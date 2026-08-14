@@ -1,0 +1,146 @@
+import { Button, Slider } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+
+export component PlayerControlBar inherits Rectangle {
+    height: 52px;
+    background: Theme.surface;
+
+    in property <bool> is-playing: false;
+    in property <float> current-time: 0.0;
+    in property <float> duration: 100.0;
+    in property <string> time-str: "00:00 / 00:00";
+    in-out property <float> volume: 100.0;
+
+    callback toggle-play-pause();
+    callback seek-requested(float);
+    callback volume-changed(float);
+    callback stop-clicked();
+    callback close-player();
+
+    // Top border separator line
+    Rectangle {
+        y: 0px;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        alignment: center;
+
+        // Play/Pause button
+        Button {
+            text: root.is-playing ? " ⏸ Pause " : " ▶ Play ";
+            clicked => { root.toggle-play-pause(); }
+        }
+
+        // Stop button
+        Button {
+            text: "⏹ Stop";
+            clicked => { root.stop-clicked(); }
+        }
+
+        // Scrubber slider
+        time-slider := Slider {
+            horizontal-stretch: 1;
+            minimum: 0.0;
+            maximum: Math.max(1.0, root.duration);
+            value: root.current-time;
+            changed(val) => { root.seek-requested(val); }
+        }
+
+        // Time display
+        Text {
+            text: root.time-str;
+            color: Theme.text;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+
+        Rectangle { width: 1px; background: Theme.border; height: 24px; }
+
+        Text {
+            text: "Vol:";
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
+
+        // Volume slider
+        vol-slider := Slider {
+            width: 80px;
+            minimum: 0.0;
+            maximum: 100.0;
+            value: root.volume;
+            changed(val) => {
+                root.volume = val;
+                root.volume-changed(val);
+            }
+        }
+
+        Button {
+            text: "✕ Close Player";
+            clicked => { root.close-player(); }
+        }
+    }
+}
+
+export component VideoPlayerView inherits Rectangle {
+    background: #000000;
+
+    in property <bool> is-playing: false;
+    in property <float> current-time: 0.0;
+    in property <float> duration: 100.0;
+    in property <string> time-str: "00:00 / 00:00";
+    in property <string> video-title: "Video Playback";
+
+    callback toggle-play();
+    callback seek(float);
+    callback set-vol(float);
+    callback stop();
+    callback close();
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // Video Surface Placeholder with hardware render target notice
+        Rectangle {
+            vertical-stretch: 1;
+            background: #050508;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 8px;
+
+                Text {
+                    text: root.video-title;
+                    color: Theme.text;
+                    font-size: 16px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: "Hardware Decoded Video Pipeline Active (libmpv / GPU)";
+                    color: Theme.text-muted;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        // Player Controls
+        PlayerControlBar {
+            is-playing: root.is-playing;
+            current-time: root.current-time;
+            duration: root.duration;
+            time-str: root.time-str;
+            toggle-play-pause => { root.toggle-play(); }
+            seek-requested(pos) => { root.seek(pos); }
+            volume-changed(v) => { root.set-vol(v); }
+            stop-clicked => { root.stop(); }
+            close-player => { root.close(); }
+        }
+    }
+}

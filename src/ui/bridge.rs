@@ -2,6 +2,8 @@ use super::favorites::FavoriteManager;
 use super::models::{format_filesize, rgb8_to_slint_image};
 use crate::library::Library;
 use crate::library::models::{FolderId, MediaId, MediaRecord, TagId};
+use crate::player::events::format_playback_time;
+use crate::player::{Player, PlayerController, PlayerEvent};
 use crate::query::{MatchMode, MediaSorter, QueryFilter, ScopeMode, SortColumn, SortOrder};
 use crate::thumbnails::{THUMBNAIL_SIZE, ThumbnailManager};
 use parking_lot::RwLock;
@@ -27,6 +29,7 @@ pub struct UiBridge {
     window: MainWindow,
     library: Arc<Library>,
     thumbnails: Arc<ThumbnailManager>,
+    player: Arc<PlayerController>,
     favorites: Arc<RwLock<FavoriteManager>>,
     state: Arc<RwLock<UiState>>,
 }
@@ -36,6 +39,7 @@ impl UiBridge {
         window: MainWindow,
         library: Arc<Library>,
         thumbnails: Arc<ThumbnailManager>,
+        player: Arc<PlayerController>,
         config_dir: &Path,
     ) -> Self {
         let favorites = Arc::new(RwLock::new(FavoriteManager::new(config_dir)));
@@ -54,11 +58,13 @@ impl UiBridge {
             window,
             library,
             thumbnails,
+            player,
             favorites,
             state,
         };
 
         bridge.register_callbacks();
+        bridge.start_player_event_timer();
         bridge.reload_folders();
         bridge.reload_favorites();
         bridge.reload_tags();
@@ -107,6 +113,12 @@ impl UiBridge {
         let bridge_self = self.clone_handle();
         self.window.on_media_clicked(move |id| {
             bridge_self.toggle_media_selection(id as u64);
+        });
+
+        // MEDIA DOUBLE CLICK
+        let bridge_self = self.clone_handle();
+        self.window.on_media_double_clicked(move |id| {
+            bridge_self.open_media_item(id as u64);
         });
 
         // SEARCH QUERY
@@ -170,6 +182,79 @@ impl UiBridge {
         self.window.on_tag_filter_changed(move |query| {
             bridge_self.filter_tags_view(&query);
         });
+
+        // PLAYER CONTROLS
+        let p_clone = self.player.clone();
+        self.window.on_player_toggle_play(move || {
+            let is_paused = p_clone.raw_mpv().is_paused();
+            if is_paused {
+                let _ = p_clone.play();
+            } else {
+                let _ = p_clone.pause();
+            }
+        });
+
+        let p_clone = self.player.clone();
+        self.window.on_player_seek(move |pos| {
+            let _ = p_clone.seek(pos as f64);
+        });
+
+        let p_clone = self.player.clone();
+        self.window.on_player_set_volume(move |vol| {
+            let _ = p_clone.set_volume(vol as f64);
+        });
+
+        let p_clone = self.player.clone();
+        self.window.on_player_stop(move || {
+            let _ = p_clone.stop();
+        });
+
+        let bridge_self = self.clone_handle();
+        self.window.on_player_close(move || {
+            let _ = bridge_self.player.stop();
+            bridge_self.window.set_is_player_open(false);
+        });
+    }
+
+    fn start_player_event_timer(&self) {
+        let player = self.player.clone();
+        let window_weak = self.window.as_weak();
+
+        let timer = slint::Timer::default();
+        timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_millis(50),
+            move || {
+                for event in player.poll_events() {
+                    if let Some(w) = window_weak.upgrade() {
+                        match event {
+                            PlayerEvent::PositionChanged {
+                                current_time,
+                                duration,
+                            } => {
+                                w.set_player_current_time(current_time as f32);
+                                w.set_player_duration(duration as f32);
+                                w.set_player_time_str(
+                                    format!(
+                                        "{} / {}",
+                                        format_playback_time(current_time),
+                                        format_playback_time(duration)
+                                    )
+                                    .into(),
+                                );
+                            }
+                            PlayerEvent::PlaybackStateChanged { is_paused } => {
+                                w.set_player_is_playing(!is_paused);
+                            }
+                            PlayerEvent::PlaybackEnded => {
+                                w.set_player_is_playing(false);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            },
+        );
     }
 
     fn clone_handle(&self) -> Self {
@@ -177,6 +262,7 @@ impl UiBridge {
             window: self.window.clone_strong(),
             library: self.library.clone(),
             thumbnails: self.thumbnails.clone(),
+            player: self.player.clone(),
             favorites: self.favorites.clone(),
             state: self.state.clone(),
         }
@@ -190,6 +276,26 @@ impl UiBridge {
             state.selected_media_ids.clear();
         }
         self.reload_media_view();
+    }
+
+    pub fn open_media_item(&self, media_id: MediaId) {
+        if let Ok(Some(media)) = self.library.media().get(media_id) {
+            let full_path = self
+                .state
+                .read()
+                .current_folder_path
+                .as_ref()
+                .map(|p| p.join(&media.filename))
+                .unwrap_or_default();
+
+            if matches!(media.media_type, crate::media::MediaType::Video)
+                && self.player.load(&full_path, true).is_ok()
+            {
+                self.window.set_player_title(media.filename.into());
+                self.window.set_is_player_open(true);
+                self.window.set_player_is_playing(true);
+            }
+        }
     }
 
     pub fn reload_folders(&self) {

@@ -1,4 +1,5 @@
 use rustview::library::Library;
+use rustview::player::{PlayerController, RenderConfig};
 use rustview::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge};
 use slint::ComponentHandle;
@@ -13,26 +14,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    tracing::info!("Launching RustView (Phase 3 UI Architecture)...");
+    tracing::info!("Launching RustView (Phase 4 libmpv Engine Active)...");
 
-    // Standard application paths under XDG data directories
     let data_dir = dirs_data_dir();
     std::fs::create_dir_all(&data_dir)?;
 
     let db_path = data_dir.join("library.lmdb");
     let cache_path = data_dir.join("thumbnails");
 
-    // 1. Initialize Core Storage Engine
+    // 1. Initialize Core Storage
     let library = Arc::new(Library::open(&db_path)?);
 
-    // 2. Initialize SIMD & Packed Thumbnail Engine (512 L1 RAM slots = ~96MB, 4 Rayon workers)
+    // 2. Initialize SIMD Thumbnail Manager
     let thumbnails = Arc::new(ThumbnailManager::new(library.clone(), &cache_path, 512, 4)?);
 
-    // 3. Initialize Slint Window & UI Bridge
-    let main_window = MainWindow::new()?;
-    let _bridge = UiBridge::new(main_window.clone_strong(), library, thumbnails, &data_dir);
+    // 3. Initialize Native Hardware Accelerated Player Controller
+    let player = Arc::new(PlayerController::new(RenderConfig::default())?);
 
-    tracing::info!("RustView UI ready and running.");
+    // 4. Initialize Slint Window & UI Bridge
+    let main_window = MainWindow::new()?;
+    let _bridge = UiBridge::new(
+        main_window.clone_strong(),
+        library,
+        thumbnails,
+        player,
+        &data_dir,
+    );
+
+    tracing::info!("RustView Player & UI online.");
     main_window.run()?;
 
     Ok(())

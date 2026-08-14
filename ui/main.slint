@@ -6,6 +6,7 @@ import { SidebarRight } from "sidebar_right.slint";
 import { VirtualizedMediaGrid } from "media_grid.slint";
 import { MediaTableView } from "media_table.slint";
 import { StatusBar } from "status_bar.slint";
+import { VideoPlayerView } from "player.slint";
 
 export component MainWindow inherits Window {
     title: "RustView - Media Viewer";
@@ -17,12 +18,20 @@ export component MainWindow inherits Window {
 
     // View state properties
     in-out property <bool> is-table-view: false;
+    in-out property <bool> is-player-open: false;
     in-out property <int> thumb-size: 150;
     in-out property <string> status-text: "Ready.";
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <bool> is-busy: false;
     in-out property <int> progress-current: 0;
     in-out property <int> progress-total: 100;
+
+    // Player state properties
+    in-out property <bool> player-is-playing: false;
+    in-out property <float> player-current-time: 0.0;
+    in-out property <float> player-duration: 100.0;
+    in-out property <string> player-time-str: "00:00 / 00:00";
+    in-out property <string> player-title: "Video Playback";
 
     // Data models
     in property <[MediaItemView]> media-items: [];
@@ -52,6 +61,13 @@ export component MainWindow inherits Window {
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
 
+    // Player Callbacks
+    callback player-toggle-play();
+    callback player-seek(float);
+    callback player-set-volume(float);
+    callback player-stop();
+    callback player-close();
+
     VerticalLayout {
         spacing: 0px;
 
@@ -78,14 +94,27 @@ export component MainWindow inherits Window {
                 horizontal-stretch: 1;
                 background: Theme.background;
 
-                if !root.is-table-view : VirtualizedMediaGrid {
+                if root.is-player-open : VideoPlayerView {
+                    is-playing: root.player-is-playing;
+                    current-time: root.player-current-time;
+                    duration: root.player-duration;
+                    time-str: root.player-time-str;
+                    video-title: root.player-title;
+                    toggle-play => { root.player-toggle-play(); }
+                    seek(p) => { root.player-seek(p); }
+                    set-vol(v) => { root.player-set-volume(v); }
+                    stop => { root.player-stop(); }
+                    close => { root.player-close(); }
+                }
+
+                if !root.is-player-open && !root.is-table-view : VirtualizedMediaGrid {
                     media-items: root.media-items;
                     thumb-size: root.thumb-size;
                     item-clicked(id) => { root.media-clicked(id); }
                     item-double-clicked(id) => { root.media-double-clicked(id); }
                 }
 
-                if root.is-table-view : MediaTableView {
+                if !root.is-player-open && root.is-table-view : MediaTableView {
                     items: root.media-items;
                     item-clicked(id) => { root.media-clicked(id); }
                     item-double-clicked(id) => { root.media-double-clicked(id); }
