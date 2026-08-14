@@ -7,6 +7,7 @@ use image::ColorType;
 use image::codecs::jpeg::JpegEncoder;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 
 pub struct ThumbnailGenerator {
     image_decoder: Arc<dyn ImageDecoder>,
@@ -33,6 +34,7 @@ impl ThumbnailGenerator {
 
     /// Encodes raw 256x256 RGB8 into compressed JPEG bytes with high quality (85%).
     pub fn compress_jpeg(&self, rgb8_pixels: &[u8]) -> Result<Vec<u8>, ThumbnailError> {
+        let t0 = Instant::now();
         let mut buffer = Vec::with_capacity(32 * 1024);
         let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 85);
         encoder.encode(
@@ -41,13 +43,25 @@ impl ThumbnailGenerator {
             THUMBNAIL_SIZE,
             ColorType::Rgb8.into(),
         )?;
+        tracing::trace!(
+            compressed_bytes = buffer.len(),
+            encode_time_us = t0.elapsed().as_micros(),
+            "[JPEG Compression] Encoded 256x256 RGB8 to JPEG (85% quality)"
+        );
         Ok(buffer)
     }
 
     /// Decompresses packed JPEG bytes into raw 256x256 RGB8.
     pub fn decompress_jpeg(&self, compressed: &[u8]) -> Result<Vec<u8>, ThumbnailError> {
+        let t0 = Instant::now();
         let img = image::load_from_memory_with_format(compressed, image::ImageFormat::Jpeg)?;
-        Ok(img.to_rgb8().into_raw())
+        let raw = img.to_rgb8().into_raw();
+        tracing::trace!(
+            decompressed_bytes = raw.len(),
+            decode_time_us = t0.elapsed().as_micros(),
+            "[JPEG Decompression] Decoded packfile JPEG slice to 256x256 RGB8"
+        );
+        Ok(raw)
     }
 }
 

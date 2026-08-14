@@ -11,6 +11,7 @@ export component TopToolbar inherits Rectangle {
     in-out property <bool> is-table-view: false;
 
     callback refresh-clicked();
+    callback settings-clicked();
     callback thumb-size-changed(int);
     callback search-changed(string);
     callback regex-toggled(bool);
@@ -33,6 +34,12 @@ export component TopToolbar inherits Rectangle {
             text: "Refresh";
             icon: @image-url("icons/refresh.svg");
             clicked => { root.refresh-clicked(); }
+        }
+
+        Button {
+            text: "Settings";
+            icon: @image-url("icons/settings.svg");
+            clicked => { root.settings-clicked(); }
         }
 
         Rectangle { width: 1px; background: Theme.border; height: 24px; }

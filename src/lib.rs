@@ -3,5 +3,6 @@ pub mod library;
 pub mod media;
 pub mod player;
 pub mod query;
+pub mod settings;
 pub mod thumbnails;
 pub mod ui;

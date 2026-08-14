@@ -21,3 +21,5 @@
 
 # OS files
 .DS_Store
+
+*.txt

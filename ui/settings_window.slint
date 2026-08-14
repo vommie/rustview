@@ -1,0 +1,370 @@
+import { Button, LineEdit, Slider, ComboBox, CheckBox, ScrollView, ListView } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+
+export component SettingsWindow inherits Window {
+    title: "RustView - Settings";
+    preferred-width: 820px;
+    preferred-height: 560px;
+    min-width: 700px;
+    min-height: 480px;
+    background: Theme.background;
+
+    // Active Category (0=General, 1=Appearance, 2=Performance, 3=Player, 4=Tags)
+    in-out property <int> active-category: 0;
+
+    // General options
+    in-out property <string> root-folder-path: "";
+    in-out property <bool> remember-last-folder: true;
+    in-out property <bool> confirm-delete: true;
+    in-out property <int> deletion-mode-idx: 0;
+
+    // Appearance options
+    in-out property <int> default-thumb-size: 150;
+    in-out property <bool> show-filenames: true;
+    in-out property <bool> show-rating-badge: true;
+    in-out property <bool> show-tag-badge: true;
+
+    // Performance options
+    in-out property <int> l1-cache-slots: 512;
+    in-out property <int> worker-threads: 4;
+    in-out property <int> hashing-mode-idx: 0;
+
+    // Player options
+    in-out property <int> hwdec-idx: 0;
+    in-out property <bool> autoplay-videos: true;
+    in-out property <float> default-volume: 100.0;
+
+    // Callbacks to Rust backend
+    callback browse-root-folder();
+    callback save-and-apply();
+    callback cancel-clicked();
+
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
+
+        // 1. Header Title Bar (Fixed top)
+        Rectangle {
+            height: 44px;
+            background: Theme.surface;
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                alignment: center;
+
+                Text {
+                    text: "Settings & Preferences";
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        // 2. Middle Content Area (Expands to fill 100% of remaining space)
+        HorizontalLayout {
+            vertical-stretch: 1;
+            padding: 0px;
+            spacing: 0px;
+
+            // Left Category Navigation Bar
+            Rectangle {
+                width: 200px;
+                background: Theme.surface;
+
+                Rectangle {
+                    x: parent.width - 1px;
+                    width: 1px;
+                    background: Theme.border;
+                }
+
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+
+                    for cat[idx] in ["General", "Appearance & Grid", "Performance & Cache", "Video Playback", "Tags & Search"]: Rectangle {
+                        height: 34px;
+                        background: root.active-category == idx ? Theme.surface-selected : (cat-touch.has-hover ? Theme.surface-hover : transparent);
+                        border-radius: 4px;
+
+                        cat-touch := TouchArea {
+                            clicked => { root.active-category = idx; }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+
+                            Text {
+                                text: cat;
+                                color: root.active-category == idx ? Theme.primary : Theme.text;
+                                font-weight: root.active-category == idx ? 700 : 400;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Right Scrollable Configuration Area
+            ScrollView {
+                horizontal-stretch: 1;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 16px;
+                    alignment: start;
+
+                    // GENERAL CATEGORY
+                    if root.active-category == 0 : VerticalLayout {
+                        spacing: 12px;
+
+                        // Folder Root Card
+                        Rectangle {
+                            background: Theme.surface;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            VerticalLayout {
+                                padding: 12px;
+                                spacing: 8px;
+
+                                Text { text: "Root Directory"; font-weight: 700; color: Theme.primary; }
+                                Text { text: "Specifies the root directory for your media library. If not set, no folders or media are displayed."; font-size: 11px; color: Theme.text-muted; }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    LineEdit {
+                                        text: root.root-folder-path;
+                                        placeholder-text: "No root directory selected (Library empty)";
+                                        horizontal-stretch: 1;
+                                        read-only: true;
+                                    }
+
+                                    Button {
+                                        text: "Browse...";
+                                        clicked => { root.browse-root-folder(); }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Startup & Deletion Card
+                        Rectangle {
+                            background: Theme.surface;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            VerticalLayout {
+                                padding: 12px;
+                                spacing: 10px;
+
+                                Text { text: "Startup & File Management"; font-weight: 700; color: Theme.primary; }
+
+                                CheckBox {
+                                    text: "Remember last opened folder on startup";
+                                    checked <=> root.remember-last-folder;
+                                }
+
+                                CheckBox {
+                                    text: "Confirm before deleting files";
+                                    checked <=> root.confirm-delete;
+                                }
+                            }
+                        }
+                    }
+
+                    // APPEARANCE CATEGORY
+                    if root.active-category == 1 : VerticalLayout {
+                        spacing: 12px;
+
+                        Rectangle {
+                            background: Theme.surface;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            VerticalLayout {
+                                padding: 12px;
+                                spacing: 12px;
+
+                                Text { text: "Grid & Thumbnail Presentation"; font-weight: 700; color: Theme.primary; }
+
+                                HorizontalLayout {
+                                    Text { text: "Default Thumbnail Size:"; color: Theme.text; vertical-alignment: center; }
+                                    Slider {
+                                        width: 140px;
+                                        minimum: 80;
+                                        maximum: 300;
+                                        value: root.default-thumb-size;
+                                        changed(v) => { root.default-thumb-size = Math.round(v); }
+                                    }
+                                    Text { text: root.default-thumb-size + "px"; color: Theme.primary; width: 45px; vertical-alignment: center; }
+                                }
+
+                                CheckBox {
+                                    text: "Display filenames below tiles";
+                                    checked <=> root.show-filenames;
+                                }
+
+                                CheckBox {
+                                    text: "Show colored rating badge overlay";
+                                    checked <=> root.show-rating-badge;
+                                }
+
+                                CheckBox {
+                                    text: "Show tag indicator overlay";
+                                    checked <=> root.show-tag-badge;
+                                }
+                            }
+                        }
+                    }
+
+                    // PERFORMANCE CATEGORY
+                    if root.active-category == 2 : VerticalLayout {
+                        spacing: 12px;
+
+                        Rectangle {
+                            background: Theme.surface;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            VerticalLayout {
+                                padding: 12px;
+                                spacing: 12px;
+
+                                Text { text: "Engine Memory & Parallelism"; font-weight: 700; color: Theme.primary; }
+
+                                HorizontalLayout {
+                                    Text { text: "L1 RAM Cache (Slots):"; color: Theme.text; vertical-alignment: center; }
+                                    Slider {
+                                        width: 140px;
+                                        minimum: 100;
+                                        maximum: 2048;
+                                        value: root.l1-cache-slots;
+                                        changed(v) => { root.l1-cache-slots = Math.round(v); }
+                                    }
+                                    Text { text: root.l1-cache-slots + " slots"; color: Theme.primary; width: 65px; vertical-alignment: center; }
+                                }
+
+                                HorizontalLayout {
+                                    Text { text: "Rayon Background Workers:"; color: Theme.text; vertical-alignment: center; }
+                                    Slider {
+                                        width: 140px;
+                                        minimum: 1;
+                                        maximum: 16;
+                                        value: root.worker-threads;
+                                        changed(v) => { root.worker-threads = Math.round(v); }
+                                    }
+                                    Text { text: root.worker-threads + " threads"; color: Theme.primary; width: 65px; vertical-alignment: center; }
+                                }
+                            }
+                        }
+                    }
+
+                    // VIDEO PLAYBACK CATEGORY
+                    if root.active-category == 3 : VerticalLayout {
+                        spacing: 12px;
+
+                        Rectangle {
+                            background: Theme.surface;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            VerticalLayout {
+                                padding: 12px;
+                                spacing: 12px;
+
+                                Text { text: "Hardware Acceleration & Playback"; font-weight: 700; color: Theme.primary; }
+
+                                CheckBox {
+                                    text: "Autoplay videos when opened";
+                                    checked <=> root.autoplay-videos;
+                                }
+
+                                HorizontalLayout {
+                                    Text { text: "Default Audio Volume:"; color: Theme.text; vertical-alignment: center; }
+                                    Slider {
+                                        width: 140px;
+                                        minimum: 0.0;
+                                        maximum: 100.0;
+                                        value: root.default-volume;
+                                        changed(v) => { root.default-volume = v; }
+                                    }
+                                    Text { text: Math.round(root.default-volume) + "%"; color: Theme.primary; width: 45px; vertical-alignment: center; }
+                                }
+                            }
+                        }
+                    }
+
+                    // TAGS & SEARCH CATEGORY
+                    if root.active-category == 4 : VerticalLayout {
+                        spacing: 12px;
+
+                        Rectangle {
+                            background: Theme.surface;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            VerticalLayout {
+                                padding: 12px;
+                                spacing: 8px;
+
+                                Text { text: "Hierarchical Categorization Defaults"; font-weight: 700; color: Theme.primary; }
+                                Text { text: "Default combinatorial query mode and search scope."; font-size: 11px; color: Theme.text-muted; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Bottom Action Bar (Anchored flush to bottom)
+        Rectangle {
+            height: 48px;
+            background: Theme.surface;
+
+            Rectangle {
+                y: 0px;
+                height: 1px;
+                background: Theme.border;
+            }
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 6px;
+                padding-bottom: 6px;
+                spacing: 12px;
+                alignment: end; // Right aligned
+
+                Button {
+                    text: "Cancel";
+                    clicked => { root.cancel-clicked(); }
+                }
+
+                Button {
+                    text: "Save";
+                    primary: true;
+                    clicked => { root.save-and-apply(); }
+                }
+            }
+        }
+    }
+}

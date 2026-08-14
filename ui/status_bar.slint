@@ -1,14 +1,22 @@
 import { Theme } from "styles.slint";
+import { ThumbnailPipelineProgress } from "thumbnail_progress.slint";
 
 export component StatusBar inherits Rectangle {
-    height: 24px;
+    height: 28px;
     background: Theme.surface;
 
     in property <string> status-message: "Ready.";
     in property <string> item-count-str: "Items: 0";
-    in property <int> progress-val: 0;
-    in property <int> progress-max: 100;
-    in property <bool> is-busy: false;
+
+    // Progress Bar Domain Delegation Properties
+    in property <bool> is-preloading: false;
+    in property <int> preload-val: 0;
+    in property <int> preload-max: 100;
+
+    in property <bool> is-generating: false;
+    in property <int> generate-val: 0;
+    in property <int> generate-max: 100;
+    in property <int> active-workers: 0;
 
     // Top border separator line
     Rectangle {
@@ -23,6 +31,7 @@ export component StatusBar inherits Rectangle {
         spacing: 12px;
         alignment: center;
 
+        // General Status Text
         Text {
             text: root.status-message;
             color: Theme.text;
@@ -32,37 +41,23 @@ export component StatusBar inherits Rectangle {
             overflow: elide;
         }
 
-        if root.is-busy : HorizontalLayout {
-            spacing: 6px;
-            width: 180px;
-            alignment: center;
-
-            Rectangle {
-                height: 10px;
-                background: Theme.surface-variant;
-                border-radius: 5px;
-                clip: true;
-
-                Rectangle {
-                    x: 0;
-                    width: parent.width * (root.progress-val / Math.max(1, root.progress-max));
-                    background: Theme.primary;
-                }
-            }
-
-            Text {
-                text: root.progress-val + "/" + root.progress-max;
-                font-size: 10px;
-                color: Theme.text-muted;
-                vertical-alignment: center;
-            }
+        // Modular Thumbnail Pipeline Progress Indicator
+        ThumbnailPipelineProgress {
+            is-preloading: root.is-preloading;
+            preload-current: root.preload-val;
+            preload-total: root.preload-max;
+            is-generating: root.is-generating;
+            generate-current: root.generate-val;
+            generate-total: root.generate-max;
+            active-workers: root.active-workers;
         }
 
+        // Total Folder Items Metric
         Text {
             text: root.item-count-str;
             color: Theme.primary;
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 700;
             vertical-alignment: center;
         }
     }

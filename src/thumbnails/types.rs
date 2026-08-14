@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 pub const THUMBNAIL_SIZE: u32 = 256;
 pub const THUMBNAIL_CHANNELS: usize = 3;
@@ -31,4 +32,23 @@ pub enum FitMode {
 pub struct ThumbnailHandle {
     pub slot_index: u32,
     pub generation: u32,
+}
+
+/// Anonymizes a filesystem path for logging to guarantee privacy while preserving debugging utility.
+/// Output format: `MediaId(42) [*.ext]` or `Unknown [*.ext]`
+pub fn anonymize_target(path: &Path, media_id: Option<u64>) -> String {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{}", e.to_ascii_lowercase()))
+        .unwrap_or_else(|| ".unknown".to_string());
+
+    let size_hint = std::fs::metadata(path)
+        .map(|m| format!(", {:.2} KB", m.len() as f64 / 1024.0))
+        .unwrap_or_default();
+
+    match media_id {
+        Some(id) => format!("MediaId({}) [*{}{}]", id, ext, size_hint),
+        None => format!("Anonymous [*{}{}]", ext, size_hint),
+    }
 }

@@ -1,9 +1,10 @@
 use super::error::ThumbnailError;
 use super::image::{BlitParams, blit_rgb, calculate_dimensions};
-use super::types::{FitMode, THUMBNAIL_SIZE};
+use super::types::{FitMode, THUMBNAIL_SIZE, anonymize_target};
 use fast_image_resize::images::Image;
 use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
 use std::path::Path;
+use std::time::Instant;
 
 pub trait VideoFrameDecoder: Send + Sync {
     fn extract_and_resize(&self, path: &Path, fit_mode: FitMode)
@@ -25,6 +26,9 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         path: &Path,
         fit_mode: FitMode,
     ) -> Result<Vec<u8>, ThumbnailError> {
+        let anon_target = anonymize_target(path, None);
+        let t0 = Instant::now();
+
         ffmpeg_next::init().map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
 
         let mut ictx =
@@ -108,7 +112,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let mut dst_image = Image::new(target_w, target_h, PixelType::U8x3);
         let mut resizer = Resizer::new();
         let options =
-            ResizeOptions::default().resize_alg(ResizeAlg::Convolution(FilterType::Lanczos3));
+            ResizeOptions::default().resize_alg(ResizeAlg::Convolution(FilterType::CatmullRom));
 
         resizer.resize(&src_image, &mut dst_image, &options)?;
 
@@ -124,6 +128,15 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                 offset_x,
                 offset_y,
             },
+        );
+
+        let total_elapsed = t0.elapsed();
+        tracing::debug!(
+            target = %anon_target,
+            orig_w = width,
+            orig_h = height,
+            total_time_ms = total_elapsed.as_millis(),
+            "[VideoDecoder: ffmpeg-next] Extracted and resized video frame to 256x256"
         );
 
         Ok(final_canvas)

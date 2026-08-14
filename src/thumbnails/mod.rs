@@ -5,6 +5,7 @@ pub mod gc;
 pub mod generator;
 pub mod image;
 pub mod loader;
+pub mod progress;
 pub mod store;
 pub mod types;
 pub mod video;
@@ -14,11 +15,12 @@ pub use cache::L1ThumbnailCache;
 pub use error::ThumbnailError;
 pub use gc::ThumbnailGarbageCollector;
 pub use generator::ThumbnailGenerator;
-pub use loader::ThumbnailScheduler;
+pub use loader::{PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
+pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 pub use store::PackStore;
 pub use types::{
     FitMode, THUMBNAIL_BYTE_SIZE, THUMBNAIL_SIZE, ThumbnailHandle, ThumbnailLocation,
-    ThumbnailPriority,
+    ThumbnailPriority, anonymize_target,
 };
 
 use crate::library::Library;
@@ -56,22 +58,29 @@ impl ThumbnailManager {
         })
     }
 
+    pub fn start_pipeline(&self, folder_id: u64, sorted_targets: Vec<PreparedTarget>) {
+        self.scheduler
+            .start_folder_pipeline(folder_id, sorted_targets);
+    }
+
+    pub fn cancel_pipeline(&self) {
+        self.scheduler.cancel_current_pipeline();
+    }
+
+    pub fn drain_ready_batch(&self, max_items: usize) -> Vec<ReadyThumbnailItem> {
+        self.scheduler.drain_ready_batch(max_items)
+    }
+
+    pub fn progress(&self) -> ThumbnailProgressSnapshot {
+        self.scheduler.snapshot_progress()
+    }
+
     pub fn get_or_load_sync(
         &self,
         media_id: MediaId,
         file_path: &Path,
     ) -> Result<ThumbnailHandle, ThumbnailError> {
         self.scheduler.load_sync(media_id, file_path)
-    }
-
-    pub fn request(
-        &self,
-        media_id: MediaId,
-        file_path: std::path::PathBuf,
-        priority: ThumbnailPriority,
-    ) {
-        self.scheduler
-            .request_thumbnail(media_id, file_path, priority);
     }
 
     pub fn cache(&self) -> &L1ThumbnailCache {

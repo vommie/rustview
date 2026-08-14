@@ -113,7 +113,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
     in property <[MediaItemView]> media-items: [];
     in property <int> thumb-size: 150;
 
-    out property <int> columns: max(1, floor(self.width / ((root.thumb-size * 1px) + 20px)));
+    out property <int> columns: Math.max(1, Math.floor(Math.max(300px, self.width) / ((root.thumb-size * 1px) + 20px)));
 
     callback item-clicked(int);
     callback item-double-clicked(int);
@@ -125,7 +125,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
             for item[index] in root.media-items: MediaTile {
                 col: Math.mod(index, root.columns);
-                row: floor(index / root.columns);
+                row: Math.floor(index / root.columns);
                 item: item;
                 thumb-size: root.thumb-size;
                 clicked => { root.item-clicked(item.id); }

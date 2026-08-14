@@ -24,11 +24,7 @@ impl<'a> FolderRefresher<'a> {
         Self { db }
     }
 
-    /// Performs an incremental refresh on the target folder:
-    /// 1. Short-circuits unchanged items by size and mtime without recalculating hashes.
-    /// 2. Hashes and extracts metadata for new or changed files.
-    /// 3. Detects and purges deleted files using generation markers.
-    /// 4. Executes all mutations in optimized batched transactions.
+    /// Performs an incremental refresh on the target folder.
     pub fn refresh_folder(&self, folder_id: FolderId) -> Result<RefreshReport, LibraryError> {
         let mut report = RefreshReport::default();
 
@@ -41,13 +37,21 @@ impl<'a> FolderRefresher<'a> {
         };
 
         let folder_path = Path::new(&folder_record.path);
+        tracing::info!(folder_id = folder_id, path = ?folder_path, "Scanning folder on filesystem...");
+
         let scanned_files = DirectoryScanner::scan(folder_path, false);
         report.total_scanned = scanned_files.len();
+
+        tracing::info!(
+            folder_id = folder_id,
+            scanned = scanned_files.len(),
+            "Found supported media files in folder"
+        );
 
         let mut wtxn = self.db.env.write_txn()?;
         let current_generation = self.db.next_generation(&mut wtxn)?;
 
-        // Build index of existing items in the folder: filename -> (MediaId, MediaRecord)
+        // Index of existing items in the folder: filename -> (MediaId, MediaRecord)
         let existing_ids = self
             .db
             .media_by_folder
@@ -67,7 +71,10 @@ impl<'a> FolderRefresher<'a> {
         for scanned in scanned_files {
             let fs_meta = match std::fs::metadata(&scanned.path) {
                 Ok(m) => m,
-                Err(_) => continue,
+                Err(e) => {
+                    tracing::warn!(file = ?scanned.path, error = %e, "Cannot read file metadata");
+                    continue;
+                }
             };
 
             let file_size = fs_meta.len();
@@ -80,7 +87,7 @@ impl<'a> FolderRefresher<'a> {
 
             if let Some((existing_id, mut existing_record)) = existing_map.remove(&scanned.filename)
             {
-                // Check if unchanged (Fast path: no hash recalculation)
+                // Fast path: Size and modification time match -> Skip hashing
                 if existing_record.file_size == file_size
                     && existing_record.modification_time == mtime
                 {
@@ -93,10 +100,16 @@ impl<'a> FolderRefresher<'a> {
                     continue;
                 }
 
-                // File modified: Compute BLAKE3 hash
-                let new_hash = MediaHasher::hash_file(&scanned.path)?;
+                // File modified -> Recalculate BLAKE3 hash
+                let new_hash = match MediaHasher::hash_file(&scanned.path) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        tracing::warn!(file = ?scanned.path, error = %e, "Failed to hash modified file");
+                        continue;
+                    }
+                };
+
                 if new_hash == existing_record.file_hash {
-                    // Content identical, update file timestamps only
                     existing_record.modification_time = mtime;
                     existing_record.file_size = file_size;
                     existing_record.last_seen = current_generation;
@@ -106,13 +119,14 @@ impl<'a> FolderRefresher<'a> {
                     active_media_ids.push(existing_id);
                     report.unchanged_media += 1;
                 } else {
-                    // Content changed: Re-extract metadata and re-index hash
                     let raw_meta = match MetadataExtractor::extract(&scanned.path) {
                         Ok(m) => m,
-                        Err(_) => continue,
+                        Err(e) => {
+                            tracing::warn!(file = ?scanned.path, error = %e, "Failed to extract metadata");
+                            continue;
+                        }
                     };
 
-                    // Remove old hash index
                     if let Some(mut hash_list) = self
                         .db
                         .media_by_hash
@@ -145,7 +159,6 @@ impl<'a> FolderRefresher<'a> {
                         .media
                         .put(&mut wtxn, &existing_id, &existing_record)?;
 
-                    // Insert new hash index
                     let mut hash_list = self
                         .db
                         .media_by_hash
@@ -165,12 +178,18 @@ impl<'a> FolderRefresher<'a> {
                 // New file
                 let new_hash = match MediaHasher::hash_file(&scanned.path) {
                     Ok(h) => h,
-                    Err(_) => continue,
+                    Err(e) => {
+                        tracing::warn!(file = ?scanned.path, error = %e, "Failed to hash new file");
+                        continue;
+                    }
                 };
 
                 let raw_meta = match MetadataExtractor::extract(&scanned.path) {
                     Ok(m) => m,
-                    Err(_) => continue,
+                    Err(e) => {
+                        tracing::warn!(file = ?scanned.path, error = %e, "Failed to extract metadata for new file");
+                        continue;
+                    }
                 };
 
                 let new_media_id = self.db.next_id(&mut wtxn, SEQ_MEDIA_ID)?;
@@ -206,7 +225,7 @@ impl<'a> FolderRefresher<'a> {
             }
         }
 
-        // Remaining elements in `existing_map` are no longer present on the filesystem -> Purge
+        // Purge deleted entries
         for (deleted_id, deleted_record) in existing_map.values() {
             if let Some(mut hash_list) = self
                 .db
@@ -231,12 +250,22 @@ impl<'a> FolderRefresher<'a> {
             report.deleted_media += 1;
         }
 
-        // Update folder contents index
         self.db
             .media_by_folder
             .put(&mut wtxn, &folder_id, &active_media_ids)?;
 
         wtxn.commit()?;
+
+        tracing::info!(
+            folder_id = folder_id,
+            total_active = active_media_ids.len(),
+            new = report.new_media,
+            updated = report.updated_media,
+            unchanged = report.unchanged_media,
+            deleted = report.deleted_media,
+            "Folder refresh committed successfully to LMDB"
+        );
+
         Ok(report)
     }
 }

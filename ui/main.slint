@@ -7,6 +7,7 @@ import { VirtualizedMediaGrid } from "media_grid.slint";
 import { MediaTableView } from "media_table.slint";
 import { StatusBar } from "status_bar.slint";
 import { VideoPlayerView } from "player.slint";
+export { SettingsWindow } from "settings_window.slint";
 
 export component MainWindow inherits Window {
     title: "RustView - Media Viewer";
@@ -19,12 +20,20 @@ export component MainWindow inherits Window {
     // View state properties
     in-out property <bool> is-table-view: false;
     in-out property <bool> is-player-open: false;
+    in-out property <bool> is-modal-locked: false;
     in-out property <int> thumb-size: 150;
     in-out property <string> status-text: "Ready.";
     in-out property <string> items-metric-text: "Items: 0";
-    in-out property <bool> is-busy: false;
-    in-out property <int> progress-current: 0;
-    in-out property <int> progress-total: 100;
+
+    // Progress & Thumbnailing Pipeline Indicators
+    in-out property <bool> is-preloading: false;
+    in-out property <int> preload-current: 0;
+    in-out property <int> preload-total: 100;
+
+    in-out property <bool> is-generating: false;
+    in-out property <int> generate-current: 0;
+    in-out property <int> generate-total: 100;
+    in-out property <int> active-workers: 0;
 
     // Player state properties
     in-out property <bool> player-is-playing: false;
@@ -48,6 +57,7 @@ export component MainWindow inherits Window {
 
     // Callbacks to Rust Backend
     callback refresh-folder();
+    callback open-settings();
     callback folder-selected(int, string);
     callback favorite-selected(string);
     callback media-clicked(int);
@@ -75,6 +85,7 @@ export component MainWindow inherits Window {
             thumb-size <=> root.thumb-size;
             is-table-view <=> root.is-table-view;
             refresh-clicked => { root.refresh-folder(); }
+            settings-clicked => { root.open-settings(); }
             search-changed(text) => { root.search-query-changed(text); }
             regex-toggled(enabled) => { root.regex-mode-toggled(enabled); }
         }
@@ -141,9 +152,22 @@ export component MainWindow inherits Window {
         StatusBar {
             status-message: root.status-text;
             item-count-str: root.items-metric-text;
-            is-busy: root.is-busy;
-            progress-val: root.progress-current;
-            progress-max: root.progress-total;
+            is-preloading: root.is-preloading;
+            preload-val: root.preload-current;
+            preload-max: root.preload-total;
+            is-generating: root.is-generating;
+            generate-val: root.generate-current;
+            generate-max: root.generate-total;
+            active-workers: root.active-workers;
+        }
+    }
+
+    // Modal Interaction Blocker Overlay
+    if root.is-modal-locked : Rectangle {
+        background: #00000066;
+
+        TouchArea {
+            // Absorbs all clicks when modal SettingsWindow is open
         }
     }
 }
