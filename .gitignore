@@ -1,0 +1,23 @@
+# Rust
+/target/
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/
+
+# RustView local application data
+/data/
+/library/
+/thumbnail_cache/
+
+# Local database files
+*.mdb
+*.lmdb
+
+# Logs
+*.log
+
+# OS files
+.DS_Store

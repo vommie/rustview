@@ -1,0 +1,41 @@
+[package]
+name = "rustview"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+slint = "1.17.1"
+heed = "0.22.1"
+blake3 = "1.8.6"
+image = "0.25.10"
+fast_image_resize = "6.1.0"
+ffmpeg-next = "8.1.0"
+libmpv2 = "6.0.0"
+rayon = "1.12.0"
+memmap2 = "0.9.11"
+walkdir = "2"
+anyhow = "1"
+thiserror = "2"
+tracing = "0"
+tracing-subscriber = { version = "0", features = ["env-filter", "fmt"] }
+serde = { version = "1", features = ["derive"] }
+parking_lot = "0"
+
+[build-dependencies]
+slint-build = "1.17.1"
+
+[dev-dependencies]
+criterion = { version = "0.7", features = ["html_reports"] }
+
+[[bench]]
+name = "database"
+harness = false
+
+[[bench]]
+name = "hashing"
+harness = false
+
+[[bench]]
+name = "thumbnails"
+harness = false

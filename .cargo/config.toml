@@ -1,0 +1,12 @@
+[build]
+jobs = -1
+
+[term]
+verbose = false
+color = "auto"
+
+[alias]
+ck = "check"
+cl = "clippy --all-targets --all-features"
+t = "test"
+br = "build --release"
