@@ -24,13 +24,13 @@ pub struct LibraryDatabase {
     pub tags_by_parent_name: Database<Str, U32<BE>>,
     pub tags_by_media: Database<U64<BE>, SerdeBincode<Vec<TagId>>>,
     pub media_by_tag: Database<U32<BE>, SerdeBincode<Vec<MediaId>>>,
+    pub thumbnails: Database<U64<BE>, SerdeBincode<ThumbnailLocation>>,
 }
 
 impl LibraryDatabase {
     pub fn open(path: &Path) -> Result<Self, LibraryError> {
         fs::create_dir_all(path)?;
 
-        // Allocate 128 GiB virtual address space for LMDB mapping (does not allocate physical RAM)
         let env = unsafe {
             EnvOpenOptions::new()
                 .map_size(128 * 1024 * 1024 * 1024)
@@ -40,7 +40,6 @@ impl LibraryDatabase {
 
         let mut wtxn = env.write_txn()?;
 
-        // Explicitly typed database initializations
         let meta: Database<Str, SerdeBincode<DatabaseMeta>> =
             env.create_database(&mut wtxn, Some(DB_META))?;
         let sequences: Database<Str, U64<BE>> =
@@ -63,8 +62,9 @@ impl LibraryDatabase {
             env.create_database(&mut wtxn, Some(DB_TAGS_BY_MEDIA))?;
         let media_by_tag: Database<U32<BE>, SerdeBincode<Vec<MediaId>>> =
             env.create_database(&mut wtxn, Some(DB_MEDIA_BY_TAG))?;
+        let thumbnails: Database<U64<BE>, SerdeBincode<ThumbnailLocation>> =
+            env.create_database(&mut wtxn, Some(DB_THUMBNAILS))?;
 
-        // Initialize Meta if newly created, otherwise verify schema compatibility
         if let Some(existing_meta) = meta.get(&wtxn, "meta")? {
             if existing_meta.schema_version != CURRENT_SCHEMA_VERSION {
                 return Err(LibraryError::SchemaVersionMismatch {
@@ -103,10 +103,10 @@ impl LibraryDatabase {
             tags_by_parent_name,
             tags_by_media,
             media_by_tag,
+            thumbnails,
         })
     }
 
-    /// Allocates an incremental monotonic ID for any sequence.
     pub fn next_id(&self, wtxn: &mut heed::RwTxn, seq_key: &str) -> Result<u64, LibraryError> {
         let current = self.sequences.get(wtxn, seq_key)?.unwrap_or(0);
         let next = current + 1;

@@ -1,4 +1,5 @@
 use crate::media::{FileHash, MediaFormat, MediaType};
+pub use crate::thumbnails::types::ThumbnailLocation;
 use serde::{Deserialize, Serialize};
 
 pub type FolderId = u64;
