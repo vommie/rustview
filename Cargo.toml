@@ -8,7 +8,7 @@ build = "build.rs"
 slint = "1.17.1"
 heed = "0.22.1"
 blake3 = "1.8.6"
-image = "0.25.10"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp", "bmp", "avif", "gif", "tiff"] }
 fast_image_resize = "6.1.0"
 ffmpeg-next = "8.1.0"
 libmpv2 = "6.0.0"
@@ -20,13 +20,15 @@ thiserror = "2"
 tracing = "0"
 tracing-subscriber = { version = "0", features = ["env-filter", "fmt"] }
 serde = { version = "1", features = ["derive"] }
-parking_lot = "0"
+bincode = "1.3"
+parking_lot = "0.12"
 
 [build-dependencies]
 slint-build = "1.17.1"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
+tempfile = "3"
 
 [[bench]]
 name = "database"

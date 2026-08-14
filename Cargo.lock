@@ -4540,6 +4540,7 @@ name = "rustview"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode 1.3.3",
  "blake3",
  "criterion",
  "fast_image_resize",
@@ -4553,6 +4554,7 @@ dependencies = [
  "serde",
  "slint",
  "slint-build",
+ "tempfile",
  "thiserror 2.0.20",
  "tracing",
  "tracing-subscriber",
