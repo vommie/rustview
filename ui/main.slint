@@ -1,20 +1,120 @@
-import { Button, VerticalBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView } from "types.slint";
+import { TopToolbar } from "toolbar.slint";
+import { SidebarLeft } from "sidebar_left.slint";
+import { SidebarRight } from "sidebar_right.slint";
+import { VirtualizedMediaGrid } from "media_grid.slint";
+import { MediaTableView } from "media_table.slint";
+import { StatusBar } from "status_bar.slint";
 
 export component MainWindow inherits Window {
-    title: "RustView";
-    width: 1280px;
-    height: 800px;
+    title: "RustView - Media Viewer";
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    min-width: 900px;
+    min-height: 600px;
+    background: Theme.background;
 
-    VerticalBox {
-        alignment: center;
+    // View state properties
+    in-out property <bool> is-table-view: false;
+    in-out property <int> thumb-size: 150;
+    in-out property <string> status-text: "Ready.";
+    in-out property <string> items-metric-text: "Items: 0";
+    in-out property <bool> is-busy: false;
+    in-out property <int> progress-current: 0;
+    in-out property <int> progress-total: 100;
 
-        Text {
-            text: "RustView";
-            horizontal-alignment: center;
+    // Data models
+    in property <[MediaItemView]> media-items: [];
+    in property <[FolderNodeView]> folders: [];
+    in property <[FavoriteItemView]> favorites: [];
+    in property <[TagNodeView]> tags: [];
+
+    // Info panel data
+    in property <string> info-filename: "-";
+    in property <string> info-size: "-";
+    in property <string> info-dimensions: "-";
+    in property <string> info-format: "-";
+    in property <string> info-hash: "-";
+
+    // Callbacks to Rust Backend
+    callback refresh-folder();
+    callback folder-selected(int, string);
+    callback favorite-selected(string);
+    callback media-clicked(int);
+    callback media-double-clicked(int);
+    callback search-query-changed(string);
+    callback regex-mode-toggled(bool);
+    callback rating-applied(int);
+    callback tag-toggled(int);
+    callback tag-filter-changed(string);
+    callback tag-mode-toggled(bool);
+    callback match-mode-changed(int);
+    callback scope-mode-changed(int);
+
+    VerticalLayout {
+        spacing: 0px;
+
+        TopToolbar {
+            thumb-size <=> root.thumb-size;
+            is-table-view <=> root.is-table-view;
+            refresh-clicked => { root.refresh-folder(); }
+            search-changed(text) => { root.search-query-changed(text); }
+            regex-toggled(enabled) => { root.regex-mode-toggled(enabled); }
         }
 
-        Button {
-            text: "Test";
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: 0px;
+
+            SidebarLeft {
+                folders: root.folders;
+                favorites: root.favorites;
+                folder-clicked(id, path) => { root.folder-selected(id, path); }
+                favorite-clicked(path) => { root.favorite-selected(path); }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                background: Theme.background;
+
+                if !root.is-table-view : VirtualizedMediaGrid {
+                    media-items: root.media-items;
+                    thumb-size: root.thumb-size;
+                    item-clicked(id) => { root.media-clicked(id); }
+                    item-double-clicked(id) => { root.media-double-clicked(id); }
+                }
+
+                if root.is-table-view : MediaTableView {
+                    items: root.media-items;
+                    item-clicked(id) => { root.media-clicked(id); }
+                    item-double-clicked(id) => { root.media-double-clicked(id); }
+                }
+            }
+
+            SidebarRight {
+                tags: root.tags;
+                info-filename: root.info-filename;
+                info-size: root.info-size;
+                info-dimensions: root.info-dimensions;
+                info-format: root.info-format;
+                info-hash: root.info-hash;
+
+                mode-toggled(assign) => { root.tag-mode-toggled(assign); }
+                rating-selected(r) => { root.rating-applied(r); }
+                tag-clicked(id) => { root.tag-toggled(id); }
+                tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
+                match-mode-changed(m) => { root.match-mode-changed(m); }
+                scope-mode-changed(s) => { root.scope-mode-changed(s); }
+            }
+        }
+
+        StatusBar {
+            status-message: root.status-text;
+            item-count-str: root.items-metric-text;
+            is-busy: root.is-busy;
+            progress-val: root.progress-current;
+            progress-max: root.progress-total;
         }
     }
 }

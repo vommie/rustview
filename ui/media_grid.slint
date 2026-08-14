@@ -1,0 +1,136 @@
+import { Theme } from "styles.slint";
+import { MediaItemView } from "types.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component MediaTile inherits Rectangle {
+    in property <MediaItemView> item;
+    in property <int> thumb-size: 150;
+
+    callback clicked();
+    callback double-clicked();
+
+    width: (root.thumb-size * 1px) + 16px;
+    height: (root.thumb-size * 1px) + 42px;
+    background: item.is-selected ? Theme.surface-selected : (tile-touch.has-hover ? Theme.surface-hover : Theme.surface);
+    border-width: item.is-selected ? 2px : 1px;
+    border-color: item.is-selected ? Theme.primary : Theme.border;
+    border-radius: 4px;
+
+    tile-touch := TouchArea {
+        clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
+    }
+
+    VerticalLayout {
+        padding: 4px;
+        spacing: 4px;
+        alignment: center;
+
+        Rectangle {
+            width: root.thumb-size * 1px;
+            height: root.thumb-size * 1px;
+            background: #000000;
+            border-radius: 2px;
+            clip: true;
+
+            Image {
+                source: item.thumbnail;
+                width: 100%;
+                height: 100%;
+                image-fit: contain;
+            }
+
+            // Top-Right Rating Badge
+            if item.rating > 0 : Rectangle {
+                x: parent.width - 20px;
+                y: 4px;
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                background: item.rating == 1 ? Theme.rating-1 : (
+                            item.rating == 2 ? Theme.rating-2 : (
+                            item.rating == 3 ? Theme.rating-3 : (
+                            item.rating == 4 ? Theme.rating-4 : Theme.rating-5)));
+
+                Text {
+                    text: item.rating;
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: #000000;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Top-Left Tag Badge
+            if item.has-tags : Rectangle {
+                x: 4px;
+                y: 4px;
+                width: 14px;
+                height: 14px;
+
+                Image {
+                    source: @image-url("icons/tag.svg");
+                    width: 100%;
+                    height: 100%;
+                }
+            }
+
+            // Video Indicator
+            if item.is-video : Rectangle {
+                x: 4px;
+                y: parent.height - 18px;
+                width: 32px;
+                height: 14px;
+                background: #000000aa;
+                border-radius: 2px;
+
+                Text {
+                    text: "VIDEO";
+                    font-size: 8px;
+                    font-weight: 700;
+                    color: #ffffff;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Text {
+            text: item.filename;
+            color: item.is-selected ? Theme.primary : Theme.text;
+            font-size: 11px;
+            horizontal-alignment: center;
+            overflow: elide;
+            height: 18px;
+        }
+    }
+}
+
+export component VirtualizedMediaGrid inherits Rectangle {
+    background: Theme.background;
+
+    in property <[MediaItemView]> media-items: [];
+    in property <int> thumb-size: 150;
+
+    out property <int> columns: max(1, floor(self.width / ((root.thumb-size * 1px) + 20px)));
+
+    callback item-clicked(int);
+    callback item-double-clicked(int);
+
+    ScrollView {
+        GridLayout {
+            padding: 12px;
+            spacing: 12px;
+
+            for item[index] in root.media-items: MediaTile {
+                col: Math.mod(index, root.columns);
+                row: floor(index / root.columns);
+                item: item;
+                thumb-size: root.thumb-size;
+                clicked => { root.item-clicked(item.id); }
+                double-clicked => { root.item-double-clicked(item.id); }
+            }
+        }
+    }
+}

@@ -1,0 +1,124 @@
+import { Theme } from "styles.slint";
+import { FolderNodeView, FavoriteItemView } from "types.slint";
+import { ListView } from "std-widgets.slint";
+
+export component SidebarLeft inherits Rectangle {
+    width: 260px;
+    background: Theme.surface;
+
+    in property <[FolderNodeView]> folders: [];
+    in property <[FavoriteItemView]> favorites: [];
+
+    callback folder-clicked(int, string);
+    callback favorite-clicked(string);
+
+    // Right border separator line
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        background: Theme.border;
+    }
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 8px;
+
+        // Favorites Section
+        Rectangle {
+            height: 24px;
+            Text {
+                text: "FAVORITES";
+                font-size: 11px;
+                font-weight: 700;
+                color: Theme.primary;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            height: 120px;
+            background: Theme.background;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            ListView {
+                for fav in root.favorites: Rectangle {
+                    height: 26px;
+                    background: fav.is-selected ? Theme.surface-selected : (fav-touch.has-hover ? Theme.surface-hover : transparent);
+                    border-radius: 2px;
+
+                    fav-touch := TouchArea {
+                        clicked => { root.favorite-clicked(fav.path); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 6px;
+
+                        Text {
+                            text: fav.alias;
+                            color: fav.is-valid ? Theme.text : Theme.text-muted;
+                            font-italic: !fav.is-valid;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Folders Section
+        Rectangle {
+            height: 24px;
+            Text {
+                text: "FOLDERS";
+                font-size: 11px;
+                font-weight: 700;
+                color: Theme.primary;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.background;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            ListView {
+                for folder in root.folders: Rectangle {
+                    height: 26px;
+                    background: folder.is-selected ? Theme.surface-selected : (ftouch.has-hover ? Theme.surface-hover : transparent);
+                    border-radius: 2px;
+
+                    ftouch := TouchArea {
+                        clicked => { root.folder-clicked(folder.id, folder.path); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: (folder.depth * 14px) + 8px;
+                        padding-right: 8px;
+                        spacing: 6px;
+
+                        Text {
+                            text: folder.is-expanded ? "▼" : "▶";
+                            font-size: 9px;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: folder.name;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,185 @@
+import { Button, LineEdit, ListView } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { TagNodeView } from "types.slint";
+
+export component SidebarRight inherits Rectangle {
+    width: 280px;
+    background: Theme.surface;
+
+    in-out property <bool> is-assign-mode: false;
+    in-out property <int> match-mode-idx: 0;
+    in-out property <int> scope-mode-idx: 0;
+    in-out property <int> selected-rating: -1;
+    in property <[TagNodeView]> tags: [];
+
+    in property <string> info-filename: "-";
+    in property <string> info-size: "-";
+    in property <string> info-dimensions: "-";
+    in property <string> info-format: "-";
+    in property <string> info-hash: "-";
+
+    callback mode-toggled(bool);
+    callback rating-selected(int);
+    callback tag-clicked(int);
+    callback tag-filter-changed(string);
+    callback match-mode-changed(int);
+    callback scope-mode-changed(int);
+
+    // Left border separator line
+    Rectangle {
+        x: 0px;
+        width: 1px;
+        background: Theme.border;
+    }
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 8px;
+
+        // TAG & RATE DOCK HEADER
+        Rectangle {
+            height: 28px;
+            HorizontalLayout {
+                Text {
+                    text: "TAG & RATE";
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                Button {
+                    text: root.is-assign-mode ? "Mode: ASSIGN" : "Mode: QUERY";
+                    clicked => {
+                        root.is-assign-mode = !root.is-assign-mode;
+                        root.mode-toggled(root.is-assign-mode);
+                    }
+                }
+            }
+        }
+
+        // QUERY SCOPE & MATCH MODES
+        if !root.is-assign-mode : HorizontalLayout {
+            spacing: 6px;
+            height: 28px;
+
+            Button {
+                text: root.match-mode-idx == 0 ? "Match: ALL" : "Match: ANY";
+                clicked => {
+                    root.match-mode-idx = root.match-mode-idx == 0 ? 1 : 0;
+                    root.match-mode-changed(root.match-mode-idx);
+                }
+            }
+
+            Button {
+                text: root.scope-mode-idx == 0 ? "Scope: Folder" : "Scope: Global";
+                clicked => {
+                    root.scope-mode-idx = root.scope-mode-idx == 0 ? 1 : 0;
+                    root.scope-mode-changed(root.scope-mode-idx);
+                }
+            }
+        }
+
+        // COLOR-CODED RATING BUTTONS 0..5
+        HorizontalLayout {
+            spacing: 4px;
+            height: 28px;
+
+            for rate in [0, 1, 2, 3, 4, 5]: Rectangle {
+                border-width: 1px;
+                border-color: root.selected-rating == rate ? #ffffff : Theme.border;
+                background: rate == 0 ? Theme.rating-0 : (
+                            rate == 1 ? Theme.rating-1 : (
+                            rate == 2 ? Theme.rating-2 : (
+                            rate == 3 ? Theme.rating-3 : (
+                            rate == 4 ? Theme.rating-4 : Theme.rating-5))));
+                border-radius: 3px;
+
+                TouchArea {
+                    clicked => {
+                        root.selected-rating = (root.selected-rating == rate) ? -1 : rate;
+                        root.rating-selected(root.selected-rating);
+                    }
+                }
+
+                Text {
+                    text: rate;
+                    color: #000000;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // TAG FILTER INPUT
+        LineEdit {
+            placeholder-text: "Filter tags...";
+            edited(text) => { root.tag-filter-changed(text); }
+        }
+
+        // HIERARCHICAL TAG LIST
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.background;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            ListView {
+                for tag in root.tags: Rectangle {
+                    height: 24px;
+                    background: tag.is-selected ? Theme.surface-selected : (tag-touch.has-hover ? Theme.surface-hover : transparent);
+                    border-radius: 2px;
+
+                    tag-touch := TouchArea {
+                        clicked => { root.tag-clicked(tag.id); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: (tag.depth * 12px) + 8px;
+                        padding-right: 8px;
+                        spacing: 6px;
+                        alignment: center;
+
+                        Image {
+                            source: @image-url("icons/tag.svg");
+                            width: 12px;
+                            height: 12px;
+                        }
+
+                        Text {
+                            text: tag.name;
+                            color: tag.is-match ? #ff5555 : (tag.is-selected ? Theme.primary : Theme.text);
+                            font-italic: tag.is-partial;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+
+        // METADATA INSPECTOR (INFO PANEL)
+        Rectangle {
+            height: 140px;
+            background: Theme.background;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 4px;
+
+                Text { text: "INFO / METADATA"; font-size: 10px; font-weight: 700; color: Theme.primary; }
+                Text { text: "File: " + root.info-filename; color: Theme.text; font-size: 11px; overflow: elide; }
+                Text { text: "Size: " + root.info-size; color: Theme.text-muted; font-size: 11px; }
+                Text { text: "Dimensions: " + root.info-dimensions; color: Theme.text-muted; font-size: 11px; }
+                Text { text: "Format: " + root.info-format; color: Theme.text-muted; font-size: 11px; }
+                Text { text: "BLAKE3: " + root.info-hash; color: Theme.text-muted; font-size: 10px; overflow: elide; }
+            }
+        }
+    }
+}

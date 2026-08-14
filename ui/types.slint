@@ -1,0 +1,36 @@
+export struct MediaItemView {
+    id: int,
+    filename: string,
+    filesize_str: string,
+    dimensions_str: string,
+    rating: int,
+    has_tags: bool,
+    thumbnail: image,
+    is_selected: bool,
+    is_video: bool,
+}
+
+export struct FolderNodeView {
+    id: int,
+    name: string,
+    path: string,
+    depth: int,
+    is_expanded: bool,
+    is_selected: bool,
+}
+
+export struct FavoriteItemView {
+    alias: string,
+    path: string,
+    is_valid: bool,
+    is_selected: bool,
+}
+
+export struct TagNodeView {
+    id: int,
+    name: string,
+    depth: int,
+    is_selected: bool,
+    is_partial: bool,
+    is_match: bool,
+}

@@ -1,0 +1,67 @@
+import { Theme } from "styles.slint";
+import { MediaItemView } from "types.slint";
+import { ListView } from "std-widgets.slint";
+
+export component MediaTableView inherits Rectangle {
+    background: Theme.background;
+
+    in property <[MediaItemView]> items: [];
+
+    callback item-clicked(int);
+    callback item-double-clicked(int);
+
+    VerticalLayout {
+        // Table Header
+        Rectangle {
+            height: 28px;
+            background: Theme.surface;
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 8px;
+
+                Text { text: "Filename"; horizontal-stretch: 3; color: Theme.primary; font-weight: 700; vertical-alignment: center; }
+                Text { text: "Dimensions"; horizontal-stretch: 1; color: Theme.primary; font-weight: 700; vertical-alignment: center; }
+                Text { text: "Size"; horizontal-stretch: 1; color: Theme.primary; font-weight: 700; vertical-alignment: center; }
+                Text { text: "Rating"; width: 60px; color: Theme.primary; font-weight: 700; vertical-alignment: center; }
+            }
+        }
+
+        // Table Rows
+        ListView {
+            for item in root.items: Rectangle {
+                height: 28px;
+                background: item.is-selected ? Theme.surface-selected : (row-touch.has-hover ? Theme.surface-hover : transparent);
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+
+                row-touch := TouchArea {
+                    clicked => { root.item-clicked(item.id); }
+                    double-clicked => { root.item-double-clicked(item.id); }
+                }
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 8px;
+
+                    Text { text: item.filename; horizontal-stretch: 3; color: Theme.text; vertical-alignment: center; overflow: elide; }
+                    Text { text: item.dimensions_str; horizontal-stretch: 1; color: Theme.text-muted; vertical-alignment: center; }
+                    Text { text: item.filesize_str; horizontal-stretch: 1; color: Theme.text-muted; vertical-alignment: center; }
+                    Text { text: item.rating > 0 ? item.rating : "-"; width: 60px; color: item.rating > 0 ? Theme.accent : Theme.text-muted; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

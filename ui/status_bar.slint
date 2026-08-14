@@ -1,0 +1,69 @@
+import { Theme } from "styles.slint";
+
+export component StatusBar inherits Rectangle {
+    height: 24px;
+    background: Theme.surface;
+
+    in property <string> status-message: "Ready.";
+    in property <string> item-count-str: "Items: 0";
+    in property <int> progress-val: 0;
+    in property <int> progress-max: 100;
+    in property <bool> is-busy: false;
+
+    // Top border separator line
+    Rectangle {
+        y: 0px;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+        alignment: center;
+
+        Text {
+            text: root.status-message;
+            color: Theme.text;
+            font-size: 11px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        if root.is-busy : HorizontalLayout {
+            spacing: 6px;
+            width: 180px;
+            alignment: center;
+
+            Rectangle {
+                height: 10px;
+                background: Theme.surface-variant;
+                border-radius: 5px;
+                clip: true;
+
+                Rectangle {
+                    x: 0;
+                    width: parent.width * (root.progress-val / Math.max(1, root.progress-max));
+                    background: Theme.primary;
+                }
+            }
+
+            Text {
+                text: root.progress-val + "/" + root.progress-max;
+                font-size: 10px;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.item-count-str;
+            color: Theme.primary;
+            font-size: 11px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+}
