@@ -95,6 +95,8 @@ impl Default for PlayerSettings {
 pub struct TagSettings {
     pub default_match_mode: String,
     pub default_scope_mode: String,
+    #[serde(default)]
+    pub expanded_tag_ids: Vec<u32>,
 }
 
 impl Default for TagSettings {
@@ -102,6 +104,7 @@ impl Default for TagSettings {
         Self {
             default_match_mode: "ALL".to_string(),
             default_scope_mode: "Folder".to_string(),
+            expanded_tag_ids: Vec::new(),
         }
     }
 }

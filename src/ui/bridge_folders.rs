@@ -1,20 +1,80 @@
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
+use super::bridge_tags::BridgeTags;
 use super::{FolderNodeView, MainWindow};
 use crate::library::Library;
 use crate::library::models::FolderId;
-use crate::settings::SettingsManager;
+use crate::settings::{SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
-use slint::{ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, VecModel};
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// Subsystem managing filesystem folder hierarchy discovery and sidebar synchronization.
 pub struct BridgeFolders;
 
 impl BridgeFolders {
+    /// Registers folder navigation and setting dialog callbacks onto MainWindow.
+    pub fn register_callbacks(
+        window: &MainWindow,
+        library: Arc<Library>,
+        thumbnails: Arc<ThumbnailManager>,
+        settings: Arc<SettingsManager>,
+        state: Arc<RwLock<UiState>>,
+        settings_dialog: Rc<RefCell<SettingsDialogController>>,
+    ) {
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let st = state.clone();
+        let win = window.clone_strong();
+        window.on_refresh_folder(move || {
+            let folder_id = st.read().current_folder_id;
+            if let Some(id) = folder_id {
+                let _ = lib.refresher().refresh_folder(id);
+                BridgeMedia::reload(&win, &lib, &thumb, &st, true, true);
+                win.set_status_text("Folder refreshed.".into());
+            }
+        });
+
+        let dialog = settings_dialog;
+        window.on_open_settings(move || {
+            dialog.borrow_mut().show();
+        });
+
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        let win = window.clone_strong();
+        window.on_folder_selected(move |id, path| {
+            Self::select_folder(
+                id as u64,
+                PathBuf::from(path.as_str()),
+                &win,
+                &lib,
+                &thumb,
+                &set,
+                &st,
+            );
+        });
+
+        let lib = library;
+        let thumb = thumbnails;
+        let set = settings;
+        let st = state;
+        let win = window.clone_strong();
+        window.on_favorite_selected(move |path_str| {
+            let path = PathBuf::from(path_str.as_str());
+            if let Ok(Some(folder)) = lib.folders().get_folder_by_path(&path) {
+                Self::select_folder(folder.id, path, &win, &lib, &thumb, &set, &st);
+            }
+        });
+    }
+
     /// Synchronizes the root folder from settings, updates database records, and restores last state.
     pub fn sync_root(
         window: &MainWindow,
@@ -94,6 +154,7 @@ impl BridgeFolders {
         Self::reload_tree(window, library, settings, state);
         BridgeMedia::reload(window, library, thumbnails, state, true, false);
         BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
     }
 
     /// Shallow scan of direct child directories for registration in LMDB.
@@ -179,6 +240,7 @@ impl BridgeFolders {
         Self::reload_tree(window, library, settings, state);
         BridgeMedia::reload(window, library, thumbnails, state, true, true);
         BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
     }
 
     /// Reconstructs the folder hierarchy tree model for the Slint left sidebar.

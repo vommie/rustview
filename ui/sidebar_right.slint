@@ -27,6 +27,9 @@ export component SidebarRight inherits Rectangle {
     callback mode-toggled(bool);
     callback rating-selected(int);
     callback tag-clicked(int);
+    callback tag-toggle-expand(int);
+    callback tag-context-menu(int, length, length);
+    callback root-context-menu(length, length);
     callback tag-filter-changed(string);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
@@ -43,7 +46,7 @@ export component SidebarRight inherits Rectangle {
         spacing: 8px;
 
         // Tagging and Rating Management Subsystem
-        TagPanel {
+        tag-panel := TagPanel {
             is-assign-mode <=> root.is-assign-mode;
             match-mode-idx <=> root.match-mode-idx;
             scope-mode-idx <=> root.scope-mode-idx;
@@ -56,6 +59,9 @@ export component SidebarRight inherits Rectangle {
             rating-selected(r) => { root.rating-selected(r); }
             tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
             tag-clicked(id) => { root.tag-clicked(id); }
+            tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
+            tag-context-menu(id, x, y) => { root.tag-context-menu(id, tag-panel.x + x, tag-panel.y + y); }
+            root-context-menu(x, y) => { root.root-context-menu(tag-panel.x + x, tag-panel.y + y); }
         }
 
         // Media Metadata Inspector Subsystem

@@ -1,7 +1,7 @@
 use super::MainWindow;
 use crate::player::events::format_playback_time;
 use crate::player::{Player, PlayerController, PlayerEvent};
-use slint::Timer;
+use slint::{ComponentHandle, Timer};
 use std::sync::Arc;
 
 /// Subsystem managing video player timer polling and playback control callbacks.
@@ -51,7 +51,7 @@ impl BridgePlayer {
         timer
     }
 
-    /// Registers player user action callbacks on MainWindow.
+    /// Registers player user action and close callbacks on MainWindow.
     pub fn register_callbacks(window: &MainWindow, player: Arc<PlayerController>) {
         let p_play = player.clone();
         window.on_player_toggle_play(move || {
@@ -73,9 +73,16 @@ impl BridgePlayer {
             let _ = p_vol.set_volume(vol as f64);
         });
 
-        let p_stop = player;
+        let p_stop = player.clone();
         window.on_player_stop(move || {
             let _ = p_stop.stop();
+        });
+
+        let p_close = player;
+        let win_close = window.clone_strong();
+        window.on_player_close(move || {
+            let _ = p_close.stop();
+            win_close.set_is_player_open(false);
         });
     }
 }

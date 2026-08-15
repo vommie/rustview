@@ -1,0 +1,387 @@
+use super::bridge_inspector::BridgeInspector;
+use super::bridge_media::BridgeMedia;
+use super::bridge_state::UiState;
+use super::bridge_tags::{BridgeTags, TagActionDialogs};
+use super::{AddTagDialog, DeleteTagDialog, MainWindow, RenameTagDialog};
+use crate::library::Library;
+use crate::library::models::TagId;
+use crate::settings::SettingsManager;
+use crate::thumbnails::ThumbnailManager;
+use parking_lot::RwLock;
+use slint::{CloseRequestResponse, ComponentHandle};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
+
+/// Dedicated controller managing modal tag creation, renaming, and deletion dialogs.
+#[derive(Default, Clone)]
+pub struct TagDialogController {
+    add_dialog: Rc<RefCell<Option<AddTagDialog>>>,
+    rename_dialog: Rc<RefCell<Option<RenameTagDialog>>>,
+    delete_dialog: Rc<RefCell<Option<DeleteTagDialog>>>,
+}
+
+impl TagDialogController {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates an encapsulated TagActionDialogs closure bundle for context menu action routing.
+    pub fn create_action_bundle(
+        &self,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) -> TagActionDialogs<
+        impl Fn(Option<TagId>, &str) + 'static,
+        impl Fn(TagId, &str) + 'static,
+        impl Fn(TagId, &str, Vec<String>) + 'static,
+    > {
+        let ctrl_add = self.clone();
+        let win_add = window.clone_strong();
+        let lib_add = library.clone();
+        let set_add = settings.clone();
+        let st_add = state.clone();
+
+        let show_add = move |parent_id: Option<TagId>, parent_info: &str| {
+            ctrl_add.show_add(
+                &win_add,
+                parent_id,
+                parent_info,
+                lib_add.clone(),
+                set_add.clone(),
+                st_add.clone(),
+            );
+        };
+
+        let ctrl_ren = self.clone();
+        let win_ren = window.clone_strong();
+        let lib_ren = library.clone();
+        let st_ren = state.clone();
+
+        let show_rename = move |tag_id: TagId, current_name: &str| {
+            ctrl_ren.show_rename(
+                &win_ren,
+                tag_id,
+                current_name,
+                lib_ren.clone(),
+                st_ren.clone(),
+            );
+        };
+
+        let ctrl_del = self.clone();
+        let win_del = window.clone_strong();
+        let lib_del = library.clone();
+        let thumb_del = thumbnails.clone();
+        let set_del = settings.clone();
+        let st_del = state.clone();
+
+        let show_delete = move |tag_id: TagId, tag_name: &str, children: Vec<String>| {
+            ctrl_del.show_delete(
+                &win_del,
+                tag_id,
+                tag_name,
+                children,
+                lib_del.clone(),
+                thumb_del.clone(),
+                set_del.clone(),
+                st_del.clone(),
+            );
+        };
+
+        TagActionDialogs {
+            show_add,
+            show_rename,
+            show_delete,
+        }
+    }
+
+    // =========================================================================
+    // Add Tag Dialog
+    // =========================================================================
+
+    pub fn show_add(
+        &self,
+        window: &MainWindow,
+        parent_id: Option<TagId>,
+        parent_info: &str,
+        library: Arc<Library>,
+        settings: Arc<SettingsManager>,
+        state: Arc<RwLock<UiState>>,
+    ) {
+        let mut d_ref = self.add_dialog.borrow_mut();
+        if d_ref.is_none() {
+            let win = AddTagDialog::new().expect("Failed to instantiate AddTagDialog");
+            *d_ref = Some(win);
+        }
+
+        if let Some(ref win) = *d_ref {
+            let ctrl_confirm = self.clone();
+            let win_confirm = window.clone_strong();
+            let lib_confirm = library.clone();
+            let set_confirm = settings.clone();
+            let st_confirm = state.clone();
+            win.on_confirmed(move |name| {
+                ctrl_confirm.execute_add(
+                    &name,
+                    parent_id,
+                    &lib_confirm,
+                    &set_confirm,
+                    &st_confirm,
+                    &win_confirm,
+                );
+            });
+
+            let ctrl_cancel = self.clone();
+            let win_cancel = window.clone_strong();
+            win.on_cancelled(move || {
+                ctrl_cancel.close_add(&win_cancel);
+            });
+
+            let ctrl_close = self.clone();
+            let win_close = window.clone_strong();
+            win.window().on_close_requested(move || {
+                ctrl_close.close_add(&win_close);
+                CloseRequestResponse::HideWindow
+            });
+
+            win.set_parent_info(parent_info.into());
+            win.set_tag_name("".into());
+            win.set_error_message("".into());
+            window.set_is_modal_locked(true);
+            let _ = win.show();
+        }
+    }
+
+    pub fn close_add(&self, window: &MainWindow) {
+        if let Some(ref win) = *self.add_dialog.borrow() {
+            let _ = win.hide();
+        }
+        window.set_is_modal_locked(false);
+    }
+
+    pub fn execute_add(
+        &self,
+        name: &str,
+        parent_id: Option<TagId>,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        window: &MainWindow,
+    ) {
+        tracing::info!(
+            name = %name,
+            parent_id = ?parent_id,
+            "[TagManager: Create] Executing tag creation in LMDB"
+        );
+
+        match library.tags().create_tag(name, parent_id) {
+            Ok(created) => {
+                if let Some(pid) = parent_id {
+                    let mut st = state.write();
+                    st.expanded_tag_ids.insert(pid);
+                    BridgeTags::persist_expanded_tags(settings, &st.expanded_tag_ids);
+                }
+                self.close_add(window);
+                window.set_status_text(format!("Created tag '{}'", created.name).into());
+                BridgeTags::reload_tags(window, library, state);
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "[TagManager: Create Error] Failed to create tag");
+                if let Some(ref win) = *self.add_dialog.borrow() {
+                    win.set_error_message(e.to_string().into());
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Rename Tag Dialog
+    // =========================================================================
+
+    pub fn show_rename(
+        &self,
+        window: &MainWindow,
+        tag_id: TagId,
+        current_name: &str,
+        library: Arc<Library>,
+        state: Arc<RwLock<UiState>>,
+    ) {
+        let mut d_ref = self.rename_dialog.borrow_mut();
+        if d_ref.is_none() {
+            let win = RenameTagDialog::new().expect("Failed to instantiate RenameTagDialog");
+            *d_ref = Some(win);
+        }
+
+        if let Some(ref win) = *d_ref {
+            let ctrl_confirm = self.clone();
+            let win_confirm = window.clone_strong();
+            let lib_confirm = library.clone();
+            let st_confirm = state.clone();
+            win.on_confirmed(move |name| {
+                ctrl_confirm.execute_rename(tag_id, &name, &lib_confirm, &st_confirm, &win_confirm);
+            });
+
+            let ctrl_cancel = self.clone();
+            let win_cancel = window.clone_strong();
+            win.on_cancelled(move || {
+                ctrl_cancel.close_rename(&win_cancel);
+            });
+
+            let ctrl_close = self.clone();
+            let win_close = window.clone_strong();
+            win.window().on_close_requested(move || {
+                ctrl_close.close_rename(&win_close);
+                CloseRequestResponse::HideWindow
+            });
+
+            win.set_initial_name(current_name.into());
+            win.set_new_name(current_name.into());
+            win.set_error_message("".into());
+            window.set_is_modal_locked(true);
+            let _ = win.show();
+        }
+    }
+
+    pub fn close_rename(&self, window: &MainWindow) {
+        if let Some(ref win) = *self.rename_dialog.borrow() {
+            let _ = win.hide();
+        }
+        window.set_is_modal_locked(false);
+    }
+
+    pub fn execute_rename(
+        &self,
+        tag_id: TagId,
+        new_name: &str,
+        library: &Arc<Library>,
+        state: &Arc<RwLock<UiState>>,
+        window: &MainWindow,
+    ) {
+        tracing::info!(tag_id = tag_id, new_name = %new_name, "[TagManager: Rename] Renaming tag in LMDB");
+
+        match library.tags().rename_tag(tag_id, new_name) {
+            Ok(updated) => {
+                self.close_rename(window);
+                window.set_status_text(format!("Renamed tag to '{}'", updated.name).into());
+                BridgeTags::reload_tags(window, library, state);
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "[TagManager: Rename Error] Failed to rename tag");
+                if let Some(ref win) = *self.rename_dialog.borrow() {
+                    win.set_error_message(e.to_string().into());
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Delete Tag Dialog
+    // =========================================================================
+
+    pub fn show_delete(
+        &self,
+        window: &MainWindow,
+        tag_id: TagId,
+        tag_name: &str,
+        children: Vec<String>,
+        library: Arc<Library>,
+        thumbnails: Arc<ThumbnailManager>,
+        settings: Arc<SettingsManager>,
+        state: Arc<RwLock<UiState>>,
+    ) {
+        let mut d_ref = self.delete_dialog.borrow_mut();
+        if d_ref.is_none() {
+            let win = DeleteTagDialog::new().expect("Failed to instantiate DeleteTagDialog");
+            *d_ref = Some(win);
+        }
+
+        if let Some(ref win) = *d_ref {
+            let ctrl_confirm = self.clone();
+            let win_confirm = window.clone_strong();
+            let lib_confirm = library.clone();
+            let thumb_confirm = thumbnails.clone();
+            let set_confirm = settings.clone();
+            let st_confirm = state.clone();
+            win.on_confirmed(move || {
+                ctrl_confirm.execute_delete(
+                    tag_id,
+                    &lib_confirm,
+                    &thumb_confirm,
+                    &set_confirm,
+                    &st_confirm,
+                    &win_confirm,
+                );
+            });
+
+            let ctrl_cancel = self.clone();
+            let win_cancel = window.clone_strong();
+            win.on_cancelled(move || {
+                ctrl_cancel.close_delete(&win_cancel);
+            });
+
+            let ctrl_close = self.clone();
+            let win_close = window.clone_strong();
+            win.window().on_close_requested(move || {
+                ctrl_close.close_delete(&win_close);
+                CloseRequestResponse::HideWindow
+            });
+
+            win.set_tag_name(tag_name.into());
+            win.set_has_children(!children.is_empty());
+            win.set_children_names(children.join(", ").into());
+            win.set_error_message("".into());
+            window.set_is_modal_locked(true);
+            let _ = win.show();
+        }
+    }
+
+    pub fn close_delete(&self, window: &MainWindow) {
+        if let Some(ref win) = *self.delete_dialog.borrow() {
+            let _ = win.hide();
+        }
+        window.set_is_modal_locked(false);
+    }
+
+    pub fn execute_delete(
+        &self,
+        tag_id: TagId,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        window: &MainWindow,
+    ) {
+        tracing::info!(
+            tag_id = tag_id,
+            "[TagManager: Delete] Purging tag subtree in LMDB"
+        );
+
+        match library.tags().delete_tag_subtree(tag_id) {
+            Ok(deleted) => {
+                {
+                    let mut st = state.write();
+                    for d in &deleted {
+                        st.filter.tag_ids.remove(&d.id);
+                        st.expanded_tag_ids.remove(&d.id);
+                    }
+                    BridgeTags::persist_expanded_tags(settings, &st.expanded_tag_ids);
+                }
+                self.close_delete(window);
+                window.set_status_text(format!("Deleted {} tag(s)", deleted.len()).into());
+
+                BridgeTags::reload_tags(window, library, state);
+                BridgeInspector::update(window, state);
+                BridgeMedia::reload(window, library, thumbnails, state, false, true);
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "[TagManager: Delete Error] Failed to delete tag");
+                if let Some(ref win) = *self.delete_dialog.borrow() {
+                    win.set_error_message(e.to_string().into());
+                }
+            }
+        }
+    }
+}

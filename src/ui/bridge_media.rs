@@ -3,11 +3,11 @@ use super::models::{format_filesize, rgb8_to_shared_buffer};
 use super::{MainWindow, MediaItemView};
 use crate::library::Library;
 use crate::library::models::{MediaId, MediaRecord};
-use crate::query::MediaSorter;
 use crate::query::filters::IndexedMediaRecord;
+use crate::query::{MatchMode, MediaSorter, ScopeMode};
 use crate::thumbnails::{PreparedTarget, THUMBNAIL_SIZE, ThumbnailManager};
 use parking_lot::RwLock;
-use slint::{Image, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel};
+use slint::{ComponentHandle, Image, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -17,6 +17,60 @@ use std::time::Instant;
 pub struct BridgeMedia;
 
 impl BridgeMedia {
+    /// Registers search query, regex, match mode, and scope mode callbacks onto MainWindow.
+    pub fn register_query_callbacks(
+        window: &MainWindow,
+        library: Arc<Library>,
+        thumbnails: Arc<ThumbnailManager>,
+        state: Arc<RwLock<UiState>>,
+    ) {
+        let win = window.clone_strong();
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let st = state.clone();
+        window.on_search_query_changed(move |query| {
+            st.write().filter.search_query = query.to_string();
+            Self::reload(&win, &lib, &thumb, &st, false, false);
+        });
+
+        let win = window.clone_strong();
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let st = state.clone();
+        window.on_regex_mode_toggled(move |enabled| {
+            st.write().filter.is_regex = enabled;
+            Self::reload(&win, &lib, &thumb, &st, false, false);
+        });
+
+        let win = window.clone_strong();
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let st = state.clone();
+        window.on_match_mode_changed(move |idx| {
+            let mode = if idx == 0 {
+                MatchMode::All
+            } else {
+                MatchMode::Any
+            };
+            st.write().filter.match_mode = mode;
+            Self::reload(&win, &lib, &thumb, &st, false, false);
+        });
+
+        let win = window.clone_strong();
+        let lib = library;
+        let thumb = thumbnails;
+        let st = state;
+        window.on_scope_mode_changed(move |idx| {
+            let scope = if idx == 0 {
+                ScopeMode::Folder
+            } else {
+                ScopeMode::Global
+            };
+            st.write().filter.scope_mode = scope;
+            Self::reload(&win, &lib, &thumb, &st, false, false);
+        });
+    }
+
     /// Pre-indexes media records and formats display strings into zero-allocation RAM cache.
     pub fn preindex(
         library: &Library,

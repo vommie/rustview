@@ -1,6 +1,6 @@
 use super::types::{CtxMenu, CtxMenuActionId, CtxMenuItem, CtxMenuItemKind};
 
-/// Fluent, declarative builder for constructing hierarchical context menus.
+/// Fluent, declarative builder for constructing multi-level context menus.
 #[derive(Debug, Default)]
 pub struct CtxMenuBuilder {
     title: Option<String>,
@@ -44,6 +44,7 @@ impl CtxMenuBuilder {
             is_checked: false,
             is_enabled,
             children: Vec::new(),
+            menu_index: 0,
         });
         self
     }
@@ -66,6 +67,7 @@ impl CtxMenuBuilder {
             is_checked,
             is_enabled,
             children: Vec::new(),
+            menu_index: 0,
         });
         self
     }
@@ -88,6 +90,7 @@ impl CtxMenuBuilder {
             is_checked,
             is_enabled,
             children: Vec::new(),
+            menu_index: 0,
         });
         self
     }
@@ -114,14 +117,22 @@ impl CtxMenuBuilder {
             is_checked: false,
             is_enabled,
             children: child_menu.items,
+            menu_index: 0,
         });
         self
     }
 
+    pub fn item(mut self, item: CtxMenuItem) -> Self {
+        self.items.push(item);
+        self
+    }
+
     pub fn build(self) -> CtxMenu {
-        CtxMenu {
+        let mut menu = CtxMenu {
             title: self.title,
             items: self.items,
-        }
+        };
+        menu.index_items();
+        menu
     }
 }

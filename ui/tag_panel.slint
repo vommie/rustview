@@ -1,7 +1,9 @@
-import { Button, LineEdit, ListView } from "std-widgets.slint";
+import { Button, LineEdit } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { TagNodeView } from "types.slint";
 import { RatingBar } from "rating_bar.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { NodeButton } from "node_button.slint";
 
 export component TagDockHeader inherits Rectangle {
     height: 28px;
@@ -59,33 +61,91 @@ export component QueryScopeControls inherits HorizontalLayout {
 export component TagTreeItem inherits Rectangle {
     in property <TagNodeView> tag;
     callback clicked();
+    callback toggle-expanded();
+    callback scroll-requested(length /* dx */, length /* dy */);
+    callback context-menu-requested(length /* x */, length /* y */);
 
-    height: 24px;
-    background: root.tag.is-selected ? Theme.surface-selected : (tag-touch.has-hover ? Theme.surface-hover : transparent);
-    border-radius: 2px;
+    height: 22px;
+
+    // Background priorities: Query Selected > Full Assigned > Partial Assigned > Hover > Base
+    background: root.tag.is-selected ? Theme.surface-selected :
+                (root.tag.is-assigned ? (root.tag.is-dimmed ? #a6e3a118 : #a6e3a128) :
+                (root.tag.is-partial ? (root.tag.is-dimmed ? #f9e2af15 : #f9e2af22) :
+                (tag-touch.has-hover ? Theme.surface-hover : (root.tag.is-dimmed ? #1e1e2e66 : Theme.surface-variant))));
+
+    border-radius: 3px;
+    border-width: 1px;
+
+    // Clean border priorities: Query Selected > Full Assigned > Partial Assigned > Default
+    border-color: root.tag.is-selected ? Theme.primary :
+                 (root.tag.is-assigned ? (root.tag.is-dimmed ? #a6e3a188 : #a6e3a1) :
+                 (root.tag.is-partial ? (root.tag.is-dimmed ? #f9e2af88 : #f9e2af) : Theme.border));
 
     tag-touch := TouchArea {
-        clicked => { root.clicked(); }
+        scroll-event(event) => {
+            root.scroll-requested(event.delta-x, event.delta-y);
+            return accept;
+        }
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                if event.button == PointerEventButton.right {
+                    root.context-menu-requested(tag-touch.mouse-x, tag-touch.mouse-y);
+                } else if event.button == PointerEventButton.left {
+                    root.clicked();
+                }
+            }
+        }
     }
 
     HorizontalLayout {
-        padding-left: (root.tag.depth * 12px) + 8px;
+        // Opacity is applied to the inner layout to avoid Slint GridLayout wrapper compiler bugs
+        opacity: root.tag.is-dimmed ? 0.8 : 1.0;
+        padding-left: (root.tag.depth * 14px) + 6px;
         padding-right: 8px;
-        spacing: 6px;
-        alignment: center;
+        spacing: 4px;
+        alignment: start;
 
-        Image {
-            source: @image-url("icons/tag.svg");
-            width: 12px;
-            height: 12px;
+        // Modular Geometrical Node Toggle Button Component
+        NodeButton {
+            has-children: root.tag.has-children;
+            is-expanded: root.tag.is-expanded;
+            show-leaf-bullet: root.tag.depth > 0;
+            button-size: 14px;
+            y: (parent.height - self.height) / 2;
+            toggled(new-state) => {
+                root.toggle-expanded();
+            }
         }
 
+        // Assignment Indicator Badge (Checkmark for Full, Half-Circle for Partial)
+        if root.tag.is-assigned || root.tag.is-partial : Rectangle {
+            width: 12px;
+            height: 12px;
+            y: (parent.height - self.height) / 2;
+
+            Text {
+                text: root.tag.is-assigned ? "✓" : "◐";
+                font-size: 10px;
+                font-weight: 700;
+                color: root.tag.is-assigned ? #a6e3a1 : #f9e2af;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Tag Name Label with Count Suffix (Strictly Left-Aligned)
         Text {
             text: root.tag.name;
-            color: root.tag.is-match ? #ff5555 : (root.tag.is-selected ? Theme.primary : Theme.text);
+            color: root.tag.is-selected ? Theme.primary :
+                   (root.tag.is-assigned ? #a6e3a1 :
+                   (root.tag.is-partial ? #f9e2af : Theme.text));
+
+            font-weight: (root.tag.is-selected || root.tag.is-assigned || root.tag.depth == 0) ? 700 : 400;
             font-italic: root.tag.is-partial;
+            font-size: 11px;
             vertical-alignment: center;
-            overflow: elide;
+            horizontal-alignment: left;
         }
     }
 }
@@ -96,14 +156,55 @@ export component TagTreeList inherits Rectangle {
     border-radius: 4px;
     border-width: 1px;
     border-color: Theme.border;
+    clip: true;
 
     in property <[TagNodeView]> tags: [];
     callback tag-clicked(int);
+    callback tag-toggle-expand(int);
+    callback tag-context-menu(int, length, length);
+    callback root-context-menu(length, length);
 
-    ListView {
-        for tag in root.tags: TagTreeItem {
-            tag: tag;
-            clicked => { root.tag-clicked(tag.id); }
+    property <length> item-row-height: 22px;
+    property <length> row-spacing: 2px;
+    property <int> rows-per-column: Math.max(1, Math.floor((self.height - 8px) / (root.item-row-height + root.row-spacing)));
+
+    bg-touch := TouchArea {
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                root.root-context-menu(bg-touch.mouse-x, bg-touch.mouse-y);
+            }
+        }
+    }
+
+    scroll-area := SmoothScrollArea {
+        width: 100%;
+        height: 100%;
+        content-width: grid-layout.preferred-width + 8px;
+        content-height: grid-layout.preferred-height + 8px;
+        enable-horizontal: true;
+        enable-vertical: false;
+
+        grid-layout := GridLayout {
+            padding: 4px;
+            spacing: root.row-spacing;
+
+            for tag[index] in root.tags: TagTreeItem {
+                col: Math.floor(index / root.rows-per-column);
+                row: Math.mod(index, root.rows-per-column);
+                tag: tag;
+                clicked => { root.tag-clicked(tag.id); }
+                toggle-expanded => { root.tag-toggle-expand(tag.id); }
+                scroll-requested(dx, dy) => {
+                    scroll-area.handle-scroll(dx, dy);
+                }
+                context-menu-requested(mx, my) => {
+                    root.tag-context-menu(
+                        tag.id,
+                        scroll-area.clamped-x + self.x + mx,
+                        scroll-area.clamped-y + self.y + my
+                    );
+                }
+            }
         }
     }
 }
@@ -124,6 +225,9 @@ export component TagPanel inherits VerticalLayout {
     callback rating-selected(int);
     callback tag-filter-changed(string);
     callback tag-clicked(int);
+    callback tag-toggle-expand(int);
+    callback tag-context-menu(int, length, length);
+    callback root-context-menu(length, length);
 
     // Dock Header
     TagDockHeader {
@@ -151,9 +255,12 @@ export component TagPanel inherits VerticalLayout {
         edited(text) => { root.tag-filter-changed(text); }
     }
 
-    // Tag Hierarchical Tree View
-    TagTreeList {
+    // Tag Hierarchical Tree View with Column Flow and Auto-Clamping Smooth Scroll Area
+    tree-list := TagTreeList {
         tags: root.tags;
         tag-clicked(id) => { root.tag-clicked(id); }
+        tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
+        tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-list.x + x, tree-list.y + y); }
+        root-context-menu(x, y) => { root.root-context-menu(tree-list.x + x, tree-list.y + y); }
     }
 }

@@ -30,9 +30,12 @@ export struct TagNodeView {
     id: int,
     name: string,
     depth: int,
+    has_children: bool,
+    is_expanded: bool,
     is_selected: bool,
+    is_assigned: bool,
     is_partial: bool,
-    is_match: bool,
+    is_dimmed: bool,
 }
 
 export struct ContextMenuItemModel {
@@ -45,4 +48,5 @@ export struct ContextMenuItemModel {
     is_enabled: bool,
     has_submenu: bool,
     submenu_depth: int,
+    menu_index: int,
 }

@@ -15,7 +15,7 @@ pub enum CtxMenuItemKind {
     Submenu = 5,
 }
 
-/// Generic, decoupled context menu item data structure.
+/// Generic, decoupled context menu item data structure supporting arbitrary nesting depth.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CtxMenuItem {
     pub id: CtxMenuActionId,
@@ -26,6 +26,7 @@ pub struct CtxMenuItem {
     pub is_checked: bool,
     pub is_enabled: bool,
     pub children: Vec<CtxMenuItem>,
+    pub menu_index: usize,
 }
 
 impl CtxMenuItem {
@@ -39,6 +40,7 @@ impl CtxMenuItem {
             is_checked: false,
             is_enabled: true,
             children: Vec::new(),
+            menu_index: 0,
         }
     }
 
@@ -52,6 +54,7 @@ impl CtxMenuItem {
             is_checked,
             is_enabled: true,
             children: Vec::new(),
+            menu_index: 0,
         }
     }
 
@@ -65,6 +68,7 @@ impl CtxMenuItem {
             is_checked: false,
             is_enabled: false,
             children: Vec::new(),
+            menu_index: 0,
         }
     }
 
@@ -78,11 +82,31 @@ impl CtxMenuItem {
             is_checked: false,
             is_enabled: false,
             children: Vec::new(),
+            menu_index: 0,
+        }
+    }
+
+    pub fn new_submenu(
+        text: impl Into<String>,
+        icon_name: Option<&str>,
+        is_enabled: bool,
+        children: Vec<CtxMenuItem>,
+    ) -> Self {
+        Self {
+            id: 0,
+            text: text.into(),
+            shortcut: None,
+            icon_name: icon_name.map(|s| s.to_string()),
+            kind: CtxMenuItemKind::Submenu,
+            is_checked: false,
+            is_enabled,
+            children,
+            menu_index: 0,
         }
     }
 }
 
-/// Root context menu model holding an array of items and optional metadata.
+/// Root context menu model holding an array of items and providing hierarchical traversal utilities.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CtxMenu {
     pub title: Option<String>,
@@ -101,9 +125,42 @@ impl CtxMenu {
     pub fn len(&self) -> usize {
         self.items.len()
     }
+
+    /// Indexes all nodes in the hierarchy with unique sequential indices for fast lookups.
+    pub fn index_items(&mut self) {
+        let mut counter = 1;
+        Self::index_slice(&mut self.items, &mut counter);
+    }
+
+    fn index_slice(items: &mut [CtxMenuItem], counter: &mut usize) {
+        for item in items.iter_mut() {
+            item.menu_index = *counter;
+            *counter += 1;
+            if !item.children.is_empty() {
+                Self::index_slice(&mut item.children, counter);
+            }
+        }
+    }
+
+    /// Retrieves the children slice of the item matching `menu_idx`.
+    pub fn find_children_by_menu_index(&self, menu_idx: usize) -> Option<&[CtxMenuItem]> {
+        Self::search_children(&self.items, menu_idx)
+    }
+
+    fn search_children(items: &[CtxMenuItem], menu_idx: usize) -> Option<&[CtxMenuItem]> {
+        for item in items {
+            if item.menu_index == menu_idx {
+                return Some(&item.children);
+            }
+            if let Some(res) = Self::search_children(&item.children, menu_idx) {
+                return Some(res);
+            }
+        }
+        None
+    }
 }
 
-/// Dynamic context menu invocation payload passing caller context without binding to concrete entities.
+/// Dynamic context menu invocation payload passing caller context.
 #[derive(Debug, Clone, Default)]
 pub struct CtxMenuContext {
     pub position_x: f32,

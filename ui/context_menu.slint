@@ -4,7 +4,7 @@ import { ContextMenuItemModel } from "types.slint";
 export component ContextMenuItemRow inherits Rectangle {
     in property <ContextMenuItemModel> item;
     callback clicked();
-    callback row-hovered(bool /* is_hover */, length /* y_pos */);
+    callback row-hovered(bool /* is_hover */, length /* y_pos */, int /* menu_index */, bool /* has_sub */);
 
     height: (root.item.kind == 3) ? 7px : ((root.item.kind == 4) ? 22px : 28px);
     background: (!root.item.is-enabled || root.item.kind == 3 || root.item.kind == 4)
@@ -15,7 +15,7 @@ export component ContextMenuItemRow inherits Rectangle {
     property <bool> is-hovered: item-touch.has-hover;
     changed is-hovered => {
         if self.is-hovered {
-            root.row-hovered(true, root.y);
+            root.row-hovered(true, root.y, root.item.menu-index, root.item.has-submenu);
         }
     }
 
@@ -47,20 +47,20 @@ export component ContextMenuItemRow inherits Rectangle {
         }
     }
 
-    // Standard Action / Checkable / Submenu Row (Left-aligned)
+    // Standard Action / Checkable / Submenu Row
     if root.item.kind != 3 && root.item.kind != 4 : HorizontalLayout {
         padding-left: 10px;
         padding-right: 10px;
         spacing: 8px;
         alignment: start;
 
-        // Checkable / Indicator Icon Box
+        // Checkable Indicator Icon Box
         Rectangle {
             width: 14px;
             height: 14px;
             y: (parent.height - self.height) / 2;
 
-            if root.item.kind == 1 && root.item.is_checked : Text {
+            if root.item.kind == 1 && root.item.is-checked : Text {
                 text: "✓";
                 font-size: 11px;
                 font-weight: 700;
@@ -69,7 +69,7 @@ export component ContextMenuItemRow inherits Rectangle {
                 vertical-alignment: center;
             }
 
-            if root.item.kind == 2 && root.item.is_checked : Text {
+            if root.item.kind == 2 && root.item.is-checked : Text {
                 text: "●";
                 font-size: 9px;
                 color: Theme.primary;
@@ -78,10 +78,10 @@ export component ContextMenuItemRow inherits Rectangle {
             }
         }
 
-        // Action Text (Strictly Left-aligned)
+        // Action Text
         Text {
             text: root.item.text;
-            color: root.item.is_enabled ? Theme.text : Theme.text-muted;
+            color: root.item.is-enabled ? Theme.text : Theme.text-muted;
             font-size: 12px;
             vertical-alignment: center;
             horizontal-alignment: left;
@@ -89,7 +89,7 @@ export component ContextMenuItemRow inherits Rectangle {
             overflow: elide;
         }
 
-        // Keyboard Shortcut Text (Right-aligned)
+        // Keyboard Shortcut Text
         if root.item.shortcut != "" : Text {
             text: root.item.shortcut;
             color: Theme.text-muted;
@@ -99,7 +99,7 @@ export component ContextMenuItemRow inherits Rectangle {
         }
 
         // Submenu Flyout Indicator Arrow
-        if root.item.has_submenu : Text {
+        if root.item.has-submenu : Text {
             text: "▶";
             font-size: 9px;
             color: Theme.text-muted;
@@ -109,16 +109,49 @@ export component ContextMenuItemRow inherits Rectangle {
 }
 
 export component ContextMenuPopup inherits Rectangle {
-    in property <[ContextMenuItemModel]> items: [];
-    in property <[ContextMenuItemModel]> submenu-items: [];
+    in property <[ContextMenuItemModel]> level0-items: [];
+    in property <[ContextMenuItemModel]> level1-items: [];
+    in property <[ContextMenuItemModel]> level2-items: [];
+    in property <[ContextMenuItemModel]> level3-items: [];
+    in property <[ContextMenuItemModel]> level4-items: [];
+    in property <[ContextMenuItemModel]> level5-items: [];
+
     in property <length> pos-x: 0px;
     in property <length> pos-y: 0px;
 
-    in-out property <bool> is-submenu-open: false;
-    in-out property <length> submenu-rel-y: 0px;
+    in-out property <length> sub1-y: 0px;
+    in-out property <length> sub2-y: 0px;
+    in-out property <length> sub3-y: 0px;
+    in-out property <length> sub4-y: 0px;
+    in-out property <length> sub5-y: 0px;
 
     callback item-clicked(int);
+    callback request-submenu(int /* depth */, int /* menu_index */);
     callback dismissed();
+
+    property <length> menu-width: 210px;
+
+    property <length> l0-x: Math.max(8px, Math.min(root.width - 220px - 8px, root.pos-x));
+
+    property <length> l1-x: (root.l0-x + 220px + root.menu-width + 8px > root.width)
+        ? Math.max(8px, root.l0-x - root.menu-width - 4px)
+        : (root.l0-x + 220px + 4px);
+
+    property <length> l2-x: (root.l1-x + root.menu-width + root.menu-width + 8px > root.width)
+        ? Math.max(8px, root.l1-x - root.menu-width - 4px)
+        : (root.l1-x + root.menu-width + 4px);
+
+    property <length> l3-x: (root.l2-x + root.menu-width + root.menu-width + 8px > root.width)
+        ? Math.max(8px, root.l2-x - root.menu-width - 4px)
+        : (root.l2-x + root.menu-width + 4px);
+
+    property <length> l4-x: (root.l3-x + root.menu-width + root.menu-width + 8px > root.width)
+        ? Math.max(8px, root.l3-x - root.menu-width - 4px)
+        : (root.l3-x + root.menu-width + 4px);
+
+    property <length> l5-x: (root.l4-x + root.menu-width + root.menu-width + 8px > root.width)
+        ? Math.max(8px, root.l4-x - root.menu-width - 4px)
+        : (root.l4-x + root.menu-width + 4px);
 
     // 1. Transparent Backdrop TouchArea
     TouchArea {
@@ -127,14 +160,12 @@ export component ContextMenuPopup inherits Rectangle {
         clicked => { root.dismissed(); }
     }
 
-    // 2. Primary Menu Box (Fitted to content height)
-    main-box := Rectangle {
+    // Level 0 Menu Box
+    Rectangle {
         width: 220px;
-        height: main-layout.preferred-height;
-
-        x: Math.max(8px, Math.min(parent.width - self.width - 8px, root.pos-x));
-        y: Math.max(8px, Math.min(parent.height - self.height - 8px, root.pos-y));
-
+        height: layout0.preferred-height;
+        x: root.l0-x;
+        y: Math.max(8px, Math.min(root.height - self.height - 8px, root.pos-y));
         background: Theme.surface;
         border-radius: 6px;
         border-width: 1px;
@@ -142,41 +173,30 @@ export component ContextMenuPopup inherits Rectangle {
         drop-shadow-blur: 16px;
         drop-shadow-color: #000000bb;
 
-        main-layout := VerticalLayout {
+        layout0 := VerticalLayout {
             padding: 4px;
             spacing: 1px;
-
-            for item in root.items: ContextMenuItemRow {
+            for item in root.level0-items: ContextMenuItemRow {
                 item: item;
-                row-hovered(is-hover, row-y) => {
-                    if item.has_submenu && is-hover {
-                        root.is-submenu-open = true;
-                        root.submenu-rel-y = row-y;
-                    } else if !item.has_submenu && is-hover {
-                        root.is-submenu-open = false;
+                row-hovered(is-hover, row-y, m-idx, has-sub) => {
+                    if is-hover {
+                        root.sub1-y = row-y;
+                        root.request-submenu(0, has-sub ? m-idx : 0);
                     }
                 }
                 clicked => {
-                    if !item.has_submenu {
-                        root.item-clicked(item.id);
-                    }
+                    if !item.has-submenu { root.item-clicked(item.id); }
                 }
             }
         }
     }
 
-    // 3. Flyout Submenu Box (Positioned to the right or flipped to left)
-    if root.is-submenu-open && root.submenu-items.length > 0 : Rectangle {
-        width: 200px;
-        height: sub-layout.preferred-height;
-
-        // Automatically flip to the left if overflowing the right edge
-        x: (main-box.x + main-box.width + self.width + 8px > parent.width)
-            ? Math.max(8px, main-box.x - self.width - 4px)
-            : (main-box.x + main-box.width + 4px);
-
-        y: Math.max(8px, Math.min(parent.height - self.height - 8px, main-box.y + root.submenu-rel-y));
-
+    // Level 1 Submenu Box
+    if root.level1-items.length > 0 : Rectangle {
+        width: root.menu-width;
+        height: layout1.preferred-height;
+        x: root.l1-x;
+        y: Math.max(8px, Math.min(root.height - self.height - 8px, root.pos-y + root.sub1-y));
         background: Theme.surface;
         border-radius: 6px;
         border-width: 1px;
@@ -184,14 +204,137 @@ export component ContextMenuPopup inherits Rectangle {
         drop-shadow-blur: 16px;
         drop-shadow-color: #000000bb;
 
-        sub-layout := VerticalLayout {
+        layout1 := VerticalLayout {
             padding: 4px;
             spacing: 1px;
-
-            for sub-item in root.submenu-items: ContextMenuItemRow {
-                item: sub-item;
+            for item in root.level1-items: ContextMenuItemRow {
+                item: item;
+                row-hovered(is-hover, row-y, m-idx, has-sub) => {
+                    if is-hover {
+                        root.sub2-y = row-y;
+                        root.request-submenu(1, has-sub ? m-idx : 0);
+                    }
+                }
                 clicked => {
-                    root.item-clicked(sub-item.id);
+                    if !item.has-submenu { root.item-clicked(item.id); }
+                }
+            }
+        }
+    }
+
+    // Level 2 Submenu Box
+    if root.level2-items.length > 0 : Rectangle {
+        width: root.menu-width;
+        height: layout2.preferred-height;
+        x: root.l2-x;
+        y: Math.max(8px, Math.min(root.height - self.height - 8px, root.pos-y + root.sub1-y + root.sub2-y));
+        background: Theme.surface;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 16px;
+        drop-shadow-color: #000000bb;
+
+        layout2 := VerticalLayout {
+            padding: 4px;
+            spacing: 1px;
+            for item in root.level2-items: ContextMenuItemRow {
+                item: item;
+                row-hovered(is-hover, row-y, m-idx, has-sub) => {
+                    if is-hover {
+                        root.sub3-y = row-y;
+                        root.request-submenu(2, has-sub ? m-idx : 0);
+                    }
+                }
+                clicked => {
+                    if !item.has-submenu { root.item-clicked(item.id); }
+                }
+            }
+        }
+    }
+
+    // Level 3 Submenu Box
+    if root.level3-items.length > 0 : Rectangle {
+        width: root.menu-width;
+        height: layout3.preferred-height;
+        x: root.l3-x;
+        y: Math.max(8px, Math.min(root.height - self.height - 8px, root.pos-y + root.sub1-y + root.sub2-y + root.sub3-y));
+        background: Theme.surface;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 16px;
+        drop-shadow-color: #000000bb;
+
+        layout3 := VerticalLayout {
+            padding: 4px;
+            spacing: 1px;
+            for item in root.level3-items: ContextMenuItemRow {
+                item: item;
+                row-hovered(is-hover, row-y, m-idx, has-sub) => {
+                    if is-hover {
+                        root.sub4-y = row-y;
+                        root.request-submenu(3, has-sub ? m-idx : 0);
+                    }
+                }
+                clicked => {
+                    if !item.has-submenu { root.item-clicked(item.id); }
+                }
+            }
+        }
+    }
+
+    // Level 4 Submenu Box
+    if root.level4-items.length > 0 : Rectangle {
+        width: root.menu-width;
+        height: layout4.preferred-height;
+        x: root.l4-x;
+        y: Math.max(8px, Math.min(root.height - self.height - 8px, root.pos-y + root.sub1-y + root.sub2-y + root.sub3-y + root.sub4-y));
+        background: Theme.surface;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 16px;
+        drop-shadow-color: #000000bb;
+
+        layout4 := VerticalLayout {
+            padding: 4px;
+            spacing: 1px;
+            for item in root.level4-items: ContextMenuItemRow {
+                item: item;
+                row-hovered(is-hover, row-y, m-idx, has-sub) => {
+                    if is-hover {
+                        root.sub5-y = row-y;
+                        root.request-submenu(4, has-sub ? m-idx : 0);
+                    }
+                }
+                clicked => {
+                    if !item.has-submenu { root.item-clicked(item.id); }
+                }
+            }
+        }
+    }
+
+    // Level 5 Submenu Box
+    if root.level5-items.length > 0 : Rectangle {
+        width: root.menu-width;
+        height: layout5.preferred-height;
+        x: root.l5-x;
+        y: Math.max(8px, Math.min(root.height - self.height - 8px, root.pos-y + root.sub1-y + root.sub2-y + root.sub3-y + root.sub4-y + root.sub5-y));
+        background: Theme.surface;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 16px;
+        drop-shadow-color: #000000bb;
+
+        layout5 := VerticalLayout {
+            padding: 4px;
+            spacing: 1px;
+            for item in root.level5-items: ContextMenuItemRow {
+                item: item;
+                clicked => {
+                    root.item-clicked(item.id);
                 }
             }
         }

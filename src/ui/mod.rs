@@ -9,6 +9,7 @@ pub mod bridge_inspector;
 pub mod bridge_media;
 pub mod bridge_player;
 pub mod bridge_state;
+pub mod bridge_tag_dialogs;
 pub mod bridge_tags;
 pub mod bridge_thumbnails;
 pub mod favorites;
@@ -17,5 +18,6 @@ pub mod models;
 
 pub use bridge::UiBridge;
 pub use bridge_state::*;
+pub use bridge_tag_dialogs::TagDialogController;
 pub use favorites::FavoriteManager;
 pub use file_selection::{FileSelectionModel, FileSelectionSummary};

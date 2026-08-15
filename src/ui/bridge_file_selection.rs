@@ -1,12 +1,13 @@
 use super::MainWindow;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
+use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
 use crate::library::Library;
 use crate::library::models::MediaId;
 use crate::player::{Player, PlayerController};
 use parking_lot::{Mutex, RwLock};
-use slint::Model;
+use slint::{ComponentHandle, Model};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -22,6 +23,35 @@ pub struct FileClickEvent {
 pub struct BridgeFileSelection;
 
 impl BridgeFileSelection {
+    /// Registers media click and selection callbacks onto MainWindow.
+    pub fn register_callbacks(
+        window: &MainWindow,
+        library: Arc<Library>,
+        player: Arc<PlayerController>,
+        state: Arc<RwLock<UiState>>,
+        last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
+    ) {
+        let win = window.clone_strong();
+        let lib = library;
+        let pl = player;
+        let st = state;
+        let lc = last_click;
+        window.on_media_clicked(move |id, is_ctrl, is_shift| {
+            Self::handle_click(
+                FileClickEvent {
+                    media_id: id as u64,
+                    is_ctrl,
+                    is_shift,
+                },
+                &win,
+                &lib,
+                &pl,
+                &st,
+                &lc,
+            );
+        });
+    }
+
     /// Handles media tile clicks with modifier keys, double-click timing, and surgical UI updates.
     pub fn handle_click(
         event: FileClickEvent,
@@ -48,9 +78,10 @@ impl BridgeFileSelection {
         Self::sync_selection_diff(window, state, &changed_ids);
         let t_sync = t_sync_start.elapsed();
 
-        // 4. Update Inspector Fields
+        // 4. Update Inspector Fields & Synchronize TagTree Highlight/Counts In-Place
         let t_insp_start = Instant::now();
         BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
         let t_insp = t_insp_start.elapsed();
 
         tracing::debug!(
@@ -61,9 +92,9 @@ impl BridgeFileSelection {
             changed_rows = changed_ids.len(),
             math_us = t_math.as_micros(),
             model_sync_us = t_sync.as_micros(),
-            inspector_us = t_insp.as_micros(),
+            inspector_and_tags_us = t_insp.as_micros(),
             total_click_us = t_start.elapsed().as_micros(),
-            "[FileSelection: FastInPlace] Instant selection updated"
+            "[FileSelection: FastInPlace] Instant selection updated with tag synchronization"
         );
     }
 
@@ -148,7 +179,7 @@ impl BridgeFileSelection {
         }
     }
 
-    pub fn select_all(window: &MainWindow, state: &Arc<RwLock<UiState>>) {
+    pub fn select_all(window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
         let t_start = Instant::now();
         let changed_ids = {
             let mut st = state.write();
@@ -169,6 +200,7 @@ impl BridgeFileSelection {
 
         Self::sync_selection_diff(window, state, &changed_ids);
         BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
 
         tracing::debug!(
             changed_rows = changed_ids.len(),
@@ -177,7 +209,11 @@ impl BridgeFileSelection {
         );
     }
 
-    pub fn clear_selection(window: &MainWindow, state: &Arc<RwLock<UiState>>) {
+    pub fn clear_selection(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
         let t_start = Instant::now();
         let prev_selected = {
             let mut st = state.write();
@@ -189,6 +225,7 @@ impl BridgeFileSelection {
         let changed_ids: Vec<MediaId> = prev_selected.into_iter().collect();
         Self::sync_selection_diff(window, state, &changed_ids);
         BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
 
         tracing::debug!(
             cleared_rows = changed_ids.len(),
@@ -217,7 +254,7 @@ impl BridgeFileSelection {
                 filename = %media.filename,
                 media_type = ?media.media_type,
                 path = ?full_path,
-                "[MediaAction: DoubleClick] Double-click event triggered on media item (Dummy Handler / Ready for Extension)"
+                "[MediaAction: DoubleClick] Double-click event triggered on media item"
             );
 
             Self::open_media(media_id, state, library, player, window);

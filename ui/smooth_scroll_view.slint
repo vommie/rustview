@@ -1,0 +1,181 @@
+import { Theme } from "styles.slint";
+
+/// Generic, modular, high-performance scroll container supporting smooth mouse wheel,
+/// trackpad gestures, intelligent axis translation, auto-clamping on resize, and interactive scrollbars.
+export component SmoothScrollArea inherits Rectangle {
+    in-out property <length> viewport-x: 0px;
+    in-out property <length> viewport-y: 0px;
+
+    in property <length> content-width: 0px;
+    in property <length> content-height: 0px;
+    in property <length> scroll-step: 36px;
+
+    in property <bool> enable-horizontal: true;
+    in property <bool> enable-vertical: true;
+
+    // Computed boundary properties
+    property <length> min-x: Math.min(0px, self.width - root.content-width);
+    property <length> min-y: Math.min(0px, self.height - root.content-height);
+
+    // Reactively clamped viewport coordinates preventing content clipping on window resize
+    out property <length> clamped-x: (root.enable-horizontal && root.content-width > self.width)
+        ? Math.max(root.min-x, Math.min(0px, root.viewport-x))
+        : 0px;
+
+    out property <length> clamped-y: (root.enable-vertical && root.content-height > self.height)
+        ? Math.max(root.min-y, Math.min(0px, root.viewport-y))
+        : 0px;
+
+    changed clamped-x => {
+        if root.viewport-x != root.clamped-x {
+            root.viewport-x = root.clamped-x;
+        }
+    }
+
+    changed clamped-y => {
+        if root.viewport-y != root.clamped-y {
+            root.viewport-y = root.clamped-y;
+        }
+    }
+
+    clip: true;
+
+    callback scrolled(length /* dx */, length /* dy */);
+
+    /// Public method to apply wheel / gesture delta to the viewport
+    public function handle-scroll(dx: length, dy: length) {
+        let has-v = root.enable-vertical && (root.content-height > self.height);
+        let has-h = root.enable-horizontal && (root.content-width > self.width);
+
+        if has-v && !has-h {
+            // Pure vertical scrolling
+            root.viewport-y = Math.max(root.min-y, Math.min(0px, root.viewport-y + dy));
+        } else if has-h && !has-v {
+            // Pure horizontal scrolling (translates vertical mouse wheel dy into horizontal dx)
+            let delta = (dx != 0px) ? dx : dy;
+            root.viewport-x = Math.max(root.min-x, Math.min(0px, root.viewport-x + delta));
+        } else if has-v && has-h {
+            // Bi-directional scrolling
+            root.viewport-y = Math.max(root.min-y, Math.min(0px, root.viewport-y + dy));
+            root.viewport-x = Math.max(root.min-x, Math.min(0px, root.viewport-x + dx));
+        }
+        root.scrolled(dx, dy);
+    }
+
+    // Scroll gesture event interceptor
+    scroll-touch := TouchArea {
+        width: 100%;
+        height: 100%;
+
+        scroll-event(event) => {
+            root.handle-scroll(event.delta-x, event.delta-y);
+            return accept;
+        }
+    }
+
+    // Content container viewport
+    content-host := Rectangle {
+        x: root.clamped-x;
+        y: root.clamped-y;
+        width: Math.max(parent.width, root.content-width);
+        height: Math.max(parent.height, root.content-height);
+
+        @children
+    }
+
+    // Horizontal Scrollbar Track & Thumb
+    if root.enable-horizontal && root.content-width > self.width : h-track := Rectangle {
+        x: 0px;
+        y: parent.height - 6px;
+        width: parent.width - (root.enable-vertical && root.content-height > parent.height ? 6px : 0px);
+        height: 6px;
+        background: #00000022;
+        border-radius: 3px;
+
+        property <length> track-w: self.width;
+        property <length> thumb-w: Math.max(20px, self.width * (root.width / Math.max(1px, root.content-width)));
+        property <length> max-scroll-x: Math.max(1px, root.content-width - root.width);
+        property <length> thumb-x: (-root.clamped-x / self.max-scroll-x) * (self.track-w - self.thumb-w);
+
+        Rectangle {
+            x: h-track.thumb-x;
+            y: 0px;
+            width: h-track.thumb-w;
+            height: 6px;
+            border-radius: 3px;
+            background: h-touch.has-hover || h-touch.pressed ? Theme.primary : Theme.border;
+
+            h-touch := TouchArea {
+                property <length> start-x;
+                property <length> start-v-x;
+
+                pointer-event(e) => {
+                    if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                        self.start-x = self.mouse-x;
+                        self.start-v-x = root.clamped-x;
+                    }
+                }
+
+                moved => {
+                    if self.pressed {
+                        let delta = self.mouse-x - self.start-x;
+                        let track-avail = h-track.track-w - h-track.thumb-w;
+                        if track-avail > 0px {
+                            let ratio = delta / track-avail;
+                            let new-x = self.start-v-x - (ratio * h-track.max-scroll-x);
+                            root.viewport-x = Math.max(root.min-x, Math.min(0px, new-x));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Vertical Scrollbar Track & Thumb
+    if root.enable-vertical && root.content-height > self.height : v-track := Rectangle {
+        x: parent.width - 6px;
+        y: 0px;
+        width: 6px;
+        height: parent.height - (root.enable-horizontal && root.content-width > parent.width ? 6px : 0px);
+        background: #00000022;
+        border-radius: 3px;
+
+        property <length> track-h: self.height;
+        property <length> thumb-h: Math.max(20px, self.height * (root.height / Math.max(1px, root.content-height)));
+        property <length> max-scroll-y: Math.max(1px, root.content-height - root.height);
+        property <length> thumb-y: (-root.clamped-y / self.max-scroll-y) * (self.track-h - self.thumb-h);
+
+        Rectangle {
+            x: 0px;
+            y: v-track.thumb-y;
+            width: 6px;
+            height: v-track.thumb-h;
+            border-radius: 3px;
+            background: v-touch.has-hover || v-touch.pressed ? Theme.primary : Theme.border;
+
+            v-touch := TouchArea {
+                property <length> start-y;
+                property <length> start-v-y;
+
+                pointer-event(e) => {
+                    if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                        self.start-y = self.mouse-y;
+                        self.start-v-y = root.clamped-y;
+                    }
+                }
+
+                moved => {
+                    if self.pressed {
+                        let delta = self.mouse-y - self.start-y;
+                        let track-avail = v-track.track-h - v-track.thumb-h;
+                        if track-avail > 0px {
+                            let ratio = delta / track-avail;
+                            let new-y = self.start-v-y - (ratio * v-track.max-scroll-y);
+                            root.viewport-y = Math.max(root.min-y, Math.min(0px, new-y));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

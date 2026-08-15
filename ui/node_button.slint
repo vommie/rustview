@@ -1,0 +1,85 @@
+import { Theme } from "styles.slint";
+
+/// Fully encapsulated, standalone, reusable tree node toggle button component.
+/// Provides pixel-perfect geometric vector rendering (+ / - / bullet) independent of font metrics.
+export component NodeButton inherits Rectangle {
+    // State & Behavior Properties
+    in-out property <bool> is-expanded: false;
+    in property <bool> has-children: true;
+    in property <bool> show-leaf-bullet: false;
+    in property <bool> enabled: true;
+
+    // Dimension & Sizing API
+    in property <length> button-size: 14px;
+    in property <length> icon-bar-length: 8px;
+    in property <length> icon-bar-thickness: 1.5px;
+    in property <length> leaf-bullet-size: 3px;
+    in property <length> btn-corner-radius: 2px;
+    in property <length> btn-border-width: 1px;
+
+    // Styling & Theme Color API
+    in property <color> button-background: Theme.surface;
+    in property <color> hover-background: Theme.surface-hover;
+    in property <color> button-border-color: Theme.border;
+    in property <color> hover-border-color: Theme.primary;
+    in property <color> icon-color: Theme.text;
+    in property <color> hover-icon-color: Theme.primary;
+    in property <color> leaf-bullet-color: Theme.text-muted;
+
+    // Callbacks
+    callback toggled(bool /* new_expanded_state */);
+    callback clicked();
+
+    width: root.button-size;
+    height: root.button-size;
+    background: transparent;
+
+    // 1. Branch / Parent Node Toggle Button Box (+ / -)
+    if root.has-children : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: btn-touch.has-hover ? root.hover-background : root.button-background;
+        border-radius: root.btn-corner-radius;
+        border-width: root.btn-border-width;
+        border-color: btn-touch.has-hover ? root.hover-border-color : root.button-border-color;
+
+        btn-touch := TouchArea {
+            enabled: root.enabled;
+            clicked => {
+                root.is-expanded = !root.is-expanded;
+                root.toggled(root.is-expanded);
+                root.clicked();
+            }
+        }
+
+        // Horizontal Bar (always visible for both + and -)
+        Rectangle {
+            width: root.icon-bar-length;
+            height: root.icon-bar-thickness;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 0.5px;
+            background: btn-touch.has-hover ? root.hover-icon-color : root.icon-color;
+        }
+
+        // Vertical Bar (rendered only when collapsed to form +)
+        if !root.is-expanded : Rectangle {
+            width: root.icon-bar-thickness;
+            height: root.icon-bar-length;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 0.5px;
+            background: btn-touch.has-hover ? root.hover-icon-color : root.icon-color;
+        }
+    }
+
+    // 2. Leaf Node Bullet Point (Centered Dot indicator)
+    if !root.has-children && root.show-leaf-bullet : Rectangle {
+        width: root.leaf-bullet-size;
+        height: root.leaf-bullet-size;
+        border-radius: root.leaf-bullet-size / 2;
+        background: root.leaf-bullet-color;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}

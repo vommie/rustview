@@ -11,6 +11,9 @@ import { ContextMenuPopup } from "context_menu.slint";
 
 export { SettingsWindow } from "settings_window.slint";
 export { FileRenameDialog } from "file_rename_dialog.slint";
+export { AddTagDialog } from "add_tag_dialog.slint";
+export { RenameTagDialog } from "rename_tag_dialog.slint";
+export { DeleteTagDialog } from "delete_tag_dialog.slint";
 
 export component MainWindow inherits Window {
     title: "RustView";
@@ -45,12 +48,16 @@ export component MainWindow inherits Window {
     in-out property <string> player-time-str: "00:00 / 00:00";
     in-out property <string> player-title: "Video Playback";
 
-    // Context Menu State
+    // Multi-Level Cascading Context Menu State
     in-out property <bool> is-context-menu-open: false;
     in-out property <length> context-menu-x: 0px;
     in-out property <length> context-menu-y: 0px;
-    in property <[ContextMenuItemModel]> context-menu-items: [];
-    in property <[ContextMenuItemModel]> context-submenu-items: [];
+    in property <[ContextMenuItemModel]> level0-context-items: [];
+    in property <[ContextMenuItemModel]> level1-context-items: [];
+    in property <[ContextMenuItemModel]> level2-context-items: [];
+    in property <[ContextMenuItemModel]> level3-context-items: [];
+    in property <[ContextMenuItemModel]> level4-context-items: [];
+    in property <[ContextMenuItemModel]> level5-context-items: [];
 
     // Data models
     in property <[MediaItemView]> media-items: [];
@@ -73,13 +80,18 @@ export component MainWindow inherits Window {
     callback favorite-selected(string);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
+
     callback context-menu-item-clicked(int /* action_id */);
+    callback context-menu-request-submenu(int /* depth */, int /* menu_index */);
     callback context-menu-dismissed();
 
     callback search-query-changed(string);
     callback regex-mode-toggled(bool);
     callback rating-applied(int);
     callback tag-toggled(int);
+    callback tag-toggle-expand(int);
+    callback tag-context-menu(int /* tag_id */, length /* x */, length /* y */);
+    callback tag-root-context-menu(length /* x */, length /* y */);
     callback tag-filter-changed(string);
     callback tag-mode-toggled(bool);
     callback match-mode-changed(int);
@@ -136,17 +148,17 @@ export component MainWindow inherits Window {
                     media-items: root.media-items;
                     thumb-size: root.thumb-size;
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                    item-context-menu(id, x, y) => { root.media-context-menu(id, x, y); }
+                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 48px); }
                 }
 
                 if !root.is-player-open && root.is-table-view : MediaTableView {
                     items: root.media-items;
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                    item-context-menu(id, x, y) => { root.media-context-menu(id, x, y); }
+                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 48px); }
                 }
             }
 
-            SidebarRight {
+            sidebar_right := SidebarRight {
                 tags: root.tags;
                 info-filename: root.info-filename;
                 info-size: root.info-size;
@@ -158,6 +170,9 @@ export component MainWindow inherits Window {
                 mode-toggled(assign) => { root.tag-mode-toggled(assign); }
                 rating-selected(r) => { root.rating-applied(r); }
                 tag-clicked(id) => { root.tag-toggled(id); }
+                tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
+                tag-context-menu(id, x, y) => { root.tag-context-menu(id, sidebar_right.x + x, 48px + sidebar_right.y + y); }
+                root-context-menu(x, y) => { root.tag-root-context-menu(sidebar_right.x + x, 48px + sidebar_right.y + y); }
                 tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
                 match-mode-changed(m) => { root.match-mode-changed(m); }
                 scope-mode-changed(s) => { root.scope-mode-changed(s); }
@@ -177,13 +192,18 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Generic Context Menu Popup Overlay
+    // Generic Multi-Level Context Menu Popup Overlay
     if root.is-context-menu-open : ContextMenuPopup {
-        items: root.context-menu-items;
-        submenu-items: root.context-submenu-items;
+        level0-items: root.level0-context-items;
+        level1-items: root.level1-context-items;
+        level2-items: root.level2-context-items;
+        level3-items: root.level3-context-items;
+        level4-items: root.level4-context-items;
+        level5-items: root.level5-context-items;
         pos-x: root.context-menu-x;
         pos-y: root.context-menu-y;
         item-clicked(id) => { root.context-menu-item-clicked(id); }
+        request-submenu(depth, m-idx) => { root.context-menu-request-submenu(depth, m-idx); }
         dismissed => { root.context-menu-dismissed(); }
     }
 

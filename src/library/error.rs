@@ -32,6 +32,12 @@ pub enum LibraryError {
     #[error("Parent tag cycle or invalid parent reference")]
     InvalidTagHierarchy,
 
+    #[error("Duplicate tag name '{0}' under the specified parent")]
+    DuplicateTag(String),
+
+    #[error("Invalid tag name '{0}'")]
+    InvalidTagName(String),
+
     #[error("Folder path already registered: {0}")]
     DuplicateFolder(String),
 
