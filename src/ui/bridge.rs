@@ -1,6 +1,7 @@
-use super::bridge_context_menu::{BridgeContextMenu, ContextMenuRegistration};
+use super::bridge_ctx_menu::{BridgeContextMenu, ContextMenuRegistration};
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_file_selection::BridgeFileSelection;
+use super::bridge_folder_dialogs::FolderDialogController;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
@@ -35,6 +36,7 @@ pub struct UiBridge {
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
     tag_dialogs: TagDialogController,
+    folder_dialogs: FolderDialogController,
     favorites: Arc<RwLock<FavoriteManager>>,
     ctx_menu_dispatcher: Arc<CtxMenuDispatcher>,
     state: Arc<RwLock<UiState>>,
@@ -59,15 +61,21 @@ impl UiBridge {
         let settings_dialog = Rc::new(RefCell::new(controller));
         let rename_dialog = Rc::new(RefCell::new(None));
         let tag_dialogs = TagDialogController::new();
+        let folder_dialogs = FolderDialogController::new();
 
-        // Restore persistent UI state (expanded tag IDs from settings)
+        // Restore persistent UI state
         let mut initial_state = UiState::default();
-        let restored_expanded = settings.get().tags.expanded_tag_ids;
-        tracing::info!(
-            restored_count = restored_expanded.len(),
-            "[TagTree: Session Restore] Restoring persistent expanded tag IDs"
-        );
-        initial_state.expanded_tag_ids = restored_expanded.into_iter().collect();
+
+        let restored_expanded_tags = settings.get().tags.expanded_tag_ids;
+        initial_state.expanded_tag_ids = restored_expanded_tags.into_iter().collect();
+
+        let restored_expanded_folders = if settings.get().folders.persist_folder_tree_state {
+            settings.get().folders.expanded_folder_ids
+        } else {
+            Vec::new()
+        };
+
+        initial_state.expanded_folder_ids = restored_expanded_folders.into_iter().collect();
 
         let state = Arc::new(RwLock::new(initial_state));
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
@@ -90,6 +98,7 @@ impl UiBridge {
             settings_dialog,
             rename_dialog,
             tag_dialogs,
+            folder_dialogs,
             favorites,
             ctx_menu_dispatcher,
             state,
@@ -131,7 +140,6 @@ impl UiBridge {
         });
     }
 
-    /// Clean, modular callback dispatch to each specialized bridge subsystem (SRP).
     fn register_subsystem_callbacks(&self) {
         BridgeFolders::register_callbacks(
             &self.window,
@@ -159,6 +167,7 @@ impl UiBridge {
                 dispatcher: self.ctx_menu_dispatcher.clone(),
                 rename_dialog: self.rename_dialog.clone(),
                 tag_dialogs: self.tag_dialogs.clone(),
+                folder_dialogs: self.folder_dialogs.clone(),
                 settings: self.settings.clone(),
             },
         );
@@ -180,10 +189,6 @@ impl UiBridge {
 
         BridgePlayer::register_callbacks(&self.window, self.player.clone());
     }
-
-    // =========================================================================
-    // Public Facade APIs
-    // =========================================================================
 
     pub fn sync_root_folder(&self) {
         BridgeFolders::sync_root(
@@ -274,7 +279,7 @@ impl UiBridge {
     }
 
     pub fn show_media_context_menu(&self, media_id: MediaId, x: f32, y: f32) {
-        BridgeContextMenu::show(&self.window, &self.state, media_id, x, y);
+        BridgeContextMenu::show_media_menu(&self.window, &self.state, media_id, x, y);
     }
 
     pub fn reload_tags(&self) {

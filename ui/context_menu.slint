@@ -109,6 +109,11 @@ export component ContextMenuItemRow inherits Rectangle {
 }
 
 export component ContextMenuPopup inherits Rectangle {
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+
     in property <[ContextMenuItemModel]> level0-items: [];
     in property <[ContextMenuItemModel]> level1-items: [];
     in property <[ContextMenuItemModel]> level2-items: [];
@@ -153,10 +158,17 @@ export component ContextMenuPopup inherits Rectangle {
         ? Math.max(8px, root.l4-x - root.menu-width - 4px)
         : (root.l4-x + root.menu-width + 4px);
 
-    // 1. Transparent Backdrop TouchArea
-    TouchArea {
+    // 1. Transparent Full-Window Backdrop: Immediately closes on the VERY FIRST click/pointer-down
+    backdrop-touch := TouchArea {
+        x: 0px;
+        y: 0px;
         width: 100%;
         height: 100%;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                root.dismissed();
+            }
+        }
         clicked => { root.dismissed(); }
     }
 

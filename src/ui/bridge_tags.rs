@@ -1,9 +1,10 @@
-use super::bridge_context_menu::BridgeContextMenu;
+use super::bridge_ctx_menu::BridgeContextMenu;
+use super::bridge_ctx_menu_tag::TagContextMenu;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::{MainWindow, TagNodeView};
-use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
+use crate::ctx_menu::CtxMenuActionId;
 use crate::library::Library;
 use crate::library::models::{MediaId, TagId, TagRecord};
 use crate::settings::SettingsManager;
@@ -150,7 +151,6 @@ impl TagTreeBuilder {
 
             let start_idx = output.len();
 
-            // Insert tentative node
             output.push(TagNodeView {
                 id: node.record.id as i32,
                 name: formatted_name.into(),
@@ -179,7 +179,6 @@ impl TagTreeBuilder {
             if !filter_text.is_empty() && !name_match && !child_matches {
                 output.truncate(start_idx);
             } else {
-                // Dim parent nodes shown solely as hierarchical context for matching descendants
                 let is_dimmed = !filter_text.is_empty() && !name_match && child_matches;
                 output[start_idx].is_dimmed = is_dimmed;
                 any_match_in_branch = true;
@@ -272,211 +271,7 @@ impl TagTreeSync {
 }
 
 // =============================================================================
-// Section 4: TagContextMenu (Context Menu Construction & Reparenting Submenu)
-// =============================================================================
-
-pub struct TagContextMenu;
-
-impl TagContextMenu {
-    pub fn build_root_menu() -> CtxMenu {
-        CtxMenuBuilder::new()
-            .header("Tags Root")
-            .action(
-                CTX_TAG_ADD_ROOT,
-                "Add Root Tag...",
-                None,
-                Some("plus"),
-                true,
-            )
-            .separator()
-            .action(CTX_TAG_EXPAND_ALL, "Expand All", None, None, true)
-            .action(CTX_TAG_COLLAPSE_ALL, "Collapse All", None, None, true)
-            .separator()
-            .action(
-                CTX_TAG_REFRESH,
-                "Refresh Tag Tree",
-                None,
-                Some("refresh"),
-                true,
-            )
-            .build()
-    }
-
-    pub fn build_tag_menu(
-        tag: &TagRecord,
-        all_tags: &[TagRecord],
-        descendants: &HashSet<TagId>,
-    ) -> CtxMenu {
-        let move_submenu = Self::build_reparent_submenu(tag.id, all_tags, descendants);
-
-        CtxMenuBuilder::new()
-            .header(format!("Tag: {}", tag.name))
-            .action(
-                CTX_TAG_ADD_CHILD,
-                "Add Child Tag...",
-                None,
-                Some("plus"),
-                true,
-            )
-            .action(
-                CTX_TAG_RENAME,
-                "Rename Tag...",
-                Some("F2"),
-                Some("edit"),
-                true,
-            )
-            .item(move_submenu)
-            .separator()
-            .action(
-                CTX_TAG_DELETE,
-                "Delete Tag...",
-                Some("Del"),
-                Some("trash"),
-                true,
-            )
-            .build()
-    }
-
-    fn build_reparent_submenu(
-        current_tag_id: TagId,
-        all_tags: &[TagRecord],
-        descendants: &HashSet<TagId>,
-    ) -> CtxMenuItem {
-        let mut children_map: HashMap<Option<TagId>, Vec<TagRecord>> = HashMap::new();
-        for t in all_tags {
-            if t.id != current_tag_id && !descendants.contains(&t.id) {
-                children_map.entry(t.parent_id).or_default().push(t.clone());
-            }
-        }
-
-        for list in children_map.values_mut() {
-            list.sort_by_key(|a| a.name.to_lowercase());
-        }
-
-        let mut sub_items = Vec::new();
-        sub_items.push(CtxMenuItem::new_action(
-            CTX_TAG_MOVE_TO_ROOT,
-            "📁 Root (Top-level)",
-        ));
-        sub_items.push(CtxMenuItem::new_separator());
-
-        Self::populate_move_nodes(None, &children_map, &mut sub_items);
-
-        CtxMenuItem::new_submenu("Move to...", Some("move"), true, sub_items)
-    }
-
-    fn populate_move_nodes(
-        parent_id: Option<TagId>,
-        children_map: &HashMap<Option<TagId>, Vec<TagRecord>>,
-        output: &mut Vec<CtxMenuItem>,
-    ) {
-        if let Some(children) = children_map.get(&parent_id) {
-            for child in children {
-                let mut child_sub_items = Vec::new();
-                child_sub_items.push(CtxMenuItem::new_action(
-                    CTX_TAG_MOVE_TARGET_BASE + (child.id as CtxMenuActionId),
-                    format!("Move under '{}'", child.name),
-                ));
-
-                let has_grandchildren = children_map
-                    .get(&Some(child.id))
-                    .is_some_and(|g| !g.is_empty());
-                if has_grandchildren {
-                    child_sub_items.push(CtxMenuItem::new_separator());
-                    Self::populate_move_nodes(Some(child.id), children_map, &mut child_sub_items);
-                }
-
-                output.push(CtxMenuItem::new_submenu(
-                    format!("📁 {}", child.name),
-                    None,
-                    true,
-                    child_sub_items,
-                ));
-            }
-        }
-    }
-
-    pub fn handle_action(
-        action_id: CtxMenuActionId,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
-        dialogs: TagActionDialogs,
-    ) {
-        window.set_is_context_menu_open(false);
-        let target_id = state.read().active_tag_dialog_target;
-
-        match action_id {
-            CTX_TAG_ADD_ROOT => {
-                tracing::info!("[TagAction] Triggering Add Root Tag dialog");
-                (dialogs.show_add)(None, "Creating as Root Tag");
-            }
-            CTX_TAG_ADD_CHILD => {
-                if let Some(pid) = target_id
-                    && let Ok(Some(parent)) = library.tags().get_tag(pid)
-                {
-                    tracing::info!(parent_id = pid, parent_name = %parent.name, "[TagAction] Triggering Add Child Tag dialog");
-                    (dialogs.show_add)(Some(pid), &format!("Parent: {}", parent.name));
-                }
-            }
-            CTX_TAG_RENAME => {
-                if let Some(tid) = target_id
-                    && let Ok(Some(tag)) = library.tags().get_tag(tid)
-                {
-                    tracing::info!(tag_id = tid, current_name = %tag.name, "[TagAction] Triggering Rename Tag dialog");
-                    (dialogs.show_rename)(tid, &tag.name);
-                }
-            }
-            CTX_TAG_DELETE => {
-                if let Some(tid) = target_id
-                    && let Ok(Some(tag)) = library.tags().get_tag(tid)
-                {
-                    let children = library
-                        .tags()
-                        .get_descendants(tid)
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|t| t.name)
-                        .collect();
-                    tracing::info!(tag_id = tid, tag_name = %tag.name, "[TagAction] Triggering Delete Tag dialog");
-                    (dialogs.show_delete)(tid, &tag.name, children);
-                }
-            }
-            CTX_TAG_MOVE_TO_ROOT => {
-                if let Some(tid) = target_id {
-                    tracing::info!(tag_id = tid, "[TagAction] Moving tag to Root");
-                    let _ = library.tags().move_tag(tid, None);
-                    BridgeTags::reload_tags(window, library, state);
-                }
-            }
-            CTX_TAG_EXPAND_ALL => BridgeTags::expand_all(window, library, settings, state),
-            CTX_TAG_COLLAPSE_ALL => BridgeTags::collapse_all(window, library, settings, state),
-            CTX_TAG_REFRESH => BridgeTags::reload_tags(window, library, state),
-            id if id >= CTX_TAG_MOVE_TARGET_BASE => {
-                let dest_parent = (id - CTX_TAG_MOVE_TARGET_BASE) as TagId;
-                if let Some(tid) = target_id {
-                    tracing::info!(
-                        tag_id = tid,
-                        new_parent_id = dest_parent,
-                        "[TagAction] Moving tag under parent"
-                    );
-                    let _ = library.tags().move_tag(tid, Some(dest_parent));
-                    {
-                        let mut st = state.write();
-                        st.expanded_tag_ids.insert(dest_parent);
-                        BridgeTags::persist_expanded_tags(settings, &st.expanded_tag_ids);
-                    }
-                    BridgeTags::reload_tags(window, library, state);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-// =============================================================================
-// Section 5: TagActionHandler (Assignment, Unassignment, Mode & Rating Logic)
+// Section 4: TagActionHandler (Assignment, Unassignment, Mode & Rating Logic)
 // =============================================================================
 
 pub struct TagActionHandler;
@@ -690,7 +485,7 @@ impl TagActionHandler {
 }
 
 // =============================================================================
-// Section 6: BridgeTags (Unified Facade)
+// Section 5: BridgeTags (Unified Facade)
 // =============================================================================
 
 pub struct BridgeTags;
@@ -856,7 +651,7 @@ impl BridgeTags {
         tracing::info!(
             tag_id = tag_id,
             is_expanded = is_now_expanded,
-            "[TagTree: NodeToggle] Toggled parent tag expansion and persisted state"
+            "[TagTree: NodeToggle] Toggled parent tag expansion"
         );
 
         Self::reload_tags(window, library, state);
@@ -876,7 +671,7 @@ impl BridgeTags {
             }
             Self::persist_expanded_tags(settings, &st.expanded_tag_ids);
         }
-        tracing::info!("[TagTree: ExpandAll] Expanded all parent nodes and persisted state");
+        tracing::info!("[TagTree: ExpandAll] Expanded all parent nodes");
         Self::reload_tags(window, library, state);
     }
 
@@ -891,7 +686,7 @@ impl BridgeTags {
             st.expanded_tag_ids.clear();
             Self::persist_expanded_tags(settings, &st.expanded_tag_ids);
         }
-        tracing::info!("[TagTree: CollapseAll] Collapsed all parent nodes and persisted state");
+        tracing::info!("[TagTree: CollapseAll] Collapsed all parent nodes");
         Self::reload_tags(window, library, state);
     }
 
@@ -911,11 +706,6 @@ impl BridgeTags {
         x: f32,
         y: f32,
     ) {
-        tracing::info!(
-            pos_x = x,
-            pos_y = y,
-            "[TagTree: ContextMenu] Opening Root Context Menu"
-        );
         let menu = TagContextMenu::build_root_menu();
         BridgeContextMenu::open_custom_menu(window, state, menu, x, y);
     }
@@ -932,15 +722,6 @@ impl BridgeTags {
             tracing::warn!(tag_id = tag_id, "Tag not found for context menu");
             return;
         };
-
-        tracing::info!(
-            tag_id = tag_id,
-            name = %record.name,
-            parent_id = ?record.parent_id,
-            pos_x = x,
-            pos_y = y,
-            "[TagTree: ContextMenu] Opening Tag Context Menu"
-        );
 
         state.write().active_tag_dialog_target = Some(tag_id);
 

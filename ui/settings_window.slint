@@ -2,6 +2,7 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsSidebar } from "settings_sidebar.slint";
 import { SettingsPageGeneral } from "settings_page_general.slint";
+import { SettingsPageFolders } from "settings_page_folders.slint";
 import { SettingsPageAppearance } from "settings_page_appearance.slint";
 import { SettingsPagePerformance } from "settings_page_performance.slint";
 import { SettingsPagePlayer } from "settings_page_player.slint";
@@ -10,6 +11,7 @@ import { ButtonBar } from "button_bar.slint";
 
 export { SettingsSidebar } from "settings_sidebar.slint";
 export { SettingsPageGeneral } from "settings_page_general.slint";
+export { SettingsPageFolders } from "settings_page_folders.slint";
 export { SettingsPageAppearance } from "settings_page_appearance.slint";
 export { SettingsPagePerformance } from "settings_page_performance.slint";
 export { SettingsPagePlayer } from "settings_page_player.slint";
@@ -19,13 +21,13 @@ export { ButtonBar } from "button_bar.slint";
 
 export component SettingsWindow inherits Window {
     title: "RustView - Settings";
-    preferred-width: 820px;
-    preferred-height: 560px;
-    min-width: 700px;
-    min-height: 480px;
+    preferred-width: 840px;
+    preferred-height: 580px;
+    min-width: 720px;
+    min-height: 500px;
     background: Theme.background;
 
-    // Active Category (0=General, 1=Appearance, 2=Performance, 3=Player, 4=Tags)
+    // Active Category (0=General, 1=Folders, 2=Appearance, 3=Performance, 4=Player, 5=Tags)
     in-out property <int> active-category: 0;
 
     // General options
@@ -33,6 +35,12 @@ export component SettingsWindow inherits Window {
     in-out property <bool> remember-last-folder: true;
     in-out property <bool> confirm-delete: true;
     in-out property <int> deletion-mode-idx: 0;
+
+    // Folders options
+    in-out property <bool> auto-reveal-remembered-folder: true;
+    in-out property <bool> persist-folder-tree-state: true;
+    in-out property <bool> show-deleted-folders: true;
+    in-out property <bool> show-folder-metrics: true;
 
     // Appearance options
     in-out property <int> default-thumb-size: 150;
@@ -59,7 +67,7 @@ export component SettingsWindow inherits Window {
         padding: 0px;
         spacing: 0px;
 
-        // 1. Content Area (Takes 100% of expanding vertical space)
+        // Content Area
         HorizontalLayout {
             vertical-stretch: 1;
             horizontal-stretch: 1;
@@ -89,31 +97,38 @@ export component SettingsWindow inherits Window {
                         browse-root-folder => { root.browse-root-folder(); }
                     }
 
-                    if root.active-category == 1 : SettingsPageAppearance {
+                    if root.active-category == 1 : SettingsPageFolders {
+                        auto-reveal-remembered-folder <=> root.auto-reveal-remembered-folder;
+                        persist-folder-tree-state <=> root.persist-folder-tree-state;
+                        show-deleted-folders <=> root.show-deleted-folders;
+                        show-folder-metrics <=> root.show-folder-metrics;
+                    }
+
+                    if root.active-category == 2 : SettingsPageAppearance {
                         default-thumb-size <=> root.default-thumb-size;
                         show-filenames <=> root.show-filenames;
                         show-rating-badge <=> root.show-rating-badge;
                         show-tag-badge <=> root.show-tag-badge;
                     }
 
-                    if root.active-category == 2 : SettingsPagePerformance {
+                    if root.active-category == 3 : SettingsPagePerformance {
                         l1-cache-slots <=> root.l1-cache-slots;
                         worker-threads <=> root.worker-threads;
                         hashing-mode-idx <=> root.hashing-mode-idx;
                     }
 
-                    if root.active-category == 3 : SettingsPagePlayer {
+                    if root.active-category == 4 : SettingsPagePlayer {
                         hwdec-idx <=> root.hwdec-idx;
                         autoplay-videos <=> root.autoplay-videos;
                         default-volume <=> root.default-volume;
                     }
 
-                    if root.active-category == 4 : SettingsPageTags {}
+                    if root.active-category == 5 : SettingsPageTags {}
                 }
             }
         }
 
-        // 2. Bottom Action Button Bar (Anchored flush to the bottom)
+        // Bottom Action Button Bar
         ButtonBar {
             vertical-stretch: 0;
             show-cancel: true;

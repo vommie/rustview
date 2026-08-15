@@ -1,0 +1,44 @@
+import { CheckBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPageFolders inherits VerticalLayout {
+    spacing: 12px;
+
+    in-out property <bool> auto-reveal-remembered-folder: true;
+    in-out property <bool> persist-folder-tree-state: true;
+    in-out property <bool> show-deleted-folders: true;
+    in-out property <bool> show-folder-metrics: true;
+
+    // Behavior Group (Top of Page)
+    SettingsCard {
+        title: "Behavior";
+        description: "Configure folder tree startup behavior, navigation persistence, and visibility rules.";
+
+        CheckBox {
+            text: "Auto-reveal and expand remembered folder on startup";
+            checked <=> root.auto-reveal-remembered-folder;
+        }
+
+        CheckBox {
+            text: "Persistent folder tree state (remember expanded nodes)";
+            checked <=> root.persist-folder-tree-state;
+        }
+
+        CheckBox {
+            text: "Show deleted/missing folders (grayed out)";
+            checked <=> root.show-deleted-folders;
+        }
+    }
+
+    // Folders Tree Presentation Group
+    SettingsCard {
+        title: "Folders Tree";
+        description: "Presentation and visual formatting options for the folders tree panel.";
+
+        CheckBox {
+            text: "Show folder metrics (subfolders and file count suffix)";
+            checked <=> root.show-folder-metrics;
+        }
+    }
+}

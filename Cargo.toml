@@ -26,6 +26,7 @@ regex = "1.10"
 bincode = "1.3"
 parking_lot = "0.12"
 rfd = "0.15"
+trash = "5.2"
 
 [build-dependencies]
 slint-build = "1.17.1"

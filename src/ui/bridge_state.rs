@@ -28,9 +28,12 @@ pub const CTX_TAG_ADD_CHILD: CtxMenuActionId = 2010;
 pub const CTX_TAG_RENAME: CtxMenuActionId = 2011;
 pub const CTX_TAG_DELETE: CtxMenuActionId = 2012;
 pub const CTX_TAG_MOVE_TO_ROOT: CtxMenuActionId = 2013;
-
-// Dynamic Move-Target Action ID Base (action_id = CTX_TAG_MOVE_TARGET_BASE + destination_parent_tag_id)
 pub const CTX_TAG_MOVE_TARGET_BASE: CtxMenuActionId = 100_000;
+
+// Folder Tree Context Menu Action IDs
+pub const CTX_FOLDER_RENAME: CtxMenuActionId = 3001;
+pub const CTX_FOLDER_DELETE: CtxMenuActionId = 3002;
+pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 /// Central persistent state for UI bridges, tree expansions, and caching.
 pub struct UiState {
@@ -47,6 +50,12 @@ pub struct UiState {
     pub sort_order: SortOrder,
     pub is_assign_mode: bool,
     pub active_file_rename_target: Option<MediaId>,
+
+    // === Hierarchical Folder Tree State ===
+    pub expanded_folder_ids: HashSet<FolderId>,
+    pub is_refreshing_folders: bool,
+    pub folder_scan_count: usize,
+    pub active_folder_dialog_target: Option<FolderId>,
 
     // === Hierarchical Tag Tree State ===
     pub expanded_tag_ids: HashSet<TagId>,
@@ -71,6 +80,10 @@ impl Default for UiState {
             sort_order: SortOrder::Ascending,
             is_assign_mode: false,
             active_file_rename_target: None,
+            expanded_folder_ids: HashSet::new(),
+            is_refreshing_folders: false,
+            folder_scan_count: 0,
+            active_folder_dialog_target: None,
             expanded_tag_ids: HashSet::new(),
             tag_filter_query: String::new(),
             active_tag_dialog_target: None,

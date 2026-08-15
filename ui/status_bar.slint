@@ -1,5 +1,6 @@
 import { Theme } from "styles.slint";
 import { ThumbnailPipelineProgress } from "thumbnail_progress.slint";
+import { FolderRefreshProgress } from "progressbar_folders.slint";
 
 export component StatusBar inherits Rectangle {
     height: 28px;
@@ -8,7 +9,11 @@ export component StatusBar inherits Rectangle {
     in property <string> status-message: "Ready.";
     in property <string> item-count-str: "Items: 0";
 
-    // Progress Bar Domain Delegation Properties
+    // Folder Structure Scan Progress Properties
+    in property <bool> is-refreshing-folders: false;
+    in property <int> folder-scan-count: 0;
+
+    // Thumbnail Pipeline Progress Properties
     in property <bool> is-preloading: false;
     in property <int> preload-val: 0;
     in property <int> preload-max: 100;
@@ -39,6 +44,12 @@ export component StatusBar inherits Rectangle {
             vertical-alignment: center;
             horizontal-stretch: 1;
             overflow: elide;
+        }
+
+        // Dedicated Folder Refresh Progress Indicator
+        if root.is-refreshing-folders : FolderRefreshProgress {
+            is-refreshing: root.is-refreshing-folders;
+            scanned-count: root.folder-scan-count;
         }
 
         // Modular Thumbnail Pipeline Progress Indicator

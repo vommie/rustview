@@ -59,6 +59,11 @@ impl SettingsDialogController {
         window.set_remember_last_folder(settings.general.remember_last_folder);
         window.set_confirm_delete(settings.general.confirm_on_file_delete);
 
+        window.set_auto_reveal_remembered_folder(settings.folders.auto_reveal_remembered_folder);
+        window.set_persist_folder_tree_state(settings.folders.persist_folder_tree_state);
+        window.set_show_deleted_folders(settings.folders.show_deleted_folders);
+        window.set_show_folder_metrics(settings.folders.show_folder_metrics);
+
         window.set_default_thumb_size(settings.appearance.default_thumbnail_size as i32);
         window.set_show_filenames(settings.appearance.show_filenames);
         window.set_show_rating_badge(settings.appearance.show_ratings_overlay);
@@ -105,6 +110,12 @@ impl SettingsDialogController {
 
                 current.general.remember_last_folder = w.get_remember_last_folder();
                 current.general.confirm_on_file_delete = w.get_confirm_delete();
+
+                current.folders.auto_reveal_remembered_folder =
+                    w.get_auto_reveal_remembered_folder();
+                current.folders.persist_folder_tree_state = w.get_persist_folder_tree_state();
+                current.folders.show_deleted_folders = w.get_show_deleted_folders();
+                current.folders.show_folder_metrics = w.get_show_folder_metrics();
 
                 current.appearance.default_thumbnail_size = w.get_default_thumb_size() as u32;
                 current.appearance.show_filenames = w.get_show_filenames();

@@ -19,7 +19,15 @@ impl<'a> FolderManager<'a> {
 
         let mut wtxn = self.db.env.write_txn()?;
 
-        if self.db.folders_by_path.get(&wtxn, &path_str)?.is_some() {
+        if let Some(existing_id) = self.db.folders_by_path.get(&wtxn, &path_str)? {
+            if let Some(mut record) = self.db.folders.get(&wtxn, &existing_id)?
+                && record.is_deleted
+            {
+                record.is_deleted = false;
+                self.db.folders.put(&mut wtxn, &existing_id, &record)?;
+                wtxn.commit()?;
+                return Ok(record);
+            }
             return Err(LibraryError::DuplicateFolder(path_str));
         }
 
@@ -31,6 +39,7 @@ impl<'a> FolderManager<'a> {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or(0),
+            is_deleted: false,
         };
 
         self.db.folders.put(&mut wtxn, &folder_id, &record)?;
@@ -72,6 +81,45 @@ impl<'a> FolderManager<'a> {
         }
 
         Ok(folders)
+    }
+
+    pub fn list_active_folders(&self) -> Result<Vec<FolderRecord>, LibraryError> {
+        let rtxn = self.db.env.read_txn()?;
+        let mut folders = Vec::new();
+
+        for entry in self.db.folders.iter(&rtxn)? {
+            let (_, record) = entry?;
+            if !record.is_deleted {
+                folders.push(record);
+            }
+        }
+
+        Ok(folders)
+    }
+
+    pub fn set_deleted(&self, id: FolderId, is_deleted: bool) -> Result<(), LibraryError> {
+        let mut wtxn = self.db.env.write_txn()?;
+        if let Some(mut record) = self.db.folders.get(&wtxn, &id)? {
+            if record.is_deleted != is_deleted {
+                record.is_deleted = is_deleted;
+                self.db.folders.put(&mut wtxn, &id, &record)?;
+            }
+        } else {
+            return Err(LibraryError::FolderNotFound(id));
+        }
+        wtxn.commit()?;
+        Ok(())
+    }
+
+    pub fn get_media_count(&self, folder_id: FolderId) -> Result<usize, LibraryError> {
+        let rtxn = self.db.env.read_txn()?;
+        let count = self
+            .db
+            .media_by_folder
+            .get(&rtxn, &folder_id)?
+            .map(|v| v.len())
+            .unwrap_or(0);
+        Ok(count)
     }
 
     pub fn remove_folder(&self, id: FolderId) -> Result<(), LibraryError> {

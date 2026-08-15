@@ -15,7 +15,7 @@ pub struct LibraryDatabase {
     // Tables
     pub meta: Database<Str, SerdeBincode<DatabaseMeta>>,
     pub sequences: Database<Str, U64<BE>>,
-    pub folders: Database<U64<BE>, SerdeBincode<FolderRecord>>,
+    pub folders: Database<U64<BE>, FolderRecordCodec>,
     pub folders_by_path: Database<Str, U64<BE>>,
     pub media: Database<U64<BE>, SerdeBincode<MediaRecord>>,
     pub media_by_folder: Database<U64<BE>, SerdeBincode<Vec<MediaId>>>,
@@ -44,7 +44,7 @@ impl LibraryDatabase {
             env.create_database(&mut wtxn, Some(DB_META))?;
         let sequences: Database<Str, U64<BE>> =
             env.create_database(&mut wtxn, Some(DB_SEQUENCES))?;
-        let folders: Database<U64<BE>, SerdeBincode<FolderRecord>> =
+        let folders: Database<U64<BE>, FolderRecordCodec> =
             env.create_database(&mut wtxn, Some(DB_FOLDERS))?;
         let folders_by_path: Database<Str, U64<BE>> =
             env.create_database(&mut wtxn, Some(DB_FOLDERS_BY_PATH))?;

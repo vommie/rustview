@@ -1,9 +1,15 @@
 slint::include_modules!();
 
 pub mod bridge;
-pub mod bridge_context_menu;
+pub mod bridge_ctx_menu;
+pub mod bridge_ctx_menu_folder;
+pub mod bridge_ctx_menu_media;
+pub mod bridge_ctx_menu_presenter;
+pub mod bridge_ctx_menu_tag;
 pub mod bridge_favorites;
+pub mod bridge_file_dialogs;
 pub mod bridge_file_selection;
+pub mod bridge_folder_dialogs;
 pub mod bridge_folders;
 pub mod bridge_inspector;
 pub mod bridge_media;
@@ -17,6 +23,12 @@ pub mod file_selection;
 pub mod models;
 
 pub use bridge::UiBridge;
+pub use bridge_ctx_menu_folder::FolderContextMenu;
+pub use bridge_ctx_menu_media::MediaContextMenu;
+pub use bridge_ctx_menu_presenter::CtxMenuPresenter;
+pub use bridge_ctx_menu_tag::TagContextMenu;
+pub use bridge_file_dialogs::{FileRenameContext, FileRenameDialogController};
+pub use bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 pub use bridge_state::*;
 pub use bridge_tag_dialogs::TagDialogController;
 pub use favorites::FavoriteManager;

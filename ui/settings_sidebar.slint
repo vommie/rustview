@@ -34,6 +34,7 @@ export component SettingsSidebar inherits Rectangle {
     in-out property <int> active-category: 0;
     in property <[string]> categories: [
         "General",
+        "Folders",
         "Appearance & Grid",
         "Performance & Cache",
         "Video Playback",
@@ -52,7 +53,7 @@ export component SettingsSidebar inherits Rectangle {
     VerticalLayout {
         padding: 8px;
         spacing: 4px;
-        alignment: start; // Keeps items neatly anchored at the top while background fills full height
+        alignment: start;
 
         for cat[idx] in root.categories: SettingsCategoryItem {
             title: cat;

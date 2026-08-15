@@ -14,6 +14,9 @@ export { FileRenameDialog } from "file_rename_dialog.slint";
 export { AddTagDialog } from "add_tag_dialog.slint";
 export { RenameTagDialog } from "rename_tag_dialog.slint";
 export { DeleteTagDialog } from "delete_tag_dialog.slint";
+export { RenameFolderDialog } from "rename_folder_dialog.slint";
+export { DeleteFolderDialog } from "delete_folder_dialog.slint";
+export { MoveFolderToDialog } from "move_folder_to_dialog.slint";
 
 export component MainWindow inherits Window {
     title: "RustView";
@@ -31,7 +34,11 @@ export component MainWindow inherits Window {
     in-out property <string> status-text: "Ready.";
     in-out property <string> items-metric-text: "Items: 0";
 
-    // Progress & Thumbnailing Pipeline Indicators
+    // Folder Structure Scan Progress Indicator
+    in-out property <bool> is-refreshing-folders: false;
+    in-out property <int> folder-scan-count: 0;
+
+    // Thumbnail Pipeline Progress Indicators
     in-out property <bool> is-preloading: false;
     in-out property <int> preload-current: 0;
     in-out property <int> preload-total: 100;
@@ -77,6 +84,9 @@ export component MainWindow inherits Window {
     callback refresh-folder();
     callback open-settings();
     callback folder-selected(int, string);
+    callback folder-toggle-expand(int);
+    callback folder-context-menu(int /* id */, length /* x */, length /* y */);
+    callback folder-refresh-clicked();
     callback favorite-selected(string);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
@@ -104,6 +114,19 @@ export component MainWindow inherits Window {
     callback player-stop();
     callback player-close();
 
+    // Global Key Interceptor (Handles Escape to close open context menus)
+    forward-focus: global-focus;
+    global-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape && root.is-context-menu-open {
+                root.is-context-menu-open = false;
+                root.context-menu-dismissed();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     VerticalLayout {
         spacing: 0px;
 
@@ -120,10 +143,13 @@ export component MainWindow inherits Window {
             vertical-stretch: 1;
             spacing: 0px;
 
-            SidebarLeft {
+            sidebar_left := SidebarLeft {
                 folders: root.folders;
                 favorites: root.favorites;
                 folder-clicked(id, path) => { root.folder-selected(id, path); }
+                folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
+                folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 48px + sidebar_left.y + y); }
+                folder-refresh-clicked => { root.folder-refresh-clicked(); }
                 favorite-clicked(path) => { root.favorite-selected(path); }
             }
 
@@ -182,6 +208,8 @@ export component MainWindow inherits Window {
         StatusBar {
             status-message: root.status-text;
             item-count-str: root.items-metric-text;
+            is-refreshing-folders: root.is-refreshing-folders;
+            folder-scan-count: root.folder-scan-count;
             is-preloading: root.is-preloading;
             preload-val: root.preload-current;
             preload-max: root.preload-total;

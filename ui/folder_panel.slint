@@ -1,36 +1,67 @@
 import { Theme } from "styles.slint";
 import { FolderNodeView } from "types.slint";
 import { ListView } from "std-widgets.slint";
+import { NodeButton } from "node_button.slint";
 
 export component FolderItemRow inherits Rectangle {
     in property <FolderNodeView> folder;
     callback clicked();
+    callback toggle-expand();
+    callback context-menu-requested(length /* x */, length /* y */);
 
-    height: 26px;
+    height: 24px;
     background: root.folder.is-selected ? Theme.surface-selected : (ftouch.has-hover ? Theme.surface-hover : transparent);
-    border-radius: 2px;
+    border-radius: 3px;
+    border-width: root.folder.is-selected ? 1px : 0px;
+    border-color: root.folder.is-selected ? Theme.primary : transparent;
 
     ftouch := TouchArea {
-        clicked => { root.clicked(); }
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                if event.button == PointerEventButton.right {
+                    root.context-menu-requested(ftouch.mouse-x, ftouch.mouse-y);
+                } else if event.button == PointerEventButton.left {
+                    root.clicked();
+                }
+            }
+        }
     }
 
     HorizontalLayout {
-        padding-left: (root.folder.depth * 14px) + 8px;
+        padding-left: (root.folder.depth * 16px) + 6px;
         padding-right: 8px;
         spacing: 6px;
-        alignment: center;
+        alignment: start;
 
-        Text {
-            text: root.folder.is-expanded ? "▼" : "▶";
-            font-size: 9px;
-            color: Theme.text-muted;
-            vertical-alignment: center;
+        // Tree Node Toggle (+ / -) Button
+        NodeButton {
+            has-children: root.folder.has-children;
+            is-expanded: root.folder.is-expanded;
+            show-leaf-bullet: false;
+            button-size: 14px;
+            y: (parent.height - self.height) / 2;
+            toggled(state) => {
+                root.toggle-expand();
+            }
         }
 
+        // Folder Icon Indicator
+        Text {
+            text: "📁";
+            font-size: 11px;
+            vertical-alignment: center;
+            opacity: root.folder.is-deleted ? 0.4 : 1.0;
+        }
+
+        // Strictly Left-Aligned Folder Name with Count Suffix
         Text {
             text: root.folder.name;
-            color: root.folder.is-selected ? Theme.primary : Theme.text;
+            color: root.folder.is-selected ? Theme.primary : (root.folder.is-deleted ? Theme.text-muted : Theme.text);
+            font-weight: root.folder.is-selected ? 700 : 400;
+            font-italic: root.folder.is-deleted;
+            font-size: 11px;
             vertical-alignment: center;
+            horizontal-alignment: left;
             horizontal-stretch: 1;
             overflow: elide;
         }
@@ -45,27 +76,40 @@ export component FolderTreeList inherits Rectangle {
 
     in property <[FolderNodeView]> folders: [];
     callback folder-clicked(int, string);
+    callback folder-toggle-expand(int);
+    callback folder-context-menu(int, length, length);
 
     ListView {
         for folder in root.folders: FolderItemRow {
             folder: folder;
             clicked => { root.folder-clicked(folder.id, folder.path); }
+            toggle-expand => { root.folder-toggle-expand(folder.id); }
+            context-menu-requested(mx, my) => {
+                root.folder-context-menu(folder.id, self.x + mx, self.y + my);
+            }
         }
     }
 }
 
 export component FolderPanel inherits VerticalLayout {
-    spacing: 4px;
+    spacing: 6px;
     vertical-stretch: 1;
 
     in property <[FolderNodeView]> folders: [];
     callback folder-clicked(int, string);
+    callback folder-toggle-expand(int);
+    callback folder-context-menu(int, length, length);
+    callback refresh-clicked();
 
     // Section Header
     Rectangle {
-        height: 24px;
+        height: 26px;
+
         HorizontalLayout {
             padding-left: 2px;
+            padding-right: 2px;
+            alignment: space-between;
+
             Text {
                 text: "FOLDERS";
                 font-size: 11px;
@@ -73,13 +117,37 @@ export component FolderPanel inherits VerticalLayout {
                 color: Theme.primary;
                 vertical-alignment: center;
             }
+
+            // Dedicated Folder Refresh Button
+            Rectangle {
+                width: 24px;
+                height: 24px;
+                border-radius: 3px;
+                background: refresh-touch.has-hover ? Theme.surface-hover : transparent;
+                border-width: refresh-touch.has-hover ? 1px : 0px;
+                border-color: Theme.border;
+
+                refresh-touch := TouchArea {
+                    clicked => { root.refresh-clicked(); }
+                }
+
+                Image {
+                    source: @image-url("icons/refresh.svg");
+                    width: 14px;
+                    height: 14px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+            }
         }
     }
 
     // Scrollable Tree Box
-    FolderTreeList {
+    tree-list := FolderTreeList {
         vertical-stretch: 1;
         folders: root.folders;
         folder-clicked(id, path) => { root.folder-clicked(id, path); }
+        folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
+        folder-context-menu(id, x, y) => { root.folder-context-menu(id, tree-list.x + x, tree-list.y + y); }
     }
 }

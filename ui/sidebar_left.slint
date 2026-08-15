@@ -14,6 +14,9 @@ export component SidebarLeft inherits Rectangle {
     in property <[FavoriteItemView]> favorites: [];
 
     callback folder-clicked(int /* id */, string /* path */);
+    callback folder-toggle-expand(int /* id */);
+    callback folder-context-menu(int /* id */, length /* x */, length /* y */);
+    callback folder-refresh-clicked();
     callback favorite-clicked(string /* path */);
 
     // Right border separator line
@@ -34,9 +37,12 @@ export component SidebarLeft inherits Rectangle {
         }
 
         // Folder Browser / Tree Navigation Subsystem
-        FolderPanel {
+        folder-panel := FolderPanel {
             folders: root.folders;
             folder-clicked(id, path) => { root.folder-clicked(id, path); }
+            folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
+            folder-context-menu(id, x, y) => { root.folder-context-menu(id, folder-panel.x + x, folder-panel.y + y); }
+            refresh-clicked => { root.folder-refresh-clicked(); }
         }
     }
 }

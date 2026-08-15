@@ -35,6 +35,28 @@ impl Default for GeneralSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderSettings {
+    pub auto_reveal_remembered_folder: bool,
+    pub persist_folder_tree_state: bool,
+    pub show_deleted_folders: bool,
+    pub show_folder_metrics: bool,
+    #[serde(default)]
+    pub expanded_folder_ids: Vec<u64>,
+}
+
+impl Default for FolderSettings {
+    fn default() -> Self {
+        Self {
+            auto_reveal_remembered_folder: true,
+            persist_folder_tree_state: true,
+            show_deleted_folders: true,
+            show_folder_metrics: true,
+            expanded_folder_ids: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppearanceSettings {
     pub default_thumbnail_size: u32,
     pub show_filenames: bool,
@@ -133,6 +155,8 @@ impl Default for WindowState {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AppSettings {
     pub general: GeneralSettings,
+    #[serde(default)]
+    pub folders: FolderSettings,
     pub appearance: AppearanceSettings,
     pub performance: PerformanceSettings,
     pub player: PlayerSettings,

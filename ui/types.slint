@@ -15,8 +15,12 @@ export struct FolderNodeView {
     name: string,
     path: string,
     depth: int,
+    has_children: bool,
     is_expanded: bool,
     is_selected: bool,
+    is_deleted: bool,
+    subfolder_count: int,
+    file_count: int,
 }
 
 export struct FavoriteItemView {
