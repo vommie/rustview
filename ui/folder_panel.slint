@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { FolderNodeView } from "types.slint";
-import { ListView } from "std-widgets.slint";
 import { NodeButton } from "node_button.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export component FolderItemRow inherits Rectangle {
     in property <FolderNodeView> folder;
@@ -73,19 +73,32 @@ export component FolderTreeList inherits Rectangle {
     border-radius: 4px;
     border-width: 1px;
     border-color: Theme.border;
+    clip: true;
 
     in property <[FolderNodeView]> folders: [];
     callback folder-clicked(int, string);
     callback folder-toggle-expand(int);
     callback folder-context-menu(int, length, length);
 
-    ListView {
-        for folder in root.folders: FolderItemRow {
-            folder: folder;
-            clicked => { root.folder-clicked(folder.id, folder.path); }
-            toggle-expand => { root.folder-toggle-expand(folder.id); }
-            context-menu-requested(mx, my) => {
-                root.folder-context-menu(folder.id, self.x + mx, self.y + my);
+    scroll-area := SmoothScrollArea {
+        width: 100%;
+        height: 100%;
+        enable-horizontal: false;
+        enable-vertical: true;
+        content-width: self.width;
+        content-height: tree-layout.preferred-height;
+
+        tree-layout := VerticalLayout {
+            spacing: 0px;
+            alignment: start;
+
+            for folder in root.folders: FolderItemRow {
+                folder: folder;
+                clicked => { root.folder-clicked(folder.id, folder.path); }
+                toggle-expand => { root.folder-toggle-expand(folder.id); }
+                context-menu-requested(mx, my) => {
+                    root.folder-context-menu(folder.id, self.x + mx, self.y + my + scroll-area.clamped-y);
+                }
             }
         }
     }

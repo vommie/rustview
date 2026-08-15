@@ -1,9 +1,10 @@
 import { Theme } from "styles.slint";
 import { MediaItemView } from "types.slint";
-import { ListView } from "std-widgets.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export component MediaTableView inherits Rectangle {
     background: Theme.background;
+    clip: true;
 
     in property <[MediaItemView]> items: [];
 
@@ -11,7 +12,7 @@ export component MediaTableView inherits Rectangle {
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
 
     VerticalLayout {
-        // Table Header
+        // Table Header (Fixed at top)
         Rectangle {
             height: 28px;
             background: Theme.surface;
@@ -34,39 +35,50 @@ export component MediaTableView inherits Rectangle {
             }
         }
 
-        // Table Rows
-        ListView {
-            for item in root.items: Rectangle {
-                height: 28px;
-                background: item.is-selected ? Theme.surface-selected : (row-touch.has-hover ? Theme.surface-hover : transparent);
+        // Table Rows with Custom SmoothScrollArea
+        scroll-area := SmoothScrollArea {
+            vertical-stretch: 1;
+            enable-horizontal: false;
+            enable-vertical: true;
+            content-width: self.width;
+            content-height: rows-layout.preferred-height;
 
-                Rectangle {
-                    y: parent.height - 1px;
-                    height: 1px;
-                    background: Theme.border;
-                }
+            rows-layout := VerticalLayout {
+                spacing: 0px;
+                alignment: start;
 
-                row-touch := TouchArea {
-                    pointer-event(event) => {
-                        if event.kind == PointerEventKind.down {
-                            if event.button == PointerEventButton.right {
-                                root.item-context-menu(item.id, row-touch.mouse-x, row-touch.mouse-y);
-                            } else if event.button == PointerEventButton.left {
-                                root.item-clicked(item.id, event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
+                for item in root.items: Rectangle {
+                    height: 28px;
+                    background: item.is-selected ? Theme.surface-selected : (row-touch.has-hover ? Theme.surface-hover : transparent);
+
+                    Rectangle {
+                        y: parent.height - 1px;
+                        height: 1px;
+                        background: Theme.border;
+                    }
+
+                    row-touch := TouchArea {
+                        pointer-event(event) => {
+                            if event.kind == PointerEventKind.down {
+                                if event.button == PointerEventButton.right {
+                                    root.item-context-menu(item.id, row-touch.mouse-x, self.y + row-touch.mouse-y + scroll-area.clamped-y);
+                                } else if event.button == PointerEventButton.left {
+                                    root.item-clicked(item.id, event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
+                                }
                             }
                         }
                     }
-                }
 
-                HorizontalLayout {
-                    padding-left: 12px;
-                    padding-right: 12px;
-                    spacing: 8px;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 8px;
 
-                    Text { text: item.filename; horizontal-stretch: 3; color: Theme.text; vertical-alignment: center; overflow: elide; }
-                    Text { text: item.dimensions_str; horizontal-stretch: 1; color: Theme.text-muted; vertical-alignment: center; }
-                    Text { text: item.filesize_str; horizontal-stretch: 1; color: Theme.text-muted; vertical-alignment: center; }
-                    Text { text: item.rating > 0 ? item.rating : "-"; width: 60px; color: item.rating > 0 ? Theme.accent : Theme.text-muted; vertical-alignment: center; }
+                        Text { text: item.filename; horizontal-stretch: 3; color: Theme.text; vertical-alignment: center; overflow: elide; }
+                        Text { text: item.dimensions_str; horizontal-stretch: 1; color: Theme.text-muted; vertical-alignment: center; }
+                        Text { text: item.filesize_str; horizontal-stretch: 1; color: Theme.text-muted; vertical-alignment: center; }
+                        Text { text: item.rating > 0 ? item.rating : "-"; width: 60px; color: item.rating > 0 ? Theme.accent : Theme.text-muted; vertical-alignment: center; }
+                    }
                 }
             }
         }

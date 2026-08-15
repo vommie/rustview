@@ -1,6 +1,6 @@
 import { Theme } from "styles.slint";
 import { FavoriteItemView } from "types.slint";
-import { ListView } from "std-widgets.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export component FavoriteItemRow inherits Rectangle {
     in property <FavoriteItemView> item;
@@ -36,14 +36,27 @@ export component FavoritesList inherits Rectangle {
     border-radius: 4px;
     border-width: 1px;
     border-color: Theme.border;
+    clip: true;
 
     in property <[FavoriteItemView]> favorites: [];
     callback favorite-clicked(string);
 
-    ListView {
-        for fav in root.favorites: FavoriteItemRow {
-            item: fav;
-            clicked => { root.favorite-clicked(fav.path); }
+    scroll-area := SmoothScrollArea {
+        width: 100%;
+        height: 100%;
+        enable-horizontal: false;
+        enable-vertical: true;
+        content-width: self.width;
+        content-height: fav-layout.preferred-height;
+
+        fav-layout := VerticalLayout {
+            spacing: 0px;
+            alignment: start;
+
+            for fav in root.favorites: FavoriteItemRow {
+                item: fav;
+                clicked => { root.favorite-clicked(fav.path); }
+            }
         }
     }
 }

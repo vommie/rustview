@@ -1,6 +1,6 @@
 import { Theme } from "styles.slint";
 import { MediaItemView } from "types.slint";
-import { ScrollView } from "std-widgets.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 /// Individual Media Item Tile with responsive boundary containment
 export component MediaTile inherits Rectangle {
@@ -116,8 +116,8 @@ export component MediaTile inherits Rectangle {
     }
 }
 
-/// Pure Vertical Scrolling Grid Container with Zero Horizontal Scrollbar Guarantee.
-/// Wraps items adaptively based on real-time viewport width changes.
+/// Pure Vertical Scrolling Grid Container with Permanent Full-Width Custom Scrollbar.
+/// Wraps items adaptively based on real-time viewport width changes with zero horizontal scrollbar.
 export component VirtualizedMediaGrid inherits Rectangle {
     background: Theme.background;
     clip: true;
@@ -142,11 +142,13 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
 
-    scroll-view := ScrollView {
+    scroll-area := SmoothScrollArea {
         width: 100%;
         height: 100%;
-        // Explicitly lock viewport width to prevent horizontal overflow and suppress horizontal scrollbars
-        viewport-width: self.width;
+        enable-horizontal: false;
+        enable-vertical: true;
+        content-width: self.width;
+        content-height: grid-layout.preferred-height + (2 * root.grid-padding);
 
         grid-layout := GridLayout {
             padding: root.grid-padding;
@@ -162,7 +164,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     root.item-context-menu(
                         item.id,
                         self.x + mx,
-                        self.y + my + scroll-view.viewport-y
+                        self.y + my + scroll-area.clamped-y
                     );
                 }
             }

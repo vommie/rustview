@@ -1,4 +1,3 @@
-import { ScrollView } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsSidebar } from "settings_sidebar.slint";
 import { SettingsPageGeneral } from "settings_page_general.slint";
@@ -8,6 +7,7 @@ import { SettingsPagePerformance } from "settings_page_performance.slint";
 import { SettingsPagePlayer } from "settings_page_player.slint";
 import { SettingsPageTags } from "settings_page_tags.slint";
 import { ButtonBar } from "button_bar.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export { SettingsSidebar } from "settings_sidebar.slint";
 export { SettingsPageGeneral } from "settings_page_general.slint";
@@ -18,6 +18,7 @@ export { SettingsPagePlayer } from "settings_page_player.slint";
 export { SettingsPageTags } from "settings_page_tags.slint";
 export { SettingsCard } from "settings_card.slint";
 export { ButtonBar } from "button_bar.slint";
+export { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export component SettingsWindow inherits Window {
     title: "RustView - Settings";
@@ -79,12 +80,16 @@ export component SettingsWindow inherits Window {
                 active-category <=> root.active-category;
             }
 
-            // Right Scrollable Configuration Area
-            ScrollView {
+            // Right Scrollable Configuration Area with Custom SmoothScrollArea
+            SmoothScrollArea {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
+                enable-horizontal: false;
+                enable-vertical: true;
+                content-width: self.width;
+                content-height: page-content.preferred-height;
 
-                VerticalLayout {
+                page-content := VerticalLayout {
                     padding: 16px;
                     spacing: 16px;
                     alignment: start;
