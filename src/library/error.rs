@@ -34,4 +34,13 @@ pub enum LibraryError {
 
     #[error("Folder path already registered: {0}")]
     DuplicateFolder(String),
+
+    #[error("File operation error: Invalid filename specified '{0}'")]
+    FileOperationInvalidFilename(String),
+
+    #[error("File operation error: Destination file already exists '{0}'")]
+    FileOperationAlreadyExists(String),
+
+    #[error("File operation error: Failed to rename media file: {0}")]
+    FileOperationRenameFailed(String),
 }

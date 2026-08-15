@@ -1,5 +1,6 @@
 pub mod db;
 pub mod error;
+pub mod file_operations;
 pub mod folders;
 pub mod media;
 pub mod models;
@@ -9,6 +10,7 @@ pub mod tags;
 
 pub use db::LibraryDatabase;
 pub use error::LibraryError;
+pub use file_operations::FileOperations;
 pub use folders::FolderManager;
 pub use media::MediaRepository;
 pub use models::{DatabaseMeta, FolderId, FolderRecord, MediaId, MediaRecord, TagId, TagRecord};
@@ -34,6 +36,10 @@ impl Library {
 
     pub fn media(&self) -> MediaRepository<'_> {
         MediaRepository::new(&self.db)
+    }
+
+    pub fn file_operations(&self) -> FileOperations<'_> {
+        FileOperations::new(&self.db)
     }
 
     pub fn tags(&self) -> TagManager<'_> {

@@ -1,7 +1,10 @@
 use super::favorites::FavoriteManager;
 use super::file_selection::{FileSelectionModel, FileSelectionSummary};
 use super::models::{format_filesize, rgb8_to_shared_buffer, rgb8_to_slint_image};
-use super::{FavoriteItemView, FolderNodeView, MainWindow, MediaItemView, TagNodeView};
+use super::{
+    FavoriteItemView, FileRenameDialog, FolderNodeView, MainWindow, MediaItemView, TagNodeView,
+};
+use crate::ctx_menu::{CtxMenuActionId, CtxMenuBuilder, CtxMenuContext, CtxMenuDispatcher};
 use crate::library::Library;
 use crate::library::models::{FolderId, MediaId, MediaRecord, TagId};
 use crate::player::events::format_playback_time;
@@ -12,7 +15,8 @@ use crate::settings::{AppSettings, SettingsDialogController, SettingsManager};
 use crate::thumbnails::{PreparedTarget, THUMBNAIL_SIZE, ThumbnailManager};
 use parking_lot::RwLock;
 use slint::{
-    ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, Timer, VecModel,
+    CloseRequestResponse, ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer,
+    Timer, VecModel,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -20,6 +24,17 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
+
+// Standardized Context Menu Action IDs
+pub const CTX_ACTION_RENAME: CtxMenuActionId = 1001;
+pub const CTX_ACTION_SELECT_ALL: CtxMenuActionId = 1002;
+pub const CTX_ACTION_CLEAR_SELECTION: CtxMenuActionId = 1003;
+pub const CTX_ACTION_RATE_5: CtxMenuActionId = 1015;
+pub const CTX_ACTION_RATE_4: CtxMenuActionId = 1014;
+pub const CTX_ACTION_RATE_3: CtxMenuActionId = 1013;
+pub const CTX_ACTION_RATE_2: CtxMenuActionId = 1012;
+pub const CTX_ACTION_RATE_1: CtxMenuActionId = 1011;
+pub const CTX_ACTION_RATE_0: CtxMenuActionId = 1010;
 
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
@@ -34,6 +49,7 @@ pub struct UiState {
     pub sort_column: SortColumn,
     pub sort_order: SortOrder,
     pub is_assign_mode: bool,
+    pub active_file_rename_target: Option<MediaId>,
 }
 
 pub struct UiBridge {
@@ -43,7 +59,9 @@ pub struct UiBridge {
     player: Arc<PlayerController>,
     settings: Arc<SettingsManager>,
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
+    rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
     favorites: Arc<RwLock<FavoriteManager>>,
+    ctx_menu_dispatcher: Arc<CtxMenuDispatcher>,
     state: Arc<RwLock<UiState>>,
     _thumbnail_timer: Timer,
     _player_timer: Timer,
@@ -63,6 +81,7 @@ impl UiBridge {
         let mut controller = SettingsDialogController::new(settings.clone());
         controller.set_main_window(window.as_weak());
         let settings_dialog = Rc::new(RefCell::new(controller));
+        let rename_dialog = Rc::new(RefCell::new(None));
 
         let state = Arc::new(RwLock::new(UiState {
             current_folder_id: None,
@@ -77,8 +96,10 @@ impl UiBridge {
             sort_column: SortColumn::Filename,
             sort_order: SortOrder::Ascending,
             is_assign_mode: false,
+            active_file_rename_target: None,
         }));
 
+        let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let thumbnail_timer = Timer::default();
         let player_timer = Timer::default();
 
@@ -89,7 +110,9 @@ impl UiBridge {
             player,
             settings,
             settings_dialog,
+            rename_dialog,
             favorites,
+            ctx_menu_dispatcher,
             state,
             _thumbnail_timer: thumbnail_timer,
             _player_timer: player_timer,
@@ -383,7 +406,7 @@ impl UiBridge {
             }
         });
 
-        // CENTRALIZED FILE SELECTION WITH MODIFIERS
+        // FILE SELECTION CLICK
         let bridge_media = self.clone_handle();
         self.window.on_media_clicked(move |id, is_ctrl, is_shift| {
             bridge_media.handle_media_click(id as u64, is_ctrl, is_shift);
@@ -393,6 +416,24 @@ impl UiBridge {
         let bridge_dbl = self.clone_handle();
         self.window.on_media_double_clicked(move |id| {
             bridge_dbl.open_media_item(id as u64);
+        });
+
+        // CONTEXT MENU TRIGGER (RIGHT-CLICK)
+        let bridge_ctx = self.clone_handle();
+        self.window.on_media_context_menu(move |id, x, y| {
+            bridge_ctx.show_media_context_menu(id as u64, x, y);
+        });
+
+        // CONTEXT MENU ITEM CLICKED
+        let bridge_ctx_click = self.clone_handle();
+        self.window.on_context_menu_item_clicked(move |action_id| {
+            bridge_ctx_click.handle_context_menu_action(action_id as u64);
+        });
+
+        // CONTEXT MENU DISMISSED
+        let bridge_ctx_dismiss = self.clone_handle();
+        self.window.on_context_menu_dismissed(move || {
+            bridge_ctx_dismiss.window.set_is_context_menu_open(false);
         });
 
         // SEARCH QUERY
@@ -538,7 +579,9 @@ impl UiBridge {
             player: self.player.clone(),
             settings: self.settings.clone(),
             settings_dialog: self.settings_dialog.clone(),
+            rename_dialog: self.rename_dialog.clone(),
             favorites: self.favorites.clone(),
+            ctx_menu_dispatcher: self.ctx_menu_dispatcher.clone(),
             state: self.state.clone(),
             _thumbnail_timer: Timer::default(),
             _player_timer: Timer::default(),
@@ -639,6 +682,234 @@ impl UiBridge {
                 self.window.set_player_title(media.filename.into());
                 self.window.set_is_player_open(true);
                 self.window.set_player_is_playing(true);
+            }
+        }
+    }
+
+    /// Prepares and opens the dynamic context menu at the specified cursor position.
+    pub fn show_media_context_menu(&self, media_id: MediaId, x: f32, y: f32) {
+        let (selected_count, is_single, can_rename) = {
+            let mut st = self.state.write();
+            if !st.file_selection.is_selected(media_id) {
+                st.file_selection.select_single(media_id);
+            }
+            let count = st.file_selection.count();
+            (count, count == 1, count == 1)
+        };
+
+        self.update_inspector();
+        self.reload_media_view_filtered();
+
+        let menu = CtxMenuBuilder::new()
+            .header(if is_single {
+                "Selected File"
+            } else {
+                "Selected Files"
+            })
+            .action(
+                CTX_ACTION_RENAME,
+                if can_rename {
+                    "Rename...".to_string()
+                } else {
+                    format!("Rename (Single File Only, {} selected)", selected_count)
+                },
+                Some("F2"),
+                Some("edit"),
+                can_rename,
+            )
+            .separator()
+            .submenu("Rate Selection", Some("star"), selected_count > 0, |sub| {
+                sub.action(CTX_ACTION_RATE_5, "5 Stars (★★★★★)", None, None, true)
+                    .action(CTX_ACTION_RATE_4, "4 Stars (★★★★☆)", None, None, true)
+                    .action(CTX_ACTION_RATE_3, "3 Stars (★★★☆☆)", None, None, true)
+                    .action(CTX_ACTION_RATE_2, "2 Stars (★★☆☆☆)", None, None, true)
+                    .action(CTX_ACTION_RATE_1, "1 Star  (★☆☆☆☆)", None, None, true)
+                    .separator()
+                    .action(CTX_ACTION_RATE_0, "Clear Rating", None, None, true)
+            })
+            .separator()
+            .action(
+                CTX_ACTION_CLEAR_SELECTION,
+                "Clear Selection",
+                Some("Esc"),
+                None,
+                selected_count > 0,
+            )
+            .action(
+                CTX_ACTION_SELECT_ALL,
+                "Select All",
+                Some("Ctrl+A"),
+                None,
+                true,
+            )
+            .build();
+
+        let (top_model, sub_model) = CtxMenuDispatcher::to_slint_models(&menu);
+
+        self.window.set_context_menu_items(top_model);
+        self.window.set_context_submenu_items(sub_model);
+        self.window.set_context_menu_x(x);
+        self.window.set_context_menu_y(y);
+        self.window.set_is_context_menu_open(true);
+
+        tracing::debug!(
+            target_media_id = media_id,
+            pos_x = x,
+            pos_y = y,
+            selected_items = selected_count,
+            "Context menu opened"
+        );
+    }
+
+    /// Dispatches and executes the invoked context menu action.
+    pub fn handle_context_menu_action(&self, action_id: CtxMenuActionId) {
+        self.window.set_is_context_menu_open(false);
+
+        let selected_ids = self.state.read().file_selection.selected_ids().clone();
+        let context = CtxMenuContext {
+            position_x: 0.0,
+            position_y: 0.0,
+            selected_item_count: selected_ids.len(),
+            target_ids: selected_ids.iter().copied().collect(),
+        };
+
+        tracing::info!(ctx_action_id = action_id, "Executing context menu action");
+
+        match action_id {
+            CTX_ACTION_RENAME => {
+                if let Some(&target_id) = selected_ids.iter().next()
+                    && selected_ids.len() == 1
+                    && let Ok(Some(record)) = self.library.media().get(target_id)
+                {
+                    self.state.write().active_file_rename_target = Some(target_id);
+                    self.show_rename_dialog(&record.filename);
+                }
+            }
+            CTX_ACTION_SELECT_ALL => {
+                self.select_all();
+            }
+            CTX_ACTION_CLEAR_SELECTION => {
+                self.clear_selection();
+            }
+            CTX_ACTION_RATE_5 => self.apply_rating_to_ids(&selected_ids, 5),
+            CTX_ACTION_RATE_4 => self.apply_rating_to_ids(&selected_ids, 4),
+            CTX_ACTION_RATE_3 => self.apply_rating_to_ids(&selected_ids, 3),
+            CTX_ACTION_RATE_2 => self.apply_rating_to_ids(&selected_ids, 2),
+            CTX_ACTION_RATE_1 => self.apply_rating_to_ids(&selected_ids, 1),
+            CTX_ACTION_RATE_0 => self.apply_rating_to_ids(&selected_ids, 0),
+            _ => {
+                self.ctx_menu_dispatcher.dispatch(action_id, &context);
+            }
+        }
+    }
+
+    /// Prepares and displays the standalone modal FileRenameDialog window.
+    pub fn show_rename_dialog(&self, current_name: &str) {
+        let mut dialog_ref = self.rename_dialog.borrow_mut();
+        if dialog_ref.is_none() {
+            let win = FileRenameDialog::new().expect("Failed to instantiate FileRenameDialog");
+
+            let bridge_confirm = self.clone_handle();
+            win.on_confirmed(move |new_name| {
+                bridge_confirm.execute_file_rename(&new_name);
+            });
+
+            let bridge_cancel = self.clone_handle();
+            win.on_cancelled(move || {
+                bridge_cancel.close_rename_dialog();
+            });
+
+            let bridge_close = self.clone_handle();
+            win.window().on_close_requested(move || {
+                bridge_close.close_rename_dialog();
+                CloseRequestResponse::HideWindow
+            });
+
+            *dialog_ref = Some(win);
+        }
+
+        if let Some(ref win) = *dialog_ref {
+            win.set_initial_name(current_name.into());
+            win.set_new_name(current_name.into());
+            win.set_error_message("".into());
+            self.window.set_is_modal_locked(true);
+            let _ = win.show();
+        }
+    }
+
+    /// Hides the FileRenameDialog window and unlocks the main window.
+    pub fn close_rename_dialog(&self) {
+        if let Some(ref win) = *self.rename_dialog.borrow() {
+            let _ = win.hide();
+        }
+        self.state.write().active_file_rename_target = None;
+        self.window.set_is_modal_locked(false);
+    }
+
+    /// Applies a rating directly to a specific set of media IDs.
+    fn apply_rating_to_ids(&self, ids: &std::collections::HashSet<MediaId>, rating: u8) {
+        for &id in ids {
+            let _ = self.library.media().set_rating(id, rating);
+        }
+        let current_folder = self.state.read().current_folder_id;
+        let current_path = self.state.read().current_folder_path.clone();
+        if let (Some(f_id), Some(path)) = (current_folder, current_path) {
+            let raw = self.library.media().get_by_folder(f_id).unwrap_or_default();
+            self.state.write().all_folder_media =
+                Self::preindex_media_records(&self.library, raw, &path);
+        }
+        self.update_inspector();
+        self.reload_media_view_filtered();
+    }
+
+    /// Executes the physical and database file rename operation.
+    pub fn execute_file_rename(&self, new_name: &str) {
+        let target_id = self.state.read().active_file_rename_target;
+
+        if let Some(media_id) = target_id {
+            match self
+                .library
+                .file_operations()
+                .rename_media(media_id, new_name)
+            {
+                Ok(updated_record) => {
+                    tracing::info!(
+                        media_id = media_id,
+                        new_name = %new_name,
+                        "File successfully renamed via FileOperations subsystem"
+                    );
+
+                    // Update in-memory preindexed media cache
+                    {
+                        let mut st = self.state.write();
+                        let folder_path_opt = st.current_folder_path.clone();
+                        if let Some(item) = st
+                            .all_folder_media
+                            .iter_mut()
+                            .find(|m| m.record.id == media_id)
+                        {
+                            item.filename_slint = updated_record.filename.clone().into();
+                            item.filename_lower = updated_record.filename.to_lowercase();
+                            if let Some(ref folder_path) = folder_path_opt {
+                                item.full_path = folder_path.join(&updated_record.filename);
+                            }
+                            item.record = updated_record;
+                        }
+                    }
+
+                    self.close_rename_dialog();
+                    self.window
+                        .set_status_text(format!("Renamed file to '{}'", new_name).into());
+
+                    self.update_inspector();
+                    self.reload_media_view_filtered();
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to rename media file");
+                    if let Some(ref win) = *self.rename_dialog.borrow() {
+                        win.set_error_message(e.to_string().into());
+                    }
+                }
             }
         }
     }

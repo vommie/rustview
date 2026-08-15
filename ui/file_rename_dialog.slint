@@ -1,0 +1,78 @@
+import { LineEdit } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { ButtonBar } from "button_bar.slint";
+
+export component FileRenameDialog inherits Window {
+    title: "RustView - Rename Media File";
+    preferred-width: 440px;
+    preferred-height: 180px;
+    min-width: 380px;
+    min-height: 160px;
+    background: Theme.background;
+
+    in-out property <string> initial-name: "";
+    in-out property <string> new-name <=> name-input.text;
+    in property <string> error-message: "";
+
+    callback confirmed(string);
+    callback cancelled();
+
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
+        alignment: space-between;
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 10px;
+            vertical-stretch: 1;
+
+            Text {
+                text: "Rename File";
+                font-size: 14px;
+                font-weight: 700;
+                color: Theme.primary;
+            }
+
+            Text {
+                text: "Enter a new filename for the selected media item:";
+                font-size: 11px;
+                color: Theme.text-muted;
+            }
+
+            name-input := LineEdit {
+                text: root.initial-name;
+                placeholder-text: "New filename...";
+                height: 32px;
+                vertical-stretch: 0;
+                accepted => {
+                    if self.text != "" {
+                        root.confirmed(self.text);
+                    }
+                }
+            }
+
+            if root.error-message != "" : Text {
+                text: root.error-message;
+                font-size: 11px;
+                color: #ff5555;
+                wrap: word-wrap;
+            }
+        }
+
+        ButtonBar {
+            vertical-stretch: 0;
+            bar-height: 48px;
+            show-cancel: true;
+            show-save: true;
+            text-save: "Rename";
+            text-cancel: "Cancel";
+            cancel-clicked => { root.cancelled(); }
+            save-clicked => {
+                if name-input.text != "" {
+                    root.confirmed(name-input.text);
+                }
+            }
+        }
+    }
+}

@@ -8,6 +8,7 @@ export component MediaTile inherits Rectangle {
 
     callback clicked(bool /* is_ctrl */, bool /* is_shift */);
     callback double-clicked();
+    callback context-menu-requested(length /* x */, length /* y */);
 
     width: (root.thumb-size * 1px) + 16px;
     height: (root.thumb-size * 1px) + 42px;
@@ -24,6 +25,9 @@ export component MediaTile inherits Rectangle {
             if event.kind == PointerEventKind.down {
                 self.last-ctrl = event.modifiers.control || event.modifiers.meta;
                 self.last-shift = event.modifiers.shift;
+                if event.button == PointerEventButton.right {
+                    root.context-menu-requested(tile-touch.mouse-x + parent.x, tile-touch.mouse-y + parent.y);
+                }
             }
         }
 
@@ -54,7 +58,7 @@ export component MediaTile inherits Rectangle {
                 image-fit: contain;
             }
 
-            // Top-Right Rating Badge with centralized Theme helper
+            // Top-Right Rating Badge
             if item.rating > 0 : Rectangle {
                 x: parent.width - 20px;
                 y: 4px;
@@ -128,6 +132,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-double-clicked(int /* id */);
+    callback item-context-menu(int /* id */, length /* x */, length /* y */);
 
     ScrollView {
         GridLayout {
@@ -141,6 +146,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                 thumb-size: root.thumb-size;
                 clicked(ctrl, shift) => { root.item-clicked(item.id, ctrl, shift); }
                 double-clicked => { root.item-double-clicked(item.id); }
+                context-menu-requested(x, y) => { root.item-context-menu(item.id, x, y); }
             }
         }
     }

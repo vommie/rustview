@@ -34,3 +34,15 @@ export struct TagNodeView {
     is_partial: bool,
     is_match: bool,
 }
+
+export struct ContextMenuItemModel {
+    id: int,
+    text: string,
+    shortcut: string,
+    icon_name: string,
+    kind: int, // 0 = Action, 1 = Checkable, 2 = Radio, 3 = Separator, 4 = Header, 5 = Submenu
+    is_checked: bool,
+    is_enabled: bool,
+    has_submenu: bool,
+    submenu_depth: int,
+}

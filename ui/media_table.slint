@@ -9,6 +9,7 @@ export component MediaTableView inherits Rectangle {
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-double-clicked(int /* id */);
+    callback item-context-menu(int /* id */, length /* x */, length /* y */);
 
     VerticalLayout {
         // Table Header
@@ -54,6 +55,9 @@ export component MediaTableView inherits Rectangle {
                         if event.kind == PointerEventKind.down {
                             self.last-ctrl = event.modifiers.control || event.modifiers.meta;
                             self.last-shift = event.modifiers.shift;
+                            if event.button == PointerEventButton.right {
+                                root.item-context-menu(item.id, row-touch.mouse-x, row-touch.mouse-y);
+                            }
                         }
                     }
 
