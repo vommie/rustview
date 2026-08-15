@@ -2,6 +2,7 @@ import { Theme } from "styles.slint";
 import { MediaItemView } from "types.slint";
 import { ScrollView } from "std-widgets.slint";
 
+/// Individual Media Item Tile with responsive boundary containment
 export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
     in property <int> thumb-size: 150;
@@ -9,18 +10,22 @@ export component MediaTile inherits Rectangle {
     callback clicked(bool /* is_ctrl */, bool /* is_shift */);
     callback context-menu-requested(length /* x */, length /* y */);
 
-    width: (root.thumb-size * 1px) + 16px;
-    height: (root.thumb-size * 1px) + 42px;
+    property <length> tile-width: (root.thumb-size * 1px) + 16px;
+    property <length> tile-height: (root.thumb-size * 1px) + 42px;
+
+    width: root.tile-width;
+    height: root.tile-height;
     background: item.is-selected ? Theme.surface-selected : (tile-touch.has-hover ? Theme.surface-hover : Theme.surface);
     border-width: item.is-selected ? 2px : 1px;
     border-color: item.is-selected ? Theme.primary : Theme.border;
     border-radius: 4px;
+    clip: true;
 
     tile-touch := TouchArea {
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 if event.button == PointerEventButton.right {
-                    root.context-menu-requested(tile-touch.mouse-x + parent.x, tile-touch.mouse-y + parent.y);
+                    root.context-menu-requested(self.mouse-x, self.mouse-y);
                 } else if event.button == PointerEventButton.left {
                     root.clicked(event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
                 }
@@ -80,7 +85,7 @@ export component MediaTile inherits Rectangle {
                 }
             }
 
-            // Video Indicator
+            // Bottom Video Indicator Tag
             if item.is-video : Rectangle {
                 x: 4px;
                 y: parent.height - 18px;
@@ -111,21 +116,41 @@ export component MediaTile inherits Rectangle {
     }
 }
 
+/// Pure Vertical Scrolling Grid Container with Zero Horizontal Scrollbar Guarantee.
+/// Wraps items adaptively based on real-time viewport width changes.
 export component VirtualizedMediaGrid inherits Rectangle {
     background: Theme.background;
+    clip: true;
 
     in property <[MediaItemView]> media-items: [];
     in property <int> thumb-size: 150;
 
-    out property <int> columns: Math.max(1, Math.floor(Math.max(300px, self.width) / ((root.thumb-size * 1px) + 20px)));
+    // Layout configuration constants
+    property <length> grid-padding: 12px;
+    property <length> grid-spacing: 12px;
+    property <length> scrollbar-gutter-reserve: 16px;
+
+    property <length> item-tile-width: (root.thumb-size * 1px) + 16px;
+    property <length> column-stride: root.item-tile-width + root.grid-spacing;
+
+    // Available inner width accounting for margins, padding, and vertical scrollbar gutter
+    property <length> available-width: Math.max(0px, self.width - (root.grid-padding * 2) - root.scrollbar-gutter-reserve + root.grid-spacing);
+
+    // Exact reactive column calculation: Guarantees items wrap cleanly without exceeding width
+    out property <int> columns: Math.max(1, Math.floor(root.available-width / root.column-stride));
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
 
-    ScrollView {
-        GridLayout {
-            padding: 12px;
-            spacing: 12px;
+    scroll-view := ScrollView {
+        width: 100%;
+        height: 100%;
+        // Explicitly lock viewport width to prevent horizontal overflow and suppress horizontal scrollbars
+        viewport-width: self.width;
+
+        grid-layout := GridLayout {
+            padding: root.grid-padding;
+            spacing: root.grid-spacing;
 
             for item[index] in root.media-items: MediaTile {
                 col: Math.mod(index, root.columns);
@@ -133,7 +158,13 @@ export component VirtualizedMediaGrid inherits Rectangle {
                 item: item;
                 thumb-size: root.thumb-size;
                 clicked(ctrl, shift) => { root.item-clicked(item.id, ctrl, shift); }
-                context-menu-requested(x, y) => { root.item-context-menu(item.id, x, y); }
+                context-menu-requested(mx, my) => {
+                    root.item-context-menu(
+                        item.id,
+                        self.x + mx,
+                        self.y + my + scroll-view.viewport-y
+                    );
+                }
             }
         }
     }

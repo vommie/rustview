@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Subsystem managing media item pre-indexing, filtering, sorting, and Slint model generation.
+/// Subsystem managing media item pre-indexing, filtering, sorting, grid layout synchronization, and Slint model generation.
 pub struct BridgeMedia;
 
 impl BridgeMedia {
@@ -29,6 +29,7 @@ impl BridgeMedia {
         let thumb = thumbnails.clone();
         let st = state.clone();
         window.on_search_query_changed(move |query| {
+            tracing::debug!(query = %query, "[QueryFilter] Search query updated by user");
             st.write().filter.search_query = query.to_string();
             Self::reload(&win, &lib, &thumb, &st, false, false);
         });
@@ -38,6 +39,10 @@ impl BridgeMedia {
         let thumb = thumbnails.clone();
         let st = state.clone();
         window.on_regex_mode_toggled(move |enabled| {
+            tracing::info!(
+                regex_enabled = enabled,
+                "[QueryFilter] Regex filter mode toggled"
+            );
             st.write().filter.is_regex = enabled;
             Self::reload(&win, &lib, &thumb, &st, false, false);
         });
@@ -52,6 +57,7 @@ impl BridgeMedia {
             } else {
                 MatchMode::Any
             };
+            tracing::info!(?mode, "[QueryFilter] Match mode updated");
             st.write().filter.match_mode = mode;
             Self::reload(&win, &lib, &thumb, &st, false, false);
         });
@@ -66,6 +72,7 @@ impl BridgeMedia {
             } else {
                 ScopeMode::Global
             };
+            tracing::info!(?scope, "[QueryFilter] Scope mode updated");
             st.write().filter.scope_mode = scope;
             Self::reload(&win, &lib, &thumb, &st, false, false);
         });
@@ -77,7 +84,10 @@ impl BridgeMedia {
         raw_records: Vec<MediaRecord>,
         folder_path: &Path,
     ) -> Vec<IndexedMediaRecord> {
-        raw_records
+        let t0 = Instant::now();
+        let total_count = raw_records.len();
+
+        let indexed = raw_records
             .into_iter()
             .enumerate()
             .map(|(index, r)| {
@@ -103,10 +113,18 @@ impl BridgeMedia {
                     has_tags,
                 }
             })
-            .collect()
+            .collect();
+
+        tracing::debug!(
+            indexed_items = total_count,
+            elapsed_us = t0.elapsed().as_micros(),
+            "[MediaIndex] In-memory pre-indexing and string formatting complete"
+        );
+
+        indexed
     }
 
-    /// Full or filtered reload of the media grid/table view.
+    /// Full or filtered reload of the media grid/table view with strict vertical-only containment.
     pub fn reload(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -131,6 +149,7 @@ impl BridgeMedia {
         let Some(f_id) = folder_id else {
             window.set_media_items(ModelRc::new(VecModel::from(vec![])));
             window.set_items_metric_text("Items: 0".into());
+            tracing::debug!("[MediaGrid] Reload bypassed: No active folder selected");
             return;
         };
 
@@ -249,15 +268,17 @@ impl BridgeMedia {
         let slint_us = t_slint_start.elapsed().as_micros();
 
         tracing::debug!(
+            folder_id = f_id,
             query = %current_query,
             is_reset = is_full_reset,
             matched = matched_count,
+            total_folder = total_folder_count,
             filter_us = filter_us,
             sort_us = sort_us,
             model_mapping_us = map_us,
             slint_commit_us = slint_us,
             total_pipeline_us = t_total_start.elapsed().as_micros(),
-            "[ViewBenchmark: Zero-Copy] View update pipeline completed"
+            "[MediaGrid: ViewPipeline] Rendered media items to UI (Vertical-only Scroll, Zero-Horizontal-Overflow)"
         );
 
         if start_pipeline {

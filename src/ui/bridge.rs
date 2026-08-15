@@ -114,6 +114,8 @@ impl UiBridge {
         bridge.reload_favorites();
         bridge.reload_tags();
 
+        tracing::info!("[UiBridge] Initialized all UI bridges and event timers successfully");
+
         bridge
     }
 
