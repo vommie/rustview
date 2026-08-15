@@ -6,7 +6,7 @@ export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
     in property <int> thumb-size: 150;
 
-    callback clicked();
+    callback clicked(bool /* is_ctrl */, bool /* is_shift */);
     callback double-clicked();
 
     width: (root.thumb-size * 1px) + 16px;
@@ -17,8 +17,22 @@ export component MediaTile inherits Rectangle {
     border-radius: 4px;
 
     tile-touch := TouchArea {
-        clicked => { root.clicked(); }
-        double-clicked => { root.double-clicked(); }
+        property <bool> last-ctrl: false;
+        property <bool> last-shift: false;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                self.last-ctrl = event.modifiers.control || event.modifiers.meta;
+                self.last-shift = event.modifiers.shift;
+            }
+        }
+
+        clicked => {
+            root.clicked(self.last-ctrl, self.last-shift);
+        }
+        double-clicked => {
+            root.double-clicked();
+        }
     }
 
     VerticalLayout {
@@ -115,8 +129,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
     out property <int> columns: Math.max(1, Math.floor(Math.max(300px, self.width) / ((root.thumb-size * 1px) + 20px)));
 
-    callback item-clicked(int);
-    callback item-double-clicked(int);
+    callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
+    callback item-double-clicked(int /* id */);
 
     ScrollView {
         GridLayout {
@@ -128,7 +142,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                 row: Math.floor(index / root.columns);
                 item: item;
                 thumb-size: root.thumb-size;
-                clicked => { root.item-clicked(item.id); }
+                clicked(ctrl, shift) => { root.item-clicked(item.id, ctrl, shift); }
                 double-clicked => { root.item-double-clicked(item.id); }
             }
         }

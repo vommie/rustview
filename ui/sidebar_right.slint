@@ -17,6 +17,7 @@ export component SidebarRight inherits Rectangle {
     in property <string> info-dimensions: "-";
     in property <string> info-format: "-";
     in property <string> info-hash: "-";
+    in property <int> info-selection-count: 0;
 
     callback mode-toggled(bool);
     callback rating-selected(int);
@@ -173,12 +174,17 @@ export component SidebarRight inherits Rectangle {
                 padding: 8px;
                 spacing: 4px;
 
-                Text { text: "INFO / METADATA"; font-size: 10px; font-weight: 700; color: Theme.primary; }
+                Text {
+                    text: "INFO / METADATA" + (root.info-selection-count > 1 ? (" (" + root.info-selection-count + " Files)") : "");
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                }
                 Text { text: "File: " + root.info-filename; color: Theme.text; font-size: 11px; overflow: elide; }
                 Text { text: "Size: " + root.info-size; color: Theme.text-muted; font-size: 11px; }
                 Text { text: "Dimensions: " + root.info-dimensions; color: Theme.text-muted; font-size: 11px; }
-                Text { text: "Format: " + root.info-format; color: Theme.text-muted; font-size: 11px; }
-                Text { text: "BLAKE3: " + root.info-hash; color: Theme.text-muted; font-size: 10px; overflow: elide; }
+                Text { text: "Format: " + root.info-format; color: Theme.text-muted; font-size: 11px; overflow: elide; }
+                Text { text: (root.info-selection-count > 1 ? "Details: " : "BLAKE3: ") + root.info-hash; color: Theme.text-muted; font-size: 10px; overflow: elide; }
             }
         }
     }

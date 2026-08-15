@@ -7,8 +7,8 @@ export component MediaTableView inherits Rectangle {
 
     in property <[MediaItemView]> items: [];
 
-    callback item-clicked(int);
-    callback item-double-clicked(int);
+    callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
+    callback item-double-clicked(int /* id */);
 
     VerticalLayout {
         // Table Header
@@ -47,8 +47,22 @@ export component MediaTableView inherits Rectangle {
                 }
 
                 row-touch := TouchArea {
-                    clicked => { root.item-clicked(item.id); }
-                    double-clicked => { root.item-double-clicked(item.id); }
+                    property <bool> last-ctrl: false;
+                    property <bool> last-shift: false;
+
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down {
+                            self.last-ctrl = event.modifiers.control || event.modifiers.meta;
+                            self.last-shift = event.modifiers.shift;
+                        }
+                    }
+
+                    clicked => {
+                        root.item-clicked(item.id, self.last-ctrl, self.last-shift);
+                    }
+                    double-clicked => {
+                        root.item-double-clicked(item.id);
+                    }
                 }
 
                 HorizontalLayout {

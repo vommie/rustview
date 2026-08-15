@@ -54,14 +54,15 @@ export component MainWindow inherits Window {
     in property <string> info-dimensions: "-";
     in property <string> info-format: "-";
     in property <string> info-hash: "-";
+    in property <int> info-selection-count: 0;
 
     // Callbacks to Rust Backend
     callback refresh-folder();
     callback open-settings();
     callback folder-selected(int, string);
     callback favorite-selected(string);
-    callback media-clicked(int);
-    callback media-double-clicked(int);
+    callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
+    callback media-double-clicked(int /* id */);
     callback search-query-changed(string);
     callback regex-mode-toggled(bool);
     callback rating-applied(int);
@@ -121,13 +122,13 @@ export component MainWindow inherits Window {
                 if !root.is-player-open && !root.is-table-view : VirtualizedMediaGrid {
                     media-items: root.media-items;
                     thumb-size: root.thumb-size;
-                    item-clicked(id) => { root.media-clicked(id); }
+                    item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                     item-double-clicked(id) => { root.media-double-clicked(id); }
                 }
 
                 if !root.is-player-open && root.is-table-view : MediaTableView {
                     items: root.media-items;
-                    item-clicked(id) => { root.media-clicked(id); }
+                    item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                     item-double-clicked(id) => { root.media-double-clicked(id); }
                 }
             }
@@ -139,6 +140,7 @@ export component MainWindow inherits Window {
                 info-dimensions: root.info-dimensions;
                 info-format: root.info-format;
                 info-hash: root.info-hash;
+                info-selection-count: root.info-selection-count;
 
                 mode-toggled(assign) => { root.tag-mode-toggled(assign); }
                 rating-selected(r) => { root.rating-applied(r); }

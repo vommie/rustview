@@ -1,4 +1,5 @@
 use super::favorites::FavoriteManager;
+use super::file_selection::{FileSelectionModel, FileSelectionSummary};
 use super::models::{format_filesize, rgb8_to_shared_buffer, rgb8_to_slint_image};
 use super::{FavoriteItemView, FolderNodeView, MainWindow, MediaItemView, TagNodeView};
 use crate::library::Library;
@@ -14,7 +15,7 @@ use slint::{
     ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, Timer, VecModel,
 };
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -23,10 +24,10 @@ use std::time::Instant;
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
     pub current_folder_path: Option<PathBuf>,
-    pub all_folder_media: Vec<IndexedMediaRecord>, // Authoritative pre-indexed cache (Never cloned, Send+Sync)
-    pub folder_thumbnails: HashMap<MediaId, SharedPixelBuffer<Rgb8Pixel>>, // Thread-safe RAM PixelBuffer cache (Send+Sync)
-    pub active_indices: Vec<usize>, // Zero-copy index subset of matched items
-    pub selected_media_ids: HashSet<MediaId>,
+    pub all_folder_media: Vec<IndexedMediaRecord>,
+    pub folder_thumbnails: HashMap<MediaId, SharedPixelBuffer<Rgb8Pixel>>,
+    pub active_indices: Vec<usize>,
+    pub file_selection: FileSelectionModel,
     pub media_row_map: HashMap<MediaId, usize>,
     pub filter: QueryFilter,
     pub last_executed_query: String,
@@ -69,7 +70,7 @@ impl UiBridge {
             all_folder_media: Vec::new(),
             folder_thumbnails: HashMap::new(),
             active_indices: Vec::new(),
-            selected_media_ids: HashSet::new(),
+            file_selection: FileSelectionModel::new(),
             media_row_map: HashMap::new(),
             filter: QueryFilter::default(),
             last_executed_query: String::new(),
@@ -108,7 +109,6 @@ impl UiBridge {
         &self.window
     }
 
-    /// High-frequency batched UI updater running on the Slint main thread (zero lag, 60fps guaranteed)
     fn start_thumbnail_drain_timer(&self) {
         let w_weak = self.window.as_weak();
         let state = self.state.clone();
@@ -122,7 +122,6 @@ impl UiBridge {
                     return;
                 };
 
-                // 1. Drain ready thumbnail batch & populate RAM SharedPixelBuffer store
                 let batch = thumbnails.drain_ready_batch(64);
                 if !batch.is_empty() {
                     let mut st = state.write();
@@ -147,7 +146,6 @@ impl UiBridge {
                     }
                 }
 
-                // 2. Sync Progress Snapshot with UI Status Bar
                 let progress = thumbnails.progress();
                 window.set_is_preloading(progress.is_preloading);
                 window.set_preload_current(progress.preload_current as i32);
@@ -241,7 +239,7 @@ impl UiBridge {
                     st.all_folder_media = indexed_media;
                     st.folder_thumbnails.clear();
                     st.active_indices.clear();
-                    st.selected_media_ids.clear();
+                    st.file_selection.clear();
                     st.last_executed_query.clear();
                 }
 
@@ -249,6 +247,7 @@ impl UiBridge {
 
                 Self::reload_folders_internal(window, library, settings, state);
                 Self::reload_media_view_internal(window, library, thumbnails, state, true, false);
+                Self::update_inspector_internal(window, state);
             } else {
                 Self::clear_library_view_internal(
                     window,
@@ -265,7 +264,6 @@ impl UiBridge {
         }
     }
 
-    /// Preindexes all records ONCE on folder load: prepares Slint strings, full paths, and caches tag presence.
     fn preindex_media_records(
         library: &Library,
         raw_records: Vec<MediaRecord>,
@@ -312,7 +310,7 @@ impl UiBridge {
             st.all_folder_media.clear();
             st.folder_thumbnails.clear();
             st.active_indices.clear();
-            st.selected_media_ids.clear();
+            st.file_selection.clear();
             st.media_row_map.clear();
             st.last_executed_query.clear();
         }
@@ -320,6 +318,7 @@ impl UiBridge {
         window.set_media_items(ModelRc::new(VecModel::from(vec![])));
         window.set_items_metric_text("Items: 0".into());
         window.set_status_text(status_msg.into());
+        Self::update_inspector_internal(window, state);
     }
 
     fn register_settings_subscriber(&self) {
@@ -384,10 +383,10 @@ impl UiBridge {
             }
         });
 
-        // MEDIA SELECTION
+        // CENTRALIZED FILE SELECTION WITH MODIFIERS
         let bridge_media = self.clone_handle();
-        self.window.on_media_clicked(move |id| {
-            bridge_media.toggle_media_selection(id as u64);
+        self.window.on_media_clicked(move |id, is_ctrl, is_shift| {
+            bridge_media.handle_media_click(id as u64, is_ctrl, is_shift);
         });
 
         // MEDIA DOUBLE CLICK
@@ -396,7 +395,7 @@ impl UiBridge {
             bridge_dbl.open_media_item(id as u64);
         });
 
-        // SEARCH QUERY (Instant synchronous in-memory filter execution)
+        // SEARCH QUERY
         let bridge_search = self.clone_handle();
         self.window.on_search_query_changed(move |query| {
             bridge_search.update_search_query(query.to_string());
@@ -605,7 +604,7 @@ impl UiBridge {
             state.all_folder_media = indexed_media;
             state.folder_thumbnails.clear();
             state.active_indices.clear();
-            state.selected_media_ids.clear();
+            state.file_selection.clear();
             state.last_executed_query.clear();
         }
 
@@ -619,6 +618,7 @@ impl UiBridge {
 
         self.reload_folders();
         self.reload_media_view_full(true);
+        self.update_inspector();
     }
 
     pub fn open_media_item(&self, media_id: MediaId) {
@@ -771,8 +771,8 @@ impl UiBridge {
             &self.library,
             &self.thumbnails,
             &self.state,
-            false, // Do NOT cancel/restart pipeline on keystrokes
-            false, // Use pure in-memory cache
+            false,
+            false,
         );
     }
 
@@ -786,20 +786,18 @@ impl UiBridge {
     ) {
         let t_total_start = Instant::now();
 
-        let (folder_id, filter, sort_col, sort_ord, selected_ids, last_query) = {
+        let (folder_id, filter, sort_col, sort_ord, last_query) = {
             let s = state.read();
             (
                 s.current_folder_id,
                 s.filter.clone(),
                 s.sort_column,
                 s.sort_order,
-                s.selected_media_ids.clone(),
                 s.last_executed_query.clone(),
             )
         };
 
         if let Some(f_id) = folder_id {
-            // Lazy load or reload from LMDB if needed (Zero clone)
             if reload_lmdb {
                 let path_opt = state.read().current_folder_path.clone();
                 if let Some(ref p) = path_opt {
@@ -829,12 +827,10 @@ impl UiBridge {
                 None
             };
 
-            // 1. Zero-Copy Sub-Microsecond Filter (Operates purely on borrowed references)
             let t_filter_start = Instant::now();
             let filtered_refs = filter.execute_indexed_refs(library, &st.all_folder_media, subset);
             let filter_us = t_filter_start.elapsed().as_micros();
 
-            // 2. Fast in-memory sort on references (Bypassed if full reset since all_folder_media is pre-sorted)
             let t_sort_start = Instant::now();
             let mut sorted_refs = filtered_refs;
 
@@ -843,7 +839,6 @@ impl UiBridge {
             }
             let sort_us = t_sort_start.elapsed().as_micros();
 
-            // 3. UI Model Mapping (0 LMDB Calls, 0 PathBuf allocations, pure fast reference copies)
             let t_map_start = Instant::now();
             let matched_len = sorted_refs.len();
             let mut item_views = Vec::with_capacity(matched_len);
@@ -851,16 +846,15 @@ impl UiBridge {
             let mut pipeline_targets = if start_pipeline {
                 Vec::with_capacity(matched_len)
             } else {
-                Vec::new() // ZERO allocation during search filter!
+                Vec::new()
             };
 
             let arena = thumbnails.cache().arena();
             let mut matched_indices = Vec::with_capacity(matched_len);
-            let has_selection = !selected_ids.is_empty();
 
             for (row_idx, &item) in sorted_refs.iter().enumerate() {
                 matched_indices.push(item.index);
-                let is_selected = has_selection && selected_ids.contains(&item.record.id);
+                let is_selected = st.file_selection.is_selected(item.record.id);
                 row_map.insert(item.record.id, row_idx);
 
                 if start_pipeline {
@@ -870,11 +864,9 @@ impl UiBridge {
                     });
                 }
 
-                // Priority 1: Persistent Slint Image RAM cache for the active folder
                 let thumbnail_img = if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
                     Image::from_rgb8(buf.clone())
                 } else if let Some(handle) = thumbnails.cache().get(item.record.id) {
-                    // Priority 2: L1 RAM slot arena
                     if let Some(rgb_data) = arena.read_slot(handle) {
                         rgb8_to_slint_image(rgb_data, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
                     } else {
@@ -908,7 +900,6 @@ impl UiBridge {
                 st_write.last_executed_query = current_query.clone();
             }
 
-            // 4. Slint UI Model Commit
             let t_slint_start = Instant::now();
             let matched_count = item_views.len();
             window.set_media_items(ModelRc::new(VecModel::from(item_views)));
@@ -940,20 +931,65 @@ impl UiBridge {
         }
     }
 
-    pub fn toggle_media_selection(&self, media_id: MediaId) {
+    /// Centralized modifier-aware click handler for single and range file selection.
+    pub fn handle_media_click(&self, media_id: MediaId, is_ctrl: bool, is_shift: bool) {
+        let t0 = Instant::now();
         {
             let mut state = self.state.write();
-            if state.selected_media_ids.contains(&media_id) {
-                state.selected_media_ids.remove(&media_id);
+
+            let visible_ids: Vec<MediaId> = if !state.active_indices.is_empty() {
+                state
+                    .active_indices
+                    .iter()
+                    .filter_map(|&idx| state.all_folder_media.get(idx))
+                    .map(|item| item.record.id)
+                    .collect()
             } else {
-                state.selected_media_ids.insert(media_id);
+                state
+                    .all_folder_media
+                    .iter()
+                    .map(|item| item.record.id)
+                    .collect()
+            };
+
+            if is_shift {
+                let additive = is_ctrl;
+                state
+                    .file_selection
+                    .select_range(media_id, &visible_ids, additive);
+                tracing::info!(
+                    target_media_id = media_id,
+                    is_ctrl = is_ctrl,
+                    is_shift = is_shift,
+                    selected_count = state.file_selection.count(),
+                    elapsed_us = t0.elapsed().as_micros(),
+                    "[FileSelection: Shift-Range] Contiguous range selection executed"
+                );
+            } else if is_ctrl {
+                state.file_selection.toggle(media_id);
+                tracing::info!(
+                    target_media_id = media_id,
+                    is_ctrl = is_ctrl,
+                    selected_count = state.file_selection.count(),
+                    is_now_selected = state.file_selection.is_selected(media_id),
+                    elapsed_us = t0.elapsed().as_micros(),
+                    "[FileSelection: Ctrl-Toggle] Individual item selection toggled"
+                );
+            } else {
+                state.file_selection.select_single(media_id);
+                tracing::info!(
+                    target_media_id = media_id,
+                    selected_count = 1,
+                    elapsed_us = t0.elapsed().as_micros(),
+                    "[FileSelection: Single] Single item selected (previous selection cleared)"
+                );
             }
         }
+
         self.update_inspector();
         self.reload_media_view_filtered();
     }
 
-    /// Instant synchronous filter execution directly on the UI main thread (Zero Timer Delay).
     pub fn update_search_query(&self, query: String) {
         self.state.write().filter.search_query = query;
         self.reload_media_view_filtered();
@@ -962,7 +998,7 @@ impl UiBridge {
     pub fn apply_rating(&self, rating: Option<u8>) {
         let (selected_ids, is_assign) = {
             let s = self.state.read();
-            (s.selected_media_ids.clone(), s.is_assign_mode)
+            (s.file_selection.selected_ids().clone(), s.is_assign_mode)
         };
 
         if is_assign {
@@ -981,13 +1017,14 @@ impl UiBridge {
         } else {
             self.state.write().filter.rating = rating;
         }
+        self.update_inspector();
         self.reload_media_view_filtered();
     }
 
     pub fn toggle_tag(&self, tag_id: TagId) {
         let (selected_ids, is_assign) = {
             let s = self.state.read();
-            (s.selected_media_ids.clone(), s.is_assign_mode)
+            (s.file_selection.selected_ids().clone(), s.is_assign_mode)
         };
 
         if is_assign {
@@ -1009,23 +1046,129 @@ impl UiBridge {
                 state.filter.tag_ids.insert(tag_id);
             }
         }
+        self.update_inspector();
         self.reload_media_view_filtered();
     }
 
-    fn update_inspector(&self) {
-        let selected_id = self.state.read().selected_media_ids.iter().next().copied();
-        if let Some(id) = selected_id
-            && let Ok(Some(media)) = self.library.media().get(id)
-        {
-            self.window.set_info_filename(media.filename.into());
-            self.window
-                .set_info_size(format_filesize(media.file_size).into());
-            self.window
-                .set_info_dimensions(format!("{} × {}", media.width, media.height).into());
-            self.window
-                .set_info_format(format!("{:?}", media.format).into());
-            self.window
-                .set_info_hash(format!("{:x?}", &media.file_hash[..8]).into());
+    pub fn update_inspector(&self) {
+        Self::update_inspector_internal(&self.window, &self.state);
+    }
+
+    fn update_inspector_internal(window: &MainWindow, state: &Arc<RwLock<UiState>>) {
+        let st = state.read();
+        let selected_ids = st.file_selection.selected_ids();
+
+        if selected_ids.is_empty() {
+            window.set_info_filename("- (No selection)".into());
+            window.set_info_size("-".into());
+            window.set_info_dimensions("-".into());
+            window.set_info_format("-".into());
+            window.set_info_hash("-".into());
+            window.set_info_selection_count(0);
+            return;
         }
+
+        let selected_records: Vec<MediaRecord> = st
+            .all_folder_media
+            .iter()
+            .filter(|m| selected_ids.contains(&m.record.id))
+            .map(|m| m.record.clone())
+            .collect();
+
+        let summary = FileSelectionSummary::from_records(&selected_records);
+        window.set_info_selection_count(summary.count as i32);
+
+        if summary.count == 1 {
+            if let Some(single) = summary.single_record {
+                window.set_info_filename(single.filename.clone().into());
+                window.set_info_size(format_filesize(single.file_size).into());
+                window.set_info_dimensions(format!("{} × {}", single.width, single.height).into());
+                window.set_info_format(format!("{:?}", single.format).into());
+                window.set_info_hash(format!("{:x?}", &single.file_hash[..8]).into());
+            }
+        } else {
+            window.set_info_filename(format!("{} multiple files selected", summary.count).into());
+            window.set_info_size(
+                format!("{} (total)", format_filesize(summary.total_size_bytes)).into(),
+            );
+
+            let dim_str = if summary.is_uniform_dimensions {
+                if let Some((w, h)) = summary.min_dimensions {
+                    format!("{} × {} (Uniform)", w, h)
+                } else {
+                    "-".to_string()
+                }
+            } else if let (Some(min), Some(max)) = (summary.min_dimensions, summary.max_dimensions)
+            {
+                format!("{} × {} – {} × {}", min.0, min.1, max.0, max.1)
+            } else {
+                "-".to_string()
+            };
+            window.set_info_dimensions(dim_str.into());
+
+            let format_str = summary
+                .format_breakdown
+                .iter()
+                .map(|(fmt, count)| format!("{:?} ({})", fmt, count))
+                .collect::<Vec<_>>()
+                .join(", ");
+            window.set_info_format(format_str.into());
+
+            let detail_str = if summary.rated_count > 0 {
+                format!(
+                    "Avg Rating: {:.1} ★ ({} rated)",
+                    summary.avg_rating, summary.rated_count
+                )
+            } else {
+                "— (Multi-selection)".to_string()
+            };
+            window.set_info_hash(detail_str.into());
+        }
+    }
+
+    pub fn selected_media_ids(&self) -> Vec<MediaId> {
+        self.state
+            .read()
+            .file_selection
+            .selected_ids()
+            .iter()
+            .copied()
+            .collect()
+    }
+
+    pub fn selected_media_records(&self) -> Vec<MediaRecord> {
+        let state = self.state.read();
+        let sel = state.file_selection.selected_ids();
+        state
+            .all_folder_media
+            .iter()
+            .filter(|m| sel.contains(&m.record.id))
+            .map(|m| m.record.clone())
+            .collect()
+    }
+
+    pub fn select_all(&self) {
+        {
+            let mut state = self.state.write();
+            let visible_ids: Vec<MediaId> = if !state.active_indices.is_empty() {
+                state
+                    .active_indices
+                    .iter()
+                    .filter_map(|&idx| state.all_folder_media.get(idx))
+                    .map(|m| m.record.id)
+                    .collect()
+            } else {
+                state.all_folder_media.iter().map(|m| m.record.id).collect()
+            };
+            state.file_selection.select_all(&visible_ids);
+        }
+        self.update_inspector();
+        self.reload_media_view_filtered();
+    }
+
+    pub fn clear_selection(&self) {
+        self.state.write().file_selection.clear();
+        self.update_inspector();
+        self.reload_media_view_filtered();
     }
 }
