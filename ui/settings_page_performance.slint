@@ -1,0 +1,57 @@
+import { Slider } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPagePerformance inherits VerticalLayout {
+    spacing: 12px;
+
+    in-out property <int> l1-cache-slots: 512;
+    in-out property <int> worker-threads: 4;
+    in-out property <int> hashing-mode-idx: 0;
+
+    SettingsCard {
+        title: "Engine Memory & Parallelism";
+
+        HorizontalLayout {
+            Text {
+                text: "L1 RAM Cache (Slots):";
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+            Slider {
+                width: 140px;
+                minimum: 100;
+                maximum: 2048;
+                value: root.l1-cache-slots;
+                changed(v) => { root.l1-cache-slots = Math.round(v); }
+            }
+            Text {
+                text: root.l1-cache-slots + " slots";
+                color: Theme.primary;
+                width: 65px;
+                vertical-alignment: center;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Rayon Background Workers:";
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+            Slider {
+                width: 140px;
+                minimum: 1;
+                maximum: 16;
+                value: root.worker-threads;
+                changed(v) => { root.worker-threads = Math.round(v); }
+            }
+            Text {
+                text: root.worker-threads + " threads";
+                color: Theme.primary;
+                width: 65px;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

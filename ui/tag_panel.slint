@@ -1,0 +1,159 @@
+import { Button, LineEdit, ListView } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { TagNodeView } from "types.slint";
+import { RatingBar } from "rating_bar.slint";
+
+export component TagDockHeader inherits Rectangle {
+    height: 28px;
+
+    in-out property <bool> is-assign-mode: false;
+    callback mode-toggled(bool);
+
+    HorizontalLayout {
+        Text {
+            text: "TAG & RATE";
+            font-size: 11px;
+            font-weight: 700;
+            color: Theme.primary;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        Button {
+            text: root.is-assign-mode ? "Mode: ASSIGN" : "Mode: QUERY";
+            clicked => {
+                root.is-assign-mode = !root.is-assign-mode;
+                root.mode-toggled(root.is-assign-mode);
+            }
+        }
+    }
+}
+
+export component QueryScopeControls inherits HorizontalLayout {
+    height: 28px;
+    spacing: 6px;
+
+    in-out property <int> match-mode-idx: 0;
+    in-out property <int> scope-mode-idx: 0;
+
+    callback match-mode-changed(int);
+    callback scope-mode-changed(int);
+
+    Button {
+        text: root.match-mode-idx == 0 ? "Match: ALL" : "Match: ANY";
+        clicked => {
+            root.match-mode-idx = root.match-mode-idx == 0 ? 1 : 0;
+            root.match-mode-changed(root.match-mode-idx);
+        }
+    }
+
+    Button {
+        text: root.scope-mode-idx == 0 ? "Scope: Folder" : "Scope: Global";
+        clicked => {
+            root.scope-mode-idx = root.scope-mode-idx == 0 ? 1 : 0;
+            root.scope-mode-changed(root.scope-mode-idx);
+        }
+    }
+}
+
+export component TagTreeItem inherits Rectangle {
+    in property <TagNodeView> tag;
+    callback clicked();
+
+    height: 24px;
+    background: root.tag.is-selected ? Theme.surface-selected : (tag-touch.has-hover ? Theme.surface-hover : transparent);
+    border-radius: 2px;
+
+    tag-touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: (root.tag.depth * 12px) + 8px;
+        padding-right: 8px;
+        spacing: 6px;
+        alignment: center;
+
+        Image {
+            source: @image-url("icons/tag.svg");
+            width: 12px;
+            height: 12px;
+        }
+
+        Text {
+            text: root.tag.name;
+            color: root.tag.is-match ? #ff5555 : (root.tag.is-selected ? Theme.primary : Theme.text);
+            font-italic: root.tag.is-partial;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+export component TagTreeList inherits Rectangle {
+    vertical-stretch: 1;
+    background: Theme.background;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    in property <[TagNodeView]> tags: [];
+    callback tag-clicked(int);
+
+    ListView {
+        for tag in root.tags: TagTreeItem {
+            tag: tag;
+            clicked => { root.tag-clicked(tag.id); }
+        }
+    }
+}
+
+export component TagPanel inherits VerticalLayout {
+    spacing: 8px;
+    vertical-stretch: 1;
+
+    in-out property <bool> is-assign-mode: false;
+    in-out property <int> match-mode-idx: 0;
+    in-out property <int> scope-mode-idx: 0;
+    in-out property <int> selected-rating: -1;
+    in property <[TagNodeView]> tags: [];
+
+    callback mode-toggled(bool);
+    callback match-mode-changed(int);
+    callback scope-mode-changed(int);
+    callback rating-selected(int);
+    callback tag-filter-changed(string);
+    callback tag-clicked(int);
+
+    // Dock Header
+    TagDockHeader {
+        is-assign-mode <=> root.is-assign-mode;
+        mode-toggled(assign) => { root.mode-toggled(assign); }
+    }
+
+    // Query Scope Controls (Only active in Query Mode)
+    if !root.is-assign-mode : QueryScopeControls {
+        match-mode-idx <=> root.match-mode-idx;
+        scope-mode-idx <=> root.scope-mode-idx;
+        match-mode-changed(m) => { root.match-mode-changed(m); }
+        scope-mode-changed(s) => { root.scope-mode-changed(s); }
+    }
+
+    // Rating Selector Bar
+    RatingBar {
+        selected-rating <=> root.selected-rating;
+        rating-selected(r) => { root.rating-selected(r); }
+    }
+
+    // Tag Filter Input
+    LineEdit {
+        placeholder-text: "Filter tags...";
+        edited(text) => { root.tag-filter-changed(text); }
+    }
+
+    // Tag Hierarchical Tree View
+    TagTreeList {
+        tags: root.tags;
+        tag-clicked(id) => { root.tag-clicked(id); }
+    }
+}

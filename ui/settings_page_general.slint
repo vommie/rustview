@@ -1,0 +1,49 @@
+import { Button, LineEdit, CheckBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPageGeneral inherits VerticalLayout {
+    spacing: 12px;
+
+    in-out property <string> root-folder-path: "";
+    in-out property <bool> remember-last-folder: true;
+    in-out property <bool> confirm-delete: true;
+    in-out property <int> deletion-mode-idx: 0;
+
+    callback browse-root-folder();
+
+    SettingsCard {
+        title: "Root Directory";
+        description: "Specifies the root directory for your media library. If not set, no folders or media are displayed.";
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            LineEdit {
+                text: root.root-folder-path;
+                placeholder-text: "No root directory selected (Library empty)";
+                horizontal-stretch: 1;
+                read-only: true;
+            }
+
+            Button {
+                text: "Browse...";
+                clicked => { root.browse-root-folder(); }
+            }
+        }
+    }
+
+    SettingsCard {
+        title: "Startup & File Management";
+
+        CheckBox {
+            text: "Remember last opened folder on startup";
+            checked <=> root.remember-last-folder;
+        }
+
+        CheckBox {
+            text: "Confirm before deleting files";
+            checked <=> root.confirm-delete;
+        }
+    }
+}

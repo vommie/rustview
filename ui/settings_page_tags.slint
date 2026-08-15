@@ -1,0 +1,11 @@
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPageTags inherits VerticalLayout {
+    spacing: 12px;
+
+    SettingsCard {
+        title: "Hierarchical Categorization Defaults";
+        description: "Default combinatorial query mode and search scope.";
+    }
+}

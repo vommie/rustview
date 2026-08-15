@@ -54,17 +54,14 @@ export component MediaTile inherits Rectangle {
                 image-fit: contain;
             }
 
-            // Top-Right Rating Badge
+            // Top-Right Rating Badge with centralized Theme helper
             if item.rating > 0 : Rectangle {
                 x: parent.width - 20px;
                 y: 4px;
                 width: 16px;
                 height: 16px;
                 border-radius: 8px;
-                background: item.rating == 1 ? Theme.rating-1 : (
-                            item.rating == 2 ? Theme.rating-2 : (
-                            item.rating == 3 ? Theme.rating-3 : (
-                            item.rating == 4 ? Theme.rating-4 : Theme.rating-5)));
+                background: Theme.rating-color(item.rating);
 
                 Text {
                     text: item.rating;

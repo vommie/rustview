@@ -1,0 +1,118 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+
+/// Generic, decoupled action button bar for dialogs and modal windows (inspired by QDialogButtonBox).
+export component ButtonBar inherits Rectangle {
+    // Height Configuration API (Default 48px, fully customizable)
+    in-out property <length> bar-height: 48px;
+
+    height: root.bar-height;
+    vertical-stretch: 0;
+    background: root.bar-background;
+
+    // Visual Customization Properties
+    in property <color> bar-background: Theme.surface;
+    in property <bool> show-top-separator: true;
+    in property <color> separator-color: Theme.border;
+
+    in property <length> padding-horizontal: 16px;
+    in property <length> padding-vertical: 6px;
+    in property <length> button-spacing: 12px;
+
+    // Button Visibility Flags
+    in property <bool> show-save: false;
+    in property <bool> show-cancel: false;
+    in property <bool> show-apply: false;
+    in property <bool> show-ok: false;
+    in property <bool> show-close: false;
+    in property <bool> show-reset: false;
+    in property <bool> show-discard: false;
+    in property <bool> show-yes: false;
+    in property <bool> show-no: false;
+
+    // Button Labels
+    in property <string> text-save: "Save";
+    in property <string> text-cancel: "Cancel";
+    in property <string> text-apply: "Apply";
+    in property <string> text-ok: "OK";
+    in property <string> text-close: "Close";
+    in property <string> text-reset: "Reset";
+    in property <string> text-discard: "Discard";
+    in property <string> text-yes: "Yes";
+    in property <string> text-no: "No";
+
+    // Event Callbacks
+    callback save-clicked();
+    callback cancel-clicked();
+    callback apply-clicked();
+    callback ok-clicked();
+    callback close-clicked();
+    callback reset-clicked();
+    callback discard-clicked();
+    callback yes-clicked();
+    callback no-clicked();
+
+    // Top Border Separator Line
+    if root.show-top-separator : Rectangle {
+        y: 0px;
+        height: 1px;
+        background: root.separator-color;
+    }
+
+    HorizontalLayout {
+        padding-left: root.padding-horizontal;
+        padding-right: root.padding-horizontal;
+        padding-top: root.padding-vertical;
+        padding-bottom: root.padding-vertical;
+        spacing: root.button-spacing;
+        alignment: end;
+
+        if root.show-reset : Button {
+            text: root.text-reset;
+            clicked => { root.reset-clicked(); }
+        }
+
+        if root.show-discard : Button {
+            text: root.text-discard;
+            clicked => { root.discard-clicked(); }
+        }
+
+        if root.show-apply : Button {
+            text: root.text-apply;
+            clicked => { root.apply-clicked(); }
+        }
+
+        if root.show-cancel : Button {
+            text: root.text-cancel;
+            clicked => { root.cancel-clicked(); }
+        }
+
+        if root.show-close : Button {
+            text: root.text-close;
+            clicked => { root.close-clicked(); }
+        }
+
+        if root.show-no : Button {
+            text: root.text-no;
+            clicked => { root.no-clicked(); }
+        }
+
+        if root.show-yes : Button {
+            text: root.text-yes;
+            primary: true;
+            clicked => { root.yes-clicked(); }
+        }
+
+        if root.show-ok : Button {
+            text: root.text-ok;
+            primary: true;
+            clicked => { root.ok-clicked(); }
+        }
+
+        if root.show-save : Button {
+            text: root.text-save;
+            primary: true;
+            clicked => { root.save-clicked(); }
+        }
+    }
+}

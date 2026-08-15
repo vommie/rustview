@@ -1,0 +1,41 @@
+import { Theme } from "styles.slint";
+
+export component RatingButton inherits Rectangle {
+    in property <int> rating: 0;
+    in property <bool> is-selected: false;
+    callback clicked();
+
+    border-width: 1px;
+    border-color: root.is-selected ? #ffffff : Theme.border;
+    background: Theme.rating-color(root.rating);
+    border-radius: 3px;
+
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    Text {
+        text: root.rating;
+        color: #000000;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+export component RatingBar inherits HorizontalLayout {
+    spacing: 4px;
+    height: 28px;
+
+    in-out property <int> selected-rating: -1;
+    callback rating-selected(int);
+
+    for rate in [0, 1, 2, 3, 4, 5]: RatingButton {
+        rating: rate;
+        is-selected: root.selected-rating == rate;
+        clicked => {
+            root.selected-rating = (root.selected-rating == rate) ? -1 : rate;
+            root.rating-selected(root.selected-rating);
+        }
+    }
+}

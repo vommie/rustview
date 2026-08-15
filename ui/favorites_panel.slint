@@ -1,0 +1,79 @@
+import { Theme } from "styles.slint";
+import { FavoriteItemView } from "types.slint";
+import { ListView } from "std-widgets.slint";
+
+export component FavoriteItemRow inherits Rectangle {
+    in property <FavoriteItemView> item;
+    callback clicked();
+
+    height: 26px;
+    background: root.item.is-selected ? Theme.surface-selected : (fav-touch.has-hover ? Theme.surface-hover : transparent);
+    border-radius: 2px;
+
+    fav-touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 6px;
+        alignment: center;
+
+        Text {
+            text: root.item.alias;
+            color: root.item.is-valid ? Theme.text : Theme.text-muted;
+            font-italic: !root.item.is-valid;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+}
+
+export component FavoritesList inherits Rectangle {
+    background: Theme.background;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    in property <[FavoriteItemView]> favorites: [];
+    callback favorite-clicked(string);
+
+    ListView {
+        for fav in root.favorites: FavoriteItemRow {
+            item: fav;
+            clicked => { root.favorite-clicked(fav.path); }
+        }
+    }
+}
+
+export component FavoritesPanel inherits VerticalLayout {
+    spacing: 4px;
+
+    in property <[FavoriteItemView]> favorites: [];
+    in property <length> list-height: 120px;
+    callback favorite-clicked(string);
+
+    // Section Header
+    Rectangle {
+        height: 24px;
+        HorizontalLayout {
+            padding-left: 2px;
+            Text {
+                text: "FAVORITES";
+                font-size: 11px;
+                font-weight: 700;
+                color: Theme.primary;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Scrollable List Container
+    FavoritesList {
+        height: root.list-height;
+        favorites: root.favorites;
+        favorite-clicked(path) => { root.favorite-clicked(path); }
+    }
+}

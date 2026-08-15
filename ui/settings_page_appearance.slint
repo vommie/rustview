@@ -1,0 +1,52 @@
+import { Slider, CheckBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPageAppearance inherits VerticalLayout {
+    spacing: 12px;
+
+    in-out property <int> default-thumb-size: 150;
+    in-out property <bool> show-filenames: true;
+    in-out property <bool> show-rating-badge: true;
+    in-out property <bool> show-tag-badge: true;
+
+    SettingsCard {
+        title: "Grid & Thumbnail Presentation";
+
+        HorizontalLayout {
+            Text {
+                text: "Default Thumbnail Size:";
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+            Slider {
+                width: 140px;
+                minimum: 80;
+                maximum: 300;
+                value: root.default-thumb-size;
+                changed(v) => { root.default-thumb-size = Math.round(v); }
+            }
+            Text {
+                text: root.default-thumb-size + "px";
+                color: Theme.primary;
+                width: 45px;
+                vertical-alignment: center;
+            }
+        }
+
+        CheckBox {
+            text: "Display filenames below tiles";
+            checked <=> root.show-filenames;
+        }
+
+        CheckBox {
+            text: "Show colored rating badge overlay";
+            checked <=> root.show-rating-badge;
+        }
+
+        CheckBox {
+            text: "Show tag indicator overlay";
+            checked <=> root.show-tag-badge;
+        }
+    }
+}

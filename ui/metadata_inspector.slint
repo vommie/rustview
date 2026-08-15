@@ -1,0 +1,81 @@
+import { Theme } from "styles.slint";
+
+export component MetadataRow inherits HorizontalLayout {
+    in property <string> label: "";
+    in property <string> value: "-";
+    in property <color> value-color: Theme.text-muted;
+    in property <length> value-font-size: 11px;
+
+    spacing: 4px;
+
+    Text {
+        text: root.label;
+        color: Theme.text-muted;
+        font-size: root.value-font-size;
+        min-width: 72px;
+    }
+
+    Text {
+        text: root.value;
+        color: root.value-color;
+        font-size: root.value-font-size;
+        horizontal-stretch: 1;
+        overflow: elide;
+    }
+}
+
+export component MetadataInspector inherits Rectangle {
+    height: 140px;
+    background: Theme.background;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    in property <string> filename: "-";
+    in property <string> filesize: "-";
+    in property <string> dimensions: "-";
+    in property <string> format-name: "-";
+    in property <string> hash-or-rating: "-";
+    in property <int> selection-count: 0;
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 4px;
+
+        // Header Title with Selection Count Suffix
+        Text {
+            text: "INFO / METADATA" + (root.selection-count > 1 ? (" (" + root.selection-count + " Files)") : "");
+            font-size: 10px;
+            font-weight: 700;
+            color: Theme.primary;
+        }
+
+        // Modular Inspector Rows
+        MetadataRow {
+            label: "File:";
+            value: root.filename;
+            value-color: Theme.text;
+        }
+
+        MetadataRow {
+            label: "Size:";
+            value: root.filesize;
+        }
+
+        MetadataRow {
+            label: "Dimensions:";
+            value: root.dimensions;
+        }
+
+        MetadataRow {
+            label: "Format:";
+            value: root.format-name;
+        }
+
+        MetadataRow {
+            label: root.selection-count > 1 ? "Details:" : "BLAKE3:";
+            value: root.hash-or-rating;
+            value-font-size: 10px;
+        }
+    }
+}

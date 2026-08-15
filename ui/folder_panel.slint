@@ -1,0 +1,85 @@
+import { Theme } from "styles.slint";
+import { FolderNodeView } from "types.slint";
+import { ListView } from "std-widgets.slint";
+
+export component FolderItemRow inherits Rectangle {
+    in property <FolderNodeView> folder;
+    callback clicked();
+
+    height: 26px;
+    background: root.folder.is-selected ? Theme.surface-selected : (ftouch.has-hover ? Theme.surface-hover : transparent);
+    border-radius: 2px;
+
+    ftouch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: (root.folder.depth * 14px) + 8px;
+        padding-right: 8px;
+        spacing: 6px;
+        alignment: center;
+
+        Text {
+            text: root.folder.is-expanded ? "▼" : "▶";
+            font-size: 9px;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.folder.name;
+            color: root.folder.is-selected ? Theme.primary : Theme.text;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+}
+
+export component FolderTreeList inherits Rectangle {
+    background: Theme.background;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    in property <[FolderNodeView]> folders: [];
+    callback folder-clicked(int, string);
+
+    ListView {
+        for folder in root.folders: FolderItemRow {
+            folder: folder;
+            clicked => { root.folder-clicked(folder.id, folder.path); }
+        }
+    }
+}
+
+export component FolderPanel inherits VerticalLayout {
+    spacing: 4px;
+    vertical-stretch: 1;
+
+    in property <[FolderNodeView]> folders: [];
+    callback folder-clicked(int, string);
+
+    // Section Header
+    Rectangle {
+        height: 24px;
+        HorizontalLayout {
+            padding-left: 2px;
+            Text {
+                text: "FOLDERS";
+                font-size: 11px;
+                font-weight: 700;
+                color: Theme.primary;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Scrollable Tree Box
+    FolderTreeList {
+        vertical-stretch: 1;
+        folders: root.folders;
+        folder-clicked(id, path) => { root.folder-clicked(id, path); }
+    }
+}
