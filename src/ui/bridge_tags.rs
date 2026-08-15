@@ -76,16 +76,15 @@ impl TagSelectionStats {
     }
 }
 
+pub type ShowAddDialogFn = Box<dyn Fn(Option<TagId>, &str)>;
+pub type ShowRenameDialogFn = Box<dyn Fn(TagId, &str)>;
+pub type ShowDeleteDialogFn = Box<dyn Fn(TagId, &str, Vec<String>)>;
+
 /// Encapsulated closure bundle for tag dialog triggers to maintain clean parameter interfaces.
-pub struct TagActionDialogs<F1, F2, F3>
-where
-    F1: Fn(Option<TagId>, &str),
-    F2: Fn(TagId, &str),
-    F3: Fn(TagId, &str, Vec<String>),
-{
-    pub show_add: F1,
-    pub show_rename: F2,
-    pub show_delete: F3,
+pub struct TagActionDialogs {
+    pub show_add: ShowAddDialogFn,
+    pub show_rename: ShowRenameDialogFn,
+    pub show_delete: ShowDeleteDialogFn,
 }
 
 // =============================================================================
@@ -397,18 +396,14 @@ impl TagContextMenu {
         }
     }
 
-    pub fn handle_action<F1, F2, F3>(
+    pub fn handle_action(
         action_id: CtxMenuActionId,
         window: &MainWindow,
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        dialogs: TagActionDialogs<F1, F2, F3>,
-    ) where
-        F1: Fn(Option<TagId>, &str),
-        F2: Fn(TagId, &str),
-        F3: Fn(TagId, &str, Vec<String>),
-    {
+        dialogs: TagActionDialogs,
+    ) {
         window.set_is_context_menu_open(false);
         let target_id = state.read().active_tag_dialog_target;
 
@@ -963,18 +958,14 @@ impl BridgeTags {
     }
 
     #[inline]
-    pub fn handle_tag_action<F1, F2, F3>(
+    pub fn handle_tag_action(
         action_id: CtxMenuActionId,
         window: &MainWindow,
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        dialogs: TagActionDialogs<F1, F2, F3>,
-    ) where
-        F1: Fn(Option<TagId>, &str),
-        F2: Fn(TagId, &str),
-        F3: Fn(TagId, &str, Vec<String>),
-    {
+        dialogs: TagActionDialogs,
+    ) {
         TagContextMenu::handle_action(action_id, window, library, settings, state, dialogs);
     }
 

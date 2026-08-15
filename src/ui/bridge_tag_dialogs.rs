@@ -13,6 +13,23 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+/// Parameter payload for opening the delete tag modal dialog.
+#[derive(Debug, Clone)]
+pub struct DeleteTagParams {
+    pub tag_id: TagId,
+    pub tag_name: String,
+    pub children: Vec<String>,
+}
+
+/// Shared subsystem context bundled to keep parameter counts clean and adhere to SRP.
+#[derive(Clone)]
+pub struct TagDialogContext {
+    pub library: Arc<Library>,
+    pub thumbnails: Arc<ThumbnailManager>,
+    pub settings: Arc<SettingsManager>,
+    pub state: Arc<RwLock<UiState>>,
+}
+
 /// Dedicated controller managing modal tag creation, renaming, and deletion dialogs.
 #[derive(Default, Clone)]
 pub struct TagDialogController {
@@ -34,18 +51,14 @@ impl TagDialogController {
         thumbnails: &Arc<ThumbnailManager>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-    ) -> TagActionDialogs<
-        impl Fn(Option<TagId>, &str) + 'static,
-        impl Fn(TagId, &str) + 'static,
-        impl Fn(TagId, &str, Vec<String>) + 'static,
-    > {
+    ) -> TagActionDialogs {
         let ctrl_add = self.clone();
         let win_add = window.clone_strong();
         let lib_add = library.clone();
         let set_add = settings.clone();
         let st_add = state.clone();
 
-        let show_add = move |parent_id: Option<TagId>, parent_info: &str| {
+        let show_add = Box::new(move |parent_id: Option<TagId>, parent_info: &str| {
             ctrl_add.show_add(
                 &win_add,
                 parent_id,
@@ -54,14 +67,14 @@ impl TagDialogController {
                 set_add.clone(),
                 st_add.clone(),
             );
-        };
+        });
 
         let ctrl_ren = self.clone();
         let win_ren = window.clone_strong();
         let lib_ren = library.clone();
         let st_ren = state.clone();
 
-        let show_rename = move |tag_id: TagId, current_name: &str| {
+        let show_rename = Box::new(move |tag_id: TagId, current_name: &str| {
             ctrl_ren.show_rename(
                 &win_ren,
                 tag_id,
@@ -69,7 +82,7 @@ impl TagDialogController {
                 lib_ren.clone(),
                 st_ren.clone(),
             );
-        };
+        });
 
         let ctrl_del = self.clone();
         let win_del = window.clone_strong();
@@ -78,18 +91,24 @@ impl TagDialogController {
         let set_del = settings.clone();
         let st_del = state.clone();
 
-        let show_delete = move |tag_id: TagId, tag_name: &str, children: Vec<String>| {
-            ctrl_del.show_delete(
-                &win_del,
-                tag_id,
-                tag_name,
-                children,
-                lib_del.clone(),
-                thumb_del.clone(),
-                set_del.clone(),
-                st_del.clone(),
-            );
-        };
+        let show_delete = Box::new(
+            move |tag_id: TagId, tag_name: &str, children: Vec<String>| {
+                ctrl_del.show_delete(
+                    &win_del,
+                    DeleteTagParams {
+                        tag_id,
+                        tag_name: tag_name.to_string(),
+                        children,
+                    },
+                    TagDialogContext {
+                        library: lib_del.clone(),
+                        thumbnails: thumb_del.clone(),
+                        settings: set_del.clone(),
+                        state: st_del.clone(),
+                    },
+                );
+            },
+        );
 
         TagActionDialogs {
             show_add,
@@ -281,17 +300,7 @@ impl TagDialogController {
     // Delete Tag Dialog
     // =========================================================================
 
-    pub fn show_delete(
-        &self,
-        window: &MainWindow,
-        tag_id: TagId,
-        tag_name: &str,
-        children: Vec<String>,
-        library: Arc<Library>,
-        thumbnails: Arc<ThumbnailManager>,
-        settings: Arc<SettingsManager>,
-        state: Arc<RwLock<UiState>>,
-    ) {
+    pub fn show_delete(&self, window: &MainWindow, params: DeleteTagParams, ctx: TagDialogContext) {
         let mut d_ref = self.delete_dialog.borrow_mut();
         if d_ref.is_none() {
             let win = DeleteTagDialog::new().expect("Failed to instantiate DeleteTagDialog");
@@ -301,17 +310,16 @@ impl TagDialogController {
         if let Some(ref win) = *d_ref {
             let ctrl_confirm = self.clone();
             let win_confirm = window.clone_strong();
-            let lib_confirm = library.clone();
-            let thumb_confirm = thumbnails.clone();
-            let set_confirm = settings.clone();
-            let st_confirm = state.clone();
+            let tag_id = params.tag_id;
+            let ctx_confirm = ctx;
+
             win.on_confirmed(move || {
                 ctrl_confirm.execute_delete(
                     tag_id,
-                    &lib_confirm,
-                    &thumb_confirm,
-                    &set_confirm,
-                    &st_confirm,
+                    &ctx_confirm.library,
+                    &ctx_confirm.thumbnails,
+                    &ctx_confirm.settings,
+                    &ctx_confirm.state,
                     &win_confirm,
                 );
             });
@@ -329,9 +337,9 @@ impl TagDialogController {
                 CloseRequestResponse::HideWindow
             });
 
-            win.set_tag_name(tag_name.into());
-            win.set_has_children(!children.is_empty());
-            win.set_children_names(children.join(", ").into());
+            win.set_tag_name(params.tag_name.into());
+            win.set_has_children(!params.children.is_empty());
+            win.set_children_names(params.children.join(", ").into());
             win.set_error_message("".into());
             window.set_is_modal_locked(true);
             let _ = win.show();

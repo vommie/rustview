@@ -21,6 +21,17 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
+/// Parameter object bundling dependencies for context menu callback registration.
+pub struct ContextMenuRegistration {
+    pub library: Arc<Library>,
+    pub thumbnails: Arc<ThumbnailManager>,
+    pub state: Arc<RwLock<UiState>>,
+    pub dispatcher: Arc<CtxMenuDispatcher>,
+    pub rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
+    pub tag_dialogs: TagDialogController,
+    pub settings: Arc<SettingsManager>,
+}
+
 // =============================================================================
 // Section 1: MediaContextMenuBuilder (Selection Prep & Menu Construction)
 // =============================================================================
@@ -377,24 +388,15 @@ pub struct BridgeContextMenu;
 
 impl BridgeContextMenu {
     /// Registers context menu and action callbacks onto MainWindow.
-    pub fn register_callbacks(
-        window: &MainWindow,
-        library: Arc<Library>,
-        thumbnails: Arc<ThumbnailManager>,
-        state: Arc<RwLock<UiState>>,
-        dispatcher: Arc<CtxMenuDispatcher>,
-        rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
-        tag_dialogs: TagDialogController,
-        settings: Arc<SettingsManager>,
-    ) {
+    pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
         let win = window.clone_strong();
-        let st = state.clone();
+        let st = reg.state.clone();
         window.on_media_context_menu(move |id, x, y| {
             Self::show(&win, &st, id as u64, x, y);
         });
 
         let win = window.clone_strong();
-        let st = state.clone();
+        let st = reg.state.clone();
         window.on_context_menu_request_submenu(move |depth, m_idx| {
             Self::request_submenu(&win, &st, depth, m_idx as usize);
         });
@@ -405,13 +407,13 @@ impl BridgeContextMenu {
         });
 
         let win = window.clone_strong();
-        let lib = library;
-        let thumb = thumbnails;
-        let st = state;
-        let set = settings;
-        let disp = dispatcher;
-        let ren_dlg = rename_dialog;
-        let tag_dlg = tag_dialogs;
+        let lib = reg.library;
+        let thumb = reg.thumbnails;
+        let st = reg.state;
+        let set = reg.settings;
+        let disp = reg.dispatcher;
+        let ren_dlg = reg.rename_dialog;
+        let tag_dlg = reg.tag_dialogs;
 
         window.on_context_menu_item_clicked(move |action_id| {
             let action_u64 = action_id as u64;

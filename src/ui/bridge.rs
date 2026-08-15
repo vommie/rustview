@@ -1,4 +1,4 @@
-use super::bridge_context_menu::BridgeContextMenu;
+use super::bridge_context_menu::{BridgeContextMenu, ContextMenuRegistration};
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folders::BridgeFolders;
@@ -152,13 +152,15 @@ impl UiBridge {
 
         BridgeContextMenu::register_callbacks(
             &self.window,
-            self.library.clone(),
-            self.thumbnails.clone(),
-            self.state.clone(),
-            self.ctx_menu_dispatcher.clone(),
-            self.rename_dialog.clone(),
-            self.tag_dialogs.clone(),
-            self.settings.clone(),
+            ContextMenuRegistration {
+                library: self.library.clone(),
+                thumbnails: self.thumbnails.clone(),
+                state: self.state.clone(),
+                dispatcher: self.ctx_menu_dispatcher.clone(),
+                rename_dialog: self.rename_dialog.clone(),
+                tag_dialogs: self.tag_dialogs.clone(),
+                settings: self.settings.clone(),
+            },
         );
 
         BridgeTags::register_callbacks(
