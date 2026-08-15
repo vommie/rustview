@@ -1,6 +1,9 @@
 use rustview::library::models::MediaRecord;
 use rustview::media::{MediaFormat, MediaType};
+use rustview::query::filters::IndexedMediaRecord;
 use rustview::ui::file_selection::{FileSelectionModel, FileSelectionSummary};
+use std::collections::HashSet;
+use std::path::PathBuf;
 
 fn create_dummy_record(
     id: u64,
@@ -43,6 +46,21 @@ fn test_file_selection_single_click_clears_prior() {
     assert!(!sel.is_selected(101));
     assert!(sel.is_selected(102));
     assert_eq!(sel.anchor_id(), Some(102));
+}
+
+#[test]
+fn test_file_selection_diff_computation() {
+    let mut prev = HashSet::new();
+    prev.insert(1);
+    prev.insert(2);
+
+    let mut current = HashSet::new();
+    current.insert(2);
+    current.insert(3);
+
+    let mut diff = FileSelectionModel::compute_selection_diff(&prev, &current);
+    diff.sort();
+    assert_eq!(diff, vec![1, 3]);
 }
 
 #[test]
@@ -145,4 +163,25 @@ fn test_file_selection_summary_calculations() {
     assert_eq!(summary.avg_rating, 4.5);
     assert_eq!(summary.format_breakdown[0], (MediaFormat::Jpeg, 2));
     assert_eq!(summary.format_breakdown[1], (MediaFormat::Mp4, 1));
+
+    // Test zero-copy summary aggregation
+    let indexed = recs
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| IndexedMediaRecord {
+            index: i,
+            record: r.clone(),
+            full_path: PathBuf::from(&r.filename),
+            filename_lower: r.filename.to_lowercase(),
+            filename_slint: r.filename.clone().into(),
+            filesize_str: "1 MB".into(),
+            dimensions_str: "1920 x 1080".into(),
+            has_tags: false,
+        })
+        .collect::<Vec<_>>();
+
+    let summary_indexed = FileSelectionSummary::from_indexed_records(&indexed);
+    assert_eq!(summary_indexed.count, 3);
+    assert_eq!(summary_indexed.total_size_bytes, 53 * 1024 * 1024);
+    assert_eq!(summary_indexed.avg_rating, 4.5);
 }

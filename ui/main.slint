@@ -72,7 +72,6 @@ export component MainWindow inherits Window {
     callback folder-selected(int, string);
     callback favorite-selected(string);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
-    callback media-double-clicked(int /* id */);
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
     callback context-menu-item-clicked(int /* action_id */);
     callback context-menu-dismissed();
@@ -137,14 +136,12 @@ export component MainWindow inherits Window {
                     media-items: root.media-items;
                     thumb-size: root.thumb-size;
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                    item-double-clicked(id) => { root.media-double-clicked(id); }
                     item-context-menu(id, x, y) => { root.media-context-menu(id, x, y); }
                 }
 
                 if !root.is-player-open && root.is-table-view : MediaTableView {
                     items: root.media-items;
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                    item-double-clicked(id) => { root.media-double-clicked(id); }
                     item-context-menu(id, x, y) => { root.media-context-menu(id, x, y); }
                 }
             }

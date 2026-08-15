@@ -1,6 +1,7 @@
 use super::favorites::FavoriteManager;
 use super::file_selection::{FileSelectionModel, FileSelectionSummary};
-use super::models::{format_filesize, rgb8_to_shared_buffer, rgb8_to_slint_image};
+use super::models::format_filesize;
+use super::models::rgb8_to_shared_buffer;
 use super::{
     FavoriteItemView, FileRenameDialog, FolderNodeView, MainWindow, MediaItemView, TagNodeView,
 };
@@ -13,7 +14,7 @@ use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MatchMode, MediaSorter, QueryFilter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::{AppSettings, SettingsDialogController, SettingsManager};
 use crate::thumbnails::{PreparedTarget, THUMBNAIL_SIZE, ThumbnailManager};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use slint::{
     CloseRequestResponse, ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer,
     Timer, VecModel,
@@ -23,7 +24,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // Standardized Context Menu Action IDs
 pub const CTX_ACTION_RENAME: CtxMenuActionId = 1001;
@@ -63,6 +64,7 @@ pub struct UiBridge {
     favorites: Arc<RwLock<FavoriteManager>>,
     ctx_menu_dispatcher: Arc<CtxMenuDispatcher>,
     state: Arc<RwLock<UiState>>,
+    last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
     _thumbnail_timer: Timer,
     _player_timer: Timer,
 }
@@ -100,6 +102,7 @@ impl UiBridge {
         }));
 
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
+        let last_click = Arc::new(Mutex::new(None));
         let thumbnail_timer = Timer::default();
         let player_timer = Timer::default();
 
@@ -114,6 +117,7 @@ impl UiBridge {
             favorites,
             ctx_menu_dispatcher,
             state,
+            last_click,
             _thumbnail_timer: thumbnail_timer,
             _player_timer: player_timer,
         };
@@ -406,16 +410,10 @@ impl UiBridge {
             }
         });
 
-        // FILE SELECTION CLICK
+        // FILE SELECTION CLICK (Handles instantaneous selection & double click detection)
         let bridge_media = self.clone_handle();
         self.window.on_media_clicked(move |id, is_ctrl, is_shift| {
             bridge_media.handle_media_click(id as u64, is_ctrl, is_shift);
-        });
-
-        // MEDIA DOUBLE CLICK
-        let bridge_dbl = self.clone_handle();
-        self.window.on_media_double_clicked(move |id| {
-            bridge_dbl.open_media_item(id as u64);
         });
 
         // CONTEXT MENU TRIGGER (RIGHT-CLICK)
@@ -583,6 +581,7 @@ impl UiBridge {
             favorites: self.favorites.clone(),
             ctx_menu_dispatcher: self.ctx_menu_dispatcher.clone(),
             state: self.state.clone(),
+            last_click: self.last_click.clone(),
             _thumbnail_timer: Timer::default(),
             _player_timer: Timer::default(),
         }
@@ -664,6 +663,29 @@ impl UiBridge {
         self.update_inspector();
     }
 
+    /// Action handler executed when a media item is opened or double-clicked.
+    pub fn handle_media_double_click(&self, media_id: MediaId) {
+        if let Ok(Some(media)) = self.library.media().get(media_id) {
+            let full_path = self
+                .state
+                .read()
+                .current_folder_path
+                .as_ref()
+                .map(|p| p.join(&media.filename))
+                .unwrap_or_default();
+
+            tracing::info!(
+                media_id = media_id,
+                filename = %media.filename,
+                media_type = ?media.media_type,
+                path = ?full_path,
+                "[MediaAction: DoubleClick] Double-click event triggered on media item (Dummy Handler / Ready for Extension)"
+            );
+
+            self.open_media_item(media_id);
+        }
+    }
+
     pub fn open_media_item(&self, media_id: MediaId) {
         if let Ok(Some(media)) = self.library.media().get(media_id) {
             let full_path = self
@@ -686,19 +708,48 @@ impl UiBridge {
         }
     }
 
+    /// Surgical in-place synchronization of selection state in the Slint Media Model without full view rebuilds.
+    fn sync_selection_diff_to_slint_model(&self, changed_ids: &[MediaId]) {
+        if changed_ids.is_empty() {
+            return;
+        }
+
+        let media_model = self.window.get_media_items();
+        let state = self.state.read();
+
+        for &id in changed_ids {
+            if let Some(&row_idx) = state.media_row_map.get(&id)
+                && let Some(mut item) = media_model.row_data(row_idx)
+            {
+                let is_selected = state.file_selection.is_selected(id);
+                if item.is_selected != is_selected {
+                    item.is_selected = is_selected;
+                    media_model.set_row_data(row_idx, item);
+                }
+            }
+        }
+    }
+
     /// Prepares and opens the dynamic context menu at the specified cursor position.
     pub fn show_media_context_menu(&self, media_id: MediaId, x: f32, y: f32) {
-        let (selected_count, is_single, can_rename) = {
+        let t_start = Instant::now();
+        let (selected_count, is_single, can_rename, changed_ids) = {
             let mut st = self.state.write();
+            let mut changed = Vec::new();
             if !st.file_selection.is_selected(media_id) {
+                let prev = st.file_selection.selected_ids().clone();
                 st.file_selection.select_single(media_id);
+                let newly = st.file_selection.selected_ids().clone();
+                changed = FileSelectionModel::compute_selection_diff(&prev, &newly);
             }
             let count = st.file_selection.count();
-            (count, count == 1, count == 1)
+            (count, count == 1, count == 1, changed)
         };
 
+        if !changed_ids.is_empty() {
+            self.sync_selection_diff_to_slint_model(&changed_ids);
+        }
         self.update_inspector();
-        self.reload_media_view_filtered();
 
         let menu = CtxMenuBuilder::new()
             .header(if is_single {
@@ -757,7 +808,9 @@ impl UiBridge {
             pos_x = x,
             pos_y = y,
             selected_items = selected_count,
-            "Context menu opened"
+            changed_rows = changed_ids.len(),
+            elapsed_us = t_start.elapsed().as_micros(),
+            "[ContextMenu: FastOpen] Context menu opened with instant selection"
         );
     }
 
@@ -1122,6 +1175,7 @@ impl UiBridge {
 
             let arena = thumbnails.cache().arena();
             let mut matched_indices = Vec::with_capacity(matched_len);
+            let mut new_thumbnails = Vec::new();
 
             for (row_idx, &item) in sorted_refs.iter().enumerate() {
                 matched_indices.push(item.index);
@@ -1137,12 +1191,12 @@ impl UiBridge {
 
                 let thumbnail_img = if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
                     Image::from_rgb8(buf.clone())
-                } else if let Some(handle) = thumbnails.cache().get(item.record.id) {
-                    if let Some(rgb_data) = arena.read_slot(handle) {
-                        rgb8_to_slint_image(rgb_data, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
-                    } else {
-                        Image::default()
-                    }
+                } else if let Some(handle) = thumbnails.cache().get(item.record.id)
+                    && let Some(rgb_data) = arena.read_slot(handle)
+                {
+                    let buf = rgb8_to_shared_buffer(rgb_data, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+                    new_thumbnails.push((item.record.id, buf.clone()));
+                    Image::from_rgb8(buf)
                 } else {
                     Image::default()
                 };
@@ -1166,6 +1220,9 @@ impl UiBridge {
 
             {
                 let mut st_write = state.write();
+                for (id, buf) in new_thumbnails {
+                    st_write.folder_thumbnails.insert(id, buf);
+                }
                 st_write.media_row_map = row_map;
                 st_write.active_indices = matched_indices;
                 st_write.last_executed_query = current_query.clone();
@@ -1202,63 +1259,99 @@ impl UiBridge {
         }
     }
 
-    /// Centralized modifier-aware click handler for single and range file selection.
+    /// Centralized, high-performance modifier-aware click handler for single, range, and double clicks.
     pub fn handle_media_click(&self, media_id: MediaId, is_ctrl: bool, is_shift: bool) {
-        let t0 = Instant::now();
-        {
-            let mut state = self.state.write();
+        let t_start = Instant::now();
 
-            let visible_ids: Vec<MediaId> = if !state.active_indices.is_empty() {
-                state
-                    .active_indices
-                    .iter()
-                    .filter_map(|&idx| state.all_folder_media.get(idx))
-                    .map(|item| item.record.id)
-                    .collect()
+        // 1. Detect fast double click
+        let now = Instant::now();
+        let mut is_double_click = false;
+        {
+            let mut click_guard = self.last_click.lock();
+            if let Some((last_id, last_time)) = *click_guard {
+                if last_id == media_id
+                    && now.duration_since(last_time) < Duration::from_millis(400)
+                    && !is_ctrl
+                    && !is_shift
+                {
+                    is_double_click = true;
+                    *click_guard = None;
+                } else {
+                    *click_guard = Some((media_id, now));
+                }
             } else {
-                state
-                    .all_folder_media
-                    .iter()
-                    .map(|item| item.record.id)
-                    .collect()
-            };
+                *click_guard = Some((media_id, now));
+            }
+        }
+
+        if is_double_click {
+            self.handle_media_double_click(media_id);
+            return;
+        }
+
+        // 2. Perform file selection math (Lazy computation of visible_ids for Shift-range)
+        let (changed_ids, sel_count) = {
+            let mut state = self.state.write();
+            let prev_selected = state.file_selection.selected_ids().clone();
 
             if is_shift {
+                let visible_ids: Vec<MediaId> = if !state.active_indices.is_empty() {
+                    state
+                        .active_indices
+                        .iter()
+                        .filter_map(|&idx| state.all_folder_media.get(idx))
+                        .map(|item| item.record.id)
+                        .collect()
+                } else {
+                    state
+                        .all_folder_media
+                        .iter()
+                        .map(|item| item.record.id)
+                        .collect()
+                };
+
                 let additive = is_ctrl;
                 state
                     .file_selection
                     .select_range(media_id, &visible_ids, additive);
-                tracing::info!(
-                    target_media_id = media_id,
-                    is_ctrl = is_ctrl,
-                    is_shift = is_shift,
-                    selected_count = state.file_selection.count(),
-                    elapsed_us = t0.elapsed().as_micros(),
-                    "[FileSelection: Shift-Range] Contiguous range selection executed"
-                );
             } else if is_ctrl {
                 state.file_selection.toggle(media_id);
-                tracing::info!(
-                    target_media_id = media_id,
-                    is_ctrl = is_ctrl,
-                    selected_count = state.file_selection.count(),
-                    is_now_selected = state.file_selection.is_selected(media_id),
-                    elapsed_us = t0.elapsed().as_micros(),
-                    "[FileSelection: Ctrl-Toggle] Individual item selection toggled"
-                );
             } else {
                 state.file_selection.select_single(media_id);
-                tracing::info!(
-                    target_media_id = media_id,
-                    selected_count = 1,
-                    elapsed_us = t0.elapsed().as_micros(),
-                    "[FileSelection: Single] Single item selected (previous selection cleared)"
-                );
             }
-        }
 
+            let newly_selected = state.file_selection.selected_ids();
+            let changed =
+                FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
+            let sel_count = state.file_selection.count();
+            (changed, sel_count)
+        };
+
+        let t_math = t_start.elapsed();
+
+        // 3. Fast surgical in-place model update in Slint
+        let t_sync_start = Instant::now();
+        self.sync_selection_diff_to_slint_model(&changed_ids);
+        let t_sync = t_sync_start.elapsed();
+
+        // 4. Update Inspector
+        let t_insp_start = Instant::now();
         self.update_inspector();
-        self.reload_media_view_filtered();
+        let t_insp = t_insp_start.elapsed();
+
+        let total_us = t_start.elapsed().as_micros();
+        tracing::debug!(
+            target_media_id = media_id,
+            is_ctrl = is_ctrl,
+            is_shift = is_shift,
+            selected_count = sel_count,
+            changed_rows = changed_ids.len(),
+            math_us = t_math.as_micros(),
+            model_sync_us = t_sync.as_micros(),
+            inspector_us = t_insp.as_micros(),
+            total_click_us = total_us,
+            "[FileSelection: FastInPlace] Instant selection updated"
+        );
     }
 
     pub fn update_search_query(&self, query: String) {
@@ -1328,8 +1421,9 @@ impl UiBridge {
     fn update_inspector_internal(window: &MainWindow, state: &Arc<RwLock<UiState>>) {
         let st = state.read();
         let selected_ids = st.file_selection.selected_ids();
+        let sel_count = selected_ids.len();
 
-        if selected_ids.is_empty() {
+        if sel_count == 0 {
             window.set_info_filename("- (No selection)".into());
             window.set_info_size("-".into());
             window.set_info_dimensions("-".into());
@@ -1339,62 +1433,73 @@ impl UiBridge {
             return;
         }
 
-        let selected_records: Vec<MediaRecord> = st
+        // Fast O(1) single-item inspector update path (zero string allocations / zero scans)
+        if sel_count == 1 {
+            let single_id = *selected_ids.iter().next().unwrap();
+            let item_opt = st
+                .media_row_map
+                .get(&single_id)
+                .and_then(|&row_idx| st.active_indices.get(row_idx))
+                .and_then(|&orig_idx| st.all_folder_media.get(orig_idx))
+                .or_else(|| {
+                    st.all_folder_media
+                        .iter()
+                        .find(|m| m.record.id == single_id)
+                });
+
+            if let Some(item) = item_opt {
+                window.set_info_filename(item.filename_slint.clone());
+                window.set_info_size(item.filesize_str.clone());
+                window.set_info_dimensions(item.dimensions_str.clone());
+                window.set_info_format(format!("{:?}", item.record.format).into());
+                window.set_info_hash(format!("{:x?}", &item.record.file_hash[..8]).into());
+                window.set_info_selection_count(1);
+            }
+            return;
+        }
+
+        // Zero-copy multi-item aggregation
+        let selected_records_iter = st
             .all_folder_media
             .iter()
-            .filter(|m| selected_ids.contains(&m.record.id))
-            .map(|m| m.record.clone())
-            .collect();
+            .filter(|m| selected_ids.contains(&m.record.id));
 
-        let summary = FileSelectionSummary::from_records(&selected_records);
+        let summary = FileSelectionSummary::from_indexed_records(selected_records_iter);
         window.set_info_selection_count(summary.count as i32);
+        window.set_info_filename(format!("{} multiple files selected", summary.count).into());
+        window
+            .set_info_size(format!("{} (total)", format_filesize(summary.total_size_bytes)).into());
 
-        if summary.count == 1 {
-            if let Some(single) = summary.single_record {
-                window.set_info_filename(single.filename.clone().into());
-                window.set_info_size(format_filesize(single.file_size).into());
-                window.set_info_dimensions(format!("{} × {}", single.width, single.height).into());
-                window.set_info_format(format!("{:?}", single.format).into());
-                window.set_info_hash(format!("{:x?}", &single.file_hash[..8]).into());
-            }
-        } else {
-            window.set_info_filename(format!("{} multiple files selected", summary.count).into());
-            window.set_info_size(
-                format!("{} (total)", format_filesize(summary.total_size_bytes)).into(),
-            );
-
-            let dim_str = if summary.is_uniform_dimensions {
-                if let Some((w, h)) = summary.min_dimensions {
-                    format!("{} × {} (Uniform)", w, h)
-                } else {
-                    "-".to_string()
-                }
-            } else if let (Some(min), Some(max)) = (summary.min_dimensions, summary.max_dimensions)
-            {
-                format!("{} × {} – {} × {}", min.0, min.1, max.0, max.1)
+        let dim_str = if summary.is_uniform_dimensions {
+            if let Some((w, h)) = summary.min_dimensions {
+                format!("{} × {} (Uniform)", w, h)
             } else {
                 "-".to_string()
-            };
-            window.set_info_dimensions(dim_str.into());
+            }
+        } else if let (Some(min), Some(max)) = (summary.min_dimensions, summary.max_dimensions) {
+            format!("{} × {} – {} × {}", min.0, min.1, max.0, max.1)
+        } else {
+            "-".to_string()
+        };
+        window.set_info_dimensions(dim_str.into());
 
-            let format_str = summary
-                .format_breakdown
-                .iter()
-                .map(|(fmt, count)| format!("{:?} ({})", fmt, count))
-                .collect::<Vec<_>>()
-                .join(", ");
-            window.set_info_format(format_str.into());
+        let format_str = summary
+            .format_breakdown
+            .iter()
+            .map(|(fmt, count)| format!("{:?} ({})", fmt, count))
+            .collect::<Vec<_>>()
+            .join(", ");
+        window.set_info_format(format_str.into());
 
-            let detail_str = if summary.rated_count > 0 {
-                format!(
-                    "Avg Rating: {:.1} ★ ({} rated)",
-                    summary.avg_rating, summary.rated_count
-                )
-            } else {
-                "— (Multi-selection)".to_string()
-            };
-            window.set_info_hash(detail_str.into());
-        }
+        let detail_str = if summary.rated_count > 0 {
+            format!(
+                "Avg Rating: {:.1} ★ ({} rated)",
+                summary.avg_rating, summary.rated_count
+            )
+        } else {
+            "— (Multi-selection)".to_string()
+        };
+        window.set_info_hash(detail_str.into());
     }
 
     pub fn selected_media_ids(&self) -> Vec<MediaId> {
@@ -1419,8 +1524,10 @@ impl UiBridge {
     }
 
     pub fn select_all(&self) {
-        {
+        let t_start = Instant::now();
+        let changed_ids = {
             let mut state = self.state.write();
+            let prev_selected = state.file_selection.selected_ids().clone();
             let visible_ids: Vec<MediaId> = if !state.active_indices.is_empty() {
                 state
                     .active_indices
@@ -1432,14 +1539,37 @@ impl UiBridge {
                 state.all_folder_media.iter().map(|m| m.record.id).collect()
             };
             state.file_selection.select_all(&visible_ids);
-        }
+            let newly_selected = state.file_selection.selected_ids();
+            FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected)
+        };
+
+        self.sync_selection_diff_to_slint_model(&changed_ids);
         self.update_inspector();
-        self.reload_media_view_filtered();
+
+        tracing::debug!(
+            changed_rows = changed_ids.len(),
+            elapsed_us = t_start.elapsed().as_micros(),
+            "[FileSelection: SelectAll] Fast in-place select all executed"
+        );
     }
 
     pub fn clear_selection(&self) {
-        self.state.write().file_selection.clear();
+        let t_start = Instant::now();
+        let prev_selected = {
+            let mut state = self.state.write();
+            let prev = state.file_selection.selected_ids().clone();
+            state.file_selection.clear();
+            prev
+        };
+
+        let changed_ids: Vec<MediaId> = prev_selected.into_iter().collect();
+        self.sync_selection_diff_to_slint_model(&changed_ids);
         self.update_inspector();
-        self.reload_media_view_filtered();
+
+        tracing::debug!(
+            cleared_rows = changed_ids.len(),
+            elapsed_us = t_start.elapsed().as_micros(),
+            "[FileSelection: ClearSelection] Fast in-place clear selection executed"
+        );
     }
 }

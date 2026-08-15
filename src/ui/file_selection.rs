@@ -15,6 +15,26 @@ impl FileSelectionModel {
         Self::default()
     }
 
+    /// Computes the symmetric difference of changed IDs between two selection states.
+    #[inline]
+    pub fn compute_selection_diff(
+        prev: &HashSet<MediaId>,
+        current: &HashSet<MediaId>,
+    ) -> Vec<MediaId> {
+        let mut changed = Vec::new();
+        for &id in prev {
+            if !current.contains(&id) {
+                changed.push(id);
+            }
+        }
+        for &id in current {
+            if !prev.contains(&id) {
+                changed.push(id);
+            }
+        }
+        changed
+    }
+
     /// Selects only the specified media ID, clearing any previous selection.
     pub fn select_single(&mut self, id: MediaId) {
         self.selected_ids.clear();
@@ -239,107 +259,97 @@ impl FileSelectionSummary {
             single_record: None,
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::media::MediaType;
+    /// Zero-copy summary aggregation directly from an iterator over indexed media records.
+    pub fn from_indexed_records<'a>(
+        records: impl IntoIterator<Item = &'a crate::query::filters::IndexedMediaRecord>,
+    ) -> Self {
+        let mut count = 0usize;
+        let mut total_size_bytes = 0u64;
+        let mut min_dim = (u32::MAX, u32::MAX, u64::MAX);
+        let mut max_dim = (0u32, 0u32, 0u64);
+        let mut first_dim: Option<(u32, u32)> = None;
+        let mut is_uniform_dimensions = true;
 
-    fn sample_record(
-        id: MediaId,
-        filename: &str,
-        size: u64,
-        w: u32,
-        h: u32,
-        fmt: MediaFormat,
-        rating: u8,
-    ) -> MediaRecord {
-        MediaRecord {
-            id,
-            folder_id: 1,
-            filename: filename.to_string(),
-            file_hash: [0u8; 32],
-            file_size: size,
-            modification_time: 0,
-            media_type: MediaType::Image,
-            format: fmt,
-            width: w,
-            height: h,
-            rating,
-            last_seen: 0,
+        let mut format_counts: HashMap<MediaFormat, usize> = HashMap::new();
+        let mut total_rating = 0u32;
+        let mut rated_count = 0usize;
+        let mut single_rec: Option<MediaRecord> = None;
+
+        for item in records {
+            count += 1;
+            total_size_bytes += item.record.file_size;
+
+            let area = (item.record.width as u64) * (item.record.height as u64);
+            if area < min_dim.2 || (area == min_dim.2 && item.record.width < min_dim.0) {
+                min_dim = (item.record.width, item.record.height, area);
+            }
+            if area > max_dim.2 || (area == max_dim.2 && item.record.width > max_dim.0) {
+                max_dim = (item.record.width, item.record.height, area);
+            }
+
+            if let Some(fd) = first_dim {
+                if fd != (item.record.width, item.record.height) {
+                    is_uniform_dimensions = false;
+                }
+            } else {
+                first_dim = Some((item.record.width, item.record.height));
+            }
+
+            *format_counts.entry(item.record.format).or_insert(0) += 1;
+
+            if item.record.rating > 0 {
+                total_rating += item.record.rating as u32;
+                rated_count += 1;
+            }
+
+            if count == 1 {
+                single_rec = Some(item.record.clone());
+            }
         }
-    }
 
-    #[test]
-    fn test_single_file_selection() {
-        let mut fsm = FileSelectionModel::new();
-        fsm.select_single(10);
-        assert_eq!(fsm.count(), 1);
-        assert!(fsm.is_selected(10));
+        if count == 0 {
+            return Self::default();
+        }
 
-        fsm.select_single(20);
-        assert_eq!(fsm.count(), 1);
-        assert!(!fsm.is_selected(10));
-        assert!(fsm.is_selected(20));
-        assert_eq!(fsm.anchor_id(), Some(20));
-    }
+        if count == 1 {
+            let single = single_rec.unwrap();
+            let format_breakdown = vec![(single.format, 1)];
+            return Self {
+                count: 1,
+                total_size_bytes: single.file_size,
+                min_dimensions: Some((single.width, single.height)),
+                max_dimensions: Some((single.width, single.height)),
+                is_uniform_dimensions: true,
+                format_breakdown,
+                avg_rating: single.rating as f32,
+                rated_count: if single.rating > 0 { 1 } else { 0 },
+                single_record: Some(single),
+            };
+        }
 
-    #[test]
-    fn test_ctrl_toggle_file_selection() {
-        let mut fsm = FileSelectionModel::new();
-        fsm.select_single(10);
-        fsm.toggle(20);
-        fsm.toggle(30);
-        assert_eq!(fsm.count(), 3);
-        assert!(fsm.is_selected(10));
-        assert!(fsm.is_selected(20));
-        assert!(fsm.is_selected(30));
+        let mut format_breakdown: Vec<(MediaFormat, usize)> = format_counts.into_iter().collect();
+        format_breakdown.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then_with(|| format!("{:?}", a.0).cmp(&format!("{:?}", b.0)))
+        });
 
-        fsm.toggle(20);
-        assert_eq!(fsm.count(), 2);
-        assert!(!fsm.is_selected(20));
-        assert_eq!(fsm.anchor_id(), Some(20));
-    }
+        let avg_rating = if rated_count > 0 {
+            total_rating as f32 / rated_count as f32
+        } else {
+            0.0
+        };
 
-    #[test]
-    fn test_shift_range_file_selection() {
-        let mut fsm = FileSelectionModel::new();
-        let visible = vec![1, 2, 3, 4, 5, 6, 7];
-
-        fsm.select_single(2);
-        assert_eq!(fsm.anchor_id(), Some(2));
-
-        fsm.select_range(5, &visible, false);
-        assert_eq!(fsm.count(), 4);
-        assert!(fsm.is_selected(2));
-        assert!(fsm.is_selected(3));
-        assert!(fsm.is_selected(4));
-        assert!(fsm.is_selected(5));
-        assert_eq!(fsm.anchor_id(), Some(2));
-
-        fsm.select_range(1, &visible, false);
-        assert_eq!(fsm.count(), 2);
-        assert!(fsm.is_selected(1));
-        assert!(fsm.is_selected(2));
-        assert!(!fsm.is_selected(3));
-    }
-
-    #[test]
-    fn test_file_summary_aggregation() {
-        let r1 = sample_record(1, "a.jpg", 1_000, 800, 600, MediaFormat::Jpeg, 5);
-        let r2 = sample_record(2, "b.jpg", 2_000, 1920, 1080, MediaFormat::Jpeg, 3);
-        let r3 = sample_record(3, "c.png", 3_000, 1280, 720, MediaFormat::Png, 0);
-
-        let summary = FileSelectionSummary::from_records(&[r1, r2, r3]);
-        assert_eq!(summary.count, 3);
-        assert_eq!(summary.total_size_bytes, 6_000);
-        assert_eq!(summary.min_dimensions, Some((800, 600)));
-        assert_eq!(summary.max_dimensions, Some((1920, 1080)));
-        assert!(!summary.is_uniform_dimensions);
-        assert_eq!(summary.avg_rating, 4.0);
-        assert_eq!(summary.rated_count, 2);
-        assert_eq!(summary.format_breakdown[0], (MediaFormat::Jpeg, 2));
-        assert_eq!(summary.format_breakdown[1], (MediaFormat::Png, 1));
+        Self {
+            count,
+            total_size_bytes,
+            min_dimensions: Some((min_dim.0, min_dim.1)),
+            max_dimensions: Some((max_dim.0, max_dim.1)),
+            is_uniform_dimensions,
+            format_breakdown,
+            avg_rating,
+            rated_count,
+            single_record: None,
+        }
     }
 }

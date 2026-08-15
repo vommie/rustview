@@ -8,7 +8,6 @@ export component MediaTableView inherits Rectangle {
     in property <[MediaItemView]> items: [];
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
-    callback item-double-clicked(int /* id */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
 
     VerticalLayout {
@@ -48,24 +47,14 @@ export component MediaTableView inherits Rectangle {
                 }
 
                 row-touch := TouchArea {
-                    property <bool> last-ctrl: false;
-                    property <bool> last-shift: false;
-
                     pointer-event(event) => {
                         if event.kind == PointerEventKind.down {
-                            self.last-ctrl = event.modifiers.control || event.modifiers.meta;
-                            self.last-shift = event.modifiers.shift;
                             if event.button == PointerEventButton.right {
                                 root.item-context-menu(item.id, row-touch.mouse-x, row-touch.mouse-y);
+                            } else if event.button == PointerEventButton.left {
+                                root.item-clicked(item.id, event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
                             }
                         }
-                    }
-
-                    clicked => {
-                        root.item-clicked(item.id, self.last-ctrl, self.last-shift);
-                    }
-                    double-clicked => {
-                        root.item-double-clicked(item.id);
                     }
                 }
 
