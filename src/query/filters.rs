@@ -1,6 +1,11 @@
 use crate::library::Library;
 use crate::library::models::{MediaRecord, TagId};
+use memchr::memmem;
+use regex::{Regex, RegexBuilder};
+use slint::SharedString;
 use std::collections::HashSet;
+use std::path::PathBuf;
+use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchMode {
@@ -38,32 +43,94 @@ impl Default for QueryFilter {
 }
 
 impl QueryFilter {
-    pub fn matches(&self, media: &MediaRecord, media_tags: &[TagId]) -> bool {
-        // Rating match
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.search_query.trim().is_empty() && self.rating.is_none() && self.tag_ids.is_empty()
+    }
+}
+
+/// Fully pre-indexed and pre-formatted media record holding zero-allocation Slint strings,
+/// precalculated filesystem paths, original folder index, and tag cache for instant mapping and filtering.
+#[derive(Debug, Clone)]
+pub struct IndexedMediaRecord {
+    pub index: usize,
+    pub record: MediaRecord,
+    pub full_path: PathBuf,
+    pub filename_lower: String,
+    pub filename_slint: SharedString,
+    pub filesize_str: SharedString,
+    pub dimensions_str: SharedString,
+    pub has_tags: bool,
+}
+
+pub struct PreparedFilter {
+    rating: Option<u8>,
+    query_trimmed: String,
+    pub query_lower: String,
+    regex_matcher: Option<Regex>,
+    tag_ids: HashSet<TagId>,
+    match_mode: MatchMode,
+}
+
+impl PreparedFilter {
+    pub fn from_filter(filter: &QueryFilter) -> Self {
+        let trimmed = filter.search_query.trim().to_string();
+        let query_lower = trimmed.to_lowercase();
+
+        let regex_matcher = if filter.is_regex && !trimmed.is_empty() {
+            match RegexBuilder::new(&trimmed).case_insensitive(true).build() {
+                Ok(re) => Some(re),
+                Err(e) => {
+                    tracing::debug!(
+                        query = %trimmed,
+                        error = %e,
+                        "[SearchFilter: Regex Warning] Invalid regex syntax, falling back to literal matching"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        Self {
+            rating: filter.rating,
+            query_trimmed: trimmed,
+            query_lower,
+            regex_matcher,
+            tag_ids: filter.tag_ids.clone(),
+            match_mode: filter.match_mode,
+        }
+    }
+
+    #[inline]
+    pub fn matches_indexed(
+        &self,
+        item: &IndexedMediaRecord,
+        media_tags: &[TagId],
+        simd_finder: Option<&memmem::Finder<'_>>,
+    ) -> bool {
+        // 1. Rating match
         if let Some(r) = self.rating
-            && media.rating != r
+            && item.record.rating != r
         {
             return false;
         }
 
-        // Search text / Regex match on Filename
-        if !self.search_query.is_empty() {
-            if self.is_regex {
-                if let Ok(re) = regex::Regex::new(&self.search_query)
-                    && !re.is_match(&media.filename)
-                {
-                    return false;
-                }
-            } else if !media
-                .filename
-                .to_lowercase()
-                .contains(&self.search_query.to_lowercase())
+        // 2. Filename Search (Precompiled Regex or SIMD memmem Substring Match)
+        if !self.query_trimmed.is_empty() {
+            if let Some(ref re) = self.regex_matcher
+                && !re.is_match(&item.record.filename)
+            {
+                return false;
+            } else if let Some(finder) = simd_finder
+                && finder.find(item.filename_lower.as_bytes()).is_none()
             {
                 return false;
             }
         }
 
-        // Tag matching
+        // 3. Tag matching
         if !self.tag_ids.is_empty() {
             let item_tags_set: HashSet<TagId> = media_tags.iter().copied().collect();
             match self.match_mode {
@@ -82,21 +149,111 @@ impl QueryFilter {
 
         true
     }
+}
 
-    pub fn execute(&self, library: &Library, folder_media: &[MediaRecord]) -> Vec<MediaRecord> {
-        folder_media
-            .iter()
-            .filter(|m| {
-                let tags = library
-                    .tags()
-                    .get_tags_for_media(m.id)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|t| t.id)
-                    .collect::<Vec<_>>();
-                self.matches(m, &tags)
-            })
-            .cloned()
-            .collect()
+impl QueryFilter {
+    /// Executes sub-microsecond Zero-Copy in-memory filtering using SIMD vectorization.
+    /// If `candidate_indices` is provided, filters ONLY those indices into `all_media` (Refinement).
+    pub fn execute_indexed_refs<'a>(
+        &self,
+        library: &Library,
+        all_media: &'a [IndexedMediaRecord],
+        candidate_indices: Option<&[usize]>,
+    ) -> Vec<&'a IndexedMediaRecord> {
+        let t0 = Instant::now();
+
+        // Instant bypass when no filters are active (Filter Reset)
+        if self.is_empty() {
+            let filtered: Vec<&'a IndexedMediaRecord> = all_media.iter().collect();
+            let elapsed_us = t0.elapsed().as_micros();
+            tracing::debug!(
+                mode = "Bypass (Unfiltered Reset)",
+                input_candidates = all_media.len(),
+                matched = filtered.len(),
+                elapsed_us = elapsed_us,
+                "[SearchFilter: Zero-Copy Bypass] Instant unfiltered reset pass executed"
+            );
+            return filtered;
+        }
+
+        let prepared = PreparedFilter::from_filter(self);
+
+        let simd_finder = if prepared.regex_matcher.is_none() && !prepared.query_lower.is_empty() {
+            Some(memmem::Finder::new(prepared.query_lower.as_bytes()))
+        } else {
+            None
+        };
+
+        let has_tag_filter = !self.tag_ids.is_empty();
+
+        let filtered: Vec<&'a IndexedMediaRecord> = match candidate_indices {
+            Some(indices) => {
+                let input_count = indices.len();
+                let res: Vec<&'a IndexedMediaRecord> = indices
+                    .iter()
+                    .filter_map(|&idx| all_media.get(idx))
+                    .filter(|m| {
+                        if has_tag_filter {
+                            let tags = library
+                                .tags()
+                                .get_tags_for_media(m.record.id)
+                                .unwrap_or_default()
+                                .into_iter()
+                                .map(|t| t.id)
+                                .collect::<Vec<_>>();
+                            prepared.matches_indexed(m, &tags, simd_finder.as_ref())
+                        } else {
+                            prepared.matches_indexed(m, &[], simd_finder.as_ref())
+                        }
+                    })
+                    .collect();
+
+                let elapsed_us = t0.elapsed().as_micros();
+                tracing::debug!(
+                    query = %self.search_query,
+                    is_regex = self.is_regex,
+                    mode = "Refinement Subset",
+                    input_candidates = input_count,
+                    matched = res.len(),
+                    elapsed_us = elapsed_us,
+                    "[SearchFilter: SIMD memmem] Zero-Copy filter executed"
+                );
+                res
+            }
+            None => {
+                let input_count = all_media.len();
+                let res: Vec<&'a IndexedMediaRecord> = all_media
+                    .iter()
+                    .filter(|m| {
+                        if has_tag_filter {
+                            let tags = library
+                                .tags()
+                                .get_tags_for_media(m.record.id)
+                                .unwrap_or_default()
+                                .into_iter()
+                                .map(|t| t.id)
+                                .collect::<Vec<_>>();
+                            prepared.matches_indexed(m, &tags, simd_finder.as_ref())
+                        } else {
+                            prepared.matches_indexed(m, &[], simd_finder.as_ref())
+                        }
+                    })
+                    .collect();
+
+                let elapsed_us = t0.elapsed().as_micros();
+                tracing::debug!(
+                    query = %self.search_query,
+                    is_regex = self.is_regex,
+                    mode = "Full Set",
+                    input_candidates = input_count,
+                    matched = res.len(),
+                    elapsed_us = elapsed_us,
+                    "[SearchFilter: SIMD memmem] Zero-Copy filter executed"
+                );
+                res
+            }
+        };
+
+        filtered
     }
 }

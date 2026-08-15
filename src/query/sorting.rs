@@ -1,3 +1,4 @@
+use super::filters::IndexedMediaRecord;
 use crate::library::models::MediaRecord;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +27,52 @@ impl MediaSorter {
                 SortColumn::Dimensions => (a.width * a.height).cmp(&(b.width * b.height)),
                 SortColumn::ModificationTime => a.modification_time.cmp(&b.modification_time),
                 SortColumn::Rating => a.rating.cmp(&b.rating),
+            };
+
+            match order {
+                SortOrder::Ascending => cmp,
+                SortOrder::Descending => cmp.reverse(),
+            }
+        });
+    }
+
+    pub fn sort_indexed(records: &mut [IndexedMediaRecord], column: SortColumn, order: SortOrder) {
+        records.sort_by(|a, b| {
+            let cmp = match column {
+                SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
+                SortColumn::FileSize => a.record.file_size.cmp(&b.record.file_size),
+                SortColumn::Dimensions => {
+                    (a.record.width * a.record.height).cmp(&(b.record.width * b.record.height))
+                }
+                SortColumn::ModificationTime => {
+                    a.record.modification_time.cmp(&b.record.modification_time)
+                }
+                SortColumn::Rating => a.record.rating.cmp(&b.record.rating),
+            };
+
+            match order {
+                SortOrder::Ascending => cmp,
+                SortOrder::Descending => cmp.reverse(),
+            }
+        });
+    }
+
+    pub fn sort_indexed_refs(
+        records: &mut [&IndexedMediaRecord],
+        column: SortColumn,
+        order: SortOrder,
+    ) {
+        records.sort_by(|a, b| {
+            let cmp = match column {
+                SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
+                SortColumn::FileSize => a.record.file_size.cmp(&b.record.file_size),
+                SortColumn::Dimensions => {
+                    (a.record.width * a.record.height).cmp(&(b.record.width * b.record.height))
+                }
+                SortColumn::ModificationTime => {
+                    a.record.modification_time.cmp(&b.record.modification_time)
+                }
+                SortColumn::Rating => a.record.rating.cmp(&b.record.rating),
             };
 
             match order {
