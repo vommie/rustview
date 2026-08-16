@@ -73,7 +73,7 @@ export component MetadataInspector inherits Rectangle {
         }
 
         MetadataRow {
-            label: root.selection-count > 1 ? "Details:" : "BLAKE3:";
+            label: root.selection-count > 1 ? "Details:" : "MD5:";
             value: root.hash-or-rating;
             value-font-size: 10px;
         }

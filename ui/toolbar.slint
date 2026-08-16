@@ -71,7 +71,7 @@ export component TopToolbar inherits Rectangle {
         Rectangle { width: 1px; background: Theme.border; height: 24px; }
 
         search-input := LineEdit {
-            placeholder-text: "Filter media (Filename)...";
+            placeholder-text: "Filter...";
             horizontal-stretch: 1;
             edited(text) => { root.search-changed(text); }
         }

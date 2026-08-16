@@ -1,6 +1,7 @@
 use super::error::LibraryError;
 use super::models::*;
 use super::schema::*;
+use crate::media::MediaHasher;
 use heed::byteorder::BE;
 use heed::types::{Bytes, SerdeBincode, Str, U32, U64};
 use heed::{Database, Env, EnvOpenOptions};
@@ -77,9 +78,9 @@ impl LibraryDatabase {
                 schema_version: CURRENT_SCHEMA_VERSION,
                 hash_algorithm: HASH_ALGORITHM.to_string(),
                 thumbnail_version: CURRENT_THUMBNAIL_VERSION,
-                database_uuid: blake3::hash(path.to_string_lossy().as_bytes())
-                    .to_hex()
-                    .to_string(),
+                database_uuid: MediaHasher::to_hex(&MediaHasher::hash_bytes(
+                    path.to_string_lossy().as_bytes(),
+                )),
                 created_at: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_secs() as i64)

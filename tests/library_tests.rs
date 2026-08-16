@@ -1,4 +1,5 @@
 use rustview::library::Library;
+use rustview::media::MediaHasher;
 use std::fs;
 use tempfile::tempdir;
 
@@ -35,7 +36,7 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     assert_eq!(report1.unchanged_media, 0);
     assert_eq!(report1.deleted_media, 0);
 
-    // 4. Verify Zero-FS Reading
+    // 4. Verify Zero-FS Reading & 16-byte MD5 Hash verification
     let media_list = lib
         .media()
         .get_by_folder(folder.id)
@@ -51,6 +52,12 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
             .iter()
             .any(|m| m.filename == "photo2.png" && m.width == 1920 && m.height == 1080)
     );
+
+    // Verify hash lookup via MD5
+    let expected_md5_img1 = MediaHasher::hash_file(&img1_path).unwrap();
+    let hash_lookup = lib.media().get_by_hash(&expected_md5_img1).unwrap();
+    assert_eq!(hash_lookup.len(), 1);
+    assert_eq!(hash_lookup[0].filename, "photo1.png");
 
     // 5. Unchanged Refresh (Fast Path test)
     let report2 = lib

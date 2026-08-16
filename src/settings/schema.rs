@@ -9,7 +9,7 @@ pub enum DeletionMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HashingMode {
-    Blake3Full,
+    Md5Full,
     FastHeader,
 }
 
@@ -114,7 +114,7 @@ impl Default for PerformanceSettings {
         Self {
             l1_cache_slots: 512,
             worker_threads: 4,
-            hashing_mode: HashingMode::Blake3Full,
+            hashing_mode: HashingMode::Md5Full,
         }
     }
 }

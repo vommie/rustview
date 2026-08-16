@@ -100,7 +100,7 @@ impl<'a> FolderRefresher<'a> {
                     continue;
                 }
 
-                // File modified -> Recalculate BLAKE3 hash
+                // File modified -> Recalculate MD5 hash
                 let new_hash = match MediaHasher::hash_file(&scanned.path) {
                     Ok(h) => h,
                     Err(e) => {

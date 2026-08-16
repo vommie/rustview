@@ -18,7 +18,7 @@ fn create_dummy_record(
         id,
         folder_id: 1,
         filename: name.to_string(),
-        file_hash: [0xAA; 32],
+        file_hash: [0xAA; 16],
         file_size: size,
         modification_time: 1700000000,
         media_type: if matches!(fmt, MediaFormat::Mp4) {

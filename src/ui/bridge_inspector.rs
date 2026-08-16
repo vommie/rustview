@@ -2,6 +2,7 @@ use super::MainWindow;
 use super::bridge_state::UiState;
 use super::file_selection::FileSelectionSummary;
 use super::models::format_filesize;
+use crate::media::MediaHasher;
 use crate::query::filters::IndexedMediaRecord;
 use parking_lot::RwLock;
 
@@ -64,7 +65,7 @@ impl BridgeInspector {
         window.set_info_size(item.filesize_str.clone());
         window.set_info_dimensions(item.dimensions_str.clone());
         window.set_info_format(format!("{:?}", item.record.format).into());
-        window.set_info_hash(format!("{:x?}", &item.record.file_hash[..8]).into());
+        window.set_info_hash(MediaHasher::to_hex(&item.record.file_hash).into());
         window.set_info_selection_count(1);
     }
 

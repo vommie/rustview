@@ -1,6 +1,6 @@
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 pub const CURRENT_THUMBNAIL_VERSION: u32 = 1;
-pub const HASH_ALGORITHM: &str = "BLAKE3-256";
+pub const HASH_ALGORITHM: &str = "MD5";
 
 // LMDB Named Database Identifiers
 pub const DB_META: &str = "meta";
