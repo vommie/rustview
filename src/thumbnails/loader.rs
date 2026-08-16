@@ -3,7 +3,7 @@ use super::error::ThumbnailError;
 use super::generator::ThumbnailGenerator;
 use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 use super::store::PackStore;
-use super::types::{FitMode, ThumbnailHandle, ThumbnailLocation, anonymize_target};
+use super::types::{ThumbnailConfig, ThumbnailLocation, anonymize_target};
 use crate::library::Library;
 use crate::library::models::MediaId;
 use parking_lot::Mutex;
@@ -21,6 +21,8 @@ pub struct PreparedTarget {
 
 pub struct ReadyThumbnailItem {
     pub media_id: MediaId,
+    pub width: u32,
+    pub height: u32,
     pub rgb8_pixels: Vec<u8>,
 }
 
@@ -71,7 +73,6 @@ impl ThumbnailScheduler {
         }
     }
 
-    /// Drains available ready thumbnail pixel buffers to the UI thread in batches.
     pub fn drain_ready_batch(&self, max_items: usize) -> Vec<ReadyThumbnailItem> {
         let mut queue = self.ready_drain_queue.lock();
         if queue.is_empty() {
@@ -94,11 +95,11 @@ impl ThumbnailScheduler {
         tracing::debug!("Thumbnail pipeline cancelled and queues cleared.");
     }
 
-    /// Launches the 2-Phase pipeline with automatic cache-corruption recovery.
     pub fn start_folder_pipeline(
         self: &Arc<Self>,
         folder_id: u64,
         sorted_targets: Vec<PreparedTarget>,
+        config: ThumbnailConfig,
     ) {
         self.cancel_current_pipeline();
 
@@ -112,7 +113,7 @@ impl ThumbnailScheduler {
 
         let scheduler = self.clone();
         self.pool.spawn(move || {
-            scheduler.execute_orchestration(pipeline_id, folder_id, sorted_targets);
+            scheduler.execute_orchestration(pipeline_id, folder_id, sorted_targets, config);
         });
     }
 
@@ -121,6 +122,7 @@ impl ThumbnailScheduler {
         pipeline_id: usize,
         folder_id: u64,
         sorted_targets: Vec<PreparedTarget>,
+        config: ThumbnailConfig,
     ) {
         if self.is_pipeline_stale(pipeline_id) {
             return;
@@ -144,12 +146,12 @@ impl ThumbnailScheduler {
 
             for target in sorted_targets {
                 // Check L1 RAM cache first
-                if let Some(handle) = self.cache.get(target.media_id)
-                    && let Some(rgb_data) = self.cache.arena().read_slot(handle)
-                {
+                if let Some(cached) = self.cache.get(target.media_id) {
                     self.ready_drain_queue.lock().push(ReadyThumbnailItem {
                         media_id: target.media_id,
-                        rgb8_pixels: rgb_data.to_vec(),
+                        width: cached.width,
+                        height: cached.height,
+                        rgb8_pixels: cached.pixels.as_ref().clone(),
                     });
                     continue;
                 }
@@ -187,7 +189,10 @@ impl ThumbnailScheduler {
             total_folder_files = total_folder_media,
             cached_in_db = existing_count,
             missing_to_generate = missing_count,
-            l1_ram_slots = self.cache.arena().slot_count(),
+            l1_ram_slots = self.cache.capacity(),
+            target_db_size = config.max_bound,
+            target_format = %config.format.as_str(),
+            scaling_algo = %config.scaling_algorithm.as_str(),
             elapsed_ms = t_start.elapsed().as_millis(),
             "=== THUMBNAIL PIPELINE START ==="
         );
@@ -219,18 +224,19 @@ impl ThumbnailScheduler {
                     let mut load_successful = false;
 
                     if let Ok(compressed_bytes) = self.store.read(location)
-                        && let Ok(rgb8_data) = self.generator.decompress_jpeg(&compressed_bytes)
+                        && let Ok((w, h, rgb8_data)) = self.generator.decompress(&compressed_bytes)
                     {
-                        let _ = self.cache.insert(media_id, &rgb8_data);
+                        let _ = self.cache.insert(media_id, w, h, &rgb8_data);
                         self.ready_drain_queue.lock().push(ReadyThumbnailItem {
                             media_id,
+                            width: w,
+                            height: h,
                             rgb8_pixels: rgb8_data,
                         });
                         load_successful = true;
                     }
 
                     if !load_successful {
-                        // Mark broken entry for auto-recovery purge & regeneration
                         corrupted_ref.lock().push(PreparedTarget {
                             media_id,
                             file_path: path,
@@ -250,9 +256,7 @@ impl ThumbnailScheduler {
             return;
         }
 
-        // =========================================================================
-        // AUTO-RECOVERY: Purge broken entries from LMDB & Re-queue for Phase 2
-        // =========================================================================
+        // Auto-Recovery: Purge broken entries and re-queue for Phase 2
         let corrupted_list = corrupted_items.lock().drain(..).collect::<Vec<_>>();
         if !corrupted_list.is_empty() {
             let count = corrupted_list.len();
@@ -269,7 +273,7 @@ impl ThumbnailScheduler {
 
             tracing::warn!(
                 repaired_count = count,
-                "[Auto-Recovery] Detected corrupted or truncated cache entries from prior crash. Purged from LMDB and queued for fresh SIMD generation."
+                "[Auto-Recovery] Detected corrupted or truncated cache entries. Purged and queued for regeneration."
             );
 
             for item in corrupted_list {
@@ -301,15 +305,17 @@ impl ThumbnailScheduler {
             let num_threads = self.pool.current_num_threads();
             for _ in 0..num_threads {
                 let scheduler = self.clone_handle();
+                let cfg = config.clone();
                 self.pool.spawn(move || {
-                    scheduler.worker_generation_loop(pipeline_id);
+                    scheduler.worker_generation_loop(pipeline_id, cfg);
                 });
             }
         }
     }
 
-    fn worker_generation_loop(&self, pipeline_id: usize) {
-        let mut batched_db_writes: Vec<(MediaId, ThumbnailLocation)> = Vec::with_capacity(16);
+    fn worker_generation_loop(&self, pipeline_id: usize, config: ThumbnailConfig) {
+        let mut batched_db_writes: Vec<(MediaId, ThumbnailLocation)> =
+            Vec::with_capacity(config.batch_commit_size);
 
         while !self.is_pipeline_stale(pipeline_id) {
             let target = {
@@ -327,19 +333,32 @@ impl ThumbnailScheduler {
 
             tracing::debug!(
                 media_target = %anonymize_target(&target.file_path, Some(target.media_id)),
-                "Starting SIMD CatmullRom Thumbnail Generation..."
+                algorithm = %config.scaling_algorithm.as_str(),
+                max_bound = config.max_bound,
+                format = %config.format.as_str(),
+                "Starting SIMD Aspect-Ratio Thumbnail Generation..."
             );
 
-            let rgb8_res = self
-                .generator
-                .generate_rgb8(&target.file_path, FitMode::Contain);
+            let frame_res = self.generator.generate_thumbnail(
+                &target.file_path,
+                config.max_bound,
+                config.scaling_algorithm,
+            );
 
-            match rgb8_res {
-                Ok(rgb8_data) => match self.generator.compress_jpeg(&rgb8_data) {
+            match frame_res {
+                Ok(frame) => match self.generator.compress(
+                    &frame.rgb_pixels,
+                    frame.width,
+                    frame.height,
+                    config.format,
+                    config.quality,
+                ) {
                     Ok(compressed_bytes) => match self.store.append(&compressed_bytes) {
                         Ok(location) => {
                             tracing::trace!(
                                 media_target = %anonymize_target(&target.file_path, Some(target.media_id)),
+                                width = frame.width,
+                                height = frame.height,
                                 pack_id = location.pack_id,
                                 offset = location.offset,
                                 length = location.length,
@@ -348,11 +367,18 @@ impl ThumbnailScheduler {
                             );
 
                             batched_db_writes.push((target.media_id, location));
-                            let _ = self.cache.insert(target.media_id, &rgb8_data);
+                            let _ = self.cache.insert(
+                                target.media_id,
+                                frame.width,
+                                frame.height,
+                                &frame.rgb_pixels,
+                            );
 
                             self.ready_drain_queue.lock().push(ReadyThumbnailItem {
                                 media_id: target.media_id,
-                                rgb8_pixels: rgb8_data,
+                                width: frame.width,
+                                height: frame.height,
+                                rgb8_pixels: frame.rgb_pixels,
                             });
                         }
                         Err(e) => {
@@ -367,7 +393,7 @@ impl ThumbnailScheduler {
                         tracing::error!(
                             media_target = %anonymize_target(&target.file_path, Some(target.media_id)),
                             error = %e,
-                            "JPEG compression failed"
+                            "Thumbnail compression failed"
                         );
                     }
                 },
@@ -380,7 +406,7 @@ impl ThumbnailScheduler {
                 }
             }
 
-            if batched_db_writes.len() >= 16 {
+            if batched_db_writes.len() >= config.batch_commit_size {
                 self.flush_db_batch(&mut batched_db_writes);
             }
 
@@ -437,9 +463,10 @@ impl ThumbnailScheduler {
         &self,
         media_id: MediaId,
         file_path: &Path,
-    ) -> Result<ThumbnailHandle, ThumbnailError> {
-        if let Some(handle) = self.cache.get(media_id) {
-            return Ok(handle);
+        config: ThumbnailConfig,
+    ) -> Result<super::cache::CachedThumbnail, ThumbnailError> {
+        if let Some(item) = self.cache.get(media_id) {
+            return Ok(item);
         }
 
         let location = {
@@ -449,14 +476,24 @@ impl ThumbnailScheduler {
 
         if let Some(loc) = location
             && let Ok(compressed) = self.store.read(loc)
-            && let Ok(rgb8) = self.generator.decompress_jpeg(&compressed)
-            && let Some(handle) = self.cache.insert(media_id, &rgb8)
+            && let Ok((w, h, rgb8)) = self.generator.decompress(&compressed)
         {
-            return Ok(handle);
+            let item = self.cache.insert(media_id, w, h, &rgb8);
+            return Ok(item);
         }
 
-        let rgb8 = self.generator.generate_rgb8(file_path, FitMode::Contain)?;
-        let compressed = self.generator.compress_jpeg(&rgb8)?;
+        let frame = self.generator.generate_thumbnail(
+            file_path,
+            config.max_bound,
+            config.scaling_algorithm,
+        )?;
+        let compressed = self.generator.compress(
+            &frame.rgb_pixels,
+            frame.width,
+            frame.height,
+            config.format,
+            config.quality,
+        )?;
         let location = self.store.append(&compressed)?;
 
         {
@@ -468,10 +505,9 @@ impl ThumbnailScheduler {
             wtxn.commit()?;
         }
 
-        let handle = self
+        let item = self
             .cache
-            .insert(media_id, &rgb8)
-            .ok_or(ThumbnailError::ArenaExhausted)?;
-        Ok(handle)
+            .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
+        Ok(item)
     }
 }

@@ -12,7 +12,6 @@ impl SettingsStore {
         Self { file_path }
     }
 
-    /// Loads settings from disk. Falls back to sanitized defaults if missing or corrupted.
     pub fn load(&self) -> AppSettings {
         if self.file_path.exists()
             && let Ok(content) = fs::read_to_string(&self.file_path)
@@ -28,7 +27,6 @@ impl SettingsStore {
         defaults
     }
 
-    /// Atomically writes configuration to disk via temp file renaming.
     pub fn save(&self, settings: &AppSettings) -> Result<(), std::io::Error> {
         if let Some(parent) = self.file_path.parent() {
             fs::create_dir_all(parent)?;
@@ -42,7 +40,6 @@ impl SettingsStore {
         Ok(())
     }
 
-    /// Validates filesystem paths and bounds-checks numerical UI configurations on startup.
     fn validate_and_sanitize(&self, settings: &mut AppSettings) {
         if let Some(ref path) = settings.general.root_folder
             && !path.is_dir()
@@ -63,8 +60,37 @@ impl SettingsStore {
 
         settings.appearance.default_thumbnail_size =
             settings.appearance.default_thumbnail_size.clamp(80, 300);
-        settings.performance.l1_cache_slots = settings.performance.l1_cache_slots.clamp(100, 4000);
+
+        // Performance sanitization
+        settings.performance.l1_cache_slots = settings.performance.l1_cache_slots.clamp(100, 8000);
         settings.performance.worker_threads = settings.performance.worker_threads.clamp(1, 32);
+        settings.performance.thumbnail_db_size =
+            settings.performance.thumbnail_db_size.clamp(64, 1024);
+        settings.performance.thumbnail_quality =
+            settings.performance.thumbnail_quality.clamp(10, 100);
+        settings.performance.batch_commit_size =
+            settings.performance.batch_commit_size.clamp(4, 256);
+
+        if !settings
+            .performance
+            .thumbnail_format
+            .eq_ignore_ascii_case("jpeg")
+            && !settings
+                .performance
+                .thumbnail_format
+                .eq_ignore_ascii_case("webp")
+        {
+            settings.performance.thumbnail_format = "WebP".to_string();
+        }
+
+        let algo_lower = settings.performance.scaling_algorithm.to_lowercase();
+        if !matches!(
+            algo_lower.as_str(),
+            "catmullrom" | "bilinear" | "triangle" | "lanczos" | "lanczos3" | "nearest"
+        ) {
+            settings.performance.scaling_algorithm = "CatmullRom".to_string();
+        }
+
         settings.player.default_volume = settings.player.default_volume.clamp(0.0, 100.0);
 
         // Sanitize view column widths

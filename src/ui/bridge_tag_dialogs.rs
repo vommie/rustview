@@ -13,7 +13,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Parameter payload for opening the delete tag modal dialog.
 #[derive(Debug, Clone)]
 pub struct DeleteTagParams {
     pub tag_id: TagId,
@@ -21,7 +20,6 @@ pub struct DeleteTagParams {
     pub children: Vec<String>,
 }
 
-/// Shared subsystem context bundled to keep parameter counts clean and adhere to SRP.
 #[derive(Clone)]
 pub struct TagDialogContext {
     pub library: Arc<Library>,
@@ -30,7 +28,6 @@ pub struct TagDialogContext {
     pub state: Arc<RwLock<UiState>>,
 }
 
-/// Dedicated controller managing modal tag creation, renaming, and deletion dialogs.
 #[derive(Default, Clone)]
 pub struct TagDialogController {
     add_dialog: Rc<RefCell<Option<AddTagDialog>>>,
@@ -43,7 +40,6 @@ impl TagDialogController {
         Self::default()
     }
 
-    /// Creates an encapsulated TagActionDialogs closure bundle for context menu action routing.
     pub fn create_action_bundle(
         &self,
         window: &MainWindow,
@@ -382,7 +378,7 @@ impl TagDialogController {
 
                 BridgeTags::reload_tags(window, library, state);
                 BridgeInspector::update(window, state);
-                BridgeMedia::reload(window, library, thumbnails, state, false, true);
+                BridgeMedia::reload(window, library, thumbnails, settings, state, false, true);
             }
             Err(e) => {
                 tracing::warn!(error = %e, "[TagManager: Delete Error] Failed to delete tag");

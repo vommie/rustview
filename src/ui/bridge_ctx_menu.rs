@@ -1,10 +1,9 @@
 pub use super::bridge_ctx_menu_folder::FolderContextMenu;
-pub use super::bridge_ctx_menu_media::MediaContextMenu;
+pub use super::bridge_ctx_menu_media::{MediaActionContext, MediaContextMenu};
 pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use super::bridge_ctx_menu_tag::TagContextMenu;
 pub use super::bridge_file_dialogs::{FileRenameContext, FileRenameDialogController};
 
-// Backward-compatibility re-exports for existing modules & integration tests
 pub use super::bridge_ctx_menu_folder::FolderContextMenu as FolderContextMenuBuilder;
 pub use super::bridge_ctx_menu_media::MediaContextMenu as MediaContextMenuBuilder;
 pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter as SlintContextMenuPresenter;
@@ -26,7 +25,6 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Registration dependency container for context menu subsystems.
 pub struct ContextMenuRegistration {
     pub library: Arc<Library>,
     pub thumbnails: Arc<ThumbnailManager>,
@@ -38,11 +36,9 @@ pub struct ContextMenuRegistration {
     pub settings: Arc<SettingsManager>,
 }
 
-/// Central Context Menu Bridge Facade coordinating Slint UI callbacks and domain routers.
 pub struct BridgeContextMenu;
 
 impl BridgeContextMenu {
-    /// Registers all context menu and submenu flyout callbacks onto MainWindow.
     pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
         Self::register_media_menu(window, &reg.state);
         Self::register_folder_menu(window, &reg.library, &reg.settings, &reg.state);
@@ -99,11 +95,10 @@ impl BridgeContextMenu {
         let fld_dlg = reg.folder_dialogs;
 
         window.on_context_menu_item_clicked(move |action_id| {
-            // Instantly dismiss popup before routing action
             CtxMenuPresenter::dismiss(&win);
             let action_u64 = action_id as u64;
 
-            // 1. Folder Actions (Move-to / Rename / Delete)
+            // 1. Folder Actions
             if action_u64 >= CTX_FOLDER_MOVE_BASE || (3000..4000).contains(&action_u64) {
                 let target_folder_id = st.read().active_folder_dialog_target;
                 let ctx = FolderDialogContext {
@@ -116,19 +111,29 @@ impl BridgeContextMenu {
                 return;
             }
 
-            // 2. Tag Actions (CRUD / Move / Tree Navigation)
+            // 2. Tag Actions
             if action_u64 >= CTX_TAG_MOVE_TARGET_BASE || (2000..3000).contains(&action_u64) {
                 let bundle = tag_dlg.create_action_bundle(&win, &lib, &thumb, &set, &st);
                 TagContextMenu::handle_action(action_u64, &win, &lib, &set, &st, bundle);
                 return;
             }
 
-            // 3. Media File Actions (Rename / Ratings / Selections)
-            MediaContextMenu::handle_action(action_u64, &win, &lib, &thumb, &st, &disp, &ren_dlg);
+            // 3. Media File Actions
+            MediaContextMenu::handle_action(
+                action_u64,
+                &win,
+                &MediaActionContext {
+                    library: &lib,
+                    thumbnails: &thumb,
+                    settings: &set,
+                    state: &st,
+                    dispatcher: &disp,
+                    rename_dialog: &ren_dlg,
+                },
+            );
         });
     }
 
-    /// Displays the media tile context menu.
     pub fn show_media_menu(
         window: &MainWindow,
         state: &Arc<RwLock<UiState>>,
@@ -141,7 +146,6 @@ impl BridgeContextMenu {
         Self::open_custom_menu(window, state, menu, x, y);
     }
 
-    /// Displays the folder tree item context menu.
     pub fn show_folder_menu(
         window: &MainWindow,
         library: &Library,
@@ -173,7 +177,6 @@ impl BridgeContextMenu {
         Self::open_custom_menu(window, state, menu, x, y);
     }
 
-    /// Renders any custom declarative CtxMenu into the multi-level popup presenter.
     #[inline]
     pub fn open_custom_menu(
         window: &MainWindow,

@@ -25,7 +25,6 @@ pub struct TagTreeNode {
     pub children: Vec<TagTreeNode>,
 }
 
-/// Tag frequency and assignment evaluator across active media selections.
 #[derive(Debug, Clone, Default)]
 pub struct TagSelectionStats {
     pub selected_files_count: usize,
@@ -81,7 +80,6 @@ pub type ShowAddDialogFn = Box<dyn Fn(Option<TagId>, &str)>;
 pub type ShowRenameDialogFn = Box<dyn Fn(TagId, &str)>;
 pub type ShowDeleteDialogFn = Box<dyn Fn(TagId, &str, Vec<String>)>;
 
-/// Encapsulated closure bundle for tag dialog triggers to maintain clean parameter interfaces.
 pub struct TagActionDialogs {
     pub show_add: ShowAddDialogFn,
     pub show_rename: ShowRenameDialogFn,
@@ -89,13 +87,12 @@ pub struct TagActionDialogs {
 }
 
 // =============================================================================
-// Section 2: TagTreeBuilder (Hierarchy Construction & Visual Flattening)
+// Section 2: TagTreeBuilder
 // =============================================================================
 
 pub struct TagTreeBuilder;
 
 impl TagTreeBuilder {
-    /// Builds an alphabetically sorted hierarchical tree from a flat tag slice.
     pub fn build_hierarchy(tags: &[TagRecord]) -> Vec<TagTreeNode> {
         let mut children_map: HashMap<Option<TagId>, Vec<TagRecord>> = HashMap::new();
         for t in tags {
@@ -126,7 +123,6 @@ impl TagTreeBuilder {
         nodes
     }
 
-    /// Flattens the hierarchical tree into a sequence of TagNodeViews for Slint rendering.
     pub fn flatten(
         nodes: &[TagTreeNode],
         depth: i32,
@@ -190,13 +186,12 @@ impl TagTreeBuilder {
 }
 
 // =============================================================================
-// Section 3: TagTreeSync (Surgical In-Place Slint Model Synchronization)
+// Section 3: TagTreeSync
 // =============================================================================
 
 pub struct TagTreeSync;
 
 impl TagTreeSync {
-    /// Strips trailing " (N)" count suffix from display names without allocation.
     #[inline]
     pub fn strip_count_suffix(name: &str) -> &str {
         if let Some(pos) = name.rfind(" (")
@@ -211,7 +206,6 @@ impl TagTreeSync {
         }
     }
 
-    /// Performs fast in-place mutation on existing rows to eliminate layout reflow and preserve scroll.
     pub fn sync_in_place(window: &MainWindow, library: &Library, state: &RwLock<UiState>) {
         let t0 = Instant::now();
         let current_model = window.get_tags();
@@ -271,18 +265,18 @@ impl TagTreeSync {
 }
 
 // =============================================================================
-// Section 4: TagActionHandler (Assignment, Unassignment, Mode & Rating Logic)
+// Section 4: TagActionHandler
 // =============================================================================
 
 pub struct TagActionHandler;
 
 impl TagActionHandler {
-    /// Toggles a tag in Query Filter mode or executes smart Assign/Unassign on selected files.
     pub fn toggle_tag(
         tag_id: TagId,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let (selected_ids, is_assign) = {
@@ -308,7 +302,7 @@ impl TagActionHandler {
                 state,
             );
         } else {
-            Self::handle_query_mode_toggle(tag_id, window, library, thumbnails, state);
+            Self::handle_query_mode_toggle(tag_id, window, library, thumbnails, settings, state);
         }
     }
 
@@ -371,6 +365,7 @@ impl TagActionHandler {
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let is_active = {
@@ -393,7 +388,7 @@ impl TagActionHandler {
 
         TagTreeSync::sync_in_place(window, library, state);
         BridgeInspector::update(window, state);
-        BridgeMedia::reload(window, library, thumbnails, state, false, false);
+        BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
     }
 
     fn update_grid_tag_badges(
@@ -442,6 +437,7 @@ impl TagActionHandler {
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let (selected_ids, is_assign) = {
@@ -451,12 +447,20 @@ impl TagActionHandler {
 
         if is_assign {
             if let Some(r) = rating {
-                Self::apply_rating_to_ids(&selected_ids, r, window, library, thumbnails, state);
+                Self::apply_rating_to_ids(
+                    &selected_ids,
+                    r,
+                    window,
+                    library,
+                    thumbnails,
+                    settings,
+                    state,
+                );
             }
         } else {
             state.write().filter.rating = rating;
             BridgeInspector::update(window, state);
-            BridgeMedia::reload(window, library, thumbnails, state, false, false);
+            BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
         }
     }
 
@@ -466,6 +470,7 @@ impl TagActionHandler {
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
         for &id in ids {
@@ -480,7 +485,7 @@ impl TagActionHandler {
         }
 
         BridgeInspector::update(window, state);
-        BridgeMedia::reload(window, library, thumbnails, state, false, false);
+        BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
     }
 }
 
@@ -491,7 +496,6 @@ impl TagActionHandler {
 pub struct BridgeTags;
 
 impl BridgeTags {
-    /// Registers tag-related UI interaction callbacks onto MainWindow.
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
@@ -502,6 +506,7 @@ impl BridgeTags {
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let set = settings.clone();
         let st = state.clone();
         window.on_rating_applied(move |rating| {
             Self::apply_rating(
@@ -509,6 +514,7 @@ impl BridgeTags {
                 &win,
                 &lib,
                 &thumb,
+                &set,
                 &st,
             );
         });
@@ -516,9 +522,10 @@ impl BridgeTags {
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails;
+        let set = settings.clone();
         let st = state.clone();
         window.on_tag_toggled(move |tag_id| {
-            Self::toggle_tag(tag_id as u32, &win, &lib, &thumb, &st);
+            Self::toggle_tag(tag_id as u32, &win, &lib, &thumb, &set, &st);
         });
 
         let win = window.clone_strong();
@@ -558,7 +565,6 @@ impl BridgeTags {
         });
     }
 
-    /// Reloads the entire hierarchical tag tree model into Slint.
     pub fn reload_tags(window: &MainWindow, library: &Library, state: &RwLock<UiState>) {
         let t0 = Instant::now();
         let tags = library.tags().list_all_tags().unwrap_or_default();
@@ -606,13 +612,11 @@ impl BridgeTags {
         window.set_tags(ModelRc::new(VecModel::from(visual_nodes)));
     }
 
-    /// Surgically updates the visible tag nodes in-place without triggering layout reconstruction.
     #[inline]
     pub fn sync_tag_selection(window: &MainWindow, library: &Library, state: &RwLock<UiState>) {
         TagTreeSync::sync_in_place(window, library, state);
     }
 
-    /// Persists the active set of expanded tag IDs to configuration storage.
     pub fn persist_expanded_tags(settings: &SettingsManager, expanded_set: &HashSet<TagId>) {
         let mut cur_settings = settings.get();
         let mut ids: Vec<u32> = expanded_set.iter().copied().collect();
@@ -627,7 +631,6 @@ impl BridgeTags {
         }
     }
 
-    /// Toggles expansion of a single parent tag node.
     pub fn toggle_expand(
         tag_id: TagId,
         window: &MainWindow,
@@ -756,9 +759,10 @@ impl BridgeTags {
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        TagActionHandler::toggle_tag(tag_id, window, library, thumbnails, state);
+        TagActionHandler::toggle_tag(tag_id, window, library, thumbnails, settings, state);
     }
 
     #[inline]
@@ -767,9 +771,10 @@ impl BridgeTags {
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        TagActionHandler::apply_rating(rating, window, library, thumbnails, state);
+        TagActionHandler::apply_rating(rating, window, library, thumbnails, settings, state);
     }
 
     #[inline]
@@ -779,8 +784,11 @@ impl BridgeTags {
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        TagActionHandler::apply_rating_to_ids(ids, rating, window, library, thumbnails, state);
+        TagActionHandler::apply_rating_to_ids(
+            ids, rating, window, library, thumbnails, settings, state,
+        );
     }
 }

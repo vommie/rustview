@@ -1,10 +1,11 @@
 use super::error::ThumbnailError;
-use super::image::{ImageDecoder, SimdImageThumbnailer};
-use super::types::{FitMode, THUMBNAIL_SIZE};
+use super::image::{DecodedThumbnailFrame, ImageDecoder, SimdImageThumbnailer};
+use super::types::{ScalingAlgorithm, ThumbnailFormat};
 use super::video::{FfmpegVideoThumbnailer, VideoFrameDecoder};
 use crate::media::{MediaFormat, MediaType};
-use image::ColorType;
 use image::codecs::jpeg::JpegEncoder;
+use image::codecs::webp::WebPEncoder;
+use image::{ColorType, ExtendedColorType};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -22,45 +23,102 @@ impl ThumbnailGenerator {
         }
     }
 
-    /// Decodes, SIMD resizes to 256x256 RGB8, and returns raw RGB8 bytes.
-    pub fn generate_rgb8(&self, path: &Path, fit_mode: FitMode) -> Result<Vec<u8>, ThumbnailError> {
+    /// Decodes image or video frame and SIMD resizes to aspect-ratio target within max_bound.
+    pub fn generate_thumbnail(
+        &self,
+        path: &Path,
+        max_bound: u32,
+        scaling_algo: ScalingAlgorithm,
+    ) -> Result<DecodedThumbnailFrame, ThumbnailError> {
         let format = MediaFormat::from_path(path);
         match format.media_type() {
-            Some(MediaType::Image) => self.image_decoder.decode_and_resize(path, fit_mode),
-            Some(MediaType::Video) => self.video_decoder.extract_and_resize(path, fit_mode),
+            Some(MediaType::Image) => {
+                self.image_decoder
+                    .decode_and_resize(path, max_bound, scaling_algo)
+            }
+            Some(MediaType::Video) => {
+                self.video_decoder
+                    .extract_and_resize(path, max_bound, scaling_algo)
+            }
             None => Err(ThumbnailError::Ffmpeg("Unsupported media type".into())),
         }
     }
 
-    /// Encodes raw 256x256 RGB8 into compressed JPEG bytes with high quality (85%).
-    pub fn compress_jpeg(&self, rgb8_pixels: &[u8]) -> Result<Vec<u8>, ThumbnailError> {
+    /// Compresses raw RGB8 pixels to configured format (WebP or JPEG) with specified quality factor (10..100).
+    pub fn compress(
+        &self,
+        rgb8_pixels: &[u8],
+        width: u32,
+        height: u32,
+        format: ThumbnailFormat,
+        quality: u8,
+    ) -> Result<Vec<u8>, ThumbnailError> {
         let t0 = Instant::now();
-        let mut buffer = Vec::with_capacity(32 * 1024);
-        let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 85);
-        encoder.encode(
-            rgb8_pixels,
-            THUMBNAIL_SIZE,
-            THUMBNAIL_SIZE,
-            ColorType::Rgb8.into(),
-        )?;
+        let quality = quality.clamp(10, 100);
+        let mut buffer = Vec::with_capacity((width * height) as usize);
+
+        match format {
+            ThumbnailFormat::Webp => {
+                let encoder = WebPEncoder::new_lossless(&mut buffer);
+                encoder.encode(rgb8_pixels, width, height, ExtendedColorType::Rgb8)?;
+            }
+            ThumbnailFormat::Jpeg => {
+                let mut encoder = JpegEncoder::new_with_quality(&mut buffer, quality);
+                encoder.encode(rgb8_pixels, width, height, ColorType::Rgb8.into())?;
+            }
+        }
+
         tracing::trace!(
-            compressed_bytes = buffer.len(),
+            format = %format.as_str(),
+            width = width,
+            height = height,
+            quality = quality,
+            output_bytes = buffer.len(),
             encode_time_us = t0.elapsed().as_micros(),
-            "[JPEG Compression] Encoded 256x256 RGB8 to JPEG (85% quality)"
+            "[Thumbnail Compression] Encoded RGB8 thumbnail into binary payload"
         );
+
         Ok(buffer)
     }
 
-    /// Decompresses packed JPEG bytes into raw 256x256 RGB8.
-    pub fn decompress_jpeg(&self, compressed: &[u8]) -> Result<Vec<u8>, ThumbnailError> {
+    /// Decompresses packed thumbnail slice to (width, height, raw RGB8 bytes), automatically detecting WebP/JPEG.
+    pub fn decompress(&self, compressed: &[u8]) -> Result<(u32, u32, Vec<u8>), ThumbnailError> {
         let t0 = Instant::now();
-        let img = image::load_from_memory_with_format(compressed, image::ImageFormat::Jpeg)?;
+        let detected = ThumbnailFormat::detect(compressed);
+
+        let img = match detected {
+            Some(ThumbnailFormat::Jpeg) => {
+                image::load_from_memory_with_format(compressed, image::ImageFormat::Jpeg)?
+            }
+            Some(ThumbnailFormat::Webp) => {
+                image::load_from_memory_with_format(compressed, image::ImageFormat::WebP)?
+            }
+            None => image::load_from_memory(compressed)?,
+        };
+
+        let width = img.width();
+        let height = img.height();
         let raw = img.to_rgb8().into_raw();
+
         tracing::trace!(
+            detected_format = ?detected,
+            width = width,
+            height = height,
             decompressed_bytes = raw.len(),
             decode_time_us = t0.elapsed().as_micros(),
-            "[JPEG Decompression] Decoded packfile JPEG slice to 256x256 RGB8"
+            "[Thumbnail Decompression] Decompressed packfile thumbnail slice"
         );
+
+        Ok((width, height, raw))
+    }
+
+    // Backward-compatibility wrappers
+    pub fn compress_jpeg(&self, rgb8_pixels: &[u8]) -> Result<Vec<u8>, ThumbnailError> {
+        self.compress(rgb8_pixels, 256, 256, ThumbnailFormat::Jpeg, 85)
+    }
+
+    pub fn decompress_jpeg(&self, compressed: &[u8]) -> Result<Vec<u8>, ThumbnailError> {
+        let (_, _, raw) = self.decompress(compressed)?;
         Ok(raw)
     }
 }

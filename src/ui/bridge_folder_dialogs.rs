@@ -14,7 +14,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Context bundle grouping shared application subsystems for folder dialog operations.
 #[derive(Clone)]
 pub struct FolderDialogContext {
     pub library: Arc<Library>,
@@ -23,7 +22,6 @@ pub struct FolderDialogContext {
     pub state: Arc<RwLock<UiState>>,
 }
 
-/// Dedicated controller managing modal folder rename, delete (trash/permanent), and move dialogs.
 #[derive(Default, Clone)]
 pub struct FolderDialogController {
     rename_dialog: Rc<RefCell<Option<RenameFolderDialog>>>,
@@ -35,10 +33,6 @@ impl FolderDialogController {
     pub fn new() -> Self {
         Self::default()
     }
-
-    // =========================================================================
-    // 1. Rename Folder Dialog
-    // =========================================================================
 
     pub fn show_rename(
         &self,
@@ -119,6 +113,7 @@ impl FolderDialogController {
                         window,
                         &ctx.library,
                         &ctx.thumbnails,
+                        &ctx.settings,
                         &ctx.state,
                         true,
                         true,
@@ -133,10 +128,6 @@ impl FolderDialogController {
             }
         }
     }
-
-    // =========================================================================
-    // 2. Delete Folder Dialog (Trash vs. Permanent)
-    // =========================================================================
 
     pub fn show_delete(
         &self,
@@ -226,7 +217,6 @@ impl FolderDialogController {
                     .map(|id| report.deleted_folder_ids.contains(&id))
                     .unwrap_or(false);
 
-                // Remove exclusively deleted folder IDs from expansion set (preserving root & sibling branches)
                 {
                     let mut st = ctx.state.write();
                     for id in &report.deleted_folder_ids {
@@ -235,7 +225,6 @@ impl FolderDialogController {
                     BridgeFolders::persist_expanded_folders(&ctx.settings, &st.expanded_folder_ids);
                 }
 
-                // If currently active folder was deleted, gracefully switch back to root
                 if is_current {
                     let root_setting = ctx.settings.get().general.root_folder;
                     if let Some(ref root_p) = root_setting
@@ -271,6 +260,7 @@ impl FolderDialogController {
                             window,
                             &ctx.library,
                             &ctx.thumbnails,
+                            &ctx.settings,
                             &ctx.state,
                             true,
                             false,
@@ -306,10 +296,6 @@ impl FolderDialogController {
             }
         }
     }
-
-    // =========================================================================
-    // 3. Move Folder Dialog
-    // =========================================================================
 
     pub fn show_move(
         &self,
@@ -413,6 +399,7 @@ impl FolderDialogController {
                     window,
                     &ctx.library,
                     &ctx.thumbnails,
+                    &ctx.settings,
                     &ctx.state,
                     false,
                     true,

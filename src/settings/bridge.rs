@@ -24,7 +24,6 @@ impl SettingsDialogController {
         self.main_window_weak = Some(weak);
     }
 
-    /// Displays the SettingsWindow and locks the MainWindow interaction.
     pub fn show(&mut self) {
         if self.settings_window.is_none() {
             let window = SettingsWindow::new().expect("Failed to create SettingsWindow");
@@ -35,7 +34,6 @@ impl SettingsDialogController {
         if let Some(ref window) = self.settings_window {
             self.populate_ui(window, &self.manager.get());
 
-            // Lock main window
             if let Some(ref w_weak) = self.main_window_weak
                 && let Some(main) = w_weak.upgrade()
             {
@@ -69,8 +67,36 @@ impl SettingsDialogController {
         window.set_show_rating_badge(settings.appearance.show_ratings_overlay);
         window.set_show_tag_badge(settings.appearance.show_tags_overlay);
 
-        window.set_l1_cache_slots(settings.performance.l1_cache_slots as i32);
+        // Performance properties
         window.set_worker_threads(settings.performance.worker_threads as i32);
+        window.set_batch_commit_size(settings.performance.batch_commit_size as i32);
+        window.set_l1_cache_slots(settings.performance.l1_cache_slots as i32);
+        window.set_thumb_db_size(settings.performance.thumbnail_db_size as i32);
+        window.set_thumb_format_idx(
+            if settings
+                .performance
+                .thumbnail_format
+                .eq_ignore_ascii_case("jpeg")
+            {
+                1
+            } else {
+                0
+            },
+        );
+        window.set_thumb_quality(settings.performance.thumbnail_quality as i32);
+        window.set_scaling_algo_idx(
+            match settings
+                .performance
+                .scaling_algorithm
+                .to_lowercase()
+                .as_str()
+            {
+                "bilinear" | "triangle" => 1,
+                "lanczos" | "lanczos3" => 2,
+                "nearest" => 3,
+                _ => 0, // CatmullRom
+            },
+        );
 
         window.set_autoplay_videos(settings.player.autoplay_videos);
         window.set_default_volume(settings.player.default_volume);
@@ -81,7 +107,6 @@ impl SettingsDialogController {
         let manager = self.manager.clone();
         let main_weak = self.main_window_weak.clone();
 
-        // BROWSE ROOT DIRECTORY
         let w_weak_browse = w_weak.clone();
         window.on_browse_root_folder(move || {
             if let Some(folder) = rfd::FileDialog::new()
@@ -93,7 +118,6 @@ impl SettingsDialogController {
             }
         });
 
-        // SAVE AND APPLY
         let w_weak_save = w_weak.clone();
         let mgr_save = manager;
         let main_weak_save = main_weak.clone();
@@ -122,15 +146,32 @@ impl SettingsDialogController {
                 current.appearance.show_ratings_overlay = w.get_show_rating_badge();
                 current.appearance.show_tags_overlay = w.get_show_tag_badge();
 
-                current.performance.l1_cache_slots = w.get_l1_cache_slots() as usize;
-                current.performance.worker_threads = w.get_worker_threads() as usize;
+                // Save Performance Parameters
+                current.performance.worker_threads = w.get_worker_threads().clamp(1, 32) as usize;
+                current.performance.batch_commit_size =
+                    w.get_batch_commit_size().clamp(4, 256) as usize;
+                current.performance.l1_cache_slots =
+                    w.get_l1_cache_slots().clamp(100, 8000) as usize;
+                current.performance.thumbnail_db_size =
+                    w.get_thumb_db_size().clamp(64, 1024) as u32;
+                current.performance.thumbnail_format = if w.get_thumb_format_idx() == 1 {
+                    "JPEG".to_string()
+                } else {
+                    "WebP".to_string()
+                };
+                current.performance.thumbnail_quality = w.get_thumb_quality().clamp(10, 100) as u8;
+                current.performance.scaling_algorithm = match w.get_scaling_algo_idx() {
+                    1 => "Bilinear".to_string(),
+                    2 => "Lanczos3".to_string(),
+                    3 => "Nearest".to_string(),
+                    _ => "CatmullRom".to_string(),
+                };
 
                 current.player.autoplay_videos = w.get_autoplay_videos();
                 current.player.default_volume = w.get_default_volume();
 
                 mgr_save.update(current);
 
-                // Unlock main window
                 if let Some(ref mw) = main_weak_save
                     && let Some(main) = mw.upgrade()
                 {
@@ -141,7 +182,6 @@ impl SettingsDialogController {
             }
         });
 
-        // CANCEL
         let w_weak_cancel = w_weak;
         let main_weak_cancel = main_weak;
         window.on_cancel_clicked(move || {
@@ -155,7 +195,6 @@ impl SettingsDialogController {
             }
         });
 
-        // WINDOW CLOSE REQUEST (X on Titlebar)
         let main_weak_close = self.main_window_weak.clone();
         window.window().on_close_requested(move || {
             if let Some(ref mw) = main_weak_close

@@ -1,4 +1,4 @@
-use super::types::{THUMBNAIL_BYTE_SIZE, ThumbnailHandle};
+use super::types::{DEFAULT_THUMBNAIL_BOUND, THUMBNAIL_CHANNELS, ThumbnailHandle};
 use parking_lot::Mutex;
 
 struct ArenaSlot {
@@ -6,7 +6,10 @@ struct ArenaSlot {
     in_use: bool,
 }
 
-/// Contiguous non-fragmenting memory arena holding decoded RGB8 thumbnails.
+pub const FIXED_ARENA_BYTES: usize =
+    (DEFAULT_THUMBNAIL_BOUND * DEFAULT_THUMBNAIL_BOUND * THUMBNAIL_CHANNELS as u32) as usize;
+
+/// Fixed-size memory arena retained for backward compatibility with existing benchmarks.
 pub struct ThumbnailArena {
     slot_count: usize,
     buffer: Vec<u8>,
@@ -15,7 +18,7 @@ pub struct ThumbnailArena {
 
 impl ThumbnailArena {
     pub fn new(slot_count: usize) -> Self {
-        let total_bytes = slot_count * THUMBNAIL_BYTE_SIZE;
+        let total_bytes = slot_count * FIXED_ARENA_BYTES;
         let mut buffer = vec![0u8; total_bytes];
         buffer.fill(0);
 
@@ -38,9 +41,8 @@ impl ThumbnailArena {
         self.slot_count
     }
 
-    /// Acquires a slot, copying decoded 256x256 RGB8 pixels into the contiguous arena.
     pub fn write_slot(&self, slot_index: usize, rgb_data: &[u8]) -> Option<ThumbnailHandle> {
-        if slot_index >= self.slot_count || rgb_data.len() != THUMBNAIL_BYTE_SIZE {
+        if slot_index >= self.slot_count || rgb_data.len() > FIXED_ARENA_BYTES {
             return None;
         }
 
@@ -49,12 +51,10 @@ impl ThumbnailArena {
         slot.in_use = true;
         let generation = slot.generation;
 
-        let start = slot_index * THUMBNAIL_BYTE_SIZE;
-
-        // Safety: Distinct slots are indexed without overlapping ranges.
+        let start = slot_index * FIXED_ARENA_BYTES;
         let dst_ptr = self.buffer.as_ptr() as *mut u8;
         unsafe {
-            let slice = std::slice::from_raw_parts_mut(dst_ptr.add(start), THUMBNAIL_BYTE_SIZE);
+            let slice = std::slice::from_raw_parts_mut(dst_ptr.add(start), rgb_data.len());
             slice.copy_from_slice(rgb_data);
         }
 
@@ -64,7 +64,6 @@ impl ThumbnailArena {
         })
     }
 
-    /// Reads raw RGB8 pixel slice from a slot if the handle generation is valid.
     pub fn read_slot(&self, handle: ThumbnailHandle) -> Option<&[u8]> {
         let idx = handle.slot_index as usize;
         if idx >= self.slot_count {
@@ -77,8 +76,8 @@ impl ThumbnailArena {
             return None;
         }
 
-        let start = idx * THUMBNAIL_BYTE_SIZE;
-        let end = start + THUMBNAIL_BYTE_SIZE;
+        let start = idx * FIXED_ARENA_BYTES;
+        let end = start + FIXED_ARENA_BYTES;
         Some(&self.buffer[start..end])
     }
 

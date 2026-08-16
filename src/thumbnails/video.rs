@@ -1,14 +1,18 @@
 use super::error::ThumbnailError;
-use super::image::{BlitParams, blit_rgb, calculate_dimensions};
-use super::types::{FitMode, THUMBNAIL_SIZE, anonymize_target};
+use super::image::DecodedThumbnailFrame;
+use super::types::{ScalingAlgorithm, anonymize_target, calculate_aspect_dimensions};
 use fast_image_resize::images::Image;
-use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
+use fast_image_resize::{PixelType, ResizeOptions, Resizer};
 use std::path::Path;
 use std::time::Instant;
 
 pub trait VideoFrameDecoder: Send + Sync {
-    fn extract_and_resize(&self, path: &Path, fit_mode: FitMode)
-    -> Result<Vec<u8>, ThumbnailError>;
+    fn extract_and_resize(
+        &self,
+        path: &Path,
+        max_bound: u32,
+        scaling_algo: ScalingAlgorithm,
+    ) -> Result<DecodedThumbnailFrame, ThumbnailError>;
 }
 
 #[derive(Default)]
@@ -24,8 +28,9 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
     fn extract_and_resize(
         &self,
         path: &Path,
-        fit_mode: FitMode,
-    ) -> Result<Vec<u8>, ThumbnailError> {
+        max_bound: u32,
+        scaling_algo: ScalingAlgorithm,
+    ) -> Result<DecodedThumbnailFrame, ThumbnailError> {
         let anon_target = anonymize_target(path, None);
         let t0 = Instant::now();
 
@@ -105,40 +110,31 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let rgb_raw = decoded_rgb
             .ok_or_else(|| ThumbnailError::Ffmpeg("Could not decode any video frames".into()))?;
 
-        let (target_w, target_h, offset_x, offset_y) =
-            calculate_dimensions(width, height, THUMBNAIL_SIZE, THUMBNAIL_SIZE, fit_mode);
+        let (target_w, target_h) = calculate_aspect_dimensions(width, height, max_bound);
 
         let src_image = Image::from_vec_u8(width, height, rgb_raw, PixelType::U8x3)?;
         let mut dst_image = Image::new(target_w, target_h, PixelType::U8x3);
         let mut resizer = Resizer::new();
-        let options =
-            ResizeOptions::default().resize_alg(ResizeAlg::Convolution(FilterType::CatmullRom));
+        let options = ResizeOptions::default().resize_alg(scaling_algo.to_resize_alg());
 
         resizer.resize(&src_image, &mut dst_image, &options)?;
-
         let resized_raw = dst_image.into_vec();
-        let mut final_canvas = vec![0u8; (THUMBNAIL_SIZE * THUMBNAIL_SIZE * 3) as usize];
-        blit_rgb(
-            &resized_raw,
-            &mut final_canvas,
-            BlitParams {
-                src_w: target_w,
-                src_h: target_h,
-                dst_w: THUMBNAIL_SIZE,
-                offset_x,
-                offset_y,
-            },
-        );
 
         let total_elapsed = t0.elapsed();
         tracing::debug!(
             target = %anon_target,
             orig_w = width,
             orig_h = height,
+            target_w = target_w,
+            target_h = target_h,
             total_time_ms = total_elapsed.as_millis(),
-            "[VideoDecoder: ffmpeg-next] Extracted and resized video frame to 256x256"
+            "[VideoDecoder: ffmpeg-next] Extracted and resized video thumbnail frame"
         );
 
-        Ok(final_canvas)
+        Ok(DecodedThumbnailFrame {
+            width: target_w,
+            height: target_h,
+            rgb_pixels: resized_raw,
+        })
     }
 }

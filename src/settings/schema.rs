@@ -7,12 +7,6 @@ pub enum DeletionMode {
     Permanent,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum HashingMode {
-    Md5Full,
-    FastHeader,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GeneralSettings {
     pub root_folder: Option<PathBuf>,
@@ -104,17 +98,28 @@ impl Default for ViewSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PerformanceSettings {
-    pub l1_cache_slots: usize,
     pub worker_threads: usize,
-    pub hashing_mode: HashingMode,
+    pub l1_cache_slots: usize,
+    pub thumbnail_db_size: u32,
+    pub thumbnail_format: String,
+    pub thumbnail_quality: u8,
+    pub scaling_algorithm: String,
+    pub batch_commit_size: usize,
 }
 
 impl Default for PerformanceSettings {
     fn default() -> Self {
         Self {
+            worker_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4)
+                .clamp(1, 32),
             l1_cache_slots: 512,
-            worker_threads: 4,
-            hashing_mode: HashingMode::Md5Full,
+            thumbnail_db_size: 256,
+            thumbnail_format: "WebP".to_string(),
+            thumbnail_quality: 80,
+            scaling_algorithm: "CatmullRom".to_string(),
+            batch_commit_size: 32,
         }
     }
 }

@@ -4,6 +4,7 @@ use super::bridge_state::UiState;
 use super::{FileRenameDialog, MainWindow};
 use crate::library::Library;
 use crate::library::models::{MediaId, MediaRecord};
+use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -11,19 +12,17 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Context required for executing file rename operations.
 #[derive(Clone)]
 pub struct FileRenameContext {
     pub library: Arc<Library>,
     pub thumbnails: Arc<ThumbnailManager>,
+    pub settings: Arc<SettingsManager>,
     pub state: Arc<RwLock<UiState>>,
 }
 
-/// Controller managing modal FileRenameDialog lifecycle and physical file rename commits.
 pub struct FileRenameDialogController;
 
 impl FileRenameDialogController {
-    /// Opens the modal file rename dialog.
     pub fn show<F1, F2, F3>(
         dialog_ref: &Rc<RefCell<Option<FileRenameDialog>>>,
         window: &MainWindow,
@@ -61,7 +60,6 @@ impl FileRenameDialogController {
         }
     }
 
-    /// Closes the modal file rename dialog.
     pub fn close(
         dialog_ref: &Rc<RefCell<Option<FileRenameDialog>>>,
         state: &Arc<RwLock<UiState>>,
@@ -74,7 +72,6 @@ impl FileRenameDialogController {
         window.set_is_modal_locked(false);
     }
 
-    /// Executes rename on filesystem and updates LMDB and in-memory cache.
     pub fn execute(
         media_id: MediaId,
         new_name: &str,
@@ -103,6 +100,7 @@ impl FileRenameDialogController {
                     window,
                     &ctx.library,
                     &ctx.thumbnails,
+                    &ctx.settings,
                     &ctx.state,
                     false,
                     false,

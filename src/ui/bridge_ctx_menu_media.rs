@@ -10,6 +10,7 @@ use crate::ctx_menu::{
 };
 use crate::library::Library;
 use crate::library::models::MediaId;
+use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::ComponentHandle;
@@ -17,11 +18,19 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Domain context menu builder and action handler for media file items.
+/// Grouped dependencies bundle for media context menu actions.
+pub struct MediaActionContext<'a> {
+    pub library: &'a Arc<Library>,
+    pub thumbnails: &'a Arc<ThumbnailManager>,
+    pub settings: &'a Arc<SettingsManager>,
+    pub state: &'a Arc<RwLock<UiState>>,
+    pub dispatcher: &'a Arc<CtxMenuDispatcher>,
+    pub rename_dialog: &'a Rc<RefCell<Option<FileRenameDialog>>>,
+}
+
 pub struct MediaContextMenu;
 
 impl MediaContextMenu {
-    /// Ensures the clicked media item is selected and returns total selection count and single-selection flag.
     pub fn prepare_selection(
         window: &MainWindow,
         state: &Arc<RwLock<UiState>>,
@@ -48,7 +57,6 @@ impl MediaContextMenu {
         (selected_count, is_single)
     }
 
-    /// Builds declarative CtxMenu hierarchy for media file items.
     pub fn build_menu(selected_count: usize) -> CtxMenu {
         let is_single = selected_count == 1;
         let can_rename = is_single;
@@ -98,17 +106,12 @@ impl MediaContextMenu {
             .build()
     }
 
-    /// Routes and executes media context menu actions.
     pub fn handle_action(
         action_id: CtxMenuActionId,
         window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        state: &Arc<RwLock<UiState>>,
-        dispatcher: &Arc<CtxMenuDispatcher>,
-        rename_dialog: &Rc<RefCell<Option<FileRenameDialog>>>,
+        ctx: &MediaActionContext<'_>,
     ) {
-        let selected_ids = state.read().file_selection.selected_ids().clone();
+        let selected_ids = ctx.state.read().file_selection.selected_ids().clone();
         let context = CtxMenuContext {
             position_x: 0.0,
             position_y: 0.0,
@@ -118,109 +121,112 @@ impl MediaContextMenu {
 
         match action_id {
             CTX_ACTION_RENAME => {
-                Self::handle_rename_action(
-                    window,
-                    library,
-                    thumbnails,
-                    state,
-                    rename_dialog,
-                    &selected_ids,
-                );
+                Self::handle_rename_action(window, ctx, &selected_ids);
             }
-            CTX_ACTION_SELECT_ALL => BridgeFileSelection::select_all(window, library, state),
+            CTX_ACTION_SELECT_ALL => {
+                BridgeFileSelection::select_all(window, ctx.library, ctx.state)
+            }
             CTX_ACTION_CLEAR_SELECTION => {
-                BridgeFileSelection::clear_selection(window, library, state)
+                BridgeFileSelection::clear_selection(window, ctx.library, ctx.state)
             }
             CTX_ACTION_RATE_5 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 5,
                 window,
-                library,
-                thumbnails,
-                state,
+                ctx.library,
+                ctx.thumbnails,
+                ctx.settings,
+                ctx.state,
             ),
             CTX_ACTION_RATE_4 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 4,
                 window,
-                library,
-                thumbnails,
-                state,
+                ctx.library,
+                ctx.thumbnails,
+                ctx.settings,
+                ctx.state,
             ),
             CTX_ACTION_RATE_3 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 3,
                 window,
-                library,
-                thumbnails,
-                state,
+                ctx.library,
+                ctx.thumbnails,
+                ctx.settings,
+                ctx.state,
             ),
             CTX_ACTION_RATE_2 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 2,
                 window,
-                library,
-                thumbnails,
-                state,
+                ctx.library,
+                ctx.thumbnails,
+                ctx.settings,
+                ctx.state,
             ),
             CTX_ACTION_RATE_1 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 1,
                 window,
-                library,
-                thumbnails,
-                state,
+                ctx.library,
+                ctx.thumbnails,
+                ctx.settings,
+                ctx.state,
             ),
             CTX_ACTION_RATE_0 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 0,
                 window,
-                library,
-                thumbnails,
-                state,
+                ctx.library,
+                ctx.thumbnails,
+                ctx.settings,
+                ctx.state,
             ),
             _ => {
-                dispatcher.dispatch(action_id, &context);
+                ctx.dispatcher.dispatch(action_id, &context);
             }
         }
     }
 
     fn handle_rename_action(
         window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        state: &Arc<RwLock<UiState>>,
-        rename_dialog: &Rc<RefCell<Option<FileRenameDialog>>>,
+        ctx: &MediaActionContext<'_>,
         selected_ids: &std::collections::HashSet<MediaId>,
     ) {
         if let Some(&target_id) = selected_ids.iter().next()
             && selected_ids.len() == 1
-            && let Ok(Some(record)) = library.media().get(target_id)
+            && let Ok(Some(record)) = ctx.library.media().get(target_id)
         {
-            state.write().active_file_rename_target = Some(target_id);
+            ctx.state.write().active_file_rename_target = Some(target_id);
 
-            let ctx = FileRenameContext {
-                library: library.clone(),
-                thumbnails: thumbnails.clone(),
-                state: state.clone(),
+            let rename_ctx = FileRenameContext {
+                library: ctx.library.clone(),
+                thumbnails: ctx.thumbnails.clone(),
+                settings: ctx.settings.clone(),
+                state: ctx.state.clone(),
             };
 
-            let ren_exec = rename_dialog.clone();
+            let ren_exec = ctx.rename_dialog.clone();
             let win_exec = window.clone_strong();
-            let ren_close1 = rename_dialog.clone();
+            let ren_close1 = ctx.rename_dialog.clone();
             let win_close1 = window.clone_strong();
-            let st_close1 = state.clone();
-            let ren_close2 = rename_dialog.clone();
+            let st_close1 = ctx.state.clone();
+            let ren_close2 = ctx.rename_dialog.clone();
             let win_close2 = window.clone_strong();
-            let st_close2 = state.clone();
+            let st_close2 = ctx.state.clone();
 
             FileRenameDialogController::show(
-                rename_dialog,
+                ctx.rename_dialog,
                 window,
                 &record.filename,
                 move |new_name| {
                     FileRenameDialogController::execute(
-                        target_id, &new_name, &ctx, &win_exec, &ren_exec,
+                        target_id,
+                        &new_name,
+                        &rename_ctx,
+                        &win_exec,
+                        &ren_exec,
                     );
                 },
                 move || {

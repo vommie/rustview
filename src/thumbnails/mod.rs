@@ -11,7 +11,7 @@ pub mod types;
 pub mod video;
 
 pub use arena::ThumbnailArena;
-pub use cache::L1ThumbnailCache;
+pub use cache::{CachedThumbnail, L1ThumbnailCache};
 pub use error::ThumbnailError;
 pub use gc::ThumbnailGarbageCollector;
 pub use generator::ThumbnailGenerator;
@@ -19,8 +19,9 @@ pub use loader::{PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
 pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 pub use store::PackStore;
 pub use types::{
-    FitMode, THUMBNAIL_BYTE_SIZE, THUMBNAIL_SIZE, ThumbnailHandle, ThumbnailLocation,
-    ThumbnailPriority, anonymize_target,
+    DEFAULT_THUMBNAIL_BOUND, FitMode, ScalingAlgorithm, THUMBNAIL_CHANNELS, ThumbnailConfig,
+    ThumbnailFormat, ThumbnailHandle, ThumbnailLocation, ThumbnailPriority, anonymize_target,
+    calculate_aspect_dimensions,
 };
 
 use crate::library::Library;
@@ -58,9 +59,14 @@ impl ThumbnailManager {
         })
     }
 
-    pub fn start_pipeline(&self, folder_id: u64, sorted_targets: Vec<PreparedTarget>) {
+    pub fn start_pipeline(
+        &self,
+        folder_id: u64,
+        sorted_targets: Vec<PreparedTarget>,
+        config: ThumbnailConfig,
+    ) {
         self.scheduler
-            .start_folder_pipeline(folder_id, sorted_targets);
+            .start_folder_pipeline(folder_id, sorted_targets, config);
     }
 
     pub fn cancel_pipeline(&self) {
@@ -79,8 +85,9 @@ impl ThumbnailManager {
         &self,
         media_id: MediaId,
         file_path: &Path,
-    ) -> Result<ThumbnailHandle, ThumbnailError> {
-        self.scheduler.load_sync(media_id, file_path)
+        config: ThumbnailConfig,
+    ) -> Result<CachedThumbnail, ThumbnailError> {
+        self.scheduler.load_sync(media_id, file_path, config)
     }
 
     pub fn cache(&self) -> &L1ThumbnailCache {

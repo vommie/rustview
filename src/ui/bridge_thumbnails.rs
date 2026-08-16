@@ -1,7 +1,7 @@
 use super::MainWindow;
 use super::bridge_state::UiState;
 use super::models::rgb8_to_shared_buffer;
-use crate::thumbnails::{THUMBNAIL_SIZE, ThumbnailManager};
+use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{Image, Model, Timer};
 use std::sync::Arc;
@@ -19,7 +19,7 @@ impl BridgeThumbnails {
         let timer = Timer::default();
         timer.start(
             slint::TimerMode::Repeated,
-            std::time::Duration::from_millis(30),
+            std::time::Duration::from_millis(25),
             move || {
                 let Some(window) = window_weak.upgrade() else {
                     return;
@@ -33,8 +33,8 @@ impl BridgeThumbnails {
                     for item_data in batch {
                         let shared_buf = rgb8_to_shared_buffer(
                             &item_data.rgb8_pixels,
-                            THUMBNAIL_SIZE,
-                            THUMBNAIL_SIZE,
+                            item_data.width,
+                            item_data.height,
                         );
 
                         st.folder_thumbnails

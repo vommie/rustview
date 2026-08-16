@@ -6,7 +6,9 @@ use crate::library::models::{MediaId, MediaRecord};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MatchMode, MediaSorter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::SettingsManager;
-use crate::thumbnails::{PreparedTarget, THUMBNAIL_SIZE, ThumbnailManager};
+use crate::thumbnails::{
+    PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager,
+};
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel};
 use std::collections::HashMap;
@@ -15,11 +17,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-/// Subsystem managing media item pre-indexing, filtering, sorting, grid/table layout synchronization, and Slint model generation.
 pub struct BridgeMedia;
 
 impl BridgeMedia {
-    /// Registers search query, regex, match mode, sorting, and view-mode callbacks onto MainWindow.
     pub fn register_query_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
@@ -27,21 +27,21 @@ impl BridgeMedia {
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
     ) {
-        // 1. Search query changed
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let set = settings.clone();
         let st = state.clone();
         window.on_search_query_changed(move |query| {
             tracing::debug!(query = %query, "[QueryFilter] Search query updated by user");
             st.write().filter.search_query = query.to_string();
-            Self::reload(&win, &lib, &thumb, &st, false, false);
+            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 2. Regex mode toggled
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let set = settings.clone();
         let st = state.clone();
         window.on_regex_mode_toggled(move |enabled| {
             tracing::info!(
@@ -49,13 +49,13 @@ impl BridgeMedia {
                 "[QueryFilter] Regex filter mode toggled"
             );
             st.write().filter.is_regex = enabled;
-            Self::reload(&win, &lib, &thumb, &st, false, false);
+            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 3. Match mode changed
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let set = settings.clone();
         let st = state.clone();
         window.on_match_mode_changed(move |idx| {
             let mode = if idx == 0 {
@@ -65,13 +65,13 @@ impl BridgeMedia {
             };
             tracing::info!(?mode, "[QueryFilter] Match mode updated");
             st.write().filter.match_mode = mode;
-            Self::reload(&win, &lib, &thumb, &st, false, false);
+            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 4. Scope mode changed
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let set = settings.clone();
         let st = state.clone();
         window.on_scope_mode_changed(move |idx| {
             let scope = if idx == 0 {
@@ -81,10 +81,9 @@ impl BridgeMedia {
             };
             tracing::info!(?scope, "[QueryFilter] Scope mode updated");
             st.write().filter.scope_mode = scope;
-            Self::reload(&win, &lib, &thumb, &st, false, false);
+            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 5. Global Column Sort Clicked (Shared across Grid and Table View)
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -109,7 +108,6 @@ impl BridgeMedia {
                 "[SortEngine: Global] Updated global sort parameters"
             );
 
-            // Persist sort configuration
             {
                 let mut app_settings = set.get();
                 app_settings.view.sort_column = new_col.as_str().to_string();
@@ -120,10 +118,9 @@ impl BridgeMedia {
             win.set_sort_column_idx(new_col.to_index());
             win.set_sort_order_idx(new_ord.to_index());
 
-            Self::reload(&win, &lib, &thumb, &st, false, false);
+            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 6. In-Memory Real-Time Column Resize with Microsecond Benchmark Tracing
         let last_resize_time = Arc::new(parking_lot::Mutex::new(Instant::now()));
         let resize_events_count = Arc::new(AtomicUsize::new(0));
 
@@ -156,7 +153,6 @@ impl BridgeMedia {
             }
         });
 
-        // 7. Column Resize Finished on Mouse Release (Atomically persist to settings.json)
         let set_res = settings.clone();
         window.on_column_resize_finished(move |col_idx, final_width| {
             let t0 = Instant::now();
@@ -182,7 +178,6 @@ impl BridgeMedia {
             );
         });
 
-        // 8. View Mode Toggled (Grid <-> Table)
         let set_mode = settings;
         window.on_view_mode_toggled(move |is_table| {
             let mut app_settings = set_mode.get();
@@ -195,7 +190,6 @@ impl BridgeMedia {
         });
     }
 
-    /// Pre-indexes media records and formats display strings into zero-allocation RAM cache.
     pub fn preindex(
         library: &Library,
         raw_records: Vec<MediaRecord>,
@@ -241,11 +235,11 @@ impl BridgeMedia {
         indexed
     }
 
-    /// Full or filtered reload of the media grid/table view.
     pub fn reload(
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
         start_pipeline: bool,
         reload_lmdb: bool,
@@ -284,7 +278,6 @@ impl BridgeMedia {
         }
 
         let current_query = filter.search_query.trim().to_string();
-
         let is_refinement = !current_query.is_empty()
             && !last_query.is_empty()
             && current_query.starts_with(&last_query);
@@ -304,8 +297,6 @@ impl BridgeMedia {
 
         let t_sort_start = Instant::now();
         let mut sorted_refs = filtered_refs;
-
-        // Apply global active sort column and order
         MediaSorter::sort_indexed_refs(&mut sorted_refs, sort_col, sort_ord);
         let sort_us = t_sort_start.elapsed().as_micros();
 
@@ -319,7 +310,6 @@ impl BridgeMedia {
             Vec::new()
         };
 
-        let arena = thumbnails.cache().arena();
         let mut matched_indices = Vec::with_capacity(matched_len);
         let mut new_thumbnails: Vec<(MediaId, SharedPixelBuffer<Rgb8Pixel>)> = Vec::new();
 
@@ -337,10 +327,8 @@ impl BridgeMedia {
 
             let thumbnail_img = if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
                 Image::from_rgb8(buf.clone())
-            } else if let Some(handle) = thumbnails.cache().get(item.record.id)
-                && let Some(rgb_data) = arena.read_slot(handle)
-            {
-                let buf = rgb8_to_shared_buffer(rgb_data, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+            } else if let Some(cached) = thumbnails.cache().get(item.record.id) {
+                let buf = rgb8_to_shared_buffer(&cached.pixels, cached.width, cached.height);
                 new_thumbnails.push((item.record.id, buf.clone()));
                 Image::from_rgb8(buf)
             } else {
@@ -397,7 +385,15 @@ impl BridgeMedia {
         );
 
         if start_pipeline {
-            thumbnails.start_pipeline(f_id, pipeline_targets);
+            let perf = settings.get().performance;
+            let config = ThumbnailConfig {
+                max_bound: perf.thumbnail_db_size,
+                format: ThumbnailFormat::from_str_name(&perf.thumbnail_format),
+                quality: perf.thumbnail_quality,
+                scaling_algorithm: ScalingAlgorithm::from_str_name(&perf.scaling_algorithm),
+                batch_commit_size: perf.batch_commit_size,
+            };
+            thumbnails.start_pipeline(f_id, pipeline_targets, config);
         }
     }
 }

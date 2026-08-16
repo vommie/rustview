@@ -6,7 +6,7 @@ pub mod store;
 pub use bridge::SettingsDialogController;
 pub use registry::SettingsManager;
 pub use schema::{
-    AppSettings, AppearanceSettings, DeletionMode, GeneralSettings, HashingMode,
-    PerformanceSettings, PlayerSettings, TagSettings, ViewSettings, WindowState,
+    AppSettings, AppearanceSettings, DeletionMode, GeneralSettings, PerformanceSettings,
+    PlayerSettings, TagSettings, ViewSettings, WindowState,
 };
 pub use store::SettingsStore;

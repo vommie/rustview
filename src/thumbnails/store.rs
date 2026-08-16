@@ -1,5 +1,5 @@
 use super::error::ThumbnailError;
-use super::types::ThumbnailLocation;
+use super::types::{ThumbnailFormat, ThumbnailLocation};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -153,14 +153,16 @@ impl PackStore {
         }
 
         let mut buffer = vec![0u8; location.length as usize];
-
         read_exact_at(&reader, &mut buffer, location.offset)?;
 
-        // Validate JPEG magic bytes (0xFF, 0xD8) to catch corruptions early
-        if buffer.len() < 2 || buffer[0] != 0xFF || buffer[1] != 0xD8 {
+        // Sniff and validate format header (WebP or JPEG)
+        if ThumbnailFormat::detect(&buffer).is_none() {
             return Err(ThumbnailError::Ffmpeg(format!(
-                "Corrupted JPEG header in pack {} at offset {}: start bytes {:02X}{:02X}",
-                location.pack_id, location.offset, buffer[0], buffer[1]
+                "Corrupted thumbnail header in pack {} at offset {}: magic bytes {:02X}{:02X}",
+                location.pack_id,
+                location.offset,
+                buffer.first().copied().unwrap_or(0),
+                buffer.get(1).copied().unwrap_or(0)
             )));
         }
 

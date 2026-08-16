@@ -27,7 +27,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Central UI Registry and Bootstrapper coordinating specialized UI subsystems.
 pub struct UiBridge {
     window: MainWindow,
     library: Arc<Library>,
@@ -64,9 +63,7 @@ impl UiBridge {
         let tag_dialogs = TagDialogController::new();
         let folder_dialogs = FolderDialogController::new();
 
-        // Restore persistent UI state
         let mut initial_state = UiState::default();
-
         let restored_expanded_tags = settings.get().tags.expanded_tag_ids;
         initial_state.expanded_tag_ids = restored_expanded_tags.into_iter().collect();
 
@@ -75,10 +72,8 @@ impl UiBridge {
         } else {
             Vec::new()
         };
-
         initial_state.expanded_folder_ids = restored_expanded_folders.into_iter().collect();
 
-        // Restore persistent view settings (Table vs. Grid, Sorting, Column Widths)
         let v_settings = settings.get().view;
         window.set_is_table_view(v_settings.is_table_view);
 
@@ -255,6 +250,7 @@ impl UiBridge {
             &self.window,
             &self.library,
             &self.thumbnails,
+            &self.settings,
             &self.state,
             start_pipeline,
             true,
@@ -266,6 +262,7 @@ impl UiBridge {
             &self.window,
             &self.library,
             &self.thumbnails,
+            &self.settings,
             &self.state,
             false,
             false,
@@ -322,6 +319,7 @@ impl UiBridge {
             &self.window,
             &self.library,
             &self.thumbnails,
+            &self.settings,
             &self.state,
         );
     }
@@ -332,6 +330,7 @@ impl UiBridge {
             &self.window,
             &self.library,
             &self.thumbnails,
+            &self.settings,
             &self.state,
         );
     }
@@ -343,6 +342,7 @@ impl UiBridge {
             &self.window,
             &self.library,
             &self.thumbnails,
+            &self.settings,
             &self.state,
         );
     }

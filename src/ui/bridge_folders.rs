@@ -16,10 +16,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
-// =============================================================================
-// Section 1: Domain Tree Hierarchy Node
-// =============================================================================
-
 #[derive(Debug, Clone)]
 pub struct FolderTreeNode {
     pub record: FolderRecord,
@@ -28,14 +24,9 @@ pub struct FolderTreeNode {
     pub children: Vec<FolderTreeNode>,
 }
 
-// =============================================================================
-// Section 2: Zero-FS Tree Hierarchy Builder
-// =============================================================================
-
 pub struct FolderTreeBuilder;
 
 impl FolderTreeBuilder {
-    /// Builds a multi-level hierarchical tree structure strictly from LMDB records. Zero filesystem calls.
     pub fn build_hierarchy(
         root_dir: &Path,
         folders: &[FolderRecord],
@@ -48,7 +39,6 @@ impl FolderTreeBuilder {
 
         let mut subfolder_map: HashMap<PathBuf, Vec<FolderRecord>> = HashMap::new();
 
-        // 1. Group records by parent path
         for f in folders {
             let p = Path::new(&f.path);
             if let Some(parent) = p.parent() {
@@ -59,12 +49,10 @@ impl FolderTreeBuilder {
             }
         }
 
-        // 2. Sort children alphabetically
         for list in subfolder_map.values_mut() {
             list.sort_by_key(|a| a.path.to_lowercase());
         }
 
-        // 3. Locate root folder record
         let root_record = folders.iter().find(|f| {
             let p = Path::new(&f.path);
             p == canonical_root || p == root_dir
@@ -113,7 +101,6 @@ impl FolderTreeBuilder {
         nodes
     }
 
-    /// Flattens the hierarchical tree into a linear sequence of FolderNodeViews respecting expansion and visibility settings.
     pub fn flatten(
         nodes: &[FolderTreeNode],
         depth: i32,
@@ -124,7 +111,6 @@ impl FolderTreeBuilder {
         output: &mut Vec<FolderNodeView>,
     ) {
         for node in nodes {
-            // Skip deleted folders if configured not to show them
             if node.record.is_deleted && !show_deleted {
                 continue;
             }
@@ -176,15 +162,9 @@ impl FolderTreeBuilder {
     }
 }
 
-// =============================================================================
-// Section 3: BridgeFolders Facade Controller
-// =============================================================================
-
-/// Subsystem managing filesystem folder hierarchy discovery, zero-FS tree projection, and sidebar synchronization.
 pub struct BridgeFolders;
 
 impl BridgeFolders {
-    /// Registers folder navigation, expansion toggles, and folder refresh callbacks onto MainWindow.
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
@@ -193,27 +173,25 @@ impl BridgeFolders {
         state: Arc<RwLock<UiState>>,
         settings_dialog: Rc<RefCell<SettingsDialogController>>,
     ) {
-        // 1. TOOLBAR MEDIA REFRESH
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let set = settings.clone();
         let st = state.clone();
         let win = window.clone_strong();
         window.on_refresh_folder(move || {
             let folder_id = st.read().current_folder_id;
             if let Some(id) = folder_id {
                 let _ = lib.refresher().refresh_folder(id);
-                BridgeMedia::reload(&win, &lib, &thumb, &st, true, true);
+                BridgeMedia::reload(&win, &lib, &thumb, &set, &st, true, true);
                 win.set_status_text("Folder refreshed.".into());
             }
         });
 
-        // 2. SETTINGS DIALOG
         let dialog = settings_dialog;
         window.on_open_settings(move || {
             dialog.borrow_mut().show();
         });
 
-        // 3. FOLDER ROW SELECTED
         let lib = library.clone();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -231,7 +209,6 @@ impl BridgeFolders {
             );
         });
 
-        // 4. FOLDER NODE TOGGLE EXPAND
         let lib = library.clone();
         let set = settings.clone();
         let st = state.clone();
@@ -240,7 +217,6 @@ impl BridgeFolders {
             Self::toggle_expand(id as u64, &win, &lib, &set, &st);
         });
 
-        // 5. DEDICATED FOLDER STRUCTURE REFRESH BUTTON
         let lib = library.clone();
         let set = settings.clone();
         let st = state.clone();
@@ -249,7 +225,6 @@ impl BridgeFolders {
             Self::refresh_folder_tree(&win, &lib, &set, &st);
         });
 
-        // 6. FAVORITE SELECTED
         let lib = library;
         let thumb = thumbnails;
         let set = settings;
@@ -263,7 +238,6 @@ impl BridgeFolders {
         });
     }
 
-    /// Synchronizes the root folder from settings, updates database records, and applies reveal/restore logic.
     pub fn sync_root(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -316,14 +290,11 @@ impl BridgeFolders {
             (folder_record.id, root_path.clone())
         };
 
-        // Behavior: Auto-reveal remembered folder takes precedence over collapsed state
         {
             let mut st = state.write();
             if s.folders.auto_reveal_remembered_folder {
-                // Ensure root itself is expanded
                 st.expanded_folder_ids.insert(folder_record.id);
 
-                // Expand all parent directory nodes leading to target_folder
                 let mut current_ancestor = target_folder.1.parent();
                 while let Some(parent_p) = current_ancestor {
                     if parent_p.starts_with(root_path) {
@@ -368,12 +339,11 @@ impl BridgeFolders {
         window.set_status_text("Ready.".into());
 
         Self::reload_tree(window, library, settings, state);
-        BridgeMedia::reload(window, library, thumbnails, state, true, false);
+        BridgeMedia::reload(window, library, thumbnails, settings, state, true, false);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
     }
 
-    /// Recursively discovers all subdirectories starting from root on Linux and synchronizes with LMDB.
     pub fn refresh_folder_tree(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -431,7 +401,6 @@ impl BridgeFolders {
         }
     }
 
-    /// Handles explicit folder selection by the user.
     pub fn select_folder(
         folder_id: FolderId,
         path: PathBuf,
@@ -489,12 +458,11 @@ impl BridgeFolders {
         }
 
         Self::reload_tree(window, library, settings, state);
-        BridgeMedia::reload(window, library, thumbnails, state, true, true);
+        BridgeMedia::reload(window, library, thumbnails, settings, state, true, true);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
     }
 
-    /// Persists the active set of expanded folder IDs if persistence option is enabled.
     pub fn persist_expanded_folders(settings: &SettingsManager, expanded_set: &HashSet<FolderId>) {
         let mut cur_settings = settings.get();
         if !cur_settings.folders.persist_folder_tree_state {
@@ -513,7 +481,6 @@ impl BridgeFolders {
         }
     }
 
-    /// Toggles expansion of a parent folder node without triggering media reloading.
     pub fn toggle_expand(
         folder_id: FolderId,
         window: &MainWindow,
@@ -543,7 +510,6 @@ impl BridgeFolders {
         Self::reload_tree(window, library, settings, state);
     }
 
-    /// Reconstructs the folder hierarchy tree model from pure LMDB indices. Zero filesystem access.
     pub fn reload_tree(
         window: &MainWindow,
         library: &Library,
@@ -565,7 +531,6 @@ impl BridgeFolders {
             (st.current_folder_id, st.expanded_folder_ids.clone())
         };
 
-        // Query media counts for all folders in a single read transaction
         let mut media_counts: HashMap<FolderId, usize> = HashMap::new();
         if let Ok(rtxn) = library.raw_db().env.read_txn() {
             for f in &folders {
@@ -606,7 +571,6 @@ impl BridgeFolders {
         window.set_folders(ModelRc::new(VecModel::from(folder_views)));
     }
 
-    /// Clears active folder data from state and UI when no root directory is set.
     pub fn clear_view(window: &MainWindow, state: &Arc<RwLock<UiState>>, status_msg: &str) {
         {
             let mut st = state.write();

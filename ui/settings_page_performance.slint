@@ -1,56 +1,185 @@
-import { Slider } from "std-widgets.slint";
+import { Slider, Button, ComboBox } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
 export component SettingsPagePerformance inherits VerticalLayout {
     spacing: 12px;
 
-    in-out property <int> l1-cache-slots: 512;
     in-out property <int> worker-threads: 4;
-    in-out property <int> hashing-mode-idx: 0;
+    in-out property <int> batch-commit-size: 32;
+    in-out property <int> l1-cache-slots: 512;
+    in-out property <int> thumb-db-size: 256;
+    in-out property <int> thumb-format-idx: 0; // 0 = WebP, 1 = JPEG
+    in-out property <int> thumb-quality: 80;
+    in-out property <int> scaling-algo-idx: 0; // 0 = CatmullRom, 1 = Bilinear, 2 = Lanczos3, 3 = Nearest
 
+    // Card 1: Threading & Concurrency
     SettingsCard {
-        title: "Engine Memory & Parallelism";
+        title: "Concurrency & Multiprocessing Architecture";
+        description: "Configure background thread pools and batched transactional commits to maximize CPU throughput across multiple cores.";
 
         HorizontalLayout {
             Text {
-                text: "L1 RAM Cache (Slots):";
+                text: "Rayon Worker Threads:";
                 color: Theme.text;
                 vertical-alignment: center;
+                horizontal-stretch: 1;
             }
             Slider {
-                width: 140px;
-                minimum: 100;
-                maximum: 2048;
-                value: root.l1-cache-slots;
-                changed(v) => { root.l1-cache-slots = Math.round(v); }
-            }
-            Text {
-                text: root.l1-cache-slots + " slots";
-                color: Theme.primary;
-                width: 65px;
-                vertical-alignment: center;
-            }
-        }
-
-        HorizontalLayout {
-            Text {
-                text: "Rayon Background Workers:";
-                color: Theme.text;
-                vertical-alignment: center;
-            }
-            Slider {
-                width: 140px;
+                width: 150px;
                 minimum: 1;
-                maximum: 16;
+                maximum: 32;
                 value: root.worker-threads;
                 changed(v) => { root.worker-threads = Math.round(v); }
             }
             Text {
                 text: root.worker-threads + " threads";
                 color: Theme.primary;
-                width: 65px;
+                width: 75px;
                 vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "LMDB Batch Commit Size:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 150px;
+                minimum: 8;
+                maximum: 128;
+                value: root.batch-commit-size;
+                changed(v) => { root.batch-commit-size = Math.round(v); }
+            }
+            Text {
+                text: root.batch-commit-size + " items";
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+    }
+
+    // Card 2: L1 In-Memory RAM Cache
+    SettingsCard {
+        title: "L1 In-Memory RAM Cache";
+        description: "Uncompressed thumbnails are retained in physical RAM for instant, stutter-free 60 FPS scrolling and zero disk latency.";
+
+        HorizontalLayout {
+            Text {
+                text: "L1 Cache Capacity:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 150px;
+                minimum: 100;
+                maximum: 4000;
+                value: root.l1-cache-slots;
+                changed(v) => { root.l1-cache-slots = Math.round(v); }
+            }
+            Text {
+                text: root.l1-cache-slots + " slots";
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+    }
+
+    // Card 3: Database Thumbnail Storage & Encoding
+    SettingsCard {
+        title: "Database Thumbnail Storage & Encoding";
+        description: "Configure how thumbnails are resized, encoded, and persisted in binary L2 PackStore containers. Exact aspect ratios are preserved without letterbox borders.";
+
+        HorizontalLayout {
+            Text {
+                text: "Target DB Bounding Size:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 150px;
+                minimum: 128;
+                maximum: 512;
+                value: root.thumb-db-size;
+                changed(v) => { root.thumb-db-size = Math.round(v / 64) * 64; }
+            }
+            Text {
+                text: root.thumb-db-size + " px";
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Storage Format:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "WebP (Recommended)";
+                primary: root.thumb-format-idx == 0;
+                clicked => { root.thumb-format-idx = 0; }
+            }
+
+            Button {
+                text: "JPEG (Legacy)";
+                primary: root.thumb-format-idx == 1;
+                clicked => { root.thumb-format-idx = 1; }
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Compression Quality:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 150px;
+                minimum: 10;
+                maximum: 100;
+                value: root.thumb-quality;
+                changed(v) => { root.thumb-quality = Math.round(v); }
+            }
+            Text {
+                text: root.thumb-quality + "%";
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Scaling Algorithm:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            ComboBox {
+                width: 200px;
+                model: ["Bicubic (CatmullRom)", "Bilinear (Triangle)", "Lanczos3", "Nearest"];
+                current-index <=> root.scaling-algo-idx;
             }
         }
     }

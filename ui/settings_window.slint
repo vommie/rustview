@@ -22,10 +22,10 @@ export { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export component SettingsWindow inherits Window {
     title: "RustView - Settings";
-    preferred-width: 840px;
-    preferred-height: 580px;
-    min-width: 720px;
-    min-height: 500px;
+    preferred-width: 860px;
+    preferred-height: 620px;
+    min-width: 740px;
+    min-height: 520px;
     background: Theme.background;
 
     // Active Category (0=General, 1=Folders, 2=Appearance, 3=Performance, 4=Player, 5=Tags)
@@ -49,10 +49,14 @@ export component SettingsWindow inherits Window {
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
 
-    // Performance options
-    in-out property <int> l1-cache-slots: 512;
+    // Granular Performance options
     in-out property <int> worker-threads: 4;
-    in-out property <int> hashing-mode-idx: 0;
+    in-out property <int> batch-commit-size: 32;
+    in-out property <int> l1-cache-slots: 512;
+    in-out property <int> thumb-db-size: 256;
+    in-out property <int> thumb-format-idx: 0; // 0 = WebP, 1 = JPEG
+    in-out property <int> thumb-quality: 80;
+    in-out property <int> scaling-algo-idx: 0;
 
     // Player options
     in-out property <int> hwdec-idx: 0;
@@ -68,19 +72,16 @@ export component SettingsWindow inherits Window {
         padding: 0px;
         spacing: 0px;
 
-        // Content Area
         HorizontalLayout {
             vertical-stretch: 1;
             horizontal-stretch: 1;
             padding: 0px;
             spacing: 0px;
 
-            // Left Category Navigation Bar
             SettingsSidebar {
                 active-category <=> root.active-category;
             }
 
-            // Right Scrollable Configuration Area with Custom SmoothScrollArea
             SmoothScrollArea {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
@@ -117,9 +118,13 @@ export component SettingsWindow inherits Window {
                     }
 
                     if root.active-category == 3 : SettingsPagePerformance {
-                        l1-cache-slots <=> root.l1-cache-slots;
                         worker-threads <=> root.worker-threads;
-                        hashing-mode-idx <=> root.hashing-mode-idx;
+                        batch-commit-size <=> root.batch-commit-size;
+                        l1-cache-slots <=> root.l1-cache-slots;
+                        thumb-db-size <=> root.thumb-db-size;
+                        thumb-format-idx <=> root.thumb-format-idx;
+                        thumb-quality <=> root.thumb-quality;
+                        scaling-algo-idx <=> root.scaling-algo-idx;
                     }
 
                     if root.active-category == 4 : SettingsPagePlayer {
@@ -133,7 +138,6 @@ export component SettingsWindow inherits Window {
             }
         }
 
-        // Bottom Action Button Bar
         ButtonBar {
             vertical-stretch: 0;
             show-cancel: true;
