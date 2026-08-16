@@ -20,13 +20,34 @@ impl SettingsStore {
         Self { file_path }
     }
 
+    /// Loads settings from disk with tolerant forward/backward compatibility.
+    /// Missing or legacy fields are automatically populated from SPoT defaults without data loss.
     pub fn load(&self) -> AppSettings {
-        if self.file_path.exists()
-            && let Ok(content) = fs::read_to_string(&self.file_path)
-            && let Ok(mut settings) = serde_json::from_str::<AppSettings>(&content)
-        {
-            self.validate_and_sanitize(&mut settings);
-            return settings;
+        if self.file_path.exists() {
+            match fs::read_to_string(&self.file_path) {
+                Ok(content) => match serde_json::from_str::<AppSettings>(&content) {
+                    Ok(mut settings) => {
+                        self.validate_and_sanitize(&mut settings);
+                        return settings;
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            path = ?self.file_path,
+                            error = %e,
+                            "[SettingsStore] Failed to parse settings JSON. Creating backup and restoring defaults"
+                        );
+                        let backup_path = self.file_path.with_extension("corrupted.bak");
+                        let _ = fs::copy(&self.file_path, backup_path);
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(
+                        path = ?self.file_path,
+                        error = %e,
+                        "[SettingsStore] Failed to read settings file"
+                    );
+                }
+            }
         }
 
         let mut defaults = AppSettings::default();
@@ -49,23 +70,6 @@ impl SettingsStore {
     }
 
     fn validate_and_sanitize(&self, settings: &mut AppSettings) {
-        if let Some(ref path) = settings.general.root_folder
-            && !path.is_dir()
-        {
-            tracing::warn!(
-                "Configured root folder does not exist: {:?}. Resetting.",
-                path
-            );
-            settings.general.root_folder = None;
-        }
-
-        if let Some(ref path) = settings.general.last_folder_path
-            && !path.is_dir()
-        {
-            tracing::warn!("Last visited folder does not exist: {:?}. Resetting.", path);
-            settings.general.last_folder_path = None;
-        }
-
         // Appearance sanitization
         settings.appearance.default_thumbnail_size = settings
             .appearance

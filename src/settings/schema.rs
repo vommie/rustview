@@ -182,6 +182,7 @@ pub enum DeletionMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct GeneralSettings {
     pub root_folder: Option<PathBuf>,
     pub remember_last_folder: bool,
@@ -203,12 +204,12 @@ impl Default for GeneralSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FolderSettings {
     pub auto_reveal_remembered_folder: bool,
     pub persist_folder_tree_state: bool,
     pub show_deleted_folders: bool,
     pub show_folder_metrics: bool,
-    #[serde(default)]
     pub expanded_folder_ids: Vec<u64>,
 }
 
@@ -225,6 +226,7 @@ impl Default for FolderSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppearanceSettings {
     pub default_thumbnail_size: u32,
     pub thumbnail_aspect_ratio: String,
@@ -250,6 +252,7 @@ impl Default for AppearanceSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ViewSettings {
     pub is_table_view: bool,
     pub sort_column: String,
@@ -275,6 +278,7 @@ impl Default for ViewSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PerformanceSettings {
     pub worker_threads: usize,
     pub l1_cache_slots: usize,
@@ -314,6 +318,7 @@ impl Default for PerformanceSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PlayerSettings {
     pub hwdec_mode: String,
     pub autoplay_videos: bool,
@@ -333,10 +338,10 @@ impl Default for PlayerSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TagSettings {
     pub default_match_mode: String,
     pub default_scope_mode: String,
-    #[serde(default)]
     pub expanded_tag_ids: Vec<u32>,
 }
 
@@ -351,6 +356,7 @@ impl Default for TagSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct WindowState {
     pub x: Option<i32>,
     pub y: Option<i32>,
@@ -372,15 +378,22 @@ impl Default for WindowState {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppSettings {
+    #[serde(default)]
     pub general: GeneralSettings,
     #[serde(default)]
     pub folders: FolderSettings,
+    #[serde(default)]
     pub appearance: AppearanceSettings,
     #[serde(default)]
     pub view: ViewSettings,
+    #[serde(default)]
     pub performance: PerformanceSettings,
+    #[serde(default)]
     pub player: PlayerSettings,
+    #[serde(default)]
     pub tags: TagSettings,
+    #[serde(default)]
     pub window: WindowState,
 }

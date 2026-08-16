@@ -16,6 +16,7 @@ use rustview::settings::{
     DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIDEO_OUTPUT, DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH,
 };
+use std::fs;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tempfile::tempdir;
@@ -199,16 +200,75 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(loaded.appearance.thumbnail_aspect_ratio, "16:9");
     assert!(!loaded.appearance.show_filenames);
 
-    // 5. Test validation & sanitization (non-existent root is cleared to None)
+    // 5. Test validation & sanitization
     let mut invalid_settings = AppSettings::default();
-    invalid_settings.general.root_folder = Some(tmp_config.path().join("does_not_exist"));
     invalid_settings.appearance.thumbnail_aspect_ratio = "invalid_ratio".to_string();
     reloaded_store.save(&invalid_settings).unwrap();
 
     let sanitized = reloaded_store.load();
-    assert_eq!(sanitized.general.root_folder, None);
     assert_eq!(
         sanitized.appearance.thumbnail_aspect_ratio,
         DEFAULT_THUMBNAIL_ASPECT_RATIO
     );
+}
+
+#[test]
+fn test_tolerant_deserialization_with_missing_legacy_fields() {
+    let tmp_config = tempdir().unwrap();
+    let file_path = tmp_config.path().join("settings.json");
+
+    // Simulate an incomplete legacy JSON file with missing new fields
+    let legacy_json = r#"{
+        "general": {
+            "remember_last_folder": false
+        },
+        "appearance": {
+            "default_thumbnail_size": 220
+        },
+        "performance": {
+            "worker_threads": 8
+        }
+    }"#;
+
+    fs::write(&file_path, legacy_json).unwrap();
+
+    let store = SettingsStore::new(tmp_config.path());
+    let loaded = store.load();
+
+    // Preserved existing fields
+    assert!(!loaded.general.remember_last_folder);
+    assert_eq!(loaded.appearance.default_thumbnail_size, 220);
+    assert_eq!(loaded.performance.worker_threads, 8);
+
+    // Missing fields automatically populated from Single Point of Truth defaults
+    assert_eq!(
+        loaded.appearance.thumbnail_aspect_ratio,
+        DEFAULT_THUMBNAIL_ASPECT_RATIO
+    );
+    assert_eq!(
+        loaded.appearance.enable_hover_previews,
+        DEFAULT_ENABLE_HOVER_PREVIEWS
+    );
+    assert_eq!(
+        loaded.performance.thumbnail_format,
+        DEFAULT_THUMBNAIL_FORMAT
+    );
+    assert_eq!(
+        loaded.performance.thumbnail_quality,
+        DEFAULT_THUMBNAIL_QUALITY
+    );
+    assert_eq!(
+        loaded.performance.custom_preview_settings,
+        DEFAULT_CUSTOM_PREVIEW_SETTINGS
+    );
+    assert_eq!(
+        loaded.performance.preview_format,
+        DEFAULT_PREVIEW_FORMAT
+    );
+    assert_eq!(
+        loaded.performance.preview_quality,
+        DEFAULT_PREVIEW_QUALITY
+    );
+    assert_eq!(loaded.performance.video_engine, DEFAULT_VIDEO_ENGINE);
+    assert_eq!(loaded.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
 }
