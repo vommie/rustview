@@ -7,6 +7,8 @@ use crate::ui::file_selection::FileSelectionModel;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 // Standard File Context Menu Action IDs
 pub const CTX_ACTION_RENAME: CtxMenuActionId = 1001;
@@ -41,6 +43,8 @@ pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
     pub current_folder_path: Option<PathBuf>,
+    pub active_folder_token: usize,
+    pub active_folder_cancel_flag: Option<Arc<AtomicBool>>,
     pub all_folder_media: Vec<IndexedMediaRecord>,
     pub folder_thumbnails: HashMap<MediaId, SharedPixelBuffer<Rgb8Pixel>>,
     pub active_indices: Vec<usize>,
@@ -71,6 +75,8 @@ impl Default for UiState {
         Self {
             current_folder_id: None,
             current_folder_path: None,
+            active_folder_token: 0,
+            active_folder_cancel_flag: None,
             all_folder_media: Vec::new(),
             folder_thumbnails: HashMap::new(),
             active_indices: Vec::new(),

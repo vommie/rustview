@@ -74,6 +74,10 @@ impl ThumbnailManager {
         self.scheduler.cancel_current_pipeline();
     }
 
+    pub fn current_pipeline_id(&self) -> usize {
+        self.scheduler.current_pipeline_id()
+    }
+
     pub fn drain_ready_batch(&self, max_items: usize) -> Vec<ReadyThumbnailItem> {
         self.scheduler.drain_ready_batch(max_items)
     }

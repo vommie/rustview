@@ -20,7 +20,7 @@ pub struct ThumbnailProgressSnapshot {
     pub active_workers: usize,
 }
 
-/// Thread-safe atomic progress tracker managing pipeline counters.
+/// Thread-safe atomic progress tracker managing pipeline counters with underflow protection.
 pub struct ThumbnailProgressTracker {
     preload_total: AtomicUsize,
     preload_done: AtomicUsize,
@@ -71,7 +71,11 @@ impl ThumbnailProgressTracker {
     }
 
     pub fn decrement_active_workers(&self) {
-        self.active_workers.fetch_sub(1, Ordering::AcqRel);
+        self.active_workers
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |val| {
+                Some(val.saturating_sub(1))
+            })
+            .ok();
     }
 
     pub fn snapshot(&self) -> ThumbnailProgressSnapshot {

@@ -95,6 +95,7 @@ impl UiBridge {
         window.set_thumb_size(app_settings.appearance.default_thumbnail_size as i32);
         let ratio = GridAspectRatio::from_str_name(&app_settings.appearance.thumbnail_aspect_ratio);
         window.set_thumb_aspect_idx(ratio.to_index());
+        window.set_status_text("Initializing RustView...".into());
 
         let state = Arc::new(RwLock::new(initial_state));
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
@@ -129,9 +130,23 @@ impl UiBridge {
         bridge.register_subsystem_callbacks();
         bridge.register_settings_subscriber();
 
-        bridge.sync_root_folder();
         bridge.reload_favorites();
         bridge.reload_tags();
+        BridgeFolders::reload_tree(&bridge.window, &bridge.library, &bridge.settings, &bridge.state);
+
+        // Defer root folder synchronization until Slint has entered the event loop and painted the initial window
+        let w_weak = bridge.window.as_weak();
+        let lib = bridge.library.clone();
+        let thumb = bridge.thumbnails.clone();
+        let set = bridge.settings.clone();
+        let st = bridge.state.clone();
+
+        Timer::single_shot(std::time::Duration::from_millis(50), move || {
+            if let Some(win) = w_weak.upgrade() {
+                tracing::info!("[UiBridge: PostMount] Slint UI event loop ready. Mounting root folder...");
+                BridgeFolders::sync_root(&win, &lib, &thumb, &set, &st);
+            }
+        });
 
         tracing::info!(
             is_table = v_settings.is_table_view,
@@ -139,7 +154,7 @@ impl UiBridge {
             sort_ord = ?initial_sort_ord,
             thumb_size = app_settings.appearance.default_thumbnail_size,
             aspect_ratio = %app_settings.appearance.thumbnail_aspect_ratio,
-            "[UiBridge] Initialized all UI bridges, restored persistent view and sort state"
+            "[UiBridge] Initialized all UI bridges, scheduled deferred initial mount"
         );
 
         bridge

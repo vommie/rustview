@@ -54,6 +54,11 @@ export component MainWindow inherits Window {
     in-out property <bool> is-refreshing-folders: false;
     in-out property <int> folder-scan-count: 0;
 
+    // Media Files Discovery & Extraction Progress Indicators
+    in-out property <bool> is-indexing-media: false;
+    in-out property <int> media-index-current: 0;
+    in-out property <int> media-index-total: 0;
+
     // Thumbnail Pipeline Progress Indicators
     in-out property <bool> is-preloading: false;
     in-out property <int> preload-current: 0;
@@ -266,6 +271,9 @@ export component MainWindow inherits Window {
             item-count-str: root.items-metric-text;
             is-refreshing-folders: root.is-refreshing-folders;
             folder-scan-count: root.folder-scan-count;
+            is-indexing-media: root.is-indexing-media;
+            media-index-current: root.media-index-current;
+            media-index-total: root.media-index-total;
             is-preloading: root.is-preloading;
             preload-val: root.preload-current;
             preload-max: root.preload-total;

@@ -161,7 +161,7 @@ impl BridgeFileSelection {
         (changed, count)
     }
 
-    /// Surgically modifies only changed rows in the Slint Model in microsecond time.
+    /// Surgically modifies only changed rows in the Slint Model with strict ID verification.
     pub fn sync_selection_diff(
         window: &MainWindow,
         state: &RwLock<UiState>,
@@ -177,6 +177,7 @@ impl BridgeFileSelection {
         for &id in changed_ids {
             if let Some(&row_idx) = st.media_row_map.get(&id)
                 && let Some(mut item) = media_model.row_data(row_idx)
+                && item.id == id as i32
             {
                 let is_selected = st.file_selection.is_selected(id);
                 if item.is_selected != is_selected {

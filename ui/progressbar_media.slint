@@ -1,0 +1,21 @@
+import { Theme } from "styles.slint";
+import { TaskProgressBar } from "progress_bar.slint";
+
+/// Standalone visual progress indicator for asynchronous media discovery, hashing, and metadata extraction.
+export component MediaIndexProgress inherits HorizontalLayout {
+    in property <bool> is-indexing: false;
+    in property <int> current-val: 0;
+    in property <int> total-val: 0;
+    in property <length> bar-width: 175px;
+
+    if root.is-indexing : TaskProgressBar {
+        is-active: root.is-indexing;
+        progress-min: 0;
+        progress-max: Math.max(1, root.total-val);
+        progress-val: root.current-val;
+        bar-width: root.bar-width;
+        bar-height: 18px;
+        fill-color: #cba6f788;
+        overlay-text: "Scanning Media: " + root.current-val + "/" + root.total-val;
+    }
+}

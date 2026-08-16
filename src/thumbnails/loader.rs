@@ -15,12 +15,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
+#[derive(Debug, Clone)]
 pub struct PreparedTarget {
+    pub pipeline_id: usize,
+    pub folder_id: u64,
     pub media_id: MediaId,
     pub file_path: PathBuf,
 }
 
+#[derive(Debug, Clone)]
 pub struct ReadyThumbnailItem {
+    pub pipeline_id: usize,
+    pub folder_id: u64,
     pub media_id: MediaId,
     pub width: u32,
     pub height: u32,
@@ -74,11 +80,20 @@ impl ThumbnailScheduler {
         }
     }
 
+    pub fn current_pipeline_id(&self) -> usize {
+        self.active_pipeline_id.load(Ordering::Acquire)
+    }
+
     pub fn drain_ready_batch(&self, max_items: usize) -> Vec<ReadyThumbnailItem> {
+        let current_pipeline = self.active_pipeline_id.load(Ordering::Acquire);
         let mut queue = self.ready_drain_queue.lock();
         if queue.is_empty() {
             return Vec::new();
         }
+
+        // Strictly filter out and discard any thumbnail from obsolete/cancelled pipelines
+        queue.retain(|item| item.pipeline_id == current_pipeline);
+
         let take_count = queue.len().min(max_items);
         queue.drain(0..take_count).collect()
     }
@@ -99,13 +114,18 @@ impl ThumbnailScheduler {
     pub fn start_folder_pipeline(
         self: &Arc<Self>,
         folder_id: u64,
-        sorted_targets: Vec<PreparedTarget>,
+        mut sorted_targets: Vec<PreparedTarget>,
         config: ThumbnailConfig,
     ) {
         self.cancel_current_pipeline();
 
         let pipeline_id = self.active_pipeline_id.load(Ordering::Acquire);
         self.is_cancelled.store(false, Ordering::Release);
+
+        for target in sorted_targets.iter_mut() {
+            target.pipeline_id = pipeline_id;
+            target.folder_id = folder_id;
+        }
 
         let total_items = sorted_targets.len();
         if total_items == 0 {
@@ -146,9 +166,15 @@ impl ThumbnailScheduler {
             };
 
             for target in sorted_targets {
+                if self.is_pipeline_stale(pipeline_id) {
+                    return;
+                }
+
                 // Check L1 RAM cache first
                 if let Some(cached) = self.cache.get(target.media_id) {
                     self.ready_drain_queue.lock().push(ReadyThumbnailItem {
+                        pipeline_id,
+                        folder_id,
                         media_id: target.media_id,
                         width: cached.width,
                         height: cached.height,
@@ -186,6 +212,7 @@ impl ThumbnailScheduler {
         let missing_count = missing_targets.len();
 
         tracing::info!(
+            pipeline_id = pipeline_id,
             folder_id = folder_id,
             total_folder_files = total_folder_media,
             cached_in_db = existing_count,
@@ -228,9 +255,12 @@ impl ThumbnailScheduler {
 
                     if let Ok(compressed_bytes) = self.store.read(location)
                         && let Ok((w, h, rgb8_data)) = self.generator.decompress(&compressed_bytes)
+                        && !self.is_pipeline_stale(pipeline_id)
                     {
                         let _ = self.cache.insert(media_id, w, h, &rgb8_data);
                         self.ready_drain_queue.lock().push(ReadyThumbnailItem {
+                            pipeline_id,
+                            folder_id,
                             media_id,
                             width: w,
                             height: h,
@@ -239,8 +269,10 @@ impl ThumbnailScheduler {
                         load_successful = true;
                     }
 
-                    if !load_successful {
+                    if !load_successful && !self.is_pipeline_stale(pipeline_id) {
                         corrupted_ref.lock().push(PreparedTarget {
+                            pipeline_id,
+                            folder_id,
                             media_id,
                             file_path: path,
                         });
@@ -315,13 +347,13 @@ impl ThumbnailScheduler {
                 let scheduler = self.clone_handle();
                 let cfg = config.clone();
                 self.pool.spawn(move || {
-                    scheduler.worker_generation_loop(pipeline_id, cfg);
+                    scheduler.worker_generation_loop(pipeline_id, folder_id, cfg);
                 });
             }
         }
     }
 
-    fn worker_generation_loop(&self, pipeline_id: usize, config: ThumbnailConfig) {
+    fn worker_generation_loop(&self, pipeline_id: usize, folder_id: u64, config: ThumbnailConfig) {
         let mut batched_db_writes: Vec<(MediaId, ThumbnailLocation, Option<VideoPreviewRecord>)> =
             Vec::with_capacity(config.batch_commit_size);
 
@@ -335,6 +367,10 @@ impl ThumbnailScheduler {
                 Some(t) => t,
                 None => break,
             };
+
+            if self.is_pipeline_stale(pipeline_id) {
+                break;
+            }
 
             self.tracker.increment_active_workers();
             let t_gen = Instant::now();
@@ -351,6 +387,11 @@ impl ThumbnailScheduler {
                     .generate_video_thumbnails(&target.file_path, &config)
                 {
                     Ok(video_res) => {
+                        if self.is_pipeline_stale(pipeline_id) {
+                            self.tracker.decrement_active_workers();
+                            break;
+                        }
+
                         let primary = video_res.primary_frame;
                         match self.generator.compress(
                             &primary.rgb_pixels,
@@ -362,7 +403,6 @@ impl ThumbnailScheduler {
                             Ok(compressed_primary) => {
                                 match self.store.append(&compressed_primary) {
                                     Ok(primary_loc) => {
-                                        // Compress and store multi-frame previews with dedicated settings if enabled
                                         let mut preview_rec = None;
                                         if !video_res.preview_frames.is_empty() {
                                             let (p_format, p_quality) =
@@ -403,24 +443,28 @@ impl ThumbnailScheduler {
                                             "Saved video thumbnail and previews to PackStore"
                                         );
 
-                                        batched_db_writes.push((
-                                            target.media_id,
-                                            primary_loc,
-                                            preview_rec,
-                                        ));
-                                        let _ = self.cache.insert(
-                                            target.media_id,
-                                            primary.width,
-                                            primary.height,
-                                            &primary.rgb_pixels,
-                                        );
+                                        if !self.is_pipeline_stale(pipeline_id) {
+                                            batched_db_writes.push((
+                                                target.media_id,
+                                                primary_loc,
+                                                preview_rec,
+                                            ));
+                                            let _ = self.cache.insert(
+                                                target.media_id,
+                                                primary.width,
+                                                primary.height,
+                                                &primary.rgb_pixels,
+                                            );
 
-                                        self.ready_drain_queue.lock().push(ReadyThumbnailItem {
-                                            media_id: target.media_id,
-                                            width: primary.width,
-                                            height: primary.height,
-                                            rgb8_pixels: primary.rgb_pixels,
-                                        });
+                                            self.ready_drain_queue.lock().push(ReadyThumbnailItem {
+                                                pipeline_id,
+                                                folder_id,
+                                                media_id: target.media_id,
+                                                width: primary.width,
+                                                height: primary.height,
+                                                rgb8_pixels: primary.rgb_pixels,
+                                            });
+                                        }
                                     }
                                     Err(e) => {
                                         tracing::error!(target = ?target.file_path, error = %e, "Failed to append primary video thumb to PackStore");
@@ -454,20 +498,24 @@ impl ThumbnailScheduler {
                     ) {
                         Ok(compressed_bytes) => match self.store.append(&compressed_bytes) {
                             Ok(location) => {
-                                batched_db_writes.push((target.media_id, location, None));
-                                let _ = self.cache.insert(
-                                    target.media_id,
-                                    frame.width,
-                                    frame.height,
-                                    &frame.rgb_pixels,
-                                );
+                                if !self.is_pipeline_stale(pipeline_id) {
+                                    batched_db_writes.push((target.media_id, location, None));
+                                    let _ = self.cache.insert(
+                                        target.media_id,
+                                        frame.width,
+                                        frame.height,
+                                        &frame.rgb_pixels,
+                                    );
 
-                                self.ready_drain_queue.lock().push(ReadyThumbnailItem {
-                                    media_id: target.media_id,
-                                    width: frame.width,
-                                    height: frame.height,
-                                    rgb8_pixels: frame.rgb_pixels,
-                                });
+                                    self.ready_drain_queue.lock().push(ReadyThumbnailItem {
+                                        pipeline_id,
+                                        folder_id,
+                                        media_id: target.media_id,
+                                        width: frame.width,
+                                        height: frame.height,
+                                        rgb8_pixels: frame.rgb_pixels,
+                                    });
+                                }
                             }
                             Err(e) => {
                                 tracing::error!(target = ?target.file_path, error = %e, "Failed to append image thumb to PackStore");

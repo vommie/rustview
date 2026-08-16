@@ -1,6 +1,8 @@
 use rustview::library::Library;
 use rustview::media::MediaHasher;
 use std::fs;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use tempfile::tempdir;
 
 #[test]
@@ -27,14 +29,25 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     let img2 = image::RgbImage::new(1920, 1080);
     img2.save(&img2_path).unwrap();
 
-    // 3. First Refresh
+    // 3. First Refresh with progress tracking
+    let progress_calls = Arc::new(AtomicUsize::new(0));
+    let p_clone = progress_calls.clone();
+
     let report1 = lib
         .refresher()
-        .refresh_folder(folder.id)
+        .refresh_folder_with_progress(
+            folder.id,
+            None,
+            Some(move |_cur, _tot| {
+                p_clone.fetch_add(1, Ordering::SeqCst);
+            }),
+        )
         .expect("First refresh failed");
+
     assert_eq!(report1.new_media, 2);
     assert_eq!(report1.unchanged_media, 0);
     assert_eq!(report1.deleted_media, 0);
+    assert!(progress_calls.load(Ordering::SeqCst) > 0);
 
     // 4. Verify Zero-FS Reading & 16-byte MD5 Hash verification
     let media_list = lib

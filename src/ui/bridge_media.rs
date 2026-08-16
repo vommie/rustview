@@ -2,7 +2,7 @@ use super::bridge_state::UiState;
 use super::models::{format_filesize, rgb8_to_shared_buffer};
 use super::{MainWindow, MediaItemView};
 use crate::library::Library;
-use crate::library::models::{MediaId, MediaRecord};
+use crate::library::models::MediaRecord;
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MatchMode, MediaSorter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::SettingsManager;
@@ -126,7 +126,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // Hover Video Preview Animation Handler
+        // Hover Video Preview Animation Handler (Guarded with strict ID validation)
         let win = window.clone_strong();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -171,6 +171,7 @@ impl BridgeMedia {
                                     let st_r = st_c.read();
                                     if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
                                         && let Some(mut item) = model.row_data(row_idx)
+                                        && item.id == media_id as i32
                                     {
                                         item.thumbnail = Image::from_rgb8(buf.clone());
                                         model.set_row_data(row_idx, item);
@@ -188,6 +189,7 @@ impl BridgeMedia {
                 if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
                     && let Some(buf) = st_r.folder_thumbnails.get(&media_id)
                     && let Some(mut item) = model.row_data(row_idx)
+                    && item.id == media_id as i32
                 {
                     item.thumbnail = Image::from_rgb8(buf.clone());
                     model.set_row_data(row_idx, item);
@@ -351,10 +353,6 @@ impl BridgeMedia {
             }
         }
 
-        if start_pipeline {
-            thumbnails.cancel_pipeline();
-        }
-
         let current_query = filter.search_query.trim().to_string();
         let is_refinement = !current_query.is_empty()
             && !last_query.is_empty()
@@ -389,7 +387,6 @@ impl BridgeMedia {
         };
 
         let mut matched_indices = Vec::with_capacity(matched_len);
-        let mut new_thumbnails: Vec<(MediaId, SharedPixelBuffer<Rgb8Pixel>)> = Vec::new();
 
         for (row_idx, &item) in sorted_refs.iter().enumerate() {
             matched_indices.push(item.index);
@@ -398,17 +395,17 @@ impl BridgeMedia {
 
             if start_pipeline {
                 pipeline_targets.push(PreparedTarget {
+                    pipeline_id: 0,
+                    folder_id: f_id,
                     media_id: item.record.id,
                     file_path: item.full_path.clone(),
                 });
             }
 
+            // Zero-Lock Instant Mapping: Use in-memory buffer if present, otherwise default placeholder.
+            // Phase 1 background workers will stream cached packfile/L1 images asynchronously.
             let thumbnail_img = if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
                 Image::from_rgb8(buf.clone())
-            } else if let Some(cached) = thumbnails.cache().get(item.record.id) {
-                let buf = rgb8_to_shared_buffer(&cached.pixels, cached.width, cached.height);
-                new_thumbnails.push((item.record.id, buf.clone()));
-                Image::from_rgb8(buf)
             } else {
                 Image::default()
             };
@@ -432,9 +429,6 @@ impl BridgeMedia {
 
         {
             let mut st_write = state.write();
-            for (id, buf) in new_thumbnails {
-                st_write.folder_thumbnails.insert(id, buf);
-            }
             st_write.media_row_map = row_map;
             st_write.active_indices = matched_indices;
             st_write.last_executed_query = current_query.clone();

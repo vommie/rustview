@@ -31,6 +31,11 @@ impl BridgeThumbnails {
                     let media_model = window.get_media_items();
 
                     for item_data in batch {
+                        // 1. Strictest Safety Verification: Item MUST belong to currently active folder
+                        if st.current_folder_id != Some(item_data.folder_id) {
+                            continue;
+                        }
+
                         let shared_buf = rgb8_to_shared_buffer(
                             &item_data.rgb8_pixels,
                             item_data.width,
@@ -40,8 +45,10 @@ impl BridgeThumbnails {
                         st.folder_thumbnails
                             .insert(item_data.media_id, shared_buf.clone());
 
+                        // 2. Direct Row Mapping Verification: Ensure media_id strictly matches the row model item id
                         if let Some(&row_idx) = st.media_row_map.get(&item_data.media_id)
                             && let Some(mut item) = media_model.row_data(row_idx)
+                            && item.id == item_data.media_id as i32
                         {
                             item.thumbnail = Image::from_rgb8(shared_buf);
                             media_model.set_row_data(row_idx, item);

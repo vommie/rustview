@@ -1,7 +1,7 @@
 use rustview::library::Library;
 use rustview::thumbnails::{
-    PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailGenerator,
-    ThumbnailManager, VideoThumbnailEngine, calculate_aspect_dimensions,
+    calculate_aspect_dimensions, PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat,
+    ThumbnailGenerator, ThumbnailManager, VideoThumbnailEngine,
 };
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -60,10 +60,14 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
 
     let targets = vec![
         PreparedTarget {
+            pipeline_id: 0,
+            folder_id: folder.id,
             media_id: media_list[0].id,
             file_path: img1_path.clone(),
         },
         PreparedTarget {
+            pipeline_id: 0,
+            folder_id: folder.id,
             media_id: media_list[1].id,
             file_path: img2_path.clone(),
         },

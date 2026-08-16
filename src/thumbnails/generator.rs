@@ -55,7 +55,7 @@ impl ThumbnailGenerator {
     ) -> Result<Vec<u8>, ThumbnailError> {
         let t0 = Instant::now();
         let quality = quality.clamp(10, 100);
-        let mut buffer = Vec::with_capacity((width * height) as usize);
+        let mut buffer = Vec::with_capacity((width * height) as usize / 2);
 
         match format {
             ThumbnailFormat::Webp => {

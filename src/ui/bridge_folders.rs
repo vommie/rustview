@@ -8,11 +8,12 @@ use crate::library::models::{FolderId, FolderRecord};
 use crate::settings::{GridAspectRatio, SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -179,11 +180,13 @@ impl BridgeFolders {
         let st = state.clone();
         let win = window.clone_strong();
         window.on_refresh_folder(move || {
-            let folder_id = st.read().current_folder_id;
-            if let Some(id) = folder_id {
-                let _ = lib.refresher().refresh_folder(id);
-                BridgeMedia::reload(&win, &lib, &thumb, &set, &st, true, true);
-                win.set_status_text("Folder refreshed.".into());
+            let (folder_id_opt, path_opt) = {
+                let s = st.read();
+                (s.current_folder_id, s.current_folder_path.clone())
+            };
+            if let (Some(id), Some(path)) = (folder_id_opt, path_opt) {
+                tracing::info!(folder_id = id, path = ?path, "[FolderPanel] Asynchronous folder refresh triggered");
+                Self::select_folder(id, path, &win, &lib, &thumb, &set, &st);
             }
         });
 
@@ -222,7 +225,7 @@ impl BridgeFolders {
         let st = state.clone();
         let win = window.clone_strong();
         window.on_folder_refresh_clicked(move || {
-            tracing::info!("[FolderPanel: Toolbar] Folder refresh action triggered via panel toolbar");
+            tracing::info!("[FolderPanel: Toolbar] Folder tree structure refresh triggered via panel toolbar");
             Self::refresh_folder_tree(&win, &lib, &set, &st);
         });
 
@@ -320,31 +323,15 @@ impl BridgeFolders {
             Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
         }
 
-        let _ = library.refresher().refresh_folder(target_folder.0);
-
-        let raw_media = library
-            .media()
-            .get_by_folder(target_folder.0)
-            .unwrap_or_default();
-        let indexed_media = BridgeMedia::preindex(library, raw_media, &target_folder.1);
-
-        {
-            let mut st = state.write();
-            st.current_folder_id = Some(target_folder.0);
-            st.current_folder_path = Some(target_folder.1);
-            st.all_folder_media = indexed_media;
-            st.folder_thumbnails.clear();
-            st.active_indices.clear();
-            st.file_selection.clear();
-            st.last_executed_query.clear();
-        }
-
-        window.set_status_text("Ready.".into());
-
-        Self::reload_tree(window, library, settings, state);
-        BridgeMedia::reload(window, library, thumbnails, settings, state, true, false);
-        BridgeInspector::update(window, state);
-        BridgeTags::sync_tag_selection(window, library, state);
+        Self::select_folder(
+            target_folder.0,
+            target_folder.1,
+            window,
+            library,
+            thumbnails,
+            settings,
+            state,
+        );
     }
 
     pub fn refresh_folder_tree(
@@ -409,6 +396,11 @@ impl BridgeFolders {
         }
     }
 
+    /// 4-Stage Asynchronous Folder Navigation Workflow.
+    /// Stage 1 (0ms): Instant UI feedback, highlights folder in tree, resets grid.
+    /// Stage 2 (~15ms deferred): Renders known grid tiles & metadata without background workload.
+    /// Stage 3 (Background thread): Scans filesystem and extracts hashes with progress bar.
+    /// Stage 4 (Scanner finished): Nachführung des Grids und Start der Thumbnail-Pipeline.
     pub fn select_folder(
         folder_id: FolderId,
         path: PathBuf,
@@ -418,57 +410,188 @@ impl BridgeFolders {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        tracing::info!(folder_id = folder_id, path = ?path, "User selected folder in sidebar");
-
-        match library.refresher().refresh_folder(folder_id) {
-            Ok(report) => {
-                tracing::info!(
-                    folder_id = folder_id,
-                    scanned = report.total_scanned,
-                    new = report.new_media,
-                    updated = report.updated_media,
-                    unchanged = report.unchanged_media,
-                    deleted = report.deleted_media,
-                    "Folder scan complete"
-                );
-            }
-            Err(e) => {
-                tracing::error!(folder_id = folder_id, error = %e, "Failed to scan folder");
-            }
-        }
-
-        let raw_media = library.media().get_by_folder(folder_id).unwrap_or_default();
-        let indexed_media = BridgeMedia::preindex(library, raw_media, &path);
+        let t0 = Instant::now();
+        let folder_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string_lossy().to_string());
 
         tracing::info!(
             folder_id = folder_id,
-            count = indexed_media.len(),
-            "Cached preformatted folder media records into RAM."
+            folder_name = %folder_name,
+            path = ?path,
+            "[FolderNavigation: Stage 1/4] Immediate UI transition started"
         );
 
-        {
+        // Cancel previous thumbnail pipeline and background scanner immediately
+        thumbnails.cancel_pipeline();
+
+        // Stage 1: Atomically cancel previous media scan, reset state, and highlight folder node
+        let (request_token, cancel_flag) = {
             let mut st = state.write();
+
+            if let Some(prev_flag) = st.active_folder_cancel_flag.take() {
+                prev_flag.store(true, Ordering::Release);
+            }
+            let new_flag = Arc::new(AtomicBool::new(false));
+            st.active_folder_cancel_flag = Some(new_flag.clone());
+
+            st.active_folder_token = st.active_folder_token.wrapping_add(1);
             st.current_folder_id = Some(folder_id);
             st.current_folder_path = Some(path.clone());
-            st.all_folder_media = indexed_media;
-            st.folder_thumbnails.clear();
             st.active_indices.clear();
             st.file_selection.clear();
             st.last_executed_query.clear();
-        }
+            st.folder_thumbnails.clear();
+            st.all_folder_media.clear();
+
+            (st.active_folder_token, new_flag)
+        };
 
         {
             let mut s = settings.get();
             if s.general.remember_last_folder {
-                s.general.last_folder_path = Some(path);
+                s.general.last_folder_path = Some(path.clone());
                 settings.save_quiet(&s);
             }
         }
 
+        // Instantly update tree highlight, clear grid, and set initial transition status
         Self::reload_tree(window, library, settings, state);
-        BridgeMedia::reload(window, library, thumbnails, settings, state, true, true);
+        window.set_media_items(ModelRc::new(VecModel::from(vec![])));
+        window.set_items_metric_text("Loading...".into());
+        window.set_status_text(format!("Opening '{}'...", folder_name).into());
+        window.set_is_indexing_media(false);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
+
+        // Stage 2: Defer known media loading & initial grid render to next event loop tick
+        let w_weak = window.as_weak();
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        let target_path = path.clone();
+
+        Timer::single_shot(std::time::Duration::from_millis(15), move || {
+            let Some(win) = w_weak.upgrade() else { return; };
+
+            let is_still_current = {
+                let s = st.read();
+                s.current_folder_id == Some(folder_id) && s.active_folder_token == request_token
+            };
+            if !is_still_current { return; }
+
+            // Load already-known media from LMDB (instant in-memory read)
+            let known_media = lib.media().get_by_folder(folder_id).unwrap_or_default();
+            let indexed_media = BridgeMedia::preindex(&lib, known_media, &target_path);
+
+            {
+                let mut s = st.write();
+                s.all_folder_media = indexed_media;
+            }
+
+            // Render grid with placeholder tiles (no thumbnail generation started yet)
+            BridgeMedia::reload(&win, &lib, &thumb, &set, &st, false, false);
+            BridgeInspector::update(&win, &st);
+            BridgeTags::sync_tag_selection(&win, &lib, &st);
+
+            win.set_is_indexing_media(true);
+            win.set_media_index_current(0);
+            win.set_media_index_total(0);
+            win.set_status_text(format!("Scanning media files in '{}'...", folder_name).into());
+
+            // Stage 3 & 4: Spawn background filesystem scanner & hash-check, then launch thumbnail pipeline
+            let w_weak_scanner = win.as_weak();
+            let lib_scanner = lib.clone();
+            let thumb_scanner = thumb.clone();
+            let set_scanner = set.clone();
+            let st_scanner = st.clone();
+            let target_p_scanner = target_path.clone();
+            let cancel_ref = cancel_flag.clone();
+
+            std::thread::Builder::new()
+                .name(format!("media-scanner-fld-{}", folder_id))
+                .spawn(move || {
+                    let w_weak_progress = w_weak_scanner.clone();
+                    let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
+
+                    let refresh_result = lib_scanner.refresher().refresh_folder_with_progress(
+                        folder_id,
+                        Some(cancel_ref.clone()),
+                        Some(move |cur, tot| {
+                            let mut last = last_progress_report.lock();
+                            if last.elapsed().as_millis() >= 35 || cur == tot {
+                                *last = Instant::now();
+                                let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
+                                    w.set_media_index_current(cur as i32);
+                                    w.set_media_index_total(tot as i32);
+                                });
+                            }
+                        }),
+                    );
+
+                    if cancel_ref.load(Ordering::Acquire) {
+                        tracing::debug!(folder_id = folder_id, "[FolderNavigation] Aborted stale media scan after cancellation");
+                        return;
+                    }
+
+                    match refresh_result {
+                        Ok(report) => {
+                            tracing::info!(
+                                folder_id = folder_id,
+                                total_scanned = report.total_scanned,
+                                new = report.new_media,
+                                updated = report.updated_media,
+                                unchanged = report.unchanged_media,
+                                deleted = report.deleted_media,
+                                elapsed_ms = t0.elapsed().as_millis(),
+                                "[FolderNavigation: Stage 3/4] Media scan & DB sync complete. Launching thumbnail pipeline..."
+                            );
+
+                            let raw_media = lib_scanner.media().get_by_folder(folder_id).unwrap_or_default();
+                            let indexed_media = BridgeMedia::preindex(&lib_scanner, raw_media, &target_p_scanner);
+
+                            let _ = w_weak_scanner.upgrade_in_event_loop(move |w| {
+                                let is_still_current = {
+                                    let s = st_scanner.read();
+                                    s.current_folder_id == Some(folder_id) && s.active_folder_token == request_token
+                                };
+
+                                if is_still_current {
+                                    {
+                                        let mut s = st_scanner.write();
+                                        s.all_folder_media = indexed_media;
+                                    }
+
+                                    w.set_is_indexing_media(false);
+                                    w.set_status_text("Ready.".into());
+
+                                    // Stage 4: Render final media view AND start thumbnail pipeline now that UI grid is ready
+                                    BridgeMedia::reload(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, true, false);
+                                    BridgeInspector::update(&w, &st_scanner);
+                                    BridgeTags::sync_tag_selection(&w, &lib_scanner, &st_scanner);
+                                    Self::reload_tree(&w, &lib_scanner, &set_scanner, &st_scanner);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            tracing::error!(folder_id = folder_id, error = %e, "[FolderNavigation] Background media scan failed");
+                            let _ = w_weak_scanner.upgrade_in_event_loop(move |w| {
+                                let is_still_current = {
+                                    let s = st_scanner.read();
+                                    s.current_folder_id == Some(folder_id) && s.active_folder_token == request_token
+                                };
+                                if is_still_current {
+                                    w.set_is_indexing_media(false);
+                                    w.set_status_text(format!("Media scan error: {}", e).into());
+                                }
+                            });
+                        }
+                    }
+                })
+                .expect("Failed to spawn media scanner thread");
+        });
     }
 
     pub fn persist_expanded_folders(settings: &SettingsManager, expanded_set: &HashSet<FolderId>) {
@@ -637,39 +760,14 @@ impl BridgeFolders {
         };
 
         if let Ok(Some(root_rec)) = library.folders().get_folder_by_path(root_p) {
-            let raw_media = library
-                .media()
-                .get_by_folder(root_rec.id)
-                .unwrap_or_default();
-            let indexed = BridgeMedia::preindex(library, raw_media, root_p);
-
-            {
-                let mut st = state.write();
-                st.current_folder_id = Some(root_rec.id);
-                st.current_folder_path = Some(root_p.clone());
-                st.all_folder_media = indexed;
-                st.folder_thumbnails.clear();
-                st.active_indices.clear();
-                st.file_selection.clear();
-                st.last_executed_query.clear();
-            }
-
-            {
-                let mut s = settings.get();
-                if s.general.remember_last_folder {
-                    s.general.last_folder_path = Some(root_p.clone());
-                    settings.save_quiet(&s);
-                }
-            }
-
-            BridgeMedia::reload(
+            Self::select_folder(
+                root_rec.id,
+                root_p.clone(),
                 window,
                 library,
                 thumbnails,
                 settings,
                 state,
-                true,
-                false,
             );
         }
     }

@@ -3,8 +3,8 @@ use super::types::{ScalingAlgorithm, anonymize_target, calculate_aspect_dimensio
 use fast_image_resize::images::Image;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
 use image::ImageReader;
-use memmap2::Mmap;
-use std::io::Cursor;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 use std::time::Instant;
 
@@ -43,22 +43,17 @@ impl ImageDecoder for SimdImageThumbnailer {
         let anon_target = anonymize_target(path, None);
         let t_total = Instant::now();
 
-        // 1. High-Performance Zero-Copy Memory Mapped File Read
+        // 1. High-Speed Buffered File Read (Zero kernel page-table lock contention across parallel threads)
         let t_io = Instant::now();
-        let file = std::fs::File::open(path)?;
-        let mmap_opt = unsafe { Mmap::map(&file).ok() };
+        let file = File::open(path)?;
+        let reader = BufReader::with_capacity(128 * 1024, file);
         let io_elapsed = t_io.elapsed();
 
-        // 2. Fast Image Decoding from memory slice
+        // 2. Image Decoding
         let t_decode = Instant::now();
-        let dynamic_img = if let Some(ref mmap) = mmap_opt {
-            ImageReader::new(Cursor::new(&mmap[..]))
-                .with_guessed_format()?
-                .decode()?
-        } else {
-            let reader = std::io::BufReader::with_capacity(128 * 1024, file);
-            ImageReader::new(reader).with_guessed_format()?.decode()?
-        };
+        let dynamic_img = ImageReader::new(reader)
+            .with_guessed_format()?
+            .decode()?;
         let decode_elapsed = t_decode.elapsed();
 
         let orig_w = dynamic_img.width();
@@ -68,11 +63,10 @@ impl ImageDecoder for SimdImageThumbnailer {
         // 3. Compute exact aspect-ratio target dimensions inside max_bound
         let (target_w, target_h) = calculate_aspect_dimensions(orig_w, orig_h, max_bound);
 
-        // 4. Convert to RGB8 pixel slice
-        let rgb_src = dynamic_img.to_rgb8();
+        let rgb_src = dynamic_img.into_rgb8();
         let src_raw = rgb_src.into_raw();
 
-        // 5. SIMD-Accelerated Resizing via fast_image_resize
+        // 4. Pure Direct Native SIMD Resizing via fast_image_resize
         let t_resize = Instant::now();
         let src_image = Image::from_vec_u8(orig_w, orig_h, src_raw, PixelType::U8x3)?;
         let mut dst_image = Image::new(target_w, target_h, PixelType::U8x3);
@@ -97,7 +91,7 @@ impl ImageDecoder for SimdImageThumbnailer {
             resize_time_ms = resize_elapsed.as_millis(),
             total_time_ms = total_elapsed.as_millis(),
             algorithm = %scaling_algo.as_str(),
-            "[ImageDecoder: SIMD FastResize] Successfully decoded and scaled thumbnail frame"
+            "[ImageDecoder: Direct SIMD Resize] Decoded and scaled thumbnail frame"
         );
 
         Ok(DecodedThumbnailFrame {

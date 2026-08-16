@@ -48,7 +48,10 @@ harness = false
 name = "thumbnails"
 harness = false
 
-# Enable maximum SIMD & native optimizations for image decoding & SIMD dependencies in dev cargo run
+# Enable maximum SIMD & native optimizations for both the rustview crate and dependencies in dev cargo run
+[profile.dev]
+opt-level = 3
+
 [profile.dev.package."*"]
 opt-level = 3
 

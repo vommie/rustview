@@ -1,6 +1,7 @@
 import { Theme } from "styles.slint";
 import { ThumbnailPipelineProgress } from "thumbnail_progress.slint";
 import { FolderRefreshProgress } from "progressbar_folders.slint";
+import { MediaIndexProgress } from "progressbar_media.slint";
 
 export component StatusBar inherits Rectangle {
     height: 28px;
@@ -12,6 +13,11 @@ export component StatusBar inherits Rectangle {
     // Folder Structure Scan Progress Properties
     in property <bool> is-refreshing-folders: false;
     in property <int> folder-scan-count: 0;
+
+    // Media Files Indexing Progress Properties
+    in property <bool> is-indexing-media: false;
+    in property <int> media-index-current: 0;
+    in property <int> media-index-total: 0;
 
     // Thumbnail Pipeline Progress Properties
     in property <bool> is-preloading: false;
@@ -46,10 +52,17 @@ export component StatusBar inherits Rectangle {
             overflow: elide;
         }
 
-        // Dedicated Folder Refresh Progress Indicator
+        // Dedicated Folder Structure Refresh Progress Indicator
         if root.is-refreshing-folders : FolderRefreshProgress {
             is-refreshing: root.is-refreshing-folders;
             scanned-count: root.folder-scan-count;
+        }
+
+        // Dedicated Media Files Discovery & Extraction Progress Indicator
+        if root.is-indexing-media : MediaIndexProgress {
+            is-indexing: root.is-indexing-media;
+            current-val: root.media-index-current;
+            total-val: root.media-index-total;
         }
 
         // Modular Thumbnail Pipeline Progress Indicator

@@ -91,7 +91,7 @@ impl PackStore {
         Ok(file)
     }
 
-    /// Thread-safe atomic append to active pack file with strict offset guarantee.
+    /// Thread-safe high-throughput append without per-item disk flush lock contention.
     pub fn append(&self, compressed_bytes: &[u8]) -> Result<ThumbnailLocation, ThumbnailError> {
         let t0 = Instant::now();
         let len = compressed_bytes.len() as u32;
@@ -116,7 +116,6 @@ impl PackStore {
 
         let offset = writer.current_size;
         writer.file.write_all(compressed_bytes)?;
-        writer.file.flush()?;
         writer.current_size += len as u64;
 
         let location = ThumbnailLocation {
