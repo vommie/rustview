@@ -42,7 +42,7 @@ impl SettingsStore {
         Ok(())
     }
 
-    /// Validates filesystem paths on startup. If a path no longer exists on disk, resets it to None.
+    /// Validates filesystem paths and bounds-checks numerical UI configurations on startup.
     fn validate_and_sanitize(&self, settings: &mut AppSettings) {
         if let Some(ref path) = settings.general.root_folder
             && !path.is_dir()
@@ -66,5 +66,11 @@ impl SettingsStore {
         settings.performance.l1_cache_slots = settings.performance.l1_cache_slots.clamp(100, 4000);
         settings.performance.worker_threads = settings.performance.worker_threads.clamp(1, 32);
         settings.player.default_volume = settings.player.default_volume.clamp(0.0, 100.0);
+
+        // Sanitize view column widths
+        settings.view.col_filename_width = settings.view.col_filename_width.clamp(100.0, 1200.0);
+        settings.view.col_dimensions_width = settings.view.col_dimensions_width.clamp(60.0, 600.0);
+        settings.view.col_size_width = settings.view.col_size_width.clamp(50.0, 400.0);
+        settings.view.col_rating_width = settings.view.col_rating_width.clamp(50.0, 300.0);
     }
 }

@@ -1,0 +1,100 @@
+import { Theme } from "styles.slint";
+
+/// Standalone, reusable single column header component with title, sort indicator, and drag resizer handle.
+export component MediaHeaderColumn inherits Rectangle {
+    in property <string> title: "";
+    in property <int> column-index: 0;
+    in property <int> active-sort-column: 0;
+    in property <int> active-sort-order: 0; // 0 = Ascending, 1 = Descending
+    in property <bool> enable-resize: true;
+    in property <length> column-min-width: 60px;
+    in-out property <length> column-width: 150px;
+
+    callback sort-clicked(int /* column_index */);
+    callback column-resized(int /* column_index */, length /* new_width */);
+    callback column-resize-finished(int /* column_index */, length /* final_width */);
+
+    width: root.column-width;
+    height: 100%;
+    background: col-touch.has-hover ? Theme.surface-hover : Theme.surface;
+    clip: false;
+
+    property <bool> is-sorted: root.column-index == root.active-sort-column;
+
+    // Header Main Click / Sort TouchArea
+    col-touch := TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width - (root.enable-resize ? 8px : 0px);
+        height: 100%;
+        clicked => {
+            root.sort-clicked(root.column-index);
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 6px;
+        alignment: start;
+
+        Text {
+            text: root.title;
+            color: root.is-sorted ? Theme.primary : Theme.text;
+            font-weight: 700;
+            font-size: 11px;
+            vertical-alignment: center;
+            horizontal-alignment: left;
+            overflow: elide;
+        }
+
+        // Directional Sort Indicator Caret (Ascending ▲ / Descending ▼)
+        if root.is-sorted : Text {
+            text: root.active-sort-order == 0 ? "▲" : "▼";
+            font-size: 8px;
+            color: Theme.primary;
+            vertical-alignment: center;
+            horizontal-alignment: left;
+        }
+    }
+
+    // Right Separator Line
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: 100%;
+        background: Theme.border;
+    }
+
+    // Drag Resizer Handle with Absolute Delta Tracking (Zero oscillation / 1:1 real-time drag)
+    if root.enable-resize : resizer-touch := TouchArea {
+        x: parent.width - 5px;
+        width: 10px;
+        height: 100%;
+        mouse-cursor: col-resize;
+
+        property <length> start-abs-x;
+        property <length> start-w;
+
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                // Record initial absolute screen position relative to header container
+                self.start-abs-x = root.x + resizer-touch.x + self.mouse-x;
+                self.start-w = root.column-width;
+            }
+            if e.kind == PointerEventKind.up && e.button == PointerEventButton.left {
+                root.column-resize-finished(root.column-index, root.column-width);
+            }
+        }
+
+        moved => {
+            if self.pressed {
+                let current-abs-x = root.x + resizer-touch.x + self.mouse-x;
+                let delta = current-abs-x - self.start-abs-x;
+                let new-w = Math.max(root.column-min-width, self.start-w + delta);
+                root.column-width = new-w;
+                root.column-resized(root.column-index, new-w);
+            }
+        }
+    }
+}

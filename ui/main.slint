@@ -34,6 +34,16 @@ export component MainWindow inherits Window {
     in-out property <string> status-text: "Ready.";
     in-out property <string> items-metric-text: "Items: 0";
 
+    // Global Sorting Properties
+    in-out property <int> sort-column-idx: 0;
+    in-out property <int> sort-order-idx: 0;
+
+    // Table Column Width Properties
+    in-out property <length> col-filename-width: 280px;
+    in-out property <length> col-dimensions-width: 140px;
+    in-out property <length> col-size-width: 110px;
+    in-out property <length> col-rating-width: 90px;
+
     // Folder Structure Scan Progress Indicator
     in-out property <bool> is-refreshing-folders: false;
     in-out property <int> folder-scan-count: 0;
@@ -90,6 +100,7 @@ export component MainWindow inherits Window {
     callback favorite-selected(string);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
+    callback background-clicked();
 
     callback context-menu-item-clicked(int /* action_id */);
     callback context-menu-request-submenu(int /* depth */, int /* menu_index */);
@@ -107,6 +118,12 @@ export component MainWindow inherits Window {
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
 
+    // Sorting & View Callbacks
+    callback sort-column-clicked(int /* column_index */);
+    callback column-resized(int /* column_index */, length /* new_width */);
+    callback column-resize-finished(int /* column_index */, length /* final_width */);
+    callback view-mode-toggled(bool /* is_table */);
+
     // Player Callbacks
     callback player-toggle-play();
     callback player-seek(float);
@@ -114,7 +131,7 @@ export component MainWindow inherits Window {
     callback player-stop();
     callback player-close();
 
-    // Global Key Interceptor (Handles Escape to close open context menus)
+    // Global Key Interceptor
     forward-focus: global-focus;
     global-focus := FocusScope {
         key-pressed(event) => {
@@ -137,6 +154,7 @@ export component MainWindow inherits Window {
             settings-clicked => { root.open-settings(); }
             search-changed(text) => { root.search-query-changed(text); }
             regex-toggled(enabled) => { root.regex-mode-toggled(enabled); }
+            view-mode-toggled(is-table) => { root.view-mode-toggled(is-table); }
         }
 
         HorizontalLayout {
@@ -173,14 +191,28 @@ export component MainWindow inherits Window {
                 if !root.is-player-open && !root.is-table-view : VirtualizedMediaGrid {
                     media-items: root.media-items;
                     thumb-size: root.thumb-size;
+                    sort-column: root.sort-column-idx;
+                    sort-order: root.sort-order-idx;
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                     item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 48px); }
+                    sort-clicked(idx) => { root.sort-column-clicked(idx); }
+                    background-clicked => { root.background-clicked(); }
                 }
 
                 if !root.is-player-open && root.is-table-view : MediaTableView {
                     items: root.media-items;
+                    sort-column: root.sort-column-idx;
+                    sort-order: root.sort-order-idx;
+                    col-filename-width <=> root.col-filename-width;
+                    col-dimensions-width <=> root.col-dimensions-width;
+                    col-size-width <=> root.col-size-width;
+                    col-rating-width <=> root.col-rating-width;
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                     item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 48px); }
+                    sort-clicked(idx) => { root.sort-column-clicked(idx); }
+                    column-resized(idx, w) => { root.column-resized(idx, w); }
+                    column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+                    background-clicked => { root.background-clicked(); }
                 }
             }
 

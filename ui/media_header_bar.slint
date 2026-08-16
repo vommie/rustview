@@ -1,0 +1,91 @@
+import { Theme } from "styles.slint";
+import { MediaHeaderColumn } from "media_header_column.slint";
+
+export { MediaHeaderColumn } from "media_header_column.slint";
+
+/// Unified modular column header bar shared across TableView and GridView with direct X positioning.
+export component MediaHeaderBar inherits Rectangle {
+    height: 28px;
+    background: Theme.surface;
+
+    in property <int> sort-column: 0;
+    in property <int> sort-order: 0;
+    in property <bool> enable-resize: true;
+
+    in-out property <length> col-filename-width: 280px;
+    in-out property <length> col-dimensions-width: 140px;
+    in-out property <length> col-size-width: 110px;
+    in-out property <length> col-rating-width: 90px;
+
+    property <length> col-pos-0: 0px;
+    property <length> col-pos-1: root.col-filename-width;
+    property <length> col-pos-2: root.col-pos-1 + root.col-dimensions-width;
+    property <length> col-pos-3: root.col-pos-2 + root.col-size-width;
+
+    callback sort-clicked(int /* column_index */);
+    callback column-resized(int /* column_index */, length /* new_width */);
+    callback column-resize-finished(int /* column_index */, length /* final_width */);
+
+    // Bottom border separator line
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    MediaHeaderColumn {
+        x: root.col-pos-0;
+        title: "Filename";
+        column-index: 0;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        enable-resize: root.enable-resize;
+        column-width <=> root.col-filename-width;
+        column-min-width: 100px;
+        sort-clicked(idx) => { root.sort-clicked(idx); }
+        column-resized(idx, w) => { root.column-resized(idx, w); }
+        column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+    }
+
+    MediaHeaderColumn {
+        x: root.col-pos-1;
+        title: "Dimensions";
+        column-index: 1;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        enable-resize: root.enable-resize;
+        column-width <=> root.col-dimensions-width;
+        column-min-width: 80px;
+        sort-clicked(idx) => { root.sort-clicked(idx); }
+        column-resized(idx, w) => { root.column-resized(idx, w); }
+        column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+    }
+
+    MediaHeaderColumn {
+        x: root.col-pos-2;
+        title: "Size";
+        column-index: 2;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        enable-resize: root.enable-resize;
+        column-width <=> root.col-size-width;
+        column-min-width: 70px;
+        sort-clicked(idx) => { root.sort-clicked(idx); }
+        column-resized(idx, w) => { root.column-resized(idx, w); }
+        column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+    }
+
+    MediaHeaderColumn {
+        x: root.col-pos-3;
+        title: "Rating";
+        column-index: 3;
+        active-sort-column: root.sort-column;
+        active-sort-order: root.sort-order;
+        enable-resize: root.enable-resize;
+        column-width <=> root.col-rating-width;
+        column-min-width: 60px;
+        sort-clicked(idx) => { root.sort-clicked(idx); }
+        column-resized(idx, w) => { root.column-resized(idx, w); }
+        column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+    }
+}

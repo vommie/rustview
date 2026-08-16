@@ -23,7 +23,7 @@ pub struct FileClickEvent {
 pub struct BridgeFileSelection;
 
 impl BridgeFileSelection {
-    /// Registers media click and selection callbacks onto MainWindow.
+    /// Registers media click, background click, and selection callbacks onto MainWindow.
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
@@ -32,9 +32,9 @@ impl BridgeFileSelection {
         last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
     ) {
         let win = window.clone_strong();
-        let lib = library;
+        let lib = library.clone();
         let pl = player;
-        let st = state;
+        let st = state.clone();
         let lc = last_click;
         window.on_media_clicked(move |id, is_ctrl, is_shift| {
             Self::handle_click(
@@ -49,6 +49,14 @@ impl BridgeFileSelection {
                 &st,
                 &lc,
             );
+        });
+
+        let win_bg = window.clone_strong();
+        let lib_bg = library;
+        let st_bg = state;
+        window.on_background_clicked(move || {
+            tracing::info!("[FileSelection: BackgroundClick] Background free space clicked, clearing active file selection");
+            Self::clear_selection(&win_bg, &lib_bg, &st_bg);
         });
     }
 

@@ -16,6 +16,7 @@ use crate::ctx_menu::CtxMenuDispatcher;
 use crate::library::Library;
 use crate::library::models::{FolderId, MediaId, TagId};
 use crate::player::PlayerController;
+use crate::query::{SortColumn, SortOrder};
 use crate::settings::{AppSettings, SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::{Mutex, RwLock};
@@ -77,6 +78,23 @@ impl UiBridge {
 
         initial_state.expanded_folder_ids = restored_expanded_folders.into_iter().collect();
 
+        // Restore persistent view settings (Table vs. Grid, Sorting, Column Widths)
+        let v_settings = settings.get().view;
+        window.set_is_table_view(v_settings.is_table_view);
+
+        let initial_sort_col = SortColumn::from_name(&v_settings.sort_column);
+        let initial_sort_ord = SortOrder::from_name(&v_settings.sort_order);
+        initial_state.sort_column = initial_sort_col;
+        initial_state.sort_order = initial_sort_ord;
+
+        window.set_sort_column_idx(initial_sort_col.to_index());
+        window.set_sort_order_idx(initial_sort_ord.to_index());
+
+        window.set_col_filename_width(v_settings.col_filename_width);
+        window.set_col_dimensions_width(v_settings.col_dimensions_width);
+        window.set_col_size_width(v_settings.col_size_width);
+        window.set_col_rating_width(v_settings.col_rating_width);
+
         let state = Arc::new(RwLock::new(initial_state));
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let last_click = Arc::new(Mutex::new(None));
@@ -114,7 +132,12 @@ impl UiBridge {
         bridge.reload_favorites();
         bridge.reload_tags();
 
-        tracing::info!("[UiBridge] Initialized all UI bridges and event timers successfully");
+        tracing::info!(
+            is_table = v_settings.is_table_view,
+            sort_col = ?initial_sort_col,
+            sort_ord = ?initial_sort_ord,
+            "[UiBridge] Initialized all UI bridges, restored persistent view and sort state"
+        );
 
         bridge
     }
@@ -186,6 +209,7 @@ impl UiBridge {
             &self.window,
             self.library.clone(),
             self.thumbnails.clone(),
+            self.settings.clone(),
             self.state.clone(),
         );
 

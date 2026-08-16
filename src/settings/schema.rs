@@ -77,6 +77,31 @@ impl Default for AppearanceSettings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ViewSettings {
+    pub is_table_view: bool,
+    pub sort_column: String,
+    pub sort_order: String,
+    pub col_filename_width: f32,
+    pub col_dimensions_width: f32,
+    pub col_size_width: f32,
+    pub col_rating_width: f32,
+}
+
+impl Default for ViewSettings {
+    fn default() -> Self {
+        Self {
+            is_table_view: false,
+            sort_column: "Filename".to_string(),
+            sort_order: "Ascending".to_string(),
+            col_filename_width: 280.0,
+            col_dimensions_width: 140.0,
+            col_size_width: 110.0,
+            col_rating_width: 90.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PerformanceSettings {
     pub l1_cache_slots: usize,
@@ -158,6 +183,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub folders: FolderSettings,
     pub appearance: AppearanceSettings,
+    #[serde(default)]
+    pub view: ViewSettings,
     pub performance: PerformanceSettings,
     pub player: PlayerSettings,
     pub tags: TagSettings,

@@ -1,8 +1,9 @@
 import { Theme } from "styles.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { MediaHeaderBar } from "media_header_bar.slint";
 
-/// Individual Media Item Tile with responsive boundary containment
+/// Individual Media Item Tile with responsive boundary containment and viewport culling
 export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
     in property <int> thumb-size: 150;
@@ -116,14 +117,15 @@ export component MediaTile inherits Rectangle {
     }
 }
 
-/// Pure Vertical Scrolling Grid Container with Permanent Full-Width Custom Scrollbar.
-/// Wraps items adaptively based on real-time viewport width changes with zero horizontal scrollbar.
+/// Pure Vertical Scrolling Grid Container with Unified Sort Strip, Viewport Culling, and Zero Horizontal Scrollbars.
 export component VirtualizedMediaGrid inherits Rectangle {
     background: Theme.background;
     clip: true;
 
     in property <[MediaItemView]> media-items: [];
     in property <int> thumb-size: 150;
+    in property <int> sort-column: 0;
+    in property <int> sort-order: 0;
 
     // Layout configuration constants
     property <length> grid-padding: 12px;
@@ -131,7 +133,9 @@ export component VirtualizedMediaGrid inherits Rectangle {
     property <length> scrollbar-gutter-reserve: 16px;
 
     property <length> item-tile-width: (root.thumb-size * 1px) + 16px;
+    property <length> item-tile-height: (root.thumb-size * 1px) + 42px;
     property <length> column-stride: root.item-tile-width + root.grid-spacing;
+    property <length> row-stride: root.item-tile-height + root.grid-spacing;
 
     // Available inner width accounting for margins, padding, and vertical scrollbar gutter
     property <length> available-width: Math.max(0px, self.width - (root.grid-padding * 2) - root.scrollbar-gutter-reserve + root.grid-spacing);
@@ -141,31 +145,73 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
+    callback sort-clicked(int /* column_index */);
+    callback background-clicked();
 
-    scroll-area := SmoothScrollArea {
-        width: 100%;
-        height: 100%;
-        enable-horizontal: false;
-        enable-vertical: true;
-        content-width: self.width;
-        content-height: grid-layout.preferred-height + (2 * root.grid-padding);
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
 
-        grid-layout := GridLayout {
-            padding: root.grid-padding;
-            spacing: root.grid-spacing;
+        // Shared Modular Header as Grid Sort Strip
+        MediaHeaderBar {
+            sort-column: root.sort-column;
+            sort-order: root.sort-order;
+            enable-resize: false;
+            col-filename-width: 120px;
+            col-dimensions-width: 110px;
+            col-size-width: 90px;
+            col-rating-width: 80px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
 
-            for item[index] in root.media-items: MediaTile {
-                col: Math.mod(index, root.columns);
-                row: Math.floor(index / root.columns);
-                item: item;
-                thumb-size: root.thumb-size;
-                clicked(ctrl, shift) => { root.item-clicked(item.id, ctrl, shift); }
-                context-menu-requested(mx, my) => {
-                    root.item-context-menu(
-                        item.id,
-                        self.x + mx,
-                        self.y + my + scroll-area.clamped-y
-                    );
+        // Pure Vertical Scroll Area with Viewport Culling
+        scroll-area := SmoothScrollArea {
+            vertical-stretch: 1;
+            enable-horizontal: false;
+            enable-vertical: true;
+            content-width: self.width;
+            content-height: grid-layout.preferred-height + (2 * root.grid-padding);
+
+            // Full-area background touch handler to deselect when clicking on empty grid space
+            bg-touch := TouchArea {
+                width: 100%;
+                height: 100%;
+                scroll-event(event) => {
+                    scroll-area.handle-scroll(event.delta-x, event.delta-y);
+                    return accept;
+                }
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        root.background-clicked();
+                    }
+                }
+            }
+
+            grid-layout := GridLayout {
+                x: 0px;
+                y: 0px;
+                padding: root.grid-padding;
+                spacing: root.grid-spacing;
+
+                for item[index] in root.media-items: MediaTile {
+                    col: Math.mod(index, root.columns);
+                    row: Math.floor(index / root.columns);
+                    item: item;
+                    thumb-size: root.thumb-size;
+
+                    // Viewport Culling for Grid Tiles
+                    property <length> tile-y: (Math.floor(index / root.columns) * root.row-stride) + root.grid-padding;
+                    property <length> screen-y: self.tile-y + scroll-area.clamped-y;
+                    visible: self.screen-y >= -root.item-tile-height && self.screen-y <= scroll-area.height + root.item-tile-height;
+
+                    clicked(ctrl, shift) => { root.item-clicked(item.id, ctrl, shift); }
+                    context-menu-requested(mx, my) => {
+                        root.item-context-menu(
+                            item.id,
+                            self.x + mx,
+                            28px + self.y + my + scroll-area.clamped-y
+                        );
+                    }
                 }
             }
         }

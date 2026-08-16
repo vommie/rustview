@@ -1,56 +1,113 @@
 import { Theme } from "styles.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { MediaHeaderBar } from "media_header_bar.slint";
 
 export component MediaTableView inherits Rectangle {
     background: Theme.background;
     clip: true;
 
     in property <[MediaItemView]> items: [];
+    in property <int> sort-column: 0;
+    in property <int> sort-order: 0;
+
+    in-out property <length> col-filename-width: 280px;
+    in-out property <length> col-dimensions-width: 140px;
+    in-out property <length> col-size-width: 110px;
+    in-out property <length> col-rating-width: 90px;
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
+    callback sort-clicked(int /* column_index */);
+    callback column-resized(int /* column_index */, length /* new_width */);
+    callback column-resize-finished(int /* column_index */, length /* final_width */);
+    callback background-clicked();
+
+    // Precalculated direct column X coordinates (Zero layout solving overhead)
+    property <length> col-pos-0: 0px;
+    property <length> col-pos-1: root.col-filename-width;
+    property <length> col-pos-2: root.col-pos-1 + root.col-dimensions-width;
+    property <length> col-pos-3: root.col-pos-2 + root.col-size-width;
+    property <length> total-columns-width: root.col-pos-3 + root.col-rating-width;
+    property <length> content-scroll-width: Math.max(self.width, root.total-columns-width);
+
+    property <length> row-height: 28px;
 
     VerticalLayout {
-        // Table Header (Fixed at top)
-        Rectangle {
+        padding: 0px;
+        spacing: 0px;
+
+        // Synchronized Fixed Table Header
+        header-box := Rectangle {
             height: 28px;
             background: Theme.surface;
+            clip: true;
 
-            Rectangle {
-                y: parent.height - 1px;
-                height: 1px;
-                background: Theme.border;
-            }
+            header-content := Rectangle {
+                x: scroll-area.clamped-x;
+                width: root.content-scroll-width;
+                height: 100%;
 
-            HorizontalLayout {
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 8px;
-
-                Text { text: "Filename"; horizontal-stretch: 3; color: Theme.primary; font-weight: 700; vertical-alignment: center; }
-                Text { text: "Dimensions"; horizontal-stretch: 1; color: Theme.primary; font-weight: 700; vertical-alignment: center; }
-                Text { text: "Size"; horizontal-stretch: 1; color: Theme.primary; font-weight: 700; vertical-alignment: center; }
-                Text { text: "Rating"; width: 60px; color: Theme.primary; font-weight: 700; vertical-alignment: center; }
+                MediaHeaderBar {
+                    width: 100%;
+                    height: 100%;
+                    sort-column: root.sort-column;
+                    sort-order: root.sort-order;
+                    enable-resize: true;
+                    col-filename-width <=> root.col-filename-width;
+                    col-dimensions-width <=> root.col-dimensions-width;
+                    col-size-width <=> root.col-size-width;
+                    col-rating-width <=> root.col-rating-width;
+                    sort-clicked(idx) => { root.sort-clicked(idx); }
+                    column-resized(idx, w) => { root.column-resized(idx, w); }
+                    column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+                }
             }
         }
 
-        // Table Rows with Custom SmoothScrollArea
+        // Ultra High-Performance Table Rows Body with GPU Scissor State Optimization & Viewport Culling
         scroll-area := SmoothScrollArea {
             vertical-stretch: 1;
-            enable-horizontal: false;
+            enable-horizontal: true;
             enable-vertical: true;
-            content-width: self.width;
-            content-height: rows-layout.preferred-height;
+            content-width: root.content-scroll-width;
+            content-height: root.items.length * root.row-height;
 
-            rows-layout := VerticalLayout {
-                spacing: 0px;
-                alignment: start;
+            // Full-area background touch handler to deselect when clicking on empty table space
+            bg-touch := TouchArea {
+                width: 100%;
+                height: 100%;
+                scroll-event(event) => {
+                    scroll-area.handle-scroll(event.delta-x, event.delta-y);
+                    return accept;
+                }
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        root.background-clicked();
+                    }
+                }
+            }
 
-                for item in root.items: Rectangle {
-                    height: 28px;
+            // Top-anchored container ensuring rows start from the top even with few items
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: root.content-scroll-width;
+                height: root.items.length * root.row-height;
+
+                for item[index] in root.items: Rectangle {
+                    x: 0px;
+                    y: index * root.row-height;
+                    height: root.row-height;
+                    width: root.content-scroll-width;
+
+                    // High-Performance Viewport Culling: Skip render pass of off-screen rows
+                    property <length> screen-y: self.y + scroll-area.clamped-y;
+                    visible: self.screen-y >= -56px && self.screen-y <= scroll-area.height + 56px;
+
                     background: item.is-selected ? Theme.surface-selected : (row-touch.has-hover ? Theme.surface-hover : transparent);
 
+                    // Bottom row divider line
                     Rectangle {
                         y: parent.height - 1px;
                         height: 1px;
@@ -61,23 +118,77 @@ export component MediaTableView inherits Rectangle {
                         pointer-event(event) => {
                             if event.kind == PointerEventKind.down {
                                 if event.button == PointerEventButton.right {
-                                    root.item-context-menu(item.id, row-touch.mouse-x, self.y + row-touch.mouse-y + scroll-area.clamped-y);
+                                    root.item-context-menu(
+                                        item.id,
+                                        row-touch.mouse-x + scroll-area.clamped-x,
+                                        28px + parent.y + row-touch.mouse-y + scroll-area.clamped-y
+                                    );
                                 } else if event.button == PointerEventButton.left {
-                                    root.item-clicked(item.id, event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
+                                    root.item-clicked(
+                                        item.id,
+                                        event.modifiers.control || event.modifiers.meta,
+                                        event.modifiers.shift
+                                    );
                                 }
                             }
                         }
                     }
 
-                    HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        spacing: 8px;
+                    // Cell 0: Filename (Direct X-positioned Text - Zero intermediate clip containers)
+                    if item.is-video : Text {
+                        x: 10px;
+                        y: (parent.height - self.height) / 2;
+                        text: "🎬";
+                        font-size: 10px;
+                        color: Theme.text;
+                    }
 
-                        Text { text: item.filename; horizontal-stretch: 3; color: Theme.text; vertical-alignment: center; overflow: elide; }
-                        Text { text: item.dimensions_str; horizontal-stretch: 1; color: Theme.text-muted; vertical-alignment: center; }
-                        Text { text: item.filesize_str; horizontal-stretch: 1; color: Theme.text-muted; vertical-alignment: center; }
-                        Text { text: item.rating > 0 ? item.rating : "-"; width: 60px; color: item.rating > 0 ? Theme.accent : Theme.text-muted; vertical-alignment: center; }
+                    Text {
+                        x: item.is-video ? 28px : 10px;
+                        y: (parent.height - self.height) / 2;
+                        width: Math.max(0px, root.col-filename-width - (item.is-video ? 38px : 20px));
+                        text: item.filename;
+                        color: item.is-selected ? Theme.primary : Theme.text;
+                        font-size: 11px;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+
+                    // Cell 1: Dimensions (Direct X-positioned Text)
+                    Text {
+                        x: root.col-pos-1 + 10px;
+                        y: (parent.height - self.height) / 2;
+                        width: Math.max(0px, root.col-dimensions-width - 20px);
+                        text: item.dimensions-str;
+                        color: Theme.text-muted;
+                        font-size: 11px;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+
+                    // Cell 2: Size (Direct X-positioned Text)
+                    Text {
+                        x: root.col-pos-2 + 10px;
+                        y: (parent.height - self.height) / 2;
+                        width: Math.max(0px, root.col-size-width - 20px);
+                        text: item.filesize-str;
+                        color: Theme.text-muted;
+                        font-size: 11px;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+
+                    // Cell 3: Rating (Direct X-positioned Text)
+                    Text {
+                        x: root.col-pos-3 + 10px;
+                        y: (parent.height - self.height) / 2;
+                        width: Math.max(0px, root.col-rating-width - 20px);
+                        text: item.rating > 0 ? ("★ " + item.rating) : "-";
+                        color: item.rating > 0 ? Theme.rating-color(item.rating) : Theme.text-muted;
+                        font-weight: item.rating > 0 ? 700 : 400;
+                        font-size: 11px;
+                        horizontal-alignment: left;
+                        overflow: elide;
                     }
                 }
             }

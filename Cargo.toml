@@ -47,6 +47,10 @@ harness = false
 name = "thumbnails"
 harness = false
 
+# Enable lightweight optimizations for Slint property graphs during debug `cargo run`
+[profile.dev]
+opt-level = 1
+
 # Enable maximum SIMD & native optimizations for dependencies even during debug `cargo run`
 [profile.dev.package."*"]
 opt-level = 3

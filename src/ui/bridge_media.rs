@@ -4,26 +4,30 @@ use super::{MainWindow, MediaItemView};
 use crate::library::Library;
 use crate::library::models::{MediaId, MediaRecord};
 use crate::query::filters::IndexedMediaRecord;
-use crate::query::{MatchMode, MediaSorter, ScopeMode};
+use crate::query::{MatchMode, MediaSorter, ScopeMode, SortColumn, SortOrder};
+use crate::settings::SettingsManager;
 use crate::thumbnails::{PreparedTarget, THUMBNAIL_SIZE, ThumbnailManager};
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-/// Subsystem managing media item pre-indexing, filtering, sorting, grid layout synchronization, and Slint model generation.
+/// Subsystem managing media item pre-indexing, filtering, sorting, grid/table layout synchronization, and Slint model generation.
 pub struct BridgeMedia;
 
 impl BridgeMedia {
-    /// Registers search query, regex, match mode, and scope mode callbacks onto MainWindow.
+    /// Registers search query, regex, match mode, sorting, and view-mode callbacks onto MainWindow.
     pub fn register_query_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
         thumbnails: Arc<ThumbnailManager>,
+        settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
     ) {
+        // 1. Search query changed
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -34,6 +38,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &st, false, false);
         });
 
+        // 2. Regex mode toggled
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -47,6 +52,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &st, false, false);
         });
 
+        // 3. Match mode changed
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -62,10 +68,11 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &st, false, false);
         });
 
+        // 4. Scope mode changed
         let win = window.clone_strong();
-        let lib = library;
-        let thumb = thumbnails;
-        let st = state;
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let st = state.clone();
         window.on_scope_mode_changed(move |idx| {
             let scope = if idx == 0 {
                 ScopeMode::Folder
@@ -75,6 +82,116 @@ impl BridgeMedia {
             tracing::info!(?scope, "[QueryFilter] Scope mode updated");
             st.write().filter.scope_mode = scope;
             Self::reload(&win, &lib, &thumb, &st, false, false);
+        });
+
+        // 5. Global Column Sort Clicked (Shared across Grid and Table View)
+        let win = window.clone_strong();
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        window.on_sort_column_clicked(move |col_idx| {
+            let target_col = SortColumn::from_index(col_idx);
+            let (new_col, new_ord) = {
+                let mut s = st.write();
+                if s.sort_column == target_col {
+                    s.sort_order = s.sort_order.toggle();
+                } else {
+                    s.sort_column = target_col;
+                    s.sort_order = SortOrder::Ascending;
+                }
+                (s.sort_column, s.sort_order)
+            };
+
+            tracing::info!(
+                col = ?new_col,
+                order = ?new_ord,
+                "[SortEngine: Global] Updated global sort parameters"
+            );
+
+            // Persist sort configuration
+            {
+                let mut app_settings = set.get();
+                app_settings.view.sort_column = new_col.as_str().to_string();
+                app_settings.view.sort_order = new_ord.as_str().to_string();
+                set.save_quiet(&app_settings);
+            }
+
+            win.set_sort_column_idx(new_col.to_index());
+            win.set_sort_order_idx(new_ord.to_index());
+
+            Self::reload(&win, &lib, &thumb, &st, false, false);
+        });
+
+        // 6. In-Memory Real-Time Column Resize with Microsecond Benchmark Tracing
+        let last_resize_time = Arc::new(parking_lot::Mutex::new(Instant::now()));
+        let resize_events_count = Arc::new(AtomicUsize::new(0));
+
+        let last_time_clone = last_resize_time;
+        let count_clone = resize_events_count;
+
+        window.on_column_resized(move |col_idx, new_width| {
+            let t0 = Instant::now();
+            let count = count_clone.fetch_add(1, Ordering::Relaxed);
+
+            let mut last_log = last_time_clone.lock();
+            let elapsed_since_last = last_log.elapsed();
+            if elapsed_since_last.as_millis() >= 100 {
+                let hz = if elapsed_since_last.as_millis() > 0 {
+                    (count as f64) / (elapsed_since_last.as_secs_f64())
+                } else {
+                    0.0
+                };
+                let elapsed_us = t0.elapsed().as_micros();
+                tracing::debug!(
+                    col_idx = col_idx,
+                    width = new_width,
+                    event_rate_hz = format!("{:.1}", hz),
+                    total_events = count,
+                    processing_us = elapsed_us,
+                    "[Benchmark: TableView Column Drag] Smooth high-FPS column layout update active"
+                );
+                *last_log = Instant::now();
+                count_clone.store(0, Ordering::Relaxed);
+            }
+        });
+
+        // 7. Column Resize Finished on Mouse Release (Atomically persist to settings.json)
+        let set_res = settings.clone();
+        window.on_column_resize_finished(move |col_idx, final_width| {
+            let t0 = Instant::now();
+            let width_f32 = final_width;
+            let mut app_settings = set_res.get();
+
+            match col_idx {
+                0 => app_settings.view.col_filename_width = width_f32,
+                1 => app_settings.view.col_dimensions_width = width_f32,
+                2 => app_settings.view.col_size_width = width_f32,
+                3 => app_settings.view.col_rating_width = width_f32,
+                _ => {}
+            }
+
+            set_res.save_quiet(&app_settings);
+            let elapsed_us = t0.elapsed().as_micros();
+
+            tracing::info!(
+                col_idx = col_idx,
+                final_width = width_f32,
+                save_time_us = elapsed_us,
+                "[Benchmark: ColumnResizeCommit] Column width persisted to disk storage"
+            );
+        });
+
+        // 8. View Mode Toggled (Grid <-> Table)
+        let set_mode = settings;
+        window.on_view_mode_toggled(move |is_table| {
+            let mut app_settings = set_mode.get();
+            app_settings.view.is_table_view = is_table;
+            set_mode.save_quiet(&app_settings);
+            tracing::info!(
+                is_table_view = is_table,
+                "[ViewMode: Toggle] Persisted active view mode"
+            );
         });
     }
 
@@ -124,7 +241,7 @@ impl BridgeMedia {
         indexed
     }
 
-    /// Full or filtered reload of the media grid/table view with strict vertical-only containment.
+    /// Full or filtered reload of the media grid/table view.
     pub fn reload(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -149,7 +266,7 @@ impl BridgeMedia {
         let Some(f_id) = folder_id else {
             window.set_media_items(ModelRc::new(VecModel::from(vec![])));
             window.set_items_metric_text("Items: 0".into());
-            tracing::debug!("[MediaGrid] Reload bypassed: No active folder selected");
+            tracing::debug!("[MediaView] Reload bypassed: No active folder selected");
             return;
         };
 
@@ -167,7 +284,6 @@ impl BridgeMedia {
         }
 
         let current_query = filter.search_query.trim().to_string();
-        let is_full_reset = filter.is_empty();
 
         let is_refinement = !current_query.is_empty()
             && !last_query.is_empty()
@@ -189,9 +305,8 @@ impl BridgeMedia {
         let t_sort_start = Instant::now();
         let mut sorted_refs = filtered_refs;
 
-        if !is_full_reset || reload_lmdb {
-            MediaSorter::sort_indexed_refs(&mut sorted_refs, sort_col, sort_ord);
-        }
+        // Apply global active sort column and order
+        MediaSorter::sort_indexed_refs(&mut sorted_refs, sort_col, sort_ord);
         let sort_us = t_sort_start.elapsed().as_micros();
 
         let t_map_start = Instant::now();
@@ -269,8 +384,8 @@ impl BridgeMedia {
 
         tracing::debug!(
             folder_id = f_id,
-            query = %current_query,
-            is_reset = is_full_reset,
+            sort_column = ?sort_col,
+            sort_order = ?sort_ord,
             matched = matched_count,
             total_folder = total_folder_count,
             filter_us = filter_us,
@@ -278,7 +393,7 @@ impl BridgeMedia {
             model_mapping_us = map_us,
             slint_commit_us = slint_us,
             total_pipeline_us = t_total_start.elapsed().as_micros(),
-            "[MediaGrid: ViewPipeline] Rendered media items to UI (Vertical-only Scroll, Zero-Horizontal-Overflow)"
+            "[MediaView: ViewPipeline] Rendered media items with synchronized global sorting"
         );
 
         if start_pipeline {

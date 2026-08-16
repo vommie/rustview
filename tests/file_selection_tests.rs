@@ -49,6 +49,23 @@ fn test_file_selection_single_click_clears_prior() {
 }
 
 #[test]
+fn test_file_selection_clear_all() {
+    let mut sel = FileSelectionModel::new();
+    sel.select_single(101);
+    sel.toggle(102);
+    sel.toggle(103);
+    assert_eq!(sel.count(), 3);
+
+    sel.clear();
+    assert_eq!(sel.count(), 0);
+    assert!(!sel.is_selected(101));
+    assert!(!sel.is_selected(102));
+    assert!(!sel.is_selected(103));
+    assert_eq!(sel.anchor_id(), None);
+    assert_eq!(sel.last_clicked_id(), None);
+}
+
+#[test]
 fn test_file_selection_diff_computation() {
     let mut prev = HashSet::new();
     prev.insert(1);
