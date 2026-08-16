@@ -43,7 +43,8 @@ export component SettingsWindow inherits Window {
     in-out property <bool> show-folder-metrics: true;
 
     // Appearance options
-    in-out property <int> default-thumb-size: 150;
+    in-out property <int> default-thumb-size: 190;
+    in-out property <int> thumb-aspect-idx: 1; // 0=1:1, 1=4:3, 2=5:4, 3=16:9, 4=3:4, 5=4:5, 6=9:16
     in-out property <bool> show-filenames: true;
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
@@ -119,6 +120,7 @@ export component SettingsWindow inherits Window {
 
                     if root.active-category == 2 : SettingsPageAppearance {
                         default-thumb-size <=> root.default-thumb-size;
+                        thumb-aspect-idx <=> root.thumb-aspect-idx;
                         show-filenames <=> root.show-filenames;
                         show-rating-badge <=> root.show-rating-badge;
                         show-tag-badge <=> root.show-tag-badge;

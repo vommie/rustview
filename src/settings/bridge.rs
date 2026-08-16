@@ -1,5 +1,5 @@
 use super::registry::SettingsManager;
-use super::schema::AppSettings;
+use super::schema::{AppSettings, GridAspectRatio};
 use crate::ui::{MainWindow, SettingsWindow};
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::path::PathBuf;
@@ -62,7 +62,10 @@ impl SettingsDialogController {
         window.set_show_deleted_folders(settings.folders.show_deleted_folders);
         window.set_show_folder_metrics(settings.folders.show_folder_metrics);
 
+        // Appearance properties
         window.set_default_thumb_size(settings.appearance.default_thumbnail_size as i32);
+        let ratio = GridAspectRatio::from_str_name(&settings.appearance.thumbnail_aspect_ratio);
+        window.set_thumb_aspect_idx(ratio.to_index());
         window.set_show_filenames(settings.appearance.show_filenames);
         window.set_show_rating_badge(settings.appearance.show_ratings_overlay);
         window.set_show_tag_badge(settings.appearance.show_tags_overlay);
@@ -170,6 +173,8 @@ impl SettingsDialogController {
                 current.folders.show_folder_metrics = w.get_show_folder_metrics();
 
                 current.appearance.default_thumbnail_size = w.get_default_thumb_size() as u32;
+                let ratio = GridAspectRatio::from_index(w.get_thumb_aspect_idx());
+                current.appearance.thumbnail_aspect_ratio = ratio.as_str().to_string();
                 current.appearance.show_filenames = w.get_show_filenames();
                 current.appearance.show_ratings_overlay = w.get_show_rating_badge();
                 current.appearance.show_tags_overlay = w.get_show_tag_badge();
@@ -188,7 +193,8 @@ impl SettingsDialogController {
                 } else {
                     "WebP".to_string()
                 };
-                current.performance.thumbnail_quality = w.get_thumb_quality().clamp(10, 100) as u8;
+                current.performance.thumbnail_quality =
+                    w.get_thumb_quality().clamp(10, 100) as u8;
                 current.performance.scaling_algorithm = match w.get_scaling_algo_idx() {
                     1 => "Bilinear".to_string(),
                     2 => "Lanczos3".to_string(),
@@ -211,7 +217,8 @@ impl SettingsDialogController {
                 } else {
                     "WebP".to_string()
                 };
-                current.performance.preview_quality = w.get_preview_quality().clamp(10, 100) as u8;
+                current.performance.preview_quality =
+                    w.get_preview_quality().clamp(10, 100) as u8;
 
                 current.player.autoplay_videos = w.get_autoplay_videos();
                 current.player.default_volume = w.get_default_volume();

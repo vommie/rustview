@@ -5,14 +5,14 @@ import { MediaHeaderBar } from "media_header_bar.slint";
 
 export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
-    in property <int> thumb-size: 150;
+    in property <int> thumb-width: 190;
+    in property <int> thumb-aspect-idx: 1;
 
-    callback clicked(bool /* is_ctrl */, bool /* is_shift */);
-    callback context-menu-requested(length /* x */, length /* y */);
-    callback hover-changed(bool /* is_hover */);
+    property <length> item-thumb-w: root.thumb-width * 1px;
+    property <length> item-thumb-h: Theme.calculate-thumb-height(root.thumb-width, root.thumb-aspect-idx);
 
-    property <length> tile-width: (root.thumb-size * 1px) + 16px;
-    property <length> tile-height: (root.thumb-size * 1px) + 42px;
+    property <length> tile-width: root.item-thumb-w + 16px;
+    property <length> tile-height: root.item-thumb-h + 42px;
 
     width: root.tile-width;
     height: root.tile-height;
@@ -21,6 +21,10 @@ export component MediaTile inherits Rectangle {
     border-color: item.is-selected ? Theme.primary : Theme.border;
     border-radius: 4px;
     clip: true;
+
+    callback clicked(bool /* is_ctrl */, bool /* is_shift */);
+    callback context-menu-requested(length /* x */, length /* y */);
+    callback hover-changed(bool /* is_hover */);
 
     property <bool> is-hovered: tile-touch.has-hover;
     changed is-hovered => {
@@ -47,8 +51,8 @@ export component MediaTile inherits Rectangle {
         alignment: center;
 
         Rectangle {
-            width: root.thumb-size * 1px;
-            height: root.thumb-size * 1px;
+            width: root.item-thumb-w;
+            height: root.item-thumb-h;
             background: #000000;
             border-radius: 2px;
             clip: true;
@@ -129,7 +133,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
     clip: true;
 
     in property <[MediaItemView]> media-items: [];
-    in property <int> thumb-size: 150;
+    in property <int> thumb-size: 190;
+    in property <int> thumb-aspect-idx: 1;
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
 
@@ -137,8 +142,11 @@ export component VirtualizedMediaGrid inherits Rectangle {
     property <length> grid-spacing: 12px;
     property <length> scrollbar-gutter-reserve: 16px;
 
-    property <length> item-tile-width: (root.thumb-size * 1px) + 16px;
-    property <length> item-tile-height: (root.thumb-size * 1px) + 42px;
+    property <length> item-thumb-w: root.thumb-size * 1px;
+    property <length> item-thumb-h: Theme.calculate-thumb-height(root.thumb-size, root.thumb-aspect-idx);
+
+    property <length> item-tile-width: root.item-thumb-w + 16px;
+    property <length> item-tile-height: root.item-thumb-h + 42px;
     property <length> column-stride: root.item-tile-width + root.grid-spacing;
     property <length> row-stride: root.item-tile-height + root.grid-spacing;
 
@@ -197,7 +205,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     col: Math.mod(index, root.columns);
                     row: Math.floor(index / root.columns);
                     item: item;
-                    thumb-size: root.thumb-size;
+                    thumb-width: root.thumb-size;
+                    thumb-aspect-idx: root.thumb-aspect-idx;
 
                     property <length> tile-y: (Math.floor(index / root.columns) * root.row-stride) + root.grid-padding;
                     property <length> screen-y: self.tile-y + scroll-area.clamped-y;

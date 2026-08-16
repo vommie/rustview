@@ -1,11 +1,12 @@
-import { Slider, CheckBox } from "std-widgets.slint";
+import { Slider, CheckBox, ComboBox } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
 export component SettingsPageAppearance inherits VerticalLayout {
     spacing: 12px;
 
-    in-out property <int> default-thumb-size: 150;
+    in-out property <int> default-thumb-size: 190;
+    in-out property <int> thumb-aspect-idx: 1; // 0=1:1, 1=4:3, 2=5:4, 3=16:9, 4=3:4, 5=4:5, 6=9:16
     in-out property <bool> show-filenames: true;
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
@@ -16,22 +17,40 @@ export component SettingsPageAppearance inherits VerticalLayout {
 
         HorizontalLayout {
             Text {
-                text: "Default Thumbnail Size:";
+                text: "Default Thumbnail Width:";
                 color: Theme.text;
                 vertical-alignment: center;
+                horizontal-stretch: 1;
             }
             Slider {
                 width: 140px;
                 minimum: 80;
-                maximum: 300;
+                maximum: 400;
                 value: root.default-thumb-size;
                 changed(v) => { root.default-thumb-size = Math.round(v); }
             }
             Text {
                 text: root.default-thumb-size + "px";
                 color: Theme.primary;
-                width: 45px;
+                width: 50px;
                 vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Thumbnail Aspect Ratio:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            ComboBox {
+                width: 180px;
+                model: ["1:1 (Square)", "4:3 (Standard)", "5:4 (Landscape)", "16:9 (Widescreen)", "3:4 (Portrait)", "4:5 (Portrait)", "9:16 (Tall Portrait)"];
+                current-index <=> root.thumb-aspect-idx;
             }
         }
 

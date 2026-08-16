@@ -1,6 +1,65 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// =============================================================================
+// Central Single Point of Truth Constants for Appearance & Grid Presentation
+// =============================================================================
+pub const DEFAULT_THUMBNAIL_WIDTH: u32 = 190;
+pub const DEFAULT_THUMBNAIL_ASPECT_RATIO: &str = "4:3";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum GridAspectRatio {
+    Ratio1x1 = 0,
+    Ratio4x3 = 1,
+    Ratio5x4 = 2,
+    Ratio16x9 = 3,
+    Ratio3x4 = 4,
+    Ratio4x5 = 5,
+    Ratio9x16 = 6,
+}
+
+impl GridAspectRatio {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Ratio1x1 => "1:1",
+            Self::Ratio4x3 => "4:3",
+            Self::Ratio5x4 => "5:4",
+            Self::Ratio16x9 => "16:9",
+            Self::Ratio3x4 => "3:4",
+            Self::Ratio4x5 => "4:5",
+            Self::Ratio9x16 => "9:16",
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.trim() {
+            "1:1" => Self::Ratio1x1,
+            "5:4" => Self::Ratio5x4,
+            "16:9" => Self::Ratio16x9,
+            "3:4" => Self::Ratio3x4,
+            "4:5" => Self::Ratio4x5,
+            "9:16" => Self::Ratio9x16,
+            _ => Self::Ratio4x3, // Default 4:3
+        }
+    }
+
+    pub fn to_index(&self) -> i32 {
+        *self as i32
+    }
+
+    pub fn from_index(idx: i32) -> Self {
+        match idx {
+            0 => Self::Ratio1x1,
+            2 => Self::Ratio5x4,
+            3 => Self::Ratio16x9,
+            4 => Self::Ratio3x4,
+            5 => Self::Ratio4x5,
+            6 => Self::Ratio9x16,
+            _ => Self::Ratio4x3,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeletionMode {
     Trash,
@@ -53,6 +112,7 @@ impl Default for FolderSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppearanceSettings {
     pub default_thumbnail_size: u32,
+    pub thumbnail_aspect_ratio: String,
     pub show_filenames: bool,
     pub show_ratings_overlay: bool,
     pub show_tags_overlay: bool,
@@ -63,7 +123,8 @@ pub struct AppearanceSettings {
 impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
-            default_thumbnail_size: 150,
+            default_thumbnail_size: DEFAULT_THUMBNAIL_WIDTH,
+            thumbnail_aspect_ratio: DEFAULT_THUMBNAIL_ASPECT_RATIO.to_string(),
             show_filenames: true,
             show_ratings_overlay: true,
             show_tags_overlay: true,

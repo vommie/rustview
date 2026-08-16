@@ -5,7 +5,7 @@ export component TopToolbar inherits Rectangle {
     height: 48px;
     background: Theme.surface;
 
-    in-out property <int> thumb-size: 150;
+    in-out property <int> thumb-size: 190;
     in-out property <string> search-text <=> search-input.text;
     in-out property <bool> regex-mode: false;
     in-out property <bool> is-table-view: false;
@@ -53,7 +53,7 @@ export component TopToolbar inherits Rectangle {
         size-slider := Slider {
             width: 120px;
             minimum: 80;
-            maximum: 300;
+            maximum: 400;
             value: root.thumb-size;
             changed(val) => {
                 root.thumb-size = Math.round(val);
@@ -64,7 +64,7 @@ export component TopToolbar inherits Rectangle {
         Text {
             text: root.thumb-size + "px";
             color: Theme.text;
-            width: 42px;
+            width: 45px;
             vertical-alignment: center;
         }
 

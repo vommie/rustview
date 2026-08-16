@@ -5,7 +5,7 @@ use super::bridge_tags::BridgeTags;
 use super::{FolderNodeView, MainWindow};
 use crate::library::Library;
 use crate::library::models::{FolderId, FolderRecord};
-use crate::settings::{SettingsDialogController, SettingsManager};
+use crate::settings::{GridAspectRatio, SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -247,6 +247,8 @@ impl BridgeFolders {
     ) {
         let s = settings.get();
         window.set_thumb_size(s.appearance.default_thumbnail_size as i32);
+        let ratio = GridAspectRatio::from_str_name(&s.appearance.thumbnail_aspect_ratio);
+        window.set_thumb_aspect_idx(ratio.to_index());
 
         let Some(ref root_path) = s.general.root_folder else {
             Self::clear_view(

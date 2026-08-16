@@ -17,7 +17,7 @@ use crate::library::Library;
 use crate::library::models::{FolderId, MediaId, TagId};
 use crate::player::PlayerController;
 use crate::query::{SortColumn, SortOrder};
-use crate::settings::{AppSettings, SettingsDialogController, SettingsManager};
+use crate::settings::{AppSettings, GridAspectRatio, SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, Timer};
@@ -90,6 +90,12 @@ impl UiBridge {
         window.set_col_size_width(v_settings.col_size_width);
         window.set_col_rating_width(v_settings.col_rating_width);
 
+        // Apply centralized appearance settings
+        let app_settings = settings.get();
+        window.set_thumb_size(app_settings.appearance.default_thumbnail_size as i32);
+        let ratio = GridAspectRatio::from_str_name(&app_settings.appearance.thumbnail_aspect_ratio);
+        window.set_thumb_aspect_idx(ratio.to_index());
+
         let state = Arc::new(RwLock::new(initial_state));
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let last_click = Arc::new(Mutex::new(None));
@@ -131,6 +137,8 @@ impl UiBridge {
             is_table = v_settings.is_table_view,
             sort_col = ?initial_sort_col,
             sort_ord = ?initial_sort_ord,
+            thumb_size = app_settings.appearance.default_thumbnail_size,
+            aspect_ratio = %app_settings.appearance.thumbnail_aspect_ratio,
             "[UiBridge] Initialized all UI bridges, restored persistent view and sort state"
         );
 
@@ -155,6 +163,10 @@ impl UiBridge {
             let state = state.clone();
 
             let _ = w_weak.upgrade_in_event_loop(move |window| {
+                let app_s = settings.get();
+                window.set_thumb_size(app_s.appearance.default_thumbnail_size as i32);
+                let ratio = GridAspectRatio::from_str_name(&app_s.appearance.thumbnail_aspect_ratio);
+                window.set_thumb_aspect_idx(ratio.to_index());
                 BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
             });
         });

@@ -28,4 +28,17 @@ export global Theme {
         if rating == 5 { return rating-5; }
         return rating-0;
     }
+
+    /// Calculates thumbnail image height based on width and aspect ratio index.
+    /// (0: 1:1, 1: 4:3, 2: 5:4, 3: 16:9, 4: 3:4, 5: 4:5, 6: 9:16)
+    pure public function calculate-thumb-height(width-px: int, aspect-idx: int) -> length {
+        if aspect-idx == 0 { return (width-px * 1px); }
+        if aspect-idx == 1 { return Math.round(width-px * 3 / 4) * 1px; }
+        if aspect-idx == 2 { return Math.round(width-px * 4 / 5) * 1px; }
+        if aspect-idx == 3 { return Math.round(width-px * 9 / 16) * 1px; }
+        if aspect-idx == 4 { return Math.round(width-px * 4 / 3) * 1px; }
+        if aspect-idx == 5 { return Math.round(width-px * 5 / 4) * 1px; }
+        if aspect-idx == 6 { return Math.round(width-px * 16 / 9) * 1px; }
+        return Math.round(width-px * 3 / 4) * 1px;
+    }
 }

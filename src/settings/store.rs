@@ -1,4 +1,4 @@
-use super::schema::AppSettings;
+use super::schema::{AppSettings, GridAspectRatio};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -58,8 +58,12 @@ impl SettingsStore {
             settings.general.last_folder_path = None;
         }
 
+        // Appearance sanitization
         settings.appearance.default_thumbnail_size =
-            settings.appearance.default_thumbnail_size.clamp(80, 300);
+            settings.appearance.default_thumbnail_size.clamp(80, 500);
+
+        let ratio = GridAspectRatio::from_str_name(&settings.appearance.thumbnail_aspect_ratio);
+        settings.appearance.thumbnail_aspect_ratio = ratio.as_str().to_string();
 
         // Performance sanitization
         settings.performance.l1_cache_slots = settings.performance.l1_cache_slots.clamp(100, 8000);
@@ -91,14 +95,8 @@ impl SettingsStore {
             settings.performance.scaling_algorithm = "CatmullRom".to_string();
         }
 
-        if !settings
-            .performance
-            .video_engine
-            .eq_ignore_ascii_case("mpv")
-            && !settings
-                .performance
-                .video_engine
-                .eq_ignore_ascii_case("ffmpeg")
+        if !settings.performance.video_engine.eq_ignore_ascii_case("mpv")
+            && !settings.performance.video_engine.eq_ignore_ascii_case("ffmpeg")
         {
             settings.performance.video_engine = "FFmpeg".to_string();
         }
@@ -119,7 +117,8 @@ impl SettingsStore {
         {
             settings.performance.preview_format = "WebP".to_string();
         }
-        settings.performance.preview_quality = settings.performance.preview_quality.clamp(10, 100);
+        settings.performance.preview_quality =
+            settings.performance.preview_quality.clamp(10, 100);
 
         settings.player.default_volume = settings.player.default_volume.clamp(0.0, 100.0);
 
