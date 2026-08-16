@@ -253,7 +253,11 @@ impl BridgeMedia {
         });
 
         let set_mode = settings;
+        let win_mode = window.as_weak();
         window.on_view_mode_toggled(move |is_table| {
+            if let Some(w) = win_mode.upgrade() {
+                w.set_is_table_view(is_table);
+            }
             let mut app_settings = set_mode.get();
             app_settings.view.is_table_view = is_table;
             set_mode.save_quiet(&app_settings);

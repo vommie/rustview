@@ -37,6 +37,8 @@ export component MainWindow inherits Window {
     in-out property <int> thumb-aspect-idx: 1; // 0=1:1, 1=4:3, 2=5:4, 3=16:9, 4=3:4, 5=4:5, 6=9:16
     in-out property <string> status-text: "Ready.";
     in-out property <string> items-metric-text: "Items: 0";
+    in-out property <string> search-query: "";
+    in-out property <bool> regex-mode: false;
 
     // Global Sorting Properties
     in-out property <int> sort-column-idx: 0;
@@ -153,13 +155,7 @@ export component MainWindow inherits Window {
         spacing: 0px;
 
         TopToolbar {
-            thumb-size <=> root.thumb-size;
-            is-table-view <=> root.is-table-view;
-            refresh-clicked => { root.refresh-folder(); }
             settings-clicked => { root.open-settings(); }
-            search-changed(text) => { root.search-query-changed(text); }
-            regex-toggled(enabled) => { root.regex-mode-toggled(enabled); }
-            view-mode-toggled(is-table) => { root.view-mode-toggled(is-table); }
         }
 
         HorizontalLayout {
@@ -171,7 +167,7 @@ export component MainWindow inherits Window {
                 favorites: root.favorites;
                 folder-clicked(id, path) => { root.folder-selected(id, path); }
                 folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
-                folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 48px + sidebar_left.y + y); }
+                folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 38px + sidebar_left.y + y); }
                 folder-refresh-clicked => { root.folder-refresh-clicked(); }
                 favorite-clicked(path) => { root.favorite-selected(path); }
             }
@@ -195,12 +191,23 @@ export component MainWindow inherits Window {
 
                 if !root.is-player-open && !root.is-table-view : VirtualizedMediaGrid {
                     media-items: root.media-items;
-                    thumb-size: root.thumb-size;
+                    thumb-size <=> root.thumb-size;
                     thumb-aspect-idx: root.thumb-aspect-idx;
                     sort-column: root.sort-column-idx;
                     sort-order: root.sort-order-idx;
+                    search-text <=> root.search-query;
+                    regex-mode <=> root.regex-mode;
+                    is-table-view <=> root.is-table-view;
+                    thumb-size-changed(w) => { /* Thumb width updated */ }
+                    search-changed(t) => { root.search-query-changed(t); }
+                    regex-toggled(r) => { root.regex-mode-toggled(r); }
+                    refresh-clicked => { root.refresh-folder(); }
+                    view-mode-toggled(is-table) => {
+                        root.is-table-view = is-table;
+                        root.view-mode-toggled(is-table);
+                    }
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 48px); }
+                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 38px); }
                     item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                     sort-clicked(idx) => { root.sort-column-clicked(idx); }
                     background-clicked => { root.background-clicked(); }
@@ -208,14 +215,24 @@ export component MainWindow inherits Window {
 
                 if !root.is-player-open && root.is-table-view : MediaTableView {
                     items: root.media-items;
+                    search-text <=> root.search-query;
+                    regex-mode <=> root.regex-mode;
+                    is-table-view <=> root.is-table-view;
                     sort-column: root.sort-column-idx;
                     sort-order: root.sort-order-idx;
                     col-filename-width <=> root.col-filename-width;
                     col-dimensions-width <=> root.col-dimensions-width;
                     col-size-width <=> root.col-size-width;
                     col-rating-width <=> root.col-rating-width;
+                    search-changed(t) => { root.search-query-changed(t); }
+                    regex-toggled(r) => { root.regex-mode-toggled(r); }
+                    refresh-clicked => { root.refresh-folder(); }
+                    view-mode-toggled(is-table) => {
+                        root.is-table-view = is-table;
+                        root.view-mode-toggled(is-table);
+                    }
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 48px); }
+                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 38px); }
                     sort-clicked(idx) => { root.sort-column-clicked(idx); }
                     column-resized(idx, w) => { root.column-resized(idx, w); }
                     column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
@@ -236,8 +253,8 @@ export component MainWindow inherits Window {
                 rating-selected(r) => { root.rating-applied(r); }
                 tag-clicked(id) => { root.tag-toggled(id); }
                 tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
-                tag-context-menu(id, x, y) => { root.tag-context-menu(id, sidebar_right.x + x, 48px + sidebar_right.y + y); }
-                root-context-menu(x, y) => { root.tag-root-context-menu(sidebar_right.x + x, 48px + sidebar_right.y + y); }
+                tag-context-menu(id, x, y) => { root.tag-context-menu(id, sidebar_right.x + x, 38px + sidebar_right.y + y); }
+                root-context-menu(x, y) => { root.tag-root-context-menu(sidebar_right.x + x, 38px + sidebar_right.y + y); }
                 tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
                 match-mode-changed(m) => { root.match-mode-changed(m); }
                 scope-mode-changed(s) => { root.scope-mode-changed(s); }

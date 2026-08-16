@@ -1,0 +1,61 @@
+import { Theme } from "styles.slint";
+import { PanelToolbar, ToolbarButton, ToolbarToggleButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
+import { ToolbarSearchField } from "toolbar_search_field.slint";
+
+/// Dedicated modular toolbar for the Media Table View.
+/// Integrates Expander, Filter Search, Regex Toggle, Refresh, and ViewMode Switcher.
+export component MediaTablePanelToolbar inherits PanelToolbar {
+    in-out property <string> search-text <=> search-field.text;
+    in-out property <bool> regex-mode: false;
+    in-out property <bool> is-table-view: true;
+
+    callback search-changed(string);
+    callback regex-toggled(bool);
+    callback refresh-clicked();
+    callback view-mode-toggled(bool);
+
+    toolbar-height: 26px;
+
+    // 1. Expander / Spacer (Pushes search & view actions to the right)
+    ToolbarSpacer {}
+
+    // 2. Filter Search Field
+    search-field := ToolbarSearchField {
+        placeholder-text: "Filter...";
+        field-width: 150px;
+        search-changed(txt) => { root.search-changed(txt); }
+    }
+
+    // 3. Filter Regex Toggle Button
+    ToolbarToggleButton {
+        text: ".*";
+        is-active: root.regex-mode;
+        tooltip: "Toggle Regular Expression filter mode";
+        font-size: 12px;
+        padding-horizontal: 6px;
+        toggled(active) => {
+            root.regex-mode = active;
+            root.regex-toggled(active);
+        }
+    }
+
+    // 4. Separator
+    ToolbarSeparator {}
+
+    // 5. Refresh Media Button
+    ToolbarButton {
+        icon: @image-url("icons/refresh.svg");
+        tooltip: "Scan and refresh media in current folder";
+        clicked => { root.refresh-clicked(); }
+    }
+
+    // 6. Separator
+    ToolbarSeparator {}
+
+    // 7. View Mode Switcher Button
+    ToolbarButton {
+        icon: root.is-table-view ? @image-url("icons/grid_view.svg") : @image-url("icons/list_view.svg");
+        tooltip: root.is-table-view ? "Switch to Grid View" : "Switch to Table View";
+        clicked => { root.view-mode-toggled(!root.is-table-view); }
+    }
+}

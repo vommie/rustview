@@ -1,21 +1,11 @@
-import { Button, LineEdit, Slider } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 
 export component TopToolbar inherits Rectangle {
-    height: 48px;
+    height: 38px;
     background: Theme.surface;
 
-    in-out property <int> thumb-size: 190;
-    in-out property <string> search-text <=> search-input.text;
-    in-out property <bool> regex-mode: false;
-    in-out property <bool> is-table-view: false;
-
-    callback refresh-clicked();
     callback settings-clicked();
-    callback thumb-size-changed(int);
-    callback search-changed(string);
-    callback regex-toggled(bool);
-    callback view-mode-toggled(bool);
 
     // Bottom border separator line
     Rectangle {
@@ -27,104 +17,13 @@ export component TopToolbar inherits Rectangle {
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
-        spacing: 12px;
-        alignment: center;
-
-        Button {
-            text: "Refresh";
-            icon: @image-url("icons/refresh.svg");
-            clicked => { root.refresh-clicked(); }
-        }
+        spacing: 8px;
+        alignment: start;
 
         Button {
             text: "Settings";
             icon: @image-url("icons/settings.svg");
             clicked => { root.settings-clicked(); }
-        }
-
-        Rectangle { width: 1px; background: Theme.border; height: 24px; }
-
-        Text {
-            text: "Size:";
-            color: Theme.text-muted;
-            vertical-alignment: center;
-        }
-
-        size-slider := Slider {
-            width: 120px;
-            minimum: 80;
-            maximum: 400;
-            value: root.thumb-size;
-            changed(val) => {
-                root.thumb-size = Math.round(val);
-                root.thumb-size-changed(root.thumb-size);
-            }
-        }
-
-        Text {
-            text: root.thumb-size + "px";
-            color: Theme.text;
-            width: 45px;
-            vertical-alignment: center;
-        }
-
-        Rectangle { width: 1px; background: Theme.border; height: 24px; }
-
-        search-input := LineEdit {
-            placeholder-text: "Filter...";
-            horizontal-stretch: 1;
-            edited(text) => { root.search-changed(text); }
-        }
-
-        // Regex Toggle Button
-        Rectangle {
-            width: 32px;
-            height: 32px;
-            border-radius: 4px;
-            background: root.regex-mode ? Theme.primary : Theme.surface-variant;
-            border-width: 1px;
-            border-color: Theme.border;
-
-            TouchArea {
-                clicked => {
-                    root.regex-mode = !root.regex-mode;
-                    root.regex-toggled(root.regex-mode);
-                }
-            }
-
-            Text {
-                text: ".*";
-                color: root.regex-mode ? #000000 : Theme.text;
-                font-weight: 700;
-                font-size: 13px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-        }
-
-        // View Mode Switch Button
-        Rectangle {
-            width: 32px;
-            height: 32px;
-            border-radius: 4px;
-            background: Theme.surface-variant;
-            border-width: 1px;
-            border-color: Theme.border;
-
-            TouchArea {
-                clicked => {
-                    root.is-table-view = !root.is-table-view;
-                    root.view-mode-toggled(root.is-table-view);
-                }
-            }
-
-            Image {
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                source: root.is-table-view ? @image-url("icons/grid_view.svg") : @image-url("icons/list_view.svg");
-                width: 16px;
-                height: 16px;
-            }
         }
     }
 }

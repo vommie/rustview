@@ -1,0 +1,53 @@
+import { Slider } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+
+/// Standalone compact thumbnail width slider control with dynamic readout.
+/// Strictly left-aligned with zero horizontal stretch to sit flush on the toolbar edge.
+export component ToolbarThumbWidthControl inherits Rectangle {
+    in-out property <int> thumb-width: 190;
+    in property <int> min-thumb-width: 80;
+    in property <int> max-thumb-width: 400;
+
+    callback thumb-width-changed(int);
+
+    width: layout.preferred-width;
+    height: 100%;
+    horizontal-stretch: 0;
+    background: transparent;
+
+    layout := HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
+        spacing: 6px;
+        alignment: start;
+
+        Text {
+            text: "Width:";
+            color: Theme.text-muted;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        slider := Slider {
+            width: 100px;
+            height: 100%;
+            minimum: root.min-thumb-width;
+            maximum: root.max-thumb-width;
+            value: root.thumb-width;
+            changed(val) => {
+                root.thumb-width = Math.round(val);
+                root.thumb-width-changed(root.thumb-width);
+            }
+        }
+
+        Text {
+            text: root.thumb-width + "px";
+            color: Theme.text;
+            font-size: 11px;
+            min-width: 42px;
+            vertical-alignment: center;
+            horizontal-alignment: left;
+        }
+    }
+}

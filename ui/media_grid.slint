@@ -2,6 +2,7 @@ import { Theme } from "styles.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
+import { MediaGridPanelToolbar } from "media_grid_panel_toolbar.slint";
 
 export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
@@ -133,10 +134,13 @@ export component VirtualizedMediaGrid inherits Rectangle {
     clip: true;
 
     in property <[MediaItemView]> media-items: [];
-    in property <int> thumb-size: 190;
+    in-out property <int> thumb-size: 190;
     in property <int> thumb-aspect-idx: 1;
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
+    in-out property <string> search-text: "";
+    in-out property <bool> regex-mode: false;
+    in-out property <bool> is-table-view: false;
 
     property <length> grid-padding: 12px;
     property <length> grid-spacing: 12px;
@@ -158,10 +162,28 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback sort-clicked(int /* column_index */);
     callback background-clicked();
     callback item-hover-changed(int /* id */, bool /* is_hover */);
+    callback thumb-size-changed(int);
+    callback search-changed(string);
+    callback regex-toggled(bool);
+    callback refresh-clicked();
+    callback view-mode-toggled(bool);
 
     VerticalLayout {
         padding: 0px;
-        spacing: 0px;
+        spacing: 4px;
+
+        // Dedicated Grid View Panel Toolbar
+        MediaGridPanelToolbar {
+            thumb-width <=> root.thumb-size;
+            search-text <=> root.search-text;
+            regex-mode <=> root.regex-mode;
+            is-table-view <=> root.is-table-view;
+            thumb-width-changed(w) => { root.thumb-size-changed(w); }
+            search-changed(t) => { root.search-changed(t); }
+            regex-toggled(r) => { root.regex-toggled(r); }
+            refresh-clicked => { root.refresh-clicked(); }
+            view-mode-toggled(is-table) => { root.view-mode-toggled(is-table); }
+        }
 
         MediaHeaderBar {
             sort-column: root.sort-column;
@@ -218,7 +240,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                         root.item-context-menu(
                             item.id,
                             self.x + mx,
-                            28px + self.y + my + scroll-area.clamped-y
+                            58px + self.y + my + scroll-area.clamped-y
                         );
                     }
                 }
