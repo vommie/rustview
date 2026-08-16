@@ -19,9 +19,10 @@ pub use loader::{PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
 pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 pub use store::PackStore;
 pub use types::{
-    DEFAULT_THUMBNAIL_BOUND, FitMode, ScalingAlgorithm, THUMBNAIL_CHANNELS, ThumbnailConfig,
-    ThumbnailFormat, ThumbnailHandle, ThumbnailLocation, ThumbnailPriority, anonymize_target,
-    calculate_aspect_dimensions,
+    DEFAULT_THUMBNAIL_BOUND, FitMode, ScalingAlgorithm, THUMBNAIL_BYTE_SIZE, THUMBNAIL_CHANNELS,
+    THUMBNAIL_PIXELS, THUMBNAIL_SIZE, ThumbnailConfig, ThumbnailFormat, ThumbnailHandle,
+    ThumbnailLocation, ThumbnailPriority, VideoPreviewRecord, VideoThumbnailEngine,
+    anonymize_target, calculate_aspect_dimensions,
 };
 
 use crate::library::Library;
@@ -90,11 +91,22 @@ impl ThumbnailManager {
         self.scheduler.load_sync(media_id, file_path, config)
     }
 
+    pub fn load_preview_frames_sync(
+        &self,
+        media_id: MediaId,
+    ) -> Result<Vec<(u32, u32, Vec<u8>)>, ThumbnailError> {
+        self.scheduler.load_preview_frames_sync(media_id)
+    }
+
     pub fn cache(&self) -> &L1ThumbnailCache {
         &self.cache
     }
 
     pub fn store(&self) -> &PackStore {
         &self.store
+    }
+
+    pub fn scheduler(&self) -> &ThumbnailScheduler {
+        &self.scheduler
     }
 }

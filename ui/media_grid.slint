@@ -3,13 +3,13 @@ import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
 
-/// Individual Media Item Tile with responsive boundary containment and viewport culling
 export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
     in property <int> thumb-size: 150;
 
     callback clicked(bool /* is_ctrl */, bool /* is_shift */);
     callback context-menu-requested(length /* x */, length /* y */);
+    callback hover-changed(bool /* is_hover */);
 
     property <length> tile-width: (root.thumb-size * 1px) + 16px;
     property <length> tile-height: (root.thumb-size * 1px) + 42px;
@@ -21,6 +21,13 @@ export component MediaTile inherits Rectangle {
     border-color: item.is-selected ? Theme.primary : Theme.border;
     border-radius: 4px;
     clip: true;
+
+    property <bool> is-hovered: tile-touch.has-hover;
+    changed is-hovered => {
+        if item.is-video {
+            root.hover-changed(self.is-hovered);
+        }
+    }
 
     tile-touch := TouchArea {
         pointer-event(event) => {
@@ -117,7 +124,6 @@ export component MediaTile inherits Rectangle {
     }
 }
 
-/// Pure Vertical Scrolling Grid Container with Unified Sort Strip, Viewport Culling, and Zero Horizontal Scrollbars.
 export component VirtualizedMediaGrid inherits Rectangle {
     background: Theme.background;
     clip: true;
@@ -127,7 +133,6 @@ export component VirtualizedMediaGrid inherits Rectangle {
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
 
-    // Layout configuration constants
     property <length> grid-padding: 12px;
     property <length> grid-spacing: 12px;
     property <length> scrollbar-gutter-reserve: 16px;
@@ -137,22 +142,19 @@ export component VirtualizedMediaGrid inherits Rectangle {
     property <length> column-stride: root.item-tile-width + root.grid-spacing;
     property <length> row-stride: root.item-tile-height + root.grid-spacing;
 
-    // Available inner width accounting for margins, padding, and vertical scrollbar gutter
     property <length> available-width: Math.max(0px, self.width - (root.grid-padding * 2) - root.scrollbar-gutter-reserve + root.grid-spacing);
-
-    // Exact reactive column calculation: Guarantees items wrap cleanly without exceeding width
     out property <int> columns: Math.max(1, Math.floor(root.available-width / root.column-stride));
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
     callback sort-clicked(int /* column_index */);
     callback background-clicked();
+    callback item-hover-changed(int /* id */, bool /* is_hover */);
 
     VerticalLayout {
         padding: 0px;
         spacing: 0px;
 
-        // Shared Modular Header as Grid Sort Strip
         MediaHeaderBar {
             sort-column: root.sort-column;
             sort-order: root.sort-order;
@@ -164,7 +166,6 @@ export component VirtualizedMediaGrid inherits Rectangle {
             sort-clicked(idx) => { root.sort-clicked(idx); }
         }
 
-        // Pure Vertical Scroll Area with Viewport Culling
         scroll-area := SmoothScrollArea {
             vertical-stretch: 1;
             enable-horizontal: false;
@@ -172,7 +173,6 @@ export component VirtualizedMediaGrid inherits Rectangle {
             content-width: self.width;
             content-height: grid-layout.preferred-height + (2 * root.grid-padding);
 
-            // Full-area background touch handler to deselect when clicking on empty grid space
             bg-touch := TouchArea {
                 width: 100%;
                 height: 100%;
@@ -199,12 +199,12 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     item: item;
                     thumb-size: root.thumb-size;
 
-                    // Viewport Culling for Grid Tiles
                     property <length> tile-y: (Math.floor(index / root.columns) * root.row-stride) + root.grid-padding;
                     property <length> screen-y: self.tile-y + scroll-area.clamped-y;
                     visible: self.screen-y >= -root.item-tile-height && self.screen-y <= scroll-area.height + root.item-tile-height;
 
                     clicked(ctrl, shift) => { root.item-clicked(item.id, ctrl, shift); }
+                    hover-changed(hover) => { root.item-hover-changed(item.id, hover); }
                     context-menu-requested(mx, my) => {
                         root.item-context-menu(
                             item.id,

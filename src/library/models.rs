@@ -1,5 +1,5 @@
 use crate::media::{FileHash, MediaFormat, MediaType};
-pub use crate::thumbnails::types::ThumbnailLocation;
+pub use crate::thumbnails::types::{ThumbnailLocation, VideoPreviewRecord};
 use heed::{BoxedError, BytesDecode, BytesEncode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -35,7 +35,6 @@ impl<'a> BytesDecode<'a> for FolderRecordCodec {
         match bincode::deserialize::<FolderRecord>(bytes) {
             Ok(record) => Ok(record),
             Err(_) => {
-                // Fallback: deserialize legacy 3-field FolderRecord without `is_deleted`
                 let legacy: LegacyFolderRecord = bincode::deserialize(bytes)?;
                 Ok(FolderRecord {
                     id: legacy.id,

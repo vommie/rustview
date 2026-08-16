@@ -91,6 +91,23 @@ impl SettingsStore {
             settings.performance.scaling_algorithm = "CatmullRom".to_string();
         }
 
+        if !settings
+            .performance
+            .video_engine
+            .eq_ignore_ascii_case("mpv")
+            && !settings
+                .performance
+                .video_engine
+                .eq_ignore_ascii_case("ffmpeg")
+        {
+            settings.performance.video_engine = "FFmpeg".to_string();
+        }
+
+        settings.performance.video_offset_percent =
+            settings.performance.video_offset_percent.clamp(1, 90);
+        settings.performance.preview_frame_count =
+            settings.performance.preview_frame_count.clamp(2, 100);
+
         settings.player.default_volume = settings.player.default_volume.clamp(0.0, 100.0);
 
         // Sanitize view column widths

@@ -1,8 +1,7 @@
 use super::error::ThumbnailError;
 use super::image::{DecodedThumbnailFrame, ImageDecoder, SimdImageThumbnailer};
-use super::types::{ScalingAlgorithm, ThumbnailFormat};
-use super::video::{FfmpegVideoThumbnailer, VideoFrameDecoder};
-use crate::media::{MediaFormat, MediaType};
+use super::types::{ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat};
+use super::video::{DynamicVideoThumbnailer, VideoExtractionResult};
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::webp::WebPEncoder;
 use image::{ColorType, ExtendedColorType};
@@ -12,36 +11,37 @@ use std::time::Instant;
 
 pub struct ThumbnailGenerator {
     image_decoder: Arc<dyn ImageDecoder>,
-    video_decoder: Arc<dyn VideoFrameDecoder>,
+    video_decoder: Arc<DynamicVideoThumbnailer>,
 }
 
 impl ThumbnailGenerator {
     pub fn new() -> Self {
         Self {
             image_decoder: Arc::new(SimdImageThumbnailer::new()),
-            video_decoder: Arc::new(FfmpegVideoThumbnailer::new()),
+            video_decoder: Arc::new(DynamicVideoThumbnailer::new()),
         }
     }
 
-    /// Decodes image or video frame and SIMD resizes to aspect-ratio target within max_bound.
-    pub fn generate_thumbnail(
+    /// Decodes image frame and SIMD resizes to aspect-ratio target within max_bound.
+    pub fn generate_image_thumbnail(
         &self,
         path: &Path,
         max_bound: u32,
         scaling_algo: ScalingAlgorithm,
     ) -> Result<DecodedThumbnailFrame, ThumbnailError> {
-        let format = MediaFormat::from_path(path);
-        match format.media_type() {
-            Some(MediaType::Image) => {
-                self.image_decoder
-                    .decode_and_resize(path, max_bound, scaling_algo)
-            }
-            Some(MediaType::Video) => {
-                self.video_decoder
-                    .extract_and_resize(path, max_bound, scaling_algo)
-            }
-            None => Err(ThumbnailError::Ffmpeg("Unsupported media type".into())),
-        }
+        self.image_decoder
+            .decode_and_resize(path, max_bound, scaling_algo)
+    }
+
+    /// Extracts video primary thumbnail and optional multi-frame previews in a single pass.
+    pub fn generate_video_thumbnails(
+        &self,
+        path: &Path,
+        config: &ThumbnailConfig,
+    ) -> Result<VideoExtractionResult, ThumbnailError> {
+        self.video_decoder
+            .decoder_for(config.video_engine)
+            .extract_video(path, config)
     }
 
     /// Compresses raw RGB8 pixels to configured format (WebP or JPEG) with specified quality factor (10..100).

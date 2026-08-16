@@ -8,11 +8,16 @@ use crate::query::{MatchMode, MediaSorter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::SettingsManager;
 use crate::thumbnails::{
     PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager,
+    VideoThumbnailEngine,
 };
 use parking_lot::RwLock;
-use slint::{ComponentHandle, Image, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel};
+use slint::{
+    ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, Timer, VecModel,
+};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
@@ -119,6 +124,75 @@ impl BridgeMedia {
             win.set_sort_order_idx(new_ord.to_index());
 
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
+        });
+
+        // Hover Video Preview Animation Handler
+        let win = window.clone_strong();
+        let thumb = thumbnails.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        let preview_anim_timer = Rc::new(RefCell::new(Option::<Timer>::None));
+
+        let win_hover = win.clone_strong();
+        let timer_clone = preview_anim_timer;
+        window.on_media_hover_changed(move |id, is_hover| {
+            let media_id = id as u64;
+            if !set.get().appearance.enable_hover_previews {
+                return;
+            }
+
+            let mut timer_guard = timer_clone.borrow_mut();
+            *timer_guard = None; // Stop any running preview
+
+            if is_hover {
+                if let Ok(frames) = thumb.load_preview_frames_sync(media_id) {
+                    let frame_buffers: Vec<SharedPixelBuffer<Rgb8Pixel>> = frames
+                        .into_iter()
+                        .map(|(w, h, rgb)| rgb8_to_shared_buffer(&rgb, w, h))
+                        .collect();
+
+                    if frame_buffers.len() > 1 {
+                        let win_w = win_hover.as_weak();
+                        let st_c = st.clone();
+                        let frame_idx = Rc::new(RefCell::new(0usize));
+                        let frame_idx_clone = frame_idx;
+
+                        let timer = Timer::default();
+                        timer.start(
+                            slint::TimerMode::Repeated,
+                            std::time::Duration::from_millis(250),
+                            move || {
+                                if let Some(w) = win_w.upgrade() {
+                                    let mut idx_ref = frame_idx_clone.borrow_mut();
+                                    let current_idx = *idx_ref % frame_buffers.len();
+                                    *idx_ref += 1;
+                                    let buf = &frame_buffers[current_idx];
+                                    let model = w.get_media_items();
+                                    let st_r = st_c.read();
+                                    if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
+                                        && let Some(mut item) = model.row_data(row_idx)
+                                    {
+                                        item.thumbnail = Image::from_rgb8(buf.clone());
+                                        model.set_row_data(row_idx, item);
+                                    }
+                                }
+                            },
+                        );
+                        *timer_guard = Some(timer);
+                    }
+                }
+            } else {
+                // Restore default static thumbnail on mouse leave
+                let model = win_hover.get_media_items();
+                let st_r = st.read();
+                if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
+                    && let Some(buf) = st_r.folder_thumbnails.get(&media_id)
+                    && let Some(mut item) = model.row_data(row_idx)
+                {
+                    item.thumbnail = Image::from_rgb8(buf.clone());
+                    model.set_row_data(row_idx, item);
+                }
+            }
         });
 
         let last_resize_time = Arc::new(parking_lot::Mutex::new(Instant::now()));
@@ -392,6 +466,10 @@ impl BridgeMedia {
                 quality: perf.thumbnail_quality,
                 scaling_algorithm: ScalingAlgorithm::from_str_name(&perf.scaling_algorithm),
                 batch_commit_size: perf.batch_commit_size,
+                video_engine: VideoThumbnailEngine::from_str_name(&perf.video_engine),
+                video_offset_percent: perf.video_offset_percent,
+                generate_video_previews: perf.generate_video_previews,
+                preview_frame_count: perf.preview_frame_count,
             };
             thumbnails.start_pipeline(f_id, pipeline_targets, config);
         }

@@ -9,6 +9,7 @@ export component SettingsPageAppearance inherits VerticalLayout {
     in-out property <bool> show-filenames: true;
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
+    in-out property <bool> enable-hover-previews: true;
 
     SettingsCard {
         title: "Grid & Thumbnail Presentation";
@@ -47,6 +48,11 @@ export component SettingsPageAppearance inherits VerticalLayout {
         CheckBox {
             text: "Show tag indicator overlay";
             checked <=> root.show-tag-badge;
+        }
+
+        CheckBox {
+            text: "Enable hover video preview animation (YouTube-style)";
+            checked <=> root.enable-hover-previews;
         }
     }
 }

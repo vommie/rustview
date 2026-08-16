@@ -100,6 +100,7 @@ export component MainWindow inherits Window {
     callback favorite-selected(string);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
+    callback media-hover-changed(int /* id */, bool /* is_hover */);
     callback background-clicked();
 
     callback context-menu-item-clicked(int /* action_id */);
@@ -195,6 +196,7 @@ export component MainWindow inherits Window {
                     sort-order: root.sort-order-idx;
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                     item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 48px); }
+                    item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                     sort-clicked(idx) => { root.sort-column-clicked(idx); }
                     background-clicked => { root.background-clicked(); }
                 }
@@ -252,7 +254,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Generic Multi-Level Context Menu Popup Overlay
     if root.is-context-menu-open : ContextMenuPopup {
         level0-items: root.level0-context-items;
         level1-items: root.level1-context-items;
@@ -267,12 +268,10 @@ export component MainWindow inherits Window {
         dismissed => { root.context-menu-dismissed(); }
     }
 
-    // Modal Interaction Blocker Overlay
     if root.is-modal-locked : Rectangle {
         background: #00000066;
 
         TouchArea {
-            // Absorbs all clicks when a modal dialog is open
         }
     }
 }

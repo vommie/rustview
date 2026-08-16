@@ -1,7 +1,7 @@
 use rustview::library::Library;
 use rustview::thumbnails::{
     PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailGenerator,
-    ThumbnailManager, calculate_aspect_dimensions,
+    ThumbnailManager, VideoThumbnailEngine, calculate_aspect_dimensions,
 };
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -42,13 +42,17 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
     let manager =
         Arc::new(ThumbnailManager::new(library.clone(), tmp_cache.path(), 128, 4).unwrap());
 
-    // 1. Generate with WebP format
+    // 1. Generate with WebP format & full video config
     let webp_config = ThumbnailConfig {
         max_bound: 256,
         format: ThumbnailFormat::Webp,
         quality: 80,
         scaling_algorithm: ScalingAlgorithm::CatmullRom,
         batch_commit_size: 16,
+        video_engine: VideoThumbnailEngine::Ffmpeg,
+        video_offset_percent: 10,
+        generate_video_previews: true,
+        preview_frame_count: 5,
     };
 
     let targets = vec![

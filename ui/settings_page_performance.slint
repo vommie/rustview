@@ -1,4 +1,4 @@
-import { Slider, Button, ComboBox } from "std-widgets.slint";
+import { Slider, Button, ComboBox, CheckBox } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
@@ -12,6 +12,10 @@ export component SettingsPagePerformance inherits VerticalLayout {
     in-out property <int> thumb-format-idx: 0; // 0 = WebP, 1 = JPEG
     in-out property <int> thumb-quality: 80;
     in-out property <int> scaling-algo-idx: 0; // 0 = CatmullRom, 1 = Bilinear, 2 = Lanczos3, 3 = Nearest
+    in-out property <int> video-engine-idx: 0; // 0 = FFmpeg, 1 = MPV
+    in-out property <int> video-offset-percent: 10;
+    in-out property <bool> generate-video-previews: true;
+    in-out property <int> preview-frame-count: 5;
 
     // Card 1: Threading & Concurrency
     SettingsCard {
@@ -180,6 +184,79 @@ export component SettingsPagePerformance inherits VerticalLayout {
                 width: 200px;
                 model: ["Bicubic (CatmullRom)", "Bilinear (Triangle)", "Lanczos3", "Nearest"];
                 current-index <=> root.scaling-algo-idx;
+            }
+        }
+    }
+
+    // Card 4: Video Thumbnailing & Previews
+    SettingsCard {
+        title: "Video Thumbnailing & Previews";
+        description: "Specify the backend video decoding library, extraction timestamp offset, and multi-frame preview animation generation.";
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Video Extraction Engine:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            ComboBox {
+                width: 200px;
+                model: ["FFmpeg (High Performance)", "MPV (libmpv Engine)"];
+                current-index <=> root.video-engine-idx;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Primary Thumbnail Position Offset:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 150px;
+                minimum: 1;
+                maximum: 90;
+                value: root.video-offset-percent;
+                changed(v) => { root.video-offset-percent = Math.round(v); }
+            }
+            Text {
+                text: root.video-offset-percent + "%";
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        CheckBox {
+            text: "Generate multi-frame previews for hover animation";
+            checked <=> root.generate-video-previews;
+        }
+
+        if root.generate-video-previews : HorizontalLayout {
+            Text {
+                text: "Preview Frame Count (10%–90% split):";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 150px;
+                minimum: 2;
+                maximum: 100;
+                value: root.preview-frame-count;
+                changed(v) => { root.preview-frame-count = Math.round(v); }
+            }
+            Text {
+                text: root.preview-frame-count + " frames";
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
             }
         }
     }

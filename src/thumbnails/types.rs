@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 pub const DEFAULT_THUMBNAIL_BOUND: u32 = 256;
+pub const THUMBNAIL_SIZE: u32 = 256;
 pub const THUMBNAIL_CHANNELS: usize = 3;
+pub const THUMBNAIL_PIXELS: usize = (THUMBNAIL_SIZE * THUMBNAIL_SIZE) as usize;
+pub const THUMBNAIL_BYTE_SIZE: usize = THUMBNAIL_PIXELS * THUMBNAIL_CHANNELS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ThumbnailPriority {
@@ -13,7 +16,6 @@ pub enum ThumbnailPriority {
     P4Maintenance = 4,
 }
 
-/// Supported thumbnail binary compression codecs stored inside the L2 PackStore.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ThumbnailFormat {
     Webp = 0,
@@ -35,7 +37,6 @@ impl ThumbnailFormat {
         }
     }
 
-    /// Sniffs format from the initial magic bytes of compressed thumbnail data with zero overhead.
     pub fn detect(bytes: &[u8]) -> Option<Self> {
         if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8 {
             return Some(ThumbnailFormat::Jpeg);
@@ -47,7 +48,6 @@ impl ThumbnailFormat {
     }
 }
 
-/// Supported high-performance SIMD resizing interpolation algorithms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ScalingAlgorithm {
     Nearest = 0,
@@ -91,6 +91,28 @@ impl ScalingAlgorithm {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum VideoThumbnailEngine {
+    Ffmpeg = 0,
+    Mpv = 1,
+}
+
+impl VideoThumbnailEngine {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            VideoThumbnailEngine::Ffmpeg => "FFmpeg",
+            VideoThumbnailEngine::Mpv => "MPV",
+        }
+    }
+
+    pub fn from_str_name(name: &str) -> Self {
+        match name.to_ascii_lowercase().as_str() {
+            "mpv" | "libmpv" => VideoThumbnailEngine::Mpv,
+            _ => VideoThumbnailEngine::Ffmpeg,
+        }
+    }
+}
+
 /// Fully resolved thumbnail generation parameters passed to worker threads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThumbnailConfig {
@@ -99,6 +121,10 @@ pub struct ThumbnailConfig {
     pub quality: u8,
     pub scaling_algorithm: ScalingAlgorithm,
     pub batch_commit_size: usize,
+    pub video_engine: VideoThumbnailEngine,
+    pub video_offset_percent: u8,
+    pub generate_video_previews: bool,
+    pub preview_frame_count: u32,
 }
 
 impl Default for ThumbnailConfig {
@@ -109,6 +135,10 @@ impl Default for ThumbnailConfig {
             quality: 80,
             scaling_algorithm: ScalingAlgorithm::CatmullRom,
             batch_commit_size: 32,
+            video_engine: VideoThumbnailEngine::Ffmpeg,
+            video_offset_percent: 10,
+            generate_video_previews: true,
+            preview_frame_count: 5,
         }
     }
 }
@@ -118,6 +148,13 @@ pub struct ThumbnailLocation {
     pub pack_id: u32,
     pub offset: u64,
     pub length: u32,
+}
+
+/// Container recording multi-frame preview positions inside the PackStore.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VideoPreviewRecord {
+    pub frame_count: u32,
+    pub frame_locations: Vec<ThumbnailLocation>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,8 +169,6 @@ pub struct ThumbnailHandle {
     pub generation: u32,
 }
 
-/// Computes the target thumbnail dimensions preserving aspect ratio without black letterbox borders.
-/// If `max_bound` is 256, the longest edge (width or height) will be exactly 256px.
 #[inline]
 pub fn calculate_aspect_dimensions(orig_w: u32, orig_h: u32, max_bound: u32) -> (u32, u32) {
     if orig_w == 0 || orig_h == 0 {
@@ -149,7 +184,6 @@ pub fn calculate_aspect_dimensions(orig_w: u32, orig_h: u32, max_bound: u32) -> 
     (target_w, target_h)
 }
 
-/// Anonymizes a filesystem path for logging to guarantee privacy while preserving debugging utility.
 pub fn anonymize_target(path: &Path, media_id: Option<u64>) -> String {
     let ext = path
         .extension()

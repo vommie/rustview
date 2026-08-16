@@ -56,6 +56,7 @@ pub struct AppearanceSettings {
     pub show_filenames: bool,
     pub show_ratings_overlay: bool,
     pub show_tags_overlay: bool,
+    pub enable_hover_previews: bool,
     pub dark_theme: bool,
 }
 
@@ -66,6 +67,7 @@ impl Default for AppearanceSettings {
             show_filenames: true,
             show_ratings_overlay: true,
             show_tags_overlay: true,
+            enable_hover_previews: true,
             dark_theme: true,
         }
     }
@@ -105,6 +107,10 @@ pub struct PerformanceSettings {
     pub thumbnail_quality: u8,
     pub scaling_algorithm: String,
     pub batch_commit_size: usize,
+    pub video_engine: String,
+    pub video_offset_percent: u8,
+    pub generate_video_previews: bool,
+    pub preview_frame_count: u32,
 }
 
 impl Default for PerformanceSettings {
@@ -120,6 +126,10 @@ impl Default for PerformanceSettings {
             thumbnail_quality: 80,
             scaling_algorithm: "CatmullRom".to_string(),
             batch_commit_size: 32,
+            video_engine: "FFmpeg".to_string(),
+            video_offset_percent: 10,
+            generate_video_previews: true,
+            preview_frame_count: 5,
         }
     }
 }

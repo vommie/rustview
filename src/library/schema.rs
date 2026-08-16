@@ -15,6 +15,7 @@ pub const DB_TAGS_BY_PARENT_NAME: &str = "tags_by_parent_name";
 pub const DB_TAGS_BY_MEDIA: &str = "tags_by_media";
 pub const DB_MEDIA_BY_TAG: &str = "media_by_tag";
 pub const DB_THUMBNAILS: &str = "thumbnails";
+pub const DB_VIDEO_PREVIEWS: &str = "video_previews";
 
 // Sequence Key Identifiers
 pub const SEQ_FOLDER_ID: &str = "seq_folder_id";

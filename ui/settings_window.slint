@@ -23,12 +23,11 @@ export { SmoothScrollArea } from "smooth_scroll_view.slint";
 export component SettingsWindow inherits Window {
     title: "RustView - Settings";
     preferred-width: 860px;
-    preferred-height: 620px;
+    preferred-height: 640px;
     min-width: 740px;
-    min-height: 520px;
+    min-height: 540px;
     background: Theme.background;
 
-    // Active Category (0=General, 1=Folders, 2=Appearance, 3=Performance, 4=Player, 5=Tags)
     in-out property <int> active-category: 0;
 
     // General options
@@ -48,8 +47,9 @@ export component SettingsWindow inherits Window {
     in-out property <bool> show-filenames: true;
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
+    in-out property <bool> enable-hover-previews: true;
 
-    // Granular Performance options
+    // Performance options
     in-out property <int> worker-threads: 4;
     in-out property <int> batch-commit-size: 32;
     in-out property <int> l1-cache-slots: 512;
@@ -57,6 +57,10 @@ export component SettingsWindow inherits Window {
     in-out property <int> thumb-format-idx: 0; // 0 = WebP, 1 = JPEG
     in-out property <int> thumb-quality: 80;
     in-out property <int> scaling-algo-idx: 0;
+    in-out property <int> video-engine-idx: 0; // 0 = FFmpeg, 1 = MPV
+    in-out property <int> video-offset-percent: 10;
+    in-out property <bool> generate-video-previews: true;
+    in-out property <int> preview-frame-count: 5;
 
     // Player options
     in-out property <int> hwdec-idx: 0;
@@ -115,6 +119,7 @@ export component SettingsWindow inherits Window {
                         show-filenames <=> root.show-filenames;
                         show-rating-badge <=> root.show-rating-badge;
                         show-tag-badge <=> root.show-tag-badge;
+                        enable-hover-previews <=> root.enable-hover-previews;
                     }
 
                     if root.active-category == 3 : SettingsPagePerformance {
@@ -125,6 +130,10 @@ export component SettingsWindow inherits Window {
                         thumb-format-idx <=> root.thumb-format-idx;
                         thumb-quality <=> root.thumb-quality;
                         scaling-algo-idx <=> root.scaling-algo-idx;
+                        video-engine-idx <=> root.video-engine-idx;
+                        video-offset-percent <=> root.video-offset-percent;
+                        generate-video-previews <=> root.generate-video-previews;
+                        preview-frame-count <=> root.preview-frame-count;
                     }
 
                     if root.active-category == 4 : SettingsPagePlayer {

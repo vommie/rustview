@@ -66,6 +66,7 @@ impl SettingsDialogController {
         window.set_show_filenames(settings.appearance.show_filenames);
         window.set_show_rating_badge(settings.appearance.show_ratings_overlay);
         window.set_show_tag_badge(settings.appearance.show_tags_overlay);
+        window.set_enable_hover_previews(settings.appearance.enable_hover_previews);
 
         // Performance properties
         window.set_worker_threads(settings.performance.worker_threads as i32);
@@ -97,6 +98,20 @@ impl SettingsDialogController {
                 _ => 0, // CatmullRom
             },
         );
+        window.set_video_engine_idx(
+            if settings
+                .performance
+                .video_engine
+                .eq_ignore_ascii_case("mpv")
+            {
+                1
+            } else {
+                0
+            },
+        );
+        window.set_video_offset_percent(settings.performance.video_offset_percent as i32);
+        window.set_generate_video_previews(settings.performance.generate_video_previews);
+        window.set_preview_frame_count(settings.performance.preview_frame_count as i32);
 
         window.set_autoplay_videos(settings.player.autoplay_videos);
         window.set_default_volume(settings.player.default_volume);
@@ -145,6 +160,7 @@ impl SettingsDialogController {
                 current.appearance.show_filenames = w.get_show_filenames();
                 current.appearance.show_ratings_overlay = w.get_show_rating_badge();
                 current.appearance.show_tags_overlay = w.get_show_tag_badge();
+                current.appearance.enable_hover_previews = w.get_enable_hover_previews();
 
                 // Save Performance Parameters
                 current.performance.worker_threads = w.get_worker_threads().clamp(1, 32) as usize;
@@ -166,6 +182,16 @@ impl SettingsDialogController {
                     3 => "Nearest".to_string(),
                     _ => "CatmullRom".to_string(),
                 };
+                current.performance.video_engine = if w.get_video_engine_idx() == 1 {
+                    "MPV".to_string()
+                } else {
+                    "FFmpeg".to_string()
+                };
+                current.performance.video_offset_percent =
+                    w.get_video_offset_percent().clamp(1, 90) as u8;
+                current.performance.generate_video_previews = w.get_generate_video_previews();
+                current.performance.preview_frame_count =
+                    w.get_preview_frame_count().clamp(2, 100) as u32;
 
                 current.player.autoplay_videos = w.get_autoplay_videos();
                 current.player.default_volume = w.get_default_volume();

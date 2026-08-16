@@ -26,6 +26,7 @@ pub struct LibraryDatabase {
     pub tags_by_media: Database<U64<BE>, SerdeBincode<Vec<TagId>>>,
     pub media_by_tag: Database<U32<BE>, SerdeBincode<Vec<MediaId>>>,
     pub thumbnails: Database<U64<BE>, SerdeBincode<ThumbnailLocation>>,
+    pub video_previews: Database<U64<BE>, SerdeBincode<VideoPreviewRecord>>,
 }
 
 impl LibraryDatabase {
@@ -35,7 +36,7 @@ impl LibraryDatabase {
         let env = unsafe {
             EnvOpenOptions::new()
                 .map_size(128 * 1024 * 1024 * 1024)
-                .max_dbs(16)
+                .max_dbs(20)
                 .open(path)?
         };
 
@@ -65,6 +66,8 @@ impl LibraryDatabase {
             env.create_database(&mut wtxn, Some(DB_MEDIA_BY_TAG))?;
         let thumbnails: Database<U64<BE>, SerdeBincode<ThumbnailLocation>> =
             env.create_database(&mut wtxn, Some(DB_THUMBNAILS))?;
+        let video_previews: Database<U64<BE>, SerdeBincode<VideoPreviewRecord>> =
+            env.create_database(&mut wtxn, Some(DB_VIDEO_PREVIEWS))?;
 
         if let Some(existing_meta) = meta.get(&wtxn, "meta")? {
             if existing_meta.schema_version != CURRENT_SCHEMA_VERSION {
@@ -105,6 +108,7 @@ impl LibraryDatabase {
             tags_by_media,
             media_by_tag,
             thumbnails,
+            video_previews,
         })
     }
 
