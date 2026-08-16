@@ -108,6 +108,19 @@ impl SettingsStore {
         settings.performance.preview_frame_count =
             settings.performance.preview_frame_count.clamp(2, 100);
 
+        if !settings
+            .performance
+            .preview_format
+            .eq_ignore_ascii_case("jpeg")
+            && !settings
+                .performance
+                .preview_format
+                .eq_ignore_ascii_case("webp")
+        {
+            settings.performance.preview_format = "WebP".to_string();
+        }
+        settings.performance.preview_quality = settings.performance.preview_quality.clamp(10, 100);
+
         settings.player.default_volume = settings.player.default_volume.clamp(0.0, 100.0);
 
         // Sanitize view column widths

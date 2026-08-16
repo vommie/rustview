@@ -42,7 +42,7 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
     let manager =
         Arc::new(ThumbnailManager::new(library.clone(), tmp_cache.path(), 128, 4).unwrap());
 
-    // 1. Generate with WebP format & full video config
+    // 1. Generate with WebP format & custom preview config
     let webp_config = ThumbnailConfig {
         max_bound: 256,
         format: ThumbnailFormat::Webp,
@@ -53,6 +53,9 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
         video_offset_percent: 10,
         generate_video_previews: true,
         preview_frame_count: 5,
+        custom_preview_settings: true,
+        preview_format: ThumbnailFormat::Webp,
+        preview_quality: 40,
     };
 
     let targets = vec![
@@ -95,7 +98,7 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
         .unwrap();
     assert_eq!((portrait_item.width, portrait_item.height), (144, 256));
 
-    // 2. Test L1 Cache Invalidation & Seamless Reload from PackStore (Verifying WebP magic bytes)
+    // 2. Test L1 Cache Invalidation & Seamless Reload from PackStore
     manager.cache().clear();
     let reloaded = manager
         .get_or_load_sync(media_list[0].id, &img1_path, webp_config.clone())
@@ -103,12 +106,12 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
     assert_eq!((reloaded.width, reloaded.height), (256, 144));
     assert_eq!(reloaded.pixels.len(), (256 * 144 * 3) as usize);
 
-    // 3. Test Mixed format decoding in PackStore (Direct Generator verification)
+    // 3. Test Mixed format decoding in PackStore
     let generator = ThumbnailGenerator::new();
     let raw_rgb = vec![200u8; 256 * 144 * 3];
 
     let webp_bytes = generator
-        .compress(&raw_rgb, 256, 144, ThumbnailFormat::Webp, 80)
+        .compress(&raw_rgb, 256, 144, ThumbnailFormat::Webp, 40)
         .unwrap();
     let (w1, h1, decoded_webp) = generator.decompress(&webp_bytes).unwrap();
     assert_eq!((w1, h1), (256, 144));

@@ -362,9 +362,16 @@ impl ThumbnailScheduler {
                             Ok(compressed_primary) => {
                                 match self.store.append(&compressed_primary) {
                                     Ok(primary_loc) => {
-                                        // Compress and store multi-frame previews
+                                        // Compress and store multi-frame previews with dedicated settings if enabled
                                         let mut preview_rec = None;
-                                        if video_res.preview_frames.len() >= 2 {
+                                        if !video_res.preview_frames.is_empty() {
+                                            let (p_format, p_quality) =
+                                                if config.custom_preview_settings {
+                                                    (config.preview_format, config.preview_quality)
+                                                } else {
+                                                    (config.format, config.quality)
+                                                };
+
                                             let mut locations =
                                                 Vec::with_capacity(video_res.preview_frames.len());
                                             for p_frame in &video_res.preview_frames {
@@ -372,14 +379,14 @@ impl ThumbnailScheduler {
                                                     &p_frame.rgb_pixels,
                                                     p_frame.width,
                                                     p_frame.height,
-                                                    config.format,
-                                                    config.quality,
+                                                    p_format,
+                                                    p_quality,
                                                 ) && let Ok(p_loc) = self.store.append(&p_bytes)
                                                 {
                                                     locations.push(p_loc);
                                                 }
                                             }
-                                            if locations.len() >= 2 {
+                                            if !locations.is_empty() {
                                                 preview_rec = Some(VideoPreviewRecord {
                                                     frame_count: locations.len() as u32,
                                                     frame_locations: locations,
@@ -623,8 +630,10 @@ impl ThumbnailScheduler {
             }
         }
 
-        if frames.len() < 2 {
-            return Err(ThumbnailError::Ffmpeg("Not enough preview frames".into()));
+        if frames.is_empty() {
+            return Err(ThumbnailError::Ffmpeg(
+                "Failed to decompress video preview frames".into(),
+            ));
         }
 
         Ok(frames)

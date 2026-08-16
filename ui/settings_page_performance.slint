@@ -16,6 +16,9 @@ export component SettingsPagePerformance inherits VerticalLayout {
     in-out property <int> video-offset-percent: 10;
     in-out property <bool> generate-video-previews: true;
     in-out property <int> preview-frame-count: 5;
+    in-out property <bool> custom-preview-settings: true;
+    in-out property <int> preview-format-idx: 0; // 0 = WebP, 1 = JPEG
+    in-out property <int> preview-quality: 40;
 
     // Card 1: Threading & Concurrency
     SettingsCard {
@@ -136,13 +139,13 @@ export component SettingsPagePerformance inherits VerticalLayout {
             }
 
             Button {
-                text: "WebP (Recommended)";
+                text: "WebP";
                 primary: root.thumb-format-idx == 0;
                 clicked => { root.thumb-format-idx = 0; }
             }
 
             Button {
-                text: "JPEG (Legacy)";
+                text: "JPEG";
                 primary: root.thumb-format-idx == 1;
                 clicked => { root.thumb-format-idx = 1; }
             }
@@ -253,6 +256,56 @@ export component SettingsPagePerformance inherits VerticalLayout {
             }
             Text {
                 text: root.preview-frame-count + " frames";
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        if root.generate-video-previews : CheckBox {
+            text: "Use dedicated compression settings for previews";
+            checked <=> root.custom-preview-settings;
+        }
+
+        if root.generate-video-previews && root.custom-preview-settings : HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Preview Storage Format:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "WebP";
+                primary: root.preview-format-idx == 0;
+                clicked => { root.preview-format-idx = 0; }
+            }
+
+            Button {
+                text: "JPEG";
+                primary: root.preview-format-idx == 1;
+                clicked => { root.preview-format-idx = 1; }
+            }
+        }
+
+        if root.generate-video-previews && root.custom-preview-settings : HorizontalLayout {
+            Text {
+                text: "Preview Compression Quality:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 150px;
+                minimum: 10;
+                maximum: 100;
+                value: root.preview-quality;
+                changed(v) => { root.preview-quality = Math.round(v); }
+            }
+            Text {
+                text: root.preview-quality + "%";
                 color: Theme.primary;
                 width: 75px;
                 vertical-alignment: center;

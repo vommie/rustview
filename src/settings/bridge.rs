@@ -112,6 +112,19 @@ impl SettingsDialogController {
         window.set_video_offset_percent(settings.performance.video_offset_percent as i32);
         window.set_generate_video_previews(settings.performance.generate_video_previews);
         window.set_preview_frame_count(settings.performance.preview_frame_count as i32);
+        window.set_custom_preview_settings(settings.performance.custom_preview_settings);
+        window.set_preview_format_idx(
+            if settings
+                .performance
+                .preview_format
+                .eq_ignore_ascii_case("jpeg")
+            {
+                1
+            } else {
+                0
+            },
+        );
+        window.set_preview_quality(settings.performance.preview_quality as i32);
 
         window.set_autoplay_videos(settings.player.autoplay_videos);
         window.set_default_volume(settings.player.default_volume);
@@ -192,6 +205,13 @@ impl SettingsDialogController {
                 current.performance.generate_video_previews = w.get_generate_video_previews();
                 current.performance.preview_frame_count =
                     w.get_preview_frame_count().clamp(2, 100) as u32;
+                current.performance.custom_preview_settings = w.get_custom_preview_settings();
+                current.performance.preview_format = if w.get_preview_format_idx() == 1 {
+                    "JPEG".to_string()
+                } else {
+                    "WebP".to_string()
+                };
+                current.performance.preview_quality = w.get_preview_quality().clamp(10, 100) as u8;
 
                 current.player.autoplay_videos = w.get_autoplay_videos();
                 current.player.default_volume = w.get_default_volume();

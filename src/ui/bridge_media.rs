@@ -151,7 +151,7 @@ impl BridgeMedia {
                         .map(|(w, h, rgb)| rgb8_to_shared_buffer(&rgb, w, h))
                         .collect();
 
-                    if frame_buffers.len() > 1 {
+                    if !frame_buffers.is_empty() {
                         let win_w = win_hover.as_weak();
                         let st_c = st.clone();
                         let frame_idx = Rc::new(RefCell::new(0usize));
@@ -470,6 +470,9 @@ impl BridgeMedia {
                 video_offset_percent: perf.video_offset_percent,
                 generate_video_previews: perf.generate_video_previews,
                 preview_frame_count: perf.preview_frame_count,
+                custom_preview_settings: perf.custom_preview_settings,
+                preview_format: ThumbnailFormat::from_str_name(&perf.preview_format),
+                preview_quality: perf.preview_quality,
             };
             thumbnails.start_pipeline(f_id, pipeline_targets, config);
         }

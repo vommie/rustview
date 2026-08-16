@@ -125,6 +125,9 @@ pub struct ThumbnailConfig {
     pub video_offset_percent: u8,
     pub generate_video_previews: bool,
     pub preview_frame_count: u32,
+    pub custom_preview_settings: bool,
+    pub preview_format: ThumbnailFormat,
+    pub preview_quality: u8,
 }
 
 impl Default for ThumbnailConfig {
@@ -139,6 +142,9 @@ impl Default for ThumbnailConfig {
             video_offset_percent: 10,
             generate_video_previews: true,
             preview_frame_count: 5,
+            custom_preview_settings: true,
+            preview_format: ThumbnailFormat::Webp,
+            preview_quality: 40,
         }
     }
 }
