@@ -1,0 +1,59 @@
+import { Theme } from "styles.slint";
+import { PanelToolbar, ToolbarSeparator, ToolbarSpacer, ToolbarToggleButton } from "panel_toolbar.slint";
+
+/// Specialized, fully encapsulated horizontal toolbar for the Tag & Rate Panel.
+/// Houses compact Mode, Match, and Scope toggle buttons with anti-jitter geometry and automatic disabled styling.
+export component TagPanelToolbar inherits PanelToolbar {
+    in-out property <bool> is-assign-mode: false;
+    in-out property <int> match-mode-idx: 0; // 0 = ALL, 1 = ANY
+    in-out property <int> scope-mode-idx: 0; // 0 = Folder, 1 = Global
+
+    callback mode-toggled(bool);
+    callback match-mode-changed(int);
+    callback scope-mode-changed(int);
+
+    toolbar-height: 26px;
+
+    // 1. Mode Toggle Button: QUERY vs ASSIGN
+    ToolbarToggleButton {
+        text-active: "ASSIGN";
+        text-inactive: "QUERY";
+        is-active: root.is-assign-mode;
+        is-enabled: true;
+        tooltip: "Mode: Toggle between Tag Query Filter and Tag Assignment mode";
+        toggled(active) => {
+            root.is-assign-mode = active;
+            root.mode-toggled(active);
+        }
+    }
+
+    ToolbarSeparator {}
+
+    // 2. Match Mode Toggle Button: ALL vs ANY (Disabled in Assign Mode)
+    ToolbarToggleButton {
+        text-active: "ANY";
+        text-inactive: "ALL";
+        is-active: root.match-mode-idx == 1;
+        is-enabled: !root.is-assign-mode;
+        tooltip: root.is-assign-mode ? "Match criteria is inactive during tag assignment" : "Match: Match ALL selected tags vs ANY tag";
+        toggled(active) => {
+            root.match-mode-idx = active ? 1 : 0;
+            root.match-mode-changed(root.match-mode-idx);
+        }
+    }
+
+    ToolbarSeparator {}
+
+    // 3. Scope Mode Toggle Button: Folder vs Global (Disabled in Assign Mode)
+    ToolbarToggleButton {
+        text-active: "Global";
+        text-inactive: "Folder";
+        is-active: root.scope-mode-idx == 1;
+        is-enabled: !root.is-assign-mode;
+        tooltip: root.is-assign-mode ? "Search scope is inactive during tag assignment" : "Scope: Filter within current Folder vs Global library";
+        toggled(active) => {
+            root.scope-mode-idx = active ? 1 : 0;
+            root.scope-mode-changed(root.scope-mode-idx);
+        }
+    }
+}

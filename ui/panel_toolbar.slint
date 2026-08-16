@@ -1,0 +1,64 @@
+import { Theme } from "styles.slint";
+import { ToolbarButton } from "toolbar_button.slint";
+import { ToolbarToggleButton } from "toolbar_toggle_button.slint";
+
+export { ToolbarButton } from "toolbar_button.slint";
+export { ToolbarToggleButton } from "toolbar_toggle_button.slint";
+
+/// Vertical divider for panel toolbars adapting automatically to toolbar height.
+export component ToolbarSeparator inherits Rectangle {
+    in property <length> margin-vertical: 3px;
+    in property <length> separator-width: 1px;
+    in property <color> separator-color: Theme.border;
+
+    width: root.separator-width + 6px; // 3px padding on each side
+    height: 100%;
+    horizontal-stretch: 0;
+    background: transparent;
+
+    Rectangle {
+        x: 3px;
+        y: root.margin-vertical;
+        width: root.separator-width;
+        height: Math.max(0px, parent.height - (2 * root.margin-vertical));
+        background: root.separator-color;
+    }
+}
+
+/// Flexible spacer expanding to fill available horizontal space in panel toolbars.
+export component ToolbarSpacer inherits Rectangle {
+    horizontal-stretch: 1;
+    min-width: 0px;
+    background: transparent;
+}
+
+/// Unified horizontal toolbar for panels, docks, and sidebars.
+/// Styled with an elevated surface background (Theme.surface-variant) to visually signal an interactive action strip.
+export component PanelToolbar inherits Rectangle {
+    in property <length> toolbar-height: 26px;
+    in property <color> toolbar-background: Theme.surface-variant;
+    in property <color> toolbar-border-color: Theme.border;
+    in property <length> toolbar-border-width: 1px;
+    in property <length> corner-radius: 4px;
+    in property <length> padding-horizontal: 4px;
+    in property <length> padding-vertical: 2px;
+    in property <length> item-spacing: 2px;
+
+    height: root.toolbar-height;
+    vertical-stretch: 0;
+    background: root.toolbar-background;
+    border-radius: root.corner-radius;
+    border-width: root.toolbar-border-width;
+    border-color: root.toolbar-border-color;
+    clip: true;
+
+    HorizontalLayout {
+        padding-left: root.padding-horizontal;
+        padding-right: root.padding-horizontal;
+        padding-top: root.padding-vertical;
+        padding-bottom: root.padding-vertical;
+        spacing: root.item-spacing;
+
+        @children
+    }
+}

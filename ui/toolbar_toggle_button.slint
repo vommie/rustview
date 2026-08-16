@@ -1,0 +1,123 @@
+import { Theme } from "styles.slint";
+
+/// Modular, jitter-free toggle button component for panel toolbars.
+/// Automatically calculates its fixed width from the longest text state to prevent layout shifts when toggled.
+export component ToolbarToggleButton inherits Rectangle {
+    in property <string> prefix: "";
+    in property <string> text-active: "";
+    in property <string> text-inactive: "";
+    in property <string> text: "";
+    in property <image> icon;
+    in property <string> tooltip: "";
+
+    in-out property <bool> is-active: false;
+    in property <bool> is-enabled: true;
+
+    in property <length> icon-size: 13px;
+    in property <length> font-size: 11px;
+    in property <length> padding-horizontal: 6px;
+    in property <length> button-width: 0px;
+
+    callback toggled(bool /* new_active_state */);
+    callback clicked();
+
+    property <bool> has-dual-states: root.text-active != "" && root.text-inactive != "";
+    property <string> full-active-text: root.prefix + root.text-active;
+    property <string> full-inactive-text: root.prefix + root.text-inactive;
+    property <string> current-display-text: root.has-dual-states
+        ? (root.is-active ? root.full-active-text : root.full-inactive-text)
+        : (root.text != "" ? (root.prefix + root.text) : "");
+
+    property <bool> has-icon: root.icon.width > 0 && root.icon.height > 0;
+    property <bool> has-text: root.current-display-text != "";
+
+    // Hidden measurement elements: Evaluates widest possible state with bold metrics to guarantee zero jitter
+    measure-active := Text {
+        text: root.full-active-text;
+        font-size: root.font-size;
+        font-weight: 700;
+        visible: false;
+    }
+
+    measure-inactive := Text {
+        text: root.full-inactive-text;
+        font-size: root.font-size;
+        font-weight: 700;
+        visible: false;
+    }
+
+    measure-fallback := Text {
+        text: root.prefix + root.text;
+        font-size: root.font-size;
+        font-weight: 700;
+        visible: false;
+    }
+
+    property <length> text-content-width: root.has-dual-states
+        ? Math.max(measure-active.preferred-width, measure-inactive.preferred-width)
+        : measure-fallback.preferred-width;
+
+    // Stable fixed width matching the longest state
+    width: root.button-width > 0px
+        ? root.button-width
+        : ((!root.has-text && root.has-icon)
+            ? self.height
+            : (root.text-content-width + (root.has-icon ? (root.icon-size + 4px) : 0px) + (root.padding-horizontal * 2)));
+    height: 100%;
+    horizontal-stretch: 0;
+    border-radius: 3px;
+
+    background: !root.is-enabled ? transparent : (
+        root.is-active ? Theme.surface-selected : (
+            touch-area.pressed ? Theme.surface-selected : (
+                touch-area.has-hover ? Theme.surface-hover : transparent
+            )
+        )
+    );
+
+    border-width: (root.is-active || (touch-area.has-hover && root.is-enabled)) ? 1px : 0px;
+    border-color: !root.is-enabled ? transparent : (root.is-active ? Theme.primary : Theme.border);
+    opacity: !root.is-enabled ? 0.38 : 1.0;
+
+    touch-area := TouchArea {
+        enabled: root.is-enabled;
+        mouse-cursor: root.is-enabled ? pointer : default;
+        clicked => {
+            root.is-active = !root.is-active;
+            root.toggled(root.is-active);
+            root.clicked();
+        }
+    }
+
+    content-layout := HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        padding-left: root.padding-horizontal;
+        padding-right: root.padding-horizontal;
+        spacing: 4px;
+        alignment: center;
+
+        if root.has-icon : Image {
+            source: root.icon;
+            width: root.icon-size;
+            height: root.icon-size;
+            y: (parent.height - self.height) / 2;
+            image-fit: contain;
+            opacity: root.is-enabled ? 1.0 : 0.4;
+        }
+
+        if root.has-text : Text {
+            text: root.current-display-text;
+            font-size: root.font-size;
+            font-weight: root.is-active ? 700 : 400;
+            color: !root.is-enabled ? Theme.text-muted : (
+                root.is-active ? Theme.primary : (
+                    touch-area.has-hover ? Theme.text : Theme.text-muted
+                )
+            );
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+}

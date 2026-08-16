@@ -4,12 +4,10 @@ import { TagNodeView } from "types.slint";
 import { RatingBar } from "rating_bar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { NodeButton } from "node_button.slint";
+import { TagPanelToolbar } from "tag_panel_toolbar.slint";
 
 export component TagDockHeader inherits Rectangle {
-    height: 28px;
-
-    in-out property <bool> is-assign-mode: false;
-    callback mode-toggled(bool);
+    height: 22px;
     callback root-context-menu(length, length);
 
     header-touch := TouchArea {
@@ -21,6 +19,8 @@ export component TagDockHeader inherits Rectangle {
     }
 
     HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
 
         Text {
             text: "TAG & RATE";
@@ -29,41 +29,6 @@ export component TagDockHeader inherits Rectangle {
             color: Theme.primary;
             vertical-alignment: center;
             horizontal-stretch: 1;
-        }
-
-        Button {
-            text: root.is-assign-mode ? "Mode: ASSIGN" : "Mode: QUERY";
-            clicked => {
-                root.is-assign-mode = !root.is-assign-mode;
-                root.mode-toggled(root.is-assign-mode);
-            }
-        }
-    }
-}
-
-export component QueryScopeControls inherits HorizontalLayout {
-    height: 28px;
-    spacing: 6px;
-
-    in-out property <int> match-mode-idx: 0;
-    in-out property <int> scope-mode-idx: 0;
-
-    callback match-mode-changed(int);
-    callback scope-mode-changed(int);
-
-    Button {
-        text: root.match-mode-idx == 0 ? "Match: ALL" : "Match: ANY";
-        clicked => {
-            root.match-mode-idx = root.match-mode-idx == 0 ? 1 : 0;
-            root.match-mode-changed(root.match-mode-idx);
-        }
-    }
-
-    Button {
-        text: root.scope-mode-idx == 0 ? "Scope: Folder" : "Scope: Global";
-        clicked => {
-            root.scope-mode-idx = root.scope-mode-idx == 0 ? 1 : 0;
-            root.scope-mode-changed(root.scope-mode-idx);
         }
     }
 }
@@ -226,7 +191,7 @@ export component TagTreeList inherits Rectangle {
 }
 
 export component TagPanel inherits VerticalLayout {
-    spacing: 8px;
+    spacing: 6px;
     vertical-stretch: 1;
 
     in-out property <bool> is-assign-mode: false;
@@ -245,34 +210,34 @@ export component TagPanel inherits VerticalLayout {
     callback tag-context-menu(int, length, length);
     callback root-context-menu(length, length);
 
-    // Dock Header
+    // 1. Clean Dock Header
     header := TagDockHeader {
-        is-assign-mode <=> root.is-assign-mode;
-        mode-toggled(assign) => { root.mode-toggled(assign); }
         root-context-menu(x, y) => { root.root-context-menu(header.x + x, header.y + y); }
     }
 
-    // Query Scope Controls (Only active in Query Mode)
-    if !root.is-assign-mode : QueryScopeControls {
+    // 2. Modular Tag Panel Toolbar (Mode, Match, Scope with Jitter-Free Toggles & Disabled State)
+    TagPanelToolbar {
+        is-assign-mode <=> root.is-assign-mode;
         match-mode-idx <=> root.match-mode-idx;
         scope-mode-idx <=> root.scope-mode-idx;
+        mode-toggled(assign) => { root.mode-toggled(assign); }
         match-mode-changed(m) => { root.match-mode-changed(m); }
         scope-mode-changed(s) => { root.scope-mode-changed(s); }
     }
 
-    // Rating Selector Bar
+    // 3. Rating Selector Bar
     RatingBar {
         selected-rating <=> root.selected-rating;
         rating-selected(r) => { root.rating-selected(r); }
     }
 
-    // Tag Filter Input
+    // 4. Tag Filter Input
     LineEdit {
         placeholder-text: "Filter tags...";
         edited(text) => { root.tag-filter-changed(text); }
     }
 
-    // Tag Hierarchical Tree View
+    // 5. Tag Hierarchical Tree View
     tree-list := TagTreeList {
         tags: root.tags;
         tag-clicked(id) => { root.tag-clicked(id); }

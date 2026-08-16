@@ -2,6 +2,7 @@ import { Theme } from "styles.slint";
 import { FolderNodeView } from "types.slint";
 import { NodeButton } from "node_button.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { FolderPanelToolbar } from "folder_panel_toolbar.slint";
 
 export component FolderItemRow inherits Rectangle {
     in property <FolderNodeView> folder;
@@ -116,12 +117,12 @@ export component FolderPanel inherits VerticalLayout {
 
     // Section Header
     Rectangle {
-        height: 26px;
+        height: 22px;
 
         HorizontalLayout {
             padding-left: 2px;
             padding-right: 2px;
-            alignment: space-between;
+            alignment: start;
 
             Text {
                 text: "FOLDERS";
@@ -130,29 +131,12 @@ export component FolderPanel inherits VerticalLayout {
                 color: Theme.primary;
                 vertical-alignment: center;
             }
-
-            // Dedicated Folder Refresh Button
-            Rectangle {
-                width: 24px;
-                height: 24px;
-                border-radius: 3px;
-                background: refresh-touch.has-hover ? Theme.surface-hover : transparent;
-                border-width: refresh-touch.has-hover ? 1px : 0px;
-                border-color: Theme.border;
-
-                refresh-touch := TouchArea {
-                    clicked => { root.refresh-clicked(); }
-                }
-
-                Image {
-                    source: @image-url("icons/refresh.svg");
-                    width: 14px;
-                    height: 14px;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                }
-            }
         }
+    }
+
+    // Modular Encapsulated Panel Toolbar
+    FolderPanelToolbar {
+        refresh-clicked => { root.refresh-clicked(); }
     }
 
     // Scrollable Tree Box

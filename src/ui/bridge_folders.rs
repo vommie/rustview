@@ -222,6 +222,7 @@ impl BridgeFolders {
         let st = state.clone();
         let win = window.clone_strong();
         window.on_folder_refresh_clicked(move || {
+            tracing::info!("[FolderPanel: Toolbar] Folder refresh action triggered via panel toolbar");
             Self::refresh_folder_tree(&win, &lib, &set, &st);
         });
 
@@ -362,6 +363,11 @@ impl BridgeFolders {
             window.set_status_text("Configured root directory not found on filesystem.".into());
             return;
         }
+
+        tracing::info!(
+            root = ?root_dir,
+            "[FolderPanel: Toolbar] Initiating high-speed recursive folder refresh from panel toolbar"
+        );
 
         window.set_is_refreshing_folders(true);
         window.set_folder_scan_count(0);

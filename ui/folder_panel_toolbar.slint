@@ -1,0 +1,18 @@
+import { Theme } from "styles.slint";
+import { PanelToolbar, ToolbarButton, ToolbarSpacer, ToolbarSeparator } from "panel_toolbar.slint";
+
+/// Specialized, fully encapsulated horizontal toolbar for the Folders Panel.
+/// Houses folder tree control actions such as rescanning and structure refresh.
+export component FolderPanelToolbar inherits PanelToolbar {
+    callback refresh-clicked();
+
+    toolbar-height: 26px;
+
+    ToolbarSpacer {}
+
+    ToolbarButton {
+        icon: @image-url("icons/refresh.svg");
+        tooltip: "Scan and refresh folder structure";
+        clicked => { root.refresh-clicked(); }
+    }
+}
