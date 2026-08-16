@@ -1,8 +1,14 @@
+use crate::settings::{
+    DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_GENERATE_VIDEO_PREVIEWS,
+    DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY,
+    DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
+    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-pub const DEFAULT_THUMBNAIL_BOUND: u32 = 256;
-pub const THUMBNAIL_SIZE: u32 = 256;
+pub const DEFAULT_THUMBNAIL_BOUND: u32 = DEFAULT_THUMBNAIL_DB_SIZE;
+pub const THUMBNAIL_SIZE: u32 = DEFAULT_THUMBNAIL_DB_SIZE;
 pub const THUMBNAIL_CHANNELS: usize = 3;
 pub const THUMBNAIL_PIXELS: usize = (THUMBNAIL_SIZE * THUMBNAIL_SIZE) as usize;
 pub const THUMBNAIL_BYTE_SIZE: usize = THUMBNAIL_PIXELS * THUMBNAIL_CHANNELS;
@@ -133,18 +139,18 @@ pub struct ThumbnailConfig {
 impl Default for ThumbnailConfig {
     fn default() -> Self {
         Self {
-            max_bound: DEFAULT_THUMBNAIL_BOUND,
-            format: ThumbnailFormat::Webp,
-            quality: 80,
-            scaling_algorithm: ScalingAlgorithm::CatmullRom,
-            batch_commit_size: 32,
-            video_engine: VideoThumbnailEngine::Ffmpeg,
-            video_offset_percent: 10,
-            generate_video_previews: true,
-            preview_frame_count: 5,
-            custom_preview_settings: true,
-            preview_format: ThumbnailFormat::Webp,
-            preview_quality: 40,
+            max_bound: DEFAULT_THUMBNAIL_DB_SIZE,
+            format: ThumbnailFormat::from_str_name(DEFAULT_THUMBNAIL_FORMAT),
+            quality: DEFAULT_THUMBNAIL_QUALITY,
+            scaling_algorithm: ScalingAlgorithm::from_str_name(DEFAULT_SCALING_ALGORITHM),
+            batch_commit_size: DEFAULT_BATCH_COMMIT_SIZE,
+            video_engine: VideoThumbnailEngine::from_str_name(DEFAULT_VIDEO_ENGINE),
+            video_offset_percent: DEFAULT_VIDEO_OFFSET_PERCENT,
+            generate_video_previews: DEFAULT_GENERATE_VIDEO_PREVIEWS,
+            preview_frame_count: DEFAULT_PREVIEW_FRAME_COUNT,
+            custom_preview_settings: DEFAULT_CUSTOM_PREVIEW_SETTINGS,
+            preview_format: ThumbnailFormat::from_str_name(DEFAULT_PREVIEW_FORMAT),
+            preview_quality: DEFAULT_PREVIEW_QUALITY,
         }
     }
 }

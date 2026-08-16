@@ -2,6 +2,7 @@ use crate::ctx_menu::{CtxMenu, CtxMenuActionId};
 use crate::library::models::{FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
+use crate::settings::{DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER};
 use crate::ui::file_selection::FileSelectionModel;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashMap, HashSet};
@@ -76,8 +77,8 @@ impl Default for UiState {
             media_row_map: HashMap::new(),
             filter: QueryFilter::default(),
             last_executed_query: String::new(),
-            sort_column: SortColumn::Filename,
-            sort_order: SortOrder::Ascending,
+            sort_column: SortColumn::from_name(DEFAULT_SORT_COLUMN),
+            sort_order: SortOrder::from_name(DEFAULT_SORT_ORDER),
             is_assign_mode: false,
             active_file_rename_target: None,
             expanded_folder_ids: HashSet::new(),

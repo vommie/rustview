@@ -2,10 +2,125 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 // =============================================================================
-// Central Single Point of Truth Constants for Appearance & Grid Presentation
+// SECTION 1: General Settings - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_REMEMBER_LAST_FOLDER: bool = true;
+pub const DEFAULT_CONFIRM_ON_FILE_DELETE: bool = true;
+pub const DEFAULT_DELETION_MODE: DeletionMode = DeletionMode::Trash;
+
+// =============================================================================
+// SECTION 2: Folder Tree Settings - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER: bool = true;
+pub const DEFAULT_PERSIST_FOLDER_TREE_STATE: bool = true;
+pub const DEFAULT_SHOW_DELETED_FOLDERS: bool = true;
+pub const DEFAULT_SHOW_FOLDER_METRICS: bool = true;
+
+// =============================================================================
+// SECTION 3: Appearance & Grid Presentation - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_THUMBNAIL_WIDTH: u32 = 190;
+pub const MIN_THUMBNAIL_WIDTH: u32 = 80;
+pub const MAX_THUMBNAIL_WIDTH: u32 = 500;
 pub const DEFAULT_THUMBNAIL_ASPECT_RATIO: &str = "4:3";
+pub const DEFAULT_SHOW_FILENAMES: bool = true;
+pub const DEFAULT_SHOW_RATINGS_OVERLAY: bool = true;
+pub const DEFAULT_SHOW_TAGS_OVERLAY: bool = true;
+pub const DEFAULT_ENABLE_HOVER_PREVIEWS: bool = true;
+pub const DEFAULT_DARK_THEME: bool = true;
+
+// =============================================================================
+// SECTION 4: View & Column Layout - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_IS_TABLE_VIEW: bool = false;
+pub const DEFAULT_SORT_COLUMN: &str = "Filename";
+pub const DEFAULT_SORT_ORDER: &str = "Ascending";
+pub const DEFAULT_COL_FILENAME_WIDTH: f32 = 280.0;
+pub const DEFAULT_COL_DIMENSIONS_WIDTH: f32 = 140.0;
+pub const DEFAULT_COL_SIZE_WIDTH: f32 = 110.0;
+pub const DEFAULT_COL_RATING_WIDTH: f32 = 90.0;
+pub const MIN_COL_WIDTH: f32 = 50.0;
+pub const MAX_COL_WIDTH: f32 = 1200.0;
+
+// =============================================================================
+// SECTION 5: Performance, Video & Engine - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_L1_CACHE_SLOTS: usize = 512;
+pub const MIN_L1_CACHE_SLOTS: usize = 100;
+pub const MAX_L1_CACHE_SLOTS: usize = 8000;
+
+pub const MIN_WORKER_THREADS: usize = 1;
+pub const MAX_WORKER_THREADS: usize = 32;
+
+pub const DEFAULT_THUMBNAIL_DB_SIZE: u32 = 256;
+pub const MIN_THUMBNAIL_DB_SIZE: u32 = 64;
+pub const MAX_THUMBNAIL_DB_SIZE: u32 = 1024;
+
+pub const DEFAULT_THUMBNAIL_FORMAT: &str = "WebP";
+pub const DEFAULT_THUMBNAIL_QUALITY: u8 = 80;
+pub const MIN_QUALITY: u8 = 10;
+pub const MAX_QUALITY: u8 = 100;
+
+pub const DEFAULT_SCALING_ALGORITHM: &str = "CatmullRom";
+
+pub const DEFAULT_BATCH_COMMIT_SIZE: usize = 32;
+pub const MIN_BATCH_COMMIT_SIZE: usize = 4;
+pub const MAX_BATCH_COMMIT_SIZE: usize = 256;
+
+pub const DEFAULT_VIDEO_ENGINE: &str = "FFmpeg";
+pub const DEFAULT_VIDEO_OFFSET_PERCENT: u8 = 10;
+pub const MIN_VIDEO_OFFSET_PERCENT: u8 = 1;
+pub const MAX_VIDEO_OFFSET_PERCENT: u8 = 90;
+
+pub const DEFAULT_GENERATE_VIDEO_PREVIEWS: bool = true;
+pub const DEFAULT_PREVIEW_FRAME_COUNT: u32 = 5;
+pub const MIN_PREVIEW_FRAME_COUNT: u32 = 2;
+pub const MAX_PREVIEW_FRAME_COUNT: u32 = 100;
+
+pub const DEFAULT_CUSTOM_PREVIEW_SETTINGS: bool = true;
+pub const DEFAULT_PREVIEW_FORMAT: &str = "WebP";
+pub const DEFAULT_PREVIEW_QUALITY: u8 = 40;
+
+/// Dynamically calculates default worker thread count based on physical CPU cores.
+#[inline]
+pub fn default_worker_threads() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .clamp(MIN_WORKER_THREADS, MAX_WORKER_THREADS)
+}
+
+// =============================================================================
+// SECTION 6: Video Player - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_HWDEC_MODE: &str = "auto-safe";
+pub const DEFAULT_VIDEO_OUTPUT: &str = "gpu";
+pub const DEFAULT_GPU_API: &str = "auto";
+pub const DEFAULT_AUDIO_DEVICE: &str = "auto";
+pub const DEFAULT_AUTOPLAY_VIDEOS: bool = true;
+pub const DEFAULT_PLAYER_VOLUME: f32 = 100.0;
+pub const MIN_PLAYER_VOLUME: f32 = 0.0;
+pub const MAX_PLAYER_VOLUME: f32 = 100.0;
+pub const DEFAULT_PLAYER_KEEP_OPEN: bool = true;
+
+// =============================================================================
+// SECTION 7: Tags & Categorization - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_TAG_MATCH_MODE: &str = "ALL";
+pub const DEFAULT_TAG_SCOPE_MODE: &str = "Folder";
+
+// =============================================================================
+// SECTION 8: Window Geometry - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_WINDOW_WIDTH: u32 = 1280;
+pub const DEFAULT_WINDOW_HEIGHT: u32 = 800;
+pub const MIN_WINDOW_WIDTH: u32 = 600;
+pub const MIN_WINDOW_HEIGHT: u32 = 400;
+pub const DEFAULT_WINDOW_MAXIMIZED: bool = false;
+
+// =============================================================================
+// Enums & Domain Data Models
+// =============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GridAspectRatio {
@@ -39,7 +154,7 @@ impl GridAspectRatio {
             "3:4" => Self::Ratio3x4,
             "4:5" => Self::Ratio4x5,
             "9:16" => Self::Ratio9x16,
-            _ => Self::Ratio4x3, // Default 4:3
+            _ => Self::Ratio4x3,
         }
     }
 
@@ -79,10 +194,10 @@ impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
             root_folder: None,
-            remember_last_folder: true,
+            remember_last_folder: DEFAULT_REMEMBER_LAST_FOLDER,
             last_folder_path: None,
-            confirm_on_file_delete: true,
-            deletion_mode: DeletionMode::Trash,
+            confirm_on_file_delete: DEFAULT_CONFIRM_ON_FILE_DELETE,
+            deletion_mode: DEFAULT_DELETION_MODE,
         }
     }
 }
@@ -100,10 +215,10 @@ pub struct FolderSettings {
 impl Default for FolderSettings {
     fn default() -> Self {
         Self {
-            auto_reveal_remembered_folder: true,
-            persist_folder_tree_state: true,
-            show_deleted_folders: true,
-            show_folder_metrics: true,
+            auto_reveal_remembered_folder: DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER,
+            persist_folder_tree_state: DEFAULT_PERSIST_FOLDER_TREE_STATE,
+            show_deleted_folders: DEFAULT_SHOW_DELETED_FOLDERS,
+            show_folder_metrics: DEFAULT_SHOW_FOLDER_METRICS,
             expanded_folder_ids: Vec::new(),
         }
     }
@@ -125,11 +240,11 @@ impl Default for AppearanceSettings {
         Self {
             default_thumbnail_size: DEFAULT_THUMBNAIL_WIDTH,
             thumbnail_aspect_ratio: DEFAULT_THUMBNAIL_ASPECT_RATIO.to_string(),
-            show_filenames: true,
-            show_ratings_overlay: true,
-            show_tags_overlay: true,
-            enable_hover_previews: true,
-            dark_theme: true,
+            show_filenames: DEFAULT_SHOW_FILENAMES,
+            show_ratings_overlay: DEFAULT_SHOW_RATINGS_OVERLAY,
+            show_tags_overlay: DEFAULT_SHOW_TAGS_OVERLAY,
+            enable_hover_previews: DEFAULT_ENABLE_HOVER_PREVIEWS,
+            dark_theme: DEFAULT_DARK_THEME,
         }
     }
 }
@@ -148,13 +263,13 @@ pub struct ViewSettings {
 impl Default for ViewSettings {
     fn default() -> Self {
         Self {
-            is_table_view: false,
-            sort_column: "Filename".to_string(),
-            sort_order: "Ascending".to_string(),
-            col_filename_width: 280.0,
-            col_dimensions_width: 140.0,
-            col_size_width: 110.0,
-            col_rating_width: 90.0,
+            is_table_view: DEFAULT_IS_TABLE_VIEW,
+            sort_column: DEFAULT_SORT_COLUMN.to_string(),
+            sort_order: DEFAULT_SORT_ORDER.to_string(),
+            col_filename_width: DEFAULT_COL_FILENAME_WIDTH,
+            col_dimensions_width: DEFAULT_COL_DIMENSIONS_WIDTH,
+            col_size_width: DEFAULT_COL_SIZE_WIDTH,
+            col_rating_width: DEFAULT_COL_RATING_WIDTH,
         }
     }
 }
@@ -180,23 +295,20 @@ pub struct PerformanceSettings {
 impl Default for PerformanceSettings {
     fn default() -> Self {
         Self {
-            worker_threads: std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(4)
-                .clamp(1, 32),
-            l1_cache_slots: 512,
-            thumbnail_db_size: 256,
-            thumbnail_format: "WebP".to_string(),
-            thumbnail_quality: 80,
-            scaling_algorithm: "CatmullRom".to_string(),
-            batch_commit_size: 32,
-            video_engine: "FFmpeg".to_string(),
-            video_offset_percent: 10,
-            generate_video_previews: true,
-            preview_frame_count: 5,
-            custom_preview_settings: true,
-            preview_format: "WebP".to_string(),
-            preview_quality: 40,
+            worker_threads: default_worker_threads(),
+            l1_cache_slots: DEFAULT_L1_CACHE_SLOTS,
+            thumbnail_db_size: DEFAULT_THUMBNAIL_DB_SIZE,
+            thumbnail_format: DEFAULT_THUMBNAIL_FORMAT.to_string(),
+            thumbnail_quality: DEFAULT_THUMBNAIL_QUALITY,
+            scaling_algorithm: DEFAULT_SCALING_ALGORITHM.to_string(),
+            batch_commit_size: DEFAULT_BATCH_COMMIT_SIZE,
+            video_engine: DEFAULT_VIDEO_ENGINE.to_string(),
+            video_offset_percent: DEFAULT_VIDEO_OFFSET_PERCENT,
+            generate_video_previews: DEFAULT_GENERATE_VIDEO_PREVIEWS,
+            preview_frame_count: DEFAULT_PREVIEW_FRAME_COUNT,
+            custom_preview_settings: DEFAULT_CUSTOM_PREVIEW_SETTINGS,
+            preview_format: DEFAULT_PREVIEW_FORMAT.to_string(),
+            preview_quality: DEFAULT_PREVIEW_QUALITY,
         }
     }
 }
@@ -212,10 +324,10 @@ pub struct PlayerSettings {
 impl Default for PlayerSettings {
     fn default() -> Self {
         Self {
-            hwdec_mode: "auto-safe".to_string(),
-            autoplay_videos: true,
-            default_volume: 100.0,
-            keep_open: true,
+            hwdec_mode: DEFAULT_HWDEC_MODE.to_string(),
+            autoplay_videos: DEFAULT_AUTOPLAY_VIDEOS,
+            default_volume: DEFAULT_PLAYER_VOLUME,
+            keep_open: DEFAULT_PLAYER_KEEP_OPEN,
         }
     }
 }
@@ -231,8 +343,8 @@ pub struct TagSettings {
 impl Default for TagSettings {
     fn default() -> Self {
         Self {
-            default_match_mode: "ALL".to_string(),
-            default_scope_mode: "Folder".to_string(),
+            default_match_mode: DEFAULT_TAG_MATCH_MODE.to_string(),
+            default_scope_mode: DEFAULT_TAG_SCOPE_MODE.to_string(),
             expanded_tag_ids: Vec::new(),
         }
     }
@@ -252,9 +364,9 @@ impl Default for WindowState {
         Self {
             x: None,
             y: None,
-            width: 1280,
-            height: 800,
-            is_maximized: false,
+            width: DEFAULT_WINDOW_WIDTH,
+            height: DEFAULT_WINDOW_HEIGHT,
+            is_maximized: DEFAULT_WINDOW_MAXIMIZED,
         }
     }
 }

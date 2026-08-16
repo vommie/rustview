@@ -33,4 +33,15 @@ impl HwDecMode {
             Self::Disabled => "no",
         }
     }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Self::Auto,
+            "vaapi" => Self::Vaapi,
+            "vdpau" => Self::Vdpau,
+            "nvdec" => Self::Nvdec,
+            "no" | "disabled" => Self::Disabled,
+            _ => Self::AutoSafe,
+        }
+    }
 }

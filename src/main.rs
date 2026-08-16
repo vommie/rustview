@@ -1,6 +1,6 @@
 use rustview::library::Library;
 use rustview::player::{PlayerController, RenderConfig};
-use rustview::settings::SettingsManager;
+use rustview::settings::{MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SettingsManager};
 use rustview::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge};
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -48,9 +48,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. Initialize Slint Window
     let main_window = MainWindow::new()?;
 
-    // 6. Restore Window Size, Position & State
+    // 6. Restore Window Size, Position & State (Guarded by SPoT Minimum Geometry Constants)
     let win_state = settings.get().window;
-    if win_state.width >= 600 && win_state.height >= 400 {
+    if win_state.width >= MIN_WINDOW_WIDTH && win_state.height >= MIN_WINDOW_HEIGHT {
         main_window
             .window()
             .set_size(slint::PhysicalSize::new(win_state.width, win_state.height));

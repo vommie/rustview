@@ -1,4 +1,12 @@
-use super::schema::{AppSettings, GridAspectRatio};
+use super::schema::{
+    AppSettings, GridAspectRatio, DEFAULT_PREVIEW_FORMAT, DEFAULT_SCALING_ALGORITHM,
+    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_VIDEO_ENGINE,
+    MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_L1_CACHE_SLOTS, MAX_PLAYER_VOLUME,
+    MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH,
+    MAX_VIDEO_OFFSET_PERCENT, MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE, MIN_COL_WIDTH,
+    MIN_L1_CACHE_SLOTS, MIN_PLAYER_VOLUME, MIN_PREVIEW_FRAME_COUNT, MIN_QUALITY,
+    MIN_THUMBNAIL_DB_SIZE, MIN_THUMBNAIL_WIDTH, MIN_VIDEO_OFFSET_PERCENT, MIN_WORKER_THREADS,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -59,21 +67,40 @@ impl SettingsStore {
         }
 
         // Appearance sanitization
-        settings.appearance.default_thumbnail_size =
-            settings.appearance.default_thumbnail_size.clamp(80, 500);
+        settings.appearance.default_thumbnail_size = settings
+            .appearance
+            .default_thumbnail_size
+            .clamp(MIN_THUMBNAIL_WIDTH, MAX_THUMBNAIL_WIDTH);
 
         let ratio = GridAspectRatio::from_str_name(&settings.appearance.thumbnail_aspect_ratio);
-        settings.appearance.thumbnail_aspect_ratio = ratio.as_str().to_string();
+        settings.appearance.thumbnail_aspect_ratio =
+            if settings.appearance.thumbnail_aspect_ratio.is_empty() {
+                DEFAULT_THUMBNAIL_ASPECT_RATIO.to_string()
+            } else {
+                ratio.as_str().to_string()
+            };
 
         // Performance sanitization
-        settings.performance.l1_cache_slots = settings.performance.l1_cache_slots.clamp(100, 8000);
-        settings.performance.worker_threads = settings.performance.worker_threads.clamp(1, 32);
-        settings.performance.thumbnail_db_size =
-            settings.performance.thumbnail_db_size.clamp(64, 1024);
-        settings.performance.thumbnail_quality =
-            settings.performance.thumbnail_quality.clamp(10, 100);
-        settings.performance.batch_commit_size =
-            settings.performance.batch_commit_size.clamp(4, 256);
+        settings.performance.l1_cache_slots = settings
+            .performance
+            .l1_cache_slots
+            .clamp(MIN_L1_CACHE_SLOTS, MAX_L1_CACHE_SLOTS);
+        settings.performance.worker_threads = settings
+            .performance
+            .worker_threads
+            .clamp(MIN_WORKER_THREADS, MAX_WORKER_THREADS);
+        settings.performance.thumbnail_db_size = settings
+            .performance
+            .thumbnail_db_size
+            .clamp(MIN_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_DB_SIZE);
+        settings.performance.thumbnail_quality = settings
+            .performance
+            .thumbnail_quality
+            .clamp(MIN_QUALITY, MAX_QUALITY);
+        settings.performance.batch_commit_size = settings
+            .performance
+            .batch_commit_size
+            .clamp(MIN_BATCH_COMMIT_SIZE, MAX_BATCH_COMMIT_SIZE);
 
         if !settings
             .performance
@@ -84,7 +111,7 @@ impl SettingsStore {
                 .thumbnail_format
                 .eq_ignore_ascii_case("webp")
         {
-            settings.performance.thumbnail_format = "WebP".to_string();
+            settings.performance.thumbnail_format = DEFAULT_THUMBNAIL_FORMAT.to_string();
         }
 
         let algo_lower = settings.performance.scaling_algorithm.to_lowercase();
@@ -92,19 +119,23 @@ impl SettingsStore {
             algo_lower.as_str(),
             "catmullrom" | "bilinear" | "triangle" | "lanczos" | "lanczos3" | "nearest"
         ) {
-            settings.performance.scaling_algorithm = "CatmullRom".to_string();
+            settings.performance.scaling_algorithm = DEFAULT_SCALING_ALGORITHM.to_string();
         }
 
         if !settings.performance.video_engine.eq_ignore_ascii_case("mpv")
             && !settings.performance.video_engine.eq_ignore_ascii_case("ffmpeg")
         {
-            settings.performance.video_engine = "FFmpeg".to_string();
+            settings.performance.video_engine = DEFAULT_VIDEO_ENGINE.to_string();
         }
 
-        settings.performance.video_offset_percent =
-            settings.performance.video_offset_percent.clamp(1, 90);
-        settings.performance.preview_frame_count =
-            settings.performance.preview_frame_count.clamp(2, 100);
+        settings.performance.video_offset_percent = settings
+            .performance
+            .video_offset_percent
+            .clamp(MIN_VIDEO_OFFSET_PERCENT, MAX_VIDEO_OFFSET_PERCENT);
+        settings.performance.preview_frame_count = settings
+            .performance
+            .preview_frame_count
+            .clamp(MIN_PREVIEW_FRAME_COUNT, MAX_PREVIEW_FRAME_COUNT);
 
         if !settings
             .performance
@@ -115,17 +146,34 @@ impl SettingsStore {
                 .preview_format
                 .eq_ignore_ascii_case("webp")
         {
-            settings.performance.preview_format = "WebP".to_string();
+            settings.performance.preview_format = DEFAULT_PREVIEW_FORMAT.to_string();
         }
-        settings.performance.preview_quality =
-            settings.performance.preview_quality.clamp(10, 100);
+        settings.performance.preview_quality = settings
+            .performance
+            .preview_quality
+            .clamp(MIN_QUALITY, MAX_QUALITY);
 
-        settings.player.default_volume = settings.player.default_volume.clamp(0.0, 100.0);
+        settings.player.default_volume = settings
+            .player
+            .default_volume
+            .clamp(MIN_PLAYER_VOLUME, MAX_PLAYER_VOLUME);
 
         // Sanitize view column widths
-        settings.view.col_filename_width = settings.view.col_filename_width.clamp(100.0, 1200.0);
-        settings.view.col_dimensions_width = settings.view.col_dimensions_width.clamp(60.0, 600.0);
-        settings.view.col_size_width = settings.view.col_size_width.clamp(50.0, 400.0);
-        settings.view.col_rating_width = settings.view.col_rating_width.clamp(50.0, 300.0);
+        settings.view.col_filename_width = settings
+            .view
+            .col_filename_width
+            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_dimensions_width = settings
+            .view
+            .col_dimensions_width
+            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_size_width = settings
+            .view
+            .col_size_width
+            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_rating_width = settings
+            .view
+            .col_rating_width
+            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
     }
 }

@@ -1,5 +1,6 @@
 use crate::library::Library;
 use crate::library::models::{MediaRecord, TagId};
+use crate::settings::{DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE};
 use memchr::memmem;
 use regex::{Regex, RegexBuilder};
 use slint::SharedString;
@@ -13,10 +14,44 @@ pub enum MatchMode {
     Any,
 }
 
+impl MatchMode {
+    pub fn from_str_name(s: &str) -> Self {
+        if s.eq_ignore_ascii_case("any") {
+            Self::Any
+        } else {
+            Self::All
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::All => "ALL",
+            Self::Any => "ANY",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScopeMode {
     Folder,
     Global,
+}
+
+impl ScopeMode {
+    pub fn from_str_name(s: &str) -> Self {
+        if s.eq_ignore_ascii_case("global") {
+            Self::Global
+        } else {
+            Self::Folder
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Folder => "Folder",
+            Self::Global => "Global",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -36,8 +71,8 @@ impl Default for QueryFilter {
             search_query: String::new(),
             is_regex: false,
             tag_ids: HashSet::new(),
-            match_mode: MatchMode::All,
-            scope_mode: ScopeMode::Folder,
+            match_mode: MatchMode::from_str_name(DEFAULT_TAG_MATCH_MODE),
+            scope_mode: ScopeMode::from_str_name(DEFAULT_TAG_SCOPE_MODE),
         }
     }
 }
@@ -152,8 +187,6 @@ impl PreparedFilter {
 }
 
 impl QueryFilter {
-    /// Executes sub-microsecond Zero-Copy in-memory filtering using SIMD vectorization.
-    /// If `candidate_indices` is provided, filters ONLY those indices into `all_media` (Refinement).
     pub fn execute_indexed_refs<'a>(
         &self,
         library: &Library,
@@ -162,7 +195,6 @@ impl QueryFilter {
     ) -> Vec<&'a IndexedMediaRecord> {
         let t0 = Instant::now();
 
-        // Instant bypass when no filters are active (Filter Reset)
         if self.is_empty() {
             let filtered: Vec<&'a IndexedMediaRecord> = all_media.iter().collect();
             let elapsed_us = t0.elapsed().as_micros();
