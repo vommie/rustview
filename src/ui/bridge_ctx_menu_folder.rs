@@ -23,7 +23,13 @@ impl FolderContextMenu {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| target_folder.path.clone());
 
-        let mut builder = CtxMenuBuilder::new().header(format!("Folder: {}", folder_name));
+        let title_header = if target_folder.is_deleted {
+            format!("Missing Folder: {}", folder_name)
+        } else {
+            format!("Folder: {}", folder_name)
+        };
+
+        let mut builder = CtxMenuBuilder::new().header(title_header);
 
         if !is_root {
             builder = builder.action(
@@ -37,13 +43,27 @@ impl FolderContextMenu {
             let move_submenu = Self::build_reparent_submenu(target_folder, all_folders, root_dir);
             builder = builder.item(move_submenu);
 
-            builder = builder.separator().action(
-                CTX_FOLDER_DELETE,
-                "Delete Folder...",
-                Some("Del"),
-                Some("trash"),
-                true,
-            );
+            builder = builder.separator();
+
+            if target_folder.is_deleted {
+                // Orphaned folder: Show "Remove from Database..."
+                builder = builder.action(
+                    CTX_FOLDER_PURGE_DB,
+                    "Remove from Database...",
+                    Some("Del"),
+                    Some("trash"),
+                    true,
+                );
+            } else {
+                // Active folder: Show standard "Delete Folder..."
+                builder = builder.action(
+                    CTX_FOLDER_DELETE,
+                    "Delete Folder...",
+                    Some("Del"),
+                    Some("trash"),
+                    true,
+                );
+            }
         }
 
         builder.build()
@@ -198,7 +218,7 @@ impl FolderContextMenu {
             return;
         }
 
-        // 2. Standard Folder Actions (Rename / Delete)
+        // 2. Standard Folder Actions (Rename / Delete / Purge Orphaned)
         if let Some(fid) = target_folder_id
             && let Ok(Some(rec)) = ctx.library.folders().get_folder(fid)
         {
@@ -211,6 +231,8 @@ impl FolderContextMenu {
                 folder_dialogs.show_rename(window, fid, &name, ctx);
             } else if action_id == CTX_FOLDER_DELETE {
                 folder_dialogs.show_delete(window, fid, &name, ctx);
+            } else if action_id == CTX_FOLDER_PURGE_DB {
+                folder_dialogs.show_remove_orphaned(window, fid, &name, ctx);
             }
         }
     }

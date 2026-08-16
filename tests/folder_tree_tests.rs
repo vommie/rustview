@@ -3,6 +3,7 @@ use rustview::library::Library;
 use rustview::library::models::FolderRecordCodec;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
 use rustview::ui::bridge_folders::FolderTreeBuilder;
+use rustview::ui::bridge_state::CTX_FOLDER_PURGE_DB;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use tempfile::tempdir;
@@ -162,6 +163,88 @@ fn test_folder_operations_rename_move_delete() {
     assert!(!dir_b.exists());
     assert!(lib.folders().get_folder(folder_b.id).unwrap().is_none());
     assert!(lib.folders().get_folder(folder_a.id).unwrap().is_none());
+}
+
+#[test]
+fn test_orphaned_folder_context_menu_and_db_purge_workflow() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let root = tmp_media.path();
+
+    let sub_orphaned = root.join("OrphanedDir");
+    fs::create_dir_all(&sub_orphaned).unwrap();
+
+    lib.folder_tree_refresher()
+        .refresh_tree(root, None::<fn(usize)>)
+        .unwrap();
+
+    let mut orphaned_rec = lib
+        .folders()
+        .get_folder_by_path(&sub_orphaned)
+        .unwrap()
+        .unwrap();
+
+    // 1. Delete directory on physical disk and mark is_deleted = true
+    fs::remove_dir_all(&sub_orphaned).unwrap();
+    lib.folders().set_deleted(orphaned_rec.id, true).unwrap();
+    orphaned_rec.is_deleted = true;
+
+    let folders = lib.folders().list_folders().unwrap();
+
+    // 2. Check Context Menu: must contain "Remove from Database..."
+    let menu = FolderContextMenuBuilder::build_menu(&orphaned_rec, &folders, Some(root), false);
+    let purge_action = menu
+        .items
+        .iter()
+        .find(|item| item.id == CTX_FOLDER_PURGE_DB);
+    assert!(
+        purge_action.is_some(),
+        "Context menu should have 'Remove from Database...' for orphaned folders"
+    );
+    assert_eq!(
+        purge_action.unwrap().text,
+        "Remove from Database...".to_string()
+    );
+
+    // 3. Test Safety Check & Rebirth: If recreated on disk, check_and_restore_if_exists restores it
+    fs::create_dir_all(&sub_orphaned).unwrap();
+    let restored = lib
+        .folder_operations()
+        .check_and_restore_if_exists(orphaned_rec.id)
+        .unwrap();
+    assert!(
+        restored,
+        "Folder was reborn on disk and should be detected"
+    );
+
+    let reloaded = lib.folders().get_folder(orphaned_rec.id).unwrap().unwrap();
+    assert!(
+        !reloaded.is_deleted,
+        "is_deleted should be reset to false after rebirth"
+    );
+
+    // 4. Test Actual Purge when directory is truly gone
+    fs::remove_dir_all(&sub_orphaned).unwrap();
+    lib.folders().set_deleted(orphaned_rec.id, true).unwrap();
+
+    let is_still_there = lib
+        .folder_operations()
+        .check_and_restore_if_exists(orphaned_rec.id)
+        .unwrap();
+    assert!(!is_still_there, "Folder is truly missing from disk");
+
+    let purge_report = lib
+        .folder_operations()
+        .purge_folder_from_db(orphaned_rec.id)
+        .expect("Purge from database failed");
+
+    assert_eq!(purge_report.deleted_folder_ids, vec![orphaned_rec.id]);
+    assert!(
+        lib.folders().get_folder(orphaned_rec.id).unwrap().is_none(),
+        "Folder must be removed completely from LMDB"
+    );
 }
 
 #[test]

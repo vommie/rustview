@@ -34,6 +34,7 @@ pub const CTX_TAG_MOVE_TARGET_BASE: CtxMenuActionId = 100_000;
 // Folder Tree Context Menu Action IDs
 pub const CTX_FOLDER_RENAME: CtxMenuActionId = 3001;
 pub const CTX_FOLDER_DELETE: CtxMenuActionId = 3002;
+pub const CTX_FOLDER_PURGE_DB: CtxMenuActionId = 3003;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 /// Central persistent state for UI bridges, tree expansions, and caching.

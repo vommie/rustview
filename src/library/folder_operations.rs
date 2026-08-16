@@ -67,7 +67,7 @@ pub struct FolderMoveReport {
     pub affected_media_count: usize,
 }
 
-/// Subsystem managing atomic physical & database folder operations (Rename, Trash, Permanent Delete, Relocate).
+/// Subsystem managing atomic physical & database folder operations (Rename, Trash, Permanent Delete, Relocate, Orphan Purge).
 pub struct FolderOperations<'a> {
     db: &'a LibraryDatabase,
 }
@@ -268,6 +268,7 @@ impl<'a> FolderOperations<'a> {
                         self.db.media.delete(&mut wtxn, &media_id)?;
                         self.db.tags_by_media.delete(&mut wtxn, &media_id)?;
                         self.db.thumbnails.delete(&mut wtxn, &media_id)?;
+                        self.db.video_previews.delete(&mut wtxn, &media_id)?;
                     }
                 }
 
@@ -292,6 +293,114 @@ impl<'a> FolderOperations<'a> {
             deleted_folder_ids: metrics.affected_folder_ids,
             deleted_media_count,
             trashed: to_trash,
+        })
+    }
+
+    /// Checks if a folder exists on physical storage. If it exists, atomically restores `is_deleted = false` in LMDB.
+    /// Returns `Ok(true)` if the folder physically exists on disk and is active/restored.
+    /// Returns `Ok(false)` if the folder does not exist on disk.
+    pub fn check_and_restore_if_exists(&self, folder_id: FolderId) -> Result<bool, LibraryError> {
+        let rtxn = self.db.env.read_txn()?;
+        let folder = self
+            .db
+            .folders
+            .get(&rtxn, &folder_id)?
+            .ok_or(LibraryError::FolderNotFound(folder_id))?;
+
+        let path = PathBuf::from(&folder.path);
+        drop(rtxn);
+
+        if path.exists() {
+            let mut wtxn = self.db.env.write_txn()?;
+            if let Some(mut rec) = self.db.folders.get(&wtxn, &folder_id)?
+                && rec.is_deleted
+            {
+                rec.is_deleted = false;
+                self.db.folders.put(&mut wtxn, &folder_id, &rec)?;
+                wtxn.commit()?;
+                tracing::info!(
+                    folder_id = folder_id,
+                    path = ?path,
+                    "[FolderOperations: Reborn Safety Check] Missing folder was detected on disk. Restored is_deleted = false in LMDB."
+                );
+            }
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    /// Purges an orphaned/missing folder and all its descendant metadata from LMDB completely.
+    /// Does NOT perform physical filesystem deletions since the directory does not exist on disk.
+    pub fn purge_folder_from_db(
+        &self,
+        folder_id: FolderId,
+    ) -> Result<FolderDeleteReport, LibraryError> {
+        let metrics = self.get_metrics(folder_id)?;
+
+        tracing::info!(
+            folder_id = folder_id,
+            path = ?metrics.path,
+            subfolders = metrics.subfolders_count,
+            files = metrics.media_files_count,
+            "Purging orphaned folder and all descendant metadata from LMDB..."
+        );
+
+        let mut wtxn = self.db.env.write_txn()?;
+        let mut deleted_media_count = 0;
+
+        for id in &metrics.affected_folder_ids {
+            if let Some(folder_rec) = self.db.folders.get(&wtxn, id)? {
+                if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, id)? {
+                    deleted_media_count += media_ids.len();
+                    for media_id in media_ids {
+                        if let Some(media_record) = self.db.media.get(&wtxn, &media_id)?
+                            && let Some(mut hash_list) = self
+                                .db
+                                .media_by_hash
+                                .get(&wtxn, &media_record.file_hash[..])?
+                        {
+                            hash_list.retain(|&m| m != media_id);
+                            if hash_list.is_empty() {
+                                self.db
+                                    .media_by_hash
+                                    .delete(&mut wtxn, &media_record.file_hash[..])?;
+                            } else {
+                                self.db.media_by_hash.put(
+                                    &mut wtxn,
+                                    &media_record.file_hash[..],
+                                    &hash_list,
+                                )?;
+                            }
+                        }
+                        self.db.media.delete(&mut wtxn, &media_id)?;
+                        self.db.tags_by_media.delete(&mut wtxn, &media_id)?;
+                        self.db.thumbnails.delete(&mut wtxn, &media_id)?;
+                        self.db.video_previews.delete(&mut wtxn, &media_id)?;
+                    }
+                }
+
+                self.db.media_by_folder.delete(&mut wtxn, id)?;
+                self.db
+                    .folders_by_path
+                    .delete(&mut wtxn, &folder_rec.path)?;
+                self.db.folders.delete(&mut wtxn, id)?;
+            }
+        }
+
+        wtxn.commit()?;
+
+        tracing::info!(
+            folder_id = folder_id,
+            purged_folders = metrics.affected_folder_ids.len(),
+            purged_media = deleted_media_count,
+            "Committed database purge of orphaned folder subtree"
+        );
+
+        Ok(FolderDeleteReport {
+            deleted_folder_ids: metrics.affected_folder_ids,
+            deleted_media_count,
+            trashed: false,
         })
     }
 

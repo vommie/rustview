@@ -592,4 +592,79 @@ impl BridgeFolders {
         window.set_status_text(status_msg.into());
         BridgeInspector::update(window, state);
     }
+
+    /// Prunes deleted folder IDs from the expanded folder set and saves state.
+    pub fn prune_expanded_folders(
+        deleted_ids: &[FolderId],
+        settings: &SettingsManager,
+        state: &RwLock<UiState>,
+    ) {
+        let mut st = state.write();
+        for id in deleted_ids {
+            st.expanded_folder_ids.remove(id);
+        }
+        Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
+    }
+
+    /// Checks if the currently active folder was affected by a deletion/purge, and safely falls back to the library root folder.
+    pub fn fallback_to_root_if_affected(
+        affected_folder_ids: &[FolderId],
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let is_current = state
+            .read()
+            .current_folder_id
+            .map(|id| affected_folder_ids.contains(&id))
+            .unwrap_or(false);
+
+        if !is_current {
+            return;
+        }
+
+        let root_setting = settings.get().general.root_folder;
+        let Some(ref root_p) = root_setting else {
+            return;
+        };
+
+        if let Ok(Some(root_rec)) = library.folders().get_folder_by_path(root_p) {
+            let raw_media = library
+                .media()
+                .get_by_folder(root_rec.id)
+                .unwrap_or_default();
+            let indexed = BridgeMedia::preindex(library, raw_media, root_p);
+
+            {
+                let mut st = state.write();
+                st.current_folder_id = Some(root_rec.id);
+                st.current_folder_path = Some(root_p.clone());
+                st.all_folder_media = indexed;
+                st.folder_thumbnails.clear();
+                st.active_indices.clear();
+                st.file_selection.clear();
+                st.last_executed_query.clear();
+            }
+
+            {
+                let mut s = settings.get();
+                if s.general.remember_last_folder {
+                    s.general.last_folder_path = Some(root_p.clone());
+                    settings.save_quiet(&s);
+                }
+            }
+
+            BridgeMedia::reload(
+                window,
+                library,
+                thumbnails,
+                settings,
+                state,
+                true,
+                false,
+            );
+        }
+    }
 }
