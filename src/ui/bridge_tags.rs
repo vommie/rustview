@@ -709,6 +709,7 @@ impl BridgeTags {
         x: f32,
         y: f32,
     ) {
+        state.write().active_tag_dialog_target = None;
         let menu = TagContextMenu::build_root_menu();
         BridgeContextMenu::open_custom_menu(window, state, menu, x, y);
     }
