@@ -397,10 +397,6 @@ impl BridgeFolders {
     }
 
     /// 4-Stage Asynchronous Folder Navigation Workflow.
-    /// Stage 1 (0ms): Instant UI feedback, highlights folder in tree, resets grid.
-    /// Stage 2 (~15ms deferred): Renders known grid tiles & metadata without background workload.
-    /// Stage 3 (Background thread): Scans filesystem and extracts hashes with progress bar.
-    /// Stage 4 (Scanner finished): Nachführung des Grids und Start der Thumbnail-Pipeline.
     pub fn select_folder(
         folder_id: FolderId,
         path: PathBuf,
@@ -482,7 +478,7 @@ impl BridgeFolders {
             };
             if !is_still_current { return; }
 
-            // Load already-known media from LMDB (instant in-memory read)
+            // Load already-known active media from LMDB
             let known_media = lib.media().get_by_folder(folder_id).unwrap_or_default();
             let indexed_media = BridgeMedia::preindex(&lib, known_media, &target_path);
 
@@ -491,7 +487,7 @@ impl BridgeFolders {
                 s.all_folder_media = indexed_media;
             }
 
-            // Render grid with placeholder tiles (no thumbnail generation started yet)
+            // Render grid with placeholder tiles
             BridgeMedia::reload(&win, &lib, &thumb, &set, &st, false, false);
             BridgeInspector::update(&win, &st);
             BridgeTags::sync_tag_selection(&win, &lib, &st);
@@ -545,6 +541,7 @@ impl BridgeFolders {
                                 updated = report.updated_media,
                                 unchanged = report.unchanged_media,
                                 deleted = report.deleted_media,
+                                restored = report.restored_media,
                                 elapsed_ms = t0.elapsed().as_millis(),
                                 "[FolderNavigation: Stage 3/4] Media scan & DB sync complete. Launching thumbnail pipeline..."
                             );
@@ -567,7 +564,7 @@ impl BridgeFolders {
                                     w.set_is_indexing_media(false);
                                     w.set_status_text("Ready.".into());
 
-                                    // Stage 4: Render final media view AND start thumbnail pipeline now that UI grid is ready
+                                    // Stage 4: Render final media view AND start thumbnail pipeline
                                     BridgeMedia::reload(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, true, false);
                                     BridgeInspector::update(&w, &st_scanner);
                                     BridgeTags::sync_tag_selection(&w, &lib_scanner, &st_scanner);
@@ -663,17 +660,9 @@ impl BridgeFolders {
         };
 
         let mut media_counts: HashMap<FolderId, usize> = HashMap::new();
-        if let Ok(rtxn) = library.raw_db().env.read_txn() {
-            for f in &folders {
-                let count = library
-                    .raw_db()
-                    .media_by_folder
-                    .get(&rtxn, &f.id)
-                    .unwrap_or(None)
-                    .map(|v| v.len())
-                    .unwrap_or(0);
-                media_counts.insert(f.id, count);
-            }
+        for f in &folders {
+            let count = library.media().get_active_count(f.id).unwrap_or(0);
+            media_counts.insert(f.id, count);
         }
 
         let tree = FolderTreeBuilder::build_hierarchy(root_dir, &folders, &media_counts);

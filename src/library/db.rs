@@ -1,7 +1,7 @@
 use super::error::LibraryError;
 use super::models::*;
 use super::schema::*;
-use crate::media::MediaHasher;
+use crate::media::{FileHash, MediaHasher};
 use heed::byteorder::BE;
 use heed::types::{Bytes, SerdeBincode, Str, U32, U64};
 use heed::{Database, Env, EnvOpenOptions};
@@ -18,7 +18,7 @@ pub struct LibraryDatabase {
     pub sequences: Database<Str, U64<BE>>,
     pub folders: Database<U64<BE>, FolderRecordCodec>,
     pub folders_by_path: Database<Str, U64<BE>>,
-    pub media: Database<U64<BE>, SerdeBincode<MediaRecord>>,
+    pub media: Database<U64<BE>, MediaRecordCodec>,
     pub media_by_folder: Database<U64<BE>, SerdeBincode<Vec<MediaId>>>,
     pub media_by_hash: Database<Bytes, SerdeBincode<Vec<MediaId>>>,
     pub tags: Database<U32<BE>, SerdeBincode<TagRecord>>,
@@ -50,7 +50,7 @@ impl LibraryDatabase {
             env.create_database(&mut wtxn, Some(DB_FOLDERS))?;
         let folders_by_path: Database<Str, U64<BE>> =
             env.create_database(&mut wtxn, Some(DB_FOLDERS_BY_PATH))?;
-        let media: Database<U64<BE>, SerdeBincode<MediaRecord>> =
+        let media: Database<U64<BE>, MediaRecordCodec> =
             env.create_database(&mut wtxn, Some(DB_MEDIA))?;
         let media_by_folder: Database<U64<BE>, SerdeBincode<Vec<MediaId>>> =
             env.create_database(&mut wtxn, Some(DB_MEDIA_BY_FOLDER))?;
@@ -121,5 +121,36 @@ impl LibraryDatabase {
 
     pub fn next_generation(&self, wtxn: &mut heed::RwTxn) -> Result<u64, LibraryError> {
         self.next_id(wtxn, SEQ_REFRESH_GEN)
+    }
+
+    /// Atomically updates the secondary `media_by_hash` index for a given `media_id`.
+    /// Handles unregistering from an old hash bucket and registering into a new hash bucket.
+    pub fn update_media_hash_index(
+        &self,
+        wtxn: &mut heed::RwTxn,
+        media_id: MediaId,
+        old_hash: Option<&FileHash>,
+        new_hash: Option<&FileHash>,
+    ) -> Result<(), LibraryError> {
+        if let Some(old) = old_hash
+            && let Some(mut hash_list) = self.media_by_hash.get(wtxn, &old[..])?
+        {
+            hash_list.retain(|&id| id != media_id);
+            if hash_list.is_empty() {
+                self.media_by_hash.delete(wtxn, &old[..])?;
+            } else {
+                self.media_by_hash.put(wtxn, &old[..], &hash_list)?;
+            }
+        }
+
+        if let Some(new) = new_hash {
+            let mut hash_list = self.media_by_hash.get(wtxn, &new[..])?.unwrap_or_default();
+            if !hash_list.contains(&media_id) {
+                hash_list.push(media_id);
+                self.media_by_hash.put(wtxn, &new[..], &hash_list)?;
+            }
+        }
+
+        Ok(())
     }
 }

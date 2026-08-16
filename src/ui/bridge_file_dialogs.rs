@@ -1,14 +1,17 @@
+use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::{FileRenameDialog, MainWindow};
 use crate::library::Library;
+use crate::library::error::LibraryError;
 use crate::library::models::{MediaId, MediaRecord};
 use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -78,7 +81,37 @@ impl FileRenameDialogController {
         ctx: &FileRenameContext,
         window: &MainWindow,
         dialog_ref: &Rc<RefCell<Option<FileRenameDialog>>>,
+        missing_dialog: &MissingFileDialogController,
     ) {
+        // Pre-check if original file physically exists on storage
+        let current_target = {
+            let st = ctx.state.read();
+            st.all_folder_media
+                .iter()
+                .find(|m| m.record.id == media_id)
+                .map(|m| (m.record.filename.clone(), m.full_path.clone()))
+                .or_else(|| {
+                    let folder_p = st.current_folder_path.as_ref()?;
+                    let rec = ctx.library.media().get(media_id).ok()??;
+                    Some((rec.filename.clone(), folder_p.join(&rec.filename)))
+                })
+        };
+
+        if let Some((filename, full_path)) = current_target
+            && !full_path.exists()
+        {
+            Self::close(dialog_ref, &ctx.state, window);
+            missing_dialog.show(
+                window,
+                "Rename File",
+                vec![MissingFileItem {
+                    filename,
+                    path: full_path,
+                }],
+            );
+            return;
+        }
+
         match ctx
             .library
             .file_operations()
@@ -104,6 +137,24 @@ impl FileRenameDialogController {
                     &ctx.state,
                     false,
                     false,
+                );
+            }
+            Err(LibraryError::Io(io_err)) if io_err.kind() == std::io::ErrorKind::NotFound => {
+                Self::close(dialog_ref, &ctx.state, window);
+                let fallback_path = ctx
+                    .state
+                    .read()
+                    .current_folder_path
+                    .as_ref()
+                    .map(|p| p.join(new_name))
+                    .unwrap_or_else(|| PathBuf::from(new_name));
+                missing_dialog.show(
+                    window,
+                    "Rename File",
+                    vec![MissingFileItem {
+                        filename: new_name.to_string(),
+                        path: fallback_path,
+                    }],
                 );
             }
             Err(e) => {

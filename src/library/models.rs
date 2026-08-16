@@ -25,7 +25,7 @@ struct LegacyFolderRecord {
 }
 
 /// Zero-copy custom codec providing seamless backward compatibility for databases
-/// created before the `is_deleted` field was introduced.
+/// created before the `is_deleted` field was introduced for folders.
 pub struct FolderRecordCodec;
 
 impl<'a> BytesDecode<'a> for FolderRecordCodec {
@@ -70,6 +70,65 @@ pub struct MediaRecord {
     pub height: u32,
     pub rating: u8,
     pub last_seen: u64,
+    #[serde(default)]
+    pub is_deleted: bool,
+}
+
+#[derive(Deserialize)]
+struct LegacyMediaRecord {
+    id: MediaId,
+    folder_id: FolderId,
+    filename: String,
+    file_hash: FileHash,
+    file_size: u64,
+    modification_time: i64,
+    media_type: MediaType,
+    format: MediaFormat,
+    width: u32,
+    height: u32,
+    rating: u8,
+    last_seen: u64,
+}
+
+/// Custom codec providing seamless backward compatibility for databases
+/// created before the `is_deleted` field was introduced for media records.
+pub struct MediaRecordCodec;
+
+impl<'a> BytesDecode<'a> for MediaRecordCodec {
+    type DItem = MediaRecord;
+
+    fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
+        match bincode::deserialize::<MediaRecord>(bytes) {
+            Ok(record) => Ok(record),
+            Err(_) => {
+                let legacy: LegacyMediaRecord = bincode::deserialize(bytes)?;
+                Ok(MediaRecord {
+                    id: legacy.id,
+                    folder_id: legacy.folder_id,
+                    filename: legacy.filename,
+                    file_hash: legacy.file_hash,
+                    file_size: legacy.file_size,
+                    modification_time: legacy.modification_time,
+                    media_type: legacy.media_type,
+                    format: legacy.format,
+                    width: legacy.width,
+                    height: legacy.height,
+                    rating: legacy.rating,
+                    last_seen: legacy.last_seen,
+                    is_deleted: false,
+                })
+            }
+        }
+    }
+}
+
+impl<'a> BytesEncode<'a> for MediaRecordCodec {
+    type EItem = MediaRecord;
+
+    fn bytes_encode(item: &'a Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
+        let bytes = bincode::serialize(item)?;
+        Ok(Cow::Owned(bytes))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

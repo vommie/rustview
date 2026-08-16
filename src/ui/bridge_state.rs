@@ -14,6 +14,8 @@ use std::sync::Arc;
 pub const CTX_ACTION_RENAME: CtxMenuActionId = 1001;
 pub const CTX_ACTION_SELECT_ALL: CtxMenuActionId = 1002;
 pub const CTX_ACTION_CLEAR_SELECTION: CtxMenuActionId = 1003;
+pub const CTX_ACTION_REFRESH_FILES: CtxMenuActionId = 1004;
+
 pub const CTX_ACTION_RATE_5: CtxMenuActionId = 1015;
 pub const CTX_ACTION_RATE_4: CtxMenuActionId = 1014;
 pub const CTX_ACTION_RATE_3: CtxMenuActionId = 1013;
@@ -55,6 +57,7 @@ pub struct UiState {
     pub sort_column: SortColumn,
     pub sort_order: SortOrder,
     pub is_assign_mode: bool,
+    pub is_refreshing_media: bool,
     pub active_file_rename_target: Option<MediaId>,
 
     // === Hierarchical Folder Tree State ===
@@ -87,6 +90,7 @@ impl Default for UiState {
             sort_column: SortColumn::from_name(DEFAULT_SORT_COLUMN),
             sort_order: SortOrder::from_name(DEFAULT_SORT_ORDER),
             is_assign_mode: false,
+            is_refreshing_media: false,
             active_file_rename_target: None,
             expanded_folder_ids: HashSet::new(),
             is_refreshing_folders: false,

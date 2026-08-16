@@ -102,6 +102,10 @@ impl ThumbnailScheduler {
         self.tracker.snapshot()
     }
 
+    pub fn tracker(&self) -> &ThumbnailProgressTracker {
+        &self.tracker
+    }
+
     pub fn cancel_current_pipeline(&self) {
         self.is_cancelled.store(true, Ordering::Release);
         self.active_pipeline_id.fetch_add(1, Ordering::SeqCst);
@@ -651,6 +655,102 @@ impl ThumbnailScheduler {
         let item = self
             .cache
             .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
+        Ok(item)
+    }
+
+    /// Explicitly regenerates thumbnail & previews from physical file, overwriting PackStore and LMDB index.
+    pub fn regenerate_sync(
+        &self,
+        media_id: MediaId,
+        file_path: &Path,
+        config: &ThumbnailConfig,
+    ) -> Result<super::cache::CachedThumbnail, ThumbnailError> {
+        let is_video = MediaFormat::from_path(file_path).media_type() == Some(MediaType::Video);
+        let (frame, video_preview_rec) = if is_video {
+            let video_res = self
+                .generator
+                .generate_video_thumbnails(file_path, config)?;
+            let primary = video_res.primary_frame;
+            let mut preview_rec = None;
+            if !video_res.preview_frames.is_empty() {
+                let (p_format, p_quality) = if config.custom_preview_settings {
+                    (config.preview_format, config.preview_quality)
+                } else {
+                    (config.format, config.quality)
+                };
+
+                let mut locations = Vec::with_capacity(video_res.preview_frames.len());
+                for p_frame in &video_res.preview_frames {
+                    if let Ok(p_bytes) = self.generator.compress(
+                        &p_frame.rgb_pixels,
+                        p_frame.width,
+                        p_frame.height,
+                        p_format,
+                        p_quality,
+                    ) && let Ok(p_loc) = self.store.append(&p_bytes)
+                    {
+                        locations.push(p_loc);
+                    }
+                }
+                if !locations.is_empty() {
+                    preview_rec = Some(VideoPreviewRecord {
+                        frame_count: locations.len() as u32,
+                        frame_locations: locations,
+                    });
+                }
+            }
+            (primary, preview_rec)
+        } else {
+            let f = self.generator.generate_image_thumbnail(
+                file_path,
+                config.max_bound,
+                config.scaling_algorithm,
+            )?;
+            (f, None)
+        };
+
+        let compressed = self.generator.compress(
+            &frame.rgb_pixels,
+            frame.width,
+            frame.height,
+            config.format,
+            config.quality,
+        )?;
+        let location = self.store.append(&compressed)?;
+
+        {
+            let mut wtxn = self.library.raw_db().env.write_txn()?;
+            self.library
+                .raw_db()
+                .thumbnails
+                .put(&mut wtxn, &media_id, &location)?;
+            if let Some(p_rec) = video_preview_rec {
+                self.library
+                    .raw_db()
+                    .video_previews
+                    .put(&mut wtxn, &media_id, &p_rec)?;
+            } else {
+                let _ = self
+                    .library
+                    .raw_db()
+                    .video_previews
+                    .delete(&mut wtxn, &media_id);
+            }
+            wtxn.commit()?;
+        }
+
+        let item = self
+            .cache
+            .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
+
+        tracing::info!(
+            media_id = media_id,
+            target = ?file_path,
+            width = frame.width,
+            height = frame.height,
+            "Successfully regenerated thumbnail and persisted to LMDB and L1 cache"
+        );
+
         Ok(item)
     }
 

@@ -1,4 +1,5 @@
 use super::MainWindow;
+use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
 use super::bridge_tags::BridgeTags;
@@ -284,6 +285,20 @@ impl BridgeFileSelection {
                 .as_ref()
                 .map(|p| p.join(&media.filename))
                 .unwrap_or_default();
+
+            if !full_path.exists() {
+                tracing::warn!(media_id = media_id, path = ?full_path, "Cannot open media: File not found on disk");
+                let missing_dlg = MissingFileDialogController::new();
+                missing_dlg.show(
+                    window,
+                    "Open Media",
+                    vec![MissingFileItem {
+                        filename: media.filename,
+                        path: full_path,
+                    }],
+                );
+                return;
+            }
 
             tracing::info!(media_id = media_id, file = ?full_path, "Opening media item");
 

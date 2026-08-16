@@ -95,6 +95,15 @@ impl ThumbnailManager {
         self.scheduler.load_sync(media_id, file_path, config)
     }
 
+    pub fn regenerate_sync(
+        &self,
+        media_id: MediaId,
+        file_path: &Path,
+        config: &ThumbnailConfig,
+    ) -> Result<CachedThumbnail, ThumbnailError> {
+        self.scheduler.regenerate_sync(media_id, file_path, config)
+    }
+
     pub fn load_preview_frames_sync(
         &self,
         media_id: MediaId,

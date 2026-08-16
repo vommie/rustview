@@ -1,5 +1,6 @@
 use super::bridge_ctx_menu::{BridgeContextMenu, ContextMenuRegistration};
 use super::bridge_favorites::BridgeFavorites;
+use super::bridge_file_dialog_missing::MissingFileDialogController;
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folder_dialogs::FolderDialogController;
 use super::bridge_folders::BridgeFolders;
@@ -35,6 +36,7 @@ pub struct UiBridge {
     settings: Arc<SettingsManager>,
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
+    missing_file_dialog: MissingFileDialogController,
     tag_dialogs: TagDialogController,
     folder_dialogs: FolderDialogController,
     favorites: Arc<RwLock<FavoriteManager>>,
@@ -60,6 +62,7 @@ impl UiBridge {
         controller.set_main_window(window.as_weak());
         let settings_dialog = Rc::new(RefCell::new(controller));
         let rename_dialog = Rc::new(RefCell::new(None));
+        let missing_file_dialog = MissingFileDialogController::new();
         let tag_dialogs = TagDialogController::new();
         let folder_dialogs = FolderDialogController::new();
 
@@ -117,6 +120,7 @@ impl UiBridge {
             settings,
             settings_dialog,
             rename_dialog,
+            missing_file_dialog,
             tag_dialogs,
             folder_dialogs,
             favorites,
@@ -213,6 +217,7 @@ impl UiBridge {
                 state: self.state.clone(),
                 dispatcher: self.ctx_menu_dispatcher.clone(),
                 rename_dialog: self.rename_dialog.clone(),
+                missing_file_dialog: self.missing_file_dialog.clone(),
                 tag_dialogs: self.tag_dialogs.clone(),
                 folder_dialogs: self.folder_dialogs.clone(),
                 settings: self.settings.clone(),
@@ -329,7 +334,14 @@ impl UiBridge {
     }
 
     pub fn show_media_context_menu(&self, media_id: MediaId, x: f32, y: f32) {
-        BridgeContextMenu::show_media_menu(&self.window, &self.state, media_id, x, y);
+        BridgeContextMenu::show_media_menu(
+            &self.window,
+            &self.thumbnails,
+            &self.state,
+            media_id,
+            x,
+            y,
+        );
     }
 
     pub fn reload_tags(&self) {

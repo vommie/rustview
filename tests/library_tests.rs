@@ -103,8 +103,9 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     let updated_media = lib.media().get(target_media.id).unwrap().unwrap();
     assert_eq!(updated_media.rating, 5);
 
-    // 8. Test Deletion Detection
-    fs::remove_file(img2_path).unwrap();
+    // 8. Test Zero-Data-Loss Soft Deletion & Restoration
+    // Delete photo2.png from disk
+    fs::remove_file(img2_path.clone()).unwrap();
     let report3 = lib
         .refresher()
         .refresh_folder(folder.id)
@@ -112,7 +113,31 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     assert_eq!(report3.deleted_media, 1);
     assert_eq!(report3.unchanged_media, 1);
 
+    // Active media list must only contain photo1.png
+    let active_media = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(active_media.len(), 1);
+    assert_eq!(active_media[0].filename, "photo1.png");
+
+    // All media (including soft-deleted) contains both
+    let all_media = lib.media().get_all_by_folder(folder.id).unwrap();
+    assert_eq!(all_media.len(), 2);
+    let deleted_item = all_media.iter().find(|m| m.filename == "photo2.png").unwrap();
+    assert!(deleted_item.is_deleted);
+
+    // 9. Recreate photo2.png on disk and refresh folder -> verify recovery with same ID, tags & ratings
+    let img2_restored = image::RgbImage::new(1920, 1080);
+    img2_restored.save(&img2_path).unwrap();
+
+    let report4 = lib
+        .refresher()
+        .refresh_folder(folder.id)
+        .expect("Fourth refresh failed");
+    assert_eq!(report4.restored_media, 1);
+    assert_eq!(report4.unchanged_media, 1);
+
     let final_media = lib.media().get_by_folder(folder.id).unwrap();
-    assert_eq!(final_media.len(), 1);
-    assert_eq!(final_media[0].filename, "photo1.png");
+    assert_eq!(final_media.len(), 2);
+    let restored_item = final_media.iter().find(|m| m.filename == "photo2.png").unwrap();
+    assert!(!restored_item.is_deleted);
+    assert_eq!(restored_item.id, deleted_item.id);
 }

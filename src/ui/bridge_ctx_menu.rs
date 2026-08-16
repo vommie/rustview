@@ -2,6 +2,7 @@ pub use super::bridge_ctx_menu_folder::FolderContextMenu;
 pub use super::bridge_ctx_menu_media::{MediaActionContext, MediaContextMenu};
 pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use super::bridge_ctx_menu_tag::TagContextMenu;
+pub use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 pub use super::bridge_file_dialogs::{FileRenameContext, FileRenameDialogController};
 
 pub use super::bridge_ctx_menu_folder::FolderContextMenu as FolderContextMenuBuilder;
@@ -10,6 +11,7 @@ pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter as SlintContextMenuPr
 pub use super::bridge_file_dialogs::FileRenameDialogController as FileRenameController;
 
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
+use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_tag_dialogs::TagDialogController;
 use super::{FileRenameDialog, MainWindow};
@@ -31,6 +33,7 @@ pub struct ContextMenuRegistration {
     pub state: Arc<RwLock<UiState>>,
     pub dispatcher: Arc<CtxMenuDispatcher>,
     pub rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
+    pub missing_file_dialog: MissingFileDialogController,
     pub tag_dialogs: TagDialogController,
     pub folder_dialogs: FolderDialogController,
     pub settings: Arc<SettingsManager>,
@@ -40,17 +43,22 @@ pub struct BridgeContextMenu;
 
 impl BridgeContextMenu {
     pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
-        Self::register_media_menu(window, &reg.state);
+        Self::register_media_menu(window, &reg.thumbnails, &reg.state);
         Self::register_folder_menu(window, &reg.library, &reg.settings, &reg.state);
         Self::register_popup_events(window, &reg.state);
         Self::register_action_dispatcher(window, reg);
     }
 
-    fn register_media_menu(window: &MainWindow, state: &Arc<RwLock<UiState>>) {
+    fn register_media_menu(
+        window: &MainWindow,
+        thumbnails: &Arc<ThumbnailManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
         let win = window.clone_strong();
+        let th = thumbnails.clone();
         let st = state.clone();
         window.on_media_context_menu(move |id, x, y| {
-            Self::show_media_menu(&win, &st, id as u64, x, y);
+            Self::show_media_menu(&win, &th, &st, id as u64, x, y);
         });
     }
 
@@ -91,6 +99,7 @@ impl BridgeContextMenu {
         let set = reg.settings;
         let disp = reg.dispatcher;
         let ren_dlg = reg.rename_dialog;
+        let missing_file_dlg = reg.missing_file_dialog;
         let tag_dlg = reg.tag_dialogs;
         let fld_dlg = reg.folder_dialogs;
 
@@ -129,6 +138,7 @@ impl BridgeContextMenu {
                     state: &st,
                     dispatcher: &disp,
                     rename_dialog: &ren_dlg,
+                    missing_file_dialog: &missing_file_dlg,
                 },
             );
         });
@@ -136,13 +146,15 @@ impl BridgeContextMenu {
 
     pub fn show_media_menu(
         window: &MainWindow,
+        thumbnails: &ThumbnailManager,
         state: &Arc<RwLock<UiState>>,
         media_id: MediaId,
         x: f32,
         y: f32,
     ) {
         let (selected_count, _) = MediaContextMenu::prepare_selection(window, state, media_id);
-        let menu = MediaContextMenu::build_menu(selected_count);
+        let is_busy = BridgeMedia::is_system_busy(window, thumbnails, state);
+        let menu = MediaContextMenu::build_menu(selected_count, is_busy);
         Self::open_custom_menu(window, state, menu, x, y);
     }
 

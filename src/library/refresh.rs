@@ -16,6 +16,7 @@ pub struct RefreshReport {
     pub updated_media: usize,
     pub unchanged_media: usize,
     pub deleted_media: usize,
+    pub restored_media: usize,
 }
 
 enum ProcessingCandidate {
@@ -47,6 +48,7 @@ enum ProcessedResult {
         existing_record: MediaRecord,
         file_size: u64,
         mtime: i64,
+        was_deleted: bool,
     },
     ModifiedContentChanged {
         existing_id: MediaId,
@@ -56,6 +58,8 @@ enum ProcessedResult {
         mtime: i64,
         raw_meta: RawMetadata,
         filename: String,
+        preserved_rating: u8,
+        was_deleted: bool,
     },
     NewItem {
         filename: String,
@@ -165,7 +169,10 @@ impl<'a> FolderRefresher<'a> {
                 .unwrap_or(0);
 
             if let Some((existing_id, existing_record)) = existing_map.remove(&scanned.filename) {
-                if existing_record.file_size == file_size && existing_record.modification_time == mtime {
+                if !existing_record.is_deleted
+                    && existing_record.file_size == file_size
+                    && existing_record.modification_time == mtime
+                {
                     candidates.push(ProcessingCandidate::Unchanged {
                         existing_id,
                         existing_record,
@@ -224,6 +231,7 @@ impl<'a> FolderRefresher<'a> {
                         file_size,
                         mtime,
                     } => {
+                        let was_deleted = existing_record.is_deleted;
                         let new_hash = match MediaHasher::hash_file(&scanned.path) {
                             Ok(h) => h,
                             Err(e) => {
@@ -244,6 +252,7 @@ impl<'a> FolderRefresher<'a> {
                                 existing_record,
                                 file_size,
                                 mtime,
+                                was_deleted,
                             }
                         } else {
                             let raw_meta = match MetadataExtractor::extract(&scanned.path) {
@@ -262,6 +271,8 @@ impl<'a> FolderRefresher<'a> {
                                 mtime,
                                 raw_meta,
                                 filename: scanned.filename,
+                                preserved_rating: existing_record.rating,
+                                was_deleted,
                             }
                         }
                     }
@@ -330,6 +341,7 @@ impl<'a> FolderRefresher<'a> {
                     mut existing_record,
                 } => {
                     existing_record.last_seen = current_generation;
+                    existing_record.is_deleted = false;
                     self.db.media.put(&mut wtxn, &existing_id, &existing_record)?;
                     active_media_ids.push(existing_id);
                     report.unchanged_media += 1;
@@ -339,13 +351,19 @@ impl<'a> FolderRefresher<'a> {
                     mut existing_record,
                     file_size,
                     mtime,
+                    was_deleted,
                 } => {
                     existing_record.modification_time = mtime;
                     existing_record.file_size = file_size;
                     existing_record.last_seen = current_generation;
+                    existing_record.is_deleted = false;
                     self.db.media.put(&mut wtxn, &existing_id, &existing_record)?;
                     active_media_ids.push(existing_id);
-                    report.unchanged_media += 1;
+                    if was_deleted {
+                        report.restored_media += 1;
+                    } else {
+                        report.unchanged_media += 1;
+                    }
                 }
                 ProcessedResult::ModifiedContentChanged {
                     existing_id,
@@ -355,15 +373,10 @@ impl<'a> FolderRefresher<'a> {
                     mtime,
                     raw_meta,
                     filename,
+                    preserved_rating,
+                    was_deleted,
                 } => {
-                    if let Some(mut hash_list) = self.db.media_by_hash.get(&wtxn, &old_hash[..])? {
-                        hash_list.retain(|&id| id != existing_id);
-                        if hash_list.is_empty() {
-                            self.db.media_by_hash.delete(&mut wtxn, &old_hash[..])?;
-                        } else {
-                            self.db.media_by_hash.put(&mut wtxn, &old_hash[..], &hash_list)?;
-                        }
-                    }
+                    self.db.update_media_hash_index(&mut wtxn, existing_id, Some(&old_hash), Some(&new_hash))?;
 
                     let updated_record = MediaRecord {
                         id: existing_id,
@@ -376,20 +389,18 @@ impl<'a> FolderRefresher<'a> {
                         format: raw_meta.format,
                         width: raw_meta.width,
                         height: raw_meta.height,
-                        rating: 0,
+                        rating: preserved_rating,
                         last_seen: current_generation,
+                        is_deleted: false,
                     };
 
                     self.db.media.put(&mut wtxn, &existing_id, &updated_record)?;
-
-                    let mut hash_list = self.db.media_by_hash.get(&wtxn, &new_hash[..])?.unwrap_or_default();
-                    if !hash_list.contains(&existing_id) {
-                        hash_list.push(existing_id);
-                        self.db.media_by_hash.put(&mut wtxn, &new_hash[..], &hash_list)?;
-                    }
-
                     active_media_ids.push(existing_id);
-                    report.updated_media += 1;
+                    if was_deleted {
+                        report.restored_media += 1;
+                    } else {
+                        report.updated_media += 1;
+                    }
                 }
                 ProcessedResult::NewItem {
                     filename,
@@ -412,13 +423,11 @@ impl<'a> FolderRefresher<'a> {
                         height: raw_meta.height,
                         rating: 0,
                         last_seen: current_generation,
+                        is_deleted: false,
                     };
 
                     self.db.media.put(&mut wtxn, &new_media_id, &new_record)?;
-
-                    let mut hash_list = self.db.media_by_hash.get(&wtxn, &file_hash[..])?.unwrap_or_default();
-                    hash_list.push(new_media_id);
-                    self.db.media_by_hash.put(&mut wtxn, &file_hash[..], &hash_list)?;
+                    self.db.update_media_hash_index(&mut wtxn, new_media_id, None, Some(&file_hash))?;
 
                     active_media_ids.push(new_media_id);
                     report.new_media += 1;
@@ -427,22 +436,19 @@ impl<'a> FolderRefresher<'a> {
             }
         }
 
-        // 5. Purge deleted entries no longer present on filesystem
-        for (deleted_id, deleted_record) in existing_map.values() {
-            if let Some(mut hash_list) = self.db.media_by_hash.get(&wtxn, &deleted_record.file_hash[..])? {
-                hash_list.retain(|id| id != deleted_id);
-                if hash_list.is_empty() {
-                    self.db.media_by_hash.delete(&mut wtxn, &deleted_record.file_hash[..])?;
-                } else {
-                    self.db.media_by_hash.put(&mut wtxn, &deleted_record.file_hash[..], &hash_list)?;
-                }
+        // 5. Zero-Data-Loss Soft Deletion: Mark missing files as is_deleted = true, strictly preserving tags & ratings
+        let mut all_folder_media_ids = active_media_ids.clone();
+
+        for (deleted_id, mut deleted_record) in existing_map.into_values() {
+            if !deleted_record.is_deleted {
+                deleted_record.is_deleted = true;
+                self.db.media.put(&mut wtxn, &deleted_id, &deleted_record)?;
+                report.deleted_media += 1;
             }
-            self.db.media.delete(&mut wtxn, deleted_id)?;
-            self.db.tags_by_media.delete(&mut wtxn, deleted_id)?;
-            report.deleted_media += 1;
+            all_folder_media_ids.push(deleted_id);
         }
 
-        self.db.media_by_folder.put(&mut wtxn, &folder_id, &active_media_ids)?;
+        self.db.media_by_folder.put(&mut wtxn, &folder_id, &all_folder_media_ids)?;
         wtxn.commit()?;
 
         tracing::info!(
@@ -451,7 +457,8 @@ impl<'a> FolderRefresher<'a> {
             new = report.new_media,
             updated = report.updated_media,
             unchanged = report.unchanged_media,
-            deleted = report.deleted_media,
+            marked_deleted = report.deleted_media,
+            restored = report.restored_media,
             "Folder refresh committed successfully to LMDB"
         );
 

@@ -1,6 +1,8 @@
 use rustview::ctx_menu::{
     CtxMenuActionId, CtxMenuBuilder, CtxMenuContext, CtxMenuDispatcher, CtxMenuItemKind,
 };
+use rustview::ui::bridge_ctx_menu_media::MediaContextMenu;
+use rustview::ui::bridge_state::CTX_ACTION_REFRESH_FILES;
 use slint::Model;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -79,4 +81,37 @@ fn test_ctx_menu_dispatcher_execution_and_flattening() {
     let (top_model, sub_model) = CtxMenuDispatcher::to_slint_models(&menu);
     assert_eq!(top_model.row_count(), 2);
     assert_eq!(sub_model.row_count(), 1);
+}
+
+#[test]
+fn test_media_context_menu_refresh_action_singular_plural_and_busy() {
+    // 1. Single selection, not busy -> "Refresh File" and enabled
+    let menu_single = MediaContextMenu::build_menu(1, false);
+    let refresh_item = menu_single
+        .items
+        .iter()
+        .find(|i| i.id == CTX_ACTION_REFRESH_FILES)
+        .unwrap();
+    assert_eq!(refresh_item.text, "Refresh File");
+    assert!(refresh_item.is_enabled);
+
+    // 2. Multi selection (3 files), not busy -> "Refresh 3 Files" and enabled
+    let menu_multi = MediaContextMenu::build_menu(3, false);
+    let refresh_item_multi = menu_multi
+        .items
+        .iter()
+        .find(|i| i.id == CTX_ACTION_REFRESH_FILES)
+        .unwrap();
+    assert_eq!(refresh_item_multi.text, "Refresh 3 Files");
+    assert!(refresh_item_multi.is_enabled);
+
+    // 3. Busy state -> disabled / grayed out
+    let menu_busy = MediaContextMenu::build_menu(3, true);
+    let refresh_item_busy = menu_busy
+        .items
+        .iter()
+        .find(|i| i.id == CTX_ACTION_REFRESH_FILES)
+        .unwrap();
+    assert_eq!(refresh_item_busy.text, "Refresh 3 Files");
+    assert!(!refresh_item_busy.is_enabled);
 }

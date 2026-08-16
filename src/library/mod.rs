@@ -7,12 +7,13 @@ pub mod media;
 pub mod models;
 pub mod refresh;
 pub mod refresh_folders;
+pub mod refresh_media_files;
 pub mod schema;
 pub mod tags;
 
 pub use db::LibraryDatabase;
 pub use error::LibraryError;
-pub use file_operations::FileOperations;
+pub use file_operations::{FileOperations, FilenameValidator};
 pub use folder_operations::{
     FolderDeleteReport, FolderMoveReport, FolderOperations, FolderSubtreeMetrics, FolderValidator,
 };
@@ -23,6 +24,7 @@ pub use models::{
 };
 pub use refresh::{FolderRefresher, RefreshReport};
 pub use refresh_folders::{FolderTreeRefreshReport, FolderTreeRefresher};
+pub use refresh_media_files::{MediaItemRefresher, RefreshedFileAttributes};
 pub use tags::TagManager;
 
 use std::path::Path;
@@ -52,6 +54,10 @@ impl Library {
 
     pub fn file_operations(&self) -> FileOperations<'_> {
         FileOperations::new(&self.db)
+    }
+
+    pub fn media_refresher(&self) -> MediaItemRefresher<'_> {
+        MediaItemRefresher::new(&self.db)
     }
 
     pub fn tags(&self) -> TagManager<'_> {

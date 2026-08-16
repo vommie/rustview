@@ -31,6 +31,7 @@ fn create_dummy_record(
         height: h,
         rating,
         last_seen: 1,
+        is_deleted: false,
     }
 }
 

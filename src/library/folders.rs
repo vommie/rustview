@@ -113,12 +113,19 @@ impl<'a> FolderManager<'a> {
 
     pub fn get_media_count(&self, folder_id: FolderId) -> Result<usize, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
-        let count = self
+        let media_ids = self
             .db
             .media_by_folder
             .get(&rtxn, &folder_id)?
-            .map(|v| v.len())
-            .unwrap_or(0);
+            .unwrap_or_default();
+        let mut count = 0;
+        for id in media_ids {
+            if let Some(rec) = self.db.media.get(&rtxn, &id)?
+                && !rec.is_deleted
+            {
+                count += 1;
+            }
+        }
         Ok(count)
     }
 
@@ -130,25 +137,12 @@ impl<'a> FolderManager<'a> {
             if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, &id)? {
                 for media_id in media_ids {
                     if let Some(media_record) = self.db.media.get(&wtxn, &media_id)? {
-                        // Unset hash index
-                        if let Some(mut hash_media_ids) = self
-                            .db
-                            .media_by_hash
-                            .get(&wtxn, &media_record.file_hash[..])?
-                        {
-                            hash_media_ids.retain(|&m_id| m_id != media_id);
-                            if hash_media_ids.is_empty() {
-                                self.db
-                                    .media_by_hash
-                                    .delete(&mut wtxn, &media_record.file_hash[..])?;
-                            } else {
-                                self.db.media_by_hash.put(
-                                    &mut wtxn,
-                                    &media_record.file_hash[..],
-                                    &hash_media_ids,
-                                )?;
-                            }
-                        }
+                        self.db.update_media_hash_index(
+                            &mut wtxn,
+                            media_id,
+                            Some(&media_record.file_hash),
+                            None,
+                        )?;
                     }
                     self.db.media.delete(&mut wtxn, &media_id)?;
                     self.db.tags_by_media.delete(&mut wtxn, &media_id)?;

@@ -1,6 +1,8 @@
+use super::bridge_file_dialog_missing::MissingFileDialogController;
 use super::bridge_file_dialogs::{FileRenameContext, FileRenameDialogController};
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_inspector::BridgeInspector;
+use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
@@ -26,6 +28,7 @@ pub struct MediaActionContext<'a> {
     pub state: &'a Arc<RwLock<UiState>>,
     pub dispatcher: &'a Arc<CtxMenuDispatcher>,
     pub rename_dialog: &'a Rc<RefCell<Option<FileRenameDialog>>>,
+    pub missing_file_dialog: &'a MissingFileDialogController,
 }
 
 pub struct MediaContextMenu;
@@ -57,9 +60,16 @@ impl MediaContextMenu {
         (selected_count, is_single)
     }
 
-    pub fn build_menu(selected_count: usize) -> CtxMenu {
+    pub fn build_menu(selected_count: usize, is_busy: bool) -> CtxMenu {
         let is_single = selected_count == 1;
-        let can_rename = is_single;
+        let can_rename = is_single && !is_busy;
+        let can_refresh = selected_count > 0 && !is_busy;
+
+        let refresh_text = if is_single {
+            "Refresh File".to_string()
+        } else {
+            format!("Refresh {} Files", selected_count)
+        };
 
         CtxMenuBuilder::new()
             .header(if is_single {
@@ -69,7 +79,7 @@ impl MediaContextMenu {
             })
             .action(
                 CTX_ACTION_RENAME,
-                if can_rename {
+                if is_single {
                     "Rename...".to_string()
                 } else {
                     format!("Rename (Single File Only, {} selected)", selected_count)
@@ -79,15 +89,28 @@ impl MediaContextMenu {
                 can_rename,
             )
             .separator()
-            .submenu("Rate Selection", Some("star"), selected_count > 0, |sub| {
-                sub.action(CTX_ACTION_RATE_5, "5 Stars (★★★★★)", None, None, true)
-                    .action(CTX_ACTION_RATE_4, "4 Stars (★★★★☆)", None, None, true)
-                    .action(CTX_ACTION_RATE_3, "3 Stars (★★★☆☆)", None, None, true)
-                    .action(CTX_ACTION_RATE_2, "2 Stars (★★☆☆☆)", None, None, true)
-                    .action(CTX_ACTION_RATE_1, "1 Star  (★☆☆☆☆)", None, None, true)
-                    .separator()
-                    .action(CTX_ACTION_RATE_0, "Clear Rating", None, None, true)
-            })
+            .submenu(
+                "Rate Selection",
+                Some("star"),
+                selected_count > 0 && !is_busy,
+                |sub| {
+                    sub.action(CTX_ACTION_RATE_5, "5 Stars (★★★★★)", None, None, true)
+                        .action(CTX_ACTION_RATE_4, "4 Stars (★★★★☆)", None, None, true)
+                        .action(CTX_ACTION_RATE_3, "3 Stars (★★★☆☆)", None, None, true)
+                        .action(CTX_ACTION_RATE_2, "2 Stars (★★☆☆☆)", None, None, true)
+                        .action(CTX_ACTION_RATE_1, "1 Star  (★☆☆☆☆)", None, None, true)
+                        .separator()
+                        .action(CTX_ACTION_RATE_0, "Clear Rating", None, None, true)
+                },
+            )
+            .separator()
+            .action(
+                CTX_ACTION_REFRESH_FILES,
+                refresh_text,
+                Some("F5"),
+                Some("refresh"),
+                can_refresh,
+            )
             .separator()
             .action(
                 CTX_ACTION_CLEAR_SELECTION,
@@ -120,6 +143,15 @@ impl MediaContextMenu {
         };
 
         match action_id {
+            CTX_ACTION_REFRESH_FILES => {
+                BridgeMedia::refresh_selected_media(
+                    window,
+                    ctx.library,
+                    ctx.thumbnails,
+                    ctx.settings,
+                    ctx.state,
+                );
+            }
             CTX_ACTION_RENAME => {
                 Self::handle_rename_action(window, ctx, &selected_ids);
             }
@@ -215,6 +247,7 @@ impl MediaContextMenu {
             let ren_close2 = ctx.rename_dialog.clone();
             let win_close2 = window.clone_strong();
             let st_close2 = ctx.state.clone();
+            let missing_dlg = ctx.missing_file_dialog.clone();
 
             FileRenameDialogController::show(
                 ctx.rename_dialog,
@@ -227,6 +260,7 @@ impl MediaContextMenu {
                         &rename_ctx,
                         &win_exec,
                         &ren_exec,
+                        &missing_dlg,
                     );
                 },
                 move || {
