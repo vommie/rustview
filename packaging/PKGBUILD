@@ -1,0 +1,32 @@
+# Maintainer: Your Name <your.email@example.com>
+
+pkgname=rustview
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Image and video viewer with hierarchical tagging and metadata inspection"
+arch=('x86_64')
+license=('MIT')
+
+depends=(
+    'ffmpeg'
+    'mpv'
+    'hicolor-icon-theme'
+)
+
+package() {
+    install -Dm755 \
+        "$startdir/../target/release/rustview" \
+        "$pkgdir/usr/bin/rustview"
+
+    install -Dm644 \
+        "$startdir/rustview.desktop" \
+        "$pkgdir/usr/share/applications/rustview.desktop"
+
+    install -Dm644 \
+        "$startdir/rustview.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/rustview.svg"
+
+    install -Dm644 \
+        "$startdir/../LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

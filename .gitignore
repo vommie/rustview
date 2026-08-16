@@ -23,3 +23,8 @@
 .DS_Store
 
 *.txt
+
+dist/
+packaging/pkg/
+packaging/src/
+packaging/*.pkg.tar.zst

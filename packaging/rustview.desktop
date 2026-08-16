@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=RustView
+GenericName=Media Viewer
+Comment=Image and video viewer
+Exec=rustview
+TryExec=rustview
+Icon=rustview
+Terminal=false
+StartupNotify=true
+Categories=Graphics;Viewer;AudioVideo;
+Keywords=image;photo;picture;video;media;gallery;viewer;catalog;tagging;
