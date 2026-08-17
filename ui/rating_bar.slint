@@ -3,14 +3,19 @@ import { Theme } from "styles.slint";
 export component RatingButton inherits Rectangle {
     in property <int> rating: 0;
     in property <bool> is-selected: false;
+    in property <bool> is-partial: false;
+    in property <bool> is-enabled: true;
     callback clicked();
 
-    border-width: 1px;
-    border-color: root.is-selected ? #ffffff : Theme.border;
+    border-width: root.is-selected ? 2px : (root.is-partial ? 2px : 1px);
+    border-color: root.is-selected ? #ffffff : (root.is-partial ? Theme.primary : Theme.border);
     background: Theme.rating-color(root.rating);
     border-radius: 3px;
+    opacity: root.is-enabled ? 1.0 : 0.38;
 
     TouchArea {
+        enabled: root.is-enabled;
+        mouse-cursor: root.is-enabled ? pointer : default;
         clicked => { root.clicked(); }
     }
 
@@ -18,6 +23,7 @@ export component RatingButton inherits Rectangle {
         text: root.rating;
         color: #000000;
         font-weight: 700;
+        font-size: 11px;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
@@ -27,15 +33,20 @@ export component RatingBar inherits HorizontalLayout {
     spacing: 4px;
     height: 28px;
 
-    in-out property <int> selected-rating: -1;
+    in-out property <int> selected-rating: 0;
+    in property <bool> is-assign-mode: false;
+    in property <bool> has-selection: true;
+    in property <[bool]> partial-ratings: [false, false, false, false, false, false];
     callback rating-selected(int);
 
-    for rate in [0, 1, 2, 3, 4, 5]: RatingButton {
+    for rate[idx] in [0, 1, 2, 3, 4, 5]: RatingButton {
         rating: rate;
+        is-enabled: !root.is-assign-mode || root.has-selection;
         is-selected: root.selected-rating == rate;
+        is-partial: root.is-assign-mode && root.partial-ratings[idx];
         clicked => {
-            root.selected-rating = (root.selected-rating == rate) ? -1 : rate;
-            root.rating-selected(root.selected-rating);
+            root.selected-rating = rate;
+            root.rating-selected(rate);
         }
     }
 }

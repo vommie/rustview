@@ -33,6 +33,7 @@ export component NodeButton inherits Rectangle {
     width: root.button-size;
     height: root.button-size;
     background: transparent;
+    opacity: root.enabled ? 1.0 : 0.38;
 
     // 1. Branch / Parent Node Toggle Button Box (+ / -)
     if root.has-children : Rectangle {
@@ -45,6 +46,7 @@ export component NodeButton inherits Rectangle {
 
         btn-touch := TouchArea {
             enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
             clicked => {
                 root.is-expanded = !root.is-expanded;
                 root.toggled(root.is-expanded);

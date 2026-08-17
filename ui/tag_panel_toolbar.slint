@@ -1,16 +1,19 @@
 import { Theme } from "styles.slint";
-import { PanelToolbar, ToolbarSeparator, ToolbarSpacer, ToolbarToggleButton } from "panel_toolbar.slint";
+import { PanelToolbar, ToolbarSeparator, ToolbarSpacer, ToolbarToggleButton, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
+import { ToolbarTagResetButton } from "toolbar_tag_reset_button.slint";
 
 /// Specialized, fully encapsulated horizontal toolbar for the Tag & Rate Panel.
-/// Houses compact Mode, Match, and Scope toggle buttons with anti-jitter geometry and automatic disabled styling.
+/// Houses compact Mode, Match, Scope dropdown (Folder, Folder & Subfolders, Global), expander spacer, and sensitive query Reset button.
 export component TagPanelToolbar inherits PanelToolbar {
     in-out property <bool> is-assign-mode: false;
     in-out property <int> match-mode-idx: 0; // 0 = ALL, 1 = ANY
-    in-out property <int> scope-mode-idx: 0; // 0 = Folder, 1 = Global
+    in-out property <int> scope-mode-idx: 2; // 0 = Folder, 1 = Folder & Subfolders, 2 = Global (Default)
+    in property <bool> has-active-query: false;
 
     callback mode-toggled(bool);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
+    callback reset-clicked();
 
     toolbar-height: 26px;
 
@@ -44,16 +47,48 @@ export component TagPanelToolbar inherits PanelToolbar {
 
     ToolbarSeparator {}
 
-    // 3. Scope Mode Toggle Button: Folder vs Global (Disabled in Assign Mode)
-    ToolbarToggleButton {
-        text-active: "Global";
-        text-inactive: "Folder";
-        is-active: root.scope-mode-idx == 1;
+    // 3. Scope Select Button: Folder, Folder & Subfolders, Global (Disabled in Assign Mode)
+    ToolbarSelectButton {
+        current-index <=> root.scope-mode-idx;
         is-enabled: !root.is-assign-mode;
-        tooltip: root.is-assign-mode ? "Search scope is inactive during tag assignment" : "Scope: Filter within current Folder vs Global library";
-        toggled(active) => {
-            root.scope-mode-idx = active ? 1 : 0;
-            root.scope-mode-changed(root.scope-mode-idx);
+        button-display-mode: 0; // Icon only on main button
+        popup-display-mode: 2;  // Icon + Text in dropdown options
+        tooltip: root.is-assign-mode
+            ? "Search scope is inactive during tag assignment"
+            : "Scope: Choose query search target (Folder, Folder & Subfolders, Global)";
+
+        model: [
+            {
+                id: 0,
+                text: "Folder",
+                icon: @image-url("icons/query_mode_folder.svg")
+            },
+            {
+                id: 1,
+                text: "Folder & Subfolders",
+                icon: @image-url("icons/query_mode_folder_and_subfolders.svg")
+            },
+            {
+                id: 2,
+                text: "Global",
+                icon: @image-url("icons/query_mode_gobal.svg")
+            }
+        ];
+
+        selected(idx) => {
+            root.scope-mode-changed(idx);
+        }
+    }
+
+    // 4. Expander Spacer
+    ToolbarSpacer {}
+
+    // 5. Sensitive Query Reset Button (SPoT-controlled via ToolbarTagResetButton)
+    ToolbarTagResetButton {
+        is-assign-mode: root.is-assign-mode;
+        has-active-query: root.has-active-query;
+        clicked => {
+            root.reset-clicked();
         }
     }
 }

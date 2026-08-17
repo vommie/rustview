@@ -20,7 +20,8 @@ pub use folder_operations::{
 pub use folders::FolderManager;
 pub use media::MediaRepository;
 pub use models::{
-    DatabaseMeta, FolderId, FolderRecord, FolderRecordCodec, MediaId, MediaRecord, TagId, TagRecord,
+    DatabaseMeta, FolderId, FolderRecord, FolderRecordCodec, MediaId, MediaRecord,
+    MediaSearchParams, TagId, TagRecord,
 };
 pub use refresh::{FolderRefresher, RefreshReport};
 pub use refresh_folders::{FolderTreeRefreshReport, FolderTreeRefresher};

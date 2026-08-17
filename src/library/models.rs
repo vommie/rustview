@@ -1,8 +1,10 @@
 use crate::media::{FileHash, MediaFormat, MediaType};
+use crate::query::{MatchMode, ScopeMode};
 pub use crate::thumbnails::types::{ThumbnailLocation, VideoPreviewRecord};
 use heed::{BoxedError, BytesDecode, BytesEncode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 pub type FolderId = u64;
 pub type MediaId = u64;
@@ -145,4 +147,14 @@ pub struct DatabaseMeta {
     pub thumbnail_version: u32,
     pub database_uuid: String,
     pub created_at: i64,
+}
+
+/// Dynamic search parameters for combinatorial tag & rating queries against LMDB storage.
+#[derive(Debug, Clone, Default)]
+pub struct MediaSearchParams {
+    pub rating: Option<u8>, // None or Some(0) = wildcard, Some(1..=5) = exact match
+    pub tag_ids: HashSet<TagId>,
+    pub match_mode: MatchMode,
+    pub scope_mode: ScopeMode,
+    pub folder_id: Option<FolderId>,
 }

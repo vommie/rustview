@@ -1,0 +1,153 @@
+import { Theme } from "styles.slint";
+
+export struct ToolbarSelectItem {
+    id: int,
+    text: string,
+    icon: image,
+}
+
+/// Compact, modular select/dropdown button tailored for panel toolbars.
+/// Supports Icon-only, Text-only, or Icon+Text rendering for both the button and its popup options.
+export component ToolbarSelectButton inherits Rectangle {
+    in property <[ToolbarSelectItem]> model: [];
+    in-out property <int> current-index: 0;
+    in property <bool> is-enabled: true;
+    in property <string> tooltip: "";
+
+    // Display modes: 0 = Icon Only, 1 = Text Only, 2 = Icon + Text
+    in property <int> button-display-mode: 0;
+    in property <int> popup-display-mode: 2;
+    in property <length> icon-size: 13px;
+    in property <length> font-size: 11px;
+    in property <length> button-width: 0px;
+
+    callback selected(int /* index */);
+
+    property <int> safe-index: Math.max(0, Math.min(root.model.length - 1, root.current-index));
+    property <ToolbarSelectItem> active-item: root.model.length > 0 ? root.model[root.safe-index] : { id: 0, text: "", icon: @image-url("") };
+
+    property <bool> btn-has-icon: (root.button-display-mode == 0 || root.button-display-mode == 2) && root.active-item.icon.width > 0;
+    property <bool> btn-has-text: (root.button-display-mode == 1 || root.button-display-mode == 2) && root.active-item.text != "";
+
+    width: root.button-width > 0px
+        ? root.button-width
+        : ((!root.btn-has-text && root.btn-has-icon)
+            ? self.height
+            : content-layout.preferred-width);
+    height: 100%;
+    horizontal-stretch: 0;
+    border-radius: 3px;
+
+    background: !root.is-enabled ? transparent : (
+        touch-area.pressed ? Theme.surface-selected : (
+            touch-area.has-hover ? Theme.surface-hover : transparent
+        )
+    );
+
+    border-width: (touch-area.has-hover && root.is-enabled) ? 1px : 0px;
+    border-color: !root.is-enabled ? transparent : Theme.border;
+    opacity: !root.is-enabled ? 0.38 : 1.0;
+
+    touch-area := TouchArea {
+        enabled: root.is-enabled;
+        mouse-cursor: root.is-enabled ? pointer : default;
+        clicked => {
+            if root.is-enabled {
+                popup.show();
+            }
+        }
+    }
+
+    content-layout := HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        padding-left: root.btn-has-text ? 6px : 2px;
+        padding-right: root.btn-has-text ? 6px : 2px;
+        spacing: 3px;
+        alignment: center;
+
+        if root.btn-has-icon : Image {
+            source: root.active-item.icon;
+            width: root.icon-size;
+            height: root.icon-size;
+            y: (parent.height - self.height) / 2;
+            image-fit: contain;
+            opacity: root.is-enabled ? (touch-area.has-hover ? 1.0 : 0.85) : 0.4;
+        }
+
+        if root.btn-has-text : Text {
+            text: root.active-item.text;
+            font-size: root.font-size;
+            font-weight: 400;
+            color: !root.is-enabled ? Theme.text-muted : (
+                touch-area.has-hover ? Theme.text : Theme.text-muted
+            );
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: root.height + 3px;
+        width: popup-content.preferred-width;
+        height: popup-content.preferred-height;
+        close-policy: close-on-click;
+
+        Rectangle {
+            background: Theme.surface;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 10px;
+            drop-shadow-color: #000000aa;
+
+            popup-content := VerticalLayout {
+                padding: 3px;
+                spacing: 2px;
+                alignment: start;
+
+                for item[idx] in root.model: Rectangle {
+                    height: 22px;
+                    border-radius: 3px;
+                    background: (idx == root.current-index)
+                        ? Theme.surface-selected
+                        : (opt-touch.has-hover ? Theme.surface-hover : transparent);
+
+                    opt-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.current-index = idx;
+                            root.selected(idx);
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 8px;
+                        spacing: 6px;
+                        alignment: start;
+
+                        if (root.popup-display-mode == 0 || root.popup-display-mode == 2) && item.icon.width > 0 : Image {
+                            source: item.icon;
+                            width: root.icon-size;
+                            height: root.icon-size;
+                            y: (parent.height - self.height) / 2;
+                            image-fit: contain;
+                        }
+
+                        if root.popup-display-mode == 1 || root.popup-display-mode == 2 : Text {
+                            text: item.text;
+                            font-size: root.font-size;
+                            font-weight: (idx == root.current-index) ? 700 : 400;
+                            color: (idx == root.current-index) ? Theme.primary : Theme.text;
+                            vertical-alignment: center;
+                            horizontal-alignment: left;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

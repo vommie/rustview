@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 
 /// Compact, versatile button component designed specifically for panel toolbars.
-/// Supports Icon-only, Text-only, and Icon+Text modes with automatic sizing and perfect vertical centering.
+/// Supports Icon-only, Text-only, and Icon+Text modes with automatic sizing, disabled states, and perfect vertical centering.
 export component ToolbarButton inherits Rectangle {
     in property <image> icon;
     in property <string> text: "";
@@ -36,7 +36,8 @@ export component ToolbarButton inherits Rectangle {
     );
 
     border-width: (root.is-active || (touch-area.has-hover && root.is-enabled)) ? 1px : 0px;
-    border-color: root.is-active ? Theme.primary : Theme.border;
+    border-color: !root.is-enabled ? transparent : (root.is-active ? Theme.primary : Theme.border);
+    opacity: !root.is-enabled ? 0.38 : 1.0;
 
     touch-area := TouchArea {
         enabled: root.is-enabled;
@@ -58,7 +59,7 @@ export component ToolbarButton inherits Rectangle {
             height: root.icon-size;
             y: (parent.height - self.height) / 2;
             image-fit: contain;
-            opacity: root.is-enabled ? (touch-area.has-hover ? 1.0 : 0.85) : 0.35;
+            opacity: root.is-enabled ? (touch-area.has-hover ? 1.0 : 0.85) : 0.4;
         }
 
         if root.has-text : Text {

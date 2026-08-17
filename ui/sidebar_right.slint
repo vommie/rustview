@@ -13,8 +13,12 @@ export component SidebarRight inherits Rectangle {
 
     in-out property <bool> is-assign-mode: false;
     in-out property <int> match-mode-idx: 0;
-    in-out property <int> scope-mode-idx: 0;
-    in-out property <int> selected-rating: -1;
+    in-out property <int> scope-mode-idx: 2;
+    in-out property <int> selected-rating: 0;
+    in property <bool> has-selection: true;
+    in property <[bool]> partial-ratings: [false, false, false, false, false, false];
+    in property <bool> has-active-query: false;
+    in-out property <string> tag-filter-text <=> tag-panel.filter-text;
     in property <[TagNodeView]> tags: [];
 
     in property <string> info-filename: "-";
@@ -33,6 +37,7 @@ export component SidebarRight inherits Rectangle {
     callback tag-filter-changed(string);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
+    callback reset-clicked();
 
     // Left border separator line
     Rectangle {
@@ -51,11 +56,15 @@ export component SidebarRight inherits Rectangle {
             match-mode-idx <=> root.match-mode-idx;
             scope-mode-idx <=> root.scope-mode-idx;
             selected-rating <=> root.selected-rating;
+            has-selection: root.has-selection;
+            partial-ratings: root.partial-ratings;
+            has-active-query: root.has-active-query;
             tags: root.tags;
 
             mode-toggled(assign) => { root.mode-toggled(assign); }
             match-mode-changed(m) => { root.match-mode-changed(m); }
             scope-mode-changed(s) => { root.scope-mode-changed(s); }
+            reset-clicked => { root.reset-clicked(); }
             rating-selected(r) => { root.rating-selected(r); }
             tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
             tag-clicked(id) => { root.tag-clicked(id); }

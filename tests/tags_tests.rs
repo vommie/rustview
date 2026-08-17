@@ -1,5 +1,8 @@
+use rustview::library::models::MediaSearchParams;
 use rustview::library::Library;
+use rustview::query::{MatchMode, ScopeMode};
 use rustview::settings::SettingsManager;
+use rustview::ui::bridge_state::UiState;
 use rustview::ui::bridge_tags::{BridgeTags, TagSelectionStats};
 use std::collections::HashSet;
 use tempfile::tempdir;
@@ -102,7 +105,7 @@ fn test_tag_expansion_persistence_in_settings() {
 }
 
 #[test]
-fn test_tag_selection_stats_calculation() {
+fn test_tag_selection_stats_and_partial_ratings() {
     let tmp_db = tempdir().unwrap();
     let tmp_media = tempdir().unwrap();
 
@@ -131,7 +134,12 @@ fn test_tag_selection_stats_calculation() {
     let m2 = media[1].id;
     let m3 = media[2].id;
 
-    // Assign:
+    // Set ratings: m1 = 4, m2 = 4, m3 = 5
+    lib.media().set_rating(m1, 4).unwrap();
+    lib.media().set_rating(m2, 4).unwrap();
+    lib.media().set_rating(m3, 5).unwrap();
+
+    // Assign tags:
     // Nature: m1, m2, m3 (3/3)
     // Urban:  m1, m2     (2/3)
     // Night:  m3         (1/3)
@@ -154,12 +162,146 @@ fn test_tag_selection_stats_calculation() {
     assert_eq!(stats.tag_counts.get(&t1.id), Some(&2)); // Nature: 2/2 -> Full
     assert_eq!(stats.tag_counts.get(&t2.id), Some(&2)); // Urban: 2/2 -> Full
     assert_eq!(stats.tag_counts.get(&t3.id), None); // Night: 0/2 -> None
+    assert_eq!(stats.ratings_in_selection, HashSet::from([4])); // Uniform rating 4
 
-    // Selection containing all 3 files
+    // Selection containing all 3 files (mixed ratings 4 and 5)
     sel.insert(m3);
     let stats3 = TagSelectionStats::compute(&sel, &lib);
     assert_eq!(stats3.selected_files_count, 3);
     assert_eq!(stats3.tag_counts.get(&t1.id), Some(&3)); // Nature: 3/3 -> Full
     assert_eq!(stats3.tag_counts.get(&t2.id), Some(&2)); // Urban: 2/3 -> Partial
     assert_eq!(stats3.tag_counts.get(&t3.id), Some(&1)); // Night: 1/3 -> Partial
+    assert_eq!(stats3.ratings_in_selection, HashSet::from([4, 5])); // Partial ratings 4 and 5
+}
+
+#[test]
+fn test_database_search_all_vs_any_and_scope_modes() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media1 = tempdir().unwrap();
+    let tmp_media2 = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let folder1 = lib.folders().add_folder(tmp_media1.path()).unwrap();
+    let folder2 = lib.folders().add_folder(tmp_media2.path()).unwrap();
+
+    // Subfolder in Folder 1
+    let subfolder_path = tmp_media1.path().join("sub");
+    std::fs::create_dir_all(&subfolder_path).unwrap();
+    let folder1_sub = lib.folders().add_folder(&subfolder_path).unwrap();
+
+    // Tags
+    let tag_cat = lib.tags().create_tag("Cat", None).unwrap();
+    let tag_cute = lib.tags().create_tag("Cute", None).unwrap();
+    let tag_wild = lib.tags().create_tag("Wild", None).unwrap();
+
+    // Folder 1 Root Files:
+    // f1_1: Cat + Cute, Rating = 5
+    let p1_1 = tmp_media1.path().join("cat_cute.png");
+    image::RgbImage::new(10, 10).save(&p1_1).unwrap();
+    lib.refresher().refresh_folder(folder1.id).unwrap();
+    let m1_1 = lib.media().get_by_folder(folder1.id).unwrap()[0].id;
+    lib.media().set_rating(m1_1, 5).unwrap();
+    lib.tags().assign_tag(m1_1, tag_cat.id).unwrap();
+    lib.tags().assign_tag(m1_1, tag_cute.id).unwrap();
+
+    // Folder 1 Subfolder Files:
+    // f1_sub: Cat + Cute, Rating = 5
+    let p1_sub = subfolder_path.join("kitten.png");
+    image::RgbImage::new(10, 10).save(&p1_sub).unwrap();
+    lib.refresher().refresh_folder(folder1_sub.id).unwrap();
+    let m1_sub = lib.media().get_by_folder(folder1_sub.id).unwrap()[0].id;
+    lib.media().set_rating(m1_sub, 5).unwrap();
+    lib.tags().assign_tag(m1_sub, tag_cat.id).unwrap();
+    lib.tags().assign_tag(m1_sub, tag_cute.id).unwrap();
+
+    // Folder 2 Unrelated Files:
+    // f2_1: Cat + Wild, Rating = 5
+    let p2_1 = tmp_media2.path().join("tiger.png");
+    image::RgbImage::new(10, 10).save(&p2_1).unwrap();
+    lib.refresher().refresh_folder(folder2.id).unwrap();
+    let m2_1 = lib.media().get_by_folder(folder2.id).unwrap()[0].id;
+    lib.media().set_rating(m2_1, 5).unwrap();
+    lib.tags().assign_tag(m2_1, tag_cat.id).unwrap();
+    lib.tags().assign_tag(m2_1, tag_wild.id).unwrap();
+
+    // Test 1: Scope Folder -> Only matches m1_1 (not the subfolder)
+    let params_folder = MediaSearchParams {
+        rating: Some(5),
+        tag_ids: HashSet::from([tag_cat.id, tag_cute.id]),
+        match_mode: MatchMode::All,
+        scope_mode: ScopeMode::Folder,
+        folder_id: Some(folder1.id),
+    };
+    let res_folder = lib.media().search(&params_folder).unwrap();
+    assert_eq!(res_folder.len(), 1);
+    assert_eq!(res_folder[0].id, m1_1);
+
+    // Test 2: Scope Folder & Subfolders -> Matches m1_1 AND m1_sub (subtree of Folder 1)
+    let params_subfolders = MediaSearchParams {
+        rating: Some(5),
+        tag_ids: HashSet::from([tag_cat.id, tag_cute.id]),
+        match_mode: MatchMode::All,
+        scope_mode: ScopeMode::FolderAndSubfolders,
+        folder_id: Some(folder1.id),
+    };
+    let res_subfolders = lib.media().search(&params_subfolders).unwrap();
+    let sub_ids: HashSet<_> = res_subfolders.iter().map(|m| m.id).collect();
+    assert_eq!(sub_ids, HashSet::from([m1_1, m1_sub]));
+
+    // Test 3: Scope Global -> Matches m1_1, m1_sub, AND m2_1 (where applicable)
+    let params_global = MediaSearchParams {
+        rating: Some(5),
+        tag_ids: HashSet::from([tag_cat.id]),
+        match_mode: MatchMode::All,
+        scope_mode: ScopeMode::Global,
+        folder_id: None,
+    };
+    let res_global = lib.media().search(&params_global).unwrap();
+    let glob_ids: HashSet<_> = res_global.iter().map(|m| m.id).collect();
+    assert_eq!(glob_ids, HashSet::from([m1_1, m1_sub, m2_1]));
+}
+
+#[test]
+fn test_query_reset_sensitivity_spot() {
+    let mut state = UiState::default();
+
+    // 1. Initial default state -> Not resettable
+    assert!(!state.is_query_resettable());
+
+    // 2. Select rating 4 in Query mode -> Resettable
+    state.selected_rating = 4;
+    assert!(state.is_query_resettable());
+
+    // 3. Reset rating back to 0 -> Not resettable
+    state.selected_rating = 0;
+    assert!(!state.is_query_resettable());
+
+    // 4. Select a tag in Query mode -> Resettable
+    state.filter.tag_ids.insert(101);
+    assert!(state.is_query_resettable());
+
+    // 5. Clear tags -> Not resettable
+    state.filter.tag_ids.clear();
+    assert!(!state.is_query_resettable());
+
+    // 6. Active query flag set -> Resettable
+    state.is_query_active = true;
+    assert!(state.is_query_resettable());
+
+    // 7. In Assign mode -> Always false (disabled) regardless of rating or tags
+    state.is_assign_mode = true;
+    assert!(!state.is_query_resettable());
+}
+
+#[test]
+fn test_query_fast_path_when_inactive() {
+    let mut state = UiState::default();
+    assert!(!state.is_query_resettable());
+    assert!(!state.is_query_active);
+
+    state.filter.match_mode = MatchMode::Any;
+    assert!(!state.is_query_resettable());
+
+    state.filter.scope_mode = ScopeMode::Global;
+    assert!(!state.is_query_resettable());
 }

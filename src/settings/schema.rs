@@ -107,7 +107,7 @@ pub const DEFAULT_PLAYER_KEEP_OPEN: bool = true;
 // SECTION 7: Tags & Categorization - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_TAG_MATCH_MODE: &str = "ALL";
-pub const DEFAULT_TAG_SCOPE_MODE: &str = "Folder";
+pub const DEFAULT_TAG_SCOPE_MODE: &str = "Global";
 
 // =============================================================================
 // SECTION 8: Window Geometry - Single Point of Truth Constants

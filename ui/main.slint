@@ -77,6 +77,16 @@ export component MainWindow inherits Window {
     in-out property <string> player-time-str: "00:00 / 00:00";
     in-out property <string> player-title: "Video Playback";
 
+    // Tag & Rate Panel Interactive State Properties
+    in-out property <bool> tag-is-assign-mode: false;
+    in-out property <int> tag-match-mode-idx: 0;
+    in-out property <int> tag-scope-mode-idx: 2; // 0 = Folder, 1 = Folder & Subfolders, 2 = Global (Default)
+    in-out property <int> selected-rating: 0;
+    in property <bool> has-file-selection: false;
+    in property <[bool]> partial-ratings: [false, false, false, false, false, false];
+    in-out property <bool> has-active-query: false;
+    in-out property <string> tag-filter-text: "";
+
     // Multi-Level Cascading Context Menu State
     in-out property <bool> is-context-menu-open: false;
     in-out property <length> context-menu-x: 0px;
@@ -130,6 +140,7 @@ export component MainWindow inherits Window {
     callback tag-mode-toggled(bool);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
+    callback tag-reset-clicked();
 
     // Sorting & View Callbacks
     callback sort-column-clicked(int /* column_index */);
@@ -248,6 +259,14 @@ export component MainWindow inherits Window {
 
             sidebar_right := SidebarRight {
                 tags: root.tags;
+                is-assign-mode <=> root.tag-is-assign-mode;
+                match-mode-idx <=> root.tag-match-mode-idx;
+                scope-mode-idx <=> root.tag-scope-mode-idx;
+                selected-rating <=> root.selected-rating;
+                has-selection: root.has-file-selection;
+                partial-ratings: root.partial-ratings;
+                has-active-query: root.has-active-query;
+                tag-filter-text <=> root.tag-filter-text;
                 info-filename: root.info-filename;
                 info-size: root.info-size;
                 info-dimensions: root.info-dimensions;
@@ -264,6 +283,7 @@ export component MainWindow inherits Window {
                 tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
                 match-mode-changed(m) => { root.match-mode-changed(m); }
                 scope-mode-changed(s) => { root.scope-mode-changed(s); }
+                reset-clicked => { root.tag-reset-clicked(); }
             }
         }
 

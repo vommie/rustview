@@ -57,6 +57,8 @@ pub struct UiState {
     pub sort_column: SortColumn,
     pub sort_order: SortOrder,
     pub is_assign_mode: bool,
+    pub is_query_active: bool,
+    pub selected_rating: u8, // 0 = wildcard in query, 0..5 in assign
     pub is_refreshing_media: bool,
     pub active_file_rename_target: Option<MediaId>,
 
@@ -90,6 +92,8 @@ impl Default for UiState {
             sort_column: SortColumn::from_name(DEFAULT_SORT_COLUMN),
             sort_order: SortOrder::from_name(DEFAULT_SORT_ORDER),
             is_assign_mode: false,
+            is_query_active: false,
+            selected_rating: 0,
             is_refreshing_media: false,
             active_file_rename_target: None,
             expanded_folder_ids: HashSet::new(),
@@ -101,5 +105,16 @@ impl Default for UiState {
             active_tag_dialog_target: None,
             active_context_menu: None,
         }
+    }
+}
+
+impl UiState {
+    /// Single Point of Truth determining whether there is an active query/filter state that can be reset.
+    #[inline]
+    pub fn is_query_resettable(&self) -> bool {
+        !self.is_assign_mode
+            && (self.selected_rating > 0
+                || !self.filter.tag_ids.is_empty()
+                || self.is_query_active)
     }
 }

@@ -1,0 +1,17 @@
+import { Theme } from "styles.slint";
+import { ToolbarButton } from "toolbar_button.slint";
+
+/// Specialized, decoupled Query Reset button for the Tag & Rate panel toolbar.
+/// Sensitively reacts to whether an active query/tag filter exists and is in QUERY mode.
+export component ToolbarTagResetButton inherits ToolbarButton {
+    in property <bool> is-assign-mode: false;
+    in property <bool> has-active-query: false;
+
+    text: "Reset";
+    is-enabled: !root.is-assign-mode && root.has-active-query;
+    tooltip: root.is-assign-mode
+        ? "Reset is inactive during tag assignment"
+        : (root.has-active-query
+            ? "Reset query: clear tag filters and reset rating to 0"
+            : "No active query to reset");
+}

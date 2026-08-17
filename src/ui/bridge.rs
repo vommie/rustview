@@ -17,11 +17,11 @@ use crate::ctx_menu::CtxMenuDispatcher;
 use crate::library::Library;
 use crate::library::models::{FolderId, MediaId, TagId};
 use crate::player::PlayerController;
-use crate::query::{SortColumn, SortOrder};
+use crate::query::{ScopeMode, SortColumn, SortOrder};
 use crate::settings::{AppSettings, GridAspectRatio, SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::{Mutex, RwLock};
-use slint::{ComponentHandle, Timer};
+use slint::{ComponentHandle, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -100,6 +100,14 @@ impl UiBridge {
         window.set_thumb_aspect_idx(ratio.to_index());
         window.set_status_text("Initializing RustView...".into());
 
+        // Initialize Tag & Rate panel properties (Default Scope: Global / Index 2)
+        window.set_selected_rating(0);
+        window.set_tag_is_assign_mode(false);
+        window.set_tag_scope_mode_idx(ScopeMode::default().to_index());
+        window.set_has_file_selection(true);
+        window.set_has_active_query(false);
+        window.set_partial_ratings(ModelRc::new(VecModel::from(vec![false; 6])));
+
         let state = Arc::new(RwLock::new(initial_state));
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let last_click = Arc::new(Mutex::new(None));
@@ -136,7 +144,12 @@ impl UiBridge {
 
         bridge.reload_favorites();
         bridge.reload_tags();
-        BridgeFolders::reload_tree(&bridge.window, &bridge.library, &bridge.settings, &bridge.state);
+        BridgeFolders::reload_tree(
+            &bridge.window,
+            &bridge.library,
+            &bridge.settings,
+            &bridge.state,
+        );
 
         // Defer root folder synchronization until Slint has entered the event loop and painted the initial window
         let w_weak = bridge.window.as_weak();
@@ -147,7 +160,9 @@ impl UiBridge {
 
         Timer::single_shot(std::time::Duration::from_millis(50), move || {
             if let Some(win) = w_weak.upgrade() {
-                tracing::info!("[UiBridge: PostMount] Slint UI event loop ready. Mounting root folder...");
+                tracing::info!(
+                    "[UiBridge: PostMount] Slint UI event loop ready. Mounting root folder..."
+                );
                 BridgeFolders::sync_root(&win, &lib, &thumb, &set, &st);
             }
         });

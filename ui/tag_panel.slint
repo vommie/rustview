@@ -35,12 +35,16 @@ export component TagDockHeader inherits Rectangle {
 
 export component TagTreeItem inherits Rectangle {
     in property <TagNodeView> tag;
+    in property <bool> is-assign-mode: false;
+    in property <bool> has-selection: true;
     callback clicked();
     callback toggle-expanded();
     callback scroll-requested(length /* dx */, length /* dy */);
     callback context-menu-requested(length /* x */, length /* y */);
 
     height: 22px;
+
+    property <bool> is-item-enabled: !root.is-assign-mode || root.has-selection;
 
     background: root.tag.is-selected ? Theme.surface-selected :
                 (root.tag.is-assigned ? (root.tag.is-dimmed ? #a6e3a118 : #a6e3a128) :
@@ -54,7 +58,12 @@ export component TagTreeItem inherits Rectangle {
                  (root.tag.is-assigned ? (root.tag.is-dimmed ? #a6e3a188 : #a6e3a1) :
                  (root.tag.is-partial ? (root.tag.is-dimmed ? #f9e2af88 : #f9e2af) : Theme.border));
 
+    opacity: root.is-item-enabled ? 1.0 : 0.45;
+
     tag-touch := TouchArea {
+        enabled: root.is-item-enabled;
+        mouse-cursor: root.is-item-enabled ? pointer : default;
+
         scroll-event(event) => {
             root.scroll-requested(event.delta-x, event.delta-y);
             return accept;
@@ -115,6 +124,8 @@ export component TagTreeItem inherits Rectangle {
             font-size: 11px;
             vertical-alignment: center;
             horizontal-alignment: left;
+            horizontal-stretch: 1;
+            overflow: elide;
         }
     }
 }
@@ -128,24 +139,39 @@ export component TagTreeList inherits Rectangle {
     clip: true;
 
     in property <[TagNodeView]> tags: [];
+    in property <bool> is-assign-mode: false;
+    in property <bool> has-selection: true;
     callback tag-clicked(int);
     callback tag-toggle-expand(int);
     callback tag-context-menu(int, length, length);
     callback root-context-menu(length, length);
 
-    property <length> item-row-height: 22px;
+    property <length> item-height: 22px;
     property <length> row-spacing: 2px;
-    property <int> rows-per-column: Math.max(1, Math.floor((self.height - 8px) / (root.item-row-height + root.row-spacing)));
+    property <length> column-width: 200px;
+    property <length> column-spacing: 6px;
+    property <length> padding-horizontal: 4px;
+    property <length> padding-vertical: 4px;
+
+    // Usable height inside the scrollable view
+    property <length> available-height: Math.max(1px, self.height - (root.padding-vertical * 2));
+    property <length> stride-y: root.item-height + root.row-spacing;
+    property <int> rows-per-column: Math.max(1, Math.floor((root.available-height + root.row-spacing) / root.stride-y));
+    property <int> total-columns: Math.max(1, Math.ceil(root.tags.length / root.rows-per-column));
+
+    // Dynamic horizontal width for seamless column-major wrapping
+    property <length> calculated-content-width: (root.padding-horizontal * 2)
+        + (root.total-columns * root.column-width)
+        + (Math.max(0, root.total-columns - 1) * root.column-spacing);
 
     scroll-area := SmoothScrollArea {
         width: 100%;
         height: 100%;
-        content-width: Math.max(self.width, grid-layout.preferred-width + 8px);
-        content-height: Math.max(self.height, grid-layout.preferred-height + 8px);
         enable-horizontal: true;
         enable-vertical: false;
+        content-width: Math.max(self.width, root.calculated-content-width);
+        content-height: self.height;
 
-        // Background TouchArea positioned inside scroll viewport to catch right clicks anywhere on empty tree space
         bg-touch := TouchArea {
             width: 100%;
             height: 100%;
@@ -158,21 +184,29 @@ export component TagTreeList inherits Rectangle {
             pointer-event(event) => {
                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
                     root.root-context-menu(
-                        scroll-area.clamped-x + bg-touch.mouse-x,
-                        scroll-area.clamped-y + bg-touch.mouse-y
+                        bg-touch.mouse-x + scroll-area.clamped-x,
+                        bg-touch.mouse-y
                     );
                 }
             }
         }
 
-        grid-layout := GridLayout {
-            padding: 4px;
-            spacing: root.row-spacing;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: Math.max(parent.width, root.calculated-content-width);
+            height: parent.height;
 
             for tag[index] in root.tags: TagTreeItem {
-                col: Math.floor(index / root.rows-per-column);
-                row: Math.mod(index, root.rows-per-column);
+                x: root.padding-horizontal + (Math.floor(index / root.rows-per-column) * (root.column-width + root.column-spacing));
+                y: root.padding-vertical + (Math.mod(index, root.rows-per-column) * root.stride-y);
+                width: root.column-width;
+                height: root.item-height;
+
                 tag: tag;
+                is-assign-mode: root.is-assign-mode;
+                has-selection: root.has-selection;
+
                 clicked => { root.tag-clicked(tag.id); }
                 toggle-expanded => { root.tag-toggle-expand(tag.id); }
                 scroll-requested(dx, dy) => {
@@ -181,8 +215,8 @@ export component TagTreeList inherits Rectangle {
                 context-menu-requested(mx, my) => {
                     root.tag-context-menu(
                         tag.id,
-                        scroll-area.clamped-x + self.x + mx,
-                        scroll-area.clamped-y + self.y + my
+                        self.x + mx + scroll-area.clamped-x,
+                        self.y + my
                     );
                 }
             }
@@ -196,13 +230,18 @@ export component TagPanel inherits VerticalLayout {
 
     in-out property <bool> is-assign-mode: false;
     in-out property <int> match-mode-idx: 0;
-    in-out property <int> scope-mode-idx: 0;
-    in-out property <int> selected-rating: -1;
+    in-out property <int> scope-mode-idx: 2;
+    in-out property <int> selected-rating: 0;
+    in property <bool> has-selection: true;
+    in property <[bool]> partial-ratings: [false, false, false, false, false, false];
+    in property <bool> has-active-query: false;
+    in-out property <string> filter-text <=> filter-input.text;
     in property <[TagNodeView]> tags: [];
 
     callback mode-toggled(bool);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
+    callback reset-clicked();
     callback rating-selected(int);
     callback tag-filter-changed(string);
     callback tag-clicked(int);
@@ -215,31 +254,38 @@ export component TagPanel inherits VerticalLayout {
         root-context-menu(x, y) => { root.root-context-menu(header.x + x, header.y + y); }
     }
 
-    // 2. Modular Tag Panel Toolbar (Mode, Match, Scope with Jitter-Free Toggles & Disabled State)
+    // 2. Modular Tag Panel Toolbar (Mode, Match, Scope Dropdown, Sensitive Reset)
     TagPanelToolbar {
         is-assign-mode <=> root.is-assign-mode;
         match-mode-idx <=> root.match-mode-idx;
         scope-mode-idx <=> root.scope-mode-idx;
+        has-active-query: root.has-active-query;
         mode-toggled(assign) => { root.mode-toggled(assign); }
         match-mode-changed(m) => { root.match-mode-changed(m); }
         scope-mode-changed(s) => { root.scope-mode-changed(s); }
+        reset-clicked => { root.reset-clicked(); }
     }
 
     // 3. Rating Selector Bar
     RatingBar {
         selected-rating <=> root.selected-rating;
+        is-assign-mode: root.is-assign-mode;
+        has-selection: root.has-selection;
+        partial-ratings: root.partial-ratings;
         rating-selected(r) => { root.rating-selected(r); }
     }
 
     // 4. Tag Filter Input
-    LineEdit {
+    filter-input := LineEdit {
         placeholder-text: "Filter tags...";
         edited(text) => { root.tag-filter-changed(text); }
     }
 
-    // 5. Tag Hierarchical Tree View
+    // 5. Tag Hierarchical Tree View (Top-to-Bottom Wrapping & Pure Horizontal Scrolling)
     tree-list := TagTreeList {
         tags: root.tags;
+        is-assign-mode: root.is-assign-mode;
+        has-selection: root.has-selection;
         tag-clicked(id) => { root.tag-clicked(id); }
         tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
         tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-list.x + x, tree-list.y + y); }

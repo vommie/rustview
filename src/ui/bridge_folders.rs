@@ -397,6 +397,7 @@ impl BridgeFolders {
     }
 
     /// 4-Stage Asynchronous Folder Navigation Workflow.
+    /// Completely resets query filters, Tag & Rate panel selections, and search fields upon navigating to a folder.
     pub fn select_folder(
         folder_id: FolderId,
         path: PathBuf,
@@ -422,7 +423,7 @@ impl BridgeFolders {
         // Cancel previous thumbnail pipeline and background scanner immediately
         thumbnails.cancel_pipeline();
 
-        // Stage 1: Atomically cancel previous media scan, reset state, and highlight folder node
+        // Stage 1: Atomically reset query state, clear search filters, and reset Tag & Rate selections
         let (request_token, cancel_flag) = {
             let mut st = state.write();
 
@@ -441,6 +442,15 @@ impl BridgeFolders {
             st.folder_thumbnails.clear();
             st.all_folder_media.clear();
 
+            // Completely reset query & filter state
+            st.is_query_active = false;
+            st.selected_rating = 0;
+            st.filter.rating = None;
+            st.filter.search_query.clear();
+            st.filter.is_regex = false;
+            st.filter.tag_ids.clear();
+            st.tag_filter_query.clear();
+
             (st.active_folder_token, new_flag)
         };
 
@@ -451,6 +461,12 @@ impl BridgeFolders {
                 settings.save_quiet(&s);
             }
         }
+
+        // Reset UI inputs
+        window.set_search_query("".into());
+        window.set_regex_mode(false);
+        window.set_selected_rating(0);
+        window.set_tag_filter_text("".into());
 
         // Instantly update tree highlight, clear grid, and set initial transition status
         Self::reload_tree(window, library, settings, state);
@@ -703,6 +719,10 @@ impl BridgeFolders {
             st.media_row_map.clear();
             st.last_executed_query.clear();
             st.expanded_folder_ids.clear();
+            st.is_query_active = false;
+            st.selected_rating = 0;
+            st.filter.rating = None;
+            st.filter.tag_ids.clear();
         }
         window.set_folders(ModelRc::new(VecModel::from(vec![])));
         window.set_media_items(ModelRc::new(VecModel::from(vec![])));
@@ -711,7 +731,6 @@ impl BridgeFolders {
         BridgeInspector::update(window, state);
     }
 
-    /// Prunes deleted folder IDs from the expanded folder set and saves state.
     pub fn prune_expanded_folders(
         deleted_ids: &[FolderId],
         settings: &SettingsManager,
@@ -724,7 +743,6 @@ impl BridgeFolders {
         Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
     }
 
-    /// Checks if the currently active folder was affected by a deletion/purge, and safely falls back to the library root folder.
     pub fn fallback_to_root_if_affected(
         affected_folder_ids: &[FolderId],
         window: &MainWindow,

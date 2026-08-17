@@ -5,9 +5,9 @@ use super::bridge_tags::BridgeTags;
 use super::models::{format_filesize, rgb8_to_shared_buffer};
 use super::{MainWindow, MediaItemView};
 use crate::library::Library;
-use crate::library::models::{MediaId, MediaRecord};
+use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::query::filters::IndexedMediaRecord;
-use crate::query::{MatchMode, MediaSorter, ScopeMode, SortColumn, SortOrder};
+use crate::query::{MediaSorter, SortColumn, SortOrder};
 use crate::settings::SettingsManager;
 use crate::thumbnails::{
     PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager,
@@ -65,38 +65,6 @@ impl BridgeMedia {
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
-        window.on_match_mode_changed(move |idx| {
-            let mode = if idx == 0 {
-                MatchMode::All
-            } else {
-                MatchMode::Any
-            };
-            tracing::info!(?mode, "[QueryFilter] Match mode updated");
-            st.write().filter.match_mode = mode;
-            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
-        });
-
-        let win = window.clone_strong();
-        let lib = library.clone();
-        let thumb = thumbnails.clone();
-        let set = settings.clone();
-        let st = state.clone();
-        window.on_scope_mode_changed(move |idx| {
-            let scope = if idx == 0 {
-                ScopeMode::Folder
-            } else {
-                ScopeMode::Global
-            };
-            tracing::info!(?scope, "[QueryFilter] Scope mode updated");
-            st.write().filter.scope_mode = scope;
-            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
-        });
-
-        let win = window.clone_strong();
-        let lib = library.clone();
-        let thumb = thumbnails.clone();
-        let set = settings.clone();
-        let st = state.clone();
         window.on_sort_column_clicked(move |col_idx| {
             let target_col = SortColumn::from_index(col_idx);
             let (new_col, new_ord) = {
@@ -129,7 +97,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // Hover Video Preview Animation Handler (Guarded with strict ID validation)
+        // Hover Video Preview Animation Handler
         let win = window.clone_strong();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -145,7 +113,7 @@ impl BridgeMedia {
             }
 
             let mut timer_guard = timer_clone.borrow_mut();
-            *timer_guard = None; // Stop any running preview
+            *timer_guard = None;
 
             if is_hover {
                 if let Ok(frames) = thumb.load_preview_frames_sync(media_id) {
@@ -186,7 +154,6 @@ impl BridgeMedia {
                     }
                 }
             } else {
-                // Restore default static thumbnail on mouse leave
                 let model = win_hover.get_media_items();
                 let st_r = st.read();
                 if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
@@ -273,7 +240,6 @@ impl BridgeMedia {
         });
     }
 
-    /// Checks if any background refresh, directory indexing, or thumbnail generation is active.
     pub fn is_system_busy(
         window: &MainWindow,
         thumbnails: &ThumbnailManager,
@@ -293,8 +259,6 @@ impl BridgeMedia {
         progress.is_preloading || progress.is_generating || progress.active_workers > 0
     }
 
-    /// Selectively refreshes metadata, MD5 hash, and generates fresh thumbnails for currently selected media files.
-    /// In case of missing files on disk, displays a consolidated MissingFileDialog notification after processing.
     pub fn refresh_selected_media(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -335,13 +299,11 @@ impl BridgeMedia {
             return;
         }
 
-        // Set state to active refreshing
         {
             let mut st = state.write();
             st.is_refreshing_media = true;
         }
 
-        // Visual status bar configuration
         window.set_is_indexing_media(true);
         window.set_media_index_current(0);
         window.set_media_index_total(total_items as i32);
@@ -386,7 +348,6 @@ impl BridgeMedia {
                 for (idx, (media_id, file_path)) in targets.into_iter().enumerate() {
                     let cur_step = idx + 1;
 
-                    // 1. Refresh physical metadata, recalculate MD5, and update LMDB record
                     let updated_record = match lib_arc.file_operations().refresh_media(media_id) {
                         Ok(rec) => rec,
                         Err(e) => {
@@ -410,7 +371,6 @@ impl BridgeMedia {
                         }
                     };
 
-                    // 2. Force regenerate thumbnail and previews
                     let cached_thumb = match thumb_arc.regenerate_sync(media_id, &file_path, &config) {
                         Ok(t) => t,
                         Err(e) => {
@@ -444,7 +404,6 @@ impl BridgeMedia {
                     let w_update = w_weak.clone();
 
                     let _ = w_update.upgrade_in_event_loop(move |w| {
-                        // Update in-memory state
                         {
                             let mut st = st_update.write();
                             st.folder_thumbnails.insert(media_id, shared_buf.clone());
@@ -464,7 +423,6 @@ impl BridgeMedia {
                             }
                         }
 
-                        // Update Slint grid / table row in real time
                         let media_model = w.get_media_items();
                         let st_read = st_update.read();
                         if let Some(&row_idx) = st_read.media_row_map.get(&media_id)
@@ -485,7 +443,6 @@ impl BridgeMedia {
                     });
                 }
 
-                // Batch completion finalize
                 let st_done = st_arc.clone();
                 let lib_done = lib_arc.clone();
                 let missing_files_final = missing_files.clone();
@@ -575,6 +532,64 @@ impl BridgeMedia {
         indexed
     }
 
+    /// Preindexes media records across multiple folders (used for Global queries).
+    pub fn preindex_records(
+        library: &Library,
+        raw_records: Vec<MediaRecord>,
+    ) -> Vec<IndexedMediaRecord> {
+        let t0 = Instant::now();
+        let total_count = raw_records.len();
+
+        let mut folder_path_cache: HashMap<FolderId, PathBuf> = HashMap::new();
+
+        let indexed = raw_records
+            .into_iter()
+            .enumerate()
+            .map(|(index, r)| {
+                let filesize_str = format_filesize(r.file_size).into();
+                let dimensions_str = format!("{} × {}", r.width, r.height).into();
+                let filename_slint = r.filename.clone().into();
+                let filename_lower = r.filename.to_lowercase();
+
+                let folder_p = folder_path_cache.entry(r.folder_id).or_insert_with(|| {
+                    library
+                        .folders()
+                        .get_folder(r.folder_id)
+                        .ok()
+                        .flatten()
+                        .map(|f| PathBuf::from(f.path))
+                        .unwrap_or_default()
+                });
+
+                let full_path = folder_p.join(&r.filename);
+                let has_tags = !library
+                    .tags()
+                    .get_tags_for_media(r.id)
+                    .unwrap_or_default()
+                    .is_empty();
+
+                IndexedMediaRecord {
+                    index,
+                    record: r,
+                    full_path,
+                    filename_lower,
+                    filename_slint,
+                    filesize_str,
+                    dimensions_str,
+                    has_tags,
+                }
+            })
+            .collect();
+
+        tracing::debug!(
+            indexed_items = total_count,
+            elapsed_us = t0.elapsed().as_micros(),
+            "[MediaIndex] In-memory multi-folder pre-indexing complete"
+        );
+
+        indexed
+    }
+
     pub fn reload(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -586,7 +601,7 @@ impl BridgeMedia {
     ) {
         let t_total_start = Instant::now();
 
-        let (folder_id, filter, sort_col, sort_ord, last_query) = {
+        let (folder_id, filter, sort_col, sort_ord, last_query, is_query_active) = {
             let s = state.read();
             (
                 s.current_folder_id,
@@ -594,23 +609,19 @@ impl BridgeMedia {
                 s.sort_column,
                 s.sort_order,
                 s.last_executed_query.clone(),
+                s.is_query_active,
             )
         };
 
-        let Some(f_id) = folder_id else {
-            window.set_media_items(ModelRc::new(VecModel::from(vec![])));
-            window.set_items_metric_text("Items: 0".into());
-            tracing::debug!("[MediaView] Reload bypassed: No active folder selected");
-            return;
-        };
-
-        if reload_lmdb {
-            let path_opt = state.read().current_folder_path.clone();
-            if let Some(ref p) = path_opt {
-                let raw_media = library.media().get_by_folder(f_id).unwrap_or_default();
-                let indexed = Self::preindex(library, raw_media, p);
-                state.write().all_folder_media = indexed;
-            }
+        let path_opt = state.read().current_folder_path.clone();
+        if reload_lmdb
+            && !is_query_active
+            && let Some(f_id) = folder_id
+            && let Some(ref p) = path_opt
+        {
+            let raw_media = library.media().get_by_folder(f_id).unwrap_or_default();
+            let indexed = Self::preindex(library, raw_media, p);
+            state.write().all_folder_media = indexed;
         }
 
         let current_query = filter.search_query.trim().to_string();
@@ -619,7 +630,7 @@ impl BridgeMedia {
             && current_query.starts_with(&last_query);
 
         let st = state.read();
-        let total_folder_count = st.all_folder_media.len();
+        let total_active_dataset_count = st.all_folder_media.len();
 
         let subset = if is_refinement && !st.active_indices.is_empty() {
             Some(st.active_indices.as_slice())
@@ -656,13 +667,12 @@ impl BridgeMedia {
             if start_pipeline {
                 pipeline_targets.push(PreparedTarget {
                     pipeline_id: 0,
-                    folder_id: f_id,
+                    folder_id: item.record.folder_id,
                     media_id: item.record.id,
                     file_path: item.full_path.clone(),
                 });
             }
 
-            // Zero-Lock Instant Mapping: Use in-memory buffer if present, otherwise default placeholder.
             let thumbnail_img = if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
                 Image::from_rgb8(buf.clone())
             } else {
@@ -696,26 +706,34 @@ impl BridgeMedia {
         let t_slint_start = Instant::now();
         let matched_count = item_views.len();
         window.set_media_items(ModelRc::new(VecModel::from(item_views)));
-        window.set_items_metric_text(
-            format!("Items: {} / {}", matched_count, total_folder_count).into(),
-        );
+
+        let metric_text = if is_query_active {
+            if matched_count == total_active_dataset_count {
+                format!("Query Items: {}", matched_count)
+            } else {
+                format!("Query Filter: {} / {}", matched_count, total_active_dataset_count)
+            }
+        } else {
+            format!("Items: {} / {}", matched_count, total_active_dataset_count)
+        };
+        window.set_items_metric_text(metric_text.into());
         let slint_us = t_slint_start.elapsed().as_micros();
 
         tracing::debug!(
-            folder_id = f_id,
+            is_query = is_query_active,
             sort_column = ?sort_col,
             sort_order = ?sort_ord,
             matched = matched_count,
-            total_folder = total_folder_count,
+            total = total_active_dataset_count,
             filter_us = filter_us,
             sort_us = sort_us,
             model_mapping_us = map_us,
             slint_commit_us = slint_us,
             total_pipeline_us = t_total_start.elapsed().as_micros(),
-            "[MediaView: ViewPipeline] Rendered media items with synchronized global sorting"
+            "[MediaView: ViewPipeline] Rendered media items with synchronized query filtering"
         );
 
-        if start_pipeline {
+        if start_pipeline && !pipeline_targets.is_empty() {
             let perf = settings.get().performance;
             let config = ThumbnailConfig {
                 max_bound: perf.thumbnail_db_size,
@@ -731,7 +749,8 @@ impl BridgeMedia {
                 preview_format: ThumbnailFormat::from_str_name(&perf.preview_format),
                 preview_quality: perf.preview_quality,
             };
-            thumbnails.start_pipeline(f_id, pipeline_targets, config);
+            let pipeline_folder_id = folder_id.unwrap_or(0);
+            thumbnails.start_pipeline(pipeline_folder_id, pipeline_targets, config);
         }
     }
 }
