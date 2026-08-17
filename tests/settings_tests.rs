@@ -4,15 +4,16 @@ use rustview::settings::{
     DEFAULT_COL_DIMENSIONS_WIDTH, DEFAULT_COL_FILENAME_WIDTH, DEFAULT_COL_RATING_WIDTH,
     DEFAULT_COL_SIZE_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE, DEFAULT_CUSTOM_PREVIEW_SETTINGS,
     DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE, DEFAULT_ENABLE_HOVER_PREVIEWS,
-    DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_GPU_API, DEFAULT_HWDEC_MODE, DEFAULT_IS_TABLE_VIEW,
-    DEFAULT_L1_CACHE_SLOTS, DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PLAYER_KEEP_OPEN,
-    DEFAULT_PLAYER_VOLUME, DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT,
-    DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM,
-    DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS,
-    DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH,
-    DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_TAG_MATCH_MODE,
-    DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE,
-    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH,
+    DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_GPU_API, DEFAULT_HWDEC_MODE,
+    DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS, DEFAULT_PERSIST_FOLDER_TREE_STATE,
+    DEFAULT_PLAYER_KEEP_OPEN, DEFAULT_PLAYER_VOLUME, DEFAULT_PREVIEW_FORMAT,
+    DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER,
+    DEFAULT_SCALING_ALGORITHM, DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES,
+    DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY,
+    DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN,
+    DEFAULT_SORT_ORDER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
+    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
+    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
     DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIDEO_OUTPUT, DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH,
 };
@@ -58,6 +59,12 @@ fn test_settings_persistence_sanitization_and_hooks() {
         DEFAULT_ENABLE_HOVER_PREVIEWS
     );
     assert_eq!(initial.appearance.dark_theme, DEFAULT_DARK_THEME);
+    assert_eq!(initial.appearance.enable_tooltips, DEFAULT_ENABLE_TOOLTIPS);
+    assert_eq!(
+        initial.appearance.tooltip_delay_ms,
+        DEFAULT_TOOLTIP_DELAY_MS
+    );
+    assert_eq!(DEFAULT_TOOLTIP_DELAY_MS, 750);
 
     // General Defaults
     assert_eq!(
@@ -191,6 +198,8 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.appearance.default_thumbnail_size = 240;
     initial.appearance.thumbnail_aspect_ratio = "16:9".to_string();
     initial.appearance.show_filenames = false;
+    initial.appearance.enable_tooltips = false;
+    initial.appearance.tooltip_delay_ms = 450;
     manager.update(initial);
 
     assert!(hook_fired.load(Ordering::SeqCst));
@@ -201,16 +210,23 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(loaded.appearance.default_thumbnail_size, 240);
     assert_eq!(loaded.appearance.thumbnail_aspect_ratio, "16:9");
     assert!(!loaded.appearance.show_filenames);
+    assert!(!loaded.appearance.enable_tooltips);
+    assert_eq!(loaded.appearance.tooltip_delay_ms, 450);
 
     // 5. Test validation & sanitization
     let mut invalid_settings = AppSettings::default();
     invalid_settings.appearance.thumbnail_aspect_ratio = "invalid_ratio".to_string();
+    invalid_settings.appearance.tooltip_delay_ms = 99999;
     reloaded_store.save(&invalid_settings).unwrap();
 
     let sanitized = reloaded_store.load();
     assert_eq!(
         sanitized.appearance.thumbnail_aspect_ratio,
         DEFAULT_THUMBNAIL_ASPECT_RATIO
+    );
+    assert_eq!(
+        sanitized.appearance.tooltip_delay_ms,
+        rustview::settings::MAX_TOOLTIP_DELAY_MS
     );
 }
 
@@ -251,6 +267,12 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
         loaded.appearance.enable_hover_previews,
         DEFAULT_ENABLE_HOVER_PREVIEWS
     );
+    assert_eq!(loaded.appearance.enable_tooltips, DEFAULT_ENABLE_TOOLTIPS);
+    assert_eq!(
+        loaded.appearance.tooltip_delay_ms,
+        DEFAULT_TOOLTIP_DELAY_MS
+    );
+    assert_eq!(loaded.appearance.tooltip_delay_ms, 750);
     assert_eq!(
         loaded.performance.thumbnail_format,
         DEFAULT_THUMBNAIL_FORMAT

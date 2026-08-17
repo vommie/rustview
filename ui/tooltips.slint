@@ -1,0 +1,297 @@
+import { Theme } from "styles.slint";
+import { Icons, AppIcon } from "icons.slint";
+
+/// Global configuration and state registry for the centralized Tooltip Subsystem.
+export global TooltipSettings {
+    // Master enable flag (synchronized from AppSettings.appearance.enable_tooltips)
+    in-out property <bool> enabled: true;
+
+    // Master default delay before a tooltip opens (synchronized from AppSettings.appearance.tooltip_delay_ms)
+    in-out property <duration> default-delay: 750ms;
+
+    // Default Visual Styling (Theme adaptive)
+    in-out property <color> default-background: #181825f2;
+    in-out property <color> default-border: #45475acc;
+    in-out property <color> default-text: #cdd6f4;
+    in-out property <color> default-shortcut-color: #f9e2af;
+    in-out property <length> default-font-size: 12px;
+    in-out property <length> default-corner-radius: 4px;
+    in-out property <length> default-padding-h: 9px;
+    in-out property <length> default-padding-v: 5px;
+    in-out property <length> max-width: 340px;
+}
+
+/// Standalone visual tooltip bubble component with border, drop shadow, text, and optional shortcut badge.
+export component TooltipBubble inherits Rectangle {
+    in property <string> text: "";
+    in property <string> shortcut: "";
+    in property <image> icon;
+    in property <bool> has-icon: root.icon.width > 0 && root.icon.height > 0;
+    in property <bool> allow-icon-tint: true;
+
+    // Custom Style Overrides (falls back to TooltipSettings defaults if transparent / 0)
+    in property <color> custom-bg: transparent;
+    in property <color> custom-border: transparent;
+    in property <color> custom-text: transparent;
+    in property <length> custom-font-size: 0px;
+
+    background: (root.custom-bg != transparent) ? root.custom-bg : TooltipSettings.default-background;
+    border-radius: TooltipSettings.default-corner-radius;
+    border-width: 1px;
+    border-color: (root.custom-border != transparent) ? root.custom-border : TooltipSettings.default-border;
+    drop-shadow-blur: 8px;
+    drop-shadow-color: #000000aa;
+    drop-shadow-offset-y: 2px;
+
+    HorizontalLayout {
+        padding-left: TooltipSettings.default-padding-h;
+        padding-right: TooltipSettings.default-padding-h;
+        padding-top: TooltipSettings.default-padding-v;
+        padding-bottom: TooltipSettings.default-padding-v;
+        spacing: 6px;
+        alignment: center;
+
+        if root.has-icon : AppIcon {
+            icon: root.icon;
+            size: 13px;
+            allow-tint: root.allow-icon-tint;
+            color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
+            y: (parent.height - self.height) / 2;
+        }
+
+        Text {
+            text: root.text;
+            font-size: (root.custom-font-size > 0px) ? root.custom-font-size : TooltipSettings.default-font-size;
+            color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
+            vertical-alignment: center;
+            horizontal-alignment: left;
+        }
+
+        if root.shortcut != "" : Rectangle {
+            background: #ffffff14;
+            border-radius: 3px;
+            border-width: 1px;
+            border-color: #ffffff22;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+
+            HorizontalLayout {
+                padding-left: 5px;
+                padding-right: 5px;
+                alignment: center;
+
+                Text {
+                    text: root.shortcut;
+                    font-size: 10.5px;
+                    font-weight: 700;
+                    color: TooltipSettings.default-shortcut-color;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+/// Generic, modular TooltipHost controller component.
+/// Embedded directly inside any button or UI element to manage hover timing, delay, cursor tracking, and PopupWindow positioning.
+export component TooltipHost inherits Rectangle {
+    in property <string> text: "";
+    in property <string> shortcut: "";
+    in property <image> icon;
+    in property <bool> allow-icon-tint: true;
+    in property <bool> is-enabled: true;
+
+    // Behavioral Options
+    in property <duration> delay: 0ms; // 0ms = use TooltipSettings.default-delay
+    in property <bool> follow-cursor: false;
+    in property <length> offset-x: 0px;
+    in property <length> offset-y: 0px;
+
+    // Custom Style Overrides
+    in property <color> custom-bg: transparent;
+    in property <color> custom-border: transparent;
+    in property <color> custom-text: transparent;
+    in property <length> custom-font-size: 0px;
+
+    // Internal State
+    property <bool> is-hovered: false;
+    property <bool> has-icon: root.icon.width > 0 && root.icon.height > 0;
+    property <duration> effective-delay: (root.delay > 0ms) ? root.delay : TooltipSettings.default-delay;
+    in-out property <length> popup-x: 0px;
+    in-out property <length> popup-y: 0px;
+
+    width: 100%;
+    height: 100%;
+    x: 0px;
+    y: 0px;
+
+    hover-timer := Timer {
+        interval: root.effective-delay;
+        running: false;
+        triggered() => {
+            if root.is-hovered && TooltipSettings.enabled && root.is-enabled && root.text != "" {
+                popup.show();
+            }
+            self.running = false;
+        }
+    }
+
+    popup := PopupWindow {
+        close-policy: no-auto-close;
+        x: root.popup-x;
+        y: root.popup-y;
+        width: tooltip-layout.preferred-width;
+        height: tooltip-layout.preferred-height;
+
+        Rectangle {
+            background: (root.custom-bg != transparent) ? root.custom-bg : TooltipSettings.default-background;
+            border-radius: TooltipSettings.default-corner-radius;
+            border-width: 1px;
+            border-color: (root.custom-border != transparent) ? root.custom-border : TooltipSettings.default-border;
+            drop-shadow-blur: 8px;
+            drop-shadow-color: #000000aa;
+            drop-shadow-offset-y: 2px;
+
+            tooltip-layout := HorizontalLayout {
+                padding-left: TooltipSettings.default-padding-h;
+                padding-right: TooltipSettings.default-padding-h;
+                padding-top: TooltipSettings.default-padding-v;
+                padding-bottom: TooltipSettings.default-padding-v;
+                spacing: 6px;
+                alignment: center;
+
+                if root.has-icon : AppIcon {
+                    icon: root.icon;
+                    size: 13px;
+                    allow-tint: root.allow-icon-tint;
+                    color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
+                    y: (parent.height - self.height) / 2;
+                }
+
+                Text {
+                    text: root.text;
+                    font-size: (root.custom-font-size > 0px) ? root.custom-font-size : TooltipSettings.default-font-size;
+                    color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                }
+
+                if root.shortcut != "" : Rectangle {
+                    background: #ffffff14;
+                    border-radius: 3px;
+                    border-width: 1px;
+                    border-color: #ffffff22;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+
+                    HorizontalLayout {
+                        padding-left: 5px;
+                        padding-right: 5px;
+                        alignment: center;
+
+                        Text {
+                            text: root.shortcut;
+                            font-size: 10.5px;
+                            font-weight: 700;
+                            color: TooltipSettings.default-shortcut-color;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Invoked when mouse enters the host component area
+    public function on-hover-enter(mx: length, my: length) {
+        root.is-hovered = true;
+        if root.follow-cursor {
+            root.popup-x = mx + root.offset-x + 8px;
+            root.popup-y = my + root.offset-y + 16px;
+        } else {
+            root.popup-x = root.offset-x;
+            root.popup-y = root.height + 4px + root.offset-y;
+        }
+
+        if TooltipSettings.enabled && root.is-enabled && root.text != "" {
+            if root.effective-delay <= 0ms {
+                popup.show();
+            } else {
+                hover-timer.running = true;
+            }
+        }
+    }
+
+    /// Invoked when mouse leaves the host component area or on click
+    public function on-hover-leave() {
+        root.is-hovered = false;
+        hover-timer.running = false;
+        popup.close();
+    }
+
+    /// Invoked during mouse move when follow-cursor is active
+    public function on-mouse-move(mx: length, my: length) {
+        if root.follow-cursor {
+            root.popup-x = mx + root.offset-x + 8px;
+            root.popup-y = my + root.offset-y + 16px;
+        }
+    }
+}
+
+/// Standalone wrapper area component that can wrap arbitrary children and provide tooltips.
+export component TooltipArea inherits Rectangle {
+    in property <string> text: "";
+    in property <string> shortcut: "";
+    in property <image> icon;
+    in property <bool> allow-icon-tint: true;
+    in property <bool> tooltip-enabled: true;
+    in property <duration> delay: 0ms;
+    in property <bool> follow-cursor: false;
+    in property <length> offset-x: 0px;
+    in property <length> offset-y: 0px;
+    in property <color> custom-bg: transparent;
+    in property <color> custom-border: transparent;
+    in property <color> custom-text: transparent;
+    in property <length> custom-font-size: 0px;
+
+    callback clicked();
+
+    tooltip-host := TooltipHost {
+        text: root.text;
+        shortcut: root.shortcut;
+        icon: root.icon;
+        allow-icon-tint: root.allow-icon-tint;
+        is-enabled: root.tooltip-enabled;
+        delay: root.delay;
+        follow-cursor: root.follow-cursor;
+        offset-x: root.offset-x;
+        offset-y: root.offset-y;
+        custom-bg: root.custom-bg;
+        custom-border: root.custom-border;
+        custom-text: root.custom-text;
+        custom-font-size: root.custom-font-size;
+    }
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked => {
+            tooltip-host.on-hover-leave();
+            root.clicked();
+        }
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: touch.has-hover && root.text != "" && root.tooltip-enabled;
+    changed is-hovered => {
+        if self.is-hovered {
+            tooltip-host.on-hover-enter(touch.mouse-x, touch.mouse-y);
+        } else {
+            tooltip-host.on-hover-leave();
+        }
+    }
+
+    @children
+}

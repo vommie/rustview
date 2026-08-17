@@ -70,6 +70,8 @@ impl SettingsDialogController {
         window.set_show_rating_badge(settings.appearance.show_ratings_overlay);
         window.set_show_tag_badge(settings.appearance.show_tags_overlay);
         window.set_enable_hover_previews(settings.appearance.enable_hover_previews);
+        window.set_enable_tooltips(settings.appearance.enable_tooltips);
+        window.set_tooltip_delay_ms(settings.appearance.tooltip_delay_ms as i32);
 
         // Performance properties
         window.set_worker_threads(settings.performance.worker_threads as i32);
@@ -179,6 +181,9 @@ impl SettingsDialogController {
                 current.appearance.show_ratings_overlay = w.get_show_rating_badge();
                 current.appearance.show_tags_overlay = w.get_show_tag_badge();
                 current.appearance.enable_hover_previews = w.get_enable_hover_previews();
+                current.appearance.enable_tooltips = w.get_enable_tooltips();
+                current.appearance.tooltip_delay_ms =
+                    w.get_tooltip_delay_ms().clamp(50, 2000) as u32;
 
                 // Save Performance Parameters
                 current.performance.worker_threads = w.get_worker_threads().clamp(1, 32) as usize;

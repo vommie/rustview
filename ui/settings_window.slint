@@ -49,6 +49,8 @@ export component SettingsWindow inherits Window {
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
     in-out property <bool> enable-hover-previews: true;
+    in-out property <bool> enable-tooltips: true;
+    in-out property <int> tooltip-delay-ms: 750;
 
     // Performance options
     in-out property <int> worker-threads: 4;
@@ -125,6 +127,8 @@ export component SettingsWindow inherits Window {
                         show-rating-badge <=> root.show-rating-badge;
                         show-tag-badge <=> root.show-tag-badge;
                         enable-hover-previews <=> root.enable-hover-previews;
+                        enable-tooltips <=> root.enable-tooltips;
+                        tooltip-delay-ms <=> root.tooltip-delay-ms;
                     }
 
                     if root.active-category == 3 : SettingsPagePerformance {

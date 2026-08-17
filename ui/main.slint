@@ -1,5 +1,6 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
+import { TooltipSettings } from "tooltips.slint";
 import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, ContextMenuItemModel } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
@@ -23,6 +24,7 @@ export { RemoveOrphanedFolderDialog } from "remove_orphaned_folder_dialog.slint"
 export { RebornFolderDeleteWarnDialog } from "reborn_folder_delete_warn_dialog.slint";
 export { MissingFolderDeleteDialog } from "missing_folder_delete_dialog.slint";
 export { MissingFileDialog } from "missing_file_dialog.slint";
+export { TooltipSettings } from "tooltips.slint";
 
 export component MainWindow inherits Window {
     title: "RustView";
@@ -42,6 +44,18 @@ export component MainWindow inherits Window {
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
+
+    // Tooltip global settings properties
+    in-out property <bool> enable-tooltips: true;
+    in-out property <int> tooltip-delay-ms: 750;
+
+    changed enable-tooltips => {
+        TooltipSettings.enabled = root.enable-tooltips;
+    }
+
+    changed tooltip-delay-ms => {
+        TooltipSettings.default-delay = root.tooltip-delay-ms * 1ms;
+    }
 
     // Sidebar Width Properties (Restored from Persistent Settings)
     in-out property <length> sidebar-left-width: 260px;

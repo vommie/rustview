@@ -1,13 +1,15 @@
 import { Theme } from "styles.slint";
+import { TooltipHost } from "tooltips.slint";
 
 /// Fully encapsulated, standalone, reusable tree node toggle button component.
-/// Provides pixel-perfect geometric vector rendering (+ / - / bullet) independent of font metrics.
+/// Provides pixel-perfect geometric vector rendering (+ / - / bullet) independent of font metrics and optional tooltip support.
 export component NodeButton inherits Rectangle {
     // State & Behavior Properties
     in-out property <bool> is-expanded: false;
     in property <bool> has-children: true;
     in property <bool> show-leaf-bullet: false;
     in property <bool> enabled: true;
+    in property <string> tooltip: "";
 
     // Dimension & Sizing API
     in property <length> button-size: 14px;
@@ -35,6 +37,11 @@ export component NodeButton inherits Rectangle {
     background: transparent;
     opacity: root.enabled ? 1.0 : 0.38;
 
+    tooltip-host := TooltipHost {
+        text: root.tooltip;
+        is-enabled: root.enabled;
+    }
+
     // 1. Branch / Parent Node Toggle Button Box (+ / -)
     if root.has-children : Rectangle {
         width: parent.width;
@@ -48,9 +55,22 @@ export component NodeButton inherits Rectangle {
             enabled: root.enabled;
             mouse-cursor: root.enabled ? pointer : default;
             clicked => {
+                tooltip-host.on-hover-leave();
                 root.is-expanded = !root.is-expanded;
                 root.toggled(root.is-expanded);
                 root.clicked();
+            }
+            moved => {
+                tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+            }
+        }
+
+        property <bool> is-hovered: btn-touch.has-hover && root.tooltip != "";
+        changed is-hovered => {
+            if self.is-hovered {
+                tooltip-host.on-hover-enter(btn-touch.mouse-x, btn-touch.mouse-y);
+            } else {
+                tooltip-host.on-hover-leave();
             }
         }
 

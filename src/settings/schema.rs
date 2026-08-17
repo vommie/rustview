@@ -28,6 +28,10 @@ pub const DEFAULT_SHOW_RATINGS_OVERLAY: bool = true;
 pub const DEFAULT_SHOW_TAGS_OVERLAY: bool = true;
 pub const DEFAULT_ENABLE_HOVER_PREVIEWS: bool = true;
 pub const DEFAULT_DARK_THEME: bool = true;
+pub const DEFAULT_ENABLE_TOOLTIPS: bool = true;
+pub const DEFAULT_TOOLTIP_DELAY_MS: u32 = 750;
+pub const MIN_TOOLTIP_DELAY_MS: u32 = 50;
+pub const MAX_TOOLTIP_DELAY_MS: u32 = 2000;
 
 // =============================================================================
 // SECTION 4: View & Column Layout - Single Point of Truth Constants
@@ -241,6 +245,8 @@ pub struct AppearanceSettings {
     pub show_tags_overlay: bool,
     pub enable_hover_previews: bool,
     pub dark_theme: bool,
+    pub enable_tooltips: bool,
+    pub tooltip_delay_ms: u32,
 }
 
 impl Default for AppearanceSettings {
@@ -253,6 +259,8 @@ impl Default for AppearanceSettings {
             show_tags_overlay: DEFAULT_SHOW_TAGS_OVERLAY,
             enable_hover_previews: DEFAULT_ENABLE_HOVER_PREVIEWS,
             dark_theme: DEFAULT_DARK_THEME,
+            enable_tooltips: DEFAULT_ENABLE_TOOLTIPS,
+            tooltip_delay_ms: DEFAULT_TOOLTIP_DELAY_MS,
         }
     }
 }

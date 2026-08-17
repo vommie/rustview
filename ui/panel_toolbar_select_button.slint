@@ -1,5 +1,6 @@
 import { Theme } from "styles.slint";
 import { AppIcon } from "icons.slint";
+import { TooltipHost } from "tooltips.slint";
 
 export struct ToolbarSelectItem {
     id: int,
@@ -8,13 +9,14 @@ export struct ToolbarSelectItem {
 }
 
 /// Compact, modular select/dropdown button tailored for panel toolbars.
-/// Supports Icon-only, Text-only, or Icon+Text rendering with theme-adaptive SVG colorization.
+/// Supports Icon-only, Text-only, or Icon+Text rendering with theme-adaptive SVG colorization and integrated tooltips.
 export component ToolbarSelectButton inherits Rectangle {
     in property <[ToolbarSelectItem]> model: [];
     in-out property <int> current-index: 0;
     in property <bool> is-enabled: true;
     in property <bool> allow-icon-tint: true;
     in property <string> tooltip: "";
+    in property <duration> tooltip-delay: 0ms;
 
     // Display modes: 0 = Icon Only, 1 = Text Only, 2 = Icon + Text
     in property <int> button-display-mode: 0;
@@ -50,13 +52,32 @@ export component ToolbarSelectButton inherits Rectangle {
     border-color: !root.is-enabled ? transparent : Theme.border;
     opacity: !root.is-enabled ? 0.38 : 1.0;
 
+    tooltip-host := TooltipHost {
+        text: root.tooltip;
+        delay: root.tooltip-delay;
+        is-enabled: root.is-enabled;
+    }
+
     touch-area := TouchArea {
         enabled: root.is-enabled;
         mouse-cursor: root.is-enabled ? pointer : default;
         clicked => {
             if root.is-enabled {
+                tooltip-host.on-hover-leave();
                 popup.show();
             }
+        }
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: touch-area.has-hover && root.tooltip != "";
+    changed is-hovered => {
+        if self.is-hovered {
+            tooltip-host.on-hover-enter(touch-area.mouse-x, touch-area.mouse-y);
+        } else {
+            tooltip-host.on-hover-leave();
         }
     }
 

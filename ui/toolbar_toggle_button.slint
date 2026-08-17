@@ -1,7 +1,8 @@
 import { Theme } from "styles.slint";
 import { AppIcon } from "icons.slint";
+import { TooltipHost } from "tooltips.slint";
 
-/// Modular, jitter-free toggle button component for panel toolbars with theme-adaptive SVG colorization.
+/// Modular, jitter-free toggle button component for panel toolbars with theme-adaptive SVG colorization and integrated tooltips.
 export component ToolbarToggleButton inherits Rectangle {
     in property <string> prefix: "";
     in property <string> text-active: "";
@@ -9,6 +10,8 @@ export component ToolbarToggleButton inherits Rectangle {
     in property <string> text: "";
     in property <image> icon;
     in property <string> tooltip: "";
+    in property <string> tooltip-shortcut: "";
+    in property <duration> tooltip-delay: 0ms;
 
     in-out property <bool> is-active: false;
     in property <bool> is-enabled: true;
@@ -80,13 +83,33 @@ export component ToolbarToggleButton inherits Rectangle {
     border-color: !root.is-enabled ? transparent : (root.is-active ? Theme.primary : Theme.border);
     opacity: !root.is-enabled ? 0.38 : 1.0;
 
+    tooltip-host := TooltipHost {
+        text: root.tooltip;
+        shortcut: root.tooltip-shortcut;
+        delay: root.tooltip-delay;
+        is-enabled: root.is-enabled;
+    }
+
     touch-area := TouchArea {
         enabled: root.is-enabled;
         mouse-cursor: root.is-enabled ? pointer : default;
         clicked => {
+            tooltip-host.on-hover-leave();
             root.is-active = !root.is-active;
             root.toggled(root.is-active);
             root.clicked();
+        }
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: touch-area.has-hover && root.tooltip != "";
+    changed is-hovered => {
+        if self.is-hovered {
+            tooltip-host.on-hover-enter(touch-area.mouse-x, touch-area.mouse-y);
+        } else {
+            tooltip-host.on-hover-leave();
         }
     }
 

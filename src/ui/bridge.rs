@@ -98,11 +98,13 @@ impl UiBridge {
         window.set_col_size_width(v_settings.col_size_width);
         window.set_col_rating_width(v_settings.col_rating_width);
 
-        // Apply centralized appearance settings
+        // Apply centralized appearance & tooltip settings
         let app_settings = settings.get();
         window.set_thumb_size(app_settings.appearance.default_thumbnail_size as i32);
         let ratio = GridAspectRatio::from_str_name(&app_settings.appearance.thumbnail_aspect_ratio);
         window.set_thumb_aspect_idx(ratio.to_index());
+        window.set_enable_tooltips(app_settings.appearance.enable_tooltips);
+        window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
         window.set_status_text("Initializing RustView...".into());
 
         // Initialize Tag & Rate panel properties (Default Scope: Global / Index 2)
@@ -180,6 +182,8 @@ impl UiBridge {
             sort_ord = ?initial_sort_ord,
             thumb_size = app_settings.appearance.default_thumbnail_size,
             aspect_ratio = %app_settings.appearance.thumbnail_aspect_ratio,
+            enable_tooltips = app_settings.appearance.enable_tooltips,
+            tooltip_delay_ms = app_settings.appearance.tooltip_delay_ms,
             "[UiBridge] Initialized all UI bridges, scheduled deferred initial mount"
         );
 
@@ -208,6 +212,8 @@ impl UiBridge {
                 window.set_thumb_size(app_s.appearance.default_thumbnail_size as i32);
                 let ratio = GridAspectRatio::from_str_name(&app_s.appearance.thumbnail_aspect_ratio);
                 window.set_thumb_aspect_idx(ratio.to_index());
+                window.set_enable_tooltips(app_s.appearance.enable_tooltips);
+                window.set_tooltip_delay_ms(app_s.appearance.tooltip_delay_ms as i32);
                 BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
             });
         });

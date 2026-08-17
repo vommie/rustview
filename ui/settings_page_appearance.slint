@@ -11,6 +11,8 @@ export component SettingsPageAppearance inherits VerticalLayout {
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
     in-out property <bool> enable-hover-previews: true;
+    in-out property <bool> enable-tooltips: true;
+    in-out property <int> tooltip-delay-ms: 750;
 
     SettingsCard {
         title: "Grid & Thumbnail Presentation";
@@ -72,6 +74,39 @@ export component SettingsPageAppearance inherits VerticalLayout {
         CheckBox {
             text: "Enable hover video preview animation (YouTube-style)";
             checked <=> root.enable-hover-previews;
+        }
+    }
+
+    SettingsCard {
+        title: "Tooltips";
+        description: "Configure application-wide hover tooltip behavior and display delay.";
+
+        CheckBox {
+            text: "Enable hover tooltips across application";
+            checked <=> root.enable-tooltips;
+        }
+
+        if root.enable-tooltips : HorizontalLayout {
+            Text {
+                text: "Tooltip Display Delay:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 140px;
+                minimum: 50;
+                maximum: 1500;
+                value: root.tooltip-delay-ms;
+                changed(v) => { root.tooltip-delay-ms = Math.round(v / 25) * 25; }
+            }
+            Text {
+                text: root.tooltip-delay-ms + " ms";
+                color: Theme.primary;
+                width: 60px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
         }
     }
 }

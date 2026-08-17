@@ -1,18 +1,21 @@
 import { Theme } from "styles.slint";
 import { AppIcon } from "icons.slint";
+import { TooltipHost } from "tooltips.slint";
 
 /// Compact, versatile button component designed specifically for panel toolbars.
-/// Supports Icon-only, Text-only, and Icon+Text modes with automatic sizing, disabled states, and theme-adaptive icon colorization.
+/// Supports Icon-only, Text-only, and Icon+Text modes with automatic sizing, disabled states, theme-adaptive icon colorization, and integrated hover tooltips.
 export component ToolbarButton inherits Rectangle {
     in property <image> icon;
     in property <string> text: "";
     in property <string> tooltip: "";
+    in property <string> tooltip-shortcut: "";
     in property <bool> is-enabled: true;
     in property <bool> is-active: false;
     in property <bool> allow-icon-tint: true;
     in property <length> icon-size: 13px;
     in property <length> font-size: 11px;
     in property <length> button-width: 0px;
+    in property <duration> tooltip-delay: 0ms;
 
     callback clicked();
 
@@ -40,10 +43,32 @@ export component ToolbarButton inherits Rectangle {
     border-color: !root.is-enabled ? transparent : (root.is-active ? Theme.primary : Theme.border);
     opacity: !root.is-enabled ? 0.38 : 1.0;
 
+    tooltip-host := TooltipHost {
+        text: root.tooltip;
+        shortcut: root.tooltip-shortcut;
+        delay: root.tooltip-delay;
+        is-enabled: root.is-enabled;
+    }
+
     touch-area := TouchArea {
         enabled: root.is-enabled;
         mouse-cursor: root.is-enabled ? pointer : default;
-        clicked => { root.clicked(); }
+        clicked => {
+            tooltip-host.on-hover-leave();
+            root.clicked();
+        }
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: touch-area.has-hover && root.tooltip != "";
+    changed is-hovered => {
+        if self.is-hovered {
+            tooltip-host.on-hover-enter(touch-area.mouse-x, touch-area.mouse-y);
+        } else {
+            tooltip-host.on-hover-leave();
+        }
     }
 
     content-layout := HorizontalLayout {
