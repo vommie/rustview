@@ -1,23 +1,24 @@
 use rustview::settings::{
-    AppSettings, GridAspectRatio, SettingsManager, SettingsStore, DEFAULT_AUDIO_DEVICE,
-    DEFAULT_AUTOPLAY_VIDEOS, DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER, DEFAULT_BATCH_COMMIT_SIZE,
-    DEFAULT_COL_DIMENSIONS_WIDTH, DEFAULT_COL_FILENAME_WIDTH, DEFAULT_COL_RATING_WIDTH,
-    DEFAULT_COL_SIZE_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE, DEFAULT_CUSTOM_PREVIEW_SETTINGS,
-    DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE, DEFAULT_ENABLE_HOVER_PREVIEWS,
-    DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_GPU_API, DEFAULT_HWDEC_MODE,
-    DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS, DEFAULT_PERSIST_FOLDER_TREE_STATE,
-    DEFAULT_PLAYER_KEEP_OPEN, DEFAULT_PLAYER_VOLUME, DEFAULT_PREVIEW_FORMAT,
-    DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER,
-    DEFAULT_SCALING_ALGORITHM, DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES,
-    DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY,
-    DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN,
-    DEFAULT_SORT_ORDER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
+    AppSettings, GridAspectRatio, SettingsDiff, SettingsManager, SettingsStore,
+    DEFAULT_AUDIO_DEVICE, DEFAULT_AUTOPLAY_VIDEOS, DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER,
+    DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_DIMENSIONS_WIDTH, DEFAULT_COL_FILENAME_WIDTH,
+    DEFAULT_COL_RATING_WIDTH, DEFAULT_COL_SIZE_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE,
+    DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE,
+    DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS,
+    DEFAULT_GPU_API, DEFAULT_HWDEC_MODE, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
+    DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PLAYER_KEEP_OPEN, DEFAULT_PLAYER_VOLUME,
+    DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY,
+    DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM, DEFAULT_SHOW_DELETED_FOLDERS,
+    DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY,
+    DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH,
+    DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
     DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
     DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
     DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIDEO_OUTPUT, DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH,
 };
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tempfile::tempdir;
@@ -184,12 +185,12 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(initial.window.height, DEFAULT_WINDOW_HEIGHT);
     assert_eq!(initial.window.is_maximized, DEFAULT_WINDOW_MAXIMIZED);
 
-    // 2. Test event hook subscription
+    // 2. Test event hook subscription with granular SettingsDiff
     let hook_fired = Arc::new(AtomicBool::new(false));
     let hook_flag = hook_fired.clone();
 
-    manager.subscribe(move |s| {
-        if s.appearance.default_thumbnail_size == 240 {
+    manager.subscribe(move |_old, new, diff| {
+        if diff.appearance_grid_changed && new.appearance.default_thumbnail_size == 240 {
             hook_flag.store(true, Ordering::SeqCst);
         }
     });
@@ -228,6 +229,51 @@ fn test_settings_persistence_sanitization_and_hooks() {
         sanitized.appearance.tooltip_delay_ms,
         rustview::settings::MAX_TOOLTIP_DELAY_MS
     );
+}
+
+#[test]
+fn test_settings_diff_granularity_and_noop_bypass() {
+    let base = AppSettings::default();
+
+    // 1. Identical settings -> has_changes is false
+    let diff_identical = SettingsDiff::compute(&base, &base);
+    assert!(!diff_identical.has_changes);
+    assert!(!diff_identical.root_folder_changed);
+    assert!(!diff_identical.appearance_grid_changed);
+    assert!(!diff_identical.tooltip_settings_changed);
+
+    // 2. Only tooltip delay changed -> only tooltip_settings_changed is true
+    let mut modified_tooltips = base.clone();
+    modified_tooltips.appearance.tooltip_delay_ms = 350;
+    let diff_tooltips = SettingsDiff::compute(&base, &modified_tooltips);
+    assert!(diff_tooltips.has_changes);
+    assert!(diff_tooltips.tooltip_settings_changed);
+    assert!(!diff_tooltips.root_folder_changed);
+    assert!(!diff_tooltips.appearance_grid_changed);
+    assert!(!diff_tooltips.folder_tree_presentation_changed);
+
+    // 3. Only root folder path changed -> only root_folder_changed is true
+    let mut modified_root = base.clone();
+    modified_root.general.root_folder = Some(PathBuf::from("/media/photos"));
+    let diff_root = SettingsDiff::compute(&base, &modified_root);
+    assert!(diff_root.has_changes);
+    assert!(diff_root.root_folder_changed);
+    assert!(!diff_root.appearance_grid_changed);
+    assert!(!diff_root.tooltip_settings_changed);
+
+    // 4. Only folder tree metrics changed -> only folder_tree_presentation_changed is true
+    let mut modified_tree = base.clone();
+    modified_tree.folders.show_folder_metrics = false;
+    let diff_tree = SettingsDiff::compute(&base, &modified_tree);
+    assert!(diff_tree.has_changes);
+    assert!(diff_tree.folder_tree_presentation_changed);
+    assert!(!diff_tree.root_folder_changed);
+    assert!(!diff_tree.appearance_grid_changed);
+
+    // 5. Verify detailed summary output
+    let summary = diff_root.detailed_summary(&base, &modified_root);
+    assert_eq!(summary.len(), 1);
+    assert!(summary[0].contains("root_folder"));
 }
 
 #[test]

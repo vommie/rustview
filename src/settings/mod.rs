@@ -1,10 +1,12 @@
 pub mod bridge;
+pub mod diff;
 pub mod registry;
 pub mod schema;
 pub mod store;
 
 pub use bridge::SettingsDialogController;
-pub use registry::SettingsManager;
+pub use diff::SettingsDiff;
+pub use registry::{SettingsChangeHook, SettingsManager};
 pub use schema::{
     default_worker_threads, AppSettings, AppearanceSettings, DeletionMode, GeneralSettings,
     GridAspectRatio, PerformanceSettings, PlayerSettings, TagSettings, ViewSettings, WindowState,

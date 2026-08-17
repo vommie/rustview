@@ -18,7 +18,7 @@ use crate::library::Library;
 use crate::library::models::{FolderId, MediaId, TagId};
 use crate::player::PlayerController;
 use crate::query::{ScopeMode, SortColumn, SortOrder};
-use crate::settings::{AppSettings, GridAspectRatio, SettingsDialogController, SettingsManager};
+use crate::settings::{AppSettings, GridAspectRatio, SettingsDialogController, SettingsDiff, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
@@ -194,6 +194,8 @@ impl UiBridge {
         &self.window
     }
 
+    /// Registers the intelligent delta-based settings subscriber.
+    /// Only triggers specific UI property changes or re-indexes when affected settings actually change.
     fn register_settings_subscriber(&self) {
         let w_weak = self.window.as_weak();
         let library = self.library.clone();
@@ -201,20 +203,73 @@ impl UiBridge {
         let settings = self.settings.clone();
         let state = self.state.clone();
 
-        self.settings.subscribe(move |_new_settings: &AppSettings| {
+        self.settings.subscribe(move |_old_settings: &AppSettings, new_settings: &AppSettings, diff: &SettingsDiff| {
+            if !diff.has_changes {
+                tracing::debug!("[UiBridge: SettingsSubscriber] No functional changes in settings diff. Bypassing UI updates.");
+                return;
+            }
+
+            tracing::info!(
+                root_changed = diff.root_folder_changed,
+                tree_presentation_changed = diff.folder_tree_presentation_changed,
+                grid_appearance_changed = diff.appearance_grid_changed,
+                tooltips_changed = diff.tooltip_settings_changed,
+                pipeline_changed = diff.performance_pipeline_changed,
+                "[UiBridge: SettingsSubscriber] Granular settings diff received. Dispatching targeted updates..."
+            );
+
             let library = library.clone();
             let thumbnails = thumbnails.clone();
             let settings = settings.clone();
             let state = state.clone();
+            let diff_clone = diff.clone();
+            let new_clone = new_settings.clone();
 
             let _ = w_weak.upgrade_in_event_loop(move |window| {
-                let app_s = settings.get();
-                window.set_thumb_size(app_s.appearance.default_thumbnail_size as i32);
-                let ratio = GridAspectRatio::from_str_name(&app_s.appearance.thumbnail_aspect_ratio);
-                window.set_thumb_aspect_idx(ratio.to_index());
-                window.set_enable_tooltips(app_s.appearance.enable_tooltips);
-                window.set_tooltip_delay_ms(app_s.appearance.tooltip_delay_ms as i32);
-                BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
+                let t_start = Instant::now();
+
+                // 1. Tooltips update (Instant Slint properties, zero media grid impact)
+                if diff_clone.tooltip_settings_changed {
+                    window.set_enable_tooltips(new_clone.appearance.enable_tooltips);
+                    window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms as i32);
+                    tracing::debug!(
+                        enabled = new_clone.appearance.enable_tooltips,
+                        delay_ms = new_clone.appearance.tooltip_delay_ms,
+                        "[UiBridge: SettingsUpdate] Applied tooltip settings to Slint UI"
+                    );
+                }
+
+                // 2. Appearance & Grid Presentation (Instant Slint properties, zero DB scan / zero filesystem hit)
+                if diff_clone.appearance_grid_changed {
+                    window.set_thumb_size(new_clone.appearance.default_thumbnail_size as i32);
+                    let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
+                    window.set_thumb_aspect_idx(ratio.to_index());
+                    tracing::debug!(
+                        thumb_size = new_clone.appearance.default_thumbnail_size,
+                        aspect_ratio = %new_clone.appearance.thumbnail_aspect_ratio,
+                        "[UiBridge: SettingsUpdate] Applied thumbnail grid appearance properties to Slint UI"
+                    );
+                }
+
+                // 3. Folder Tree Presentation (Only re-flatten in-memory tree nodes, zero disk scan)
+                if diff_clone.folder_tree_presentation_changed && !diff_clone.root_folder_changed {
+                    BridgeFolders::reload_tree(&window, &library, &settings, &state);
+                    tracing::debug!("[UiBridge: SettingsUpdate] Re-rendered folder tree with updated visibility/metrics");
+                }
+
+                // 4. Root Folder Changed (Heavy path: Only executed when root directory was ACTUALLY changed)
+                if diff_clone.root_folder_changed {
+                    tracing::info!(
+                        new_root = ?new_clone.general.root_folder,
+                        "[UiBridge: SettingsUpdate] Root directory path modified. Executing full root synchronization..."
+                    );
+                    BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
+                }
+
+                tracing::debug!(
+                    elapsed_us = t_start.elapsed().as_micros(),
+                    "[UiBridge: SettingsUpdate] Targeted UI settings update completed successfully"
+                );
             });
         });
     }
