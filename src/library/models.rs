@@ -149,6 +149,14 @@ pub struct DatabaseMeta {
     pub created_at: i64,
 }
 
+/// Dedicated external hash record storing checksums and timestamps from external sources (e.g. XnViewMP Hashes table).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalHashRecord {
+    pub hash_id: u64,
+    pub hash: String,
+    pub date_time: String,
+}
+
 /// Dynamic search parameters for combinatorial tag & rating queries against LMDB storage.
 #[derive(Debug, Clone, Default)]
 pub struct MediaSearchParams {

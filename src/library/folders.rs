@@ -4,6 +4,29 @@ use super::models::{FolderId, FolderRecord};
 use super::schema::SEQ_FOLDER_ID;
 use std::path::{Path, PathBuf};
 
+/// Normalizes a filesystem path by resolving symlinks/canonical form and removing any trailing slash.
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let canonical = match path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
+            let mut normalized = PathBuf::new();
+            for comp in path.components() {
+                match comp {
+                    std::path::Component::CurDir => {}
+                    _ => normalized.push(comp.as_os_str()),
+                }
+            }
+            normalized
+        }
+    };
+    let s = canonical.to_string_lossy();
+    if s.len() > 1 && (s.ends_with('/') || s.ends_with('\\')) {
+        PathBuf::from(s.trim_end_matches(['/', '\\']))
+    } else {
+        canonical
+    }
+}
+
 pub struct FolderManager<'a> {
     db: &'a LibraryDatabase,
 }
@@ -14,7 +37,7 @@ impl<'a> FolderManager<'a> {
     }
 
     pub fn add_folder(&self, path: &Path) -> Result<FolderRecord, LibraryError> {
-        let canonical_path = fs_err_canonicalize(path)?;
+        let canonical_path = normalize_path(path);
         let path_str = canonical_path.to_string_lossy().to_string();
 
         let mut wtxn = self.db.env.write_txn()?;
@@ -60,7 +83,7 @@ impl<'a> FolderManager<'a> {
     }
 
     pub fn get_folder_by_path(&self, path: &Path) -> Result<Option<FolderRecord>, LibraryError> {
-        let canonical_path = fs_err_canonicalize(path)?;
+        let canonical_path = normalize_path(path);
         let path_str = canonical_path.to_string_lossy().to_string();
 
         let rtxn = self.db.env.read_txn()?;
@@ -156,12 +179,5 @@ impl<'a> FolderManager<'a> {
 
         wtxn.commit()?;
         Ok(())
-    }
-}
-
-fn fs_err_canonicalize(path: &Path) -> Result<PathBuf, std::io::Error> {
-    match path.canonicalize() {
-        Ok(p) => Ok(p),
-        Err(_) => Ok(path.to_path_buf()),
     }
 }

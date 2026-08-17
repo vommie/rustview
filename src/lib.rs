@@ -7,3 +7,4 @@ pub mod query;
 pub mod settings;
 pub mod thumbnails;
 pub mod ui;
+pub mod xnviewdb_migrate;

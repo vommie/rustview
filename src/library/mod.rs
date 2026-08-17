@@ -20,12 +20,13 @@ pub use folder_operations::{
 pub use folders::FolderManager;
 pub use media::MediaRepository;
 pub use models::{
-    DatabaseMeta, FolderId, FolderRecord, FolderRecordCodec, MediaId, MediaRecord,
-    MediaSearchParams, TagId, TagRecord,
+    DatabaseMeta, ExternalHashRecord, FolderId, FolderRecord, FolderRecordCodec, MediaId,
+    MediaRecord, MediaSearchParams, TagId, TagRecord,
 };
 pub use refresh::{FolderRefresher, RefreshReport};
 pub use refresh_folders::{FolderTreeRefreshReport, FolderTreeRefresher};
 pub use refresh_media_files::{MediaItemRefresher, RefreshedFileAttributes};
+pub use schema::{DB_EXTERNAL_HASHES, SEQ_EXTERNAL_HASH_ID};
 pub use tags::TagManager;
 
 use std::path::Path;

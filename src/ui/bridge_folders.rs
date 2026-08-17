@@ -3,8 +3,9 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_tags::BridgeTags;
 use super::{FolderNodeView, MainWindow};
-use crate::library::Library;
+use crate::library::folders::normalize_path;
 use crate::library::models::{FolderId, FolderRecord};
+use crate::library::Library;
 use crate::settings::{GridAspectRatio, SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
@@ -33,15 +34,12 @@ impl FolderTreeBuilder {
         folders: &[FolderRecord],
         media_counts: &HashMap<FolderId, usize>,
     ) -> Vec<FolderTreeNode> {
-        let canonical_root = match root_dir.canonicalize() {
-            Ok(p) => p,
-            Err(_) => root_dir.to_path_buf(),
-        };
+        let canonical_root = normalize_path(root_dir);
 
         let mut subfolder_map: HashMap<PathBuf, Vec<FolderRecord>> = HashMap::new();
 
         for f in folders {
-            let p = Path::new(&f.path);
+            let p = normalize_path(Path::new(&f.path));
             if let Some(parent) = p.parent() {
                 subfolder_map
                     .entry(parent.to_path_buf())
@@ -55,8 +53,8 @@ impl FolderTreeBuilder {
         }
 
         let root_record = folders.iter().find(|f| {
-            let p = Path::new(&f.path);
-            p == canonical_root || p == root_dir
+            let p = normalize_path(Path::new(&f.path));
+            p == canonical_root
         });
 
         match root_record {
@@ -82,7 +80,7 @@ impl FolderTreeBuilder {
         media_counts: &HashMap<FolderId, usize>,
     ) -> Vec<FolderTreeNode> {
         let mut nodes = Vec::new();
-        let path_buf = PathBuf::from(current_path_str);
+        let path_buf = normalize_path(Path::new(current_path_str));
 
         if let Some(children) = subfolder_map.get(&path_buf) {
             for child in children {
@@ -138,8 +136,8 @@ impl FolderTreeBuilder {
             output.push(FolderNodeView {
                 id: node.record.id as i32,
                 name: formatted_name.into(),
-                path: node.record.path.clone().into(),
                 depth,
+                path: node.record.path.clone().into(),
                 has_children,
                 is_expanded,
                 is_selected,
@@ -263,7 +261,8 @@ impl BridgeFolders {
             return;
         };
 
-        if !root_path.is_dir() {
+        let normalized_root = normalize_path(root_path);
+        if !normalized_root.is_dir() {
             Self::clear_view(
                 window,
                 state,
@@ -272,11 +271,11 @@ impl BridgeFolders {
             return;
         }
 
-        tracing::info!(root = ?root_path, "Synchronizing root directory...");
+        tracing::info!(root = ?normalized_root, "Synchronizing root directory...");
 
-        let folder_record = match library.folders().get_folder_by_path(root_path) {
+        let folder_record = match library.folders().get_folder_by_path(&normalized_root) {
             Ok(Some(f)) => f,
-            _ => match library.folders().add_folder(root_path) {
+            _ => match library.folders().add_folder(&normalized_root) {
                 Ok(f) => f,
                 Err(e) => {
                     tracing::error!(error = %e, "Failed to register root directory");
@@ -288,12 +287,12 @@ impl BridgeFolders {
         let target_folder = if s.general.remember_last_folder
             && let Some(ref last_path) = s.general.last_folder_path
             && last_path.is_dir()
-            && last_path.starts_with(root_path)
+            && normalize_path(last_path).starts_with(&normalized_root)
             && let Ok(Some(f)) = library.folders().get_folder_by_path(last_path)
         {
-            (f.id, last_path.clone())
+            (f.id, normalize_path(last_path))
         } else {
-            (folder_record.id, root_path.clone())
+            (folder_record.id, normalized_root.clone())
         };
 
         {
@@ -303,12 +302,12 @@ impl BridgeFolders {
 
                 let mut current_ancestor = target_folder.1.parent();
                 while let Some(parent_p) = current_ancestor {
-                    if parent_p.starts_with(root_path) {
+                    if parent_p.starts_with(&normalized_root) {
                         if let Ok(Some(parent_rec)) = library.folders().get_folder_by_path(parent_p)
                         {
                             st.expanded_folder_ids.insert(parent_rec.id);
                         }
-                        if parent_p == root_path {
+                        if parent_p == normalized_root {
                             break;
                         }
                         current_ancestor = parent_p.parent();
@@ -346,13 +345,14 @@ impl BridgeFolders {
             return;
         };
 
-        if !root_dir.is_dir() {
+        let normalized_root = normalize_path(root_dir);
+        if !normalized_root.is_dir() {
             window.set_status_text("Configured root directory not found on filesystem.".into());
             return;
         }
 
         tracing::info!(
-            root = ?root_dir,
+            root = ?normalized_root,
             "[FolderPanel: Toolbar] Initiating high-speed recursive folder refresh from panel toolbar"
         );
 
@@ -365,7 +365,7 @@ impl BridgeFolders {
 
         let w_weak = window.as_weak();
         let report_res = refresher.refresh_tree(
-            root_dir,
+            &normalized_root,
             Some(move |count| {
                 if let Some(w) = w_weak.upgrade() {
                     w.set_folder_scan_count(count as i32);
@@ -408,15 +408,16 @@ impl BridgeFolders {
         state: &Arc<RwLock<UiState>>,
     ) {
         let t0 = Instant::now();
-        let folder_name = path
+        let normalized_path = normalize_path(&path);
+        let folder_name = normalized_path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.to_string_lossy().to_string());
+            .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
 
         tracing::info!(
             folder_id = folder_id,
             folder_name = %folder_name,
-            path = ?path,
+            path = ?normalized_path,
             "[FolderNavigation: Stage 1/4] Immediate UI transition started"
         );
 
@@ -435,7 +436,7 @@ impl BridgeFolders {
 
             st.active_folder_token = st.active_folder_token.wrapping_add(1);
             st.current_folder_id = Some(folder_id);
-            st.current_folder_path = Some(path.clone());
+            st.current_folder_path = Some(normalized_path.clone());
             st.active_indices.clear();
             st.file_selection.clear();
             st.last_executed_query.clear();
@@ -456,7 +457,7 @@ impl BridgeFolders {
         {
             let mut s = settings.get();
             if s.general.remember_last_folder {
-                s.general.last_folder_path = Some(path.clone());
+                s.general.last_folder_path = Some(normalized_path.clone());
                 settings.save_quiet(&s);
             }
         }
@@ -481,7 +482,7 @@ impl BridgeFolders {
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
-        let target_path = path.clone();
+        let target_path = normalized_path.clone();
 
         Timer::single_shot(std::time::Duration::from_millis(15), move || {
             let Some(win) = w_weak.upgrade() else { return; };
@@ -492,7 +493,7 @@ impl BridgeFolders {
             };
             if !is_still_current { return; }
 
-            // Load already-known active media from LMDB
+            // Load already-known active media from LMDB (includes all migrated ratings & tag flags)
             let known_media = lib.media().get_by_folder(folder_id).unwrap_or_default();
             let indexed_media = BridgeMedia::preindex(&lib, known_media, &target_path);
 
@@ -769,7 +770,7 @@ impl BridgeFolders {
         if let Ok(Some(root_rec)) = library.folders().get_folder_by_path(root_p) {
             Self::select_folder(
                 root_rec.id,
-                root_p.clone(),
+                normalize_path(root_p),
                 window,
                 library,
                 thumbnails,

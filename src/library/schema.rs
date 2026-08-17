@@ -16,9 +16,11 @@ pub const DB_TAGS_BY_MEDIA: &str = "tags_by_media";
 pub const DB_MEDIA_BY_TAG: &str = "media_by_tag";
 pub const DB_THUMBNAILS: &str = "thumbnails";
 pub const DB_VIDEO_PREVIEWS: &str = "video_previews";
+pub const DB_EXTERNAL_HASHES: &str = "external_hashes";
 
 // Sequence Key Identifiers
 pub const SEQ_FOLDER_ID: &str = "seq_folder_id";
 pub const SEQ_MEDIA_ID: &str = "seq_media_id";
 pub const SEQ_TAG_ID: &str = "seq_tag_id";
 pub const SEQ_REFRESH_GEN: &str = "seq_refresh_gen";
+pub const SEQ_EXTERNAL_HASH_ID: &str = "seq_external_hash_id";
