@@ -42,6 +42,12 @@ pub const DEFAULT_COL_RATING_WIDTH: f32 = 90.0;
 pub const MIN_COL_WIDTH: f32 = 50.0;
 pub const MAX_COL_WIDTH: f32 = 1200.0;
 
+// Sidebar Width Constants
+pub const DEFAULT_SIDEBAR_LEFT_WIDTH: f32 = 260.0;
+pub const DEFAULT_SIDEBAR_RIGHT_WIDTH: f32 = 280.0;
+pub const MIN_SIDEBAR_WIDTH: f32 = 150.0;
+pub const MAX_SIDEBAR_WIDTH: f32 = 700.0;
+
 // =============================================================================
 // SECTION 5: Performance, Video & Engine - Single Point of Truth Constants
 // =============================================================================
@@ -261,6 +267,8 @@ pub struct ViewSettings {
     pub col_dimensions_width: f32,
     pub col_size_width: f32,
     pub col_rating_width: f32,
+    pub sidebar_left_width: f32,
+    pub sidebar_right_width: f32,
 }
 
 impl Default for ViewSettings {
@@ -273,6 +281,8 @@ impl Default for ViewSettings {
             col_dimensions_width: DEFAULT_COL_DIMENSIONS_WIDTH,
             col_size_width: DEFAULT_COL_SIZE_WIDTH,
             col_rating_width: DEFAULT_COL_RATING_WIDTH,
+            sidebar_left_width: DEFAULT_SIDEBAR_LEFT_WIDTH,
+            sidebar_right_width: DEFAULT_SIDEBAR_RIGHT_WIDTH,
         }
     }
 }

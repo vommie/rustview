@@ -7,7 +7,8 @@ export { FavoritesPanel } from "favorites_panel.slint";
 export { FolderPanel } from "folder_panel.slint";
 
 export component SidebarLeft inherits Rectangle {
-    width: 260px;
+    in-out property <length> sidebar-width: 260px;
+    width: root.sidebar-width;
     background: Theme.surface;
 
     in property <[FolderNodeView]> folders: [];
@@ -18,13 +19,6 @@ export component SidebarLeft inherits Rectangle {
     callback folder-context-menu(int /* id */, length /* x */, length /* y */);
     callback folder-refresh-clicked();
     callback favorite-clicked(string /* path */);
-
-    // Right border separator line
-    Rectangle {
-        x: parent.width - 1px;
-        width: 1px;
-        background: Theme.border;
-    }
 
     VerticalLayout {
         padding: 8px;

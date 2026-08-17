@@ -9,6 +9,7 @@ import { MediaTableView } from "media_table.slint";
 import { StatusBar } from "status_bar.slint";
 import { VideoPlayerView } from "player.slint";
 import { ContextMenuPopup } from "context_menu.slint";
+import { ResizerBar } from "resizer_bar.slint";
 
 export { SettingsWindow } from "settings_window.slint";
 export { FileRenameDialog } from "file_rename_dialog.slint";
@@ -41,6 +42,10 @@ export component MainWindow inherits Window {
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
+
+    // Sidebar Width Properties (Restored from Persistent Settings)
+    in-out property <length> sidebar-left-width: 260px;
+    in-out property <length> sidebar-right-width: 280px;
 
     // Global Sorting Properties
     in-out property <int> sort-column-idx: 0;
@@ -149,6 +154,12 @@ export component MainWindow inherits Window {
     callback column-resize-finished(int /* column_index */, length /* final_width */);
     callback view-mode-toggled(bool /* is_table */);
 
+    // Sidebar Resizing Callbacks
+    callback sidebar-left-resized(length /* new_width */);
+    callback sidebar-left-resize-finished(length /* final_width */);
+    callback sidebar-right-resized(length /* new_width */);
+    callback sidebar-right-resize-finished(length /* final_width */);
+
     // Player Callbacks
     callback player-toggle-play();
     callback player-seek(float);
@@ -181,6 +192,7 @@ export component MainWindow inherits Window {
             spacing: 0px;
 
             sidebar_left := SidebarLeft {
+                sidebar-width: root.sidebar-left-width;
                 folders: root.folders;
                 favorites: root.favorites;
                 folder-clicked(id, path) => { root.folder-selected(id, path); }
@@ -188,6 +200,21 @@ export component MainWindow inherits Window {
                 folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 38px + sidebar_left.y + y); }
                 folder-refresh-clicked => { root.folder-refresh-clicked(); }
                 favorite-clicked(path) => { root.favorite-selected(path); }
+            }
+
+            resizer_left := ResizerBar {
+                is-horizontal: true;
+                property <length> start-w: 260px;
+                drag-started => {
+                    self.start-w = root.sidebar-left-width;
+                }
+                dragged(delta) => {
+                    root.sidebar-left-width = Math.max(150px, Math.min(700px, self.start-w + delta));
+                    root.sidebar-left-resized(root.sidebar-left-width);
+                }
+                drag-finished => {
+                    root.sidebar-left-resize-finished(root.sidebar-left-width);
+                }
             }
 
             Rectangle {
@@ -225,7 +252,7 @@ export component MainWindow inherits Window {
                         root.view-mode-toggled(is-table);
                     }
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 38px); }
+                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 38px); }
                     item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                     sort-clicked(idx) => { root.sort-column-clicked(idx); }
                     background-clicked => { root.background-clicked(); }
@@ -250,7 +277,7 @@ export component MainWindow inherits Window {
                         root.view-mode-toggled(is-table);
                     }
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + 260px, y + 38px); }
+                    item-context-menu(id, x, y) => { root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 38px); }
                     sort-clicked(idx) => { root.sort-column-clicked(idx); }
                     column-resized(idx, w) => { root.column-resized(idx, w); }
                     column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
@@ -258,7 +285,23 @@ export component MainWindow inherits Window {
                 }
             }
 
+            resizer_right := ResizerBar {
+                is-horizontal: true;
+                property <length> start-w: 280px;
+                drag-started => {
+                    self.start-w = root.sidebar-right-width;
+                }
+                dragged(delta) => {
+                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w - delta));
+                    root.sidebar-right-resized(root.sidebar-right-width);
+                }
+                drag-finished => {
+                    root.sidebar-right-resize-finished(root.sidebar-right-width);
+                }
+            }
+
             sidebar_right := SidebarRight {
+                sidebar-width: root.sidebar-right-width;
                 tags: root.tags;
                 is-assign-mode <=> root.tag-is-assign-mode;
                 match-mode-idx <=> root.tag-match-mode-idx;

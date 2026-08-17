@@ -8,7 +8,8 @@ export { MetadataInspector } from "metadata_inspector.slint";
 export { RatingBar } from "rating_bar.slint";
 
 export component SidebarRight inherits Rectangle {
-    width: 280px;
+    in-out property <length> sidebar-width: 280px;
+    width: root.sidebar-width;
     background: Theme.surface;
 
     in-out property <bool> is-assign-mode: false;
@@ -38,13 +39,6 @@ export component SidebarRight inherits Rectangle {
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
     callback reset-clicked();
-
-    // Left border separator line
-    Rectangle {
-        x: 0px;
-        width: 1px;
-        background: Theme.border;
-    }
 
     VerticalLayout {
         padding: 8px;

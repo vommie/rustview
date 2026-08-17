@@ -25,6 +25,7 @@ use slint::{ComponentHandle, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -79,6 +80,10 @@ impl UiBridge {
 
         let v_settings = settings.get().view;
         window.set_is_table_view(v_settings.is_table_view);
+
+        // Restore Sidebar Widths from Persistent Settings
+        window.set_sidebar_left_width(v_settings.sidebar_left_width);
+        window.set_sidebar_right_width(v_settings.sidebar_right_width);
 
         let initial_sort_col = SortColumn::from_name(&v_settings.sort_column);
         let initial_sort_ord = SortOrder::from_name(&v_settings.sort_order);
@@ -169,6 +174,8 @@ impl UiBridge {
 
         tracing::info!(
             is_table = v_settings.is_table_view,
+            sidebar_left_width = v_settings.sidebar_left_width,
+            sidebar_right_width = v_settings.sidebar_right_width,
             sort_col = ?initial_sort_col,
             sort_ord = ?initial_sort_ord,
             thumb_size = app_settings.appearance.default_thumbnail_size,
@@ -255,7 +262,111 @@ impl UiBridge {
             self.state.clone(),
         );
 
+        self.register_sidebar_resize_callbacks();
+
         BridgePlayer::register_callbacks(&self.window, self.player.clone());
+    }
+
+    fn register_sidebar_resize_callbacks(&self) {
+        // 1. Left Sidebar Resize Benchmarking & Persistence
+        let last_left_resize = Arc::new(Mutex::new(Instant::now()));
+        let left_events_count = Arc::new(AtomicUsize::new(0));
+
+        let last_left_clone = last_left_resize;
+        let left_count_clone = left_events_count;
+
+        self.window.on_sidebar_left_resized(move |new_width| {
+            let t0 = Instant::now();
+            let count = left_count_clone.fetch_add(1, Ordering::Relaxed) + 1;
+
+            let mut last_log = last_left_clone.lock();
+            let elapsed = last_log.elapsed();
+            if elapsed.as_millis() >= 100 {
+                let hz = if elapsed.as_secs_f64() > 0.0 {
+                    (count as f64) / elapsed.as_secs_f64()
+                } else {
+                    0.0
+                };
+                let elapsed_us = t0.elapsed().as_micros();
+                tracing::debug!(
+                    sidebar = "left",
+                    width = new_width,
+                    event_rate_hz = format!("{:.1}", hz),
+                    total_events = count,
+                    processing_us = elapsed_us,
+                    "[Benchmark: Sidebar Drag] Smooth high-FPS left sidebar resize active"
+                );
+                *last_log = Instant::now();
+                left_count_clone.store(0, Ordering::Relaxed);
+            }
+        });
+
+        let set_left = self.settings.clone();
+        self.window.on_sidebar_left_resize_finished(move |final_width| {
+            let t0 = Instant::now();
+            let width_f32 = final_width;
+            let mut app_settings = set_left.get();
+            app_settings.view.sidebar_left_width = width_f32;
+            set_left.save_quiet(&app_settings);
+            let elapsed_us = t0.elapsed().as_micros();
+
+            tracing::info!(
+                sidebar = "left",
+                final_width = width_f32,
+                save_time_us = elapsed_us,
+                "[Benchmark: SidebarResizeCommit] Left sidebar width persisted to disk settings"
+            );
+        });
+
+        // 2. Right Sidebar Resize Benchmarking & Persistence
+        let last_right_resize = Arc::new(Mutex::new(Instant::now()));
+        let right_events_count = Arc::new(AtomicUsize::new(0));
+
+        let last_right_clone = last_right_resize;
+        let right_count_clone = right_events_count;
+
+        self.window.on_sidebar_right_resized(move |new_width| {
+            let t0 = Instant::now();
+            let count = right_count_clone.fetch_add(1, Ordering::Relaxed) + 1;
+
+            let mut last_log = last_right_clone.lock();
+            let elapsed = last_log.elapsed();
+            if elapsed.as_millis() >= 100 {
+                let hz = if elapsed.as_secs_f64() > 0.0 {
+                    (count as f64) / elapsed.as_secs_f64()
+                } else {
+                    0.0
+                };
+                let elapsed_us = t0.elapsed().as_micros();
+                tracing::debug!(
+                    sidebar = "right",
+                    width = new_width,
+                    event_rate_hz = format!("{:.1}", hz),
+                    total_events = count,
+                    processing_us = elapsed_us,
+                    "[Benchmark: Sidebar Drag] Smooth high-FPS right sidebar resize active"
+                );
+                *last_log = Instant::now();
+                right_count_clone.store(0, Ordering::Relaxed);
+            }
+        });
+
+        let set_right = self.settings.clone();
+        self.window.on_sidebar_right_resize_finished(move |final_width| {
+            let t0 = Instant::now();
+            let width_f32 = final_width;
+            let mut app_settings = set_right.get();
+            app_settings.view.sidebar_right_width = width_f32;
+            set_right.save_quiet(&app_settings);
+            let elapsed_us = t0.elapsed().as_micros();
+
+            tracing::info!(
+                sidebar = "right",
+                final_width = width_f32,
+                save_time_us = elapsed_us,
+                "[Benchmark: SidebarResizeCommit] Right sidebar width persisted to disk settings"
+            );
+        });
     }
 
     pub fn sync_root_folder(&self) {
