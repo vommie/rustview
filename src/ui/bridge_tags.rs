@@ -11,6 +11,7 @@ use crate::query::{MatchMode, ScopeMode};
 use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
+use regex::{Regex, RegexBuilder};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -101,6 +102,8 @@ pub struct TagFlattenContext<'a> {
     pub expanded_set: &'a HashSet<TagId>,
     pub selected_query_tags: &'a HashSet<TagId>,
     pub filter_text: &'a str,
+    pub filter_regex: Option<&'a Regex>,
+    pub is_regex: bool,
     pub stats: &'a TagSelectionStats,
     pub is_assign_mode: bool,
 }
@@ -149,14 +152,21 @@ impl TagTreeBuilder {
         output: &mut Vec<TagNodeView>,
     ) -> bool {
         let mut any_match_in_branch = false;
+        let is_filtering = !ctx.filter_text.is_empty();
 
         for node in nodes {
             let has_children = !node.children.is_empty();
             let is_expanded = ctx.expanded_set.contains(&node.record.id);
             let is_selected =
                 !ctx.is_assign_mode && ctx.selected_query_tags.contains(&node.record.id);
-            let name_match = !ctx.filter_text.is_empty()
-                && node.record.name.to_lowercase().contains(ctx.filter_text);
+
+            let name_match = if !is_filtering {
+                false
+            } else if let Some(re) = ctx.filter_regex {
+                re.is_match(&node.record.name)
+            } else {
+                node.record.name.to_lowercase().contains(ctx.filter_text)
+            };
 
             let is_assigned = ctx.is_assign_mode && ctx.stats.is_fully_assigned(node.record.id);
             let is_partial = ctx.is_assign_mode && ctx.stats.is_partially_assigned(node.record.id);
@@ -181,14 +191,14 @@ impl TagTreeBuilder {
             });
 
             let mut child_matches = false;
-            if has_children && (is_expanded || !ctx.filter_text.is_empty()) {
+            if has_children && (is_expanded || is_filtering) {
                 child_matches = Self::flatten(&node.children, depth + 1, ctx, output);
             }
 
-            if !ctx.filter_text.is_empty() && !name_match && !child_matches {
+            if is_filtering && !name_match && !child_matches {
                 output.truncate(start_idx);
             } else {
-                let is_dimmed = !ctx.filter_text.is_empty() && !name_match && child_matches;
+                let is_dimmed = is_filtering && !name_match && child_matches;
                 output[start_idx].is_dimmed = is_dimmed;
                 any_match_in_branch = true;
             }
@@ -279,8 +289,8 @@ impl TagTreeSync {
             window.set_selected_rating(query_rating as i32);
         }
 
+        // Safe exit without recursion when 0 rows are visible
         if row_count == 0 {
-            BridgeTags::reload_tags(window, library, state);
             return;
         }
 
@@ -529,7 +539,6 @@ impl TagActionHandler {
                 (s.selected_rating, s.is_query_active)
             };
 
-            // Fast-path: If rating was already 0 and no query was active, clicking 0 is a no-op
             if prev_rating == rating_val && !is_query && rating_val == 0 {
                 return;
             }
@@ -592,7 +601,6 @@ impl TagActionHandler {
             }
         }
 
-        // In-place UI synchronization: Keep active results dataset stable during assignment
         TagTreeSync::sync_in_place(window, library, state);
         BridgeInspector::update(window, state);
 
@@ -605,7 +613,6 @@ impl TagActionHandler {
         );
     }
 
-    /// Resets all query filters and restores the regular folder view.
     pub fn reset_query(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -619,7 +626,6 @@ impl TagActionHandler {
             st.filter.rating = None;
             st.filter.tag_ids.clear();
             st.filter.search_query.clear();
-            st.filter.is_regex = false;
             st.last_executed_query.clear();
             st.is_query_active = false;
             (st.current_folder_id, st.current_folder_path.clone())
@@ -627,9 +633,8 @@ impl TagActionHandler {
 
         window.set_selected_rating(0);
         window.set_search_query("".into());
-        window.set_regex_mode(false);
 
-        tracing::info!("[TagAction: Reset] Query filters reset. Restoring regular folder view...");
+        tracing::info!("[TagAction: Reset] Query filters reset. Restoring regular folder view (preserving regex toggle)...");
 
         if let (Some(f_id), Some(path)) = (current_f_id, current_f_path.as_ref()) {
             let raw_media = library.media().get_by_folder(f_id).unwrap_or_default();
@@ -649,8 +654,6 @@ impl TagActionHandler {
         window.set_status_text("Query reset to default folder view.".into());
     }
 
-    /// Primary reactive query coordinator: Resets search text filter, runs database search,
-    /// populates virtual query results dataset, prunes selection, and refreshes the view.
     pub fn execute_query_flow(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -660,14 +663,11 @@ impl TagActionHandler {
     ) {
         let t_flow_start = Instant::now();
 
-        // 1. Reset text filter input whenever query parameters are modified
         window.set_search_query("".into());
-        window.set_regex_mode(false);
 
         let (params, current_folder_p) = {
             let mut st = state.write();
             st.filter.search_query.clear();
-            st.filter.is_regex = false;
             st.last_executed_query.clear();
 
             let is_rating_active = st.selected_rating > 0;
@@ -691,7 +691,6 @@ impl TagActionHandler {
             (params, st.current_folder_path.clone())
         };
 
-        // 2. If query is inactive (Rating 0 and no tags selected), restore regular folder content
         let is_query_active =
             params.rating.map(|r| r > 0).unwrap_or(false) || !params.tag_ids.is_empty();
 
@@ -722,13 +721,11 @@ impl TagActionHandler {
             return;
         }
 
-        // 3. Execute search in LMDB database
         let t_db = Instant::now();
         let search_results = library.media().search(&params).unwrap_or_default();
         let db_search_us = t_db.elapsed().as_micros();
         let result_count = search_results.len();
 
-        // 4. Preindex search results (resolving each item's folder path automatically)
         let t_preindex = Instant::now();
         let indexed_results = BridgeMedia::preindex_records(library, search_results);
         let preindex_us = t_preindex.elapsed().as_micros();
@@ -738,11 +735,9 @@ impl TagActionHandler {
         {
             let mut st = state.write();
             st.all_folder_media = indexed_results;
-            // 5. Prune selection to only matched item IDs
             st.file_selection.prune_missing(&valid_ids);
         }
 
-        // 6. Reload UI grid/table and launch thumbnail pipeline for results
         let t_reload = Instant::now();
         TagTreeSync::sync_in_place(window, library, state);
         BridgeMedia::reload(window, library, thumbnails, settings, state, true, false);
@@ -866,7 +861,6 @@ impl BridgeTags {
                 MatchMode::Any
             };
 
-            // Fast-Path: If query is inactive, toggle mode in memory without triggering heavy re-indexes or pipeline restarts
             let should_execute = {
                 let mut s = st.write();
                 s.filter.match_mode = mode;
@@ -897,7 +891,6 @@ impl BridgeTags {
             let t0 = Instant::now();
             let scope = ScopeMode::from_index(idx);
 
-            // Fast-Path: If query is inactive, toggle scope in memory without triggering heavy re-indexes or pipeline restarts
             let should_execute = {
                 let mut s = st.write();
                 s.filter.scope_mode = scope;
@@ -923,7 +916,24 @@ impl BridgeTags {
         let lib = library.clone();
         let st = state.clone();
         window.on_tag_filter_changed(move |query| {
+            tracing::info!(
+                tag_query = %query,
+                tag_query_len = query.len(),
+                "[TagFilter: InputEvent] Tag filter query text changed"
+            );
             Self::filter_tags(&win, &lib, &st, &query);
+        });
+
+        let win = window.clone_strong();
+        let lib = library.clone();
+        let st = state.clone();
+        window.on_tag_regex_toggled(move |enabled| {
+            tracing::info!(
+                tag_regex_enabled = enabled,
+                "[TagFilter: InputEvent] Tag regex filter mode toggled"
+            );
+            st.write().tag_filter_is_regex = enabled;
+            Self::reload_tags(&win, &lib, &st);
         });
 
         let win = window.clone_strong();
@@ -947,15 +957,35 @@ impl BridgeTags {
             st.expanded_tag_ids.retain(|id| valid_ids.contains(id));
         }
 
-        let (is_assign, expanded_set, selected_query_tags, filter_text, selected_file_ids) = {
+        let (is_assign, expanded_set, selected_query_tags, filter_text, is_regex, selected_file_ids) = {
             let s = state.read();
             (
                 s.is_assign_mode,
                 s.expanded_tag_ids.clone(),
                 s.filter.tag_ids.clone(),
-                s.tag_filter_query.to_lowercase(),
+                s.tag_filter_query.clone(),
+                s.tag_filter_is_regex,
                 s.file_selection.selected_ids().clone(),
             )
+        };
+
+        let filter_trimmed = filter_text.trim().to_string();
+        let filter_lower = filter_trimmed.to_lowercase();
+
+        let regex_matcher = if is_regex && !filter_trimmed.is_empty() {
+            match RegexBuilder::new(&filter_trimmed).case_insensitive(true).build() {
+                Ok(re) => Some(re),
+                Err(e) => {
+                    tracing::debug!(
+                        query = %filter_trimmed,
+                        error = %e,
+                        "[TagFilter: Regex Warning] Invalid regex syntax, falling back to substring matching"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
         };
 
         let stats = TagSelectionStats::compute(&selected_file_ids, library);
@@ -964,7 +994,9 @@ impl BridgeTags {
         let ctx = TagFlattenContext {
             expanded_set: &expanded_set,
             selected_query_tags: &selected_query_tags,
-            filter_text: &filter_text,
+            filter_text: &filter_lower,
+            filter_regex: regex_matcher.as_ref(),
+            is_regex,
             stats: &stats,
             is_assign_mode: is_assign,
         };
@@ -978,6 +1010,7 @@ impl BridgeTags {
             expanded_parents = expanded_set.len(),
             selected_files = stats.selected_files_count,
             filter = %filter_text,
+            is_regex = is_regex,
             elapsed_us = t0.elapsed().as_micros(),
             "[TagTree: Visual Model Sync] Synchronized tag tree to Slint UI"
         );

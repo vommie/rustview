@@ -71,6 +71,7 @@ pub struct UiState {
     // === Hierarchical Tag Tree State ===
     pub expanded_tag_ids: HashSet<TagId>,
     pub tag_filter_query: String,
+    pub tag_filter_is_regex: bool,
     pub active_tag_dialog_target: Option<TagId>,
     pub active_context_menu: Option<CtxMenu>,
 }
@@ -102,6 +103,7 @@ impl Default for UiState {
             active_folder_dialog_target: None,
             expanded_tag_ids: HashSet::new(),
             tag_filter_query: String::new(),
+            tag_filter_is_regex: false,
             active_tag_dialog_target: None,
             active_context_menu: None,
         }

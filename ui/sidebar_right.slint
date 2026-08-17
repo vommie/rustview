@@ -19,7 +19,8 @@ export component SidebarRight inherits Rectangle {
     in property <bool> has-selection: true;
     in property <[bool]> partial-ratings: [false, false, false, false, false, false];
     in property <bool> has-active-query: false;
-    in-out property <string> tag-filter-text <=> tag-panel.filter-text;
+    in-out property <string> tag-filter-text: "";
+    in-out property <bool> tag-filter-is-regex: false;
     in property <[TagNodeView]> tags: [];
 
     in property <string> info-filename: "-";
@@ -36,6 +37,7 @@ export component SidebarRight inherits Rectangle {
     callback tag-context-menu(int, length, length);
     callback root-context-menu(length, length);
     callback tag-filter-changed(string);
+    callback tag-regex-toggled(bool);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
     callback reset-clicked();
@@ -53,6 +55,8 @@ export component SidebarRight inherits Rectangle {
             has-selection: root.has-selection;
             partial-ratings: root.partial-ratings;
             has-active-query: root.has-active-query;
+            filter-text <=> root.tag-filter-text;
+            tag-filter-is-regex <=> root.tag-filter-is-regex;
             tags: root.tags;
 
             mode-toggled(assign) => { root.mode-toggled(assign); }
@@ -61,6 +65,7 @@ export component SidebarRight inherits Rectangle {
             reset-clicked => { root.reset-clicked(); }
             rating-selected(r) => { root.rating-selected(r); }
             tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
+            tag-regex-toggled(r) => { root.tag-regex-toggled(r); }
             tag-clicked(id) => { root.tag-clicked(id); }
             tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
             tag-context-menu(id, x, y) => { root.tag-context-menu(id, tag-panel.x + x, tag-panel.y + y); }

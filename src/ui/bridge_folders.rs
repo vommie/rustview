@@ -397,7 +397,7 @@ impl BridgeFolders {
     }
 
     /// 4-Stage Asynchronous Folder Navigation Workflow.
-    /// Completely resets query filters, Tag & Rate panel selections, and search fields upon navigating to a folder.
+    /// Resets query filters, Tag & Rate panel selections, and search fields while strictly preserving regex toggle button states.
     pub fn select_folder(
         folder_id: FolderId,
         path: PathBuf,
@@ -423,7 +423,7 @@ impl BridgeFolders {
         // Cancel previous thumbnail pipeline and background scanner immediately
         thumbnails.cancel_pipeline();
 
-        // Stage 1: Atomically reset query state, clear search filters, and reset Tag & Rate selections
+        // Stage 1: Atomically reset query state, clear search text, and reset Tag & Rate selections while preserving active regex button states
         let (request_token, cancel_flag) = {
             let mut st = state.write();
 
@@ -442,12 +442,11 @@ impl BridgeFolders {
             st.folder_thumbnails.clear();
             st.all_folder_media.clear();
 
-            // Completely reset query & filter state
+            // Reset query & filter state (preserving active regex mode toggle)
             st.is_query_active = false;
             st.selected_rating = 0;
             st.filter.rating = None;
             st.filter.search_query.clear();
-            st.filter.is_regex = false;
             st.filter.tag_ids.clear();
             st.tag_filter_query.clear();
 
@@ -462,9 +461,8 @@ impl BridgeFolders {
             }
         }
 
-        // Reset UI inputs
+        // Reset UI text & rating inputs while preserving regex button states
         window.set_search_query("".into());
-        window.set_regex_mode(false);
         window.set_selected_rating(0);
         window.set_tag_filter_text("".into());
 
@@ -723,11 +721,13 @@ impl BridgeFolders {
             st.selected_rating = 0;
             st.filter.rating = None;
             st.filter.tag_ids.clear();
+            st.tag_filter_query.clear();
         }
         window.set_folders(ModelRc::new(VecModel::from(vec![])));
         window.set_media_items(ModelRc::new(VecModel::from(vec![])));
         window.set_items_metric_text("Items: 0".into());
         window.set_status_text(status_msg.into());
+        window.set_tag_filter_text("".into());
         BridgeInspector::update(window, state);
     }
 

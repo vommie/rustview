@@ -1,12 +1,12 @@
 import { Theme } from "styles.slint";
 import { Icons } from "icons.slint";
-import { PanelToolbar, ToolbarButton, ToolbarToggleButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
+import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
 import { ToolbarSearchField } from "toolbar_search_field.slint";
 
 /// Dedicated modular toolbar for the Media Table View.
-/// Integrates Expander, Filter Search, Regex Toggle, Refresh, and ViewMode Switcher.
+/// Integrates Expander, Filter Search (with embedded Regex & Clear), Refresh, and ViewMode Switcher.
 export component MediaTablePanelToolbar inherits PanelToolbar {
-    in-out property <string> search-text <=> search-field.text;
+    in-out property <string> search-text: "";
     in-out property <bool> regex-mode: false;
     in-out property <bool> is-table-view: true;
 
@@ -20,40 +20,30 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
     // 1. Expander / Spacer (Pushes search & view actions to the right)
     ToolbarSpacer {}
 
-    // 2. Filter Search Field
+    // 2. Filter Search Field (with inline Regex Toggle and Clear button)
     search-field := ToolbarSearchField {
         placeholder-text: "Filter...";
-        field-width: 150px;
+        field-width: 160px;
+        text <=> root.search-text;
+        is-regex <=> root.regex-mode;
         search-changed(txt) => { root.search-changed(txt); }
+        regex-toggled(r) => { root.regex-toggled(r); }
     }
 
-    // 3. Filter Regex Toggle Button
-    ToolbarToggleButton {
-        text: ".*";
-        is-active: root.regex-mode;
-        tooltip: "Toggle Regular Expression filter mode";
-        font-size: 12px;
-        padding-horizontal: 6px;
-        toggled(active) => {
-            root.regex-mode = active;
-            root.regex-toggled(active);
-        }
-    }
-
-    // 4. Separator
+    // 3. Separator
     ToolbarSeparator {}
 
-    // 5. Refresh Media Button
+    // 4. Refresh Media Button
     ToolbarButton {
         icon: Icons.refresh;
         tooltip: "Scan and refresh media in current folder";
         clicked => { root.refresh-clicked(); }
     }
 
-    // 6. Separator
+    // 5. Separator
     ToolbarSeparator {}
 
-    // 7. View Mode Switcher Button
+    // 6. View Mode Switcher Button
     ToolbarButton {
         icon: root.is-table-view ? Icons.grid-view : Icons.list-view;
         tooltip: root.is-table-view ? "Switch to Grid View" : "Switch to Table View";

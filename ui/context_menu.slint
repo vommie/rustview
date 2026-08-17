@@ -134,6 +134,18 @@ export component ContextMenuPopup inherits Rectangle {
     callback request-submenu(int /* depth */, int /* menu_index */);
     callback dismissed();
 
+    // Isolated focus scope catching Escape only while the context popup is active
+    forward-focus: popup-focus;
+    popup-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.dismissed();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     property <length> menu-width: 210px;
 
     property <length> l0-x: Math.max(8px, Math.min(root.width - 220px - 8px, root.pos-x));

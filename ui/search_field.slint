@@ -1,0 +1,286 @@
+import { Theme } from "styles.slint";
+import { AppIcon } from "icons.slint";
+import { TooltipHost } from "tooltips.slint";
+
+/// Generic, modular, and feature-rich Search & Filter Field component API for Slint.
+/// Features built-in inline Regex toggle button, interactive Clear/Reset button,
+/// Escape key clear handling while focused, focus ring styling, and tooltip integration.
+export component SearchField inherits Rectangle {
+    // Core State Properties
+    in-out property <string> text: "";
+    in-out property <bool> is-regex: false;
+    in property <string> placeholder-text: "Filter...";
+    in property <bool> is-enabled: true;
+
+    // Feature Toggle Options (Sensible Defaults)
+    in property <bool> enable-regex-toggle: true;
+    in property <bool> enable-clear-button: true;
+    in property <bool> enable-escape-clear: true;
+    in property <bool> show-search-icon: false;
+    in property <image> search-icon;
+
+    // Dimension & Typography API
+    in property <length> field-width: 160px;
+    in property <length> field-height: 24px;
+    in property <length> font-size: 11px;
+    in property <length> icon-size: 12px;
+    in property <length> corner-radius: 4px;
+
+    // Theme & Styling Overrides (falls back to Theme defaults when transparent)
+    in property <color> custom-bg: transparent;
+    in property <color> custom-border: transparent;
+    in property <color> custom-focus-border: transparent;
+    in property <color> custom-text: transparent;
+
+    // Tooltip Descriptions
+    in property <string> regex-tooltip: "Toggle Regular Expression filter mode";
+    in property <string> clear-tooltip: "Clear search filter (Esc)";
+
+    // Event Hooks
+    callback search-changed(string /* query */);
+    callback regex-toggled(bool /* is_regex_active */);
+    callback accepted(string /* current_text */);
+    callback cleared();
+
+    // Programmatic Public API
+    public function clear() {
+        root.text = "";
+        root.search-changed("");
+        root.cleared();
+    }
+
+    public function focus-input() {
+        input.focus();
+    }
+
+    public function select-all() {
+        input.select-all();
+    }
+
+    width: root.field-width;
+    height: root.field-height;
+    border-radius: root.corner-radius;
+    border-width: 1px;
+
+    background: !root.is-enabled ? #1e1e2e44 : (
+        root.custom-bg != transparent ? root.custom-bg : Theme.surface-variant
+    );
+
+    border-color: !root.is-enabled ? Theme.border : (
+        input.has-focus
+            ? (root.custom-focus-border != transparent ? root.custom-focus-border : Theme.primary)
+            : (root.custom-border != transparent ? root.custom-border : Theme.border)
+    );
+
+    animate border-color { duration: 120ms; }
+    animate background { duration: 120ms; }
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 4px;
+        padding-top: 2px;
+        padding-bottom: 2px;
+        spacing: 4px;
+
+        // 1. Optional Leading Search Icon
+        if root.show-search-icon : VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+
+            Rectangle {
+                width: root.icon-size;
+                height: root.icon-size;
+
+                if root.search-icon.width > 0 : AppIcon {
+                    icon: root.search-icon;
+                    size: root.icon-size;
+                    allow-tint: true;
+                    color: input.has-focus ? Theme.primary : Theme.text-muted;
+                }
+
+                if root.search-icon.width == 0 : Text {
+                    text: "🔍";
+                    font-size: root.font-size - 1px;
+                    color: input.has-focus ? Theme.primary : Theme.text-muted;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    opacity: input.has-focus ? 0.9 : 0.6;
+                }
+            }
+        }
+
+        // 2. Central Text Input & Placeholder Container (Stretches to fill horizontal space, vertically centered)
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+
+            Rectangle {
+                height: root.font-size + 6px;
+                clip: true;
+
+                if input.text == "" : Text {
+                    x: 0px;
+                    y: 0px;
+                    width: 100%;
+                    height: 100%;
+                    text: root.placeholder-text;
+                    font-size: root.font-size;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                    overflow: elide;
+                }
+
+                input := TextInput {
+                    x: 0px;
+                    y: 0px;
+                    width: 100%;
+                    height: 100%;
+                    text <=> root.text;
+                    font-size: root.font-size;
+                    color: root.is-enabled
+                        ? (root.custom-text != transparent ? root.custom-text : Theme.text)
+                        : Theme.text-muted;
+                    selection-background-color: Theme.primary;
+                    selection-foreground-color: #000000;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                    single-line: true;
+                    enabled: root.is-enabled;
+
+                    edited => {
+                        root.search-changed(self.text);
+                    }
+
+                    accepted => {
+                        root.accepted(self.text);
+                    }
+
+                    key-pressed(event) => {
+                        if event.text == Key.Escape && root.enable-escape-clear {
+                            if root.text != "" {
+                                root.text = "";
+                                root.search-changed("");
+                                root.cleared();
+                                return accept;
+                            }
+                        }
+                        if event.text == Key.Return {
+                            root.accepted(self.text);
+                            return accept;
+                        }
+                        return reject;
+                    }
+                }
+            }
+        }
+
+        // 3. Integrated Regex Toggle Button (Pinned to the right, vertically centered)
+        if root.enable-regex-toggle : VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+
+            regex-btn := Rectangle {
+                width: 20px;
+                height: 18px;
+                border-radius: 3px;
+                background: root.is-regex
+                    ? Theme.surface-selected
+                    : (regex-touch.has-hover ? Theme.surface-hover : transparent);
+                border-width: root.is-regex ? 1px : 0px;
+                border-color: root.is-regex ? Theme.primary : transparent;
+
+                regex-tooltip-host := TooltipHost {
+                    text: root.regex-tooltip;
+                    shortcut: ".*";
+                    is-enabled: root.is-enabled;
+                }
+
+                regex-touch := TouchArea {
+                    enabled: root.is-enabled;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        regex-tooltip-host.on-hover-leave();
+                        root.is-regex = !root.is-regex;
+                        root.regex-toggled(root.is-regex);
+                    }
+                    moved => {
+                        regex-tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+                    }
+                }
+
+                property <bool> is-regex-hovered: regex-touch.has-hover && root.regex-tooltip != "";
+                changed is-regex-hovered => {
+                    if self.is-regex-hovered {
+                        regex-tooltip-host.on-hover-enter(regex-touch.mouse-x, regex-touch.mouse-y);
+                    } else {
+                        regex-tooltip-host.on-hover-leave();
+                    }
+                }
+
+                Text {
+                    text: ".*";
+                    font-size: 10px;
+                    font-weight: root.is-regex ? 700 : 400;
+                    color: root.is-regex
+                        ? Theme.primary
+                        : (regex-touch.has-hover ? Theme.text : Theme.text-muted);
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // 4. Integrated Clear / Reset Button (Pinned to the right, vertically centered)
+        if root.enable-clear-button && root.text != "" : VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+
+            clear-btn := Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                background: clear-touch.has-hover ? Theme.surface-hover : transparent;
+
+                clear-tooltip-host := TooltipHost {
+                    text: root.clear-tooltip;
+                    shortcut: "Esc";
+                    is-enabled: root.is-enabled;
+                }
+
+                clear-touch := TouchArea {
+                    enabled: root.is-enabled;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        clear-tooltip-host.on-hover-leave();
+                        root.text = "";
+                        root.search-changed("");
+                        root.cleared();
+                        input.focus();
+                    }
+                    moved => {
+                        clear-tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+                    }
+                }
+
+                property <bool> is-clear-hovered: clear-touch.has-hover && root.clear-tooltip != "";
+                changed is-clear-hovered => {
+                    if self.is-clear-hovered {
+                        clear-tooltip-host.on-hover-enter(clear-touch.mouse-x, clear-touch.mouse-y);
+                    } else {
+                        clear-tooltip-host.on-hover-leave();
+                    }
+                }
+
+                Text {
+                    text: "✕";
+                    font-size: 9px;
+                    font-weight: 700;
+                    color: clear-touch.has-hover ? Theme.text : Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

@@ -1,14 +1,14 @@
 import { Theme } from "styles.slint";
 import { Icons } from "icons.slint";
-import { PanelToolbar, ToolbarButton, ToolbarToggleButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
+import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
 import { ToolbarThumbWidthControl } from "toolbar_thumb_width_control.slint";
 import { ToolbarSearchField } from "toolbar_search_field.slint";
 
 /// Dedicated modular toolbar for the Media Grid View.
-/// Integrates Thumbnail Width Slider (left-aligned), Expander, Filter Search, Regex Toggle, Refresh, and ViewMode Switcher.
+/// Integrates Thumbnail Width Slider (left-aligned), Expander, Filter Search (with embedded Regex & Clear), Refresh, and ViewMode Switcher.
 export component MediaGridPanelToolbar inherits PanelToolbar {
     in-out property <int> thumb-width: 190;
-    in-out property <string> search-text <=> search-field.text;
+    in-out property <string> search-text: "";
     in-out property <bool> regex-mode: false;
     in-out property <bool> is-table-view: false;
 
@@ -29,40 +29,30 @@ export component MediaGridPanelToolbar inherits PanelToolbar {
     // 2. Expander / Spacer (Expands to push search & view actions to the right)
     ToolbarSpacer {}
 
-    // 3. Filter Search Field
+    // 3. Filter Search Field (with inline Regex Toggle and Clear button)
     search-field := ToolbarSearchField {
         placeholder-text: "Filter...";
-        field-width: 150px;
+        field-width: 160px;
+        text <=> root.search-text;
+        is-regex <=> root.regex-mode;
         search-changed(txt) => { root.search-changed(txt); }
+        regex-toggled(r) => { root.regex-toggled(r); }
     }
 
-    // 4. Filter Regex Toggle Button
-    ToolbarToggleButton {
-        text: ".*";
-        is-active: root.regex-mode;
-        tooltip: "Toggle Regular Expression filter mode";
-        font-size: 12px;
-        padding-horizontal: 6px;
-        toggled(active) => {
-            root.regex-mode = active;
-            root.regex-toggled(active);
-        }
-    }
-
-    // 5. Separator
+    // 4. Separator
     ToolbarSeparator {}
 
-    // 6. Refresh Media Button
+    // 5. Refresh Media Button
     ToolbarButton {
         icon: Icons.refresh;
         tooltip: "Scan and refresh media in current folder";
         clicked => { root.refresh-clicked(); }
     }
 
-    // 7. Separator
+    // 6. Separator
     ToolbarSeparator {}
 
-    // 8. View Mode Switcher Button
+    // 7. View Mode Switcher Button
     ToolbarButton {
         icon: root.is-table-view ? Icons.grid-view : Icons.list-view;
         tooltip: root.is-table-view ? "Switch to Grid View" : "Switch to Table View";

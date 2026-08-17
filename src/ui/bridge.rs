@@ -114,6 +114,8 @@ impl UiBridge {
         window.set_has_file_selection(true);
         window.set_has_active_query(false);
         window.set_partial_ratings(ModelRc::new(VecModel::from(vec![false; 6])));
+        window.set_tag_filter_text("".into());
+        window.set_tag_filter_is_regex(false);
 
         let state = Arc::new(RwLock::new(initial_state));
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());

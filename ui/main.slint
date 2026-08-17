@@ -106,6 +106,7 @@ export component MainWindow inherits Window {
     in property <[bool]> partial-ratings: [false, false, false, false, false, false];
     in-out property <bool> has-active-query: false;
     in-out property <string> tag-filter-text: "";
+    in-out property <bool> tag-filter-is-regex: false;
 
     // Multi-Level Cascading Context Menu State
     in-out property <bool> is-context-menu-open: false;
@@ -157,6 +158,7 @@ export component MainWindow inherits Window {
     callback tag-context-menu(int /* tag_id */, length /* x */, length /* y */);
     callback tag-root-context-menu(length /* x */, length /* y */);
     callback tag-filter-changed(string);
+    callback tag-regex-toggled(bool);
     callback tag-mode-toggled(bool);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
@@ -180,19 +182,6 @@ export component MainWindow inherits Window {
     callback player-set-volume(float);
     callback player-stop();
     callback player-close();
-
-    // Global Key Interceptor
-    forward-focus: global-focus;
-    global-focus := FocusScope {
-        key-pressed(event) => {
-            if event.text == Key.Escape && root.is-context-menu-open {
-                root.is-context-menu-open = false;
-                root.context-menu-dismissed();
-                return accept;
-            }
-            return reject;
-        }
-    }
 
     VerticalLayout {
         spacing: 0px;
@@ -325,6 +314,7 @@ export component MainWindow inherits Window {
                 partial-ratings: root.partial-ratings;
                 has-active-query: root.has-active-query;
                 tag-filter-text <=> root.tag-filter-text;
+                tag-filter-is-regex <=> root.tag-filter-is-regex;
                 info-filename: root.info-filename;
                 info-size: root.info-size;
                 info-dimensions: root.info-dimensions;
@@ -339,6 +329,7 @@ export component MainWindow inherits Window {
                 tag-context-menu(id, x, y) => { root.tag-context-menu(id, sidebar_right.x + x, 38px + sidebar_right.y + y); }
                 root-context-menu(x, y) => { root.tag-root-context-menu(sidebar_right.x + x, 38px + sidebar_right.y + y); }
                 tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
+                tag-regex-toggled(r) => { root.tag-regex-toggled(r); }
                 match-mode-changed(m) => { root.match-mode-changed(m); }
                 scope-mode-changed(s) => { root.scope-mode-changed(s); }
                 reset-clicked => { root.tag-reset-clicked(); }

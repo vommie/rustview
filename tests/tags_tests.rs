@@ -1,9 +1,12 @@
-use rustview::library::models::MediaSearchParams;
+use regex::RegexBuilder;
+use rustview::library::models::{MediaSearchParams, TagRecord};
 use rustview::library::Library;
 use rustview::query::{MatchMode, ScopeMode};
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_state::UiState;
-use rustview::ui::bridge_tags::{BridgeTags, TagSelectionStats};
+use rustview::ui::bridge_tags::{
+    BridgeTags, TagFlattenContext, TagSelectionStats, TagTreeBuilder,
+};
 use std::collections::HashSet;
 use tempfile::tempdir;
 
@@ -259,6 +262,145 @@ fn test_database_search_all_vs_any_and_scope_modes() {
     let res_global = lib.media().search(&params_global).unwrap();
     let glob_ids: HashSet<_> = res_global.iter().map(|m| m.id).collect();
     assert_eq!(glob_ids, HashSet::from([m1_1, m1_sub, m2_1]));
+}
+
+#[test]
+fn test_tag_tree_filter_substring_and_regex() {
+    let tags = vec![
+        TagRecord {
+            id: 1,
+            parent_id: None,
+            name: "Animals".to_string(),
+        },
+        TagRecord {
+            id: 2,
+            parent_id: Some(1),
+            name: "Mammals".to_string(),
+        },
+        TagRecord {
+            id: 3,
+            parent_id: Some(2),
+            name: "Canines".to_string(),
+        },
+        TagRecord {
+            id: 4,
+            parent_id: None,
+            name: "Landscapes".to_string(),
+        },
+    ];
+
+    let tree = TagTreeBuilder::build_hierarchy(&tags);
+    let expanded = HashSet::from([1, 2]);
+    let selected = HashSet::new();
+    let stats = TagSelectionStats::default();
+
+    // 1. Substring Filter ("can") -> Animals & Mammals dimmed ancestors, Canines matched
+    let ctx_sub = TagFlattenContext {
+        expanded_set: &expanded,
+        selected_query_tags: &selected,
+        filter_text: "can",
+        filter_regex: None,
+        is_regex: false,
+        stats: &stats,
+        is_assign_mode: false,
+    };
+    let mut out_sub = Vec::new();
+    TagTreeBuilder::flatten(&tree, 0, &ctx_sub, &mut out_sub);
+
+    assert_eq!(out_sub.len(), 3);
+    assert_eq!(out_sub[0].name, "Animals");
+    assert!(out_sub[0].is_dimmed);
+    assert_eq!(out_sub[1].name, "Mammals");
+    assert!(out_sub[1].is_dimmed);
+    assert_eq!(out_sub[2].name, "Canines");
+    assert!(!out_sub[2].is_dimmed);
+
+    // 2. Regex Filter (r"^Land.*") -> Matches Landscapes only
+    let regex_land = RegexBuilder::new(r"^Land.*")
+        .case_insensitive(true)
+        .build()
+        .unwrap();
+    let ctx_regex = TagFlattenContext {
+        expanded_set: &expanded,
+        selected_query_tags: &selected,
+        filter_text: "^land.*",
+        filter_regex: Some(&regex_land),
+        is_regex: true,
+        stats: &stats,
+        is_assign_mode: false,
+    };
+    let mut out_regex = Vec::new();
+    TagTreeBuilder::flatten(&tree, 0, &ctx_regex, &mut out_regex);
+
+    assert_eq!(out_regex.len(), 1);
+    assert_eq!(out_regex[0].name, "Landscapes");
+    assert!(!out_regex[0].is_dimmed);
+
+    // 3. Regex Filter matching suffix (r".*s$") -> Matches Animals, Mammals, Canines, Landscapes
+    let regex_suffix = RegexBuilder::new(r".*s$")
+        .case_insensitive(true)
+        .build()
+        .unwrap();
+    let ctx_suffix = TagFlattenContext {
+        expanded_set: &expanded,
+        selected_query_tags: &selected,
+        filter_text: ".*s$",
+        filter_regex: Some(&regex_suffix),
+        is_regex: true,
+        stats: &stats,
+        is_assign_mode: false,
+    };
+    let mut out_suffix = Vec::new();
+    TagTreeBuilder::flatten(&tree, 0, &ctx_suffix, &mut out_suffix);
+
+    assert_eq!(out_suffix.len(), 4);
+    assert!(!out_suffix[0].is_dimmed);
+    assert!(!out_suffix[1].is_dimmed);
+    assert!(!out_suffix[2].is_dimmed);
+    assert!(!out_suffix[3].is_dimmed);
+}
+
+#[test]
+fn test_tag_tree_filter_invalid_regex_safety() {
+    let tags = vec![
+        TagRecord {
+            id: 1,
+            parent_id: None,
+            name: "Animals".to_string(),
+        },
+        TagRecord {
+            id: 2,
+            parent_id: Some(1),
+            name: "Canines".to_string(),
+        },
+    ];
+    let tree = TagTreeBuilder::build_hierarchy(&tags);
+    let expanded = HashSet::from([1]);
+    let selected = HashSet::new();
+    let stats = TagSelectionStats::default();
+
+    // Invalid regex syntax "\" (fails compilation)
+    let filter_text = "\\";
+    let regex_matcher = RegexBuilder::new(filter_text)
+        .case_insensitive(true)
+        .build()
+        .ok();
+    assert!(regex_matcher.is_none());
+
+    let ctx = TagFlattenContext {
+        expanded_set: &expanded,
+        selected_query_tags: &selected,
+        filter_text: "\\",
+        filter_regex: regex_matcher.as_ref(),
+        is_regex: true,
+        stats: &stats,
+        is_assign_mode: false,
+    };
+    let mut out = Vec::new();
+    TagTreeBuilder::flatten(&tree, 0, &ctx, &mut out);
+
+    // Matches 0 rows without panic, loop or stack overflow
+    assert_eq!(out.len(), 0);
 }
 
 #[test]

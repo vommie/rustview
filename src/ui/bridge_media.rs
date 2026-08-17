@@ -41,7 +41,11 @@ impl BridgeMedia {
         let set = settings.clone();
         let st = state.clone();
         window.on_search_query_changed(move |query| {
-            tracing::debug!(query = %query, "[QueryFilter] Search query updated by user");
+            tracing::info!(
+                query = %query,
+                query_len = query.len(),
+                "[SearchFilter: InputEvent] Media search query text changed"
+            );
             st.write().filter.search_query = query.to_string();
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
@@ -54,7 +58,7 @@ impl BridgeMedia {
         window.on_regex_mode_toggled(move |enabled| {
             tracing::info!(
                 regex_enabled = enabled,
-                "[QueryFilter] Regex filter mode toggled"
+                "[SearchFilter: InputEvent] Media regex filter mode toggled"
             );
             st.write().filter.is_regex = enabled;
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
@@ -721,6 +725,8 @@ impl BridgeMedia {
 
         tracing::debug!(
             is_query = is_query_active,
+            search_query = %current_query,
+            is_regex = filter.is_regex,
             sort_column = ?sort_col,
             sort_order = ?sort_ord,
             matched = matched_count,

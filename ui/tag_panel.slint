@@ -1,10 +1,11 @@
-import { Button, LineEdit } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { TagNodeView } from "types.slint";
 import { RatingBar } from "rating_bar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { NodeButton } from "node_button.slint";
 import { TagPanelToolbar } from "tag_panel_toolbar.slint";
+import { TagSearchFilter } from "tag_search_filter.slint";
 
 export component TagDockHeader inherits Rectangle {
     height: 22px;
@@ -235,7 +236,8 @@ export component TagPanel inherits VerticalLayout {
     in property <bool> has-selection: true;
     in property <[bool]> partial-ratings: [false, false, false, false, false, false];
     in property <bool> has-active-query: false;
-    in-out property <string> filter-text <=> filter-input.text;
+    in-out property <string> filter-text: "";
+    in-out property <bool> tag-filter-is-regex: false;
     in property <[TagNodeView]> tags: [];
 
     callback mode-toggled(bool);
@@ -244,6 +246,7 @@ export component TagPanel inherits VerticalLayout {
     callback reset-clicked();
     callback rating-selected(int);
     callback tag-filter-changed(string);
+    callback tag-regex-toggled(bool);
     callback tag-clicked(int);
     callback tag-toggle-expand(int);
     callback tag-context-menu(int, length, length);
@@ -275,10 +278,13 @@ export component TagPanel inherits VerticalLayout {
         rating-selected(r) => { root.rating-selected(r); }
     }
 
-    // 4. Tag Filter Input
-    filter-input := LineEdit {
+    // 4. Tag Filter Input with integrated regex toggle & clear button
+    filter-input := TagSearchFilter {
+        text <=> root.filter-text;
+        is-regex <=> root.tag-filter-is-regex;
         placeholder-text: "Filter tags...";
-        edited(text) => { root.tag-filter-changed(text); }
+        search-changed(text) => { root.tag-filter-changed(text); }
+        regex-toggled(r) => { root.tag-regex-toggled(r); }
     }
 
     // 5. Tag Hierarchical Tree View (Top-to-Bottom Wrapping & Pure Horizontal Scrolling)
