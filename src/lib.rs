@@ -1,4 +1,5 @@
 pub mod app;
+pub mod cli_api;
 pub mod ctx_menu;
 pub mod library;
 pub mod media;

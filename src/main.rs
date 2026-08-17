@@ -12,7 +12,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = dirs_data_dir();
     let config_dir = dirs_config_dir();
 
-    // 1. Check for standalone CLI migration arguments before starting UI
+    // 1. Standalone Headless CLI API for external tools (e.g. PyCut)
+    if rustview::cli_api::is_api_requested(&args) {
+        match rustview::cli_api::run_cli_api(&args, &data_dir) {
+            Ok(exit_code) => std::process::exit(exit_code),
+            Err(e) => {
+                eprintln!("API Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // 2. Standalone CLI Migration Tool (XnViewMP)
     if rustview::xnviewdb_migrate::is_migration_requested(&args) {
         tracing_subscriber::fmt()
             .with_target(false)
@@ -32,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // 2. Standard GUI Startup with structured logging output
+    // 3. Standard GUI Startup with structured logging output
     tracing_subscriber::fmt()
         .with_target(false)
         .with_thread_names(true)
