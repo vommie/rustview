@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
-
-<svg fill="#000000" width="666.69476" height="666.69476" viewBox="-1 0 15.834001 15.834001" class="cf-icon-svg" version="1.1" id="svg1" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
-  <defs id="defs1" />
-  <path d="M 14.834,7.917 A 7.917,7.917 0 1 1 6.917,0 7.917,7.917 0 0 1 14.834,7.917 Z M 8.083,4.825 H 6.665 L 4.507,6.407 5.313,7.51 6.535,6.565 v 4.816 h 1.547 z" id="path1" style="fill:#eeaaaa" />
+<svg width="24" height="24" viewBox="-1 0 15.834001 15.834001" class="cf-icon-svg" version="1.1" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 14.834,7.917 A 7.917,7.917 0 1 1 6.917,0 7.917,7.917 0 0 1 14.834,7.917 Z M 8.083,4.825 H 6.665 L 4.507,6.407 5.313,7.51 6.535,6.565 v 4.816 h 1.547 z" fill="#eeaaaa" />
 </svg>

@@ -1,0 +1,65 @@
+import { Theme } from "styles.slint";
+
+/// Global Single Point of Truth (SPoT) Registry for all SVG application icons in Slint.
+export global Icons {
+    out property <image> settings: @image-url("icons/settings.svg");
+    out property <image> refresh: @image-url("icons/refresh.svg");
+    out property <image> grid-view: @image-url("icons/grid_view.svg");
+    out property <image> list-view: @image-url("icons/list_view.svg");
+    out property <image> plus: @image-url("icons/plus.svg");
+    out property <image> minus: @image-url("icons/minus.svg");
+    out property <image> caret-up: @image-url("icons/caret-up.svg");
+    out property <image> caret-down: @image-url("icons/caret-down.svg");
+    out property <image> regex: @image-url("icons/regex.svg");
+    out property <image> query-folder: @image-url("icons/query_mode_folder.svg");
+    out property <image> query-subfolders: @image-url("icons/query_mode_folder_and_subfolders.svg");
+    out property <image> query-global: @image-url("icons/query_mode_gobal.svg");
+    out property <image> tag: @image-url("icons/tag.svg");
+    out property <image> rating-0: @image-url("icons/rating_0.svg");
+    out property <image> rating-1: @image-url("icons/rating_1.svg");
+    out property <image> rating-2: @image-url("icons/rating_2.svg");
+    out property <image> rating-3: @image-url("icons/rating_3.svg");
+    out property <image> rating-4: @image-url("icons/rating_4.svg");
+    out property <image> rating-5: @image-url("icons/rating_5.svg");
+
+    /// Returns the rating icon for a rating value (0..5). Never colorized.
+    pure public function rating-icon(rating: int) -> image {
+        if rating == 1 { return @image-url("icons/rating_1.svg"); }
+        if rating == 2 { return @image-url("icons/rating_2.svg"); }
+        if rating == 3 { return @image-url("icons/rating_3.svg"); }
+        if rating == 4 { return @image-url("icons/rating_4.svg"); }
+        if rating == 5 { return @image-url("icons/rating_5.svg"); }
+        return @image-url("icons/rating_0.svg");
+    }
+
+    /// Resolves an icon image by contextual name.
+    pure public function by-name(name: string) -> image {
+        if name == "settings" { return @image-url("icons/settings.svg"); }
+        if name == "refresh" { return @image-url("icons/refresh.svg"); }
+        if name == "grid" || name == "grid_view" { return @image-url("icons/grid_view.svg"); }
+        if name == "list" || name == "list_view" { return @image-url("icons/list_view.svg"); }
+        if name == "plus" { return @image-url("icons/plus.svg"); }
+        if name == "minus" { return @image-url("icons/minus.svg"); }
+        if name == "caret-up" { return @image-url("icons/caret-up.svg"); }
+        if name == "caret-down" { return @image-url("icons/caret-down.svg"); }
+        if name == "regex" { return @image-url("icons/regex.svg"); }
+        if name == "folder" || name == "query_folder" { return @image-url("icons/query_mode_folder.svg"); }
+        if name == "folders" || name == "query_subfolders" { return @image-url("icons/query_mode_folder_and_subfolders.svg"); }
+        if name == "world" || name == "global" || name == "query_global" { return @image-url("icons/query_mode_gobal.svg"); }
+        if name == "tag" { return @image-url("icons/tag.svg"); }
+        return @image-url("icons/settings.svg");
+    }
+}
+
+/// Dedicated, modular Vector Icon component with intelligent tinting/colorization support.
+export component AppIcon inherits Image {
+    in property <image> icon <=> self.source;
+    in property <color> color: Theme.text;
+    in property <bool> allow-tint: true;
+    in property <length> size: 16px;
+
+    width: root.size;
+    height: root.size;
+    image-fit: contain;
+    colorize: root.allow-tint ? root.color : transparent;
+}

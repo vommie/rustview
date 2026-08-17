@@ -27,6 +27,7 @@ pub mod bridge_tags;
 pub mod bridge_thumbnails;
 pub mod favorites;
 pub mod file_selection;
+pub mod icons;
 pub mod models;
 
 pub use bridge::UiBridge;
@@ -47,3 +48,4 @@ pub use bridge_state::*;
 pub use bridge_tag_dialogs::TagDialogController;
 pub use favorites::FavoriteManager;
 pub use file_selection::{FileSelectionModel, FileSelectionSummary};
+pub use icons::{IconAsset, IconManager, IconMetadata};

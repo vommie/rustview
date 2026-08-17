@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIcon } from "icons.slint";
 
 export struct ToolbarSelectItem {
     id: int,
@@ -7,11 +8,12 @@ export struct ToolbarSelectItem {
 }
 
 /// Compact, modular select/dropdown button tailored for panel toolbars.
-/// Supports Icon-only, Text-only, or Icon+Text rendering for both the button and its popup options.
+/// Supports Icon-only, Text-only, or Icon+Text rendering with theme-adaptive SVG colorization.
 export component ToolbarSelectButton inherits Rectangle {
     in property <[ToolbarSelectItem]> model: [];
     in-out property <int> current-index: 0;
     in property <bool> is-enabled: true;
+    in property <bool> allow-icon-tint: true;
     in property <string> tooltip: "";
 
     // Display modes: 0 = Icon Only, 1 = Text Only, 2 = Icon + Text
@@ -66,12 +68,14 @@ export component ToolbarSelectButton inherits Rectangle {
         spacing: 3px;
         alignment: center;
 
-        if root.btn-has-icon : Image {
-            source: root.active-item.icon;
-            width: root.icon-size;
-            height: root.icon-size;
+        if root.btn-has-icon : AppIcon {
+            icon: root.active-item.icon;
+            size: root.icon-size;
+            allow-tint: root.allow-icon-tint;
+            color: !root.is-enabled ? Theme.text-muted : (
+                touch-area.has-hover ? Theme.text : Theme.text-muted
+            );
             y: (parent.height - self.height) / 2;
-            image-fit: contain;
             opacity: root.is-enabled ? (touch-area.has-hover ? 1.0 : 0.85) : 0.4;
         }
 
@@ -129,12 +133,12 @@ export component ToolbarSelectButton inherits Rectangle {
                         spacing: 6px;
                         alignment: start;
 
-                        if (root.popup-display-mode == 0 || root.popup-display-mode == 2) && item.icon.width > 0 : Image {
-                            source: item.icon;
-                            width: root.icon-size;
-                            height: root.icon-size;
+                        if (root.popup-display-mode == 0 || root.popup-display-mode == 2) && item.icon.width > 0 : AppIcon {
+                            icon: item.icon;
+                            size: root.icon-size;
+                            allow-tint: root.allow-icon-tint;
+                            color: (idx == root.current-index) ? Theme.primary : Theme.text;
                             y: (parent.height - self.height) / 2;
-                            image-fit: contain;
                         }
 
                         if root.popup-display-mode == 1 || root.popup-display-mode == 2 : Text {

@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
+import { AppIcon } from "icons.slint";
 
-/// Modular, jitter-free toggle button component for panel toolbars.
-/// Automatically calculates its fixed width from the longest text state to prevent layout shifts when toggled.
+/// Modular, jitter-free toggle button component for panel toolbars with theme-adaptive SVG colorization.
 export component ToolbarToggleButton inherits Rectangle {
     in property <string> prefix: "";
     in property <string> text-active: "";
@@ -12,6 +12,7 @@ export component ToolbarToggleButton inherits Rectangle {
 
     in-out property <bool> is-active: false;
     in property <bool> is-enabled: true;
+    in property <bool> allow-icon-tint: true;
 
     in property <length> icon-size: 13px;
     in property <length> font-size: 11px;
@@ -97,12 +98,16 @@ export component ToolbarToggleButton inherits Rectangle {
         spacing: 4px;
         alignment: center;
 
-        if root.has-icon : Image {
-            source: root.icon;
-            width: root.icon-size;
-            height: root.icon-size;
+        if root.has-icon : AppIcon {
+            icon: root.icon;
+            size: root.icon-size;
+            allow-tint: root.allow-icon-tint;
+            color: !root.is-enabled ? Theme.text-muted : (
+                root.is-active ? Theme.primary : (
+                    touch-area.has-hover ? Theme.text : Theme.text-muted
+                )
+            );
             y: (parent.height - self.height) / 2;
-            image-fit: contain;
             opacity: root.is-enabled ? 1.0 : 0.4;
         }
 

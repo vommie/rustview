@@ -1,13 +1,15 @@
 import { Theme } from "styles.slint";
+import { AppIcon } from "icons.slint";
 
 /// Compact, versatile button component designed specifically for panel toolbars.
-/// Supports Icon-only, Text-only, and Icon+Text modes with automatic sizing, disabled states, and perfect vertical centering.
+/// Supports Icon-only, Text-only, and Icon+Text modes with automatic sizing, disabled states, and theme-adaptive icon colorization.
 export component ToolbarButton inherits Rectangle {
     in property <image> icon;
     in property <string> text: "";
     in property <string> tooltip: "";
     in property <bool> is-enabled: true;
     in property <bool> is-active: false;
+    in property <bool> allow-icon-tint: true;
     in property <length> icon-size: 13px;
     in property <length> font-size: 11px;
     in property <length> button-width: 0px;
@@ -17,7 +19,6 @@ export component ToolbarButton inherits Rectangle {
     property <bool> has-icon: root.icon.width > 0 && root.icon.height > 0;
     property <bool> has-text: root.text != "";
 
-    // Auto-size width: custom button-width if set (> 0px), square (self.height) when icon-only, content-fitted when text is present
     width: root.button-width > 0px
         ? root.button-width
         : ((!root.has-text && root.has-icon)
@@ -53,12 +54,16 @@ export component ToolbarButton inherits Rectangle {
         spacing: 4px;
         alignment: center;
 
-        if root.has-icon : Image {
-            source: root.icon;
-            width: root.icon-size;
-            height: root.icon-size;
+        if root.has-icon : AppIcon {
+            icon: root.icon;
+            size: root.icon-size;
+            allow-tint: root.allow-icon-tint;
+            color: !root.is-enabled ? Theme.text-muted : (
+                root.is-active ? Theme.primary : (
+                    touch-area.has-hover ? Theme.text : Theme.text-muted
+                )
+            );
             y: (parent.height - self.height) / 2;
-            image-fit: contain;
             opacity: root.is-enabled ? (touch-area.has-hover ? 1.0 : 0.85) : 0.4;
         }
 

@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { Icons, AppIcon } from "icons.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
@@ -84,17 +85,17 @@ export component MediaTile inherits Rectangle {
                 }
             }
 
-            // Top-Left Tag Badge
+            // Top-Left Tag Badge (Non-tinted vibrant tag icon)
             if item.has-tags : Rectangle {
                 x: 4px;
                 y: 4px;
                 width: 14px;
                 height: 14px;
 
-                Image {
-                    source: @image-url("icons/tag.svg");
-                    width: 100%;
-                    height: 100%;
+                AppIcon {
+                    icon: Icons.tag;
+                    allow-tint: false;
+                    size: 14px;
                 }
             }
 

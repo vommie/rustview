@@ -1,5 +1,6 @@
-import { Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
+import { Icons } from "icons.slint";
+import { ToolbarButton } from "toolbar_button.slint";
 
 export component TopToolbar inherits Rectangle {
     height: 38px;
@@ -20,9 +21,13 @@ export component TopToolbar inherits Rectangle {
         spacing: 8px;
         alignment: start;
 
-        Button {
+        ToolbarButton {
             text: "Settings";
-            icon: @image-url("icons/settings.svg");
+            icon: Icons.settings;
+            icon-size: 15px;
+            font-size: 12px;
+            height: 28px;
+            y: (parent.height - self.height) / 2;
             clicked => { root.settings-clicked(); }
         }
     }

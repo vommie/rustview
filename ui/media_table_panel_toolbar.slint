@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { Icons } from "icons.slint";
 import { PanelToolbar, ToolbarButton, ToolbarToggleButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
 import { ToolbarSearchField } from "toolbar_search_field.slint";
 
@@ -44,7 +45,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
 
     // 5. Refresh Media Button
     ToolbarButton {
-        icon: @image-url("icons/refresh.svg");
+        icon: Icons.refresh;
         tooltip: "Scan and refresh media in current folder";
         clicked => { root.refresh-clicked(); }
     }
@@ -54,7 +55,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
 
     // 7. View Mode Switcher Button
     ToolbarButton {
-        icon: root.is-table-view ? @image-url("icons/grid_view.svg") : @image-url("icons/list_view.svg");
+        icon: root.is-table-view ? Icons.grid-view : Icons.list-view;
         tooltip: root.is-table-view ? "Switch to Grid View" : "Switch to Table View";
         clicked => { root.view-mode-toggled(!root.is-table-view); }
     }
