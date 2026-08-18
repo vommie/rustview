@@ -5,6 +5,10 @@ fn test_icon_asset_metadata_and_spot_tint_rules() {
     // 1. Verify monochrome action/toolbar icons are tintable
     assert!(IconAsset::Settings.is_tintable());
     assert!(IconAsset::Refresh.is_tintable());
+    assert!(IconAsset::Loader.is_tintable());
+    assert!(IconAsset::FolderTreeNodesFold.is_tintable());
+    assert!(IconAsset::HiddenFoldersInvisible.is_tintable());
+    assert!(IconAsset::HiddenFoldersVisible.is_tintable());
     assert!(IconAsset::GridView.is_tintable());
     assert!(IconAsset::ListView.is_tintable());
     assert!(IconAsset::Plus.is_tintable());
@@ -30,6 +34,19 @@ fn test_icon_asset_metadata_and_spot_tint_rules() {
 fn test_icon_manager_resolution_by_name() {
     assert_eq!(IconAsset::from_name("settings"), Some(IconAsset::Settings));
     assert_eq!(IconAsset::from_name("refresh"), Some(IconAsset::Refresh));
+    assert_eq!(IconAsset::from_name("loader"), Some(IconAsset::Loader));
+    assert_eq!(
+        IconAsset::from_name("folder_tree_nodes_fold"),
+        Some(IconAsset::FolderTreeNodesFold)
+    );
+    assert_eq!(
+        IconAsset::from_name("hidden_invisible"),
+        Some(IconAsset::HiddenFoldersInvisible)
+    );
+    assert_eq!(
+        IconAsset::from_name("hidden_visible"),
+        Some(IconAsset::HiddenFoldersVisible)
+    );
     assert_eq!(IconAsset::from_name("grid_view"), Some(IconAsset::GridView));
     assert_eq!(IconAsset::from_name("list_view"), Some(IconAsset::ListView));
     assert_eq!(IconAsset::from_name("tag"), Some(IconAsset::Tag));
@@ -37,6 +54,7 @@ fn test_icon_manager_resolution_by_name() {
     assert_eq!(IconAsset::from_name("unknown_icon"), None);
 
     assert!(IconManager::is_tintable("settings"));
+    assert!(IconManager::is_tintable("folder_tree_nodes_fold"));
     assert!(!IconManager::is_tintable("tag"));
     assert!(!IconManager::is_tintable("rating_4"));
 }

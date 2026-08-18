@@ -124,6 +124,7 @@ export component FolderPanel inherits VerticalLayout {
     callback folder-toggle-expand(int);
     callback folder-context-menu(int, length, length);
     callback refresh-clicked();
+    callback collapse-all-clicked();
     callback toggle-hidden-folders(bool);
 
     /// Public endpoint to scroll to specific folder row index
@@ -150,10 +151,11 @@ export component FolderPanel inherits VerticalLayout {
         }
     }
 
-    // Modular Encapsulated Panel Toolbar with integrated Throbber and Hidden Folders Toggle Button
+    // Modular Encapsulated Panel Toolbar
     FolderPanelToolbar {
         is-refreshing: root.is-refreshing;
         show-hidden <=> root.show-hidden-folders;
+        collapse-all-clicked => { root.collapse-all-clicked(); }
         toggle-hidden-clicked(h) => { root.toggle-hidden-folders(h); }
         refresh-clicked => { root.refresh-clicked(); }
     }

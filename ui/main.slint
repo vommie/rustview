@@ -141,6 +141,7 @@ export component MainWindow inherits Window {
     callback folder-toggle-expand(int);
     callback folder-context-menu(int /* id */, length /* x */, length /* y */);
     callback folder-refresh-clicked();
+    callback folder-collapse-all-clicked();
     callback favorite-selected(string);
     callback toggle-hidden-folders(bool /* show_hidden */);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
@@ -208,6 +209,7 @@ export component MainWindow inherits Window {
                 is-refreshing-folders: root.is-refreshing-folders;
                 show-hidden-folders <=> root.show-hidden-folders;
                 toggle-hidden-folders(h) => { root.toggle-hidden-folders(h); }
+                folder-collapse-all-clicked => { root.folder-collapse-all-clicked(); }
                 folder-clicked(id, path) => { root.folder-selected(id, path); }
                 folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
                 folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 38px + sidebar_left.y + y); }
@@ -222,7 +224,7 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-left-width;
                 }
                 dragged(delta) => {
-                    root.sidebar-left-width = Math.max(150px, Math.min(700px, self.start-w + delta));
+                    root.sidebar-left-width = Math.max(150px, Math.min(700px, self.start-w - delta));
                     root.sidebar-left-resized(root.sidebar-left-width);
                 }
                 drag-finished => {

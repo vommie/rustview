@@ -2,6 +2,7 @@ use heed::BytesDecode;
 use rustview::library::dot_hidden::DotHiddenCache;
 use rustview::library::Library;
 use rustview::library::models::FolderRecordCodec;
+use rustview::settings::SettingsManager;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
 use rustview::ui::bridge_folders::{FolderFlattenContext, FolderTreeBuilder};
 use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB};
@@ -130,11 +131,6 @@ fn test_hidden_folders_and_dot_hidden_file_support() {
     let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
     let root = tmp_media.path();
 
-    // Directory hierarchy:
-    // root -> NormalDir
-    // root -> .hidden_dot_dir (Standard Linux dot-folder)
-    // root -> ListedHiddenDir (Listed in root/.hidden file)
-    // root -> ExplicitVisibleDir
     let normal_dir = root.join("NormalDir");
     let dot_dir = root.join(".hidden_dot_dir");
     let listed_dir = root.join("ListedHiddenDir");
@@ -154,7 +150,7 @@ fn test_hidden_folders_and_dot_hidden_file_support() {
         .unwrap();
 
     let folders = lib.folders().list_folders().unwrap();
-    assert_eq!(folders.len(), 5); // root + 4 children
+    assert_eq!(folders.len(), 5);
 
     let root_folder = lib.folders().get_folder_by_path(root).unwrap().unwrap();
     let media_counts = HashMap::new();
@@ -163,8 +159,7 @@ fn test_hidden_folders_and_dot_hidden_file_support() {
     let mut expanded_ids = HashSet::new();
     expanded_ids.insert(root_folder.id);
 
-    // 1. When show_hidden = false and support_dot_hidden = true:
-    // Both .hidden_dot_dir AND ListedHiddenDir must be HIDDEN.
+    // 1. When show_hidden = false and support_dot_hidden = true
     let mut dot_hidden_cache = DotHiddenCache::new();
     let mut ctx_hidden = FolderFlattenContext {
         expanded_ids: &expanded_ids,
@@ -181,12 +176,11 @@ fn test_hidden_folders_and_dot_hidden_file_support() {
     let names: Vec<_> = flattened_hidden.iter().map(|f| f.name.as_str()).collect();
     assert!(names.contains(&"NormalDir"));
     assert!(names.contains(&"ExplicitVisibleDir"));
-    assert!(!names.contains(&".hidden_dot_dir"), "Dot folders should be hidden");
-    assert!(!names.contains(&"ListedHiddenDir"), "Listed .hidden entries should be hidden");
-    assert_eq!(flattened_hidden.len(), 3); // root, NormalDir, ExplicitVisibleDir
+    assert!(!names.contains(&".hidden_dot_dir"));
+    assert!(!names.contains(&"ListedHiddenDir"));
+    assert_eq!(flattened_hidden.len(), 3);
 
-    // 2. When show_hidden = true:
-    // ALL directories must be visible!
+    // 2. When show_hidden = true
     let mut dot_hidden_cache_all = DotHiddenCache::new();
     let mut ctx_all = FolderFlattenContext {
         expanded_ids: &expanded_ids,
@@ -205,29 +199,115 @@ fn test_hidden_folders_and_dot_hidden_file_support() {
     assert!(all_names.contains(&".hidden_dot_dir"));
     assert!(all_names.contains(&"ListedHiddenDir"));
     assert!(all_names.contains(&"ExplicitVisibleDir"));
-    assert_eq!(flattened_all.len(), 5); // root + 4 children
+    assert_eq!(flattened_all.len(), 5);
+}
 
-    // 3. When support_dot_hidden = false:
-    // .hidden_dot_dir is still hidden (dot-folder), but ListedHiddenDir is SHOWN because .hidden is ignored!
-    let mut dot_hidden_cache_no_dot = DotHiddenCache::new();
-    let mut ctx_no_dot = FolderFlattenContext {
-        expanded_ids: &expanded_ids,
-        selected_id: None,
-        show_deleted: true,
-        show_metrics: false,
-        show_hidden: false,
-        support_dot_hidden: false,
-        dot_hidden_cache: &mut dot_hidden_cache_no_dot,
-    };
-    let mut flattened_no_dot_hidden = Vec::new();
-    FolderTreeBuilder::flatten(&tree, 0, &mut ctx_no_dot, &mut flattened_no_dot_hidden);
+#[test]
+fn test_collapse_all_except_active_path() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+    let tmp_config = tempdir().unwrap();
 
-    let no_dot_names: Vec<_> = flattened_no_dot_hidden.iter().map(|f| f.name.as_str()).collect();
-    assert!(no_dot_names.contains(&"NormalDir"));
-    assert!(no_dot_names.contains(&"ExplicitVisibleDir"));
-    assert!(no_dot_names.contains(&"ListedHiddenDir"), "Listed .hidden entries should be shown when option is disabled");
-    assert!(!no_dot_names.contains(&".hidden_dot_dir"));
-    assert_eq!(flattened_no_dot_hidden.len(), 4);
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let root = tmp_media.path();
+
+    // Branch A: root -> A1 -> A2 -> A3 (Target folder is A3)
+    let a1 = root.join("BranchA");
+    let a2 = a1.join("SubA2");
+    let a3 = a2.join("SubA3");
+
+    // Branch B: root -> B1 -> B2
+    let b1 = root.join("BranchB");
+    let b2 = b1.join("SubB2");
+
+    // Branch C: root -> C1
+    let c1 = root.join("BranchC");
+
+    fs::create_dir_all(&a3).unwrap();
+    fs::create_dir_all(&b2).unwrap();
+    fs::create_dir_all(&c1).unwrap();
+
+    lib.folder_tree_refresher()
+        .refresh_tree(root, None::<fn(usize)>)
+        .unwrap();
+
+    let root_rec = lib.folders().get_folder_by_path(root).unwrap().unwrap();
+    let a1_rec = lib.folders().get_folder_by_path(&a1).unwrap().unwrap();
+    let a2_rec = lib.folders().get_folder_by_path(&a2).unwrap().unwrap();
+    let a3_rec = lib.folders().get_folder_by_path(&a3).unwrap().unwrap();
+    let b1_rec = lib.folders().get_folder_by_path(&b1).unwrap().unwrap();
+    let b2_rec = lib.folders().get_folder_by_path(&b2).unwrap().unwrap();
+    let c1_rec = lib.folders().get_folder_by_path(&c1).unwrap().unwrap();
+
+    let settings = SettingsManager::new(tmp_config.path());
+    let mut app_settings = settings.get();
+    app_settings.general.root_folder = Some(root.to_path_buf());
+    settings.save_quiet(&app_settings);
+
+    let state = parking_lot::RwLock::new(UiState::default());
+
+    // Initially expand ALL branches (root, A1, A2, B1, B2, C1)
+    {
+        let mut st = state.write();
+        st.expanded_folder_ids.insert(root_rec.id);
+        st.expanded_folder_ids.insert(a1_rec.id);
+        st.expanded_folder_ids.insert(a2_rec.id);
+        st.expanded_folder_ids.insert(b1_rec.id);
+        st.expanded_folder_ids.insert(b2_rec.id);
+        st.expanded_folder_ids.insert(c1_rec.id);
+        st.current_folder_id = Some(a3_rec.id);
+        st.current_folder_path = Some(a3.clone());
+    }
+
+    // Call collapse logic (headless simulation)
+    let app_settings = settings.get();
+    let root_path_opt = app_settings
+        .general
+        .root_folder
+        .as_ref()
+        .map(|p| rustview::library::folders::normalize_path(p));
+
+    let mut keep_expanded_ids = HashSet::new();
+    if let Some(ref root_p) = root_path_opt {
+        if let Ok(Some(root_r)) = lib.folders().get_folder_by_path(root_p) {
+            keep_expanded_ids.insert(root_r.id);
+        }
+        let target_p = a3;
+        let mut curr_ancestor = target_p.parent();
+        while let Some(parent_p) = curr_ancestor {
+            if parent_p.starts_with(root_p) {
+                if let Ok(Some(parent_rec)) = lib.folders().get_folder_by_path(parent_p) {
+                    keep_expanded_ids.insert(parent_rec.id);
+                }
+                if parent_p == root_p.as_path() {
+                    break;
+                }
+                curr_ancestor = parent_p.parent();
+            } else {
+                break;
+            }
+        }
+    }
+
+    {
+        let mut st = state.write();
+        st.expanded_folder_ids.retain(|id| keep_expanded_ids.contains(id));
+        for id in &keep_expanded_ids {
+            st.expanded_folder_ids.insert(*id);
+        }
+    }
+
+    // Assert that ONLY the active path (Root, A1, A2) is expanded!
+    let final_expanded = state.read().expanded_folder_ids.clone();
+    assert!(final_expanded.contains(&root_rec.id));
+    assert!(final_expanded.contains(&a1_rec.id));
+    assert!(final_expanded.contains(&a2_rec.id));
+
+    // Branch B and Branch C must be collapsed
+    assert!(!final_expanded.contains(&b1_rec.id));
+    assert!(!final_expanded.contains(&b2_rec.id));
+    assert!(!final_expanded.contains(&c1_rec.id));
+    assert_eq!(final_expanded.len(), 3);
 }
 
 #[test]

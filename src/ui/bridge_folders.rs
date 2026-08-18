@@ -259,6 +259,16 @@ impl BridgeFolders {
             Self::refresh_folder_tree(&win, &lib, &set, &st);
         });
 
+        // Collapse all non-active branches toolbar button handler
+        let lib = library.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        let win = window.clone_strong();
+        window.on_folder_collapse_all_clicked(move || {
+            tracing::info!("[FolderPanel: Toolbar] Collapse all except active path button clicked");
+            Self::collapse_all_except_active(&win, &lib, &set, &st);
+        });
+
         // Hidden folders toolbar toggle button handler
         let set = settings.clone();
         let st = state.clone();
@@ -301,6 +311,72 @@ impl BridgeFolders {
                 break;
             }
         }
+    }
+
+    /// Collapses all open folder branches in the tree except the active path leading to the currently selected folder.
+    pub fn collapse_all_except_active(
+        window: &MainWindow,
+        library: &Library,
+        settings: &SettingsManager,
+        state: &RwLock<UiState>,
+    ) {
+        let t0 = Instant::now();
+        let (target_id_opt, target_path_opt) = {
+            let st = state.read();
+            (st.current_folder_id, st.current_folder_path.clone())
+        };
+
+        let app_settings = settings.get();
+        let root_path_opt = app_settings.general.root_folder.as_ref().map(|p| normalize_path(p));
+
+        let mut keep_expanded_ids: HashSet<FolderId> = HashSet::new();
+
+        if let Some(ref root_p) = root_path_opt {
+            if let Ok(Some(root_rec)) = library.folders().get_folder_by_path(root_p) {
+                keep_expanded_ids.insert(root_rec.id);
+            }
+
+            if let Some(ref target_p) = target_path_opt {
+                let mut curr_ancestor = target_p.parent();
+                while let Some(parent_p) = curr_ancestor {
+                    if parent_p.starts_with(root_p) {
+                        if let Ok(Some(parent_rec)) = library.folders().get_folder_by_path(parent_p) {
+                            keep_expanded_ids.insert(parent_rec.id);
+                        }
+                        if parent_p == root_p.as_path() {
+                            break;
+                        }
+                        curr_ancestor = parent_p.parent();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        let (collapsed_count, remaining_count) = {
+            let mut st = state.write();
+            let prev_count = st.expanded_folder_ids.len();
+            st.expanded_folder_ids.retain(|id| keep_expanded_ids.contains(id));
+            for id in &keep_expanded_ids {
+                st.expanded_folder_ids.insert(*id);
+            }
+            let new_count = st.expanded_folder_ids.len();
+            let collapsed = prev_count.saturating_sub(new_count);
+            Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
+            (collapsed, new_count)
+        };
+
+        Self::reload_tree(window, library, settings, state);
+        Self::scroll_to_selected(window);
+
+        tracing::info!(
+            collapsed_branches = collapsed_count,
+            remaining_open_ancestors = remaining_count,
+            active_folder_id = ?target_id_opt,
+            elapsed_us = t0.elapsed().as_micros(),
+            "[Benchmark: FolderTreeCollapseAll] Collapsed all non-active branches in-memory"
+        );
     }
 
     pub fn sync_root(

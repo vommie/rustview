@@ -6,6 +6,7 @@ pub enum IconAsset {
     Settings,
     Refresh,
     Loader,
+    FolderTreeNodesFold,
     HiddenFoldersInvisible,
     HiddenFoldersVisible,
     GridView,
@@ -60,6 +61,14 @@ impl IconAsset {
                 relative_path: "ui/icons/loader.svg",
                 allow_tint: true,
                 description: "Animated background progress throbber indicator",
+            },
+            Self::FolderTreeNodesFold => IconMetadata {
+                asset: *self,
+                name: "folder_tree_nodes_fold",
+                file_name: "folder_tree_nodes_fold.svg",
+                relative_path: "ui/icons/folder_tree_nodes_fold.svg",
+                allow_tint: true,
+                description: "Collapse all folder tree nodes except active path",
             },
             Self::HiddenFoldersInvisible => IconMetadata {
                 asset: *self,
@@ -243,6 +252,9 @@ impl IconAsset {
             "settings" => Some(Self::Settings),
             "refresh" | "reload" => Some(Self::Refresh),
             "loader" | "throbber" | "spinner" => Some(Self::Loader),
+            "folder_tree_nodes_fold" | "folder_tree_fold" | "fold_nodes" | "collapse_all_folders" => {
+                Some(Self::FolderTreeNodesFold)
+            }
             "hidden-folders-invisible" | "hidden_folders_invisible" | "hidden_invisible" => {
                 Some(Self::HiddenFoldersInvisible)
             }
@@ -276,6 +288,7 @@ impl IconAsset {
             Self::Settings,
             Self::Refresh,
             Self::Loader,
+            Self::FolderTreeNodesFold,
             Self::HiddenFoldersInvisible,
             Self::HiddenFoldersVisible,
             Self::GridView,
