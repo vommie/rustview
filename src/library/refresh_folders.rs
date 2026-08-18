@@ -3,8 +3,11 @@ use super::error::LibraryError;
 use super::models::{FolderId, FolderRecord};
 use super::schema::SEQ_FOLDER_ID;
 use crate::settings::LogObscurer;
-use std::collections::{HashMap, HashSet, VecDeque};
+use rayon::prelude::*;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -25,38 +28,44 @@ impl<'a> FolderTreeRefresher<'a> {
         Self { db }
     }
 
-    /// High-performance recursive directory scan and LMDB synchronization.
-    /// Optimized for Linux filesystem traversal without inspecting or loading regular files.
+    /// Parallelized recursive directory scan and LMDB synchronization.
+    /// Uses Linux d_type getdents64 extraction without regular file stat calls across all CPU threads.
     pub fn refresh_tree<F>(
         &self,
         root_path: &Path,
         progress_callback: Option<F>,
     ) -> Result<FolderTreeRefreshReport, LibraryError>
     where
-        F: Fn(usize),
+        F: Fn(usize) + Send + Sync + 'static,
     {
-        let t0 = Instant::now();
+        let t_total = Instant::now();
         let canonical_root = match root_path.canonicalize() {
             Ok(p) => p,
             Err(_) => root_path.to_path_buf(),
         };
 
         let root_str = canonical_root.to_string_lossy().to_string();
-        tracing::info!(root = %LogObscurer::path(&canonical_root), "Starting recursive high-speed directory discovery on Linux filesystem...");
+        tracing::info!(
+            root = %LogObscurer::path(&canonical_root),
+            "[Benchmark: FolderTreeScan] Starting parallel multi-threaded directory discovery..."
+        );
 
-        // 1. Recursive pure-directory discovery
+        // 1. Ultra-fast multi-core recursive directory discovery (Zero inner canonicalize syscalls)
+        let t_fs_discovery = Instant::now();
         let discovered =
-            Self::discover_directories_linux(&canonical_root, progress_callback.as_ref())?;
+            Self::discover_directories_parallel(&canonical_root, progress_callback.as_ref())?;
         let total_scanned = discovered.len();
+        let fs_elapsed_ms = t_fs_discovery.elapsed().as_millis();
 
         tracing::info!(
             root = %LogObscurer::path(&canonical_root),
             discovered_dirs = total_scanned,
-            scan_elapsed_ms = t0.elapsed().as_millis(),
-            "Physical directory discovery completed. Synchronizing with LMDB storage..."
+            fs_discovery_ms = fs_elapsed_ms,
+            "[Benchmark: FolderTreeScan] Parallel directory discovery completed. Beginning LMDB sync transaction..."
         );
 
         // 2. Synchronize with LMDB in a single atomic write transaction
+        let t_lmdb_sync = Instant::now();
         let mut wtxn = self.db.env.write_txn()?;
         let mut report = FolderTreeRefreshReport {
             total_scanned_dirs: total_scanned,
@@ -153,6 +162,7 @@ impl<'a> FolderTreeRefresher<'a> {
         }
 
         wtxn.commit()?;
+        let lmdb_elapsed_ms = t_lmdb_sync.elapsed().as_millis();
 
         tracing::info!(
             total_scanned = report.total_scanned_dirs,
@@ -160,77 +170,115 @@ impl<'a> FolderTreeRefresher<'a> {
             marked_deleted = report.folders_marked_deleted,
             restored = report.folders_restored,
             unchanged = report.unchanged_folders,
-            total_time_ms = t0.elapsed().as_millis(),
-            "Committed folder tree refresh transaction to LMDB storage."
+            fs_discovery_ms = fs_elapsed_ms,
+            lmdb_sync_ms = lmdb_elapsed_ms,
+            total_time_ms = t_total.elapsed().as_millis(),
+            "[Benchmark: FolderTreeCommit] Folder tree refresh transaction committed to LMDB storage."
         );
 
         Ok(report)
     }
 
-    /// High-performance recursive directory discovery avoiding stat(2) calls via d_type extraction.
-    fn discover_directories_linux<F>(
+    /// Multi-core parallel directory discovery with dynamic Rayon work-stealing and zero inner canonicalize syscalls.
+    fn discover_directories_parallel<F>(
         root: &Path,
         progress_callback: Option<&F>,
     ) -> Result<Vec<PathBuf>, LibraryError>
     where
-        F: Fn(usize),
+        F: Fn(usize) + Send + Sync,
     {
-        let mut discovered = Vec::with_capacity(1024);
-        let mut queue = VecDeque::with_capacity(256);
-        let mut visited_paths = HashSet::new();
+        let counter = Arc::new(AtomicUsize::new(1));
+        let results = Self::scan_dir_parallel(root.to_path_buf(), 0, &counter, progress_callback);
 
-        queue.push_back(root.to_path_buf());
-        visited_paths.insert(root.to_path_buf());
-        discovered.push(root.to_path_buf());
+        let total = counter.load(Ordering::Relaxed);
+        if let Some(cb) = progress_callback {
+            cb(total);
+        }
 
-        let mut count = 1;
-        let mut last_progress_report = Instant::now();
+        Ok(results)
+    }
 
-        while let Some(current_dir) = queue.pop_front() {
-            let read_dir_res = std::fs::read_dir(&current_dir);
-            let entries = match read_dir_res {
-                Ok(it) => it,
-                Err(e) => {
-                    tracing::warn!(dir = %LogObscurer::path(&current_dir), error = %e, "Skipping unreadable directory");
-                    continue;
-                }
-            };
+    fn scan_dir_parallel<F>(
+        dir: PathBuf,
+        depth: usize,
+        counter: &Arc<AtomicUsize>,
+        progress_callback: Option<&F>,
+    ) -> Vec<PathBuf>
+    where
+        F: Fn(usize) + Send + Sync,
+    {
+        let mut local_dirs = Vec::with_capacity(32);
+        let mut sub_dirs = Vec::new();
 
-            for entry_res in entries {
-                let entry = match entry_res {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
-
-                // On Linux, file_type() uses d_type from getdents64 with ZERO stat syscalls
-                let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
-                if is_dir {
-                    let path = entry.path();
-                    let canonical = match path.canonicalize() {
-                        Ok(p) => p,
-                        Err(_) => path,
-                    };
-
-                    if visited_paths.insert(canonical.clone()) {
-                        queue.push_back(canonical.clone());
-                        discovered.push(canonical);
-                        count += 1;
-
-                        if let Some(cb) = progress_callback
-                            && last_progress_report.elapsed().as_millis() >= 80
-                        {
-                            cb(count);
-                            last_progress_report = Instant::now();
-                        }
-                    }
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                // On Linux, file_type() uses d_type directly without any stat syscalls
+                if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                    sub_dirs.push(entry.path());
                 }
             }
         }
 
-        if let Some(cb) = progress_callback {
-            cb(count);
+        let added_count = sub_dirs.len();
+        local_dirs.push(dir);
+
+        let cur = counter.fetch_add(added_count, Ordering::Relaxed);
+        if let Some(cb) = progress_callback
+            && cur.is_multiple_of(256)
+        {
+            cb(cur);
         }
 
-        Ok(discovered)
+        // Dynamically parallelize across Rayon threads for top 3 hierarchy levels
+        if depth < 3 && sub_dirs.len() > 1 {
+            let child_results: Vec<Vec<PathBuf>> = sub_dirs
+                .into_par_iter()
+                .map(|sub| Self::scan_dir_parallel(sub, depth + 1, counter, progress_callback))
+                .collect();
+
+            for mut c in child_results {
+                local_dirs.append(&mut c);
+            }
+        } else {
+            for sub in sub_dirs {
+                let mut c = Self::scan_dir_sequential(sub, counter, progress_callback);
+                local_dirs.append(&mut c);
+            }
+        }
+
+        local_dirs
+    }
+
+    fn scan_dir_sequential<F>(
+        dir: PathBuf,
+        counter: &Arc<AtomicUsize>,
+        progress_callback: Option<&F>,
+    ) -> Vec<PathBuf>
+    where
+        F: Fn(usize) + Send + Sync,
+    {
+        let mut results = Vec::with_capacity(64);
+        let mut queue = std::collections::VecDeque::with_capacity(32);
+        queue.push_back(dir);
+
+        while let Some(current) = queue.pop_front() {
+            if let Ok(entries) = std::fs::read_dir(&current) {
+                for entry in entries.flatten() {
+                    if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                        let p = entry.path();
+                        queue.push_back(p);
+                        let cur = counter.fetch_add(1, Ordering::Relaxed);
+                        if let Some(cb) = progress_callback
+                            && cur.is_multiple_of(256)
+                        {
+                            cb(cur);
+                        }
+                    }
+                }
+            }
+            results.push(current);
+        }
+
+        results
     }
 }

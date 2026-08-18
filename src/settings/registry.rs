@@ -92,6 +92,23 @@ impl SettingsManager {
         let _ = self.store.save(settings);
     }
 
+    /// Persists settings in-memory immediately and flushes JSON to disk in a non-blocking background thread.
+    pub fn save_quiet_async(&self, settings: &AppSettings) {
+        LogObscurer::set_obfuscate(settings.debug.obfuscate_logs);
+        {
+            let mut writer = self.current.write();
+            *writer = settings.clone();
+        }
+        let store = self.store.clone();
+        let s_clone = settings.clone();
+        std::thread::Builder::new()
+            .name("settings-async-saver".into())
+            .spawn(move || {
+                let _ = store.save(&s_clone);
+            })
+            .ok();
+    }
+
     /// Registers an event hook that receives the previous settings, new settings, and the computed granular diff.
     pub fn subscribe<F>(&self, hook: F)
     where

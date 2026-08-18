@@ -4,6 +4,7 @@ import { Theme } from "styles.slint";
 export global Icons {
     out property <image> settings: @image-url("icons/settings.svg");
     out property <image> refresh: @image-url("icons/refresh.svg");
+    out property <image> loader: @image-url("icons/loader.svg");
     out property <image> grid-view: @image-url("icons/grid_view.svg");
     out property <image> list-view: @image-url("icons/list_view.svg");
     out property <image> plus: @image-url("icons/plus.svg");
@@ -36,6 +37,7 @@ export global Icons {
     pure public function by-name(name: string) -> image {
         if name == "settings" { return @image-url("icons/settings.svg"); }
         if name == "refresh" { return @image-url("icons/refresh.svg"); }
+        if name == "loader" || name == "throbber" || name == "spinner" { return @image-url("icons/loader.svg"); }
         if name == "grid" || name == "grid_view" { return @image-url("icons/grid_view.svg"); }
         if name == "list" || name == "list_view" { return @image-url("icons/list_view.svg"); }
         if name == "plus" { return @image-url("icons/plus.svg"); }

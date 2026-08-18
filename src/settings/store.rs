@@ -11,6 +11,7 @@ use super::schema::{
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[derive(Clone)]
 pub struct SettingsStore {
     file_path: PathBuf,
 }

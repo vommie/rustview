@@ -2,6 +2,7 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{FolderId, FolderRecord};
 use super::schema::SEQ_FOLDER_ID;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Normalizes a filesystem path by resolving symlinks/canonical form and removing any trailing slash.
@@ -94,6 +95,7 @@ impl<'a> FolderManager<'a> {
         }
     }
 
+    /// Ultra-fast sequential streaming of all folder records from LMDB.
     pub fn list_folders(&self) -> Result<Vec<FolderRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let mut folders = Vec::new();
@@ -150,6 +152,27 @@ impl<'a> FolderManager<'a> {
             }
         }
         Ok(count)
+    }
+
+    /// Retrieves active media file counts for ALL folders in a single ultra-fast read transaction.
+    pub fn get_all_media_counts(&self) -> Result<HashMap<FolderId, usize>, LibraryError> {
+        let rtxn = self.db.env.read_txn()?;
+        let mut counts = HashMap::new();
+
+        for entry in self.db.media_by_folder.iter(&rtxn)? {
+            let (folder_id, media_ids) = entry?;
+            let mut count = 0;
+            for id in media_ids {
+                if let Some(rec) = self.db.media.get(&rtxn, &id)?
+                    && !rec.is_deleted
+                {
+                    count += 1;
+                }
+            }
+            counts.insert(folder_id, count);
+        }
+
+        Ok(counts)
     }
 
     pub fn remove_folder(&self, id: FolderId) -> Result<(), LibraryError> {

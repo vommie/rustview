@@ -3,6 +3,7 @@ use crate::library::models::{FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER};
+use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashMap, HashSet};
@@ -62,11 +63,13 @@ pub struct UiState {
     pub is_refreshing_media: bool,
     pub active_file_rename_target: Option<MediaId>,
 
-    // === Hierarchical Folder Tree State ===
+    // === Hierarchical Folder Tree State & Fast In-Memory Cache ===
     pub expanded_folder_ids: HashSet<FolderId>,
     pub is_refreshing_folders: bool,
     pub folder_scan_count: usize,
     pub active_folder_dialog_target: Option<FolderId>,
+    pub cached_folder_tree: Option<Vec<FolderTreeNode>>,
+    pub cached_media_counts: HashMap<FolderId, usize>,
 
     // === Hierarchical Tag Tree State ===
     pub expanded_tag_ids: HashSet<TagId>,
@@ -101,6 +104,8 @@ impl Default for UiState {
             is_refreshing_folders: false,
             folder_scan_count: 0,
             active_folder_dialog_target: None,
+            cached_folder_tree: None,
+            cached_media_counts: HashMap::new(),
             expanded_tag_ids: HashSet::new(),
             tag_filter_query: String::new(),
             tag_filter_is_regex: false,
@@ -118,5 +123,33 @@ impl UiState {
             && (self.selected_rating > 0
                 || !self.filter.tag_ids.is_empty()
                 || self.is_query_active)
+    }
+
+    /// Invalidates the in-memory cached FolderTree hierarchy forcing a fresh topological build.
+    #[inline]
+    pub fn invalidate_folder_tree_cache(&mut self) {
+        self.cached_folder_tree = None;
+        self.cached_media_counts.clear();
+    }
+
+    /// Updates media count of a single folder in-place without rebuilding the entire 180k hierarchy.
+    pub fn update_folder_media_count_in_cache(&mut self, folder_id: FolderId, count: usize) {
+        self.cached_media_counts.insert(folder_id, count);
+        if let Some(ref mut tree) = self.cached_folder_tree {
+            Self::update_tree_node_count(tree, folder_id, count);
+        }
+    }
+
+    fn update_tree_node_count(nodes: &mut [FolderTreeNode], folder_id: FolderId, count: usize) -> bool {
+        for node in nodes.iter_mut() {
+            if node.record.id == folder_id {
+                node.media_files_count = count;
+                return true;
+            }
+            if Self::update_tree_node_count(&mut node.children, folder_id, count) {
+                return true;
+            }
+        }
+        false
     }
 }

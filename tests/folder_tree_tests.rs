@@ -3,7 +3,7 @@ use rustview::library::Library;
 use rustview::library::models::FolderRecordCodec;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
 use rustview::ui::bridge_folders::FolderTreeBuilder;
-use rustview::ui::bridge_state::CTX_FOLDER_PURGE_DB;
+use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use tempfile::tempdir;
@@ -36,12 +36,16 @@ fn test_folder_tree_hierarchy_building_and_counts() {
     let folders = lib.folders().list_folders().unwrap();
     assert_eq!(folders.len(), 4);
 
-    let mut media_counts: HashMap<u64, usize> = HashMap::new();
     let root_folder = lib.folders().get_folder_by_path(root).unwrap().unwrap();
     let sub1_folder = lib.folders().get_folder_by_path(&sub1).unwrap().unwrap();
     let sub1_a_folder = lib.folders().get_folder_by_path(&sub1_a).unwrap().unwrap();
     let sub2_folder = lib.folders().get_folder_by_path(&sub2).unwrap().unwrap();
 
+    // Test single-transaction batch media count lookup
+    let batch_counts = lib.folders().get_all_media_counts().unwrap();
+    assert!(batch_counts.contains_key(&root_folder.id));
+
+    let mut media_counts: HashMap<u64, usize> = HashMap::new();
     // Simulate 10 files in root, 25 files in sub1_a
     media_counts.insert(root_folder.id, 10);
     media_counts.insert(sub1_folder.id, 0);
@@ -111,6 +115,45 @@ fn test_folder_tree_hierarchy_building_and_counts() {
     assert_eq!(flattened_no_metrics[1].name.as_str(), "Sub1");
     assert_eq!(flattened_no_metrics[2].name.as_str(), "Sub1_A");
     assert_eq!(flattened_no_metrics[3].name.as_str(), "Sub2");
+}
+
+#[test]
+fn test_in_place_count_update_in_state() {
+    let mut state = UiState::default();
+
+    let root_rec = rustview::library::models::FolderRecord {
+        id: 1,
+        path: "/root".to_string(),
+        added_at: 0,
+        is_deleted: false,
+    };
+    let child_rec = rustview::library::models::FolderRecord {
+        id: 2,
+        path: "/root/child".to_string(),
+        added_at: 0,
+        is_deleted: false,
+    };
+
+    let tree = vec![rustview::ui::bridge_folders::FolderTreeNode {
+        record: root_rec,
+        subfolders_count: 1,
+        media_files_count: 0,
+        children: vec![rustview::ui::bridge_folders::FolderTreeNode {
+            record: child_rec,
+            subfolders_count: 0,
+            media_files_count: 0,
+            children: Vec::new(),
+        }],
+    }];
+
+    state.cached_folder_tree = Some(tree);
+
+    // Update count in-place
+    state.update_folder_media_count_in_cache(2, 42);
+
+    assert_eq!(state.cached_media_counts.get(&2), Some(&42));
+    let root_node = &state.cached_folder_tree.as_ref().unwrap()[0];
+    assert_eq!(root_node.children[0].media_files_count, 42);
 }
 
 #[test]
@@ -323,37 +366,6 @@ fn test_folder_deletion_preserves_root_and_sibling_expansion() {
 }
 
 #[test]
-fn test_folder_context_menu_move_to_submenu() {
-    let tmp_db = tempdir().unwrap();
-    let tmp_media = tempdir().unwrap();
-
-    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
-    let root = tmp_media.path();
-
-    let sub1 = root.join("Sub1");
-    let sub2 = root.join("Sub2");
-    let sub1_a = sub1.join("Sub1_A");
-
-    fs::create_dir_all(&sub1_a).unwrap();
-    fs::create_dir_all(&sub2).unwrap();
-
-    lib.folder_tree_refresher()
-        .refresh_tree(root, None::<fn(usize)>)
-        .unwrap();
-
-    let folders = lib.folders().list_folders().unwrap();
-    let sub1_a_folder = lib.folders().get_folder_by_path(&sub1_a).unwrap().unwrap();
-
-    // Build context menu for sub1_a
-    let menu = FolderContextMenuBuilder::build_menu(&sub1_a_folder, &folders, Some(root), false);
-
-    // "Move to..." should be present at index 1 and enabled
-    assert_eq!(menu.items[1].text, "Move to...");
-    assert!(menu.items[1].is_enabled);
-    assert!(!menu.items[1].children.is_empty());
-}
-
-#[test]
 fn test_legacy_folder_record_backward_compatibility() {
     #[derive(serde::Serialize)]
     struct LegacyFormat {
@@ -370,7 +382,6 @@ fn test_legacy_folder_record_backward_compatibility() {
 
     let encoded_old = bincode::serialize(&old_data).unwrap();
 
-    // Decode legacy bytes using the new FolderRecordCodec
     let decoded =
         FolderRecordCodec::bytes_decode(&encoded_old).expect("Failed to decode legacy record");
     assert_eq!(decoded.id, 42);

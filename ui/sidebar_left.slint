@@ -13,6 +13,7 @@ export component SidebarLeft inherits Rectangle {
 
     in property <[FolderNodeView]> folders: [];
     in property <[FavoriteItemView]> favorites: [];
+    in property <bool> is-refreshing-folders: false;
 
     callback folder-clicked(int /* id */, string /* path */);
     callback folder-toggle-expand(int /* id */);
@@ -33,6 +34,7 @@ export component SidebarLeft inherits Rectangle {
         // Folder Browser / Tree Navigation Subsystem
         folder-panel := FolderPanel {
             folders: root.folders;
+            is-refreshing: root.is-refreshing-folders;
             folder-clicked(id, path) => { root.folder-clicked(id, path); }
             folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
             folder-context-menu(id, x, y) => { root.folder-context-menu(id, folder-panel.x + x, folder-panel.y + y); }

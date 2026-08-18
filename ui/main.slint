@@ -198,6 +198,7 @@ export component MainWindow inherits Window {
                 sidebar-width: root.sidebar-left-width;
                 folders: root.folders;
                 favorites: root.favorites;
+                is-refreshing-folders: root.is-refreshing-folders;
                 folder-clicked(id, path) => { root.folder-selected(id, path); }
                 folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
                 folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 38px + sidebar_left.y + y); }

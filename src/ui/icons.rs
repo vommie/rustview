@@ -5,6 +5,7 @@ use std::path::Path;
 pub enum IconAsset {
     Settings,
     Refresh,
+    Loader,
     GridView,
     ListView,
     Plus,
@@ -49,6 +50,14 @@ impl IconAsset {
                 relative_path: "ui/icons/refresh.svg",
                 allow_tint: true,
                 description: "Synchronize and refresh file or directory contents",
+            },
+            Self::Loader => IconMetadata {
+                asset: *self,
+                name: "loader",
+                file_name: "loader.svg",
+                relative_path: "ui/icons/loader.svg",
+                allow_tint: true,
+                description: "Animated background progress throbber indicator",
             },
             Self::GridView => IconMetadata {
                 asset: *self,
@@ -215,6 +224,7 @@ impl IconAsset {
         match trimmed.as_str() {
             "settings" => Some(Self::Settings),
             "refresh" | "reload" => Some(Self::Refresh),
+            "loader" | "throbber" | "spinner" => Some(Self::Loader),
             "grid" | "grid_view" => Some(Self::GridView),
             "list" | "list_view" | "table" => Some(Self::ListView),
             "plus" | "add" => Some(Self::Plus),
@@ -241,6 +251,7 @@ impl IconAsset {
         &[
             Self::Settings,
             Self::Refresh,
+            Self::Loader,
             Self::GridView,
             Self::ListView,
             Self::Plus,

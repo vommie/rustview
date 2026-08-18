@@ -1,19 +1,32 @@
 import { Theme } from "styles.slint";
 import { Icons } from "icons.slint";
 import { PanelToolbar, ToolbarButton, ToolbarSpacer, ToolbarSeparator } from "panel_toolbar.slint";
+import { Throbber } from "throbber.slint";
 
 /// Specialized, fully encapsulated horizontal toolbar for the Folders Panel.
-/// Houses folder tree control actions such as rescanning and structure refresh.
+/// Houses folder tree control actions such as rescanning, structure refresh, and active background throbber indicator.
 export component FolderPanelToolbar inherits PanelToolbar {
+    in property <bool> is-refreshing: false;
     callback refresh-clicked();
 
     toolbar-height: 26px;
 
+    // 1. Throbber Indicator: Positioned as first item on the left, active during directory scans/syncs
+    Throbber {
+        is-active: root.is-refreshing;
+        size: 14px;
+        throbber-color: Theme.primary;
+        tooltip: "Scanning directory tree on filesystem...";
+    }
+
+    // 2. Expander / Spacer: Pushes toolbar control buttons to the right
     ToolbarSpacer {}
 
+    // 3. Folder Refresh Action Button
     ToolbarButton {
         icon: Icons.refresh;
         tooltip: "Scan and refresh folder structure";
+        is-enabled: !root.is-refreshing;
         clicked => { root.refresh-clicked(); }
     }
 }

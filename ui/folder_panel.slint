@@ -110,6 +110,7 @@ export component FolderPanel inherits VerticalLayout {
     vertical-stretch: 1;
 
     in property <[FolderNodeView]> folders: [];
+    in property <bool> is-refreshing: false;
     callback folder-clicked(int, string);
     callback folder-toggle-expand(int);
     callback folder-context-menu(int, length, length);
@@ -134,8 +135,9 @@ export component FolderPanel inherits VerticalLayout {
         }
     }
 
-    // Modular Encapsulated Panel Toolbar
+    // Modular Encapsulated Panel Toolbar with integrated Throbber
     FolderPanelToolbar {
+        is-refreshing: root.is-refreshing;
         refresh-clicked => { root.refresh-clicked(); }
     }
 

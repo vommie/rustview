@@ -1,0 +1,88 @@
+import { Theme } from "styles.slint";
+import { Icons } from "icons.slint";
+import { TooltipHost } from "tooltips.slint";
+
+/// Fully encapsulated, standalone, reusable animated Throbber component for Slint.
+/// Supports smooth continuous rotation, visibility animations, theme colorization,
+/// custom sizes, dimmed/disabled states, and integrated hover tooltips.
+export component Throbber inherits Rectangle {
+    // State & Behavior Properties
+    in-out property <bool> is-active: false;
+    in property <bool> is-dimmed: false;
+    in property <string> tooltip: "Processing in background...";
+    in property <duration> animation-interval: 35ms;
+    in property <angle> rotation-step: 18deg;
+
+    // Dimension & Sizing API
+    in property <length> size: 14px;
+
+    // Theme & Styling API
+    in property <color> throbber-color: Theme.primary;
+
+    // Public API Functions for Programmatic Control
+    public function show() {
+        root.is-active = true;
+    }
+
+    public function hide() {
+        root.is-active = false;
+    }
+
+    // Geometry layout integration
+    width: root.is-active ? root.size : 0px;
+    height: root.size;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    clip: false;
+    visible: root.is-active;
+    opacity: root.is-active ? (root.is-dimmed ? 0.45 : 1.0) : 0.0;
+
+    animate width { duration: 150ms; }
+    animate opacity { duration: 150ms; }
+
+    property <angle> current-angle: 0deg;
+
+    // Rotation Animation Timer
+    spin-timer := Timer {
+        interval: root.animation-interval;
+        running: root.is-active;
+        triggered => {
+            root.current-angle = root.current-angle + root.rotation-step;
+            if root.current-angle >= 360deg {
+                root.current-angle = 0deg;
+            }
+        }
+    }
+
+    tooltip-host := TooltipHost {
+        text: root.tooltip;
+        is-enabled: root.is-active && root.tooltip != "";
+    }
+
+    touch-area := TouchArea {
+        enabled: root.is-active && root.tooltip != "";
+        mouse-cursor: default;
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: touch-area.has-hover && root.tooltip != "";
+    changed is-hovered => {
+        if self.is-hovered && root.is-active {
+            tooltip-host.on-hover-enter(touch-area.mouse-x, touch-area.mouse-y);
+        } else {
+            tooltip-host.on-hover-leave();
+        }
+    }
+
+    // Rotating Vector Icon
+    Image {
+        source: Icons.loader;
+        width: root.size;
+        height: root.size;
+        image-fit: contain;
+        colorize: root.throbber-color;
+        transform-rotation: root.current-angle;
+    }
+}

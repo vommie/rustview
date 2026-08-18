@@ -265,6 +265,7 @@ impl UiBridge {
 
                 // 4. Folder Tree Presentation (Only re-flatten in-memory tree nodes, zero disk scan)
                 if diff_clone.folder_tree_presentation_changed && !diff_clone.root_folder_changed {
+                    state.write().invalidate_folder_tree_cache();
                     BridgeFolders::reload_tree(&window, &library, &settings, &state);
                     tracing::debug!("[UiBridge: SettingsUpdate] Re-rendered folder tree with updated visibility/metrics");
                 }
@@ -275,6 +276,7 @@ impl UiBridge {
                         new_root = %LogObscurer::path_opt(new_clone.general.root_folder.as_ref()),
                         "[UiBridge: SettingsUpdate] Root directory path modified. Executing full root synchronization..."
                     );
+                    state.write().invalidate_folder_tree_cache();
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
                 }
 
@@ -443,6 +445,7 @@ impl UiBridge {
     }
 
     pub fn sync_root_folder(&self) {
+        self.state.write().invalidate_folder_tree_cache();
         BridgeFolders::sync_root(
             &self.window,
             &self.library,
