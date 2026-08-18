@@ -1,5 +1,6 @@
 use super::error::ThumbnailError;
-use super::types::{ThumbnailFormat, ThumbnailLocation};
+use super::types::{ThumbnailFormat, ThumbnailLocation, ThumbnailStorageStats};
+use crate::library::Library;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -173,6 +174,91 @@ impl PackStore {
         );
 
         Ok(buffer)
+    }
+
+    /// Calculates the current storage footprint of all binary pack files on disk in bytes.
+    pub fn total_storage_bytes(&self) -> u64 {
+        let mut total = 0u64;
+        if let Ok(entries) = std::fs::read_dir(&self.base_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("pack-")
+                    && name.ends_with(".bin")
+                    && let Ok(meta) = entry.metadata()
+                {
+                    total += meta.len();
+                }
+            }
+        }
+        total
+    }
+
+    /// Counts the total number of binary pack containers currently in the cache directory.
+    pub fn pack_file_count(&self) -> usize {
+        let mut count = 0;
+        if let Ok(entries) = std::fs::read_dir(&self.base_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("pack-") && name.ends_with(".bin") {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Computes full storage metrics across binary pack containers and LMDB database tables.
+    pub fn storage_stats(&self, library: &Library) -> ThumbnailStorageStats {
+        let pack_total_bytes = self.total_storage_bytes();
+        let pack_files_count = self.pack_file_count();
+        let pack_total_mb = pack_total_bytes as f64 / (1024.0 * 1024.0);
+
+        let (lmdb_thumbnails_count, lmdb_previews_count, lmdb_preview_frames_count) = {
+            if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                let thumb_count = library.raw_db().thumbnails.len(&rtxn).unwrap_or(0) as usize;
+                let prev_count = library.raw_db().video_previews.len(&rtxn).unwrap_or(0) as usize;
+                let mut preview_frames = 0usize;
+                if let Ok(iter) = library.raw_db().video_previews.iter(&rtxn) {
+                    for entry in iter.flatten() {
+                        let (_, rec) = entry;
+                        preview_frames += rec.frame_locations.len();
+                    }
+                }
+                (thumb_count, prev_count, preview_frames)
+            } else {
+                (0, 0, 0)
+            }
+        };
+
+        // Determine LMDB data file size on disk
+        let lmdb_data_bytes = {
+            let lmdb_path = library.raw_db().env.path();
+            let data_file = lmdb_path.join("data.mdb");
+            if let Ok(meta) = std::fs::metadata(&data_file) {
+                meta.len()
+            } else if let Ok(meta) = std::fs::metadata(lmdb_path) {
+                meta.len()
+            } else {
+                0
+            }
+        };
+
+        let lmdb_data_mb = lmdb_data_bytes as f64 / (1024.0 * 1024.0);
+        let total_cache_bytes = pack_total_bytes + lmdb_data_bytes;
+        let total_cache_mb = total_cache_bytes as f64 / (1024.0 * 1024.0);
+
+        ThumbnailStorageStats {
+            pack_files_count,
+            pack_total_bytes,
+            pack_total_mb,
+            lmdb_thumbnails_count,
+            lmdb_previews_count,
+            lmdb_preview_frames_count,
+            lmdb_data_bytes,
+            lmdb_data_mb,
+            total_cache_bytes,
+            total_cache_mb,
+        }
     }
 }
 

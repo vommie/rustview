@@ -19,14 +19,14 @@ pub use loader::{PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
 pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 pub use store::PackStore;
 pub use types::{
-    DEFAULT_THUMBNAIL_BOUND, FitMode, ScalingAlgorithm, THUMBNAIL_BYTE_SIZE, THUMBNAIL_CHANNELS,
-    THUMBNAIL_PIXELS, THUMBNAIL_SIZE, ThumbnailConfig, ThumbnailFormat, ThumbnailHandle,
-    ThumbnailLocation, ThumbnailPriority, VideoPreviewRecord, VideoThumbnailEngine,
-    anonymize_target, calculate_aspect_dimensions,
+    anonymize_target, calculate_aspect_dimensions, FitMode, ScalingAlgorithm, ThumbnailConfig,
+    ThumbnailFormat, ThumbnailHandle, ThumbnailLocation, ThumbnailPriority, ThumbnailStorageStats,
+    VideoPreviewRecord, VideoThumbnailEngine, DEFAULT_THUMBNAIL_BOUND, THUMBNAIL_BYTE_SIZE,
+    THUMBNAIL_CHANNELS, THUMBNAIL_PIXELS, THUMBNAIL_SIZE,
 };
 
-use crate::library::Library;
 use crate::library::models::MediaId;
+use crate::library::Library;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -84,6 +84,10 @@ impl ThumbnailManager {
 
     pub fn progress(&self) -> ThumbnailProgressSnapshot {
         self.scheduler.snapshot_progress()
+    }
+
+    pub fn storage_stats(&self) -> ThumbnailStorageStats {
+        self.scheduler.storage_stats()
     }
 
     pub fn get_or_load_sync(

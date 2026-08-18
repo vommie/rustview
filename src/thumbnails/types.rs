@@ -170,6 +170,33 @@ pub struct VideoPreviewRecord {
     pub frame_locations: Vec<ThumbnailLocation>,
 }
 
+/// Comprehensive storage footprint statistics across PackStore packfiles and LMDB database tables.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ThumbnailStorageStats {
+    pub pack_files_count: usize,
+    pub pack_total_bytes: u64,
+    pub pack_total_mb: f64,
+    pub lmdb_thumbnails_count: usize,
+    pub lmdb_previews_count: usize,
+    pub lmdb_preview_frames_count: usize,
+    pub lmdb_data_bytes: u64,
+    pub lmdb_data_mb: f64,
+    pub total_cache_bytes: u64,
+    pub total_cache_mb: f64,
+}
+
+impl ThumbnailStorageStats {
+    #[inline]
+    pub fn avg_thumbnail_kb(&self) -> f64 {
+        let total_frames = self.lmdb_thumbnails_count + self.lmdb_preview_frames_count;
+        if total_frames > 0 {
+            (self.pack_total_bytes as f64 / total_frames as f64) / 1024.0
+        } else {
+            0.0
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FitMode {
     Contain,

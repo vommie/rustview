@@ -275,6 +275,42 @@ impl SettingsDiff {
                 old.performance.video_engine, new.performance.video_engine
             ));
         }
+        if old.performance.video_offset_percent != new.performance.video_offset_percent {
+            changes.push(format!(
+                "Performance: video_offset_percent ({}% -> {}%)",
+                old.performance.video_offset_percent, new.performance.video_offset_percent
+            ));
+        }
+        if old.performance.generate_video_previews != new.performance.generate_video_previews {
+            changes.push(format!(
+                "Performance: generate_video_previews ({} -> {})",
+                old.performance.generate_video_previews, new.performance.generate_video_previews
+            ));
+        }
+        if old.performance.preview_frame_count != new.performance.preview_frame_count {
+            changes.push(format!(
+                "Performance: preview_frame_count ({} -> {})",
+                old.performance.preview_frame_count, new.performance.preview_frame_count
+            ));
+        }
+        if old.performance.custom_preview_settings != new.performance.custom_preview_settings {
+            changes.push(format!(
+                "Performance: custom_preview_settings ({} -> {})",
+                old.performance.custom_preview_settings, new.performance.custom_preview_settings
+            ));
+        }
+        if old.performance.preview_format != new.performance.preview_format {
+            changes.push(format!(
+                "Performance: preview_format ({} -> {})",
+                old.performance.preview_format, new.performance.preview_format
+            ));
+        }
+        if old.performance.preview_quality != new.performance.preview_quality {
+            changes.push(format!(
+                "Performance: preview_quality ({}% -> {}%)",
+                old.performance.preview_quality, new.performance.preview_quality
+            ));
+        }
 
         if old.debug.obfuscate_logs != new.debug.obfuscate_logs {
             changes.push(format!(

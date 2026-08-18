@@ -3,7 +3,9 @@ use super::error::ThumbnailError;
 use super::generator::ThumbnailGenerator;
 use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 use super::store::PackStore;
-use super::types::{anonymize_target, ThumbnailConfig, ThumbnailLocation, VideoPreviewRecord};
+use super::types::{
+    anonymize_target, ThumbnailConfig, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord,
+};
 use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::media::{MediaFormat, MediaType};
@@ -35,7 +37,7 @@ pub struct ReadyThumbnailItem {
 }
 
 pub struct ThumbnailScheduler {
-    library: Arc<Library>,
+    pub library: Arc<Library>,
     cache: Arc<L1ThumbnailCache>,
     store: Arc<PackStore>,
     generator: Arc<ThumbnailGenerator>,
@@ -105,6 +107,10 @@ impl ThumbnailScheduler {
 
     pub fn tracker(&self) -> &ThumbnailProgressTracker {
         &self.tracker
+    }
+
+    pub fn storage_stats(&self) -> ThumbnailStorageStats {
+        self.store.storage_stats(&self.library)
     }
 
     pub fn cancel_current_pipeline(&self) {
@@ -215,6 +221,7 @@ impl ThumbnailScheduler {
 
         let existing_count = existing_locations.len();
         let missing_count = missing_targets.len();
+        let stats_start = self.storage_stats();
 
         tracing::info!(
             pipeline_id = pipeline_id,
@@ -225,9 +232,21 @@ impl ThumbnailScheduler {
             l1_ram_slots = self.cache.capacity(),
             target_db_size = config.max_bound,
             target_format = %config.format.as_str(),
+            target_quality = config.quality,
             scaling_algo = %config.scaling_algorithm.as_str(),
             video_engine = %config.video_engine.as_str(),
             video_offset = config.video_offset_percent,
+            generate_previews = config.generate_video_previews,
+            preview_frames = config.preview_frame_count,
+            preview_format = %config.preview_format.as_str(),
+            preview_quality = config.preview_quality,
+            pack_store_mb = format!("{:.2} MB ({} pack files)", stats_start.pack_total_mb, stats_start.pack_files_count),
+            lmdb_database_mb = format!("{:.2} MB", stats_start.lmdb_data_mb),
+            total_storage_mb = format!("{:.2} MB", stats_start.total_cache_mb),
+            total_stored_thumbnails = stats_start.lmdb_thumbnails_count,
+            total_stored_previews = stats_start.lmdb_previews_count,
+            total_preview_frames = stats_start.lmdb_preview_frames_count,
+            avg_frame_size = format!("{:.2} KB", stats_start.avg_thumbnail_kb()),
             elapsed_ms = t_start.elapsed().as_millis(),
             "=== THUMBNAIL PIPELINE START ==="
         );
@@ -444,6 +463,7 @@ impl ThumbnailScheduler {
                                             width = primary.width,
                                             height = primary.height,
                                             preview_frames = video_res.preview_frames.len(),
+                                            primary_bytes = compressed_primary.len(),
                                             total_gen_ms = t_gen.elapsed().as_millis(),
                                             "Saved video thumbnail and previews to PackStore"
                                         );
@@ -546,6 +566,29 @@ impl ThumbnailScheduler {
 
         if !batched_db_writes.is_empty() {
             self.flush_db_batch(&mut batched_db_writes);
+        }
+
+        // Output overall updated storage metrics once all generation workers finish
+        let snap = self.tracker.snapshot();
+        if !snap.is_generating && snap.generate_total > 0 && snap.generate_current >= snap.generate_total {
+            let stats_end = self.storage_stats();
+            tracing::info!(
+                pipeline_id = pipeline_id,
+                folder_id = folder_id,
+                total_generated = snap.generate_total,
+                target_format = %config.format.as_str(),
+                target_quality = config.quality,
+                preview_format = %config.preview_format.as_str(),
+                preview_quality = config.preview_quality,
+                pack_store_mb = format!("{:.2} MB ({} pack files)", stats_end.pack_total_mb, stats_end.pack_files_count),
+                lmdb_database_mb = format!("{:.2} MB", stats_end.lmdb_data_mb),
+                total_storage_mb = format!("{:.2} MB", stats_end.total_cache_mb),
+                total_stored_thumbnails = stats_end.lmdb_thumbnails_count,
+                total_stored_previews = stats_end.lmdb_previews_count,
+                total_preview_frames = stats_end.lmdb_preview_frames_count,
+                avg_frame_size = format!("{:.2} KB", stats_end.avg_thumbnail_kb()),
+                "[Thumbnail Storage] Generation batch completed. Total storage updated."
+            );
         }
     }
 
@@ -744,11 +787,18 @@ impl ThumbnailScheduler {
             .cache
             .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
 
+        let stats = self.storage_stats();
+
         tracing::info!(
             media = %LogObscurer::media(Some(media_id), file_path.to_string_lossy().as_ref()),
             target = %LogObscurer::path(file_path),
             width = frame.width,
             height = frame.height,
+            format = %config.format.as_str(),
+            quality = config.quality,
+            compressed_bytes = compressed.len(),
+            total_pack_storage_mb = format!("{:.2} MB", stats.pack_total_mb),
+            total_cache_storage_mb = format!("{:.2} MB", stats.total_cache_mb),
             "Successfully regenerated thumbnail and persisted to LMDB and L1 cache"
         );
 

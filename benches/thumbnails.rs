@@ -1,7 +1,7 @@
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, Criterion};
 use fast_image_resize::images::{Image, ImageRef};
 use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
-use rustview::thumbnails::{ThumbnailFormat, ThumbnailGenerator, calculate_aspect_dimensions};
+use rustview::thumbnails::{calculate_aspect_dimensions, ThumbnailFormat, ThumbnailGenerator};
 use std::hint::black_box;
 
 fn thumbnail_benchmark(c: &mut Criterion) {
@@ -71,6 +71,21 @@ fn thumbnail_benchmark(c: &mut Criterion) {
                     dst_h,
                     ThumbnailFormat::Webp,
                     80,
+                )
+                .unwrap();
+            black_box(encoded);
+        });
+    });
+
+    c.bench_function("encode_webp_quality_40", |b| {
+        b.iter(|| {
+            let encoded = generator
+                .compress(
+                    black_box(&sample_rgb),
+                    dst_w,
+                    dst_h,
+                    ThumbnailFormat::Webp,
+                    40,
                 )
                 .unwrap();
             black_box(encoded);

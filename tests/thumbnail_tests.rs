@@ -1,7 +1,7 @@
 use rustview::library::Library;
 use rustview::thumbnails::{
-    calculate_aspect_dimensions, PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat,
-    ThumbnailGenerator, ThumbnailManager, VideoThumbnailEngine,
+    calculate_aspect_dimensions, PreparedTarget, ScalingAlgorithm, ThumbnailConfig,
+    ThumbnailFormat, ThumbnailGenerator, ThumbnailManager, VideoThumbnailEngine,
 };
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -17,7 +17,7 @@ fn test_aspect_ratio_calculations() {
     // 1:1 Square
     assert_eq!(calculate_aspect_dimensions(2000, 2000, 256), (256, 256));
 
-    // Problematic portrait & odd video aspect ratios from user probing
+    // Problematic portrait & odd video aspect ratios
     // viddd.mp4: 720x1280 (9:16)
     assert_eq!(calculate_aspect_dimensions(720, 1280, 256), (144, 256));
     // root2.mkv: 368x656 (23:41)
@@ -27,7 +27,87 @@ fn test_aspect_ratio_calculations() {
 }
 
 #[test]
-fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
+fn test_webp_and_jpeg_quality_scaling_differences() {
+    let generator = ThumbnailGenerator::new();
+    let width = 256u32;
+    let height = 144u32;
+
+    // Create realistic non-uniform gradient test pixel data
+    let mut pixels = Vec::with_capacity((width * height * 3) as usize);
+    for y in 0..height {
+        for x in 0..width {
+            let r = ((x * 255) / width) as u8;
+            let g = ((y * 255) / height) as u8;
+            let b = (((x + y) * 255) / (width + height)) as u8;
+            pixels.push(r);
+            pixels.push(g);
+            pixels.push(b);
+        }
+    }
+
+    // 1. Test WebP quality scaling: quality 20 MUST be significantly smaller than quality 95
+    let webp_q20 = generator
+        .compress(&pixels, width, height, ThumbnailFormat::Webp, 20)
+        .expect("WebP Q20 encode failed");
+    let webp_q50 = generator
+        .compress(&pixels, width, height, ThumbnailFormat::Webp, 50)
+        .expect("WebP Q50 encode failed");
+    let webp_q95 = generator
+        .compress(&pixels, width, height, ThumbnailFormat::Webp, 95)
+        .expect("WebP Q95 encode failed");
+
+    assert!(
+        webp_q20.len() < webp_q50.len(),
+        "WebP quality 20 ({} bytes) must be smaller than quality 50 ({} bytes)",
+        webp_q20.len(),
+        webp_q50.len()
+    );
+    assert!(
+        webp_q50.len() < webp_q95.len(),
+        "WebP quality 50 ({} bytes) must be smaller than quality 95 ({} bytes)",
+        webp_q50.len(),
+        webp_q95.len()
+    );
+
+    // Verify decompression round-trip for lossy WebP
+    let (w_dec, h_dec, raw_dec) = generator.decompress(&webp_q50).expect("WebP decode failed");
+    assert_eq!(w_dec, width);
+    assert_eq!(h_dec, height);
+    assert_eq!(raw_dec.len(), (width * height * 3) as usize);
+
+    // 2. Test JPEG quality scaling: quality 20 MUST be significantly smaller than quality 95
+    let jpeg_q20 = generator
+        .compress(&pixels, width, height, ThumbnailFormat::Jpeg, 20)
+        .expect("JPEG Q20 encode failed");
+    let jpeg_q50 = generator
+        .compress(&pixels, width, height, ThumbnailFormat::Jpeg, 50)
+        .expect("JPEG Q50 encode failed");
+    let jpeg_q95 = generator
+        .compress(&pixels, width, height, ThumbnailFormat::Jpeg, 95)
+        .expect("JPEG Q95 encode failed");
+
+    assert!(
+        jpeg_q20.len() < jpeg_q50.len(),
+        "JPEG quality 20 ({} bytes) must be smaller than quality 50 ({} bytes)",
+        jpeg_q20.len(),
+        jpeg_q50.len()
+    );
+    assert!(
+        jpeg_q50.len() < jpeg_q95.len(),
+        "JPEG quality 50 ({} bytes) must be smaller than quality 95 ({} bytes)",
+        jpeg_q50.len(),
+        jpeg_q95.len()
+    );
+
+    // Verify decompression round-trip for JPEG
+    let (w_jpg, h_jpg, raw_jpg) = generator.decompress(&jpeg_q50).expect("JPEG decode failed");
+    assert_eq!(w_jpg, width);
+    assert_eq!(h_jpg, height);
+    assert_eq!(raw_jpg.len(), (width * height * 3) as usize);
+}
+
+#[test]
+fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline_and_storage_stats() {
     let tmp_db = tempdir().unwrap();
     let tmp_media = tempdir().unwrap();
     let tmp_cache = tempdir().unwrap();
@@ -110,7 +190,14 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
         .unwrap();
     assert_eq!((portrait_item.width, portrait_item.height), (144, 256));
 
-    // 2. Test L1 Cache Invalidation & Seamless Reload from PackStore
+    // 2. Test Storage Stats in MB / KB
+    let stats = manager.storage_stats();
+    assert!(stats.pack_total_bytes > 0);
+    assert!(stats.pack_files_count >= 1);
+    assert_eq!(stats.lmdb_thumbnails_count, 2);
+    assert!(stats.avg_thumbnail_kb() > 0.0);
+
+    // 3. Test L1 Cache Invalidation & Seamless Reload from PackStore
     manager.cache().clear();
     let reloaded = manager
         .get_or_load_sync(media_list[0].id, &img1_path, webp_config.clone())
@@ -118,7 +205,7 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline() {
     assert_eq!((reloaded.width, reloaded.height), (256, 144));
     assert_eq!(reloaded.pixels.len(), (256 * 144 * 3) as usize);
 
-    // 3. Test Mixed format decoding in PackStore
+    // 4. Test Mixed format decoding in PackStore
     let generator = ThumbnailGenerator::new();
     let raw_rgb = vec![200u8; 256 * 144 * 3];
 

@@ -3,8 +3,7 @@ use super::image::{DecodedThumbnailFrame, ImageDecoder, SimdImageThumbnailer};
 use super::types::{ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat};
 use super::video::{DynamicVideoThumbnailer, VideoExtractionResult};
 use image::codecs::jpeg::JpegEncoder;
-use image::codecs::webp::WebPEncoder;
-use image::{ColorType, ExtendedColorType};
+use image::ColorType;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -45,6 +44,7 @@ impl ThumbnailGenerator {
     }
 
     /// Compresses raw RGB8 pixels to configured format (WebP or JPEG) with specified quality factor (10..100).
+    /// Uses native lossy WebP compression via libwebp or high-performance JPEG compression via JpegEncoder.
     pub fn compress(
         &self,
         rgb8_pixels: &[u8],
@@ -55,18 +55,26 @@ impl ThumbnailGenerator {
     ) -> Result<Vec<u8>, ThumbnailError> {
         let t0 = Instant::now();
         let quality = quality.clamp(10, 100);
-        let mut buffer = Vec::with_capacity((width * height) as usize / 2);
 
-        match format {
+        if rgb8_pixels.len() != (width as usize) * (height as usize) * 3 {
+            return Err(ThumbnailError::ImageBuffer(
+                fast_image_resize::ImageBufferError::InvalidBufferSize,
+            ));
+        }
+
+        let buffer = match format {
             ThumbnailFormat::Webp => {
-                let encoder = WebPEncoder::new_lossless(&mut buffer);
-                encoder.encode(rgb8_pixels, width, height, ExtendedColorType::Rgb8)?;
+                let encoder = webp::Encoder::from_rgb(rgb8_pixels, width, height);
+                let webp_memory = encoder.encode(quality as f32);
+                webp_memory.to_vec()
             }
             ThumbnailFormat::Jpeg => {
-                let mut encoder = JpegEncoder::new_with_quality(&mut buffer, quality);
+                let mut buf = Vec::with_capacity((width * height) as usize / 2);
+                let mut encoder = JpegEncoder::new_with_quality(&mut buf, quality);
                 encoder.encode(rgb8_pixels, width, height, ColorType::Rgb8.into())?;
+                buf
             }
-        }
+        };
 
         tracing::trace!(
             format = %format.as_str(),
