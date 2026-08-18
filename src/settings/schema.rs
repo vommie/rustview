@@ -15,6 +15,8 @@ pub const DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER: bool = true;
 pub const DEFAULT_PERSIST_FOLDER_TREE_STATE: bool = true;
 pub const DEFAULT_SHOW_DELETED_FOLDERS: bool = true;
 pub const DEFAULT_SHOW_FOLDER_METRICS: bool = true;
+pub const DEFAULT_SHOW_HIDDEN_FOLDERS: bool = false;
+pub const DEFAULT_SUPPORT_DOT_HIDDEN_FILES: bool = true;
 
 // =============================================================================
 // SECTION 3: Appearance & Grid Presentation - Single Point of Truth Constants
@@ -225,6 +227,8 @@ pub struct FolderSettings {
     pub persist_folder_tree_state: bool,
     pub show_deleted_folders: bool,
     pub show_folder_metrics: bool,
+    pub show_hidden_folders: bool,
+    pub support_dot_hidden_files: bool,
     pub expanded_folder_ids: Vec<u64>,
 }
 
@@ -235,6 +239,8 @@ impl Default for FolderSettings {
             persist_folder_tree_state: DEFAULT_PERSIST_FOLDER_TREE_STATE,
             show_deleted_folders: DEFAULT_SHOW_DELETED_FOLDERS,
             show_folder_metrics: DEFAULT_SHOW_FOLDER_METRICS,
+            show_hidden_folders: DEFAULT_SHOW_HIDDEN_FOLDERS,
+            support_dot_hidden_files: DEFAULT_SUPPORT_DOT_HIDDEN_FILES,
             expanded_folder_ids: Vec::new(),
         }
     }

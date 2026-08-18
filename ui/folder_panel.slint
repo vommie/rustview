@@ -111,10 +111,13 @@ export component FolderPanel inherits VerticalLayout {
 
     in property <[FolderNodeView]> folders: [];
     in property <bool> is-refreshing: false;
+    in-out property <bool> show-hidden-folders: false;
+
     callback folder-clicked(int, string);
     callback folder-toggle-expand(int);
     callback folder-context-menu(int, length, length);
     callback refresh-clicked();
+    callback toggle-hidden-folders(bool);
 
     // Section Header
     Rectangle {
@@ -135,9 +138,11 @@ export component FolderPanel inherits VerticalLayout {
         }
     }
 
-    // Modular Encapsulated Panel Toolbar with integrated Throbber
+    // Modular Encapsulated Panel Toolbar with integrated Throbber and Hidden Folders Toggle Button
     FolderPanelToolbar {
         is-refreshing: root.is-refreshing;
+        show-hidden <=> root.show-hidden-folders;
+        toggle-hidden-clicked(h) => { root.toggle-hidden-folders(h); }
         refresh-clicked => { root.refresh-clicked(); }
     }
 

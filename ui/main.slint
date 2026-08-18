@@ -71,9 +71,10 @@ export component MainWindow inherits Window {
     in-out property <length> col-size-width: 110px;
     in-out property <length> col-rating-width: 90px;
 
-    // Folder Structure Scan Progress Indicator
+    // Folder Structure Scan Progress Indicator & Hidden Folders State
     in-out property <bool> is-refreshing-folders: false;
     in-out property <int> folder-scan-count: 0;
+    in-out property <bool> show-hidden-folders: false;
 
     // Media Files Discovery & Extraction Progress Indicators
     in-out property <bool> is-indexing-media: false;
@@ -141,6 +142,7 @@ export component MainWindow inherits Window {
     callback folder-context-menu(int /* id */, length /* x */, length /* y */);
     callback folder-refresh-clicked();
     callback favorite-selected(string);
+    callback toggle-hidden-folders(bool /* show_hidden */);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
     callback media-hover-changed(int /* id */, bool /* is_hover */);
@@ -199,6 +201,8 @@ export component MainWindow inherits Window {
                 folders: root.folders;
                 favorites: root.favorites;
                 is-refreshing-folders: root.is-refreshing-folders;
+                show-hidden-folders <=> root.show-hidden-folders;
+                toggle-hidden-folders(h) => { root.toggle-hidden-folders(h); }
                 folder-clicked(id, path) => { root.folder-selected(id, path); }
                 folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
                 folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 38px + sidebar_left.y + y); }

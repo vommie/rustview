@@ -6,6 +6,8 @@ pub enum IconAsset {
     Settings,
     Refresh,
     Loader,
+    HiddenFoldersInvisible,
+    HiddenFoldersVisible,
     GridView,
     ListView,
     Plus,
@@ -58,6 +60,22 @@ impl IconAsset {
                 relative_path: "ui/icons/loader.svg",
                 allow_tint: true,
                 description: "Animated background progress throbber indicator",
+            },
+            Self::HiddenFoldersInvisible => IconMetadata {
+                asset: *self,
+                name: "hidden-folders-invisible",
+                file_name: "hidden-folders-invisible.svg",
+                relative_path: "ui/icons/hidden-folders-invisible.svg",
+                allow_tint: true,
+                description: "Hidden folders are currently hidden/invisible",
+            },
+            Self::HiddenFoldersVisible => IconMetadata {
+                asset: *self,
+                name: "hidden-folders-visible",
+                file_name: "hidden-folders-visible.svg",
+                relative_path: "ui/icons/hidden-folders-visible.svg",
+                allow_tint: true,
+                description: "Hidden folders are currently shown/visible",
             },
             Self::GridView => IconMetadata {
                 asset: *self,
@@ -206,7 +224,7 @@ impl IconAsset {
         }
     }
 
-    /// Single Point of Truth determining whether the icon is theme-tintable.
+    /// Single Point of Truth helper querying whether an icon should be colorized for dark/light themes.
     #[inline]
     pub fn is_tintable(&self) -> bool {
         self.metadata().allow_tint
@@ -225,6 +243,12 @@ impl IconAsset {
             "settings" => Some(Self::Settings),
             "refresh" | "reload" => Some(Self::Refresh),
             "loader" | "throbber" | "spinner" => Some(Self::Loader),
+            "hidden-folders-invisible" | "hidden_folders_invisible" | "hidden_invisible" => {
+                Some(Self::HiddenFoldersInvisible)
+            }
+            "hidden-folders-visible" | "hidden_folders_visible" | "hidden_visible" => {
+                Some(Self::HiddenFoldersVisible)
+            }
             "grid" | "grid_view" => Some(Self::GridView),
             "list" | "list_view" | "table" => Some(Self::ListView),
             "plus" | "add" => Some(Self::Plus),
@@ -252,6 +276,8 @@ impl IconAsset {
             Self::Settings,
             Self::Refresh,
             Self::Loader,
+            Self::HiddenFoldersInvisible,
+            Self::HiddenFoldersVisible,
             Self::GridView,
             Self::ListView,
             Self::Plus,

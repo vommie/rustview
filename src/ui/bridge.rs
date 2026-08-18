@@ -105,6 +105,7 @@ impl UiBridge {
         window.set_thumb_aspect_idx(ratio.to_index());
         window.set_enable_tooltips(app_settings.appearance.enable_tooltips);
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
+        window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
         window.set_status_text("Initializing RustView...".into());
 
         // Initialize Tag & Rate panel properties (Default Scope: Global / Index 2)
@@ -184,6 +185,8 @@ impl UiBridge {
             sort_ord = ?initial_sort_ord,
             thumb_size = app_settings.appearance.default_thumbnail_size,
             aspect_ratio = %app_settings.appearance.thumbnail_aspect_ratio,
+            show_hidden_folders = app_settings.folders.show_hidden_folders,
+            support_dot_hidden = app_settings.folders.support_dot_hidden_files,
             enable_tooltips = app_settings.appearance.enable_tooltips,
             tooltip_delay_ms = app_settings.appearance.tooltip_delay_ms,
             "[UiBridge] Initialized all UI bridges, scheduled deferred initial mount"
@@ -265,7 +268,7 @@ impl UiBridge {
 
                 // 4. Folder Tree Presentation (Only re-flatten in-memory tree nodes, zero disk scan)
                 if diff_clone.folder_tree_presentation_changed && !diff_clone.root_folder_changed {
-                    state.write().invalidate_folder_tree_cache();
+                    window.set_show_hidden_folders(new_clone.folders.show_hidden_folders);
                     BridgeFolders::reload_tree(&window, &library, &settings, &state);
                     tracing::debug!("[UiBridge: SettingsUpdate] Re-rendered folder tree with updated visibility/metrics");
                 }

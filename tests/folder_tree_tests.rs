@@ -1,8 +1,9 @@
 use heed::BytesDecode;
+use rustview::library::dot_hidden::DotHiddenCache;
 use rustview::library::Library;
 use rustview::library::models::FolderRecordCodec;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
-use rustview::ui::bridge_folders::FolderTreeBuilder;
+use rustview::ui::bridge_folders::{FolderFlattenContext, FolderTreeBuilder};
 use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -67,15 +68,17 @@ fn test_folder_tree_hierarchy_building_and_counts() {
     expanded_ids.insert(sub1_folder.id);
 
     let mut flattened = Vec::new();
-    FolderTreeBuilder::flatten(
-        &tree,
-        0,
-        &expanded_ids,
-        Some(sub1_a_folder.id),
-        true, // show_deleted
-        true, // show_metrics
-        &mut flattened,
-    );
+    let mut dot_hidden_cache = DotHiddenCache::new();
+    let mut ctx = FolderFlattenContext {
+        expanded_ids: &expanded_ids,
+        selected_id: Some(sub1_a_folder.id),
+        show_deleted: true,
+        show_metrics: true,
+        show_hidden: false,
+        support_dot_hidden: true,
+        dot_hidden_cache: &mut dot_hidden_cache,
+    };
+    FolderTreeBuilder::flatten(&tree, 0, &mut ctx, &mut flattened);
 
     assert_eq!(flattened.len(), 4);
     assert_eq!(
@@ -98,15 +101,17 @@ fn test_folder_tree_hierarchy_building_and_counts() {
 
     // 5. Test Flattening with metrics disabled
     let mut flattened_no_metrics = Vec::new();
-    FolderTreeBuilder::flatten(
-        &tree,
-        0,
-        &expanded_ids,
-        Some(sub1_a_folder.id),
-        true,  // show_deleted
-        false, // show_metrics = false
-        &mut flattened_no_metrics,
-    );
+    let mut dot_hidden_cache_no_metrics = DotHiddenCache::new();
+    let mut ctx_no_metrics = FolderFlattenContext {
+        expanded_ids: &expanded_ids,
+        selected_id: Some(sub1_a_folder.id),
+        show_deleted: true,
+        show_metrics: false,
+        show_hidden: false,
+        support_dot_hidden: true,
+        dot_hidden_cache: &mut dot_hidden_cache_no_metrics,
+    };
+    FolderTreeBuilder::flatten(&tree, 0, &mut ctx_no_metrics, &mut flattened_no_metrics);
 
     assert_eq!(
         flattened_no_metrics[0].name.as_str(),
@@ -115,6 +120,114 @@ fn test_folder_tree_hierarchy_building_and_counts() {
     assert_eq!(flattened_no_metrics[1].name.as_str(), "Sub1");
     assert_eq!(flattened_no_metrics[2].name.as_str(), "Sub1_A");
     assert_eq!(flattened_no_metrics[3].name.as_str(), "Sub2");
+}
+
+#[test]
+fn test_hidden_folders_and_dot_hidden_file_support() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let root = tmp_media.path();
+
+    // Directory hierarchy:
+    // root -> NormalDir
+    // root -> .hidden_dot_dir (Standard Linux dot-folder)
+    // root -> ListedHiddenDir (Listed in root/.hidden file)
+    // root -> ExplicitVisibleDir
+    let normal_dir = root.join("NormalDir");
+    let dot_dir = root.join(".hidden_dot_dir");
+    let listed_dir = root.join("ListedHiddenDir");
+    let visible_dir = root.join("ExplicitVisibleDir");
+
+    fs::create_dir_all(&normal_dir).unwrap();
+    fs::create_dir_all(&dot_dir).unwrap();
+    fs::create_dir_all(&listed_dir).unwrap();
+    fs::create_dir_all(&visible_dir).unwrap();
+
+    // Create root/.hidden file listing "ListedHiddenDir"
+    let dot_hidden_path = root.join(".hidden");
+    fs::write(&dot_hidden_path, "# Comments are ignored\nListedHiddenDir\nNonExistentDir\n").unwrap();
+
+    lib.folder_tree_refresher()
+        .refresh_tree(root, None::<fn(usize)>)
+        .unwrap();
+
+    let folders = lib.folders().list_folders().unwrap();
+    assert_eq!(folders.len(), 5); // root + 4 children
+
+    let root_folder = lib.folders().get_folder_by_path(root).unwrap().unwrap();
+    let media_counts = HashMap::new();
+    let tree = FolderTreeBuilder::build_hierarchy(root, &folders, &media_counts);
+
+    let mut expanded_ids = HashSet::new();
+    expanded_ids.insert(root_folder.id);
+
+    // 1. When show_hidden = false and support_dot_hidden = true:
+    // Both .hidden_dot_dir AND ListedHiddenDir must be HIDDEN.
+    let mut dot_hidden_cache = DotHiddenCache::new();
+    let mut ctx_hidden = FolderFlattenContext {
+        expanded_ids: &expanded_ids,
+        selected_id: None,
+        show_deleted: true,
+        show_metrics: false,
+        show_hidden: false,
+        support_dot_hidden: true,
+        dot_hidden_cache: &mut dot_hidden_cache,
+    };
+    let mut flattened_hidden = Vec::new();
+    FolderTreeBuilder::flatten(&tree, 0, &mut ctx_hidden, &mut flattened_hidden);
+
+    let names: Vec<_> = flattened_hidden.iter().map(|f| f.name.as_str()).collect();
+    assert!(names.contains(&"NormalDir"));
+    assert!(names.contains(&"ExplicitVisibleDir"));
+    assert!(!names.contains(&".hidden_dot_dir"), "Dot folders should be hidden");
+    assert!(!names.contains(&"ListedHiddenDir"), "Listed .hidden entries should be hidden");
+    assert_eq!(flattened_hidden.len(), 3); // root, NormalDir, ExplicitVisibleDir
+
+    // 2. When show_hidden = true:
+    // ALL directories must be visible!
+    let mut dot_hidden_cache_all = DotHiddenCache::new();
+    let mut ctx_all = FolderFlattenContext {
+        expanded_ids: &expanded_ids,
+        selected_id: None,
+        show_deleted: true,
+        show_metrics: false,
+        show_hidden: true,
+        support_dot_hidden: true,
+        dot_hidden_cache: &mut dot_hidden_cache_all,
+    };
+    let mut flattened_all = Vec::new();
+    FolderTreeBuilder::flatten(&tree, 0, &mut ctx_all, &mut flattened_all);
+
+    let all_names: Vec<_> = flattened_all.iter().map(|f| f.name.as_str()).collect();
+    assert!(all_names.contains(&"NormalDir"));
+    assert!(all_names.contains(&".hidden_dot_dir"));
+    assert!(all_names.contains(&"ListedHiddenDir"));
+    assert!(all_names.contains(&"ExplicitVisibleDir"));
+    assert_eq!(flattened_all.len(), 5); // root + 4 children
+
+    // 3. When support_dot_hidden = false:
+    // .hidden_dot_dir is still hidden (dot-folder), but ListedHiddenDir is SHOWN because .hidden is ignored!
+    let mut dot_hidden_cache_no_dot = DotHiddenCache::new();
+    let mut ctx_no_dot = FolderFlattenContext {
+        expanded_ids: &expanded_ids,
+        selected_id: None,
+        show_deleted: true,
+        show_metrics: false,
+        show_hidden: false,
+        support_dot_hidden: false,
+        dot_hidden_cache: &mut dot_hidden_cache_no_dot,
+    };
+    let mut flattened_no_dot_hidden = Vec::new();
+    FolderTreeBuilder::flatten(&tree, 0, &mut ctx_no_dot, &mut flattened_no_dot_hidden);
+
+    let no_dot_names: Vec<_> = flattened_no_dot_hidden.iter().map(|f| f.name.as_str()).collect();
+    assert!(no_dot_names.contains(&"NormalDir"));
+    assert!(no_dot_names.contains(&"ExplicitVisibleDir"));
+    assert!(no_dot_names.contains(&"ListedHiddenDir"), "Listed .hidden entries should be shown when option is disabled");
+    assert!(!no_dot_names.contains(&".hidden_dot_dir"));
+    assert_eq!(flattened_no_dot_hidden.len(), 4);
 }
 
 #[test]
@@ -356,7 +469,17 @@ fn test_folder_deletion_preserves_root_and_sibling_expansion() {
     let tree = FolderTreeBuilder::build_hierarchy(root, &folders, &media_counts);
 
     let mut flattened = Vec::new();
-    FolderTreeBuilder::flatten(&tree, 0, &expanded_ids, None, true, true, &mut flattened);
+    let mut dot_hidden_cache = DotHiddenCache::new();
+    let mut ctx = FolderFlattenContext {
+        expanded_ids: &expanded_ids,
+        selected_id: None,
+        show_deleted: true,
+        show_metrics: true,
+        show_hidden: false,
+        support_dot_hidden: true,
+        dot_hidden_cache: &mut dot_hidden_cache,
+    };
+    FolderTreeBuilder::flatten(&tree, 0, &mut ctx, &mut flattened);
 
     // Should contain: Root (depth 0), KeepBranch (depth 1), KeepSub (depth 2) -> 3 rows
     assert_eq!(flattened.len(), 3);

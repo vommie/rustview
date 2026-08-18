@@ -14,12 +14,14 @@ export component SidebarLeft inherits Rectangle {
     in property <[FolderNodeView]> folders: [];
     in property <[FavoriteItemView]> favorites: [];
     in property <bool> is-refreshing-folders: false;
+    in-out property <bool> show-hidden-folders: false;
 
     callback folder-clicked(int /* id */, string /* path */);
     callback folder-toggle-expand(int /* id */);
     callback folder-context-menu(int /* id */, length /* x */, length /* y */);
     callback folder-refresh-clicked();
     callback favorite-clicked(string /* path */);
+    callback toggle-hidden-folders(bool /* show_hidden */);
 
     VerticalLayout {
         padding: 8px;
@@ -35,6 +37,8 @@ export component SidebarLeft inherits Rectangle {
         folder-panel := FolderPanel {
             folders: root.folders;
             is-refreshing: root.is-refreshing-folders;
+            show-hidden-folders <=> root.show-hidden-folders;
+            toggle-hidden-folders(h) => { root.toggle-hidden-folders(h); }
             folder-clicked(id, path) => { root.folder-clicked(id, path); }
             folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
             folder-context-menu(id, x, y) => { root.folder-context-menu(id, folder-panel.x + x, folder-panel.y + y); }

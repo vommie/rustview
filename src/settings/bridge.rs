@@ -61,6 +61,8 @@ impl SettingsDialogController {
         window.set_persist_folder_tree_state(settings.folders.persist_folder_tree_state);
         window.set_show_deleted_folders(settings.folders.show_deleted_folders);
         window.set_show_folder_metrics(settings.folders.show_folder_metrics);
+        window.set_show_hidden_folders(settings.folders.show_hidden_folders);
+        window.set_support_dot_hidden_files(settings.folders.support_dot_hidden_files);
 
         // Appearance properties
         window.set_default_thumb_size(settings.appearance.default_thumbnail_size as i32);
@@ -176,6 +178,8 @@ impl SettingsDialogController {
                 current.folders.persist_folder_tree_state = w.get_persist_folder_tree_state();
                 current.folders.show_deleted_folders = w.get_show_deleted_folders();
                 current.folders.show_folder_metrics = w.get_show_folder_metrics();
+                current.folders.show_hidden_folders = w.get_show_hidden_folders();
+                current.folders.support_dot_hidden_files = w.get_support_dot_hidden_files();
 
                 current.appearance.default_thumbnail_size = w.get_default_thumb_size() as u32;
                 let ratio = GridAspectRatio::from_index(w.get_thumb_aspect_idx());

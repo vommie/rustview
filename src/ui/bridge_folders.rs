@@ -3,6 +3,7 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_tags::BridgeTags;
 use super::{FolderNodeView, MainWindow};
+use crate::library::dot_hidden::DotHiddenCache;
 use crate::library::folders::normalize_path;
 use crate::library::models::{FolderId, FolderRecord};
 use crate::library::Library;
@@ -24,6 +25,17 @@ pub struct FolderTreeNode {
     pub subfolders_count: usize,
     pub media_files_count: usize,
     pub children: Vec<FolderTreeNode>,
+}
+
+/// Context parameters passed during the recursive tree flattening pass.
+pub struct FolderFlattenContext<'a> {
+    pub expanded_ids: &'a HashSet<FolderId>,
+    pub selected_id: Option<FolderId>,
+    pub show_deleted: bool,
+    pub show_metrics: bool,
+    pub show_hidden: bool,
+    pub support_dot_hidden: bool,
+    pub dot_hidden_cache: &'a mut DotHiddenCache,
 }
 
 pub struct FolderTreeBuilder;
@@ -92,7 +104,6 @@ impl FolderTreeBuilder {
 
         if let Some(child_indices) = subfolder_map.get(clean_path) {
             let mut sorted_indices = child_indices.clone();
-            // Fast sibling-only sorting: only sorts small child lists in nanoseconds
             if sorted_indices.len() > 1 {
                 sorted_indices.sort_unstable_by(|&a, &b| folders[a].path.cmp(&folders[b].path));
             }
@@ -116,24 +127,17 @@ impl FolderTreeBuilder {
         nodes
     }
 
-    /// Fast in-memory flattening of expanded tree nodes for Slint ModelRc rendering.
+    /// Fast in-memory flattening of expanded tree nodes for Slint ModelRc rendering with dot-folder and Linux .hidden file support.
     pub fn flatten(
         nodes: &[FolderTreeNode],
         depth: i32,
-        expanded_ids: &HashSet<FolderId>,
-        selected_id: Option<FolderId>,
-        show_deleted: bool,
-        show_metrics: bool,
+        ctx: &mut FolderFlattenContext<'_>,
         output: &mut Vec<FolderNodeView>,
     ) {
         for node in nodes {
-            if node.record.is_deleted && !show_deleted {
+            if node.record.is_deleted && !ctx.show_deleted {
                 continue;
             }
-
-            let has_children = !node.children.is_empty();
-            let is_expanded = expanded_ids.contains(&node.record.id);
-            let is_selected = selected_id == Some(node.record.id);
 
             let path_obj = Path::new(&node.record.path);
             let raw_name = path_obj
@@ -141,7 +145,18 @@ impl FolderTreeBuilder {
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| node.record.path.clone());
 
-            let formatted_name = if show_metrics {
+            let is_hidden_folder = ctx.dot_hidden_cache.is_hidden(path_obj, &raw_name, ctx.support_dot_hidden);
+
+            // Filter out hidden folders if show_hidden is false
+            if is_hidden_folder && !ctx.show_hidden {
+                continue;
+            }
+
+            let has_children = !node.children.is_empty();
+            let is_expanded = ctx.expanded_ids.contains(&node.record.id);
+            let is_selected = ctx.selected_id == Some(node.record.id);
+
+            let formatted_name = if ctx.show_metrics {
                 format!(
                     "{} ({}, {})",
                     raw_name, node.subfolders_count, node.media_files_count
@@ -167,10 +182,7 @@ impl FolderTreeBuilder {
                 Self::flatten(
                     &node.children,
                     depth + 1,
-                    expanded_ids,
-                    selected_id,
-                    show_deleted,
-                    show_metrics,
+                    ctx,
                     output,
                 );
             }
@@ -247,6 +259,22 @@ impl BridgeFolders {
             Self::refresh_folder_tree(&win, &lib, &set, &st);
         });
 
+        // Hidden folders toolbar toggle button handler
+        let set = settings.clone();
+        let st = state.clone();
+        let win = window.clone_strong();
+        let lib = library.clone();
+        window.on_toggle_hidden_folders(move |show_hidden| {
+            tracing::info!(
+                show_hidden = show_hidden,
+                "[FolderPanel: Toolbar] Hidden folders toggle state changed"
+            );
+            let mut app_settings = set.get();
+            app_settings.folders.show_hidden_folders = show_hidden;
+            set.save_quiet_async(&app_settings);
+            Self::reload_tree(&win, &lib, &set, &st);
+        });
+
         let lib = library;
         let thumb = thumbnails;
         let set = settings;
@@ -272,6 +300,7 @@ impl BridgeFolders {
         window.set_thumb_size(s.appearance.default_thumbnail_size as i32);
         let ratio = GridAspectRatio::from_str_name(&s.appearance.thumbnail_aspect_ratio);
         window.set_thumb_aspect_idx(ratio.to_index());
+        window.set_show_hidden_folders(s.folders.show_hidden_folders);
 
         let Some(ref root_path) = s.general.root_folder else {
             Self::clear_view(
@@ -752,7 +781,6 @@ impl BridgeFolders {
             }
             None => {
                 let t_db_load = Instant::now();
-                // Sequential high-throughput LMDB stream (fastest possible memory-mapped traversal)
                 let folders = library.folders().list_folders().unwrap_or_default();
                 let db_load_us = t_db_load.elapsed().as_micros();
 
@@ -784,16 +812,19 @@ impl BridgeFolders {
         };
 
         let t_flatten = Instant::now();
+        let mut dot_hidden_cache = DotHiddenCache::new();
+        let mut ctx = FolderFlattenContext {
+            expanded_ids: &expanded_ids,
+            selected_id: current_sel,
+            show_deleted: app_settings.folders.show_deleted_folders,
+            show_metrics: app_settings.folders.show_folder_metrics,
+            show_hidden: app_settings.folders.show_hidden_folders,
+            support_dot_hidden: app_settings.folders.support_dot_hidden_files,
+            dot_hidden_cache: &mut dot_hidden_cache,
+        };
+
         let mut folder_views = Vec::with_capacity(tree.len() * 4);
-        FolderTreeBuilder::flatten(
-            &tree,
-            0,
-            &expanded_ids,
-            current_sel,
-            app_settings.folders.show_deleted_folders,
-            app_settings.folders.show_folder_metrics,
-            &mut folder_views,
-        );
+        FolderTreeBuilder::flatten(&tree, 0, &mut ctx, &mut folder_views);
         let flatten_us = t_flatten.elapsed().as_micros();
 
         let t_slint = Instant::now();
@@ -802,6 +833,8 @@ impl BridgeFolders {
 
         tracing::debug!(
             expanded_nodes = expanded_ids.len(),
+            show_hidden = app_settings.folders.show_hidden_folders,
+            support_dot_hidden = app_settings.folders.support_dot_hidden_files,
             flatten_us = flatten_us,
             slint_commit_us = slint_us,
             total_time_us = t_total.elapsed().as_micros(),

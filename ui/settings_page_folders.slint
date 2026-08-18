@@ -9,6 +9,8 @@ export component SettingsPageFolders inherits VerticalLayout {
     in-out property <bool> persist-folder-tree-state: true;
     in-out property <bool> show-deleted-folders: true;
     in-out property <bool> show-folder-metrics: true;
+    in-out property <bool> show-hidden-folders: false;
+    in-out property <bool> support-dot-hidden-files: true;
 
     // Behavior Group (Top of Page)
     SettingsCard {
@@ -23,6 +25,16 @@ export component SettingsPageFolders inherits VerticalLayout {
         CheckBox {
             text: "Persistent folder tree state (remember expanded nodes)";
             checked <=> root.persist-folder-tree-state;
+        }
+
+        CheckBox {
+            text: "Show hidden folders (dot-folders and .hidden file entries)";
+            checked <=> root.show-hidden-folders;
+        }
+
+        CheckBox {
+            text: "Support Linux '.hidden' files for folder visibility (Dolphin / Nautilus standard)";
+            checked <=> root.support-dot-hidden-files;
         }
 
         CheckBox {

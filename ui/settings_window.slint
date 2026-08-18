@@ -43,6 +43,8 @@ export component SettingsWindow inherits Window {
     in-out property <bool> persist-folder-tree-state: true;
     in-out property <bool> show-deleted-folders: true;
     in-out property <bool> show-folder-metrics: true;
+    in-out property <bool> show-hidden-folders: false;
+    in-out property <bool> support-dot-hidden-files: true;
 
     // Appearance options
     in-out property <int> default-thumb-size: 190;
@@ -123,6 +125,8 @@ export component SettingsWindow inherits Window {
                         persist-folder-tree-state <=> root.persist-folder-tree-state;
                         show-deleted-folders <=> root.show-deleted-folders;
                         show-folder-metrics <=> root.show-folder-metrics;
+                        show-hidden-folders <=> root.show-hidden-folders;
+                        support-dot-hidden-files <=> root.support-dot-hidden-files;
                     }
 
                     if root.active-category == 2 : SettingsPageAppearance {

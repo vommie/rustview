@@ -4,10 +4,14 @@ import { PanelToolbar, ToolbarButton, ToolbarSpacer, ToolbarSeparator } from "pa
 import { Throbber } from "throbber.slint";
 
 /// Specialized, fully encapsulated horizontal toolbar for the Folders Panel.
-/// Houses folder tree control actions such as rescanning, structure refresh, and active background throbber indicator.
+/// Houses folder tree control actions such as rescanning, structure refresh, active background throbber indicator,
+/// and toggle button for showing/hiding hidden folders (dot-folders and Linux .hidden files).
 export component FolderPanelToolbar inherits PanelToolbar {
     in property <bool> is-refreshing: false;
+    in-out property <bool> show-hidden: false;
+
     callback refresh-clicked();
+    callback toggle-hidden-clicked(bool);
 
     toolbar-height: 26px;
 
@@ -22,7 +26,22 @@ export component FolderPanelToolbar inherits PanelToolbar {
     // 2. Expander / Spacer: Pushes toolbar control buttons to the right
     ToolbarSpacer {}
 
-    // 3. Folder Refresh Action Button
+    // 3. Toggle Hidden Folders Action Button (Icon-only, placed to the left of the refresh button)
+    ToolbarButton {
+        icon: root.show-hidden ? Icons.hidden-folders-visible : Icons.hidden-folders-invisible;
+        tooltip: root.show-hidden
+            ? "Hide hidden folders (dot-folders and .hidden entries)"
+            : "Show hidden folders (dot-folders and .hidden entries)";
+        is-active: root.show-hidden;
+        clicked => {
+            root.show-hidden = !root.show-hidden;
+            root.toggle-hidden-clicked(root.show-hidden);
+        }
+    }
+
+    ToolbarSeparator {}
+
+    // 4. Folder Refresh Action Button
     ToolbarButton {
         icon: Icons.refresh;
         tooltip: "Scan and refresh folder structure";

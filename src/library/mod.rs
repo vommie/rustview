@@ -1,4 +1,5 @@
 pub mod db;
+pub mod dot_hidden;
 pub mod error;
 pub mod file_operations;
 pub mod folder_operations;
@@ -12,6 +13,7 @@ pub mod schema;
 pub mod tags;
 
 pub use db::LibraryDatabase;
+pub use dot_hidden::DotHiddenCache;
 pub use error::LibraryError;
 pub use file_operations::{FileOperations, FilenameValidator};
 pub use folder_operations::{

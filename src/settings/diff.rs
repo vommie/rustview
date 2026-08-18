@@ -52,7 +52,9 @@ impl SettingsDiff {
             || old.general.deletion_mode != new.general.deletion_mode;
 
         let folder_tree_presentation_changed = old.folders.show_deleted_folders != new.folders.show_deleted_folders
-            || old.folders.show_folder_metrics != new.folders.show_folder_metrics;
+            || old.folders.show_folder_metrics != new.folders.show_folder_metrics
+            || old.folders.show_hidden_folders != new.folders.show_hidden_folders
+            || old.folders.support_dot_hidden_files != new.folders.support_dot_hidden_files;
 
         let folder_tree_behavior_changed = old.folders.auto_reveal_remembered_folder != new.folders.auto_reveal_remembered_folder
             || old.folders.persist_folder_tree_state != new.folders.persist_folder_tree_state;
@@ -167,6 +169,18 @@ impl SettingsDiff {
             changes.push(format!(
                 "Folders: show_folder_metrics ({} -> {})",
                 old.folders.show_folder_metrics, new.folders.show_folder_metrics
+            ));
+        }
+        if old.folders.show_hidden_folders != new.folders.show_hidden_folders {
+            changes.push(format!(
+                "Folders: show_hidden_folders ({} -> {})",
+                old.folders.show_hidden_folders, new.folders.show_hidden_folders
+            ));
+        }
+        if old.folders.support_dot_hidden_files != new.folders.support_dot_hidden_files {
+            changes.push(format!(
+                "Folders: support_dot_hidden_files ({} -> {})",
+                old.folders.support_dot_hidden_files, new.folders.support_dot_hidden_files
             ));
         }
 
