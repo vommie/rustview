@@ -133,6 +133,9 @@ impl SettingsDialogController {
 
         window.set_autoplay_videos(settings.player.autoplay_videos);
         window.set_default_volume(settings.player.default_volume);
+
+        // Debug properties
+        window.set_obfuscate_logs(settings.debug.obfuscate_logs);
     }
 
     fn register_callbacks(&self, window: &SettingsWindow) {
@@ -227,6 +230,9 @@ impl SettingsDialogController {
 
                 current.player.autoplay_videos = w.get_autoplay_videos();
                 current.player.default_volume = w.get_default_volume();
+
+                // Save Debug Parameters
+                current.debug.obfuscate_logs = w.get_obfuscate_logs();
 
                 mgr_save.update(current);
 

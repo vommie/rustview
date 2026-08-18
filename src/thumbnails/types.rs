@@ -1,8 +1,9 @@
 use crate::settings::{
-    DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_GENERATE_VIDEO_PREVIEWS,
-    DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY,
-    DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
-    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT,
+    LogObscurer, DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_CUSTOM_PREVIEW_SETTINGS,
+    DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT,
+    DEFAULT_PREVIEW_QUALITY, DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_DB_SIZE,
+    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY, DEFAULT_VIDEO_ENGINE,
+    DEFAULT_VIDEO_OFFSET_PERCENT,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -196,19 +197,7 @@ pub fn calculate_aspect_dimensions(orig_w: u32, orig_h: u32, max_bound: u32) -> 
     (target_w, target_h)
 }
 
+#[inline]
 pub fn anonymize_target(path: &Path, media_id: Option<u64>) -> String {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{}", e.to_ascii_lowercase()))
-        .unwrap_or_else(|| ".unknown".to_string());
-
-    let size_hint = std::fs::metadata(path)
-        .map(|m| format!(", {:.2} KB", m.len() as f64 / 1024.0))
-        .unwrap_or_default();
-
-    match media_id {
-        Some(id) => format!("MediaId({}) [*{}{}]", id, ext, size_hint),
-        None => format!("Anonymous [*{}{}]", ext, size_hint),
-    }
+    LogObscurer::target(path, media_id)
 }

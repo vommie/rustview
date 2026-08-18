@@ -1,12 +1,13 @@
-use super::MainWindow;
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
 use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
-use crate::library::Library;
+use super::MainWindow;
 use crate::library::models::MediaId;
+use crate::library::Library;
 use crate::player::{Player, PlayerController};
+use crate::settings::LogObscurer;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, Model};
 use std::sync::Arc;
@@ -260,10 +261,9 @@ impl BridgeFileSelection {
                 .unwrap_or_default();
 
             tracing::info!(
-                media_id = media_id,
-                filename = %media.filename,
+                media = %LogObscurer::media(Some(media_id), &media.filename),
                 media_type = ?media.media_type,
-                path = ?full_path,
+                path = %LogObscurer::path(&full_path),
                 "[MediaAction: DoubleClick] Double-click event triggered on media item"
             );
 
@@ -287,7 +287,11 @@ impl BridgeFileSelection {
                 .unwrap_or_default();
 
             if !full_path.exists() {
-                tracing::warn!(media_id = media_id, path = ?full_path, "Cannot open media: File not found on disk");
+                tracing::warn!(
+                    media = %LogObscurer::media(Some(media_id), &media.filename),
+                    path = %LogObscurer::path(&full_path),
+                    "Cannot open media: File not found on disk"
+                );
                 let missing_dlg = MissingFileDialogController::new();
                 missing_dlg.show(
                     window,
@@ -300,7 +304,11 @@ impl BridgeFileSelection {
                 return;
             }
 
-            tracing::info!(media_id = media_id, file = ?full_path, "Opening media item");
+            tracing::info!(
+                media = %LogObscurer::media(Some(media_id), &media.filename),
+                file = %LogObscurer::path(&full_path),
+                "Opening media item"
+            );
 
             if matches!(media.media_type, crate::media::MediaType::Video)
                 && player.load(&full_path, true).is_ok()

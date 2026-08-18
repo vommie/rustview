@@ -1,26 +1,26 @@
 use rustview::settings::{
-    AppSettings, GridAspectRatio, SettingsDiff, SettingsManager, SettingsStore,
+    AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager, SettingsStore,
     DEFAULT_AUDIO_DEVICE, DEFAULT_AUTOPLAY_VIDEOS, DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER,
     DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_DIMENSIONS_WIDTH, DEFAULT_COL_FILENAME_WIDTH,
     DEFAULT_COL_RATING_WIDTH, DEFAULT_COL_SIZE_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE,
     DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE,
     DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS,
     DEFAULT_GPU_API, DEFAULT_HWDEC_MODE, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
-    DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PLAYER_KEEP_OPEN, DEFAULT_PLAYER_VOLUME,
-    DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY,
-    DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM, DEFAULT_SHOW_DELETED_FOLDERS,
-    DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY,
-    DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH,
-    DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
-    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
-    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
-    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIDEO_OUTPUT, DEFAULT_WINDOW_HEIGHT,
-    DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH,
+    DEFAULT_OBFUSCATE_LOGS, DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PLAYER_KEEP_OPEN,
+    DEFAULT_PLAYER_VOLUME, DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT,
+    DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM,
+    DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS,
+    DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH,
+    DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_TAG_MATCH_MODE,
+    DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE,
+    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH,
+    DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT,
+    DEFAULT_VIDEO_OUTPUT, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH,
 };
 use std::fs;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tempfile::tempdir;
 
 #[test]
@@ -175,6 +175,10 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(initial.tags.default_match_mode, DEFAULT_TAG_MATCH_MODE);
     assert_eq!(initial.tags.default_scope_mode, DEFAULT_TAG_SCOPE_MODE);
 
+    // Debug & Logging Defaults (Default = true)
+    assert_eq!(initial.debug.obfuscate_logs, DEFAULT_OBFUSCATE_LOGS);
+    assert!(initial.debug.obfuscate_logs);
+
     // QueryFilter Defaults
     let filter = rustview::query::QueryFilter::default();
     assert_eq!(filter.match_mode.as_str(), DEFAULT_TAG_MATCH_MODE);
@@ -201,9 +205,11 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.appearance.show_filenames = false;
     initial.appearance.enable_tooltips = false;
     initial.appearance.tooltip_delay_ms = 450;
+    initial.debug.obfuscate_logs = false;
     manager.update(initial);
 
     assert!(hook_fired.load(Ordering::SeqCst));
+    assert!(!LogObscurer::is_active());
 
     // 4. Test persistent reload from disk
     let reloaded_store = SettingsStore::new(tmp_config.path());
@@ -213,6 +219,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(!loaded.appearance.show_filenames);
     assert!(!loaded.appearance.enable_tooltips);
     assert_eq!(loaded.appearance.tooltip_delay_ms, 450);
+    assert!(!loaded.debug.obfuscate_logs);
 
     // 5. Test validation & sanitization
     let mut invalid_settings = AppSettings::default();
@@ -241,6 +248,7 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_identical.root_folder_changed);
     assert!(!diff_identical.appearance_grid_changed);
     assert!(!diff_identical.tooltip_settings_changed);
+    assert!(!diff_identical.debug_settings_changed);
 
     // 2. Only tooltip delay changed -> only tooltip_settings_changed is true
     let mut modified_tooltips = base.clone();
@@ -251,6 +259,7 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_tooltips.root_folder_changed);
     assert!(!diff_tooltips.appearance_grid_changed);
     assert!(!diff_tooltips.folder_tree_presentation_changed);
+    assert!(!diff_tooltips.debug_settings_changed);
 
     // 3. Only root folder path changed -> only root_folder_changed is true
     let mut modified_root = base.clone();
@@ -260,6 +269,7 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(diff_root.root_folder_changed);
     assert!(!diff_root.appearance_grid_changed);
     assert!(!diff_root.tooltip_settings_changed);
+    assert!(!diff_root.debug_settings_changed);
 
     // 4. Only folder tree metrics changed -> only folder_tree_presentation_changed is true
     let mut modified_tree = base.clone();
@@ -269,11 +279,26 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(diff_tree.folder_tree_presentation_changed);
     assert!(!diff_tree.root_folder_changed);
     assert!(!diff_tree.appearance_grid_changed);
+    assert!(!diff_tree.debug_settings_changed);
 
-    // 5. Verify detailed summary output
+    // 5. Only debug logging changed -> only debug_settings_changed is true
+    let mut modified_debug = base.clone();
+    modified_debug.debug.obfuscate_logs = false;
+    let diff_debug = SettingsDiff::compute(&base, &modified_debug);
+    assert!(diff_debug.has_changes);
+    assert!(diff_debug.debug_settings_changed);
+    assert!(!diff_debug.root_folder_changed);
+    assert!(!diff_debug.appearance_grid_changed);
+    assert!(!diff_debug.tooltip_settings_changed);
+
+    // 6. Verify detailed summary output
     let summary = diff_root.detailed_summary(&base, &modified_root);
     assert_eq!(summary.len(), 1);
     assert!(summary[0].contains("root_folder"));
+
+    let summary_debug = diff_debug.detailed_summary(&base, &modified_debug);
+    assert_eq!(summary_debug.len(), 1);
+    assert!(summary_debug[0].contains("obfuscate_logs"));
 }
 
 #[test]
@@ -343,4 +368,67 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
     assert_eq!(loaded.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
     assert_eq!(loaded.view.sidebar_left_width, DEFAULT_SIDEBAR_LEFT_WIDTH);
     assert_eq!(loaded.view.sidebar_right_width, DEFAULT_SIDEBAR_RIGHT_WIDTH);
+    assert_eq!(loaded.debug.obfuscate_logs, DEFAULT_OBFUSCATE_LOGS);
+}
+
+#[test]
+fn test_log_obscurer_behavior_enabled_and_disabled() {
+    let test_path = Path::new("/home/alice/Pictures/Summer_Vacation_2026/beach_party.jpg");
+    let test_filename = "beach_party.jpg";
+    let test_tag_name = "Family Vacation";
+    let test_query = "beach 2026";
+
+    // 1. When Obfuscation is DISABLED (Cleartext with contextual info)
+    LogObscurer::set_obfuscate(false);
+    assert!(!LogObscurer::is_active());
+
+    assert_eq!(LogObscurer::path(test_path), test_path.display().to_string());
+    assert_eq!(
+        LogObscurer::folder(Some(42), test_path),
+        format!("Folder#42({})", test_path.display())
+    );
+    assert_eq!(
+        LogObscurer::media(Some(101), test_filename),
+        "Media#101(beach_party.jpg)"
+    );
+    assert_eq!(
+        LogObscurer::tag(Some(7), test_tag_name),
+        "Tag#7(Family Vacation)"
+    );
+    assert_eq!(LogObscurer::query(test_query), "\"beach 2026\"");
+
+    // 2. When Obfuscation is ENABLED (Privacy-Protected with IDs / Hash surrogates)
+    LogObscurer::set_obfuscate(true);
+    assert!(LogObscurer::is_active());
+
+    let obscured_path = LogObscurer::path(test_path);
+    assert!(!obscured_path.contains("alice"));
+    assert!(!obscured_path.contains("Summer_Vacation"));
+    assert!(!obscured_path.contains("beach_party"));
+    assert!(obscured_path.starts_with("[Path:"));
+    assert!(obscured_path.ends_with(".jpg]"));
+
+    let obscured_folder = LogObscurer::folder(Some(42), test_path);
+    assert_eq!(obscured_folder, "Folder#42");
+    assert!(!obscured_folder.contains("alice"));
+
+    let obscured_media = LogObscurer::media(Some(101), test_filename);
+    assert_eq!(obscured_media, "Media#101[*.jpg]");
+    assert!(!obscured_media.contains("beach_party"));
+
+    let obscured_tag = LogObscurer::tag(Some(7), test_tag_name);
+    assert_eq!(obscured_tag, "Tag#7");
+    assert!(!obscured_tag.contains("Vacation"));
+
+    let obscured_query = LogObscurer::query(test_query);
+    assert_eq!(obscured_query, "[Query:10 chars]");
+    assert!(!obscured_query.contains("beach"));
+
+    // Target formatting
+    let obscured_target = LogObscurer::target(test_path, Some(101));
+    assert!(!obscured_target.contains("alice"));
+    assert!(obscured_target.contains("MediaId(101) [*.jpg"));
+
+    // Cleanup: Reset to SPoT default state
+    LogObscurer::set_obfuscate(DEFAULT_OBFUSCATE_LOGS);
 }

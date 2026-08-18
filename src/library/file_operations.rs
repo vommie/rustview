@@ -2,6 +2,7 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{FolderRecord, MediaId, MediaRecord};
 use super::refresh_media_files::MediaItemRefresher;
+use crate::settings::LogObscurer;
 use std::path::{Path, PathBuf};
 
 /// POSIX Linux media filename validator ensuring safety and filesystem compliance.
@@ -95,9 +96,9 @@ impl<'a> FileOperations<'a> {
         self.verify_destination_available(&paths)?;
 
         tracing::info!(
-            media_id = media_id,
-            old_path = ?paths.old_path,
-            new_path = ?paths.new_path,
+            media = %LogObscurer::media(Some(media_id), &record.filename),
+            old_path = %LogObscurer::path(&paths.old_path),
+            new_path = %LogObscurer::path(&paths.new_path),
             "Executing physical file rename operation..."
         );
 
@@ -108,7 +109,7 @@ impl<'a> FileOperations<'a> {
 
         tracing::info!(
             media_id = media_id,
-            new_filename = %paths.validated_name,
+            new_filename = %LogObscurer::filename(&paths.validated_name),
             "Committed file rename operation to LMDB storage successfully"
         );
 

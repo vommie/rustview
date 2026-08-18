@@ -3,16 +3,17 @@ use super::error::ThumbnailError;
 use super::generator::ThumbnailGenerator;
 use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 use super::store::PackStore;
-use super::types::{ThumbnailConfig, ThumbnailLocation, VideoPreviewRecord, anonymize_target};
-use crate::library::Library;
+use super::types::{anonymize_target, ThumbnailConfig, ThumbnailLocation, VideoPreviewRecord};
 use crate::library::models::MediaId;
+use crate::library::Library;
 use crate::media::{MediaFormat, MediaType};
+use crate::settings::LogObscurer;
 use parking_lot::Mutex;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
@@ -471,17 +472,17 @@ impl ThumbnailScheduler {
                                         }
                                     }
                                     Err(e) => {
-                                        tracing::error!(target = ?target.file_path, error = %e, "Failed to append primary video thumb to PackStore");
+                                        tracing::error!(target = %LogObscurer::path(&target.file_path), error = %e, "Failed to append primary video thumb to PackStore");
                                     }
                                 }
                             }
                             Err(e) => {
-                                tracing::error!(target = ?target.file_path, error = %e, "Primary video thumb compression failed");
+                                tracing::error!(target = %LogObscurer::path(&target.file_path), error = %e, "Primary video thumb compression failed");
                             }
                         }
                     }
                     Err(e) => {
-                        tracing::warn!(target = ?target.file_path, error = %e, "Failed to extract video thumbnail");
+                        tracing::warn!(target = %LogObscurer::path(&target.file_path), error = %e, "Failed to extract video thumbnail");
                     }
                 }
             } else {
@@ -522,15 +523,15 @@ impl ThumbnailScheduler {
                                 }
                             }
                             Err(e) => {
-                                tracing::error!(target = ?target.file_path, error = %e, "Failed to append image thumb to PackStore");
+                                tracing::error!(target = %LogObscurer::path(&target.file_path), error = %e, "Failed to append image thumb to PackStore");
                             }
                         },
                         Err(e) => {
-                            tracing::error!(target = ?target.file_path, error = %e, "Image thumb compression failed");
+                            tracing::error!(target = %LogObscurer::path(&target.file_path), error = %e, "Image thumb compression failed");
                         }
                     },
                     Err(e) => {
-                        tracing::warn!(target = ?target.file_path, error = %e, "Failed to decode image");
+                        tracing::warn!(target = %LogObscurer::path(&target.file_path), error = %e, "Failed to decode image");
                     }
                 }
             }
@@ -744,8 +745,8 @@ impl ThumbnailScheduler {
             .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
 
         tracing::info!(
-            media_id = media_id,
-            target = ?file_path,
+            media = %LogObscurer::media(Some(media_id), file_path.to_string_lossy().as_ref()),
+            target = %LogObscurer::path(file_path),
             width = frame.width,
             height = frame.height,
             "Successfully regenerated thumbnail and persisted to LMDB and L1 cache"

@@ -5,6 +5,7 @@ use super::bridge_inspector::BridgeInspector;
 use super::{DeleteFolderDialog, MainWindow};
 use crate::library::folder_operations::FolderSubtreeMetrics;
 use crate::library::models::FolderId;
+use crate::settings::LogObscurer;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -43,7 +44,7 @@ impl DeleteFolderDialogController {
         if !folder_path.exists() {
             tracing::warn!(
                 folder_id = folder_id,
-                path = ?folder_path,
+                path = %LogObscurer::path(&folder_path),
                 "[FolderDialog: Delete] Folder path does not exist on disk. Redirecting to MissingFolderDeleteDialog."
             );
 

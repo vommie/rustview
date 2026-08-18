@@ -2,6 +2,7 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{MediaId, TagId, TagRecord};
 use super::schema::SEQ_TAG_ID;
+use crate::settings::LogObscurer;
 use std::collections::{HashMap, HashSet};
 
 /// Pure, decoupled database repository managing tag persistence and hierarchical relations.
@@ -55,7 +56,11 @@ impl<'a> TagManager<'a> {
         self.db.media_by_tag.put(&mut wtxn, &tag_id, &Vec::new())?;
 
         wtxn.commit()?;
-        tracing::info!(tag_id = tag_id, name = %trimmed_name, parent_id = ?parent_id, "Created tag record in LMDB");
+        tracing::info!(
+            tag = %LogObscurer::tag(Some(tag_id), trimmed_name),
+            parent_id = ?parent_id,
+            "Created tag record in LMDB"
+        );
         Ok(record)
     }
 
@@ -95,7 +100,10 @@ impl<'a> TagManager<'a> {
         self.db.tags.put(&mut wtxn, &tag_id, &record)?;
 
         wtxn.commit()?;
-        tracing::info!(tag_id = tag_id, new_name = %trimmed_name, "Renamed tag in LMDB");
+        tracing::info!(
+            tag = %LogObscurer::tag(Some(tag_id), trimmed_name),
+            "Renamed tag in LMDB"
+        );
         Ok(record)
     }
 
@@ -153,7 +161,11 @@ impl<'a> TagManager<'a> {
         self.db.tags.put(&mut wtxn, &tag_id, &record)?;
 
         wtxn.commit()?;
-        tracing::info!(tag_id = tag_id, new_parent = ?new_parent_id, "Moved tag record in LMDB");
+        tracing::info!(
+            tag = %LogObscurer::tag_id(tag_id),
+            new_parent = ?new_parent_id,
+            "Moved tag record in LMDB"
+        );
         Ok(record)
     }
 
@@ -222,7 +234,7 @@ impl<'a> TagManager<'a> {
 
         wtxn.commit()?;
         tracing::info!(
-            root_id = root_tag_id,
+            root = %LogObscurer::tag_id(root_tag_id),
             deleted_count = to_delete.len(),
             "Atomically purged tag subtree and updated media associations in LMDB"
         );

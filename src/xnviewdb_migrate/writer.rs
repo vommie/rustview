@@ -5,6 +5,7 @@ use crate::library::db::LibraryDatabase;
 use crate::library::models::DatabaseMeta;
 use crate::library::schema::*;
 use crate::media::MediaHasher;
+use crate::settings::LogObscurer;
 use std::fs;
 use std::path::Path;
 use std::time::Instant;
@@ -25,8 +26,8 @@ impl XnViewDbWriter {
         let cache_path = data_dir.join("thumbnails");
 
         tracing::warn!(
-            db_path = ?db_path,
-            cache_path = ?cache_path,
+            db_path = %LogObscurer::path(&db_path),
+            cache_path = %LogObscurer::path(&cache_path),
             "[XnViewWriter] Destructive wipe: Removing existing RustView databases and thumbnail caches..."
         );
 

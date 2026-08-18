@@ -2,6 +2,7 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{MediaId, MediaRecord};
 use crate::media::{FileHash, MediaHasher, MetadataExtractor, RawMetadata};
+use crate::settings::LogObscurer;
 use std::path::{Path, PathBuf};
 
 /// Extracted file inspection metrics from disk.
@@ -37,8 +38,7 @@ impl<'a> MediaItemRefresher<'a> {
         wtxn.commit()?;
 
         tracing::info!(
-            media_id = media_id,
-            filename = %updated_record.filename,
+            media = %LogObscurer::media(Some(media_id), &updated_record.filename),
             file_size = updated_record.file_size,
             width = updated_record.width,
             height = updated_record.height,
@@ -85,7 +85,7 @@ impl<'a> MediaItemRefresher<'a> {
         file_path: &Path,
     ) -> Result<RefreshedFileAttributes, LibraryError> {
         tracing::debug!(
-            file_path = ?file_path,
+            file = %LogObscurer::path(file_path),
             "[MediaItemRefresher] Inspecting physical file on disk..."
         );
 

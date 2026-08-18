@@ -8,7 +8,7 @@ use crate::ctx_menu::CtxMenuActionId;
 use crate::library::models::{MediaId, MediaSearchParams, TagId, TagRecord};
 use crate::library::Library;
 use crate::query::{MatchMode, ScopeMode};
-use crate::settings::SettingsManager;
+use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use regex::{Regex, RegexBuilder};
@@ -405,8 +405,7 @@ impl TagActionHandler {
 
         if stats.is_fully_assigned(tag_id) {
             tracing::info!(
-                tag_id = tag_id,
-                tag_name = %tag_name,
+                tag = %LogObscurer::tag(Some(tag_id), tag_name),
                 affected_files = total_selected,
                 "[TagAction: Unassign] Removing tag from all selected files"
             );
@@ -418,8 +417,7 @@ impl TagActionHandler {
             );
         } else {
             tracing::info!(
-                tag_id = tag_id,
-                tag_name = %tag_name,
+                tag = %LogObscurer::tag(Some(tag_id), tag_name),
                 affected_files = total_selected,
                 previously_had_it = stats.assigned_count(tag_id),
                 "[TagAction: Assign] Assigning tag to all selected files"
@@ -455,7 +453,7 @@ impl TagActionHandler {
         }
 
         tracing::info!(
-            tag_id = tag_id,
+            tag = %LogObscurer::tag_id(tag_id),
             active_filter_tags = ?state.read().filter.tag_ids,
             "[TagAction: Query] Toggled tag selection in query filter"
         );
@@ -917,7 +915,7 @@ impl BridgeTags {
         let st = state.clone();
         window.on_tag_filter_changed(move |query| {
             tracing::info!(
-                tag_query = %query,
+                tag_query = %LogObscurer::query(&query),
                 tag_query_len = query.len(),
                 "[TagFilter: InputEvent] Tag filter query text changed"
             );
@@ -977,7 +975,7 @@ impl BridgeTags {
                 Ok(re) => Some(re),
                 Err(e) => {
                     tracing::debug!(
-                        query = %filter_trimmed,
+                        query = %LogObscurer::query(&filter_trimmed),
                         error = %e,
                         "[TagFilter: Regex Warning] Invalid regex syntax, falling back to substring matching"
                     );
@@ -1009,7 +1007,7 @@ impl BridgeTags {
             visible_rows = visual_nodes.len(),
             expanded_parents = expanded_set.len(),
             selected_files = stats.selected_files_count,
-            filter = %filter_text,
+            filter = %LogObscurer::query(&filter_text),
             is_regex = is_regex,
             elapsed_us = t0.elapsed().as_micros(),
             "[TagTree: Visual Model Sync] Synchronized tag tree to Slint UI"
@@ -1059,7 +1057,7 @@ impl BridgeTags {
         };
 
         tracing::info!(
-            tag_id = tag_id,
+            tag = %LogObscurer::tag_id(tag_id),
             is_expanded = is_now_expanded,
             "[TagTree: NodeToggle] Toggled parent tag expansion"
         );

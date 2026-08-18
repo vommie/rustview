@@ -3,6 +3,7 @@ use super::error::LibraryError;
 use super::models::{FolderId, MediaId, MediaRecord};
 use super::schema::SEQ_MEDIA_ID;
 use crate::media::{DirectoryScanner, FileHash, MediaHasher, MetadataExtractor, RawMetadata, ScannedFile};
+use crate::settings::LogObscurer;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
@@ -107,7 +108,7 @@ impl<'a> FolderRefresher<'a> {
         };
 
         let folder_path = Path::new(&folder_record.path);
-        tracing::info!(folder_id = folder_id, path = ?folder_path, "Scanning folder on filesystem...");
+        tracing::info!(folder = %LogObscurer::folder(Some(folder_id), folder_path), "Scanning folder on filesystem...");
 
         let scanned_files = DirectoryScanner::scan(folder_path, false);
         report.total_scanned = scanned_files.len();
@@ -155,7 +156,7 @@ impl<'a> FolderRefresher<'a> {
             let fs_meta = match std::fs::metadata(&scanned.path) {
                 Ok(m) => m,
                 Err(e) => {
-                    tracing::warn!(file = ?scanned.path, error = %e, "Cannot read file metadata");
+                    tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Cannot read file metadata");
                     continue;
                 }
             };
@@ -235,7 +236,7 @@ impl<'a> FolderRefresher<'a> {
                         let new_hash = match MediaHasher::hash_file(&scanned.path) {
                             Ok(h) => h,
                             Err(e) => {
-                                tracing::warn!(file = ?scanned.path, error = %e, "Failed to hash modified file");
+                                tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Failed to hash modified file");
                                 return ProcessedResult::Failed;
                             }
                         };
@@ -258,7 +259,7 @@ impl<'a> FolderRefresher<'a> {
                             let raw_meta = match MetadataExtractor::extract(&scanned.path) {
                                 Ok(m) => m,
                                 Err(e) => {
-                                    tracing::warn!(file = ?scanned.path, error = %e, "Failed to extract metadata for modified file");
+                                    tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Failed to extract metadata for modified file");
                                     return ProcessedResult::Failed;
                                 }
                             };
@@ -284,7 +285,7 @@ impl<'a> FolderRefresher<'a> {
                         let new_hash = match MediaHasher::hash_file(&scanned.path) {
                             Ok(h) => h,
                             Err(e) => {
-                                tracing::warn!(file = ?scanned.path, error = %e, "Failed to hash new file");
+                                tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Failed to hash new file");
                                 return ProcessedResult::Failed;
                             }
                         };
@@ -298,7 +299,7 @@ impl<'a> FolderRefresher<'a> {
                         let raw_meta = match MetadataExtractor::extract(&scanned.path) {
                             Ok(m) => m,
                             Err(e) => {
-                                tracing::warn!(file = ?scanned.path, error = %e, "Failed to extract metadata for new file");
+                                tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Failed to extract metadata for new file");
                                 return ProcessedResult::Failed;
                             }
                         };

@@ -1,4 +1,5 @@
 use super::stats::MigrationStats;
+use crate::settings::LogObscurer;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -64,14 +65,23 @@ impl MigrationLogger {
             let _ = writeln!(f, "               RUSTVIEW - XNVIEWMP DATABASE MIGRATION AUDIT LOG                 ");
             let _ = writeln!(f, "================================================================================");
             let _ = writeln!(f, "Timestamp          : {}", current_timestamp_string());
-            let _ = writeln!(f, "Source Database    : {}", source_db.display());
-            let _ = writeln!(f, "Target RustView Dir: {}", target_dir.display());
+            let _ = writeln!(f, "Source Database    : {}", LogObscurer::path(source_db));
+            let _ = writeln!(f, "Target RustView Dir: {}", LogObscurer::path(target_dir));
             let _ = writeln!(
                 f,
                 "Base/Root Filter   : {}",
                 match root_filter {
-                    Some(r) => format!("Active (only paths under '{}')", r.display()),
+                    Some(r) => format!("Active (only paths under '{}')", LogObscurer::path(r)),
                     None => "Disabled (all paths imported)".to_string(),
+                }
+            );
+            let _ = writeln!(
+                f,
+                "Log Privacy Mode   : {}",
+                if LogObscurer::is_active() {
+                    "Enabled (Obfuscated IDs and surrogate hashes)"
+                } else {
+                    "Disabled (Plain text filenames and paths)"
                 }
             );
             let _ = writeln!(
@@ -96,8 +106,8 @@ impl MigrationLogger {
                 f,
                 "[FOLDER OUTSIDE]  Folder #{:<5} | Path: {} | Reason: Outside configured base/root path ('{}')",
                 old_id,
-                path.display(),
-                root_path.display()
+                LogObscurer::folder(None, path),
+                LogObscurer::path(root_path)
             );
         }
     }
@@ -108,7 +118,7 @@ impl MigrationLogger {
                 f,
                 "[FOLDER SKIPPED]  Folder #{:<5} | Path: {} | Reason: {}",
                 old_id,
-                path.display(),
+                LogObscurer::folder(None, path),
                 reason
             );
         }
@@ -118,8 +128,10 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[FOLDER MIGRATED] Folder #{:<5} -> #{:<5} | Path: {}",
-                old_id, new_id, path
+                "[FOLDER MIGRATED] Folder #{:<5} -> Folder #{:<5} | Path: {}",
+                old_id,
+                new_id,
+                LogObscurer::folder(Some(new_id), path)
             );
         }
     }
@@ -133,13 +145,16 @@ impl MigrationLogger {
     ) {
         if let Some(ref mut f) = self.file {
             let parent_info = match new_parent_id {
-                Some(p) => format!("Parent: #{}", p),
+                Some(p) => format!("Parent: Tag #{}", p),
                 None => "Parent: Root".to_string(),
             };
             let _ = writeln!(
                 f,
-                "[TAG MIGRATED]    Tag #{:<5} -> #{:<5} | Name: '{}' ({})",
-                old_id, new_id, name, parent_info
+                "[TAG MIGRATED]    Tag #{:<5} -> Tag #{:<5} | Name: {} ({})",
+                old_id,
+                new_id,
+                LogObscurer::tag(Some(new_id), name),
+                parent_info
             );
         }
     }
@@ -153,8 +168,10 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[SUBFOLDER ENTRY] Image #{:<6} | Name: '{}' in {} | Info: Subdirectory entry from XnView browser (handled by folder tree)",
-                old_image_id, name, folder_info
+                "[SUBFOLDER ENTRY] Image #{:<6} | Name: {} in {} | Info: Subdirectory entry from XnView browser (handled by folder tree)",
+                old_image_id,
+                LogObscurer::filename(name),
+                folder_info
             );
         }
     }
@@ -168,8 +185,10 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[UNSUPPORTED FMT] Image #{:<6} | File: '{}' in {} | Reason: Non-media file format (not an image or video)",
-                old_image_id, filename, folder_info
+                "[UNSUPPORTED FMT] Image #{:<6} | File: {} in {} | Reason: Non-media file format (not an image or video)",
+                old_image_id,
+                LogObscurer::filename(filename),
+                folder_info
             );
         }
     }
@@ -183,8 +202,10 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[MEDIA OUTSIDE]   Image #{:<6} | File: '{}' in {} | Reason: Parent folder is outside of base/root path",
-                old_image_id, filename, folder_info
+                "[MEDIA OUTSIDE]   Image #{:<6} | File: {} in {} | Reason: Parent folder is outside of base/root path",
+                old_image_id,
+                LogObscurer::filename(filename),
+                folder_info
             );
         }
     }
@@ -199,8 +220,11 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[MEDIA SKIPPED]   Image #{:<6} | File: '{}' in {} | Reason: {}",
-                old_image_id, filename, folder_info, reason
+                "[MEDIA SKIPPED]   Image #{:<6} | File: {} in {} | Reason: {}",
+                old_image_id,
+                LogObscurer::filename(filename),
+                folder_info,
+                reason
             );
         }
     }
@@ -217,8 +241,13 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[MEDIA MIGRATED]  Image #{:<6} -> Media #{:<6} | Folder: #{:<4} | File: '{}' | Rating: {} | Hash: {}",
-                old_image_id, new_media_id, new_folder_id, filename, rating, hash_hex
+                "[MEDIA MIGRATED]  Image #{:<6} -> Media #{:<6} | Folder: #{:<4} | File: {} | Rating: {} | Hash: {}",
+                old_image_id,
+                new_media_id,
+                new_folder_id,
+                LogObscurer::media(Some(new_media_id), filename),
+                rating,
+                hash_hex
             );
         }
     }
@@ -264,7 +293,7 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[HASH MIGRATED]   Hash #{:<5} -> #{:<5} | Hash: {} | Date: {}",
+                "[HASH MIGRATED]   Hash #{:<5} -> Hash #{:<5} | Hash: {} | Date: {}",
                 old_hash_id, new_hash_id, hash, date_time
             );
         }

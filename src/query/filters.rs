@@ -1,6 +1,6 @@
 use crate::library::Library;
 use crate::library::models::{MediaRecord, TagId};
-use crate::settings::{DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE};
+use crate::settings::{LogObscurer, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE};
 use memchr::memmem;
 use regex::{Regex, RegexBuilder};
 use slint::SharedString;
@@ -142,7 +142,7 @@ impl PreparedFilter {
                 Ok(re) => Some(re),
                 Err(e) => {
                     tracing::debug!(
-                        query = %trimmed,
+                        query = %LogObscurer::query(&trimmed),
                         error = %e,
                         "[SearchFilter: Regex Warning] Invalid regex syntax, falling back to literal matching"
                     );
@@ -306,7 +306,7 @@ impl QueryFilter {
 
                 let elapsed_us = t0.elapsed().as_micros();
                 tracing::debug!(
-                    query = %self.search_query,
+                    query = %LogObscurer::query(&self.search_query),
                     is_regex = self.is_regex,
                     mode = "Refinement Subset",
                     input_candidates = input_count,
@@ -338,7 +338,7 @@ impl QueryFilter {
 
                 let elapsed_us = t0.elapsed().as_micros();
                 tracing::debug!(
-                    query = %self.search_query,
+                    query = %LogObscurer::query(&self.search_query),
                     is_regex = self.is_regex,
                     mode = "Full Set",
                     input_candidates = input_count,

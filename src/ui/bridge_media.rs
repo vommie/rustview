@@ -4,11 +4,13 @@ use super::bridge_state::UiState;
 use super::bridge_tags::BridgeTags;
 use super::models::{format_filesize, rgb8_to_shared_buffer};
 use super::{MainWindow, MediaItemView};
-use crate::library::Library;
 use crate::library::models::{FolderId, MediaId, MediaRecord};
+use crate::library::Library;
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, SortColumn, SortOrder};
-use crate::settings::SettingsManager;
+use crate::settings::{
+    LogObscurer, SettingsManager,
+};
 use crate::thumbnails::{
     PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager,
     VideoThumbnailEngine,
@@ -21,8 +23,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 pub struct BridgeMedia;
@@ -42,7 +44,7 @@ impl BridgeMedia {
         let st = state.clone();
         window.on_search_query_changed(move |query| {
             tracing::info!(
-                query = %query,
+                query = %LogObscurer::query(&query),
                 query_len = query.len(),
                 "[SearchFilter: InputEvent] Media search query text changed"
             );
@@ -355,7 +357,7 @@ impl BridgeMedia {
                     let updated_record = match lib_arc.file_operations().refresh_media(media_id) {
                         Ok(rec) => rec,
                         Err(e) => {
-                            tracing::warn!(media_id = media_id, path = ?file_path, error = %e, "Failed to refresh media record");
+                            tracing::warn!(media_id = media_id, path = %LogObscurer::path(&file_path), error = %e, "Failed to refresh media record");
                             let file_name = file_path
                                 .file_name()
                                 .map(|n| n.to_string_lossy().to_string())
@@ -378,7 +380,7 @@ impl BridgeMedia {
                     let cached_thumb = match thumb_arc.regenerate_sync(media_id, &file_path, &config) {
                         Ok(t) => t,
                         Err(e) => {
-                            tracing::warn!(media_id = media_id, path = ?file_path, error = %e, "Failed to regenerate thumbnail");
+                            tracing::warn!(media_id = media_id, path = %LogObscurer::path(&file_path), error = %e, "Failed to regenerate thumbnail");
                             let _ = w_weak.upgrade_in_event_loop(move |w| {
                                 w.set_media_index_current(cur_step as i32);
                             });
@@ -725,7 +727,7 @@ impl BridgeMedia {
 
         tracing::debug!(
             is_query = is_query_active,
-            search_query = %current_query,
+            search_query = %LogObscurer::query(&current_query),
             is_regex = filter.is_regex,
             sort_column = ?sort_col,
             sort_order = ?sort_ord,

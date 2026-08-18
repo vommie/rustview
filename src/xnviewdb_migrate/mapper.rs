@@ -6,6 +6,7 @@ use crate::library::models::{
     ExternalHashRecord, FolderId, FolderRecord, MediaId, MediaRecord, TagId, TagRecord,
 };
 use crate::media::{FileHash, MediaFormat, MediaHasher, MediaType, MetadataExtractor};
+use crate::settings::LogObscurer;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -60,6 +61,7 @@ impl XnViewMapper {
         tracing::info!(
             skip_missing = skip_missing,
             root_filter = ?root_filter,
+            obfuscate_logs = LogObscurer::is_active(),
             "[XnViewMapper] Starting entity filtering, root validation, contiguous ID re-indexing, and relational mapping..."
         );
 
@@ -124,8 +126,8 @@ impl XnViewMapper {
                     logger.log_folder_outside_root(f.folder_id, &normalized_path_buf, root_path);
                     tracing::debug!(
                         old_folder_id = f.folder_id,
-                        path = ?normalized_path_buf,
-                        root = ?root_path,
+                        path = %LogObscurer::path(&normalized_path_buf),
+                        root = %LogObscurer::path(root_path),
                         "[XnViewMapper: Skip] Folder is outside configured base root directory."
                     );
                     continue;
@@ -143,7 +145,7 @@ impl XnViewMapper {
                 );
                 tracing::debug!(
                     old_folder_id = f.folder_id,
-                    path = ?normalized_path_buf,
+                    path = %LogObscurer::path(&normalized_path_buf),
                     "[XnViewMapper: Skip] Folder does not exist on disk. Skipping folder and all child entries."
                 );
                 continue;

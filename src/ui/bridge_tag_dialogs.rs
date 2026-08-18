@@ -3,9 +3,9 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_tags::{BridgeTags, TagActionDialogs};
 use super::{AddTagDialog, DeleteTagDialog, MainWindow, RenameTagDialog};
-use crate::library::Library;
 use crate::library::models::TagId;
-use crate::settings::SettingsManager;
+use crate::library::Library;
+use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -187,7 +187,7 @@ impl TagDialogController {
         window: &MainWindow,
     ) {
         tracing::info!(
-            name = %name,
+            tag = %LogObscurer::tag(None, name),
             parent_id = ?parent_id,
             "[TagManager: Create] Executing tag creation in LMDB"
         );
@@ -275,7 +275,10 @@ impl TagDialogController {
         state: &Arc<RwLock<UiState>>,
         window: &MainWindow,
     ) {
-        tracing::info!(tag_id = tag_id, new_name = %new_name, "[TagManager: Rename] Renaming tag in LMDB");
+        tracing::info!(
+            tag = %LogObscurer::tag(Some(tag_id), new_name),
+            "[TagManager: Rename] Renaming tag in LMDB"
+        );
 
         match library.tags().rename_tag(tag_id, new_name) {
             Ok(updated) => {
@@ -359,7 +362,7 @@ impl TagDialogController {
         window: &MainWindow,
     ) {
         tracing::info!(
-            tag_id = tag_id,
+            tag = %LogObscurer::tag_id(tag_id),
             "[TagManager: Delete] Purging tag subtree in LMDB"
         );
 

@@ -1,3 +1,4 @@
+use crate::settings::LogObscurer;
 use md5::{Digest, Md5};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -43,7 +44,7 @@ impl MediaHasher {
         result.copy_from_slice(&digest);
 
         tracing::trace!(
-            file = ?path,
+            file = %LogObscurer::path(path),
             md5_hex = %Self::to_hex(&result),
             "[MediaHasher: MD5] Successfully computed file checksum"
         );

@@ -1,6 +1,6 @@
 use rustview::library::Library;
 use rustview::player::{PlayerController, RenderConfig};
-use rustview::settings::{SettingsManager, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
+use rustview::settings::{LogObscurer, SettingsManager, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 use rustview::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge};
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -61,8 +61,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_path = data_dir.join("library.lmdb");
     let cache_path = data_dir.join("thumbnails");
 
-    // Initialize Settings System
+    // Initialize Settings System and live Log Privacy Obscurer
     let settings = SettingsManager::new(&config_dir);
+    LogObscurer::set_obfuscate(settings.get().debug.obfuscate_logs);
 
     // Initialize Core LMDB Storage
     let library = Arc::new(Library::open(&db_path)?);

@@ -1,3 +1,5 @@
+use crate::settings::LogObscurer;
+
 #[derive(Debug, Default, Clone)]
 pub struct MigrationStats {
     pub source_path: String,
@@ -68,7 +70,7 @@ impl MigrationStats {
         println!("================================================================================");
         println!("              RUSTVIEW - XNVIEWMP DATABASE MIGRATION SUMMARY                    ");
         println!("================================================================================");
-        println!("Source Database    : {}", self.source_path);
+        println!("Source Database    : {}", LogObscurer::path(&self.source_path));
         println!(
             "Source Size        : {:.2} MB",
             self.source_size_bytes as f64 / (1024.0 * 1024.0)
@@ -84,8 +86,16 @@ impl MigrationStats {
         println!(
             "Base/Root Filter   : {}",
             match self.root_filter_path {
-                Some(ref r) => format!("Active (only paths at or under '{}')", r),
+                Some(ref r) => format!("Active (only paths at or under '{}')", LogObscurer::path(r)),
                 None => "Disabled (all paths imported)".to_string(),
+            }
+        );
+        println!(
+            "Log Privacy Mode   : {}",
+            if LogObscurer::is_active() {
+                "Enabled (Obfuscated IDs/Hashes)"
+            } else {
+                "Disabled (Plain text audit trail)"
             }
         );
         println!(

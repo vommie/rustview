@@ -1,6 +1,7 @@
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{FolderId, FolderRecord};
+use crate::settings::LogObscurer;
 use std::path::{Path, PathBuf};
 
 /// POSIX Linux folder component name validator.
@@ -156,9 +157,8 @@ impl<'a> FolderOperations<'a> {
         }
 
         tracing::info!(
-            folder_id = folder_id,
-            old_path = ?old_path,
-            new_path = ?new_path,
+            folder = %LogObscurer::folder(Some(folder_id), &old_path),
+            new_path = %LogObscurer::path(&new_path),
             "Executing physical folder rename operation..."
         );
 
@@ -201,8 +201,7 @@ impl<'a> FolderOperations<'a> {
         wtxn.commit()?;
 
         tracing::info!(
-            folder_id = folder_id,
-            new_path = %record.path,
+            folder = %LogObscurer::folder(Some(folder_id), &record.path),
             "Folder rename committed successfully to LMDB"
         );
 
@@ -220,8 +219,7 @@ impl<'a> FolderOperations<'a> {
         let folder_path = metrics.path;
 
         tracing::info!(
-            folder_id = folder_id,
-            path = ?folder_path,
+            folder = %LogObscurer::folder(Some(folder_id), &folder_path),
             to_trash = to_trash,
             subfolders = metrics.subfolders_count,
             files = metrics.media_files_count,
@@ -313,8 +311,7 @@ impl<'a> FolderOperations<'a> {
                 self.db.folders.put(&mut wtxn, &folder_id, &rec)?;
                 wtxn.commit()?;
                 tracing::info!(
-                    folder_id = folder_id,
-                    path = ?path,
+                    folder = %LogObscurer::folder(Some(folder_id), &path),
                     "[FolderOperations: Reborn Safety Check] Missing folder was detected on disk. Restored is_deleted = false in LMDB."
                 );
             }
@@ -333,8 +330,7 @@ impl<'a> FolderOperations<'a> {
         let metrics = self.get_metrics(folder_id)?;
 
         tracing::info!(
-            folder_id = folder_id,
-            path = ?metrics.path,
+            folder = %LogObscurer::folder(Some(folder_id), &metrics.path),
             subfolders = metrics.subfolders_count,
             files = metrics.media_files_count,
             "Purging orphaned folder and all descendant metadata from LMDB..."
@@ -435,9 +431,8 @@ impl<'a> FolderOperations<'a> {
         }
 
         tracing::info!(
-            folder_id = folder_id,
-            src = ?src_path,
-            dst = ?dst_path,
+            folder = %LogObscurer::folder(Some(folder_id), &src_path),
+            dst = %LogObscurer::path(&dst_path),
             "Relocating folder directory on physical filesystem..."
         );
 
@@ -483,7 +478,7 @@ impl<'a> FolderOperations<'a> {
 
         tracing::info!(
             folder_id = folder_id,
-            new_path = ?dst_path,
+            new_path = %LogObscurer::path(&dst_path),
             "Committed folder relocation to LMDB"
         );
 

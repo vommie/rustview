@@ -6,7 +6,7 @@ use super::{FolderNodeView, MainWindow};
 use crate::library::folders::normalize_path;
 use crate::library::models::{FolderId, FolderRecord};
 use crate::library::Library;
-use crate::settings::{GridAspectRatio, SettingsDialogController, SettingsManager};
+use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
@@ -183,7 +183,10 @@ impl BridgeFolders {
                 (s.current_folder_id, s.current_folder_path.clone())
             };
             if let (Some(id), Some(path)) = (folder_id_opt, path_opt) {
-                tracing::info!(folder_id = id, path = ?path, "[FolderPanel] Asynchronous folder refresh triggered");
+                tracing::info!(
+                    folder = %LogObscurer::folder(Some(id), &path),
+                    "[FolderPanel] Asynchronous folder refresh triggered"
+                );
                 Self::select_folder(id, path, &win, &lib, &thumb, &set, &st);
             }
         });
@@ -271,7 +274,7 @@ impl BridgeFolders {
             return;
         }
 
-        tracing::info!(root = ?normalized_root, "Synchronizing root directory...");
+        tracing::info!(root = %LogObscurer::path(&normalized_root), "Synchronizing root directory...");
 
         let folder_record = match library.folders().get_folder_by_path(&normalized_root) {
             Ok(Some(f)) => f,
@@ -352,7 +355,7 @@ impl BridgeFolders {
         }
 
         tracing::info!(
-            root = ?normalized_root,
+            root = %LogObscurer::path(&normalized_root),
             "[FolderPanel: Toolbar] Initiating high-speed recursive folder refresh from panel toolbar"
         );
 
@@ -415,9 +418,7 @@ impl BridgeFolders {
             .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
 
         tracing::info!(
-            folder_id = folder_id,
-            folder_name = %folder_name,
-            path = ?normalized_path,
+            folder = %LogObscurer::folder(Some(folder_id), &normalized_path),
             "[FolderNavigation: Stage 1/4] Immediate UI transition started"
         );
 

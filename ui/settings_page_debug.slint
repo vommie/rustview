@@ -1,0 +1,18 @@
+import { CheckBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPageDebug inherits VerticalLayout {
+    spacing: 12px;
+
+    in-out property <bool> obfuscate-logs: true;
+
+    SettingsCard {
+        title: "Details";
+
+        CheckBox {
+            text: "Obfuscate sensitive details like tag names and file paths in logs";
+            checked <=> root.obfuscate-logs;
+        }
+    }
+}

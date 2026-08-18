@@ -1,12 +1,13 @@
 use rusqlite::Connection;
 use rustview::library::Library;
-use rustview::settings::SettingsManager;
+use rustview::settings::{LogObscurer, SettingsManager, DEFAULT_OBFUSCATE_LOGS};
 use rustview::xnviewdb_migrate::cli::run_cli;
 use rustview::xnviewdb_migrate::logger::MigrationLogger;
 use rustview::xnviewdb_migrate::mapper::XnViewMapper;
 use rustview::xnviewdb_migrate::reader::XnViewDbReader;
 use rustview::xnviewdb_migrate::stats::MigrationStats;
 use rustview::xnviewdb_migrate::writer::XnViewDbWriter;
+use std::fs;
 use tempfile::tempdir;
 
 fn setup_mock_xnview_db(
@@ -169,13 +170,14 @@ fn test_cli_explicit_root_flag_and_settings_persistence() {
     let sqlite_db_file = tmp_src.path().join("XnView.db");
     setup_mock_xnview_db(&sqlite_db_file, tmp_root.path(), &sub_folder, tmp_outside.path());
 
-    // Run CLI with `--root <PATH>` flag
+    // Run CLI with `--root <PATH>` flag and `--plain-logs`
     let args = vec![
         "rustview".to_string(),
         "--migrate-xnview".to_string(),
         sqlite_db_file.to_string_lossy().to_string(),
         "--root".to_string(),
         tmp_root.path().to_string_lossy().to_string(),
+        "--plain-logs".to_string(),
         "--yes".to_string(),
     ];
 
@@ -193,4 +195,47 @@ fn test_cli_explicit_root_flag_and_settings_persistence() {
     let lib = Library::open(&tmp_target.path().join("library.lmdb")).unwrap();
     let folders = lib.folders().list_folders().unwrap();
     assert_eq!(folders.len(), 2);
+}
+
+#[test]
+fn test_migration_with_log_obfuscation_flag() {
+    let tmp_src = tempdir().unwrap();
+    let tmp_root = tempdir().unwrap();
+    let sub_folder = tmp_root.path().join("secret_vacation");
+    std::fs::create_dir_all(&sub_folder).unwrap();
+
+    let tmp_outside = tempdir().unwrap();
+    let tmp_target = tempdir().unwrap();
+    let tmp_config = tempdir().unwrap();
+
+    let sqlite_db_file = tmp_src.path().join("XnView.db");
+    setup_mock_xnview_db(&sqlite_db_file, tmp_root.path(), &sub_folder, tmp_outside.path());
+
+    let custom_log_path = tmp_target.path().join("obfuscated_migration.log");
+
+    // Run CLI with `--obfuscate-logs` flag
+    let args = vec![
+        "rustview".to_string(),
+        "--migrate-xnview".to_string(),
+        sqlite_db_file.to_string_lossy().to_string(),
+        "--root".to_string(),
+        tmp_root.path().to_string_lossy().to_string(),
+        "--log-file".to_string(),
+        custom_log_path.to_string_lossy().to_string(),
+        "--obfuscate-logs".to_string(),
+        "--yes".to_string(),
+    ];
+
+    let res = run_cli(&args, tmp_target.path(), tmp_config.path());
+    assert!(res.is_ok());
+
+    // Check log file content: filenames and path components must be masked with [File:...] / [Path:...]
+    let log_content = fs::read_to_string(&custom_log_path).expect("Failed to read audit log");
+    assert!(!log_content.contains("root_photo.jpg"));
+    assert!(!log_content.contains("secret_vacation"));
+    assert!(log_content.contains("Media #1"));
+    assert!(log_content.contains("Folder #1"));
+
+    // Cleanup: restore SPoT default state
+    LogObscurer::set_obfuscate(DEFAULT_OBFUSCATE_LOGS);
 }

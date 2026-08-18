@@ -3,10 +3,10 @@ use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::{FileRenameDialog, MainWindow};
-use crate::library::Library;
 use crate::library::error::LibraryError;
 use crate::library::models::{MediaId, MediaRecord};
-use crate::settings::SettingsManager;
+use crate::library::Library;
+use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -119,8 +119,7 @@ impl FileRenameDialogController {
         {
             Ok(updated_record) => {
                 tracing::info!(
-                    media_id = media_id,
-                    new_name = %new_name,
+                    media = %LogObscurer::media(Some(media_id), new_name),
                     "File successfully renamed via FileOperations subsystem"
                 );
 

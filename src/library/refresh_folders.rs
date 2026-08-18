@@ -2,6 +2,7 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{FolderId, FolderRecord};
 use super::schema::SEQ_FOLDER_ID;
+use crate::settings::LogObscurer;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -41,7 +42,7 @@ impl<'a> FolderTreeRefresher<'a> {
         };
 
         let root_str = canonical_root.to_string_lossy().to_string();
-        tracing::info!(root = %root_str, "Starting recursive high-speed directory discovery on Linux filesystem...");
+        tracing::info!(root = %LogObscurer::path(&canonical_root), "Starting recursive high-speed directory discovery on Linux filesystem...");
 
         // 1. Recursive pure-directory discovery
         let discovered =
@@ -49,7 +50,7 @@ impl<'a> FolderTreeRefresher<'a> {
         let total_scanned = discovered.len();
 
         tracing::info!(
-            root = %root_str,
+            root = %LogObscurer::path(&canonical_root),
             discovered_dirs = total_scanned,
             scan_elapsed_ms = t0.elapsed().as_millis(),
             "Physical directory discovery completed. Synchronizing with LMDB storage..."
@@ -190,7 +191,7 @@ impl<'a> FolderTreeRefresher<'a> {
             let entries = match read_dir_res {
                 Ok(it) => it,
                 Err(e) => {
-                    tracing::warn!(dir = ?current_dir, error = %e, "Skipping unreadable directory");
+                    tracing::warn!(dir = %LogObscurer::path(&current_dir), error = %e, "Skipping unreadable directory");
                     continue;
                 }
             };

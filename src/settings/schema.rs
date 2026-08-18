@@ -129,6 +129,11 @@ pub const MIN_WINDOW_HEIGHT: u32 = 400;
 pub const DEFAULT_WINDOW_MAXIMIZED: bool = false;
 
 // =============================================================================
+// SECTION 9: Debug & Privacy Settings - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_OBFUSCATE_LOGS: bool = true;
+
+// =============================================================================
 // Enums & Domain Data Models
 // =============================================================================
 
@@ -375,6 +380,20 @@ impl Default for TagSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct DebugSettings {
+    pub obfuscate_logs: bool,
+}
+
+impl Default for DebugSettings {
+    fn default() -> Self {
+        Self {
+            obfuscate_logs: DEFAULT_OBFUSCATE_LOGS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct WindowState {
     pub x: Option<i32>,
     pub y: Option<i32>,
@@ -412,6 +431,8 @@ pub struct AppSettings {
     pub player: PlayerSettings,
     #[serde(default)]
     pub tags: TagSettings,
+    #[serde(default)]
+    pub debug: DebugSettings,
     #[serde(default)]
     pub window: WindowState,
 }

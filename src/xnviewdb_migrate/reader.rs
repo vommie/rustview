@@ -1,5 +1,6 @@
 use super::error::MigrationError;
 use super::types::*;
+use crate::settings::LogObscurer;
 use rusqlite::{Connection, OpenFlags};
 use std::collections::HashMap;
 use std::path::Path;
@@ -18,7 +19,7 @@ impl XnViewDbReader {
 
         let t0 = Instant::now();
         tracing::info!(
-            path = ?db_path,
+            path = %LogObscurer::path(db_path),
             "[XnViewReader] Opening XnViewMP SQLite database in read-only mode..."
         );
 

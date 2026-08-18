@@ -2,9 +2,9 @@ use super::MainWindow;
 use super::bridge_state::*;
 use super::bridge_tags::{BridgeTags, TagActionDialogs};
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
-use crate::library::Library;
 use crate::library::models::{TagId, TagRecord};
-use crate::settings::SettingsManager;
+use crate::library::Library;
+use crate::settings::{LogObscurer, SettingsManager};
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -153,7 +153,10 @@ impl TagContextMenu {
                 if let Some(pid) = target_id
                     && let Ok(Some(parent)) = library.tags().get_tag(pid)
                 {
-                    tracing::info!(parent_id = pid, parent_name = %parent.name, "[TagAction] Triggering Add Child Tag dialog");
+                    tracing::info!(
+                        parent = %LogObscurer::tag(Some(pid), &parent.name),
+                        "[TagAction] Triggering Add Child Tag dialog"
+                    );
                     (dialogs.show_add)(Some(pid), &format!("Parent: {}", parent.name));
                 }
             }
@@ -161,7 +164,10 @@ impl TagContextMenu {
                 if let Some(tid) = target_id
                     && let Ok(Some(tag)) = library.tags().get_tag(tid)
                 {
-                    tracing::info!(tag_id = tid, current_name = %tag.name, "[TagAction] Triggering Rename Tag dialog");
+                    tracing::info!(
+                        tag = %LogObscurer::tag(Some(tid), &tag.name),
+                        "[TagAction] Triggering Rename Tag dialog"
+                    );
                     (dialogs.show_rename)(tid, &tag.name);
                 }
             }
@@ -176,7 +182,10 @@ impl TagContextMenu {
                         .into_iter()
                         .map(|t| t.name)
                         .collect();
-                    tracing::info!(tag_id = tid, tag_name = %tag.name, "[TagAction] Triggering Delete Tag dialog");
+                    tracing::info!(
+                        tag = %LogObscurer::tag(Some(tid), &tag.name),
+                        "[TagAction] Triggering Delete Tag dialog"
+                    );
                     (dialogs.show_delete)(tid, &tag.name, children);
                 }
             }
@@ -194,8 +203,8 @@ impl TagContextMenu {
                 let dest_parent = (id - CTX_TAG_MOVE_TARGET_BASE) as TagId;
                 if let Some(tid) = target_id {
                     tracing::info!(
-                        tag_id = tid,
-                        new_parent_id = dest_parent,
+                        tag = %LogObscurer::tag_id(tid),
+                        new_parent = %LogObscurer::tag_id(dest_parent),
                         "[TagAction] Moving tag under parent"
                     );
                     let _ = library.tags().move_tag(tid, Some(dest_parent));

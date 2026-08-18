@@ -14,11 +14,11 @@ use super::bridge_thumbnails::BridgeThumbnails;
 use super::favorites::FavoriteManager;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
-use crate::library::Library;
 use crate::library::models::{FolderId, MediaId, TagId};
+use crate::library::Library;
 use crate::player::PlayerController;
 use crate::query::{ScopeMode, SortColumn, SortOrder};
-use crate::settings::{AppSettings, GridAspectRatio, SettingsDialogController, SettingsDiff, SettingsManager};
+use crate::settings::{AppSettings, GridAspectRatio, LogObscurer, SettingsDialogController, SettingsDiff, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
@@ -217,6 +217,7 @@ impl UiBridge {
                 grid_appearance_changed = diff.appearance_grid_changed,
                 tooltips_changed = diff.tooltip_settings_changed,
                 pipeline_changed = diff.performance_pipeline_changed,
+                debug_changed = diff.debug_settings_changed,
                 "[UiBridge: SettingsSubscriber] Granular settings diff received. Dispatching targeted updates..."
             );
 
@@ -253,16 +254,25 @@ impl UiBridge {
                     );
                 }
 
-                // 3. Folder Tree Presentation (Only re-flatten in-memory tree nodes, zero disk scan)
+                // 3. Debug & Privacy update
+                if diff_clone.debug_settings_changed {
+                    LogObscurer::set_obfuscate(new_clone.debug.obfuscate_logs);
+                    tracing::info!(
+                        obfuscate_logs = new_clone.debug.obfuscate_logs,
+                        "[UiBridge: SettingsUpdate] Updated global log obfuscation privacy setting"
+                    );
+                }
+
+                // 4. Folder Tree Presentation (Only re-flatten in-memory tree nodes, zero disk scan)
                 if diff_clone.folder_tree_presentation_changed && !diff_clone.root_folder_changed {
                     BridgeFolders::reload_tree(&window, &library, &settings, &state);
                     tracing::debug!("[UiBridge: SettingsUpdate] Re-rendered folder tree with updated visibility/metrics");
                 }
 
-                // 4. Root Folder Changed (Heavy path: Only executed when root directory was ACTUALLY changed)
+                // 5. Root Folder Changed (Heavy path: Only executed when root directory was ACTUALLY changed)
                 if diff_clone.root_folder_changed {
                     tracing::info!(
-                        new_root = ?new_clone.general.root_folder,
+                        new_root = %LogObscurer::path_opt(new_clone.general.root_folder.as_ref()),
                         "[UiBridge: SettingsUpdate] Root directory path modified. Executing full root synchronization..."
                     );
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);

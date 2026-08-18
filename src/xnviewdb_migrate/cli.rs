@@ -5,7 +5,7 @@ use super::reader::XnViewDbReader;
 use super::stats::MigrationStats;
 use super::writer::XnViewDbWriter;
 use crate::library::folders::normalize_path;
-use crate::settings::SettingsManager;
+use crate::settings::{LogObscurer, SettingsManager};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -40,6 +40,7 @@ pub fn run_cli(
     let mut explicit_root_path: Option<PathBuf> = None;
     let mut enable_log = true; // Default: true (write audit log in home dir)
     let mut custom_log_path: Option<PathBuf> = None;
+    let mut explicit_obfuscate: Option<bool> = None;
 
     let mut iter = args.iter().skip(1);
     while let Some(arg) = iter.next() {
@@ -86,6 +87,10 @@ pub fn run_cli(
         } else if let Some(path_str) = arg.strip_prefix("--log-file=") {
             custom_log_path = Some(PathBuf::from(path_str));
             enable_log = true;
+        } else if arg == "--obfuscate-logs" || arg == "--obfuscate" {
+            explicit_obfuscate = Some(true);
+        } else if arg == "--no-obfuscate-logs" || arg == "--plain-logs" || arg == "--clear-logs" {
+            explicit_obfuscate = Some(false);
         } else if arg == "--yes" || arg == "-y" || arg == "--force" {
             auto_confirm = true;
         }
@@ -195,20 +200,57 @@ pub fn run_cli(
         }
     }
 
-    // 2. Initialize Migration Audit Logger
+    // 2. Resolve Log Privacy / Obfuscation Mode
+    let mut obfuscate_logs = explicit_obfuscate.unwrap_or_else(|| settings_mgr.get().debug.obfuscate_logs);
+
+    // If obfuscation is active and user is interactive, prompt whether they want to keep it
+    if explicit_obfuscate.is_none() && obfuscate_logs && !auto_confirm {
+        println!();
+        println!("--------------------------------------------------------------------------------");
+        println!("PRIVACY NOTICE: Log Obfuscation / Data Masking is currently ENABLED.");
+        println!("All file names, folder paths, and tag labels in the audit log will be masked with IDs.");
+        println!();
+        println!("If you plan to inspect the audit log yourself to verify skipped files or folders,");
+        println!("you may prefer plain text logging for this migration run.");
+        println!("--------------------------------------------------------------------------------");
+        print!("Keep log obfuscation enabled? [Y/n] (Enter 'n' for plain text log): ");
+        io::stdout().flush()?;
+
+        let mut obsc_input = String::new();
+        io::stdin().read_line(&mut obsc_input)?;
+        let trimmed_obsc = obsc_input.trim().to_lowercase();
+        if trimmed_obsc == "n" || trimmed_obsc == "no" {
+            obfuscate_logs = false;
+            println!("Log Obfuscation disabled for this migration run (plain text audit trail).");
+        } else {
+            println!("Log Obfuscation kept enabled (privacy-masked audit trail).");
+        }
+    }
+
+    LogObscurer::set_obfuscate(obfuscate_logs);
+
+    // 3. Initialize Migration Audit Logger
     let mut logger = MigrationLogger::new(enable_log, custom_log_path)?;
 
     println!();
     println!("================================================================================");
     println!("                  RUSTVIEW - XNVIEWMP DATABASE MIGRATION                        ");
     println!("================================================================================");
-    println!("Source XnViewMP DB: {}", xnview_db_path.display());
-    println!("Target RustView Dir: {}", data_dir.display());
+    println!("Source XnViewMP DB: {}", LogObscurer::path(&xnview_db_path));
+    println!("Target RustView Dir: {}", LogObscurer::path(data_dir));
     println!(
         "Base/Root Filter   : {}",
         match active_root_path {
-            Some(ref r) => format!("Active (only paths under '{}')", r.display()),
+            Some(ref r) => format!("Active (only paths under '{}')", LogObscurer::path(r)),
             None => "Disabled (importing all folders)".to_string(),
+        }
+    );
+    println!(
+        "Log Privacy Mode   : {}",
+        if LogObscurer::is_active() {
+            "Enabled (Obfuscated IDs/Hashes)"
+        } else {
+            "Disabled (Plain text audit trail)"
         }
     );
     if let Some(log_p) = logger.path() {
@@ -346,6 +388,9 @@ fn print_help() {
     println!("  --all-folders              Alias for --no-root-filter");
     println!("  --skip-missing             Skip folders and files that do not physically exist on disk (Default: enabled)");
     println!("  --include-missing          Include non-existent folders and files (disables missing check)");
+    println!("  --obfuscate-logs           Force log and audit trail obfuscation (mask names and paths)");
+    println!("  --no-obfuscate-logs        Disable log obfuscation (output clear text paths and names)");
+    println!("  --plain-logs               Alias for --no-obfuscate-logs");
     println!("  --no-log                   Disable writing audit log file in user home directory");
     println!("  --log                      Enable writing audit log file (Default: enabled in ~/rustview_migration_*.log)");
     println!("  --log-file <PATH>          Specify custom output path for the migration audit log file");
@@ -355,6 +400,6 @@ fn print_help() {
     println!("Examples:");
     println!("  rustview --migrate-xnview ~/.config/xnviewmp/XnView.db");
     println!("  rustview -m /path/to/XnView.db --root ~/images --yes");
-    println!("  rustview -m /path/to/XnView.db --no-root-filter --yes");
+    println!("  rustview -m /path/to/XnView.db --no-root-filter --plain-logs --yes");
     println!();
 }

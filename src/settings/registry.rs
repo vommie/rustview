@@ -1,4 +1,5 @@
 use super::diff::SettingsDiff;
+use super::obscurer::LogObscurer;
 use super::schema::AppSettings;
 use super::store::SettingsStore;
 use parking_lot::RwLock;
@@ -18,7 +19,9 @@ pub struct SettingsManager {
 impl SettingsManager {
     pub fn new(config_dir: &Path) -> Arc<Self> {
         let store = SettingsStore::new(config_dir);
-        let current = RwLock::new(store.load());
+        let loaded = store.load();
+        LogObscurer::set_obfuscate(loaded.debug.obfuscate_logs);
+        let current = RwLock::new(loaded);
 
         Arc::new(Self {
             store,
@@ -49,6 +52,9 @@ impl SettingsManager {
             return;
         }
 
+        // Live update log obfuscator state before emitting detailed summary
+        LogObscurer::set_obfuscate(new_settings.debug.obfuscate_logs);
+
         let summary = diff.detailed_summary(&old_settings, &new_settings);
         tracing::info!(
             changed_items_count = summary.len(),
@@ -78,6 +84,7 @@ impl SettingsManager {
 
     /// Persists settings quietly without triggering subscriber reload loops.
     pub fn save_quiet(&self, settings: &AppSettings) {
+        LogObscurer::set_obfuscate(settings.debug.obfuscate_logs);
         {
             let mut writer = self.current.write();
             *writer = settings.clone();

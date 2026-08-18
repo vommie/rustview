@@ -1,3 +1,4 @@
+use super::obscurer::LogObscurer;
 use super::schema::AppSettings;
 
 /// Granular, domain-specific delta representation between two `AppSettings` states.
@@ -33,6 +34,9 @@ pub struct SettingsDiff {
     // Tags Subsystem
     pub tags_settings_changed: bool,
     pub tag_expansion_changed: bool,
+
+    // Debug & Logging Subsystem
+    pub debug_settings_changed: bool,
 
     // Window Geometry
     pub window_geometry_changed: bool,
@@ -88,6 +92,7 @@ impl SettingsDiff {
         let tags_settings_changed = old.tags.default_match_mode != new.tags.default_match_mode
             || old.tags.default_scope_mode != new.tags.default_scope_mode;
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
+        let debug_settings_changed = old.debug != new.debug;
         let window_geometry_changed = old.window != new.window;
 
         let has_changes = root_folder_changed
@@ -104,6 +109,7 @@ impl SettingsDiff {
             || player_settings_changed
             || tags_settings_changed
             || tag_expansion_changed
+            || debug_settings_changed
             || window_geometry_changed;
 
         Self {
@@ -122,6 +128,7 @@ impl SettingsDiff {
             player_settings_changed,
             tags_settings_changed,
             tag_expansion_changed,
+            debug_settings_changed,
             window_geometry_changed,
         }
     }
@@ -132,8 +139,9 @@ impl SettingsDiff {
 
         if self.root_folder_changed {
             changes.push(format!(
-                "General: root_folder ({:?} -> {:?})",
-                old.general.root_folder, new.general.root_folder
+                "General: root_folder ({} -> {})",
+                LogObscurer::path_opt(old.general.root_folder.as_ref()),
+                LogObscurer::path_opt(new.general.root_folder.as_ref())
             ));
         }
         if old.general.remember_last_folder != new.general.remember_last_folder {
@@ -251,6 +259,13 @@ impl SettingsDiff {
             changes.push(format!(
                 "Performance: video_engine ({} -> {})",
                 old.performance.video_engine, new.performance.video_engine
+            ));
+        }
+
+        if old.debug.obfuscate_logs != new.debug.obfuscate_logs {
+            changes.push(format!(
+                "Debug: obfuscate_logs ({} -> {})",
+                old.debug.obfuscate_logs, new.debug.obfuscate_logs
             ));
         }
 
