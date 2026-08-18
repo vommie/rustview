@@ -4,7 +4,6 @@ import { SettingsPageGeneral } from "settings_page_general.slint";
 import { SettingsPageFolders } from "settings_page_folders.slint";
 import { SettingsPageAppearance } from "settings_page_appearance.slint";
 import { SettingsPagePerformance } from "settings_page_performance.slint";
-import { SettingsPagePlayer } from "settings_page_player.slint";
 import { SettingsPageTags } from "settings_page_tags.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
 import { ButtonBar } from "button_bar.slint";
@@ -15,7 +14,6 @@ export { SettingsPageGeneral } from "settings_page_general.slint";
 export { SettingsPageFolders } from "settings_page_folders.slint";
 export { SettingsPageAppearance } from "settings_page_appearance.slint";
 export { SettingsPagePerformance } from "settings_page_performance.slint";
-export { SettingsPagePlayer } from "settings_page_player.slint";
 export { SettingsPageTags } from "settings_page_tags.slint";
 export { SettingsPageDebug } from "settings_page_debug.slint";
 export { SettingsCard } from "settings_card.slint";
@@ -71,11 +69,6 @@ export component SettingsWindow inherits Window {
     in-out property <bool> custom-preview-settings: true;
     in-out property <int> preview-format-idx: 0; // 0 = WebP, 1 = JPEG
     in-out property <int> preview-quality: 40;
-
-    // Player options
-    in-out property <int> hwdec-idx: 0;
-    in-out property <bool> autoplay-videos: true;
-    in-out property <float> default-volume: 100.0;
 
     // Debug options
     in-out property <bool> obfuscate-logs: true;
@@ -157,15 +150,9 @@ export component SettingsWindow inherits Window {
                         preview-quality <=> root.preview-quality;
                     }
 
-                    if root.active-category == 4 : SettingsPagePlayer {
-                        hwdec-idx <=> root.hwdec-idx;
-                        autoplay-videos <=> root.autoplay-videos;
-                        default-volume <=> root.default-volume;
-                    }
+                    if root.active-category == 4 : SettingsPageTags {}
 
-                    if root.active-category == 5 : SettingsPageTags {}
-
-                    if root.active-category == 6 : SettingsPageDebug {
+                    if root.active-category == 5 : SettingsPageDebug {
                         obfuscate-logs <=> root.obfuscate-logs;
                     }
                 }

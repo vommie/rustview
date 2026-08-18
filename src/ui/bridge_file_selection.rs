@@ -6,8 +6,8 @@ use super::file_selection::FileSelectionModel;
 use super::MainWindow;
 use crate::library::models::MediaId;
 use crate::library::Library;
-use crate::player::{Player, PlayerController};
 use crate::settings::LogObscurer;
+use crate::system::SystemFileHandler;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, Model};
 use std::sync::Arc;
@@ -29,13 +29,11 @@ impl BridgeFileSelection {
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
-        player: Arc<PlayerController>,
         state: Arc<RwLock<UiState>>,
         last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
-        let pl = player;
         let st = state.clone();
         let lc = last_click;
         window.on_media_clicked(move |id, is_ctrl, is_shift| {
@@ -47,7 +45,6 @@ impl BridgeFileSelection {
                 },
                 &win,
                 &lib,
-                &pl,
                 &st,
                 &lc,
             );
@@ -57,7 +54,9 @@ impl BridgeFileSelection {
         let lib_bg = library;
         let st_bg = state;
         window.on_background_clicked(move || {
-            tracing::info!("[FileSelection: BackgroundClick] Background free space clicked, clearing active file selection");
+            tracing::info!(
+                "[FileSelection: BackgroundClick] Background free space clicked, clearing active file selection"
+            );
             Self::clear_selection(&win_bg, &lib_bg, &st_bg);
         });
     }
@@ -67,7 +66,6 @@ impl BridgeFileSelection {
         event: FileClickEvent,
         window: &MainWindow,
         library: &Arc<Library>,
-        player: &Arc<PlayerController>,
         state: &Arc<RwLock<UiState>>,
         last_click: &Arc<Mutex<Option<(MediaId, Instant)>>>,
     ) {
@@ -75,7 +73,7 @@ impl BridgeFileSelection {
 
         // 1. Double Click Detection (< 400ms delta on same ID without modifiers)
         if Self::check_double_click(event, last_click) {
-            Self::handle_double_click(event.media_id, state, library, player, window);
+            Self::handle_double_click(event.media_id, state, library, window);
             return;
         }
 
@@ -249,7 +247,6 @@ impl BridgeFileSelection {
         media_id: MediaId,
         state: &Arc<RwLock<UiState>>,
         library: &Arc<Library>,
-        player: &Arc<PlayerController>,
         window: &MainWindow,
     ) {
         if let Ok(Some(media)) = library.media().get(media_id) {
@@ -264,10 +261,10 @@ impl BridgeFileSelection {
                 media = %LogObscurer::media(Some(media_id), &media.filename),
                 media_type = ?media.media_type,
                 path = %LogObscurer::path(&full_path),
-                "[MediaAction: DoubleClick] Double-click event triggered on media item"
+                "[MediaAction: DoubleClick] Double-click event triggered on media item. Dispatching to system default handler..."
             );
 
-            Self::open_media(media_id, state, library, player, window);
+            Self::open_media(media_id, state, library, window);
         }
     }
 
@@ -275,7 +272,6 @@ impl BridgeFileSelection {
         media_id: MediaId,
         state: &Arc<RwLock<UiState>>,
         library: &Arc<Library>,
-        player: &Arc<PlayerController>,
         window: &MainWindow,
     ) {
         if let Ok(Some(media)) = library.media().get(media_id) {
@@ -307,15 +303,20 @@ impl BridgeFileSelection {
             tracing::info!(
                 media = %LogObscurer::media(Some(media_id), &media.filename),
                 file = %LogObscurer::path(&full_path),
-                "Opening media item"
+                "Opening media file with Linux system default handler..."
             );
 
-            if matches!(media.media_type, crate::media::MediaType::Video)
-                && player.load(&full_path, true).is_ok()
-            {
-                window.set_player_title(media.filename.into());
-                window.set_is_player_open(true);
-                window.set_player_is_playing(true);
+            if let Err(e) = SystemFileHandler::open_file(&full_path) {
+                tracing::error!(
+                    file = %LogObscurer::path(&full_path),
+                    error = %e,
+                    "Failed to launch system default application for media file"
+                );
+                window.set_status_text(format!("Failed to open file: {}", e).into());
+            } else {
+                window.set_status_text(
+                    format!("Opened '{}' with system default application.", media.filename).into(),
+                );
             }
         }
     }

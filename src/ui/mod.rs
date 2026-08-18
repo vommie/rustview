@@ -20,7 +20,6 @@ pub mod bridge_folder_dialogs;
 pub mod bridge_folders;
 pub mod bridge_inspector;
 pub mod bridge_media;
-pub mod bridge_player;
 pub mod bridge_state;
 pub mod bridge_tag_dialogs;
 pub mod bridge_tags;

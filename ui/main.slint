@@ -8,7 +8,6 @@ import { SidebarRight } from "sidebar_right.slint";
 import { VirtualizedMediaGrid } from "media_grid.slint";
 import { MediaTableView } from "media_table.slint";
 import { StatusBar } from "status_bar.slint";
-import { VideoPlayerView } from "player.slint";
 import { ContextMenuPopup } from "context_menu.slint";
 import { ResizerBar } from "resizer_bar.slint";
 
@@ -36,7 +35,6 @@ export component MainWindow inherits Window {
 
     // View state properties
     in-out property <bool> is-table-view: false;
-    in-out property <bool> is-player-open: false;
     in-out property <bool> is-modal-locked: false;
     in-out property <int> thumb-size: 190;
     in-out property <int> thumb-aspect-idx: 1; // 0=1:1, 1=4:3, 2=5:4, 3=16:9, 4=3:4, 5=4:5, 6=9:16
@@ -90,13 +88,6 @@ export component MainWindow inherits Window {
     in-out property <int> generate-current: 0;
     in-out property <int> generate-total: 100;
     in-out property <int> active-workers: 0;
-
-    // Player state properties
-    in-out property <bool> player-is-playing: false;
-    in-out property <float> player-current-time: 0.0;
-    in-out property <float> player-duration: 100.0;
-    in-out property <string> player-time-str: "00:00 / 00:00";
-    in-out property <string> player-title: "Video Playback";
 
     // Tag & Rate Panel Interactive State Properties
     in-out property <bool> tag-is-assign-mode: false;
@@ -179,13 +170,6 @@ export component MainWindow inherits Window {
     callback sidebar-right-resized(length /* new_width */);
     callback sidebar-right-resize-finished(length /* final_width */);
 
-    // Player Callbacks
-    callback player-toggle-play();
-    callback player-seek(float);
-    callback player-set-volume(float);
-    callback player-stop();
-    callback player-close();
-
     /// Public endpoint on MainWindow to scroll tree view to the given row index
     public function scroll-folder-to-row(row-idx: int) {
         sidebar_left.scroll-folder-to-row(row-idx);
@@ -236,20 +220,7 @@ export component MainWindow inherits Window {
                 horizontal-stretch: 1;
                 background: Theme.background;
 
-                if root.is-player-open : VideoPlayerView {
-                    is-playing: root.player-is-playing;
-                    current-time: root.player-current-time;
-                    duration: root.player-duration;
-                    time-str: root.player-time-str;
-                    video-title: root.player-title;
-                    toggle-play => { root.player-toggle-play(); }
-                    seek(p) => { root.player-seek(p); }
-                    set-vol(v) => { root.player-set-volume(v); }
-                    stop => { root.player-stop(); }
-                    close => { root.player-close(); }
-                }
-
-                if !root.is-player-open && !root.is-table-view : VirtualizedMediaGrid {
+                if !root.is-table-view : VirtualizedMediaGrid {
                     media-items: root.media-items;
                     thumb-size <=> root.thumb-size;
                     thumb-aspect-idx: root.thumb-aspect-idx;
@@ -273,7 +244,7 @@ export component MainWindow inherits Window {
                     background-clicked => { root.background-clicked(); }
                 }
 
-                if !root.is-player-open && root.is-table-view : MediaTableView {
+                if root.is-table-view : MediaTableView {
                     items: root.media-items;
                     search-text <=> root.search-query;
                     regex-mode <=> root.regex-mode;

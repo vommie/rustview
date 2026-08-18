@@ -103,26 +103,13 @@ pub fn default_worker_threads() -> usize {
 }
 
 // =============================================================================
-// SECTION 6: Video Player - Single Point of Truth Constants
-// =============================================================================
-pub const DEFAULT_HWDEC_MODE: &str = "auto-safe";
-pub const DEFAULT_VIDEO_OUTPUT: &str = "gpu";
-pub const DEFAULT_GPU_API: &str = "auto";
-pub const DEFAULT_AUDIO_DEVICE: &str = "auto";
-pub const DEFAULT_AUTOPLAY_VIDEOS: bool = true;
-pub const DEFAULT_PLAYER_VOLUME: f32 = 100.0;
-pub const MIN_PLAYER_VOLUME: f32 = 0.0;
-pub const MAX_PLAYER_VOLUME: f32 = 100.0;
-pub const DEFAULT_PLAYER_KEEP_OPEN: bool = true;
-
-// =============================================================================
-// SECTION 7: Tags & Categorization - Single Point of Truth Constants
+// SECTION 6: Tags & Categorization - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_TAG_MATCH_MODE: &str = "ALL";
 pub const DEFAULT_TAG_SCOPE_MODE: &str = "Global";
 
 // =============================================================================
-// SECTION 8: Window Geometry - Single Point of Truth Constants
+// SECTION 7: Window Geometry - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_WINDOW_WIDTH: u32 = 1280;
 pub const DEFAULT_WINDOW_HEIGHT: u32 = 800;
@@ -131,7 +118,7 @@ pub const MIN_WINDOW_HEIGHT: u32 = 400;
 pub const DEFAULT_WINDOW_MAXIMIZED: bool = false;
 
 // =============================================================================
-// SECTION 9: Debug & Privacy Settings - Single Point of Truth Constants
+// SECTION 8: Debug & Privacy Settings - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_OBFUSCATE_LOGS: bool = true;
 
@@ -346,26 +333,6 @@ impl Default for PerformanceSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct PlayerSettings {
-    pub hwdec_mode: String,
-    pub autoplay_videos: bool,
-    pub default_volume: f32,
-    pub keep_open: bool,
-}
-
-impl Default for PlayerSettings {
-    fn default() -> Self {
-        Self {
-            hwdec_mode: DEFAULT_HWDEC_MODE.to_string(),
-            autoplay_videos: DEFAULT_AUTOPLAY_VIDEOS,
-            default_volume: DEFAULT_PLAYER_VOLUME,
-            keep_open: DEFAULT_PLAYER_KEEP_OPEN,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TagSettings {
@@ -433,8 +400,6 @@ pub struct AppSettings {
     pub view: ViewSettings,
     #[serde(default)]
     pub performance: PerformanceSettings,
-    #[serde(default)]
-    pub player: PlayerSettings,
     #[serde(default)]
     pub tags: TagSettings,
     #[serde(default)]

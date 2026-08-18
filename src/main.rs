@@ -1,5 +1,4 @@
 use rustview::library::Library;
-use rustview::player::{PlayerController, RenderConfig};
 use rustview::settings::{LogObscurer, SettingsManager, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 use rustview::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge};
@@ -76,9 +75,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         settings.get().performance.worker_threads,
     )?);
 
-    // Initialize Native Player Controller
-    let player = Arc::new(PlayerController::new(RenderConfig::default())?);
-
     // Initialize Slint Window
     let main_window = MainWindow::new()?;
 
@@ -126,7 +122,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         main_window.clone_strong(),
         library,
         thumbnails,
-        player,
         settings,
         &data_dir,
     );

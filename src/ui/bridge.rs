@@ -6,7 +6,6 @@ use super::bridge_folder_dialogs::FolderDialogController;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
-use super::bridge_player::BridgePlayer;
 use super::bridge_state::*;
 use super::bridge_tag_dialogs::TagDialogController;
 use super::bridge_tags::BridgeTags;
@@ -16,9 +15,11 @@ use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
 use crate::library::models::{FolderId, MediaId, TagId};
 use crate::library::Library;
-use crate::player::PlayerController;
 use crate::query::{ScopeMode, SortColumn, SortOrder};
-use crate::settings::{AppSettings, GridAspectRatio, LogObscurer, SettingsDialogController, SettingsDiff, SettingsManager};
+use crate::settings::{
+    AppSettings, GridAspectRatio, LogObscurer, SettingsDialogController, SettingsDiff,
+    SettingsManager,
+};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
@@ -33,7 +34,6 @@ pub struct UiBridge {
     window: MainWindow,
     library: Arc<Library>,
     thumbnails: Arc<ThumbnailManager>,
-    player: Arc<PlayerController>,
     settings: Arc<SettingsManager>,
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
@@ -45,7 +45,6 @@ pub struct UiBridge {
     state: Arc<RwLock<UiState>>,
     last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
     _thumbnail_timer: Timer,
-    _player_timer: Timer,
 }
 
 impl UiBridge {
@@ -53,7 +52,6 @@ impl UiBridge {
         window: MainWindow,
         library: Arc<Library>,
         thumbnails: Arc<ThumbnailManager>,
-        player: Arc<PlayerController>,
         settings: Arc<SettingsManager>,
         config_dir: &Path,
     ) -> Self {
@@ -128,13 +126,10 @@ impl UiBridge {
             window.as_weak(),
         );
 
-        let player_timer = BridgePlayer::start_event_timer(player.clone(), window.as_weak());
-
         let bridge = Self {
             window,
             library,
             thumbnails,
-            player,
             settings,
             settings_dialog,
             rename_dialog,
@@ -146,7 +141,6 @@ impl UiBridge {
             state,
             last_click,
             _thumbnail_timer: thumbnail_timer,
-            _player_timer: player_timer,
         };
 
         bridge.register_subsystem_callbacks();
@@ -304,7 +298,6 @@ impl UiBridge {
         BridgeFileSelection::register_callbacks(
             &self.window,
             self.library.clone(),
-            self.player.clone(),
             self.state.clone(),
             self.last_click.clone(),
         );
@@ -341,8 +334,6 @@ impl UiBridge {
         );
 
         self.register_sidebar_resize_callbacks();
-
-        BridgePlayer::register_callbacks(&self.window, self.player.clone());
     }
 
     fn register_sidebar_resize_callbacks(&self) {
@@ -515,7 +506,6 @@ impl UiBridge {
             },
             &self.window,
             &self.library,
-            &self.player,
             &self.state,
             &self.last_click,
         );

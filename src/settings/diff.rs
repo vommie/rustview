@@ -28,9 +28,6 @@ pub struct SettingsDiff {
     // View & Layout Subsystem
     pub view_settings_changed: bool,
 
-    // Video Player Subsystem
-    pub player_settings_changed: bool,
-
     // Tags Subsystem
     pub tags_settings_changed: bool,
     pub tag_expansion_changed: bool,
@@ -90,7 +87,6 @@ impl SettingsDiff {
             || old.performance.preview_quality != new.performance.preview_quality;
 
         let view_settings_changed = old.view != new.view;
-        let player_settings_changed = old.player != new.player;
         let tags_settings_changed = old.tags.default_match_mode != new.tags.default_match_mode
             || old.tags.default_scope_mode != new.tags.default_scope_mode;
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
@@ -108,7 +104,6 @@ impl SettingsDiff {
             || performance_cache_changed
             || performance_pipeline_changed
             || view_settings_changed
-            || player_settings_changed
             || tags_settings_changed
             || tag_expansion_changed
             || debug_settings_changed
@@ -127,7 +122,6 @@ impl SettingsDiff {
             performance_cache_changed,
             performance_pipeline_changed,
             view_settings_changed,
-            player_settings_changed,
             tags_settings_changed,
             tag_expansion_changed,
             debug_settings_changed,
