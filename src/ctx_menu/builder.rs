@@ -1,4 +1,5 @@
 use super::types::{CtxMenu, CtxMenuActionId, CtxMenuItem, CtxMenuItemKind};
+use std::path::PathBuf;
 
 /// Fluent, declarative builder for constructing multi-level context menus.
 #[derive(Debug, Default)]
@@ -40,6 +41,30 @@ impl CtxMenuBuilder {
             text: text.into(),
             shortcut: shortcut.map(|s| s.to_string()),
             icon_name: icon_name.map(|s| s.to_string()),
+            icon_path: None,
+            kind: CtxMenuItemKind::Action,
+            is_checked: false,
+            is_enabled,
+            children: Vec::new(),
+            menu_index: 0,
+        });
+        self
+    }
+
+    pub fn action_with_icon_path(
+        mut self,
+        id: CtxMenuActionId,
+        text: impl Into<String>,
+        shortcut: Option<&str>,
+        icon_path: Option<PathBuf>,
+        is_enabled: bool,
+    ) -> Self {
+        self.items.push(CtxMenuItem {
+            id,
+            text: text.into(),
+            shortcut: shortcut.map(|s| s.to_string()),
+            icon_name: None,
+            icon_path,
             kind: CtxMenuItemKind::Action,
             is_checked: false,
             is_enabled,
@@ -63,6 +88,7 @@ impl CtxMenuBuilder {
             text: text.into(),
             shortcut: shortcut.map(|s| s.to_string()),
             icon_name: icon_name.map(|s| s.to_string()),
+            icon_path: None,
             kind: CtxMenuItemKind::Checkable,
             is_checked,
             is_enabled,
@@ -86,6 +112,7 @@ impl CtxMenuBuilder {
             text: text.into(),
             shortcut: shortcut.map(|s| s.to_string()),
             icon_name: icon_name.map(|s| s.to_string()),
+            icon_path: None,
             kind: CtxMenuItemKind::Radio,
             is_checked,
             is_enabled,
@@ -113,6 +140,7 @@ impl CtxMenuBuilder {
             text: text.into(),
             shortcut: None,
             icon_name: icon_name.map(|s| s.to_string()),
+            icon_path: None,
             kind: CtxMenuItemKind::Submenu,
             is_checked: false,
             is_enabled,

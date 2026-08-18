@@ -5,6 +5,7 @@ use super::bridge_state::*;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
 use crate::library::models::{FolderId, FolderRecord};
 use crate::settings::LogObscurer;
+use crate::system::SystemFileHandler;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -32,6 +33,16 @@ impl FolderContextMenu {
         };
 
         let mut builder = CtxMenuBuilder::new().header(title_header);
+
+        // Open in File Manager right at the top
+        builder = builder.action(
+            CTX_FOLDER_OPEN_IN_FILE_MANAGER,
+            "Open in File Manager",
+            None,
+            Some("folder"),
+            !target_folder.is_deleted,
+        );
+        builder = builder.separator();
 
         if !is_root {
             builder = builder.action(
@@ -231,7 +242,7 @@ impl FolderContextMenu {
             return;
         }
 
-        // 2. Standard Folder Actions (Rename / Delete / Purge Orphaned / Refresh)
+        // 2. Standard Folder Actions (Open in File Manager / Rename / Delete / Purge Orphaned / Refresh)
         if let Some(fid) = target_folder_id
             && let Ok(Some(rec)) = ctx.library.folders().get_folder(fid)
         {
@@ -240,7 +251,23 @@ impl FolderContextMenu {
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| rec.path.clone());
 
-            if action_id == CTX_FOLDER_REFRESH {
+            if action_id == CTX_FOLDER_OPEN_IN_FILE_MANAGER {
+                tracing::info!(
+                    folder = %LogObscurer::folder(Some(fid), &rec.path),
+                    "[FolderContextMenu] Open in File Manager triggered"
+                );
+                if let Err(e) = SystemFileHandler::open_folder(&rec.path) {
+                    tracing::error!(
+                        error = %e,
+                        "[FolderContextMenu] Failed to open folder in File Manager"
+                    );
+                    window.set_status_text(format!("Failed to open File Manager: {}", e).into());
+                } else {
+                    window.set_status_text(
+                        format!("Opened folder '{}' in File Manager.", name).into(),
+                    );
+                }
+            } else if action_id == CTX_FOLDER_REFRESH {
                 tracing::info!(
                     folder = %LogObscurer::folder(Some(fid), &rec.path),
                     "[FolderContextMenu] Refresh Folder action triggered via context menu"

@@ -3,6 +3,7 @@ use crate::library::models::{FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER};
+use crate::system::DesktopApp;
 use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
@@ -12,10 +13,19 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 // Standard File Context Menu Action IDs
+pub const CTX_ACTION_OPEN: CtxMenuActionId = 1000;
+pub const CTX_ACTION_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 1008;
+pub const CTX_ACTION_OPEN_WITH_OTHER: CtxMenuActionId = 1050;
+pub const CTX_ACTION_OPEN_WITH_APP_BASE: CtxMenuActionId = 10_000;
+
 pub const CTX_ACTION_RENAME: CtxMenuActionId = 1001;
 pub const CTX_ACTION_SELECT_ALL: CtxMenuActionId = 1002;
 pub const CTX_ACTION_CLEAR_SELECTION: CtxMenuActionId = 1003;
 pub const CTX_ACTION_REFRESH_FILES: CtxMenuActionId = 1004;
+
+pub const CTX_ACTION_COPY_NAME: CtxMenuActionId = 1005;
+pub const CTX_ACTION_COPY_PATH: CtxMenuActionId = 1006;
+pub const CTX_ACTION_COPY_IMAGE: CtxMenuActionId = 1007;
 
 pub const CTX_ACTION_RATE_5: CtxMenuActionId = 1015;
 pub const CTX_ACTION_RATE_4: CtxMenuActionId = 1014;
@@ -37,6 +47,7 @@ pub const CTX_TAG_MOVE_TO_ROOT: CtxMenuActionId = 2013;
 pub const CTX_TAG_MOVE_TARGET_BASE: CtxMenuActionId = 100_000;
 
 // Folder Tree Context Menu Action IDs
+pub const CTX_FOLDER_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 3000;
 pub const CTX_FOLDER_RENAME: CtxMenuActionId = 3001;
 pub const CTX_FOLDER_DELETE: CtxMenuActionId = 3002;
 pub const CTX_FOLDER_PURGE_DB: CtxMenuActionId = 3003;
@@ -63,6 +74,7 @@ pub struct UiState {
     pub selected_rating: u8, // 0 = wildcard in query, 0..5 in assign
     pub is_refreshing_media: bool,
     pub active_file_rename_target: Option<MediaId>,
+    pub active_associated_apps: Vec<DesktopApp>,
 
     // === Hierarchical Folder Tree State & Fast In-Memory Cache ===
     pub expanded_folder_ids: HashSet<FolderId>,
@@ -101,6 +113,7 @@ impl Default for UiState {
             selected_rating: 0,
             is_refreshing_media: false,
             active_file_rename_target: None,
+            active_associated_apps: Vec::new(),
             expanded_folder_ids: HashSet::new(),
             is_refreshing_folders: false,
             folder_scan_count: 0,

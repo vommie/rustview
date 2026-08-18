@@ -43,7 +43,7 @@ pub struct BridgeContextMenu;
 
 impl BridgeContextMenu {
     pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
-        Self::register_media_menu(window, &reg.thumbnails, &reg.state);
+        Self::register_media_menu(window, &reg.library, &reg.thumbnails, &reg.state);
         Self::register_folder_menu(window, &reg.library, &reg.settings, &reg.state);
         Self::register_popup_events(window, &reg.state);
         Self::register_action_dispatcher(window, reg);
@@ -51,14 +51,16 @@ impl BridgeContextMenu {
 
     fn register_media_menu(
         window: &MainWindow,
+        library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let win = window.clone_strong();
+        let lib = library.clone();
         let th = thumbnails.clone();
         let st = state.clone();
         window.on_media_context_menu(move |id, x, y| {
-            Self::show_media_menu(&win, &th, &st, id as u64, x, y);
+            Self::show_media_menu(&win, &lib, &th, &st, id as u64, x, y);
         });
     }
 
@@ -146,15 +148,17 @@ impl BridgeContextMenu {
 
     pub fn show_media_menu(
         window: &MainWindow,
+        library: &Library,
         thumbnails: &ThumbnailManager,
         state: &Arc<RwLock<UiState>>,
         media_id: MediaId,
         x: f32,
         y: f32,
     ) {
-        let (selected_count, _) = MediaContextMenu::prepare_selection(window, state, media_id);
+        let (selected_count, is_single_image, associated_apps) =
+            MediaContextMenu::prepare_selection(window, library, state, media_id);
         let is_busy = BridgeMedia::is_system_busy(window, thumbnails, state);
-        let menu = MediaContextMenu::build_menu(selected_count, is_busy);
+        let menu = MediaContextMenu::build_menu(selected_count, is_single_image, is_busy, &associated_apps);
         Self::open_custom_menu(window, state, menu, x, y);
     }
 

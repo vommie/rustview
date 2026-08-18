@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Explicit unique identifier for a context menu action.
 pub type CtxMenuActionId = u64;
@@ -22,6 +23,7 @@ pub struct CtxMenuItem {
     pub text: String,
     pub shortcut: Option<String>,
     pub icon_name: Option<String>,
+    pub icon_path: Option<PathBuf>,
     pub kind: CtxMenuItemKind,
     pub is_checked: bool,
     pub is_enabled: bool,
@@ -36,6 +38,7 @@ impl CtxMenuItem {
             text: text.into(),
             shortcut: None,
             icon_name: None,
+            icon_path: None,
             kind: CtxMenuItemKind::Action,
             is_checked: false,
             is_enabled: true,
@@ -50,6 +53,7 @@ impl CtxMenuItem {
             text: text.into(),
             shortcut: None,
             icon_name: None,
+            icon_path: None,
             kind: CtxMenuItemKind::Checkable,
             is_checked,
             is_enabled: true,
@@ -64,6 +68,7 @@ impl CtxMenuItem {
             text: String::new(),
             shortcut: None,
             icon_name: None,
+            icon_path: None,
             kind: CtxMenuItemKind::Separator,
             is_checked: false,
             is_enabled: false,
@@ -78,6 +83,7 @@ impl CtxMenuItem {
             text: text.into(),
             shortcut: None,
             icon_name: None,
+            icon_path: None,
             kind: CtxMenuItemKind::Header,
             is_checked: false,
             is_enabled: false,
@@ -97,6 +103,7 @@ impl CtxMenuItem {
             text: text.into(),
             shortcut: None,
             icon_name: icon_name.map(|s| s.to_string()),
+            icon_path: None,
             kind: CtxMenuItemKind::Submenu,
             is_checked: false,
             is_enabled,

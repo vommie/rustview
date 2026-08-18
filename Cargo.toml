@@ -1,6 +1,6 @@
 [package]
 name = "rustview"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 build = "build.rs"
 
@@ -30,6 +30,7 @@ rfd = "0.15"
 trash = "5"
 rusqlite = { version = "0", features = ["bundled"] }
 webp = "0.3"
+arboard = "3"
 
 [build-dependencies]
 slint-build = "1"

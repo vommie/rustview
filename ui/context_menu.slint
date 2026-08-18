@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { Icons, AppIcon } from "icons.slint";
 import { ContextMenuItemModel } from "types.slint";
 
 export component ContextMenuItemRow inherits Rectangle {
@@ -54,7 +55,7 @@ export component ContextMenuItemRow inherits Rectangle {
         spacing: 8px;
         alignment: start;
 
-        // Checkable Indicator Icon Box
+        // Icon Box (Checkmark / Radio / Real App Desktop Icon)
         Rectangle {
             width: 14px;
             height: 14px;
@@ -75,6 +76,17 @@ export component ContextMenuItemRow inherits Rectangle {
                 color: Theme.primary;
                 horizontal-alignment: center;
                 vertical-alignment: center;
+            }
+
+            // Real Application Icon (from Desktop file icon path)
+            if root.item.kind != 1 && root.item.kind != 2 && root.item.icon.width > 0 : Image {
+                source: root.item.icon;
+                width: 14px;
+                height: 14px;
+                image-fit: contain;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                opacity: root.item.is-enabled ? 1.0 : 0.4;
             }
         }
 
@@ -146,13 +158,13 @@ export component ContextMenuPopup inherits Rectangle {
         }
     }
 
-    property <length> menu-width: 210px;
+    property <length> menu-width: 230px;
 
-    property <length> l0-x: Math.max(8px, Math.min(root.width - 220px - 8px, root.pos-x));
+    property <length> l0-x: Math.max(8px, Math.min(root.width - 230px - 8px, root.pos-x));
 
-    property <length> l1-x: (root.l0-x + 220px + root.menu-width + 8px > root.width)
+    property <length> l1-x: (root.l0-x + 230px + root.menu-width + 8px > root.width)
         ? Math.max(8px, root.l0-x - root.menu-width - 4px)
-        : (root.l0-x + 220px + 4px);
+        : (root.l0-x + 230px + 4px);
 
     property <length> l2-x: (root.l1-x + root.menu-width + root.menu-width + 8px > root.width)
         ? Math.max(8px, root.l1-x - root.menu-width - 4px)
@@ -186,7 +198,7 @@ export component ContextMenuPopup inherits Rectangle {
 
     // Level 0 Menu Box
     Rectangle {
-        width: 220px;
+        width: 230px;
         height: layout0.preferred-height;
         x: root.l0-x;
         y: Math.max(8px, Math.min(root.height - self.height - 8px, root.pos-y));

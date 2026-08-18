@@ -1,7 +1,7 @@
 use super::types::{CtxMenu, CtxMenuActionId, CtxMenuContext, CtxMenuItem};
 use crate::ui::ContextMenuItemModel;
 use parking_lot::RwLock;
-use slint::{ModelRc, VecModel};
+use slint::{Image, ModelRc, VecModel};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -46,24 +46,33 @@ impl CtxMenuDispatcher {
         }
     }
 
-    /// Converts a slice of CtxMenuItems into a Slint Model for any depth level.
+    /// Converts a slice of CtxMenuItems into a Slint Model for any depth level with native image support.
     pub fn items_to_slint_model(
         items: &[CtxMenuItem],
         depth: i32,
     ) -> ModelRc<ContextMenuItemModel> {
         let models: Vec<ContextMenuItemModel> = items
             .iter()
-            .map(|item| ContextMenuItemModel {
-                id: item.id as i32,
-                text: item.text.clone().into(),
-                shortcut: item.shortcut.clone().unwrap_or_default().into(),
-                icon_name: item.icon_name.clone().unwrap_or_default().into(),
-                kind: item.kind as i32,
-                is_checked: item.is_checked,
-                is_enabled: item.is_enabled,
-                has_submenu: !item.children.is_empty(),
-                submenu_depth: depth,
-                menu_index: item.menu_index as i32,
+            .map(|item| {
+                let slint_icon = if let Some(ref path) = item.icon_path {
+                    Image::load_from_path(path).unwrap_or_default()
+                } else {
+                    Image::default()
+                };
+
+                ContextMenuItemModel {
+                    id: item.id as i32,
+                    text: item.text.clone().into(),
+                    shortcut: item.shortcut.clone().unwrap_or_default().into(),
+                    icon_name: item.icon_name.clone().unwrap_or_default().into(),
+                    icon: slint_icon,
+                    kind: item.kind as i32,
+                    is_checked: item.is_checked,
+                    is_enabled: item.is_enabled,
+                    has_submenu: !item.children.is_empty(),
+                    submenu_depth: depth,
+                    menu_index: item.menu_index as i32,
+                }
             })
             .collect();
         ModelRc::new(VecModel::from(models))
@@ -79,11 +88,18 @@ impl CtxMenuDispatcher {
         for item in &menu.items {
             if !item.children.is_empty() {
                 for child in &item.children {
+                    let slint_icon = if let Some(ref path) = child.icon_path {
+                        Image::load_from_path(path).unwrap_or_default()
+                    } else {
+                        Image::default()
+                    };
+
                     sub_items.push(ContextMenuItemModel {
                         id: child.id as i32,
                         text: child.text.clone().into(),
                         shortcut: child.shortcut.clone().unwrap_or_default().into(),
                         icon_name: child.icon_name.clone().unwrap_or_default().into(),
+                        icon: slint_icon,
                         kind: child.kind as i32,
                         is_checked: child.is_checked,
                         is_enabled: child.is_enabled,

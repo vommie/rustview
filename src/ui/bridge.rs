@@ -531,6 +531,7 @@ impl UiBridge {
     pub fn show_media_context_menu(&self, media_id: MediaId, x: f32, y: f32) {
         BridgeContextMenu::show_media_menu(
             &self.window,
+            &self.library,
             &self.thumbnails,
             &self.state,
             media_id,
