@@ -1,10 +1,12 @@
 use super::MainWindow;
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
+use super::bridge_folders::BridgeFolders;
 use super::bridge_state::*;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
 use crate::library::models::{FolderId, FolderRecord};
+use crate::settings::LogObscurer;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Domain context menu builder and action handler for folder tree nodes.
 pub struct FolderContextMenu;
@@ -42,9 +44,20 @@ impl FolderContextMenu {
 
             let move_submenu = Self::build_reparent_submenu(target_folder, all_folders, root_dir);
             builder = builder.item(move_submenu);
+        }
 
-            builder = builder.separator();
+        // Separator above and below Refresh Folder
+        builder = builder.separator();
+        builder = builder.action(
+            CTX_FOLDER_REFRESH,
+            "Refresh Folder",
+            Some("F5"),
+            Some("refresh"),
+            !target_folder.is_deleted,
+        );
+        builder = builder.separator();
 
+        if !is_root {
             if target_folder.is_deleted {
                 // Orphaned folder: Show "Remove from Database..."
                 builder = builder.action(
@@ -218,16 +231,30 @@ impl FolderContextMenu {
             return;
         }
 
-        // 2. Standard Folder Actions (Rename / Delete / Purge Orphaned)
+        // 2. Standard Folder Actions (Rename / Delete / Purge Orphaned / Refresh)
         if let Some(fid) = target_folder_id
             && let Ok(Some(rec)) = ctx.library.folders().get_folder(fid)
         {
             let name = Path::new(&rec.path)
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or(rec.path);
+                .unwrap_or_else(|| rec.path.clone());
 
-            if action_id == CTX_FOLDER_RENAME {
+            if action_id == CTX_FOLDER_REFRESH {
+                tracing::info!(
+                    folder = %LogObscurer::folder(Some(fid), &rec.path),
+                    "[FolderContextMenu] Refresh Folder action triggered via context menu"
+                );
+                BridgeFolders::select_folder(
+                    fid,
+                    PathBuf::from(&rec.path),
+                    window,
+                    &ctx.library,
+                    &ctx.thumbnails,
+                    &ctx.settings,
+                    &ctx.state,
+                );
+            } else if action_id == CTX_FOLDER_RENAME {
                 folder_dialogs.show_rename(window, fid, &name, ctx);
             } else if action_id == CTX_FOLDER_DELETE {
                 folder_dialogs.show_delete(window, fid, &name, ctx);

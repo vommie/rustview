@@ -40,6 +40,7 @@ pub const CTX_TAG_MOVE_TARGET_BASE: CtxMenuActionId = 100_000;
 pub const CTX_FOLDER_RENAME: CtxMenuActionId = 3001;
 pub const CTX_FOLDER_DELETE: CtxMenuActionId = 3002;
 pub const CTX_FOLDER_PURGE_DB: CtxMenuActionId = 3003;
+pub const CTX_FOLDER_REFRESH: CtxMenuActionId = 3004;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 /// Central persistent state for UI bridges, tree expansions, and caching.
@@ -132,7 +133,7 @@ impl UiState {
         self.cached_media_counts.clear();
     }
 
-    /// Updates media count of a single folder in-place without rebuilding the entire 180k hierarchy.
+    /// Updates media count of a single folder in-place without rebuilding the entire hierarchy.
     pub fn update_folder_media_count_in_cache(&mut self, folder_id: FolderId, count: usize) {
         self.cached_media_counts.insert(folder_id, count);
         if let Some(ref mut tree) = self.cached_folder_tree {

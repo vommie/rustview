@@ -5,7 +5,7 @@ use rustview::library::models::FolderRecordCodec;
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
 use rustview::ui::bridge_folders::{FolderFlattenContext, FolderTreeBuilder};
-use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB};
+use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB, CTX_FOLDER_REFRESH};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use tempfile::tempdir;
@@ -121,6 +121,47 @@ fn test_folder_tree_hierarchy_building_and_counts() {
     assert_eq!(flattened_no_metrics[1].name.as_str(), "Sub1");
     assert_eq!(flattened_no_metrics[2].name.as_str(), "Sub1_A");
     assert_eq!(flattened_no_metrics[3].name.as_str(), "Sub2");
+}
+
+#[test]
+fn test_folder_context_menu_items_and_refresh_action() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let root = tmp_media.path();
+
+    let sub1 = root.join("Sub1");
+    fs::create_dir_all(&sub1).unwrap();
+
+    lib.folder_tree_refresher()
+        .refresh_tree(root, None::<fn(usize)>)
+        .unwrap();
+
+    let folders = lib.folders().list_folders().unwrap();
+    let sub1_folder = lib.folders().get_folder_by_path(&sub1).unwrap().unwrap();
+
+    // Build context menu for non-root folder
+    let menu = FolderContextMenuBuilder::build_menu(&sub1_folder, &folders, Some(root), false);
+
+    // Verify "Refresh Folder" item exists and is enabled
+    let refresh_item = menu
+        .items
+        .iter()
+        .find(|item| item.id == CTX_FOLDER_REFRESH)
+        .expect("Refresh Folder menu item must exist in folder context menu");
+
+    assert_eq!(refresh_item.text, "Refresh Folder");
+    assert_eq!(refresh_item.shortcut, Some("F5".to_string()));
+    assert!(refresh_item.is_enabled);
+
+    // Verify "Move to..." exists
+    let move_item = menu
+        .items
+        .iter()
+        .find(|item| item.text == "Move to...")
+        .expect("Move to... item must exist");
+    assert!(move_item.is_enabled);
 }
 
 #[test]
