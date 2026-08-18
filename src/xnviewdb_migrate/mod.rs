@@ -13,5 +13,5 @@ pub use logger::MigrationLogger;
 pub use mapper::{MappedData, XnViewMapper};
 pub use reader::XnViewDbReader;
 pub use stats::MigrationStats;
-pub use types::XnViewRawData;
+pub use types::{MigratedTagTreeNode, XnViewRawData};
 pub use writer::XnViewDbWriter;

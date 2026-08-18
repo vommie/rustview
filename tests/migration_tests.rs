@@ -6,6 +6,7 @@ use rustview::xnviewdb_migrate::logger::MigrationLogger;
 use rustview::xnviewdb_migrate::mapper::XnViewMapper;
 use rustview::xnviewdb_migrate::reader::XnViewDbReader;
 use rustview::xnviewdb_migrate::stats::MigrationStats;
+use rustview::xnviewdb_migrate::types::XnViewTag;
 use rustview::xnviewdb_migrate::writer::XnViewDbWriter;
 use std::fs;
 use tempfile::tempdir;
@@ -154,6 +155,12 @@ fn test_migration_filtered_by_root_folder() {
     let media_sub = lib.media().get_by_folder(2).unwrap();
     assert_eq!(media_sub.len(), 1);
     assert_eq!(media_sub[0].filename, "sub_video.mp4");
+
+    // 5. Verify Tag Tree is present in audit log
+    let log_content = fs::read_to_string(&log_file_path).unwrap();
+    assert!(log_content.contains("MAPPED TAG TREE HIERARCHY (XnViewMP -> RustView):"));
+    assert!(log_content.contains("├── [#1 -> #1] Favorites") || log_content.contains("└── [#1 -> #1] Favorites"));
+    assert!(log_content.contains("├── [#2 -> #2] Work") || log_content.contains("└── [#2 -> #2] Work"));
 }
 
 #[test]
@@ -236,6 +243,104 @@ fn test_migration_with_log_obfuscation_flag() {
     assert!(log_content.contains("Media #1"));
     assert!(log_content.contains("Folder #1"));
 
+    // Verify Tag Tree in obfuscated mode: Tag names must be masked as Tag#<new_id>
+    assert!(log_content.contains("MAPPED TAG TREE HIERARCHY (XnViewMP -> RustView):"));
+    assert!(log_content.contains("[#1 -> #1] Tag#1"));
+    assert!(log_content.contains("[#2 -> #2] Tag#2"));
+    assert!(!log_content.contains("Favorites"));
+    assert!(!log_content.contains("Work"));
+
     // Cleanup: restore SPoT default state
     LogObscurer::set_obfuscate(DEFAULT_OBFUSCATE_LOGS);
+}
+
+#[test]
+fn test_migration_hierarchical_tag_tree_audit_logging() {
+    let tmp_target = tempdir().unwrap();
+    let log_file_path = tmp_target.path().join("tag_tree_audit.log");
+
+    // Build multi-level hierarchical raw tags
+    let raw_tags = vec![
+        XnViewTag {
+            tag_id: 10,
+            label: "Nature".to_string(),
+            parent_id: None,
+        },
+        XnViewTag {
+            tag_id: 20,
+            label: "Animals".to_string(),
+            parent_id: Some(10),
+        },
+        XnViewTag {
+            tag_id: 30,
+            label: "Mammals".to_string(),
+            parent_id: Some(20),
+        },
+        XnViewTag {
+            tag_id: 40,
+            label: "Dogs".to_string(),
+            parent_id: Some(30),
+        },
+        XnViewTag {
+            tag_id: 25,
+            label: "Plants".to_string(),
+            parent_id: Some(10),
+        },
+        XnViewTag {
+            tag_id: 50,
+            label: "Events".to_string(),
+            parent_id: None,
+        },
+        XnViewTag {
+            tag_id: 60,
+            label: "Holidays".to_string(),
+            parent_id: Some(50),
+        },
+    ];
+
+    let raw_data = rustview::xnviewdb_migrate::types::XnViewRawData {
+        tags: raw_tags,
+        ..Default::default()
+    };
+
+    let mut logger = MigrationLogger::new(true, Some(log_file_path.clone())).unwrap();
+    let mut stats = MigrationStats::default();
+
+    LogObscurer::set_obfuscate(false);
+    let mapped = XnViewMapper::map_data(raw_data, true, None, &mut stats, &mut logger);
+
+    assert_eq!(mapped.tags.len(), 7);
+    drop(logger);
+
+    let log_content = fs::read_to_string(&log_file_path).unwrap();
+    assert!(log_content.contains("MAPPED TAG TREE HIERARCHY (XnViewMP -> RustView):"));
+    assert!(log_content.contains("├── [#10 -> #1] Nature"));
+    assert!(log_content.contains("│   ├── [#20 -> #2] Animals"));
+    assert!(log_content.contains("│   │   └── [#30 -> #3] Mammals"));
+    assert!(log_content.contains("│   │       └── [#40 -> #4] Dogs"));
+    assert!(log_content.contains("│   └── [#25 -> #5] Plants"));
+    assert!(log_content.contains("└── [#50 -> #6] Events"));
+    assert!(log_content.contains("    └── [#60 -> #7] Holidays"));
+}
+
+#[test]
+fn test_migration_empty_tags_audit_logging() {
+    let tmp_target = tempdir().unwrap();
+    let log_file_path = tmp_target.path().join("empty_tags_audit.log");
+
+    let raw_data = rustview::xnviewdb_migrate::types::XnViewRawData {
+        tags: Vec::new(),
+        ..Default::default()
+    };
+
+    let mut logger = MigrationLogger::new(true, Some(log_file_path.clone())).unwrap();
+    let mut stats = MigrationStats::default();
+
+    let mapped = XnViewMapper::map_data(raw_data, true, None, &mut stats, &mut logger);
+    assert_eq!(mapped.tags.len(), 0);
+    drop(logger);
+
+    let log_content = fs::read_to_string(&log_file_path).unwrap();
+    assert!(log_content.contains("MAPPED TAG TREE HIERARCHY (XnViewMP -> RustView):"));
+    assert!(log_content.contains("<No tags found in XnViewMP database>"));
 }

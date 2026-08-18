@@ -1,4 +1,5 @@
 use super::stats::MigrationStats;
+use super::types::MigratedTagTreeNode;
 use crate::settings::LogObscurer;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -97,6 +98,7 @@ impl MigrationLogger {
             let _ = writeln!(f, "--------------------------------------------------------------------------------");
             let _ = writeln!(f, "DETAILED MIGRATION TRACE & AUDIT TRAIL:");
             let _ = writeln!(f);
+            let _ = f.flush();
         }
     }
 
@@ -156,6 +158,58 @@ impl MigrationLogger {
                 LogObscurer::tag(Some(new_id), name),
                 parent_info
             );
+        }
+    }
+
+    /// Renders a full visual ASCII Tag Tree diagram showing exact hierarchical relationships and ID mapping.
+    pub fn log_tag_tree(&mut self, root_nodes: &[MigratedTagTreeNode]) {
+        if let Some(ref mut f) = self.file {
+            let _ = writeln!(f);
+            let _ = writeln!(f, "--------------------------------------------------------------------------------");
+            let _ = writeln!(f, "MAPPED TAG TREE HIERARCHY (XnViewMP -> RustView):");
+            if root_nodes.is_empty() {
+                let _ = writeln!(f, "  <No tags found in XnViewMP database>");
+            } else {
+                let mut lines = Vec::new();
+                let total_roots = root_nodes.len();
+                for (idx, root_node) in root_nodes.iter().enumerate() {
+                    let is_last = idx + 1 == total_roots;
+                    Self::render_tree_node(root_node, "", is_last, &mut lines);
+                }
+                for line in lines {
+                    let _ = writeln!(f, "{}", line);
+                }
+            }
+            let _ = writeln!(f, "--------------------------------------------------------------------------------");
+            let _ = writeln!(f);
+            let _ = f.flush();
+        }
+    }
+
+    fn render_tree_node(
+        node: &MigratedTagTreeNode,
+        prefix: &str,
+        is_last: bool,
+        lines: &mut Vec<String>,
+    ) {
+        let display_name = if LogObscurer::is_active() {
+            format!("Tag#{}", node.new_id)
+        } else {
+            node.name.clone()
+        };
+
+        let branch = if is_last { "└── " } else { "├── " };
+        let line = format!(
+            "{}{}[#{} -> #{}] {}",
+            prefix, branch, node.old_id, node.new_id, display_name
+        );
+        lines.push(line);
+
+        let child_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
+        let total_children = node.children.len();
+        for (idx, child) in node.children.iter().enumerate() {
+            let child_is_last = idx + 1 == total_children;
+            Self::render_tree_node(child, &child_prefix, child_is_last, lines);
         }
     }
 

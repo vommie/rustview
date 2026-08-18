@@ -217,10 +217,19 @@ impl XnViewMapper {
         stats.total_folders = folders.len();
 
         // =========================================================================
-        // 3. Hierarchical Tag Ordering & Re-indexing (Contiguous 1-based IDs)
+        // 3. Hierarchical Tag Ordering, Re-indexing & Visual Tree Logging
         // =========================================================================
-        let (tags, tag_id_map) = Self::reindex_tags(raw.tags, logger);
+        let (tags, tag_id_map, tag_tree_roots) = Self::reindex_tags(raw.tags, logger);
         stats.total_tags = tags.len();
+
+        // Output the visual hierarchical Tag Tree to the audit log
+        logger.log_tag_tree(&tag_tree_roots);
+
+        tracing::info!(
+            tags_count = tags.len(),
+            root_tags_count = tag_tree_roots.len(),
+            "[XnViewMapper] Hierarchical tag tree re-indexed and logged to audit trail"
+        );
 
         // =========================================================================
         // 4. Media Filtering & Resolving via in-memory O(1) Cache
@@ -471,11 +480,11 @@ impl XnViewMapper {
         }
     }
 
-    /// Topologically sorts tags and re-indexes them with contiguous IDs (1..=N), preserving hierarchy.
+    /// Topologically sorts tags and re-indexes them with contiguous IDs (1..=N), preserving hierarchy and capturing tree structure.
     fn reindex_tags(
         raw_tags: Vec<XnViewTag>,
         logger: &mut MigrationLogger,
-    ) -> (Vec<TagRecord>, HashMap<i64, TagId>) {
+    ) -> (Vec<TagRecord>, HashMap<i64, TagId>, Vec<MigratedTagTreeNode>) {
         let mut old_tags_map: HashMap<i64, XnViewTag> = HashMap::new();
         let mut children_map: HashMap<Option<i64>, Vec<i64>> = HashMap::new();
 
@@ -504,17 +513,18 @@ impl XnViewMapper {
             logger,
         };
 
-        // Traverse hierarchy from Root level downwards
-        Self::traverse_and_reindex(None, None, &mut ctx);
+        // Traverse hierarchy from Root level downwards and collect the tree hierarchy
+        let root_nodes = Self::traverse_and_reindex(None, None, &mut ctx);
 
-        (reindexed_tags, tag_id_map)
+        (reindexed_tags, tag_id_map, root_nodes)
     }
 
     fn traverse_and_reindex(
         current_old_parent: Option<i64>,
         current_new_parent: Option<TagId>,
         ctx: &mut TagReindexContext<'_>,
-    ) {
+    ) -> Vec<MigratedTagTreeNode> {
+        let mut nodes = Vec::new();
         if let Some(children) = ctx.children_map.get(&current_old_parent) {
             for &child_old_id in children {
                 if let Some(old_tag) = ctx.old_tags_map.get(&child_old_id) {
@@ -540,17 +550,25 @@ impl XnViewMapper {
                     ctx.output_tags.push(TagRecord {
                         id: new_id,
                         parent_id: current_new_parent,
-                        name: tag_name,
+                        name: tag_name.clone(),
                     });
 
                     // Recurse into children of this tag
-                    Self::traverse_and_reindex(
+                    let child_tree = Self::traverse_and_reindex(
                         Some(child_old_id),
                         Some(new_id),
                         ctx,
                     );
+
+                    nodes.push(MigratedTagTreeNode {
+                        old_id: child_old_id,
+                        new_id,
+                        name: tag_name,
+                        children: child_tree,
+                    });
                 }
             }
         }
+        nodes
     }
 }

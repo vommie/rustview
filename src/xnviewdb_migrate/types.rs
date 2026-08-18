@@ -1,3 +1,5 @@
+use crate::library::models::TagId;
+
 #[derive(Debug, Clone)]
 pub struct XnViewFolder {
     pub folder_id: i64,
@@ -43,6 +45,15 @@ pub struct XnViewImageInfo {
 pub struct XnViewTagLink {
     pub image_id: i64,
     pub tag_id: i64,
+}
+
+/// Hierarchical representation of migrated tag tree nodes for visual ASCII tree logging.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigratedTagTreeNode {
+    pub old_id: i64,
+    pub new_id: TagId,
+    pub name: String,
+    pub children: Vec<MigratedTagTreeNode>,
 }
 
 /// Consolidated container holding raw extracted records from the XnViewMP database.
