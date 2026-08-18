@@ -16,6 +16,14 @@ fn test_aspect_ratio_calculations() {
     assert_eq!(calculate_aspect_dimensions(3000, 4000, 256), (192, 256));
     // 1:1 Square
     assert_eq!(calculate_aspect_dimensions(2000, 2000, 256), (256, 256));
+
+    // Problematic portrait & odd video aspect ratios from user probing
+    // viddd.mp4: 720x1280 (9:16)
+    assert_eq!(calculate_aspect_dimensions(720, 1280, 256), (144, 256));
+    // root2.mkv: 368x656 (23:41)
+    assert_eq!(calculate_aspect_dimensions(368, 656, 256), (144, 256));
+    // root5.mp4: 480x512 (15:16)
+    assert_eq!(calculate_aspect_dimensions(480, 512, 256), (240, 256));
 }
 
 #[test]

@@ -63,28 +63,48 @@ impl MetadataExtractor {
     }
 
     fn extract_video_dimensions(path: &Path) -> Result<(u32, u32), MetadataError> {
-        // Initialize ffmpeg context
         ffmpeg_next::init().map_err(|e| MetadataError::VideoError(e.to_string()))?;
 
         let ictx = ffmpeg_next::format::input(path)
             .map_err(|e| MetadataError::VideoError(e.to_string()))?;
 
-        for stream in ictx.streams() {
-            let codec_params = stream.parameters();
-            if codec_params.medium() == ffmpeg_next::media::Type::Video {
-                let decoder = ffmpeg_next::codec::context::Context::from_parameters(codec_params)
-                    .map_err(|e| MetadataError::VideoError(e.to_string()))?;
-                let video_decoder = decoder
-                    .decoder()
-                    .video()
-                    .map_err(|e| MetadataError::VideoError(e.to_string()))?;
+        let stream = ictx
+            .streams()
+            .best(ffmpeg_next::media::Type::Video)
+            .ok_or_else(|| MetadataError::VideoError("No video stream found in file".to_string()))?;
 
-                return Ok((video_decoder.width(), video_decoder.height()));
-            }
+        let context_decoder = ffmpeg_next::codec::context::Context::from_parameters(stream.parameters())
+            .map_err(|e| MetadataError::VideoError(e.to_string()))?;
+        let video_decoder = context_decoder
+            .decoder()
+            .video()
+            .map_err(|e| MetadataError::VideoError(e.to_string()))?;
+
+        let mut width = video_decoder.width();
+        let mut height = video_decoder.height();
+
+        if width == 0 || height == 0 {
+            return Err(MetadataError::VideoError(
+                "Invalid video dimensions (0x0)".to_string(),
+            ));
         }
 
-        Err(MetadataError::VideoError(
-            "No video stream found in file".to_string(),
-        ))
+        // Apply display orientation rotation if container/stream specifies it safely
+        let rotation: i32 = stream
+            .metadata()
+            .get("rotate")
+            .and_then(|r| r.parse::<i32>().ok())
+            .or_else(|| {
+                ictx.metadata()
+                    .get("rotate")
+                    .and_then(|r| r.parse::<i32>().ok())
+            })
+            .unwrap_or(0);
+        let norm_rot = rotation.rem_euclid(360);
+        if norm_rot == 90 || norm_rot == 270 {
+            std::mem::swap(&mut width, &mut height);
+        }
+
+        Ok((width, height))
     }
 }
