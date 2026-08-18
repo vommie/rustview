@@ -1,7 +1,8 @@
 import { Theme } from "styles.slint";
 
 /// Generic, modular, high-performance scroll container with permanent full-width, custom-styled scrollbars.
-/// Provides real-time 1:1 cursor synchronization during scrollbar dragging with zero lag or drift.
+/// Provides real-time 1:1 cursor synchronization during scrollbar dragging with zero lag or drift,
+/// as well as programmatic scroll-into-view API.
 export component SmoothScrollArea inherits Rectangle {
     in-out property <length> viewport-x: 0px;
     in-out property <length> viewport-y: 0px;
@@ -71,6 +72,29 @@ export component SmoothScrollArea inherits Rectangle {
             root.viewport-x = Math.max(root.min-x, Math.min(0px, root.viewport-x + dx));
         }
         root.scrolled(dx, dy);
+    }
+
+    /// Programmatically scrolls the viewport to ensure the target item range [target-y, target-y + target-height] is visible in the viewport.
+    public function scroll-into-view(target-y: length, target-height: length) {
+        if !root.has-vertical-scrollbar {
+            return;
+        }
+        let view-h = self.height;
+        let cur-top = 0px - root.clamped-y;
+        let cur-bottom = cur-top + view-h;
+
+        if target-y < cur-top {
+            // Target is above current viewport -> scroll up to show top of item
+            root.viewport-y = 0px - target-y;
+        } else if target-y + target-height > cur-bottom {
+            // Target is below current viewport -> scroll down to bring item into view at bottom
+            root.viewport-y = 0px - (target-y + target-height - view-h);
+        }
+    }
+
+    /// Programmatically scrolls to top
+    public function scroll-to-top() {
+        root.viewport-y = 0px;
     }
 
     // Scroll gesture event interceptor over content area

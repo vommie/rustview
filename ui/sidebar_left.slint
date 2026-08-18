@@ -23,6 +23,11 @@ export component SidebarLeft inherits Rectangle {
     callback favorite-clicked(string /* path */);
     callback toggle-hidden-folders(bool /* show_hidden */);
 
+    /// Public endpoint to scroll to specific folder row index
+    public function scroll-folder-to-row(row-idx: int) {
+        folder-panel.scroll-folder-to-row(row-idx);
+    }
+
     VerticalLayout {
         padding: 8px;
         spacing: 8px;

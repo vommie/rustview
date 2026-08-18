@@ -10,7 +10,7 @@ use crate::library::Library;
 use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
-use slint::{ComponentHandle, ModelRc, Timer, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -273,6 +273,7 @@ impl BridgeFolders {
             app_settings.folders.show_hidden_folders = show_hidden;
             set.save_quiet_async(&app_settings);
             Self::reload_tree(&win, &lib, &set, &st);
+            Self::scroll_to_selected(&win);
         });
 
         let lib = library;
@@ -286,6 +287,20 @@ impl BridgeFolders {
                 Self::select_folder(folder.id, path, &win, &lib, &thumb, &set, &st);
             }
         });
+    }
+
+    /// Programmatically scrolls the visible folder tree view to bring the selected folder row into view.
+    pub fn scroll_to_selected(window: &MainWindow) {
+        let model = window.get_folders();
+        let count = model.row_count();
+        for idx in 0..count {
+            if let Some(row) = model.row_data(idx)
+                && row.is_selected
+            {
+                window.invoke_scroll_folder_to_row(idx as i32);
+                break;
+            }
+        }
     }
 
     pub fn sync_root(
@@ -388,6 +403,15 @@ impl BridgeFolders {
             settings,
             state,
         );
+
+        // Auto-scroll folder tree to the active folder after initial mount and Slint geometry calculation
+        let win_weak_scroll = window.as_weak();
+        Timer::single_shot(std::time::Duration::from_millis(60), move || {
+            if let Some(w) = win_weak_scroll.upgrade() {
+                Self::scroll_to_selected(&w);
+                tracing::debug!("[FolderTree: AutoScroll] Scrolled folder tree into view on startup");
+            }
+        });
     }
 
     /// Asynchronously refreshes the directory structure in a non-blocking background thread while activating the Throbber.
@@ -478,6 +502,7 @@ impl BridgeFolders {
                             );
                             w.set_status_text(status_msg.into());
                             Self::reload_tree(&w, &lib, &set, &st);
+                            Self::scroll_to_selected(&w);
                         }
                         Err(e) => {
                             tracing::error!(error = %e, "[FolderTreeRefreshError] Failed to refresh folder tree");
@@ -554,6 +579,8 @@ impl BridgeFolders {
         window.set_tag_filter_text("".into());
 
         Self::reload_tree(window, library, settings, state);
+        Self::scroll_to_selected(window);
+
         window.set_media_items(ModelRc::new(VecModel::from(vec![])));
         window.set_items_metric_text("Loading...".into());
         window.set_status_text(format!("Opening '{}'...", folder_name).into());
@@ -588,6 +615,7 @@ impl BridgeFolders {
             BridgeMedia::reload(&win, &lib, &thumb, &set, &st, false, false);
             BridgeInspector::update(&win, &st);
             BridgeTags::sync_tag_selection(&win, &lib, &st);
+            Self::scroll_to_selected(&win);
 
             win.set_is_indexing_media(true);
             win.set_media_index_current(0);
@@ -673,6 +701,7 @@ impl BridgeFolders {
                                     if has_count_changed {
                                         Self::reload_tree(&w, &lib_scanner, &set_scanner, &st_scanner);
                                     }
+                                    Self::scroll_to_selected(&w);
                                 }
                             });
                         }
@@ -824,7 +853,12 @@ impl BridgeFolders {
         };
 
         let mut folder_views = Vec::with_capacity(tree.len() * 4);
-        FolderTreeBuilder::flatten(&tree, 0, &mut ctx, &mut folder_views);
+        FolderTreeBuilder::flatten(
+            &tree,
+            0,
+            &mut ctx,
+            &mut folder_views,
+        );
         let flatten_us = t_flatten.elapsed().as_micros();
 
         let t_slint = Instant::now();

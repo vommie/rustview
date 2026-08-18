@@ -185,6 +185,11 @@ export component MainWindow inherits Window {
     callback player-stop();
     callback player-close();
 
+    /// Public endpoint on MainWindow to scroll tree view to the given row index
+    public function scroll-folder-to-row(row-idx: int) {
+        sidebar_left.scroll-folder-to-row(row-idx);
+    }
+
     VerticalLayout {
         spacing: 0px;
 

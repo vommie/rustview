@@ -81,6 +81,13 @@ export component FolderTreeList inherits Rectangle {
     callback folder-toggle-expand(int);
     callback folder-context-menu(int, length, length);
 
+    /// Programmatically scrolls to ensure a specific folder row is in view
+    public function scroll-folder-to-row(row-idx: int) {
+        if row-idx >= 0 {
+            scroll-area.scroll-into-view(row-idx * 24px, 24px);
+        }
+    }
+
     scroll-area := SmoothScrollArea {
         width: 100%;
         height: 100%;
@@ -118,6 +125,11 @@ export component FolderPanel inherits VerticalLayout {
     callback folder-context-menu(int, length, length);
     callback refresh-clicked();
     callback toggle-hidden-folders(bool);
+
+    /// Public endpoint to scroll to specific folder row index
+    public function scroll-folder-to-row(row-idx: int) {
+        tree-list.scroll-folder-to-row(row-idx);
+    }
 
     // Section Header
     Rectangle {
