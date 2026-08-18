@@ -16,7 +16,7 @@ export component FolderPanelToolbar inherits PanelToolbar {
 
     toolbar-height: 26px;
 
-    // 1. Throbber Indicator: Positioned as first item on the left, active during directory scans/syncs
+    // 1. Throbber Indicator: Positioned as first item on the left, dynamically vertically centered
     Throbber {
         is-active: root.is-refreshing;
         size: 14px;

@@ -4,7 +4,7 @@ import { TooltipHost } from "tooltips.slint";
 
 /// Fully encapsulated, standalone, reusable animated Throbber component for Slint.
 /// Supports smooth continuous rotation, visibility animations, theme colorization,
-/// custom sizes, dimmed/disabled states, and integrated hover tooltips.
+/// custom sizes, dimmed/disabled states, and integrated hover tooltips with dynamic vertical and horizontal centering.
 export component Throbber inherits Rectangle {
     // State & Behavior Properties
     in-out property <bool> is-active: false;
@@ -28,19 +28,27 @@ export component Throbber inherits Rectangle {
         root.is-active = false;
     }
 
-    // Geometry layout integration
-    width: root.is-active ? root.size : 0px;
-    height: root.size;
+    // Geometry & Layout Integration (Fixed-coordinate inner frame with stable invariant X/Y alignment)
+    property <length> target-width: root.size + 4px;
+    width: root.is-active ? root.target-width : 0px;
+    height: 100%;
     horizontal-stretch: 0;
     vertical-stretch: 0;
-    clip: false;
+    clip: true;
     visible: root.is-active;
     opacity: root.is-active ? (root.is-dimmed ? 0.45 : 1.0) : 0.0;
+    background: transparent;
 
     animate width { duration: 150ms; }
     animate opacity { duration: 150ms; }
 
     property <angle> current-angle: 0deg;
+
+    changed is-active => {
+        if self.is-active {
+            root.current-angle = 0deg;
+        }
+    }
 
     // Rotation Animation Timer
     spin-timer := Timer {
@@ -76,13 +84,22 @@ export component Throbber inherits Rectangle {
         }
     }
 
-    // Rotating Vector Icon
-    Image {
-        source: Icons.loader;
-        width: root.size;
-        height: root.size;
-        image-fit: contain;
-        colorize: root.throbber-color;
-        transform-rotation: root.current-angle;
+    // Fixed-width inner frame ensuring the rotating icon never shifts coordinates or wobbles during width animation
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.target-width;
+        height: parent.height;
+
+        Image {
+            x: (parent.width - root.size) / 2;
+            y: (parent.height - root.size) / 2;
+            width: root.size;
+            height: root.size;
+            source: Icons.loader;
+            image-fit: contain;
+            colorize: root.throbber-color;
+            transform-rotation: root.current-angle;
+        }
     }
 }
