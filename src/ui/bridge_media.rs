@@ -3,6 +3,7 @@ use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
 use super::bridge_tags::BridgeTags;
 use super::models::{format_filesize, rgb8_to_shared_buffer};
+use super::video_preview_animator::VideoPreviewAnimator;
 use super::{MainWindow, MediaItemView};
 use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::Library;
@@ -17,7 +18,7 @@ use crate::thumbnails::{
 };
 use parking_lot::RwLock;
 use slint::{
-    ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, Timer, VecModel,
+    ComponentHandle, Image, Model, ModelRc, Timer, VecModel,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -103,7 +104,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // Hover Video Preview Animation Handler
+        // Hover Video Preview Animation Handler (Driven by modular VideoPreviewAnimator)
         let win = window.clone_strong();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -122,42 +123,23 @@ impl BridgeMedia {
             *timer_guard = None;
 
             if is_hover {
-                if let Ok(frames) = thumb.load_preview_frames_sync(media_id) {
-                    let frame_buffers: Vec<SharedPixelBuffer<Rgb8Pixel>> = frames
-                        .into_iter()
-                        .map(|(w, h, rgb)| rgb8_to_shared_buffer(&rgb, w, h))
-                        .collect();
+                if let Some(images) = VideoPreviewAnimator::load_preview_images(&thumb, media_id) {
+                    let win_w = win_hover.as_weak();
+                    let st_c = st.clone();
 
-                    if !frame_buffers.is_empty() {
-                        let win_w = win_hover.as_weak();
-                        let st_c = st.clone();
-                        let frame_idx = Rc::new(RefCell::new(0usize));
-                        let frame_idx_clone = frame_idx;
-
-                        let timer = Timer::default();
-                        timer.start(
-                            slint::TimerMode::Repeated,
-                            std::time::Duration::from_millis(250),
-                            move || {
-                                if let Some(w) = win_w.upgrade() {
-                                    let mut idx_ref = frame_idx_clone.borrow_mut();
-                                    let current_idx = *idx_ref % frame_buffers.len();
-                                    *idx_ref += 1;
-                                    let buf = &frame_buffers[current_idx];
-                                    let model = w.get_media_items();
-                                    let st_r = st_c.read();
-                                    if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
-                                        && let Some(mut item) = model.row_data(row_idx)
-                                        && item.id == media_id as i32
-                                    {
-                                        item.thumbnail = Image::from_rgb8(buf.clone());
-                                        model.set_row_data(row_idx, item);
-                                    }
-                                }
-                            },
-                        );
-                        *timer_guard = Some(timer);
-                    }
+                    *timer_guard = VideoPreviewAnimator::start_animation(images, move |img| {
+                        if let Some(w) = win_w.upgrade() {
+                            let model = w.get_media_items();
+                            let st_r = st_c.read();
+                            if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
+                                && let Some(mut item) = model.row_data(row_idx)
+                                && item.id == media_id as i32
+                            {
+                                item.thumbnail = img;
+                                model.set_row_data(row_idx, item);
+                            }
+                        }
+                    });
                 }
             } else {
                 let model = win_hover.get_media_items();

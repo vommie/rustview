@@ -27,6 +27,9 @@ export component MediaTile inherits Rectangle {
     callback clicked(bool /* is_ctrl */, bool /* is_shift */);
     callback context-menu-requested(length /* x */, length /* y */);
     callback hover-changed(bool /* is_hover */);
+    callback drag-started(int /* id */, length /* local_x */, length /* local_y */);
+    callback drag-moved(length /* local_x */, length /* local_y */);
+    callback drag-ended();
 
     property <bool> is-hovered: tile-touch.has-hover;
     changed is-hovered => {
@@ -36,13 +39,51 @@ export component MediaTile inherits Rectangle {
     }
 
     tile-touch := TouchArea {
+        property <length> press-x: 0px;
+        property <length> press-y: 0px;
+        property <bool> is-drag-active: false;
+        property <bool> was-already-selected: false;
+
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
-                if event.button == PointerEventButton.right {
+                if event.button == PointerEventButton.left {
+                    self.press-x = self.mouse-x;
+                    self.press-y = self.mouse-y;
+                    self.is-drag-active = false;
+                    self.was-already-selected = item.is-selected;
+
+                    // If clicking an unselected item or with modifiers, update selection immediately on mouse-down
+                    if !item.is-selected || event.modifiers.control || event.modifiers.meta || event.modifiers.shift {
+                        root.clicked(event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
+                    }
+                } else if event.button == PointerEventButton.right {
                     root.context-menu-requested(self.mouse-x, self.mouse-y);
-                } else if event.button == PointerEventButton.left {
-                    root.clicked(event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
                 }
+            }
+            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                if self.is-drag-active {
+                    self.is-drag-active = false;
+                    root.drag-ended();
+                } else {
+                    // If clicking an already selected item without dragging, collapse selection on mouse-up
+                    if self.was-already-selected && !event.modifiers.control && !event.modifiers.meta && !event.modifiers.shift {
+                        root.clicked(false, false);
+                    }
+                }
+            }
+        }
+
+        moved => {
+            if self.pressed && !self.is-drag-active {
+                let dx = self.mouse-x - self.press-x;
+                let dy = self.mouse-y - self.press-y;
+                if (dx * dx + dy * dy) > 25px * 1px {
+                    self.is-drag-active = true;
+                    root.drag-started(item.id, self.mouse-x, self.mouse-y);
+                }
+            }
+            if self.is-drag-active {
+                root.drag-moved(self.mouse-x, self.mouse-y);
             }
         }
     }
@@ -169,6 +210,10 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback refresh-clicked();
     callback view-mode-toggled(bool);
 
+    callback item-drag-started(int /* id */, length /* x */, length /* y */);
+    callback item-drag-moved(length /* x */, length /* y */);
+    callback item-drag-ended();
+
     VerticalLayout {
         padding: 0px;
         spacing: 4px;
@@ -243,6 +288,15 @@ export component VirtualizedMediaGrid inherits Rectangle {
                             self.x + mx,
                             58px + self.y + my + scroll-area.clamped-y
                         );
+                    }
+                    drag-started(id, mx, my) => {
+                        root.item-drag-started(id, self.x + mx, 58px + self.y + my + scroll-area.clamped-y);
+                    }
+                    drag-moved(mx, my) => {
+                        root.item-drag-moved(self.x + mx, 58px + self.y + my + scroll-area.clamped-y);
+                    }
+                    drag-ended => {
+                        root.item-drag-ended();
                     }
                 }
             }

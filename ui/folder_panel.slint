@@ -6,15 +6,33 @@ import { FolderPanelToolbar } from "folder_panel_toolbar.slint";
 
 export component FolderItemRow inherits Rectangle {
     in property <FolderNodeView> folder;
+    in property <int> drop-target-folder-id: -1;
     callback clicked();
     callback toggle-expand();
     callback context-menu-requested(length /* x */, length /* y */);
+    callback row-hovered(int /* folder_id */);
+    callback row-unhovered(int /* folder_id */);
+
+    property <bool> is-drop-target: root.folder.id == root.drop-target-folder-id && !root.folder.is-deleted;
 
     height: 24px;
-    background: root.folder.is-selected ? Theme.surface-selected : (ftouch.has-hover ? Theme.surface-hover : transparent);
+    background: root.is-drop-target ? #89b4fa44 : (
+        root.folder.is-selected ? Theme.surface-selected : (
+            ftouch.has-hover ? Theme.surface-hover : transparent
+        )
+    );
     border-radius: 3px;
-    border-width: root.folder.is-selected ? 1px : 0px;
-    border-color: root.folder.is-selected ? Theme.primary : transparent;
+    border-width: (root.folder.is-selected || root.is-drop-target) ? 1.5px : 0px;
+    border-color: root.is-drop-target ? Theme.accent : (root.folder.is-selected ? Theme.primary : transparent);
+
+    property <bool> is-hovered: ftouch.has-hover;
+    changed is-hovered => {
+        if self.is-hovered {
+            root.row-hovered(root.folder.id);
+        } else {
+            root.row-unhovered(root.folder.id);
+        }
+    }
 
     ftouch := TouchArea {
         pointer-event(event) => {
@@ -46,8 +64,16 @@ export component FolderItemRow inherits Rectangle {
             }
         }
 
-        // Folder Icon Indicator
-        Text {
+        // Folder Icon / Drop Target Indicator
+        if root.is-drop-target : Text {
+            text: "⬇";
+            font-size: 11px;
+            font-weight: 700;
+            color: Theme.accent;
+            vertical-alignment: center;
+        }
+
+        if !root.is-drop-target : Text {
             text: "📁";
             font-size: 11px;
             vertical-alignment: center;
@@ -57,8 +83,12 @@ export component FolderItemRow inherits Rectangle {
         // Strictly Left-Aligned Folder Name with Count Suffix
         Text {
             text: root.folder.name;
-            color: root.folder.is-selected ? Theme.primary : (root.folder.is-deleted ? Theme.text-muted : Theme.text);
-            font-weight: root.folder.is-selected ? 700 : 400;
+            color: root.is-drop-target ? Theme.accent : (
+                root.folder.is-selected ? Theme.primary : (
+                    root.folder.is-deleted ? Theme.text-muted : Theme.text
+                )
+            );
+            font-weight: (root.folder.is-selected || root.is-drop-target) ? 700 : 400;
             font-italic: root.folder.is-deleted;
             font-size: 11px;
             vertical-alignment: center;
@@ -77,9 +107,19 @@ export component FolderTreeList inherits Rectangle {
     clip: true;
 
     in property <[FolderNodeView]> folders: [];
+    in property <int> drop-target-folder-id: -1;
+    out property <length> scroll-offset-y: scroll-area.clamped-y;
+
     callback folder-clicked(int, string);
     callback folder-toggle-expand(int);
     callback folder-context-menu(int, length, length);
+    callback row-hovered(int);
+    callback row-unhovered(int);
+
+    /// Programmatically scrolls by a delta in pixels
+    public function scroll-by(dy: length) {
+        scroll-area.handle-scroll(0px, dy);
+    }
 
     /// Programmatically scrolls to ensure a specific folder row is in view
     public function scroll-folder-to-row(row-idx: int) {
@@ -102,8 +142,11 @@ export component FolderTreeList inherits Rectangle {
 
             for folder in root.folders: FolderItemRow {
                 folder: folder;
+                drop-target-folder-id: root.drop-target-folder-id;
                 clicked => { root.folder-clicked(folder.id, folder.path); }
                 toggle-expand => { root.folder-toggle-expand(folder.id); }
+                row-hovered(id) => { root.row-hovered(id); }
+                row-unhovered(id) => { root.row-unhovered(id); }
                 context-menu-requested(mx, my) => {
                     root.folder-context-menu(folder.id, self.x + mx, self.y + my + scroll-area.clamped-y);
                 }
@@ -119,6 +162,8 @@ export component FolderPanel inherits VerticalLayout {
     in property <[FolderNodeView]> folders: [];
     in property <bool> is-refreshing: false;
     in-out property <bool> show-hidden-folders: false;
+    in property <int> drop-target-folder-id: -1;
+    out property <length> scroll-offset-y: tree-list.scroll-offset-y;
 
     callback folder-clicked(int, string);
     callback folder-toggle-expand(int);
@@ -126,6 +171,13 @@ export component FolderPanel inherits VerticalLayout {
     callback refresh-clicked();
     callback collapse-all-clicked();
     callback toggle-hidden-folders(bool);
+    callback row-hovered(int);
+    callback row-unhovered(int);
+
+    /// Programmatically scrolls the tree list by a delta in pixels
+    public function scroll-by(dy: length) {
+        tree-list.scroll-by(dy);
+    }
 
     /// Public endpoint to scroll to specific folder row index
     public function scroll-folder-to-row(row-idx: int) {
@@ -164,8 +216,11 @@ export component FolderPanel inherits VerticalLayout {
     tree-list := FolderTreeList {
         vertical-stretch: 1;
         folders: root.folders;
+        drop-target-folder-id: root.drop-target-folder-id;
         folder-clicked(id, path) => { root.folder-clicked(id, path); }
         folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
+        row-hovered(id) => { root.row-hovered(id); }
+        row-unhovered(id) => { root.row-unhovered(id); }
         folder-context-menu(id, x, y) => { root.folder-context-menu(id, tree-list.x + x, tree-list.y + y); }
     }
 }

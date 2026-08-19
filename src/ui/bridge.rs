@@ -1,5 +1,7 @@
 use super::bridge_ctx_menu::{BridgeContextMenu, ContextMenuRegistration};
+use super::bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
 use super::bridge_favorites::BridgeFavorites;
+use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
 use super::bridge_file_dialog_missing::MissingFileDialogController;
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folder_dialogs::FolderDialogController;
@@ -10,10 +12,11 @@ use super::bridge_state::*;
 use super::bridge_tag_dialogs::TagDialogController;
 use super::bridge_tags::BridgeTags;
 use super::bridge_thumbnails::BridgeThumbnails;
+use super::dnd_foldertree_autoscroller::DndFolderTreeAutoScroller;
 use super::favorites::FavoriteManager;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
-use crate::library::models::{FolderId, MediaId, TagId};
+use crate::library::models::{FileTransferKind, FolderId, MediaId, TagId};
 use crate::library::Library;
 use crate::query::{ScopeMode, SortColumn, SortOrder};
 use crate::settings::{
@@ -38,6 +41,8 @@ pub struct UiBridge {
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
     missing_file_dialog: MissingFileDialogController,
+    conflict_dialog: FileOpsConflictDialogController,
+    dnd_foldertree_autoscroller: DndFolderTreeAutoScroller,
     tag_dialogs: TagDialogController,
     folder_dialogs: FolderDialogController,
     favorites: Arc<RwLock<FavoriteManager>>,
@@ -62,6 +67,8 @@ impl UiBridge {
         let settings_dialog = Rc::new(RefCell::new(controller));
         let rename_dialog = Rc::new(RefCell::new(None));
         let missing_file_dialog = MissingFileDialogController::new();
+        let conflict_dialog = FileOpsConflictDialogController::new();
+        let dnd_foldertree_autoscroller = DndFolderTreeAutoScroller::new();
         let tag_dialogs = TagDialogController::new();
         let folder_dialogs = FolderDialogController::new();
 
@@ -134,6 +141,8 @@ impl UiBridge {
             settings_dialog,
             rename_dialog,
             missing_file_dialog,
+            conflict_dialog,
+            dnd_foldertree_autoscroller,
             tag_dialogs,
             folder_dialogs,
             favorites,
@@ -194,7 +203,6 @@ impl UiBridge {
     }
 
     /// Registers the intelligent delta-based settings subscriber.
-    /// Only triggers specific UI property changes or re-indexes when affected settings actually change.
     fn register_settings_subscriber(&self) {
         let w_weak = self.window.as_weak();
         let library = self.library.clone();
@@ -228,51 +236,32 @@ impl UiBridge {
             let _ = w_weak.upgrade_in_event_loop(move |window| {
                 let t_start = Instant::now();
 
-                // 1. Tooltips update (Instant Slint properties, zero media grid impact)
+                // 1. Tooltips update
                 if diff_clone.tooltip_settings_changed {
                     window.set_enable_tooltips(new_clone.appearance.enable_tooltips);
                     window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms as i32);
-                    tracing::debug!(
-                        enabled = new_clone.appearance.enable_tooltips,
-                        delay_ms = new_clone.appearance.tooltip_delay_ms,
-                        "[UiBridge: SettingsUpdate] Applied tooltip settings to Slint UI"
-                    );
                 }
 
-                // 2. Appearance & Grid Presentation (Instant Slint properties, zero DB scan / zero filesystem hit)
+                // 2. Appearance & Grid Presentation
                 if diff_clone.appearance_grid_changed {
                     window.set_thumb_size(new_clone.appearance.default_thumbnail_size as i32);
                     let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
                     window.set_thumb_aspect_idx(ratio.to_index());
-                    tracing::debug!(
-                        thumb_size = new_clone.appearance.default_thumbnail_size,
-                        aspect_ratio = %new_clone.appearance.thumbnail_aspect_ratio,
-                        "[UiBridge: SettingsUpdate] Applied thumbnail grid appearance properties to Slint UI"
-                    );
                 }
 
                 // 3. Debug & Privacy update
                 if diff_clone.debug_settings_changed {
                     LogObscurer::set_obfuscate(new_clone.debug.obfuscate_logs);
-                    tracing::info!(
-                        obfuscate_logs = new_clone.debug.obfuscate_logs,
-                        "[UiBridge: SettingsUpdate] Updated global log obfuscation privacy setting"
-                    );
                 }
 
-                // 4. Folder Tree Presentation (Only re-flatten in-memory tree nodes, zero disk scan)
+                // 4. Folder Tree Presentation
                 if diff_clone.folder_tree_presentation_changed && !diff_clone.root_folder_changed {
                     window.set_show_hidden_folders(new_clone.folders.show_hidden_folders);
                     BridgeFolders::reload_tree(&window, &library, &settings, &state);
-                    tracing::debug!("[UiBridge: SettingsUpdate] Re-rendered folder tree with updated visibility/metrics");
                 }
 
-                // 5. Root Folder Changed (Heavy path: Only executed when root directory was ACTUALLY changed)
+                // 5. Root Folder Changed
                 if diff_clone.root_folder_changed {
-                    tracing::info!(
-                        new_root = %LogObscurer::path_opt(new_clone.general.root_folder.as_ref()),
-                        "[UiBridge: SettingsUpdate] Root directory path modified. Executing full root synchronization..."
-                    );
                     state.write().invalidate_folder_tree_cache();
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
                 }
@@ -333,11 +322,123 @@ impl UiBridge {
             self.state.clone(),
         );
 
+        self.register_dnd_callbacks();
         self.register_sidebar_resize_callbacks();
     }
 
+    fn register_dnd_callbacks(&self) {
+        let win_start = self.window.clone_strong();
+        let lib_start = self.library.clone();
+        let thumb_start = self.thumbnails.clone();
+        let st_start = self.state.clone();
+        let autoscroll_start = self.dnd_foldertree_autoscroller.clone();
+        self.window.on_media_drag_started(move |id, x, y| {
+            BridgeDnd::handle_drag_started(DragStartParams {
+                media_id: id as u64,
+                start_x: x,
+                start_y: y,
+                window: &win_start,
+                library: &lib_start,
+                thumbnails: &thumb_start,
+                state: &st_start,
+                autoscroller: &autoscroll_start,
+            });
+        });
+
+        let win_move = self.window.clone_strong();
+        let lib_move = self.library.clone();
+        let st_move = self.state.clone();
+        let autoscroll_move = self.dnd_foldertree_autoscroller.clone();
+        self.window.on_media_drag_moved(move |x, y| {
+            BridgeDnd::handle_drag_moved(
+                x,
+                y,
+                &win_move,
+                &lib_move,
+                &st_move,
+                &autoscroll_move,
+            );
+        });
+
+        let win_hover = self.window.clone_strong();
+        let st_hover = self.state.clone();
+        self.window.on_folder_row_hovered(move |folder_id| {
+            BridgeDnd::handle_folder_hovered(folder_id as u64, &win_hover, &st_hover);
+        });
+
+        let win_unhover = self.window.clone_strong();
+        self.window.on_folder_row_unhovered(move |folder_id| {
+            BridgeDnd::handle_folder_unhovered(folder_id as u64, &win_unhover);
+        });
+
+        let win_end = self.window.clone_strong();
+        let lib_end = self.library.clone();
+        let st_end = self.state.clone();
+        let autoscroll_end = self.dnd_foldertree_autoscroller.clone();
+        self.window.on_media_drag_ended(move || {
+            BridgeDnd::handle_drag_ended(
+                &win_end,
+                &lib_end,
+                &st_end,
+                &autoscroll_end,
+            );
+        });
+
+        // Floating Choice Popup Callbacks: Copy, Move, Cancel, Dismissed
+        let win_copy = self.window.clone_strong();
+        let lib_copy = self.library.clone();
+        let thumb_copy = self.thumbnails.clone();
+        let set_copy = self.settings.clone();
+        let st_copy = self.state.clone();
+        let conflict_copy = self.conflict_dialog.clone();
+        self.window.on_choice_popup_copy(move |target_fid| {
+            win_copy.set_is_choice_popup_open(false);
+            BridgeDnd::start_batch_transfer(BatchTransferParams {
+                window: &win_copy,
+                library: &lib_copy,
+                thumbnails: &thumb_copy,
+                settings: &set_copy,
+                state: &st_copy,
+                conflict_dialog: &conflict_copy,
+                target_folder_id: target_fid as u64,
+                transfer_kind: FileTransferKind::Copy,
+            });
+        });
+
+        let win_mv = self.window.clone_strong();
+        let lib_mv = self.library.clone();
+        let thumb_mv = self.thumbnails.clone();
+        let set_mv = self.settings.clone();
+        let st_mv = self.state.clone();
+        let conflict_mv = self.conflict_dialog.clone();
+        self.window.on_choice_popup_move(move |target_fid| {
+            win_mv.set_is_choice_popup_open(false);
+            BridgeDnd::start_batch_transfer(BatchTransferParams {
+                window: &win_mv,
+                library: &lib_mv,
+                thumbnails: &thumb_mv,
+                settings: &set_mv,
+                state: &st_mv,
+                conflict_dialog: &conflict_mv,
+                target_folder_id: target_fid as u64,
+                transfer_kind: FileTransferKind::Move,
+            });
+        });
+
+        let win_cancel = self.window.clone_strong();
+        self.window.on_choice_popup_cancel(move || {
+            tracing::info!("[DndChoicePopup] User clicked Cancel. Drop aborted, selection preserved.");
+            win_cancel.set_is_choice_popup_open(false);
+        });
+
+        let win_dism = self.window.clone_strong();
+        self.window.on_choice_popup_dismissed(move || {
+            tracing::info!("[DndChoicePopup] Popup dismissed. Drop aborted, selection preserved.");
+            win_dism.set_is_choice_popup_open(false);
+        });
+    }
+
     fn register_sidebar_resize_callbacks(&self) {
-        // 1. Left Sidebar Resize Benchmarking & Persistence
         let last_left_resize = Arc::new(Mutex::new(Instant::now()));
         let left_events_count = Arc::new(AtomicUsize::new(0));
 
@@ -387,7 +488,6 @@ impl UiBridge {
             );
         });
 
-        // 2. Right Sidebar Resize Benchmarking & Persistence
         let last_right_resize = Arc::new(Mutex::new(Instant::now()));
         let right_events_count = Arc::new(AtomicUsize::new(0));
 

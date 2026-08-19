@@ -15,15 +15,16 @@ pub mod tags;
 pub use db::LibraryDatabase;
 pub use dot_hidden::DotHiddenCache;
 pub use error::LibraryError;
-pub use file_operations::{FileOperations, FilenameValidator};
+pub use file_operations::{is_same_file_path, robust_move_file, FileOperations, FilenameValidator};
 pub use folder_operations::{
     FolderDeleteReport, FolderMoveReport, FolderOperations, FolderSubtreeMetrics, FolderValidator,
 };
 pub use folders::FolderManager;
 pub use media::MediaRepository;
 pub use models::{
-    DatabaseMeta, ExternalHashRecord, FolderId, FolderRecord, FolderRecordCodec, MediaId,
-    MediaRecord, MediaSearchParams, TagId, TagRecord,
+    BatchMoveSummary, DatabaseMeta, ExternalHashRecord, FileConflictItemDetails,
+    FileConflictReport, FileConflictResolution, FileTransferKind, FolderId, FolderRecord,
+    FolderRecordCodec, MediaId, MediaRecord, MediaSearchParams, TagId, TagRecord,
 };
 pub use refresh::{FolderRefresher, RefreshReport};
 pub use refresh_folders::{FolderTreeRefreshReport, FolderTreeRefresher};
@@ -31,7 +32,7 @@ pub use refresh_media_files::{MediaItemRefresher, RefreshedFileAttributes};
 pub use schema::{DB_EXTERNAL_HASHES, SEQ_EXTERNAL_HASH_ID};
 pub use tags::TagManager;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Unified Library Facade coordinating all storage subsystems.
 pub struct Library {
@@ -74,6 +75,12 @@ impl Library {
 
     pub fn folder_tree_refresher(&self) -> FolderTreeRefresher<'_> {
         FolderTreeRefresher::new(&self.db)
+    }
+
+    /// Resolves the absolute physical filesystem path of any media file from its registered folder in LMDB.
+    #[inline]
+    pub fn resolve_media_path(&self, media_id: MediaId) -> Result<PathBuf, LibraryError> {
+        self.media().resolve_path(media_id)
     }
 
     pub fn raw_db(&self) -> &LibraryDatabase {

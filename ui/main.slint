@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
 import { TooltipSettings } from "tooltips.slint";
-import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, ContextMenuItemModel } from "types.slint";
+import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, ContextMenuItemModel, ConflictFileView } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
 import { SidebarRight } from "sidebar_right.slint";
@@ -10,9 +10,11 @@ import { MediaTableView } from "media_table.slint";
 import { StatusBar } from "status_bar.slint";
 import { ContextMenuPopup } from "context_menu.slint";
 import { ResizerBar } from "resizer_bar.slint";
+import { FloatingChoicePopup } from "floating_choice_popup.slint";
 
 export { SettingsWindow } from "settings_window.slint";
 export { FileRenameDialog } from "file_rename_dialog.slint";
+export { FileOpsConflictDialog } from "file_ops_conflict_dialog.slint";
 export { AddTagDialog } from "add_tag_dialog.slint";
 export { RenameTagDialog } from "rename_tag_dialog.slint";
 export { DeleteTagDialog } from "delete_tag_dialog.slint";
@@ -42,6 +44,24 @@ export component MainWindow inherits Window {
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
+
+    // Drag and Drop (media_file_dnd) State Properties
+    in-out property <bool> is-dragging-media: false;
+    in-out property <int> drag-count: 0;
+    in-out property <string> drag-title: "";
+    in-out property <image> drag-thumbnail;
+    in-out property <length> drag-x: 0px;
+    in-out property <length> drag-y: 0px;
+    in-out property <int> drop-target-folder-id: -1;
+    out property <length> folder-tree-scroll-y: sidebar_left.folder-tree-scroll-y;
+
+    // Floating Choice Popup (Copy/Move/Cancel) State Properties
+    in-out property <bool> is-choice-popup-open: false;
+    in-out property <int> choice-target-folder-id: -1;
+    in-out property <string> choice-target-folder-name: "";
+    in-out property <int> choice-item-count: 1;
+    in-out property <length> choice-popup-x: 0px;
+    in-out property <length> choice-popup-y: 0px;
 
     // Tooltip global settings properties
     in-out property <bool> enable-tooltips: true;
@@ -140,6 +160,20 @@ export component MainWindow inherits Window {
     callback media-hover-changed(int /* id */, bool /* is_hover */);
     callback background-clicked();
 
+    // Drag and Drop (media_file_dnd) Callbacks
+    callback media-drag-started(int /* id */, length /* x */, length /* y */);
+    callback media-drag-moved(length /* x */, length /* y */);
+    callback media-drag-ended();
+    callback folder-row-hovered(int /* folder_id */);
+    callback folder-row-unhovered(int /* folder_id */);
+    callback media-dropped-on-folder(int /* target_folder_id */);
+
+    // Floating Choice Popup Callbacks
+    callback choice-popup-copy(int /* target_folder_id */);
+    callback choice-popup-move(int /* target_folder_id */);
+    callback choice-popup-cancel();
+    callback choice-popup-dismissed();
+
     callback context-menu-item-clicked(int /* action_id */);
     callback context-menu-request-submenu(int /* depth */, int /* menu_index */);
     callback context-menu-dismissed();
@@ -170,6 +204,11 @@ export component MainWindow inherits Window {
     callback sidebar-right-resized(length /* new_width */);
     callback sidebar-right-resize-finished(length /* final_width */);
 
+    /// Public endpoint to scroll the folder tree by delta pixels
+    public function scroll-folder-tree-by(dy: length) {
+        sidebar_left.scroll-folder-tree-by(dy);
+    }
+
     /// Public endpoint on MainWindow to scroll tree view to the given row index
     public function scroll-folder-to-row(row-idx: int) {
         sidebar_left.scroll-folder-to-row(row-idx);
@@ -190,12 +229,15 @@ export component MainWindow inherits Window {
                 sidebar-width: root.sidebar-left-width;
                 folders: root.folders;
                 favorites: root.favorites;
+                drop-target-folder-id: root.drop-target-folder-id;
                 is-refreshing-folders: root.is-refreshing-folders;
                 show-hidden-folders <=> root.show-hidden-folders;
                 toggle-hidden-folders(h) => { root.toggle-hidden-folders(h); }
                 folder-collapse-all-clicked => { root.folder-collapse-all-clicked(); }
                 folder-clicked(id, path) => { root.folder-selected(id, path); }
                 folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
+                folder-row-hovered(id) => { root.folder-row-hovered(id); }
+                folder-row-unhovered(id) => { root.folder-row-unhovered(id); }
                 folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 38px + sidebar_left.y + y); }
                 folder-refresh-clicked => { root.folder-refresh-clicked(); }
                 favorite-clicked(path) => { root.favorite-selected(path); }
@@ -242,6 +284,9 @@ export component MainWindow inherits Window {
                     item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                     sort-clicked(idx) => { root.sort-column-clicked(idx); }
                     background-clicked => { root.background-clicked(); }
+                    item-drag-started(id, x, y) => { root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 38px); }
+                    item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 38px); }
+                    item-drag-ended => { root.media-drag-ended(); }
                 }
 
                 if root.is-table-view : MediaTableView {
@@ -268,6 +313,9 @@ export component MainWindow inherits Window {
                     column-resized(idx, w) => { root.column-resized(idx, w); }
                     column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
                     background-clicked => { root.background-clicked(); }
+                    item-drag-started(id, x, y) => { root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 38px); }
+                    item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 38px); }
+                    item-drag-ended => { root.media-drag-ended(); }
                 }
             }
 
@@ -337,6 +385,7 @@ export component MainWindow inherits Window {
         }
     }
 
+    // Context Menu Popup Overlay
     if root.is-context-menu-open : ContextMenuPopup {
         level0-items: root.level0-context-items;
         level1-items: root.level1-context-items;
@@ -349,6 +398,143 @@ export component MainWindow inherits Window {
         item-clicked(id) => { root.context-menu-item-clicked(id); }
         request-submenu(depth, m-idx) => { root.context-menu-request-submenu(depth, m-idx); }
         dismissed => { root.context-menu-dismissed(); }
+    }
+
+    // Floating Choice Popup Overlay (Copy / Move / Cancel)
+    if root.is-choice-popup-open : FloatingChoicePopup {
+        target-folder-name: root.choice-target-folder-name;
+        item-count: root.choice-item-count;
+        pos-x: root.choice-popup-x;
+        pos-y: root.choice-popup-y;
+        copy-clicked => { root.choice-popup-copy(root.choice-target-folder-id); }
+        move-clicked => { root.choice-popup-move(root.choice-target-folder-id); }
+        cancel-clicked => { root.choice-popup-cancel(); }
+        dismissed => { root.choice-popup-dismissed(); }
+    }
+
+    // Flying Ghost Drag & Drop Visual Overlay with Gradual Card Stacking & Depth Fading
+    if root.is-dragging-media : Rectangle {
+        x: root.drag-x + 12px;
+        y: root.drag-y + 12px;
+        width: drag-layout.preferred-width;
+        height: 38px;
+        z: 100;
+
+        // Background Stack Layer 2 (Furthest back)
+        if root.drag-count >= 3 : Rectangle {
+            x: 6px;
+            y: 6px;
+            width: parent.width;
+            height: parent.height;
+            background: Theme.surface;
+            opacity: 0.25;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: Theme.primary;
+        }
+
+        // Background Stack Layer 1 (Middle card)
+        if root.drag-count >= 2 : Rectangle {
+            x: 3px;
+            y: 3px;
+            width: parent.width;
+            height: parent.height;
+            background: Theme.surface;
+            opacity: 0.60;
+            border-radius: 6px;
+            border-width: 1.2px;
+            border-color: Theme.primary;
+        }
+
+        // Top Main Ghost Card
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            background: #1e1e2ef8;
+            border-radius: 6px;
+            border-width: 1.5px;
+            border-color: Theme.primary;
+            drop-shadow-blur: 16px;
+            drop-shadow-color: #000000cc;
+            drop-shadow-offset-y: 4px;
+
+            drag-layout := HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 10px;
+                spacing: 8px;
+
+                // 1. Thumbnail Container
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+
+                    Rectangle {
+                        width: 24px;
+                        height: 24px;
+                        background: #000000;
+                        border-radius: 3px;
+                        clip: true;
+
+                        if root.drag-thumbnail.width > 0 : Image {
+                            source: root.drag-thumbnail;
+                            width: 100%;
+                            height: 100%;
+                            image-fit: contain;
+                        }
+                        if root.drag-thumbnail.width == 0 : Text {
+                            text: "📄";
+                            font-size: 13px;
+                            vertical-alignment: center;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                // 2. File Name Label
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: root.drag-title;
+                        color: Theme.text;
+                        font-size: 11px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        horizontal-alignment: left;
+                        max-width: 220px;
+                        overflow: elide;
+                    }
+                }
+
+                // 3. Multi-File Counter Badge
+                if root.drag-count > 1 : VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+
+                    Rectangle {
+                        height: 20px;
+                        background: Theme.primary;
+                        border-radius: 10px;
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            alignment: center;
+
+                            Text {
+                                text: root.drag-count + " Files";
+                                font-size: 10px;
+                                font-weight: 700;
+                                color: #000000;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if root.is-modal-locked : Rectangle {

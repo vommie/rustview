@@ -82,9 +82,7 @@ impl MediaContextMenu {
                     .flatten()
                     .map(|m| matches!(m.media_type, MediaType::Image))
                     .unwrap_or(false);
-                let path = st.current_folder_path.as_ref().and_then(|fp| {
-                    library.media().get(single_id).ok()?.map(|rec| fp.join(&rec.filename))
-                });
+                let path = library.resolve_media_path(single_id).ok();
                 (is_img, path)
             }
         };
@@ -453,7 +451,6 @@ impl MediaContextMenu {
         selected_ids: &std::collections::HashSet<MediaId>,
     ) -> Vec<PathBuf> {
         let st = ctx.state.read();
-        let folder_p_opt = st.current_folder_path.clone();
         let mut paths: Vec<PathBuf> = Vec::with_capacity(selected_ids.len());
 
         for item in &st.all_folder_media {
@@ -463,12 +460,10 @@ impl MediaContextMenu {
         }
         drop(st);
 
-        if paths.is_empty()
-            && let Some(ref folder_p) = folder_p_opt
-        {
+        if paths.is_empty() {
             for &id in selected_ids {
-                if let Ok(Some(rec)) = ctx.library.media().get(id) {
-                    paths.push(folder_p.join(&rec.filename));
+                if let Ok(p) = ctx.library.resolve_media_path(id) {
+                    paths.push(p);
                 }
             }
         }
@@ -594,10 +589,9 @@ impl MediaContextMenu {
             let st = ctx.state.read();
             if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
                 (item.record.filename.clone(), item.full_path.clone())
-            } else if let Some(ref folder_p) = st.current_folder_path
-                && let Ok(Some(rec)) = ctx.library.media().get(single_id)
-            {
-                (rec.filename.clone(), folder_p.join(&rec.filename))
+            } else if let Ok(p) = ctx.library.resolve_media_path(single_id) {
+                let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                (name, p)
             } else {
                 return;
             }

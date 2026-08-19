@@ -147,7 +147,6 @@ impl FolderTreeBuilder {
 
             let is_hidden_folder = ctx.dot_hidden_cache.is_hidden(path_obj, &raw_name, ctx.support_dot_hidden);
 
-            // Filter out hidden folders if show_hidden is false
             if is_hidden_folder && !ctx.show_hidden {
                 continue;
             }
@@ -259,7 +258,6 @@ impl BridgeFolders {
             Self::refresh_folder_tree(&win, &lib, &set, &st);
         });
 
-        // Collapse all non-active branches toolbar button handler
         let lib = library.clone();
         let set = settings.clone();
         let st = state.clone();
@@ -269,7 +267,6 @@ impl BridgeFolders {
             Self::collapse_all_except_active(&win, &lib, &set, &st);
         });
 
-        // Hidden folders toolbar toggle button handler
         let set = settings.clone();
         let st = state.clone();
         let win = window.clone_strong();
@@ -299,7 +296,6 @@ impl BridgeFolders {
         });
     }
 
-    /// Programmatically scrolls the visible folder tree view to bring the selected folder row into view.
     pub fn scroll_to_selected(window: &MainWindow) {
         let model = window.get_folders();
         let count = model.row_count();
@@ -313,7 +309,6 @@ impl BridgeFolders {
         }
     }
 
-    /// Collapses all open folder branches in the tree except the active path leading to the currently selected folder.
     pub fn collapse_all_except_active(
         window: &MainWindow,
         library: &Library,
@@ -480,7 +475,6 @@ impl BridgeFolders {
             state,
         );
 
-        // Auto-scroll folder tree to the active folder after initial mount and Slint geometry calculation
         let win_weak_scroll = window.as_weak();
         Timer::single_shot(std::time::Duration::from_millis(60), move || {
             if let Some(w) = win_weak_scroll.upgrade() {
@@ -490,7 +484,6 @@ impl BridgeFolders {
         });
     }
 
-    /// Asynchronously refreshes the directory structure in a non-blocking background thread while activating the Throbber.
     pub fn refresh_folder_tree(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -514,7 +507,6 @@ impl BridgeFolders {
             "[FolderPanel: Toolbar] Spawning non-blocking background thread for folder tree refresh"
         );
 
-        // Instantly activate Throbber and update state
         {
             let mut st = state.write();
             st.is_refreshing_folders = true;
@@ -840,7 +832,6 @@ impl BridgeFolders {
             expanded
         };
 
-        // Renders tree instantly using cached in-memory hierarchy
         Self::reload_tree(window, library, settings, state);
 
         tracing::info!(

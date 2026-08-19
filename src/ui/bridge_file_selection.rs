@@ -249,23 +249,7 @@ impl BridgeFileSelection {
         library: &Arc<Library>,
         window: &MainWindow,
     ) {
-        if let Ok(Some(media)) = library.media().get(media_id) {
-            let full_path = state
-                .read()
-                .current_folder_path
-                .as_ref()
-                .map(|p| p.join(&media.filename))
-                .unwrap_or_default();
-
-            tracing::info!(
-                media = %LogObscurer::media(Some(media_id), &media.filename),
-                media_type = ?media.media_type,
-                path = %LogObscurer::path(&full_path),
-                "[MediaAction: DoubleClick] Double-click event triggered on media item. Dispatching to system default handler..."
-            );
-
-            Self::open_media(media_id, state, library, window);
-        }
+        Self::open_media(media_id, state, library, window);
     }
 
     pub fn open_media(
@@ -274,50 +258,75 @@ impl BridgeFileSelection {
         library: &Arc<Library>,
         window: &MainWindow,
     ) {
-        if let Ok(Some(media)) = library.media().get(media_id) {
-            let full_path = state
-                .read()
-                .current_folder_path
-                .as_ref()
-                .map(|p| p.join(&media.filename))
-                .unwrap_or_default();
+        // 1. Try finding in indexed in-memory records
+        let full_path_opt = {
+            let st = state.read();
+            st.all_folder_media
+                .iter()
+                .find(|m| m.record.id == media_id)
+                .map(|m| (m.record.filename.clone(), m.full_path.clone()))
+        };
 
-            if !full_path.exists() {
-                tracing::warn!(
-                    media = %LogObscurer::media(Some(media_id), &media.filename),
-                    path = %LogObscurer::path(&full_path),
-                    "Cannot open media: File not found on disk"
-                );
-                let missing_dlg = MissingFileDialogController::new();
-                missing_dlg.show(
-                    window,
-                    "Open Media",
-                    vec![MissingFileItem {
-                        filename: media.filename,
-                        path: full_path,
-                    }],
-                );
-                return;
-            }
+        // 2. If not found in-memory, resolve from database via true rec.folder_id
+        let (filename, full_path) = match full_path_opt {
+            Some(pair) => pair,
+            None => match library.resolve_media_path(media_id) {
+                Ok(p) => {
+                    let name = p
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    (name, p)
+                }
+                Err(e) => {
+                    tracing::error!(
+                        media_id = media_id,
+                        error = %e,
+                        "Failed to resolve media path from database"
+                    );
+                    window.set_status_text(
+                        format!("Media record not found in database: #{}", media_id).into(),
+                    );
+                    return;
+                }
+            },
+        };
 
-            tracing::info!(
-                media = %LogObscurer::media(Some(media_id), &media.filename),
-                file = %LogObscurer::path(&full_path),
-                "Opening media file with Linux system default handler..."
+        if !full_path.exists() {
+            tracing::warn!(
+                media_id = media_id,
+                path = %LogObscurer::path(&full_path),
+                "Cannot open media: File not found on physical disk"
             );
+            let missing_dlg = MissingFileDialogController::new();
+            missing_dlg.show(
+                window,
+                "Open Media",
+                vec![MissingFileItem {
+                    filename,
+                    path: full_path,
+                }],
+            );
+            return;
+        }
 
-            if let Err(e) = SystemFileHandler::open_file(&full_path) {
-                tracing::error!(
-                    file = %LogObscurer::path(&full_path),
-                    error = %e,
-                    "Failed to launch system default application for media file"
-                );
-                window.set_status_text(format!("Failed to open file: {}", e).into());
-            } else {
-                window.set_status_text(
-                    format!("Opened '{}' with system default application.", media.filename).into(),
-                );
-            }
+        tracing::info!(
+            media = %LogObscurer::media(Some(media_id), &filename),
+            file = %LogObscurer::path(&full_path),
+            "Opening media file with Linux system default handler..."
+        );
+
+        if let Err(e) = SystemFileHandler::open_file(&full_path) {
+            tracing::error!(
+                file = %LogObscurer::path(&full_path),
+                error = %e,
+                "Failed to launch system default application for media file"
+            );
+            window.set_status_text(format!("Failed to open file: {}", e).into());
+        } else {
+            window.set_status_text(
+                format!("Opened '{}' with system default application.", filename).into(),
+            );
         }
     }
 }

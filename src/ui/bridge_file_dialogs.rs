@@ -83,7 +83,7 @@ impl FileRenameDialogController {
         dialog_ref: &Rc<RefCell<Option<FileRenameDialog>>>,
         missing_dialog: &MissingFileDialogController,
     ) {
-        // Pre-check if original file physically exists on storage
+        // Pre-check if original file physically exists on storage via absolute library path resolution
         let current_target = {
             let st = ctx.state.read();
             st.all_folder_media
@@ -91,9 +91,9 @@ impl FileRenameDialogController {
                 .find(|m| m.record.id == media_id)
                 .map(|m| (m.record.filename.clone(), m.full_path.clone()))
                 .or_else(|| {
-                    let folder_p = st.current_folder_path.as_ref()?;
-                    let rec = ctx.library.media().get(media_id).ok()??;
-                    Some((rec.filename.clone(), folder_p.join(&rec.filename)))
+                    let path = ctx.library.resolve_media_path(media_id).ok()?;
+                    let name = path.file_name().map(|n| n.to_string_lossy().to_string())?;
+                    Some((name, path))
                 })
         };
 
@@ -141,12 +141,9 @@ impl FileRenameDialogController {
             Err(LibraryError::Io(io_err)) if io_err.kind() == std::io::ErrorKind::NotFound => {
                 Self::close(dialog_ref, &ctx.state, window);
                 let fallback_path = ctx
-                    .state
-                    .read()
-                    .current_folder_path
-                    .as_ref()
-                    .map(|p| p.join(new_name))
-                    .unwrap_or_else(|| PathBuf::from(new_name));
+                    .library
+                    .resolve_media_path(media_id)
+                    .unwrap_or_else(|_| PathBuf::from(new_name));
                 missing_dialog.show(
                     window,
                     "Rename File",

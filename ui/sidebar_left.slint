@@ -15,6 +15,8 @@ export component SidebarLeft inherits Rectangle {
     in property <[FavoriteItemView]> favorites: [];
     in property <bool> is-refreshing-folders: false;
     in-out property <bool> show-hidden-folders: false;
+    in property <int> drop-target-folder-id: -1;
+    out property <length> folder-tree-scroll-y: folder-panel.scroll-offset-y;
 
     callback folder-clicked(int /* id */, string /* path */);
     callback folder-toggle-expand(int /* id */);
@@ -23,6 +25,13 @@ export component SidebarLeft inherits Rectangle {
     callback folder-collapse-all-clicked();
     callback favorite-clicked(string /* path */);
     callback toggle-hidden-folders(bool /* show_hidden */);
+    callback folder-row-hovered(int /* folder_id */);
+    callback folder-row-unhovered(int /* folder_id */);
+
+    /// Programmatically scrolls the folder tree by a delta in pixels
+    public function scroll-folder-tree-by(dy: length) {
+        folder-panel.scroll-by(dy);
+    }
 
     /// Public endpoint to scroll to specific folder row index
     public function scroll-folder-to-row(row-idx: int) {
@@ -42,12 +51,15 @@ export component SidebarLeft inherits Rectangle {
         // Folder Browser / Tree Navigation Subsystem
         folder-panel := FolderPanel {
             folders: root.folders;
+            drop-target-folder-id: root.drop-target-folder-id;
             is-refreshing: root.is-refreshing-folders;
             show-hidden-folders <=> root.show-hidden-folders;
             toggle-hidden-folders(h) => { root.toggle-hidden-folders(h); }
             collapse-all-clicked => { root.folder-collapse-all-clicked(); }
             folder-clicked(id, path) => { root.folder-clicked(id, path); }
             folder-toggle-expand(id) => { root.folder-toggle-expand(id); }
+            row-hovered(id) => { root.folder-row-hovered(id); }
+            row-unhovered(id) => { root.folder-row-unhovered(id); }
             folder-context-menu(id, x, y) => { root.folder-context-menu(id, folder-panel.x + x, folder-panel.y + y); }
             refresh-clicked => { root.folder-refresh-clicked(); }
         }

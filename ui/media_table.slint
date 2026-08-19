@@ -31,6 +31,10 @@ export component MediaTableView inherits Rectangle {
     callback refresh-clicked();
     callback view-mode-toggled(bool);
 
+    callback item-drag-started(int /* id */, length /* x */, length /* y */);
+    callback item-drag-moved(length /* x */, length /* y */);
+    callback item-drag-ended();
+
     // Precalculated direct column X coordinates
     property <length> col-pos-0: 0px;
     property <length> col-pos-1: root.col-filename-width;
@@ -130,21 +134,57 @@ export component MediaTableView inherits Rectangle {
                     }
 
                     row-touch := TouchArea {
+                        property <length> press-x: 0px;
+                        property <length> press-y: 0px;
+                        property <bool> is-drag-active: false;
+                        property <bool> was-already-selected: false;
+
                         pointer-event(event) => {
                             if event.kind == PointerEventKind.down {
-                                if event.button == PointerEventButton.right {
+                                if event.button == PointerEventButton.left {
+                                    self.press-x = self.mouse-x;
+                                    self.press-y = self.mouse-y;
+                                    self.is-drag-active = false;
+                                    self.was-already-selected = item.is-selected;
+
+                                    if !item.is-selected || event.modifiers.control || event.modifiers.meta || event.modifiers.shift {
+                                        root.item-clicked(
+                                            item.id,
+                                            event.modifiers.control || event.modifiers.meta,
+                                            event.modifiers.shift
+                                        );
+                                    }
+                                } else if event.button == PointerEventButton.right {
                                     root.item-context-menu(
                                         item.id,
                                         row-touch.mouse-x + scroll-area.clamped-x,
                                         58px + parent.y + row-touch.mouse-y + scroll-area.clamped-y
                                     );
-                                } else if event.button == PointerEventButton.left {
-                                    root.item-clicked(
-                                        item.id,
-                                        event.modifiers.control || event.modifiers.meta,
-                                        event.modifiers.shift
-                                    );
                                 }
+                            }
+                            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                                if self.is-drag-active {
+                                    self.is-drag-active = false;
+                                    root.item-drag-ended();
+                                } else {
+                                    if self.was-already-selected && !event.modifiers.control && !event.modifiers.meta && !event.modifiers.shift {
+                                        root.item-clicked(item.id, false, false);
+                                    }
+                                }
+                            }
+                        }
+
+                        moved => {
+                            if self.pressed && !self.is-drag-active {
+                                let dx = self.mouse-x - self.press-x;
+                                let dy = self.mouse-y - self.press-y;
+                                if (dx * dx + dy * dy) > 25px * 1px {
+                                    self.is-drag-active = true;
+                                    root.item-drag-started(item.id, self.mouse-x + scroll-area.clamped-x, 58px + parent.y + self.mouse-y + scroll-area.clamped-y);
+                                }
+                            }
+                            if self.is-drag-active {
+                                root.item-drag-moved(self.mouse-x + scroll-area.clamped-x, 58px + parent.y + self.mouse-y + scroll-area.clamped-y);
                             }
                         }
                     }

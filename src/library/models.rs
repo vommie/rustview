@@ -5,6 +5,7 @@ use heed::{BoxedError, BytesDecode, BytesEncode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 pub type FolderId = u64;
 pub type MediaId = u64;
@@ -165,4 +166,56 @@ pub struct MediaSearchParams {
     pub match_mode: MatchMode,
     pub scope_mode: ScopeMode,
     pub folder_id: Option<FolderId>,
+}
+
+/// Supported file transfer modes when dropping files onto folders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FileTransferKind {
+    Copy,
+    Move,
+}
+
+/// Supported user decisions when a target file name collision occurs during a file move/copy operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FileConflictResolution {
+    Skip,
+    AutoRename,
+    Overwrite,
+    Cancel,
+}
+
+/// Detailed file inspection attributes contrasting conflicting source and destination files.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileConflictItemDetails {
+    pub media_id: Option<MediaId>,
+    pub folder_id: FolderId,
+    pub folder_path: String,
+    pub filename: String,
+    pub full_path: PathBuf,
+    pub file_size: u64,
+    pub modification_time: i64,
+    pub file_hash: FileHash,
+    pub width: u32,
+    pub height: u32,
+    pub format: MediaFormat,
+    pub rating: u8,
+}
+
+/// Comprehensive conflict report pairing the source candidate and the conflicting target item.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileConflictReport {
+    pub source: FileConflictItemDetails,
+    pub destination: FileConflictItemDetails,
+}
+
+/// Summary metrics returned after executing a batch file move or copy operation.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BatchMoveSummary {
+    pub total_requested: usize,
+    pub moved_count: usize,
+    pub auto_renamed_count: usize,
+    pub overwritten_count: usize,
+    pub skipped_count: usize,
+    pub failed_count: usize,
+    pub affected_folder_ids: Vec<FolderId>,
 }

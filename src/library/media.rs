@@ -4,7 +4,7 @@ use super::models::{FolderId, MediaId, MediaRecord, MediaSearchParams, TagId};
 use crate::media::FileHash;
 use crate::query::{MatchMode, ScopeMode};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct MediaRepository<'a> {
     db: &'a LibraryDatabase,
@@ -18,6 +18,22 @@ impl<'a> MediaRepository<'a> {
     pub fn get(&self, id: MediaId) -> Result<Option<MediaRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         Ok(self.db.media.get(&rtxn, &id)?)
+    }
+
+    /// Resolves the absolute physical filesystem path of a media file via its registered folder_id in LMDB.
+    pub fn resolve_path(&self, id: MediaId) -> Result<PathBuf, LibraryError> {
+        let rtxn = self.db.env.read_txn()?;
+        let rec = self
+            .db
+            .media
+            .get(&rtxn, &id)?
+            .ok_or(LibraryError::MediaNotFound(id))?;
+        let folder = self
+            .db
+            .folders
+            .get(&rtxn, &rec.folder_id)?
+            .ok_or(LibraryError::FolderNotFound(rec.folder_id))?;
+        Ok(Path::new(&folder.path).join(&rec.filename))
     }
 
     /// Retrieves all active (non-deleted) media records for the specified folder.

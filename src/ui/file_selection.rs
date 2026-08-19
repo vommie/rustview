@@ -54,6 +54,21 @@ impl FileSelectionModel {
         self.anchor_id = Some(id);
     }
 
+    /// Deselects a specific subset of media IDs while retaining the rest of the active selection.
+    pub fn deselect_many(&mut self, ids: &HashSet<MediaId>) {
+        self.selected_ids.retain(|id| !ids.contains(id));
+        if let Some(anchor) = self.anchor_id
+            && ids.contains(&anchor)
+        {
+            self.anchor_id = None;
+        }
+        if let Some(last) = self.last_clicked_id
+            && ids.contains(&last)
+        {
+            self.last_clicked_id = None;
+        }
+    }
+
     /// Selects a contiguous range between the anchor and the target ID (Shift + Click).
     /// If `additive` is true (Ctrl + Shift + Click), existing selections outside the range are preserved.
     pub fn select_range(
