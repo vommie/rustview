@@ -1,5 +1,6 @@
 use super::error::ThumbnailError;
 use super::types::{calculate_aspect_dimensions, ScalingAlgorithm};
+use super::video::{FfmpegVideoThumbnailer, VideoFrameDecoder};
 use fast_image_resize::images::Image;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
 use image::ImageReader;
@@ -39,37 +40,37 @@ impl ImageDecoder for SimdImageThumbnailer {
         max_bound: u32,
         scaling_algo: ScalingAlgorithm,
     ) -> Result<DecodedThumbnailFrame, ThumbnailError> {
-        // 1. High-Speed Buffered File Read (Zero kernel page-table lock contention across parallel threads)
-        let file = File::open(path)?;
-        let reader = BufReader::with_capacity(128 * 1024, file);
+        // 1. High-Speed Buffered File Read & Native Image Crate Decoding
+        if let Ok(file) = File::open(path) {
+            let reader = BufReader::with_capacity(128 * 1024, file);
+            if let Ok(reader_guessed) = ImageReader::new(reader).with_guessed_format()
+                && let Ok(dynamic_img) = reader_guessed.decode()
+            {
+                let orig_w = dynamic_img.width();
+                let orig_h = dynamic_img.height();
+                let (target_w, target_h) = calculate_aspect_dimensions(orig_w, orig_h, max_bound);
 
-        // 2. Image Decoding
-        let dynamic_img = ImageReader::new(reader)
-            .with_guessed_format()?
-            .decode()?;
+                let rgb_src = dynamic_img.into_rgb8();
+                let src_raw = rgb_src.into_raw();
 
-        let orig_w = dynamic_img.width();
-        let orig_h = dynamic_img.height();
+                let src_image = Image::from_vec_u8(orig_w, orig_h, src_raw, PixelType::U8x3)?;
+                let mut dst_image = Image::new(target_w, target_h, PixelType::U8x3);
+                let mut resizer = Resizer::new();
+                let options = ResizeOptions::default().resize_alg(scaling_algo.to_resize_alg());
 
-        // 3. Compute exact aspect-ratio target dimensions inside max_bound
-        let (target_w, target_h) = calculate_aspect_dimensions(orig_w, orig_h, max_bound);
+                resizer.resize(&src_image, &mut dst_image, &options)?;
+                let resized_raw = dst_image.into_vec();
 
-        let rgb_src = dynamic_img.into_rgb8();
-        let src_raw = rgb_src.into_raw();
+                return Ok(DecodedThumbnailFrame {
+                    width: target_w,
+                    height: target_h,
+                    rgb_pixels: resized_raw,
+                });
+            }
+        }
 
-        // 4. Pure Direct Native SIMD Resizing via fast_image_resize
-        let src_image = Image::from_vec_u8(orig_w, orig_h, src_raw, PixelType::U8x3)?;
-        let mut dst_image = Image::new(target_w, target_h, PixelType::U8x3);
-        let mut resizer = Resizer::new();
-        let options = ResizeOptions::default().resize_alg(scaling_algo.to_resize_alg());
-
-        resizer.resize(&src_image, &mut dst_image, &options)?;
-        let resized_raw = dst_image.into_vec();
-
-        Ok(DecodedThumbnailFrame {
-            width: target_w,
-            height: target_h,
-            rgb_pixels: resized_raw,
-        })
+        // 2. Resilient Fallback to FFmpeg decoder (for PSD, exotic TIFF or chunk variations)
+        let ffmpeg_decoder = FfmpegVideoThumbnailer::new();
+        ffmpeg_decoder.extract_frame(path, 0.0, max_bound, scaling_algo)
     }
 }

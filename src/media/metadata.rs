@@ -59,7 +59,11 @@ impl MetadataExtractor {
     }
 
     fn extract_image_dimensions(path: &Path) -> Result<(u32, u32), MetadataError> {
-        image::image_dimensions(path).map_err(|e| MetadataError::ImageError(e.to_string()))
+        if let Ok(dims) = image::image_dimensions(path) {
+            return Ok(dims);
+        }
+        // Fallback for image formats not handled natively by the image crate (e.g. PSD)
+        Self::extract_video_dimensions(path).map_err(|e| MetadataError::ImageError(e.to_string()))
     }
 
     fn extract_video_dimensions(path: &Path) -> Result<(u32, u32), MetadataError> {

@@ -1,0 +1,60 @@
+import { CheckBox, LineEdit } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPageFormats inherits VerticalLayout {
+    spacing: 12px;
+
+    in property <string> supported-image-formats: "jpg, jpeg, jfif, jpe, png, webp, avif, gif, bmp, tiff, tif, psd";
+    in property <string> supported-video-formats: "mp4, m4v, mkv, webm, mov, avi, mpg, mpeg, flv";
+    in-out property <bool> auto-detect-extensionless: true;
+
+    SettingsCard {
+        title: "Supported File Formats";
+        description: "Overview of media file extensions recognized, indexed, and displayed by RustView (read-only).";
+
+        VerticalLayout {
+            spacing: 6px;
+
+            Text {
+                text: "Supported Image Formats:";
+                font-size: 11px;
+                font-weight: 700;
+                color: Theme.text-muted;
+            }
+
+            LineEdit {
+                text: root.supported-image-formats;
+                read-only: true;
+                enabled: false;
+            }
+        }
+
+        VerticalLayout {
+            spacing: 6px;
+
+            Text {
+                text: "Supported Video Formats:";
+                font-size: 11px;
+                font-weight: 700;
+                color: Theme.text-muted;
+            }
+
+            LineEdit {
+                text: root.supported-video-formats;
+                read-only: true;
+                enabled: false;
+            }
+        }
+    }
+
+    SettingsCard {
+        title: "Tools";
+        description: "Automated filesystem maintenance and media format detection utilities.";
+
+        CheckBox {
+            text: "Auto-detect MIME type and append extension for extensionless files on refresh";
+            checked <=> root.auto-detect-extensionless;
+        }
+    }
+}

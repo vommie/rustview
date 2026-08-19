@@ -4,6 +4,7 @@ import { SettingsPageGeneral } from "settings_page_general.slint";
 import { SettingsPageFolders } from "settings_page_folders.slint";
 import { SettingsPageAppearance } from "settings_page_appearance.slint";
 import { SettingsPagePerformance } from "settings_page_performance.slint";
+import { SettingsPageFormats } from "settings_page_formats.slint";
 import { SettingsPageTags } from "settings_page_tags.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
 import { ButtonBar } from "button_bar.slint";
@@ -14,6 +15,7 @@ export { SettingsPageGeneral } from "settings_page_general.slint";
 export { SettingsPageFolders } from "settings_page_folders.slint";
 export { SettingsPageAppearance } from "settings_page_appearance.slint";
 export { SettingsPagePerformance } from "settings_page_performance.slint";
+export { SettingsPageFormats } from "settings_page_formats.slint";
 export { SettingsPageTags } from "settings_page_tags.slint";
 export { SettingsPageDebug } from "settings_page_debug.slint";
 export { SettingsCard } from "settings_card.slint";
@@ -69,6 +71,11 @@ export component SettingsWindow inherits Window {
     in-out property <bool> custom-preview-settings: true;
     in-out property <int> preview-format-idx: 0; // 0 = WebP, 1 = JPEG
     in-out property <int> preview-quality: 40;
+
+    // Formats options
+    in property <string> supported-image-formats: "jpg, jpeg, jfif, jpe, png, webp, avif, gif, bmp, tiff, tif, psd";
+    in property <string> supported-video-formats: "mp4, m4v, mkv, webm, mov, avi, mpg, mpeg, flv";
+    in-out property <bool> auto-detect-extensionless: true;
 
     // Debug options
     in-out property <bool> obfuscate-logs: true;
@@ -150,9 +157,15 @@ export component SettingsWindow inherits Window {
                         preview-quality <=> root.preview-quality;
                     }
 
-                    if root.active-category == 4 : SettingsPageTags {}
+                    if root.active-category == 4 : SettingsPageFormats {
+                        supported-image-formats: root.supported-image-formats;
+                        supported-video-formats: root.supported-video-formats;
+                        auto-detect-extensionless <=> root.auto-detect-extensionless;
+                    }
 
-                    if root.active-category == 5 : SettingsPageDebug {
+                    if root.active-category == 5 : SettingsPageTags {}
+
+                    if root.active-category == 6 : SettingsPageDebug {
                         obfuscate-logs <=> root.obfuscate-logs;
                     }
                 }

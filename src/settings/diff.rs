@@ -28,6 +28,9 @@ pub struct SettingsDiff {
     // View & Layout Subsystem
     pub view_settings_changed: bool,
 
+    // Formats & Tools Subsystem
+    pub formats_settings_changed: bool,
+
     // Tags Subsystem
     pub tags_settings_changed: bool,
     pub tag_expansion_changed: bool,
@@ -87,6 +90,7 @@ impl SettingsDiff {
             || old.performance.preview_quality != new.performance.preview_quality;
 
         let view_settings_changed = old.view != new.view;
+        let formats_settings_changed = old.formats != new.formats;
         let tags_settings_changed = old.tags.default_match_mode != new.tags.default_match_mode
             || old.tags.default_scope_mode != new.tags.default_scope_mode;
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
@@ -104,6 +108,7 @@ impl SettingsDiff {
             || performance_cache_changed
             || performance_pipeline_changed
             || view_settings_changed
+            || formats_settings_changed
             || tags_settings_changed
             || tag_expansion_changed
             || debug_settings_changed
@@ -122,6 +127,7 @@ impl SettingsDiff {
             performance_cache_changed,
             performance_pipeline_changed,
             view_settings_changed,
+            formats_settings_changed,
             tags_settings_changed,
             tag_expansion_changed,
             debug_settings_changed,
@@ -303,6 +309,13 @@ impl SettingsDiff {
             changes.push(format!(
                 "Performance: preview_quality ({}% -> {}%)",
                 old.performance.preview_quality, new.performance.preview_quality
+            ));
+        }
+
+        if old.formats.auto_detect_extensionless_media != new.formats.auto_detect_extensionless_media {
+            changes.push(format!(
+                "Formats: auto_detect_extensionless_media ({} -> {})",
+                old.formats.auto_detect_extensionless_media, new.formats.auto_detect_extensionless_media
             ));
         }
 

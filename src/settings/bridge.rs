@@ -1,5 +1,7 @@
 use super::registry::SettingsManager;
-use super::schema::{AppSettings, GridAspectRatio};
+use super::schema::{
+    AppSettings, GridAspectRatio, DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS,
+};
 use crate::ui::{MainWindow, SettingsWindow};
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::path::PathBuf;
@@ -133,6 +135,11 @@ impl SettingsDialogController {
         );
         window.set_preview_quality(settings.performance.preview_quality as i32);
 
+        // Formats properties
+        window.set_supported_image_formats(DEFAULT_SUPPORTED_IMAGE_FORMATS.into());
+        window.set_supported_video_formats(DEFAULT_SUPPORTED_VIDEO_FORMATS.into());
+        window.set_auto_detect_extensionless(settings.formats.auto_detect_extensionless_media);
+
         // Debug properties
         window.set_obfuscate_logs(settings.debug.obfuscate_logs);
     }
@@ -228,6 +235,9 @@ impl SettingsDialogController {
                 };
                 current.performance.preview_quality =
                     w.get_preview_quality().clamp(10, 100) as u8;
+
+                // Save Formats Parameters
+                current.formats.auto_detect_extensionless_media = w.get_auto_detect_extensionless();
 
                 // Save Debug Parameters
                 current.debug.obfuscate_logs = w.get_obfuscate_logs();

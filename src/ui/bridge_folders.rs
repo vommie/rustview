@@ -748,8 +748,10 @@ impl BridgeFolders {
                 let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
 
                 let t_scan = Instant::now();
-                let refresh_result = lib_scanner.refresher().refresh_folder_with_progress(
+                let auto_detect = set_scanner.get().formats.auto_detect_extensionless_media;
+                let refresh_result = lib_scanner.refresher().refresh_folder_with_options(
                     folder_id,
+                    auto_detect,
                     Some(cancel_ref.clone()),
                     Some(move |cur, tot| {
                         let mut last = last_progress_report.lock();

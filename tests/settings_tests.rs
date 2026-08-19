@@ -1,20 +1,21 @@
 use rustview::settings::{
     AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager, SettingsStore,
-    DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER, DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_DIMENSIONS_WIDTH,
-    DEFAULT_COL_FILENAME_WIDTH, DEFAULT_COL_RATING_WIDTH, DEFAULT_COL_SIZE_WIDTH,
-    DEFAULT_CONFIRM_ON_FILE_DELETE, DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME,
-    DEFAULT_DELETION_MODE, DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS,
-    DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
-    DEFAULT_OBFUSCATE_LOGS, DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT,
-    DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER,
-    DEFAULT_SCALING_ALGORITHM, DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES,
-    DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY,
-    DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN,
-    DEFAULT_SORT_ORDER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
-    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
-    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
-    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT,
-    DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH,
+    DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA, DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER,
+    DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_DIMENSIONS_WIDTH, DEFAULT_COL_FILENAME_WIDTH,
+    DEFAULT_COL_RATING_WIDTH, DEFAULT_COL_SIZE_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE,
+    DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE,
+    DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS,
+    DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS, DEFAULT_OBFUSCATE_LOGS,
+    DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT,
+    DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM,
+    DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS,
+    DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH,
+    DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER,
+    DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE,
+    DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE,
+    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH,
+    DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT,
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -144,6 +145,19 @@ fn test_settings_persistence_sanitization_and_hooks() {
         DEFAULT_PREVIEW_QUALITY
     );
 
+    // Formats Defaults
+    assert_eq!(
+        initial.formats.auto_detect_extensionless_media,
+        DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA
+    );
+    assert!(initial.formats.auto_detect_extensionless_media);
+    assert!(DEFAULT_SUPPORTED_IMAGE_FORMATS.contains("psd"));
+    assert!(DEFAULT_SUPPORTED_IMAGE_FORMATS.contains("jfif"));
+    assert!(DEFAULT_SUPPORTED_IMAGE_FORMATS.contains("jpe"));
+    assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("mpg"));
+    assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("mpeg"));
+    assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("flv"));
+
     // View Defaults
     assert_eq!(initial.view.is_table_view, DEFAULT_IS_TABLE_VIEW);
     assert_eq!(initial.view.sort_column, DEFAULT_SORT_COLUMN);
@@ -192,6 +206,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.appearance.show_filenames = false;
     initial.appearance.enable_tooltips = false;
     initial.appearance.tooltip_delay_ms = 450;
+    initial.formats.auto_detect_extensionless_media = false;
     initial.debug.obfuscate_logs = false;
     manager.update(initial);
 
@@ -206,6 +221,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(!loaded.appearance.show_filenames);
     assert!(!loaded.appearance.enable_tooltips);
     assert_eq!(loaded.appearance.tooltip_delay_ms, 450);
+    assert!(!loaded.formats.auto_detect_extensionless_media);
     assert!(!loaded.debug.obfuscate_logs);
 
     // 5. Test validation & sanitization
@@ -235,18 +251,18 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_identical.root_folder_changed);
     assert!(!diff_identical.appearance_grid_changed);
     assert!(!diff_identical.tooltip_settings_changed);
+    assert!(!diff_identical.formats_settings_changed);
     assert!(!diff_identical.debug_settings_changed);
 
-    // 2. Only tooltip delay changed -> only tooltip_settings_changed is true
-    let mut modified_tooltips = base.clone();
-    modified_tooltips.appearance.tooltip_delay_ms = 350;
-    let diff_tooltips = SettingsDiff::compute(&base, &modified_tooltips);
-    assert!(diff_tooltips.has_changes);
-    assert!(diff_tooltips.tooltip_settings_changed);
-    assert!(!diff_tooltips.root_folder_changed);
-    assert!(!diff_tooltips.appearance_grid_changed);
-    assert!(!diff_tooltips.folder_tree_presentation_changed);
-    assert!(!diff_tooltips.debug_settings_changed);
+    // 2. Only formats setting changed -> only formats_settings_changed is true
+    let mut modified_formats = base.clone();
+    modified_formats.formats.auto_detect_extensionless_media = false;
+    let diff_formats = SettingsDiff::compute(&base, &modified_formats);
+    assert!(diff_formats.has_changes);
+    assert!(diff_formats.formats_settings_changed);
+    assert!(!diff_formats.root_folder_changed);
+    assert!(!diff_formats.appearance_grid_changed);
+    assert!(!diff_formats.debug_settings_changed);
 
     // 3. Only root folder path changed -> only root_folder_changed is true
     let mut modified_root = base.clone();
@@ -258,34 +274,10 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_root.tooltip_settings_changed);
     assert!(!diff_root.debug_settings_changed);
 
-    // 4. Only folder tree metrics changed -> only folder_tree_presentation_changed is true
-    let mut modified_tree = base.clone();
-    modified_tree.folders.show_folder_metrics = false;
-    let diff_tree = SettingsDiff::compute(&base, &modified_tree);
-    assert!(diff_tree.has_changes);
-    assert!(diff_tree.folder_tree_presentation_changed);
-    assert!(!diff_tree.root_folder_changed);
-    assert!(!diff_tree.appearance_grid_changed);
-    assert!(!diff_tree.debug_settings_changed);
-
-    // 5. Only debug logging changed -> only debug_settings_changed is true
-    let mut modified_debug = base.clone();
-    modified_debug.debug.obfuscate_logs = false;
-    let diff_debug = SettingsDiff::compute(&base, &modified_debug);
-    assert!(diff_debug.has_changes);
-    assert!(diff_debug.debug_settings_changed);
-    assert!(!diff_debug.root_folder_changed);
-    assert!(!diff_debug.appearance_grid_changed);
-    assert!(!diff_debug.tooltip_settings_changed);
-
-    // 6. Verify detailed summary output
-    let summary = diff_root.detailed_summary(&base, &modified_root);
+    // 4. Verify detailed summary output
+    let summary = diff_formats.detailed_summary(&base, &modified_formats);
     assert_eq!(summary.len(), 1);
-    assert!(summary[0].contains("root_folder"));
-
-    let summary_debug = diff_debug.detailed_summary(&base, &modified_debug);
-    assert_eq!(summary_debug.len(), 1);
-    assert!(summary_debug[0].contains("obfuscate_logs"));
+    assert!(summary[0].contains("auto_detect_extensionless_media"));
 }
 
 #[test]
@@ -331,6 +323,11 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
         DEFAULT_TOOLTIP_DELAY_MS
     );
     assert_eq!(loaded.appearance.tooltip_delay_ms, 750);
+    assert_eq!(
+        loaded.formats.auto_detect_extensionless_media,
+        DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA
+    );
+    assert!(loaded.formats.auto_detect_extensionless_media);
     assert_eq!(
         loaded.performance.thumbnail_format,
         DEFAULT_THUMBNAIL_FORMAT

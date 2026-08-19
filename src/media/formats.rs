@@ -17,6 +17,7 @@ pub enum MediaFormat {
     Gif,
     Bmp,
     Tiff,
+    Psd,
 
     // Video Formats
     Mp4,
@@ -24,6 +25,8 @@ pub enum MediaFormat {
     Webm,
     Mov,
     Avi,
+    Mpeg,
+    Flv,
 
     Unknown,
 }
@@ -32,18 +35,21 @@ impl MediaFormat {
     /// Detects the media format based on the file extension.
     pub fn from_extension(ext: &str) -> Self {
         match ext.to_ascii_lowercase().as_str() {
-            "jpg" | "jpeg" => Self::Jpeg,
+            "jpg" | "jpeg" | "jfif" | "jpe" => Self::Jpeg,
             "png" => Self::Png,
             "webp" => Self::Webp,
             "avif" => Self::Avif,
             "gif" => Self::Gif,
             "bmp" => Self::Bmp,
             "tif" | "tiff" => Self::Tiff,
+            "psd" => Self::Psd,
             "mp4" | "m4v" => Self::Mp4,
             "mkv" => Self::Mkv,
             "webm" => Self::Webm,
             "mov" => Self::Mov,
             "avi" => Self::Avi,
+            "mpg" | "mpeg" => Self::Mpeg,
+            "flv" => Self::Flv,
             _ => Self::Unknown,
         }
     }
@@ -65,9 +71,38 @@ impl MediaFormat {
             | Self::Avif
             | Self::Gif
             | Self::Bmp
-            | Self::Tiff => Some(MediaType::Image),
-            Self::Mp4 | Self::Mkv | Self::Webm | Self::Mov | Self::Avi => Some(MediaType::Video),
+            | Self::Tiff
+            | Self::Psd => Some(MediaType::Image),
+            Self::Mp4
+            | Self::Mkv
+            | Self::Webm
+            | Self::Mov
+            | Self::Avi
+            | Self::Mpeg
+            | Self::Flv => Some(MediaType::Video),
             Self::Unknown => None,
+        }
+    }
+
+    /// Returns the recommended default file extension for this format.
+    pub fn default_extension(&self) -> &'static str {
+        match self {
+            Self::Jpeg => "jpg",
+            Self::Png => "png",
+            Self::Webp => "webp",
+            Self::Avif => "avif",
+            Self::Gif => "gif",
+            Self::Bmp => "bmp",
+            Self::Tiff => "tiff",
+            Self::Psd => "psd",
+            Self::Mp4 => "mp4",
+            Self::Mkv => "mkv",
+            Self::Webm => "webm",
+            Self::Mov => "mov",
+            Self::Avi => "avi",
+            Self::Mpeg => "mpg",
+            Self::Flv => "flv",
+            Self::Unknown => "",
         }
     }
 

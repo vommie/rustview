@@ -103,13 +103,20 @@ pub fn default_worker_threads() -> usize {
 }
 
 // =============================================================================
-// SECTION 6: Tags & Categorization - Single Point of Truth Constants
+// SECTION 6: File Formats & Tools - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA: bool = true;
+pub const DEFAULT_SUPPORTED_IMAGE_FORMATS: &str = "jpg, jpeg, jfif, jpe, png, webp, avif, gif, bmp, tiff, tif, psd";
+pub const DEFAULT_SUPPORTED_VIDEO_FORMATS: &str = "mp4, m4v, mkv, webm, mov, avi, mpg, mpeg, flv";
+
+// =============================================================================
+// SECTION 7: Tags & Categorization - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_TAG_MATCH_MODE: &str = "ALL";
 pub const DEFAULT_TAG_SCOPE_MODE: &str = "Global";
 
 // =============================================================================
-// SECTION 7: Window Geometry - Single Point of Truth Constants
+// SECTION 8: Window Geometry - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_WINDOW_WIDTH: u32 = 1280;
 pub const DEFAULT_WINDOW_HEIGHT: u32 = 800;
@@ -118,7 +125,7 @@ pub const MIN_WINDOW_HEIGHT: u32 = 400;
 pub const DEFAULT_WINDOW_MAXIMIZED: bool = false;
 
 // =============================================================================
-// SECTION 8: Debug & Privacy Settings - Single Point of Truth Constants
+// SECTION 9: Debug & Privacy Settings - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_OBFUSCATE_LOGS: bool = true;
 
@@ -335,6 +342,20 @@ impl Default for PerformanceSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct FormatsSettings {
+    pub auto_detect_extensionless_media: bool,
+}
+
+impl Default for FormatsSettings {
+    fn default() -> Self {
+        Self {
+            auto_detect_extensionless_media: DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TagSettings {
     pub default_match_mode: String,
     pub default_scope_mode: String,
@@ -400,6 +421,8 @@ pub struct AppSettings {
     pub view: ViewSettings,
     #[serde(default)]
     pub performance: PerformanceSettings,
+    #[serde(default)]
+    pub formats: FormatsSettings,
     #[serde(default)]
     pub tags: TagSettings,
     #[serde(default)]

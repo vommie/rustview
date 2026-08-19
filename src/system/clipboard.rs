@@ -41,19 +41,22 @@ impl SystemClipboard {
             .unwrap_or("");
 
         match ext.to_ascii_lowercase().as_str() {
-            "jpg" | "jpeg" => "image/jpeg",
+            "jpg" | "jpeg" | "jfif" | "jpe" => "image/jpeg",
             "png" => "image/png",
             "webp" => "image/webp",
             "avif" => "image/avif",
             "gif" => "image/gif",
             "bmp" => "image/bmp",
             "tif" | "tiff" => "image/tiff",
+            "psd" => "image/vnd.adobe.photoshop",
             "svg" => "image/svg+xml",
             "mp4" | "m4v" => "video/mp4",
             "mkv" => "video/x-matroska",
             "webm" => "video/webm",
             "mov" => "video/quicktime",
             "avi" => "video/x-msvideo",
+            "mpg" | "mpeg" => "video/mpeg",
+            "flv" => "video/x-flv",
             _ => "application/octet-stream",
         }
     }

@@ -2,13 +2,17 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{FolderId, MediaId, MediaRecord};
 use super::schema::SEQ_MEDIA_ID;
-use crate::media::{DirectoryScanner, FileHash, MediaHasher, MetadataExtractor, RawMetadata, ScannedFile};
+use crate::media::{
+    DirectoryScanner, FileHash, MediaDetector, MediaHasher, MetadataExtractor, RawMetadata,
+    ScannedFile,
+};
 use crate::settings::LogObscurer;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RefreshReport {
@@ -82,15 +86,29 @@ impl<'a> FolderRefresher<'a> {
         Self { db }
     }
 
-    /// Performs an incremental refresh on the target folder.
+    /// Performs an incremental refresh on the target folder with default auto-extension detection enabled.
     pub fn refresh_folder(&self, folder_id: FolderId) -> Result<RefreshReport, LibraryError> {
-        self.refresh_folder_with_progress(folder_id, None, None::<fn(usize, usize)>)
+        self.refresh_folder_with_options(folder_id, true, None, None::<fn(usize, usize)>)
     }
 
-    /// Parallelized incremental folder refresh using Rayon to compute hashes and metadata with cancel support.
+    /// Parallelized incremental folder refresh using Rayon with cancel and progress tracking support.
     pub fn refresh_folder_with_progress<F>(
         &self,
         folder_id: FolderId,
+        cancel_flag: Option<Arc<AtomicBool>>,
+        progress_callback: Option<F>,
+    ) -> Result<RefreshReport, LibraryError>
+    where
+        F: Fn(usize, usize) + Send + Sync + 'static,
+    {
+        self.refresh_folder_with_options(folder_id, true, cancel_flag, progress_callback)
+    }
+
+    /// Full-featured incremental folder refresh with explicit control over auto-extension detection for extensionless files.
+    pub fn refresh_folder_with_options<F>(
+        &self,
+        folder_id: FolderId,
+        auto_detect_extensionless: bool,
         cancel_flag: Option<Arc<AtomicBool>>,
         progress_callback: Option<F>,
     ) -> Result<RefreshReport, LibraryError>
@@ -108,6 +126,19 @@ impl<'a> FolderRefresher<'a> {
         };
 
         let folder_path = Path::new(&folder_record.path);
+
+        // 0. Auto-detect MIME type & append extension for extensionless files if option is enabled
+        if auto_detect_extensionless && folder_path.is_dir() {
+            Self::auto_detect_and_fix_extensionless(folder_path, cancel_flag.as_deref());
+        }
+
+        if let Some(ref flag) = cancel_flag
+            && flag.load(Ordering::Acquire)
+        {
+            tracing::debug!(folder_id = folder_id, "Folder refresh aborted early due to cancellation");
+            return Ok(report);
+        }
+
         tracing::info!(folder = %LogObscurer::folder(Some(folder_id), folder_path), "Scanning folder on filesystem...");
 
         let scanned_files = DirectoryScanner::scan(folder_path, false);
@@ -459,5 +490,67 @@ impl<'a> FolderRefresher<'a> {
         );
 
         Ok(report)
+    }
+
+    /// Automatically scans directory for extensionless files, sniffs magic headers, and renames matching supported files.
+    fn auto_detect_and_fix_extensionless(folder_path: &Path, cancel_flag: Option<&AtomicBool>) {
+        let entries = match std::fs::read_dir(folder_path) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+
+        for entry in entries.flatten() {
+            if let Some(flag) = cancel_flag
+                && flag.load(Ordering::Relaxed)
+            {
+                break;
+            }
+
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+
+            if !file_type.is_file() {
+                continue;
+            }
+
+            let path = entry.path();
+            let filename = entry.file_name().to_string_lossy().to_string();
+
+            // Ignore hidden dot-files (like .hidden, .gitignore) and files that already have an extension
+            if !filename.starts_with('.')
+                && path.extension().is_none()
+                && let Some((format, ext)) = MediaDetector::detect_format(&path)
+                && format.is_supported()
+            {
+                let target_filename = format!("{}.{}", filename, ext);
+                let unique_filename = crate::library::file_operations::FileOperations::generate_unique_filename(
+                    folder_path,
+                    &target_filename,
+                );
+                let new_path = folder_path.join(&unique_filename);
+
+                let t_ren = Instant::now();
+                match std::fs::rename(&path, &new_path) {
+                    Ok(()) => {
+                        tracing::info!(
+                            original = %LogObscurer::path(&path),
+                            renamed = %LogObscurer::path(&new_path),
+                            detected_format = ?format,
+                            elapsed_us = t_ren.elapsed().as_micros(),
+                            "[AutoExtension: Fix] Detected extensionless media file and appended extension"
+                        );
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            file = %LogObscurer::path(&path),
+                            error = %err,
+                            "[AutoExtension: Error] Failed to rename extensionless file"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

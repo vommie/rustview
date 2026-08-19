@@ -1,5 +1,5 @@
 use rustview::library::Library;
-use rustview::media::MediaHasher;
+use rustview::media::{MediaFormat, MediaHasher};
 use std::fs;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -140,4 +140,150 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     let restored_item = final_media.iter().find(|m| m.filename == "photo2.png").unwrap();
     assert!(!restored_item.is_deleted);
     assert_eq!(restored_item.id, deleted_item.id);
+}
+
+#[test]
+fn test_additional_supported_file_formats_detection() {
+    assert_eq!(MediaFormat::from_extension("jfif"), MediaFormat::Jpeg);
+    assert_eq!(MediaFormat::from_extension("jpe"), MediaFormat::Jpeg);
+    assert_eq!(MediaFormat::from_extension("psd"), MediaFormat::Psd);
+    assert_eq!(MediaFormat::from_extension("mpg"), MediaFormat::Mpeg);
+    assert_eq!(MediaFormat::from_extension("mpeg"), MediaFormat::Mpeg);
+    assert_eq!(MediaFormat::from_extension("flv"), MediaFormat::Flv);
+
+    assert!(MediaFormat::from_extension("jfif").is_supported());
+    assert!(MediaFormat::from_extension("jpe").is_supported());
+    assert!(MediaFormat::from_extension("psd").is_supported());
+    assert!(MediaFormat::from_extension("mpg").is_supported());
+    assert!(MediaFormat::from_extension("mpeg").is_supported());
+    assert!(MediaFormat::from_extension("flv").is_supported());
+
+    assert_eq!(
+        MediaFormat::from_extension("psd").media_type(),
+        Some(rustview::media::MediaType::Image)
+    );
+    assert_eq!(
+        MediaFormat::from_extension("mpg").media_type(),
+        Some(rustview::media::MediaType::Video)
+    );
+    assert_eq!(
+        MediaFormat::from_extension("flv").media_type(),
+        Some(rustview::media::MediaType::Video)
+    );
+}
+
+#[test]
+fn test_auto_detect_and_rename_extensionless_media_on_refresh() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    // 1. Create extensionless files with valid magic bytes:
+    // a) JPEG header (FF D8 FF E0 ...)
+    let jpeg_no_ext = tmp_media.path().join("raw_image_sample");
+    let mut jpeg_bytes = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00];
+    jpeg_bytes.extend(vec![0x00; 128]);
+    fs::write(&jpeg_no_ext, &jpeg_bytes).unwrap();
+
+    // b) PNG header (89 50 4E 47 0D 0A 1A 0A ...)
+    let png_no_ext = tmp_media.path().join("transparent_layer");
+    let mut png_bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    png_bytes.extend(vec![0x00; 64]);
+    fs::write(&png_no_ext, &png_bytes).unwrap();
+
+    // c) PSD header (8BPS ...)
+    let psd_no_ext = tmp_media.path().join("photoshop_project");
+    let mut psd_bytes = b"8BPS".to_vec();
+    psd_bytes.extend(vec![0x00; 64]);
+    fs::write(&psd_no_ext, &psd_bytes).unwrap();
+
+    // d) FLV header (FLV\x01 ...)
+    let flv_no_ext = tmp_media.path().join("flash_stream");
+    let mut flv_bytes = b"FLV\x01".to_vec();
+    flv_bytes.extend(vec![0x00; 64]);
+    fs::write(&flv_no_ext, &flv_bytes).unwrap();
+
+    // e) MPEG header (00 00 01 BA ...)
+    let mpeg_no_ext = tmp_media.path().join("movie_clip");
+    let mut mpeg_bytes = vec![0x00, 0x00, 0x01, 0xBA];
+    mpeg_bytes.extend(vec![0x00; 64]);
+    fs::write(&mpeg_no_ext, &mpeg_bytes).unwrap();
+
+    // f) Non-media / Unsupported file (e.g. Shell script / plain text) -> Must NOT be renamed
+    let text_no_ext = tmp_media.path().join("build_script");
+    fs::write(&text_no_ext, b"#!/bin/bash\necho 'hello world'").unwrap();
+
+    // g) Linux hidden file starting with '.' -> Must NOT be renamed
+    let hidden_dot_file = tmp_media.path().join(".hidden_image");
+    fs::write(&hidden_dot_file, &jpeg_bytes).unwrap();
+
+    // 2. Refresh folder with auto_detect_extensionless = true
+    let report = lib
+        .refresher()
+        .refresh_folder_with_options(folder.id, true, None, None::<fn(usize, usize)>)
+        .expect("Refresh failed");
+
+    // 3. Verify disk renames:
+    // Extensionless media files should now have their extensions appended
+    assert!(!jpeg_no_ext.exists());
+    assert!(tmp_media.path().join("raw_image_sample.jpg").exists());
+
+    assert!(!png_no_ext.exists());
+    assert!(tmp_media.path().join("transparent_layer.png").exists());
+
+    assert!(!psd_no_ext.exists());
+    assert!(tmp_media.path().join("photoshop_project.psd").exists());
+
+    assert!(!flv_no_ext.exists());
+    assert!(tmp_media.path().join("flash_stream.flv").exists());
+
+    assert!(!mpeg_no_ext.exists());
+    assert!(tmp_media.path().join("movie_clip.mpg").exists());
+
+    // Non-media text file and dot file MUST remain untouched
+    assert!(text_no_ext.exists());
+    assert!(!tmp_media.path().join("build_script.jpg").exists());
+    assert!(hidden_dot_file.exists());
+
+    // 4. Verify LMDB index:
+    let media = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(media.len(), 5);
+    assert_eq!(report.new_media, 5);
+
+    let filenames: Vec<_> = media.iter().map(|m| m.filename.as_str()).collect();
+    assert!(filenames.contains(&"raw_image_sample.jpg"));
+    assert!(filenames.contains(&"transparent_layer.png"));
+    assert!(filenames.contains(&"photoshop_project.psd"));
+    assert!(filenames.contains(&"flash_stream.flv"));
+    assert!(filenames.contains(&"movie_clip.mpg"));
+}
+
+#[test]
+fn test_auto_detect_disabled_leaves_extensionless_files_untouched() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let jpeg_no_ext = tmp_media.path().join("unmodified_image");
+    let mut jpeg_bytes = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+    jpeg_bytes.extend(vec![0x00; 64]);
+    fs::write(&jpeg_no_ext, &jpeg_bytes).unwrap();
+
+    // Refresh with auto_detect_extensionless = false
+    let report = lib
+        .refresher()
+        .refresh_folder_with_options(folder.id, false, None, None::<fn(usize, usize)>)
+        .expect("Refresh failed");
+
+    // File must remain extensionless on disk
+    assert!(jpeg_no_ext.exists());
+    assert!(!tmp_media.path().join("unmodified_image.jpg").exists());
+
+    // Since it's extensionless and unsupported by extension, it is not indexed in LMDB
+    assert_eq!(report.new_media, 0);
+    assert_eq!(lib.media().get_by_folder(folder.id).unwrap().len(), 0);
 }
