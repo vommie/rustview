@@ -7,7 +7,6 @@ use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
 
 #[cfg(unix)]
 use std::os::unix::fs::FileExt;
@@ -61,12 +60,6 @@ impl PackStore {
             current_size,
         };
 
-        tracing::info!(
-            latest_pack_id = latest_id,
-            current_pack_bytes = current_size,
-            "Opened L2 Multi-threaded Atomic PackStore."
-        );
-
         Ok(Self {
             base_dir: base_dir.to_path_buf(),
             writer: Mutex::new(writer),
@@ -94,7 +87,6 @@ impl PackStore {
 
     /// Thread-safe high-throughput append without per-item disk flush lock contention.
     pub fn append(&self, compressed_bytes: &[u8]) -> Result<ThumbnailLocation, ThumbnailError> {
-        let t0 = Instant::now();
         let len = compressed_bytes.len() as u32;
 
         let mut writer = self.writer.lock();
@@ -125,20 +117,11 @@ impl PackStore {
             length: len,
         };
 
-        tracing::trace!(
-            pack_id = location.pack_id,
-            offset = location.offset,
-            length = location.length,
-            append_time_us = t0.elapsed().as_micros(),
-            "[PackStore] Appended bytes atomically to container"
-        );
-
         Ok(location)
     }
 
     /// Reads compressed thumbnail slice via high-speed atomic pread syscalls.
     pub fn read(&self, location: ThumbnailLocation) -> Result<Vec<u8>, ThumbnailError> {
-        let t0 = Instant::now();
         let reader = self.get_or_open_reader(location.pack_id)?;
 
         let file_len = reader.metadata()?.len();
@@ -165,13 +148,6 @@ impl PackStore {
                 buffer.get(1).copied().unwrap_or(0)
             )));
         }
-
-        tracing::trace!(
-            pack_id = location.pack_id,
-            bytes = buffer.len(),
-            read_time_us = t0.elapsed().as_micros(),
-            "[PackStore] Atomic read_exact_at slice completed"
-        );
 
         Ok(buffer)
     }

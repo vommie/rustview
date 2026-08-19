@@ -1,15 +1,13 @@
 use super::error::ThumbnailError;
 use super::image::DecodedThumbnailFrame;
 use super::types::{
-    ScalingAlgorithm, ThumbnailConfig, VideoThumbnailEngine, anonymize_target,
-    calculate_aspect_dimensions,
+    calculate_aspect_dimensions, ScalingAlgorithm, ThumbnailConfig, VideoThumbnailEngine,
 };
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::software::scaling::context::Context as SwsContext;
 use ffmpeg_next::software::scaling::flag::Flags as SwsFlags;
 use libmpv2::Mpv;
 use std::path::Path;
-use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct VideoExtractionResult {
@@ -82,15 +80,6 @@ impl DynamicScaler {
         let h = decoded.height();
 
         if self.scaler.is_none() || self.src_fmt != fmt || self.src_w != w || self.src_h != h {
-            tracing::trace!(
-                src_fmt = ?fmt,
-                src_w = w,
-                src_h = h,
-                dst_w = self.dst_w,
-                dst_h = self.dst_h,
-                "[VideoDecoder: Swscale] Initializing dynamic colorspace scaling context"
-            );
-
             let new_scaler = SwsContext::get(
                 fmt,
                 w,
@@ -121,9 +110,6 @@ impl DynamicScaler {
         let row_bytes = (actual_w * 3) as usize;
         let plane_data = rgb_frame.data(0);
 
-        // Pitch / Stride Correction:
-        // If stride equals row_bytes, the buffer is already tightly packed.
-        // If stride > row_bytes (common for non-aligned widths like 144, 240, etc.), unpack row by row.
         if stride == row_bytes && plane_data.len() >= row_bytes * actual_h as usize {
             return Ok(plane_data[..row_bytes * actual_h as usize].to_vec());
         }
@@ -207,7 +193,6 @@ impl FfmpegVideoThumbnailer {
             if stream.index() == video_stream_index {
                 packets_read += 1;
 
-                // Non-fatal packet send: ignore single corrupt packets/slices and keep streaming
                 let _ = decoder.send_packet(&packet);
 
                 while decoder.receive_frame(&mut decoded_frame).is_ok() {
@@ -236,7 +221,6 @@ impl FfmpegVideoThumbnailer {
             }
         }
 
-        // Drain any buffered B-frames/delayed frames from decoder using EOF packet
         if final_frame.is_none() {
             let _ = decoder.send_eof();
             while decoder.receive_frame(&mut decoded_frame).is_ok() {
@@ -272,9 +256,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         path: &Path,
         config: &ThumbnailConfig,
     ) -> Result<VideoExtractionResult, ThumbnailError> {
-        let anon_target = anonymize_target(path, None);
-        let t0 = Instant::now();
-
         ffmpeg_next::init().map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
 
         // 1. Open media container directly (FFmpeg probes magic header, ignoring extension mismatches)
@@ -290,7 +271,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let stream_duration = stream.duration();
         let time_base = stream.time_base();
 
-        // Check container and stream rotation metadata safely without borrowing temporary context
         let rotation: i32 = stream
             .metadata()
             .get("rotate")
@@ -307,7 +287,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
             ffmpeg_next::codec::context::Context::from_parameters(stream.parameters())
                 .map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
 
-        // Maximize decoder error tolerance & low-latency streaming
         let mut flags = ffmpeg_next::codec::flag::Flags::empty();
         flags.insert(ffmpeg_next::codec::flag::Flags::LOW_DELAY);
         flags.insert(ffmpeg_next::codec::flag::Flags::OUTPUT_CORRUPT);
@@ -327,7 +306,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
             ));
         }
 
-        // Display dimensions taking rotation into account
         let (disp_w, disp_h) = if norm_rot == 90 || norm_rot == 270 {
             (orig_h, orig_w)
         } else {
@@ -336,7 +314,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
 
         let (target_disp_w, target_disp_h) = calculate_aspect_dimensions(disp_w, disp_h, config.max_bound);
 
-        // Pre-rotation scale target dimensions
         let (scaler_target_w, scaler_target_h) = if norm_rot == 90 || norm_rot == 270 {
             (target_disp_h, target_disp_w)
         } else {
@@ -346,7 +323,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let sws_flags = map_scaling_algorithm_to_sws_flags(config.scaling_algorithm);
         let mut dynamic_scaler = DynamicScaler::new(scaler_target_w, scaler_target_h, sws_flags);
 
-        // Standardize container duration to AV_TIME_BASE (microseconds) across all formats
         let total_dur_av = if ictx.duration() > 0 {
             ictx.duration()
         } else if stream_duration > 0 {
@@ -385,7 +361,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         ) {
             Ok(f) => f,
             Err(_) => {
-                // Seek fallback: seek to beginning (0) and decode first available frame
                 let _ = ictx.seek(0, ..0);
                 decoder.flush();
                 Self::decode_and_scale_direct(
@@ -408,7 +383,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
             for i in 0..count {
                 let t_pct = 0.10 + (0.80 * (i as f64 / (count - 1) as f64));
 
-                // Reuse primary frame if offset matches closely
                 if (t_pct - primary_pct).abs() < 0.02 {
                     preview_frames.push(primary_frame.clone());
                     continue;
@@ -432,7 +406,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                         preview_frames.push(frame);
                     }
                     Err(_) => {
-                        // Self-healing fallback: replicate last valid frame so preview count is never incomplete
                         let fallback = preview_frames
                             .last()
                             .cloned()
@@ -442,19 +415,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                 }
             }
         }
-
-        tracing::debug!(
-            target = %anon_target,
-            orig_w = orig_w,
-            orig_h = orig_h,
-            target_w = primary_frame.width,
-            target_h = primary_frame.height,
-            rotation = norm_rot,
-            preview_frames_extracted = preview_frames.len(),
-            total_time_ms = t0.elapsed().as_millis(),
-            engine = "FFmpeg",
-            "[VideoDecoder: FFmpeg Resilient] Extracted video thumbnail & preview frames with stride-aligned pixel unpacking"
-        );
 
         Ok(VideoExtractionResult {
             primary_frame,
@@ -500,9 +460,6 @@ impl VideoFrameDecoder for MpvVideoThumbnailer {
         path: &Path,
         config: &ThumbnailConfig,
     ) -> Result<VideoExtractionResult, ThumbnailError> {
-        let anon_target = anonymize_target(path, None);
-        let t0 = Instant::now();
-
         let mpv = Mpv::with_initializer(|init| {
             init.set_property("vo", "null")?;
             init.set_property("ao", "null")?;
@@ -519,14 +476,6 @@ impl VideoFrameDecoder for MpvVideoThumbnailer {
 
         let percent_str = format!("{:.1}", config.video_offset_percent);
         let _ = mpv.command("seek", &[&percent_str, "absolute-percent+exact"]);
-
-        tracing::debug!(
-            target = %anon_target,
-            offset = config.video_offset_percent,
-            total_time_ms = t0.elapsed().as_millis(),
-            engine = "MPV",
-            "[VideoDecoder: MPV Engine] Stream seek verified via libmpv context"
-        );
 
         FfmpegVideoThumbnailer::new().extract_video(path, config)
     }

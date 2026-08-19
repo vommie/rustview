@@ -6,6 +6,7 @@ pub mod media;
 pub mod query;
 pub mod settings;
 pub mod system;
+pub mod telemetry;
 pub mod thumbnails;
 pub mod ui;
 pub mod xnviewdb_migrate;

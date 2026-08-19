@@ -1,5 +1,6 @@
 use super::filters::IndexedMediaRecord;
 use crate::library::models::MediaRecord;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,7 +93,7 @@ pub struct MediaSorter;
 
 impl MediaSorter {
     pub fn sort(records: &mut [MediaRecord], column: SortColumn, order: SortOrder) {
-        records.sort_by(|a, b| {
+        records.par_sort_unstable_by(|a, b| {
             let cmp = match column {
                 SortColumn::Filename => a.filename.to_lowercase().cmp(&b.filename.to_lowercase()),
                 SortColumn::FileSize => a
@@ -120,7 +121,7 @@ impl MediaSorter {
     }
 
     pub fn sort_indexed(records: &mut [IndexedMediaRecord], column: SortColumn, order: SortOrder) {
-        records.sort_by(|a, b| {
+        records.par_sort_unstable_by(|a, b| {
             let cmp = match column {
                 SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
                 SortColumn::FileSize => a
@@ -155,7 +156,7 @@ impl MediaSorter {
         column: SortColumn,
         order: SortOrder,
     ) {
-        records.sort_by(|a, b| {
+        records.par_sort_unstable_by(|a, b| {
             let cmp = match column {
                 SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
                 SortColumn::FileSize => a

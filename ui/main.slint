@@ -39,7 +39,7 @@ export component MainWindow inherits Window {
     in-out property <bool> is-table-view: false;
     in-out property <bool> is-modal-locked: false;
     in-out property <int> thumb-size: 190;
-    in-out property <int> thumb-aspect-idx: 1; // 0=1:1, 1=4:3, 2=5:4, 3=16:9, 4=3:4, 5=4:5, 6=9:16
+    in-out property <int> thumb-aspect-idx: 1;
     in-out property <string> status-text: "Ready.";
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <string> search-query: "";
@@ -55,7 +55,7 @@ export component MainWindow inherits Window {
     in-out property <int> drop-target-folder-id: -1;
     out property <length> folder-tree-scroll-y: sidebar_left.folder-tree-scroll-y;
 
-    // Floating Choice Popup (Copy/Move/Cancel) State Properties
+    // Floating Choice Popup State Properties
     in-out property <bool> is-choice-popup-open: false;
     in-out property <int> choice-target-folder-id: -1;
     in-out property <string> choice-target-folder-name: "";
@@ -75,31 +75,25 @@ export component MainWindow inherits Window {
         TooltipSettings.default-delay = root.tooltip-delay-ms * 1ms;
     }
 
-    // Sidebar Width Properties (Restored from Persistent Settings)
     in-out property <length> sidebar-left-width: 260px;
     in-out property <length> sidebar-right-width: 280px;
 
-    // Global Sorting Properties
     in-out property <int> sort-column-idx: 0;
     in-out property <int> sort-order-idx: 0;
 
-    // Table Column Width Properties
     in-out property <length> col-filename-width: 280px;
     in-out property <length> col-dimensions-width: 140px;
     in-out property <length> col-size-width: 110px;
     in-out property <length> col-rating-width: 90px;
 
-    // Folder Structure Scan Progress Indicator & Hidden Folders State
     in-out property <bool> is-refreshing-folders: false;
     in-out property <int> folder-scan-count: 0;
     in-out property <bool> show-hidden-folders: false;
 
-    // Media Files Discovery & Extraction Progress Indicators
     in-out property <bool> is-indexing-media: false;
     in-out property <int> media-index-current: 0;
     in-out property <int> media-index-total: 0;
 
-    // Thumbnail Pipeline Progress Indicators
     in-out property <bool> is-preloading: false;
     in-out property <int> preload-current: 0;
     in-out property <int> preload-total: 100;
@@ -109,10 +103,9 @@ export component MainWindow inherits Window {
     in-out property <int> generate-total: 100;
     in-out property <int> active-workers: 0;
 
-    // Tag & Rate Panel Interactive State Properties
     in-out property <bool> tag-is-assign-mode: false;
     in-out property <int> tag-match-mode-idx: 0;
-    in-out property <int> tag-scope-mode-idx: 2; // 0 = Folder, 1 = Folder & Subfolders, 2 = Global (Default)
+    in-out property <int> tag-scope-mode-idx: 2;
     in-out property <int> selected-rating: 0;
     in property <bool> has-file-selection: false;
     in property <[bool]> partial-ratings: [false, false, false, false, false, false];
@@ -120,7 +113,6 @@ export component MainWindow inherits Window {
     in-out property <string> tag-filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
 
-    // Multi-Level Cascading Context Menu State
     in-out property <bool> is-context-menu-open: false;
     in-out property <length> context-menu-x: 0px;
     in-out property <length> context-menu-y: 0px;
@@ -131,13 +123,11 @@ export component MainWindow inherits Window {
     in property <[ContextMenuItemModel]> level4-context-items: [];
     in property <[ContextMenuItemModel]> level5-context-items: [];
 
-    // Data models
     in property <[MediaItemView]> media-items: [];
     in property <[FolderNodeView]> folders: [];
     in property <[FavoriteItemView]> favorites: [];
     in property <[TagNodeView]> tags: [];
 
-    // Info panel data
     in property <string> info-filename: "-";
     in property <string> info-size: "-";
     in property <string> info-dimensions: "-";
@@ -145,7 +135,6 @@ export component MainWindow inherits Window {
     in property <string> info-hash: "-";
     in property <int> info-selection-count: 0;
 
-    // Callbacks to Rust Backend
     callback refresh-folder();
     callback open-settings();
     callback folder-selected(int, string);
@@ -159,8 +148,8 @@ export component MainWindow inherits Window {
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
     callback media-hover-changed(int /* id */, bool /* is_hover */);
     callback background-clicked();
+    callback visible-chunk-changed(int /* first_item */, int /* last_item */, int /* total */);
 
-    // Drag and Drop (media_file_dnd) Callbacks
     callback media-drag-started(int /* id */, length /* x */, length /* y */);
     callback media-drag-moved(length /* x */, length /* y */);
     callback media-drag-ended();
@@ -168,7 +157,6 @@ export component MainWindow inherits Window {
     callback folder-row-unhovered(int /* folder_id */);
     callback media-dropped-on-folder(int /* target_folder_id */);
 
-    // Floating Choice Popup Callbacks
     callback choice-popup-copy(int /* target_folder_id */);
     callback choice-popup-move(int /* target_folder_id */);
     callback choice-popup-cancel();
@@ -192,24 +180,20 @@ export component MainWindow inherits Window {
     callback scope-mode-changed(int);
     callback tag-reset-clicked();
 
-    // Sorting & View Callbacks
     callback sort-column-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
     callback view-mode-toggled(bool /* is_table */);
 
-    // Sidebar Resizing Callbacks
     callback sidebar-left-resized(length /* new_width */);
     callback sidebar-left-resize-finished(length /* final_width */);
     callback sidebar-right-resized(length /* new_width */);
     callback sidebar-right-resize-finished(length /* final_width */);
 
-    /// Public endpoint to scroll the folder tree by delta pixels
     public function scroll-folder-tree-by(dy: length) {
         sidebar_left.scroll-folder-tree-by(dy);
     }
 
-    /// Public endpoint on MainWindow to scroll tree view to the given row index
     public function scroll-folder-to-row(row-idx: int) {
         sidebar_left.scroll-folder-to-row(row-idx);
     }
@@ -271,13 +255,16 @@ export component MainWindow inherits Window {
                     search-text <=> root.search-query;
                     regex-mode <=> root.regex-mode;
                     is-table-view <=> root.is-table-view;
-                    thumb-size-changed(w) => { /* Thumb width updated */ }
+                    thumb-size-changed(w) => { }
                     search-changed(t) => { root.search-query-changed(t); }
                     regex-toggled(r) => { root.regex-mode-toggled(r); }
                     refresh-clicked => { root.refresh-folder(); }
                     view-mode-toggled(is-table) => {
                         root.is-table-view = is-table;
                         root.view-mode-toggled(is-table);
+                    }
+                    visible-chunk-changed(first, last, tot) => {
+                        root.visible-chunk-changed(first, last, tot);
                     }
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                     item-context-menu(id, x, y) => { root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 38px); }
@@ -306,6 +293,9 @@ export component MainWindow inherits Window {
                     view-mode-toggled(is-table) => {
                         root.is-table-view = is-table;
                         root.view-mode-toggled(is-table);
+                    }
+                    visible-chunk-changed(first, last, tot) => {
+                        root.visible-chunk-changed(first, last, tot);
                     }
                     item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                     item-context-menu(id, x, y) => { root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 38px); }
@@ -400,7 +390,7 @@ export component MainWindow inherits Window {
         dismissed => { root.context-menu-dismissed(); }
     }
 
-    // Floating Choice Popup Overlay (Copy / Move / Cancel)
+    // Floating Choice Popup Overlay
     if root.is-choice-popup-open : FloatingChoicePopup {
         target-folder-name: root.choice-target-folder-name;
         item-count: root.choice-item-count;
@@ -412,7 +402,7 @@ export component MainWindow inherits Window {
         dismissed => { root.choice-popup-dismissed(); }
     }
 
-    // Flying Ghost Drag & Drop Visual Overlay with Gradual Card Stacking & Depth Fading
+    // Flying Ghost Drag & Drop Visual Overlay
     if root.is-dragging-media : Rectangle {
         x: root.drag-x + 12px;
         y: root.drag-y + 12px;
@@ -420,7 +410,6 @@ export component MainWindow inherits Window {
         height: 38px;
         z: 100;
 
-        // Background Stack Layer 2 (Furthest back)
         if root.drag-count >= 3 : Rectangle {
             x: 6px;
             y: 6px;
@@ -433,7 +422,6 @@ export component MainWindow inherits Window {
             border-color: Theme.primary;
         }
 
-        // Background Stack Layer 1 (Middle card)
         if root.drag-count >= 2 : Rectangle {
             x: 3px;
             y: 3px;
@@ -446,7 +434,6 @@ export component MainWindow inherits Window {
             border-color: Theme.primary;
         }
 
-        // Top Main Ghost Card
         Rectangle {
             width: 100%;
             height: 100%;
@@ -463,7 +450,6 @@ export component MainWindow inherits Window {
                 padding-right: 10px;
                 spacing: 8px;
 
-                // 1. Thumbnail Container
                 VerticalLayout {
                     alignment: center;
                     horizontal-stretch: 0;
@@ -490,7 +476,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // 2. File Name Label
                 VerticalLayout {
                     alignment: center;
                     horizontal-stretch: 1;
@@ -507,7 +492,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // 3. Multi-File Counter Badge
                 if root.drag-count > 1 : VerticalLayout {
                     alignment: center;
                     horizontal-stretch: 0;

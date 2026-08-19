@@ -27,6 +27,7 @@ pub use types::{
 
 use crate::library::models::MediaId;
 use crate::library::Library;
+use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -76,6 +77,14 @@ impl ThumbnailManager {
 
     pub fn current_pipeline_id(&self) -> usize {
         self.scheduler.current_pipeline_id()
+    }
+
+    pub fn is_drain_queue_empty(&self) -> bool {
+        self.scheduler.is_drain_queue_empty()
+    }
+
+    pub fn active_benchmark(&self) -> Option<Arc<ThumbnailPipelineBenchmark>> {
+        self.scheduler.active_benchmark()
     }
 
     pub fn drain_ready_batch(&self, max_items: usize) -> Vec<ReadyThumbnailItem> {

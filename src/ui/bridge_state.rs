@@ -4,10 +4,11 @@ use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER};
 use crate::system::DesktopApp;
+use crate::telemetry::FolderLoadBenchmark;
 use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -54,14 +55,77 @@ pub const CTX_FOLDER_PURGE_DB: CtxMenuActionId = 3003;
 pub const CTX_FOLDER_REFRESH: CtxMenuActionId = 3004;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
+/// High-performance LRU-managed bounded in-memory thumbnail store preventing RAM bloat on 100k+ datasets.
+#[derive(Debug, Clone)]
+pub struct LruThumbnailStore {
+    capacity: usize,
+    map: HashMap<MediaId, SharedPixelBuffer<Rgb8Pixel>>,
+    order: VecDeque<MediaId>,
+}
+
+impl Default for LruThumbnailStore {
+    fn default() -> Self {
+        Self::new(2048)
+    }
+}
+
+impl LruThumbnailStore {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity: capacity.max(128),
+            map: HashMap::with_capacity(capacity.min(2048)),
+            order: VecDeque::with_capacity(capacity.min(2048)),
+        }
+    }
+
+    /// Inserts a thumbnail and returns the evicted MediaId if capacity was exceeded.
+    #[inline]
+    pub fn insert(&mut self, id: MediaId, buffer: SharedPixelBuffer<Rgb8Pixel>) -> Option<MediaId> {
+        let mut evicted = None;
+        if self.map.len() >= self.capacity
+            && !self.map.contains_key(&id)
+            && let Some(evicted_id) = self.order.pop_front()
+        {
+            self.map.remove(&evicted_id);
+            evicted = Some(evicted_id);
+        }
+        self.map.insert(id, buffer);
+        self.order.retain(|&i| i != id);
+        self.order.push_back(id);
+        evicted
+    }
+
+    #[inline]
+    pub fn get(&self, id: &MediaId) -> Option<&SharedPixelBuffer<Rgb8Pixel>> {
+        self.map.get(id)
+    }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.map.clear();
+        self.order.clear();
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+}
+
 /// Central persistent state for UI bridges, tree expansions, and caching.
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
     pub current_folder_path: Option<PathBuf>,
     pub active_folder_token: usize,
     pub active_folder_cancel_flag: Option<Arc<AtomicBool>>,
+    pub active_folder_bench: Option<Arc<FolderLoadBenchmark>>,
     pub all_folder_media: Vec<IndexedMediaRecord>,
-    pub folder_thumbnails: HashMap<MediaId, SharedPixelBuffer<Rgb8Pixel>>,
+    pub folder_thumbnails: LruThumbnailStore,
     pub active_indices: Vec<usize>,
     pub file_selection: FileSelectionModel,
     pub media_row_map: HashMap<MediaId, usize>,
@@ -71,7 +135,7 @@ pub struct UiState {
     pub sort_order: SortOrder,
     pub is_assign_mode: bool,
     pub is_query_active: bool,
-    pub selected_rating: u8, // 0 = wildcard in query, 0..5 in assign
+    pub selected_rating: u8,
     pub is_refreshing_media: bool,
     pub active_file_rename_target: Option<MediaId>,
     pub active_associated_apps: Vec<DesktopApp>,
@@ -99,8 +163,9 @@ impl Default for UiState {
             current_folder_path: None,
             active_folder_token: 0,
             active_folder_cancel_flag: None,
+            active_folder_bench: None,
             all_folder_media: Vec::new(),
-            folder_thumbnails: HashMap::new(),
+            folder_thumbnails: LruThumbnailStore::default(),
             active_indices: Vec::new(),
             file_selection: FileSelectionModel::new(),
             media_row_map: HashMap::new(),

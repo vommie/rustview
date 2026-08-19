@@ -9,19 +9,16 @@ use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::Library;
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, SortColumn, SortOrder};
-use crate::settings::{
-    LogObscurer, SettingsManager,
-};
+use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
     PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager,
     VideoThumbnailEngine,
 };
 use parking_lot::RwLock;
-use slint::{
-    ComponentHandle, Image, Model, ModelRc, Timer, VecModel,
-};
+use rayon::prelude::*;
+use slint::{ComponentHandle, Image, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -44,11 +41,6 @@ impl BridgeMedia {
         let set = settings.clone();
         let st = state.clone();
         window.on_search_query_changed(move |query| {
-            tracing::info!(
-                query = %LogObscurer::query(&query),
-                query_len = query.len(),
-                "[SearchFilter: InputEvent] Media search query text changed"
-            );
             st.write().filter.search_query = query.to_string();
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
@@ -59,10 +51,6 @@ impl BridgeMedia {
         let set = settings.clone();
         let st = state.clone();
         window.on_regex_mode_toggled(move |enabled| {
-            tracing::info!(
-                regex_enabled = enabled,
-                "[SearchFilter: InputEvent] Media regex filter mode toggled"
-            );
             st.write().filter.is_regex = enabled;
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
@@ -85,12 +73,6 @@ impl BridgeMedia {
                 (s.sort_column, s.sort_order)
             };
 
-            tracing::info!(
-                col = ?new_col,
-                order = ?new_ord,
-                "[SortEngine: Global] Updated global sort parameters"
-            );
-
             {
                 let mut app_settings = set.get();
                 app_settings.view.sort_column = new_col.as_str().to_string();
@@ -104,7 +86,6 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // Hover Video Preview Animation Handler (Driven by modular VideoPreviewAnimator)
         let win = window.clone_strong();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -155,33 +136,26 @@ impl BridgeMedia {
             }
         });
 
+        // Real-Time Visible Scroll Chunk Logger
+        window.on_visible_chunk_changed(move |first_idx, last_idx, total| {
+            tracing::debug!(
+                first_visible = first_idx,
+                last_visible = last_idx,
+                total_items = total,
+                "[Viewport: ScrollChunk] Visible item window updated"
+            );
+        });
+
         let last_resize_time = Arc::new(parking_lot::Mutex::new(Instant::now()));
         let resize_events_count = Arc::new(AtomicUsize::new(0));
 
         let last_time_clone = last_resize_time;
         let count_clone = resize_events_count;
 
-        window.on_column_resized(move |col_idx, new_width| {
-            let t0 = Instant::now();
-            let count = count_clone.fetch_add(1, Ordering::Relaxed);
-
+        window.on_column_resized(move |_col_idx, _new_width| {
+            let _count = count_clone.fetch_add(1, Ordering::Relaxed);
             let mut last_log = last_time_clone.lock();
-            let elapsed_since_last = last_log.elapsed();
-            if elapsed_since_last.as_millis() >= 100 {
-                let hz = if elapsed_since_last.as_millis() > 0 {
-                    (count as f64) / (elapsed_since_last.as_secs_f64())
-                } else {
-                    0.0
-                };
-                let elapsed_us = t0.elapsed().as_micros();
-                tracing::debug!(
-                    col_idx = col_idx,
-                    width = new_width,
-                    event_rate_hz = format!("{:.1}", hz),
-                    total_events = count,
-                    processing_us = elapsed_us,
-                    "[Benchmark: TableView Column Drag] Smooth high-FPS column layout update active"
-                );
+            if last_log.elapsed().as_millis() >= 100 {
                 *last_log = Instant::now();
                 count_clone.store(0, Ordering::Relaxed);
             }
@@ -189,7 +163,6 @@ impl BridgeMedia {
 
         let set_res = settings.clone();
         window.on_column_resize_finished(move |col_idx, final_width| {
-            let t0 = Instant::now();
             let width_f32 = final_width;
             let mut app_settings = set_res.get();
 
@@ -202,14 +175,6 @@ impl BridgeMedia {
             }
 
             set_res.save_quiet(&app_settings);
-            let elapsed_us = t0.elapsed().as_micros();
-
-            tracing::info!(
-                col_idx = col_idx,
-                final_width = width_f32,
-                save_time_us = elapsed_us,
-                "[Benchmark: ColumnResizeCommit] Column width persisted to disk storage"
-            );
         });
 
         let set_mode = settings;
@@ -221,10 +186,6 @@ impl BridgeMedia {
             let mut app_settings = set_mode.get();
             app_settings.view.is_table_view = is_table;
             set_mode.save_quiet(&app_settings);
-            tracing::info!(
-                is_table_view = is_table,
-                "[ViewMode: Toggle] Persisted active view mode"
-            );
         });
     }
 
@@ -262,7 +223,6 @@ impl BridgeMedia {
         };
 
         if selected_ids.is_empty() || is_busy {
-            tracing::warn!("[MediaRefresh] Aborted: No files selected or system is currently busy");
             return;
         }
 
@@ -475,28 +435,43 @@ impl BridgeMedia {
             .expect("Failed to spawn media item refresher thread");
     }
 
+    /// Parallel multi-core string formatting and pre-indexing using Rayon and 1-txn tag lookup.
     pub fn preindex(
         library: &Library,
         raw_records: Vec<MediaRecord>,
         folder_path: &Path,
     ) -> Vec<IndexedMediaRecord> {
-        let t0 = Instant::now();
-        let total_count = raw_records.len();
+        let folder_path_buf = folder_path.to_path_buf();
 
-        let indexed = raw_records
-            .into_iter()
+        let tagged_media_ids: HashSet<MediaId> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
+            raw_records
+                .iter()
+                .filter_map(|r| {
+                    if let Ok(Some(tags)) = library.raw_db().tags_by_media.get(&rtxn, &r.id) {
+                        if !tags.is_empty() {
+                            Some(r.id)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
+        raw_records
+            .into_par_iter()
             .enumerate()
             .map(|(index, r)| {
-                let filesize_str = format_filesize(r.file_size).into();
-                let dimensions_str = format!("{} × {}", r.width, r.height).into();
-                let filename_slint = r.filename.clone().into();
+                let filesize_str: slint::SharedString = format_filesize(r.file_size).into();
+                let dimensions_str: slint::SharedString = format!("{} × {}", r.width, r.height).into();
+                let filename_slint: slint::SharedString = r.filename.clone().into();
                 let filename_lower = r.filename.to_lowercase();
-                let full_path = folder_path.join(&r.filename);
-                let has_tags = !library
-                    .tags()
-                    .get_tags_for_media(r.id)
-                    .unwrap_or_default()
-                    .is_empty();
+                let full_path = folder_path_buf.join(&r.filename);
+                let has_tags = tagged_media_ids.contains(&r.id);
 
                 IndexedMediaRecord {
                     index,
@@ -509,15 +484,7 @@ impl BridgeMedia {
                     has_tags,
                 }
             })
-            .collect();
-
-        tracing::debug!(
-            indexed_items = total_count,
-            elapsed_us = t0.elapsed().as_micros(),
-            "[MediaIndex] In-memory pre-indexing and string formatting complete"
-        );
-
-        indexed
+            .collect()
     }
 
     /// Preindexes media records across multiple folders (used for Global queries).
@@ -525,12 +492,28 @@ impl BridgeMedia {
         library: &Library,
         raw_records: Vec<MediaRecord>,
     ) -> Vec<IndexedMediaRecord> {
-        let t0 = Instant::now();
-        let total_count = raw_records.len();
-
         let mut folder_path_cache: HashMap<FolderId, PathBuf> = HashMap::new();
 
-        let indexed = raw_records
+        let tagged_media_ids: HashSet<MediaId> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
+            raw_records
+                .iter()
+                .filter_map(|r| {
+                    if let Ok(Some(tags)) = library.raw_db().tags_by_media.get(&rtxn, &r.id) {
+                        if !tags.is_empty() {
+                            Some(r.id)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
+        raw_records
             .into_iter()
             .enumerate()
             .map(|(index, r)| {
@@ -550,11 +533,7 @@ impl BridgeMedia {
                 });
 
                 let full_path = folder_p.join(&r.filename);
-                let has_tags = !library
-                    .tags()
-                    .get_tags_for_media(r.id)
-                    .unwrap_or_default()
-                    .is_empty();
+                let has_tags = tagged_media_ids.contains(&r.id);
 
                 IndexedMediaRecord {
                     index,
@@ -567,15 +546,7 @@ impl BridgeMedia {
                     has_tags,
                 }
             })
-            .collect();
-
-        tracing::debug!(
-            indexed_items = total_count,
-            elapsed_us = t0.elapsed().as_micros(),
-            "[MediaIndex] In-memory multi-folder pre-indexing complete"
-        );
-
-        indexed
+            .collect()
     }
 
     pub fn reload(
@@ -587,9 +558,7 @@ impl BridgeMedia {
         start_pipeline: bool,
         reload_lmdb: bool,
     ) {
-        let t_total_start = Instant::now();
-
-        let (folder_id, filter, sort_col, sort_ord, last_query, is_query_active) = {
+        let (folder_id, filter, sort_col, sort_ord, last_query, is_query_active, bench_opt) = {
             let s = state.read();
             (
                 s.current_folder_id,
@@ -598,6 +567,7 @@ impl BridgeMedia {
                 s.sort_order,
                 s.last_executed_query.clone(),
                 s.is_query_active,
+                s.active_folder_bench.clone(),
             )
         };
 
@@ -628,12 +598,21 @@ impl BridgeMedia {
 
         let t_filter_start = Instant::now();
         let filtered_refs = filter.execute_indexed_refs(library, &st.all_folder_media, subset);
-        let filter_us = t_filter_start.elapsed().as_micros();
+        let filter_us = t_filter_start.elapsed().as_micros() as u64;
+
+        if let Some(ref bench) = bench_opt {
+            bench.filter_time_us.store(filter_us, Ordering::Relaxed);
+            bench.items_matched.store(filtered_refs.len(), Ordering::Relaxed);
+        }
 
         let t_sort_start = Instant::now();
         let mut sorted_refs = filtered_refs;
         MediaSorter::sort_indexed_refs(&mut sorted_refs, sort_col, sort_ord);
-        let sort_us = t_sort_start.elapsed().as_micros();
+        let sort_us = t_sort_start.elapsed().as_micros() as u64;
+
+        if let Some(ref bench) = bench_opt {
+            bench.sort_time_us.store(sort_us, Ordering::Relaxed);
+        }
 
         let t_map_start = Instant::now();
         let matched_len = sorted_refs.len();
@@ -682,7 +661,10 @@ impl BridgeMedia {
 
         drop(st);
 
-        let map_us = t_map_start.elapsed().as_micros();
+        let map_us = t_map_start.elapsed().as_micros() as u64;
+        if let Some(ref bench) = bench_opt {
+            bench.view_model_map_time_us.store(map_us, Ordering::Relaxed);
+        }
 
         {
             let mut st_write = state.write();
@@ -705,23 +687,11 @@ impl BridgeMedia {
             format!("Items: {} / {}", matched_count, total_active_dataset_count)
         };
         window.set_items_metric_text(metric_text.into());
-        let slint_us = t_slint_start.elapsed().as_micros();
 
-        tracing::debug!(
-            is_query = is_query_active,
-            search_query = %LogObscurer::query(&current_query),
-            is_regex = filter.is_regex,
-            sort_column = ?sort_col,
-            sort_order = ?sort_ord,
-            matched = matched_count,
-            total = total_active_dataset_count,
-            filter_us = filter_us,
-            sort_us = sort_us,
-            model_mapping_us = map_us,
-            slint_commit_us = slint_us,
-            total_pipeline_us = t_total_start.elapsed().as_micros(),
-            "[MediaView: ViewPipeline] Rendered media items with synchronized query filtering"
-        );
+        let commit_us = t_slint_start.elapsed().as_micros() as u64;
+        if let Some(ref bench) = bench_opt {
+            bench.slint_commit_time_us.store(commit_us, Ordering::Relaxed);
+        }
 
         if start_pipeline && !pipeline_targets.is_empty() {
             let perf = settings.get().performance;

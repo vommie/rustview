@@ -4,14 +4,15 @@ use super::generator::ThumbnailGenerator;
 use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 use super::store::PackStore;
 use super::types::{
-    anonymize_target, ThumbnailConfig, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord,
+    ThumbnailConfig, ThumbnailFormat, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord,
 };
 use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::media::{MediaFormat, MediaType};
-use crate::settings::LogObscurer;
-use parking_lot::Mutex;
+use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
+use parking_lot::{Mutex, RwLock};
 use rayon::{ThreadPool, ThreadPoolBuilder};
+use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -33,7 +34,7 @@ pub struct ReadyThumbnailItem {
     pub media_id: MediaId,
     pub width: u32,
     pub height: u32,
-    pub rgb8_pixels: Vec<u8>,
+    pub pixel_buffer: SharedPixelBuffer<Rgb8Pixel>,
 }
 
 pub struct ThumbnailScheduler {
@@ -47,6 +48,7 @@ pub struct ThumbnailScheduler {
     generation_queue: Arc<Mutex<VecDeque<PreparedTarget>>>,
     active_pipeline_id: Arc<AtomicUsize>,
     is_cancelled: Arc<AtomicBool>,
+    active_benchmark: Arc<RwLock<Option<Arc<ThumbnailPipelineBenchmark>>>>,
 }
 
 impl ThumbnailScheduler {
@@ -64,11 +66,6 @@ impl ThumbnailScheduler {
                 .expect("Failed to build high-performance thumbnail worker pool"),
         );
 
-        tracing::info!(
-            worker_threads = threads,
-            "Initialized SIMD Thumbnail Worker Pool."
-        );
-
         Self {
             library,
             cache,
@@ -76,15 +73,24 @@ impl ThumbnailScheduler {
             generator: Arc::new(ThumbnailGenerator::new()),
             pool,
             tracker: Arc::new(ThumbnailProgressTracker::new()),
-            ready_drain_queue: Arc::new(Mutex::new(Vec::with_capacity(512))),
+            ready_drain_queue: Arc::new(Mutex::new(Vec::with_capacity(1024))),
             generation_queue: Arc::new(Mutex::new(VecDeque::new())),
             active_pipeline_id: Arc::new(AtomicUsize::new(0)),
             is_cancelled: Arc::new(AtomicBool::new(false)),
+            active_benchmark: Arc::new(RwLock::new(None)),
         }
     }
 
     pub fn current_pipeline_id(&self) -> usize {
         self.active_pipeline_id.load(Ordering::Acquire)
+    }
+
+    pub fn active_benchmark(&self) -> Option<Arc<ThumbnailPipelineBenchmark>> {
+        self.active_benchmark.read().clone()
+    }
+
+    pub fn is_drain_queue_empty(&self) -> bool {
+        self.ready_drain_queue.lock().is_empty()
     }
 
     pub fn drain_ready_batch(&self, max_items: usize) -> Vec<ReadyThumbnailItem> {
@@ -94,7 +100,6 @@ impl ThumbnailScheduler {
             return Vec::new();
         }
 
-        // Strictly filter out and discard any thumbnail from obsolete/cancelled pipelines
         queue.retain(|item| item.pipeline_id == current_pipeline);
 
         let take_count = queue.len().min(max_items);
@@ -119,7 +124,7 @@ impl ThumbnailScheduler {
         self.generation_queue.lock().clear();
         self.ready_drain_queue.lock().clear();
         self.tracker.reset();
-        tracing::debug!("Thumbnail pipeline cancelled and queues cleared.");
+        *self.active_benchmark.write() = None;
     }
 
     pub fn start_folder_pipeline(
@@ -130,22 +135,32 @@ impl ThumbnailScheduler {
     ) {
         self.cancel_current_pipeline();
 
+        let total_items = sorted_targets.len();
+        if total_items == 0 {
+            return;
+        }
+
         let pipeline_id = self.active_pipeline_id.load(Ordering::Acquire);
         self.is_cancelled.store(false, Ordering::Release);
+
+        let bench = Arc::new(ThumbnailPipelineBenchmark::new(pipeline_id, folder_id, total_items));
+        *self.active_benchmark.write() = Some(bench.clone());
 
         for target in sorted_targets.iter_mut() {
             target.pipeline_id = pipeline_id;
             target.folder_id = folder_id;
         }
 
-        let total_items = sorted_targets.len();
-        if total_items == 0 {
-            return;
-        }
-
         let scheduler = self.clone();
+        let bench_clone = bench;
         self.pool.spawn(move || {
-            scheduler.execute_orchestration(pipeline_id, folder_id, sorted_targets, config);
+            scheduler.execute_orchestration(
+                pipeline_id,
+                folder_id,
+                sorted_targets,
+                config,
+                bench_clone,
+            );
         });
     }
 
@@ -155,13 +170,11 @@ impl ThumbnailScheduler {
         folder_id: u64,
         sorted_targets: Vec<PreparedTarget>,
         config: ThumbnailConfig,
+        benchmark: Arc<ThumbnailPipelineBenchmark>,
     ) {
         if self.is_pipeline_stale(pipeline_id) {
             return;
         }
-
-        let t_start = Instant::now();
-        let total_folder_media = sorted_targets.len();
 
         let mut existing_locations: Vec<(MediaId, PathBuf, ThumbnailLocation)> = Vec::new();
         let mut missing_targets: Vec<PreparedTarget> = Vec::new();
@@ -181,20 +194,26 @@ impl ThumbnailScheduler {
                     return;
                 }
 
-                // Check L1 RAM cache first
                 if let Some(cached) = self.cache.get(target.media_id) {
-                    self.ready_drain_queue.lock().push(ReadyThumbnailItem {
+                    benchmark.record_l1_hit();
+                    let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(cached.width, cached.height);
+                    pixel_buffer.make_mut_bytes().copy_from_slice(&cached.pixels);
+
+                    let mut q = self.ready_drain_queue.lock();
+                    q.push(ReadyThumbnailItem {
                         pipeline_id,
                         folder_id,
                         media_id: target.media_id,
                         width: cached.width,
                         height: cached.height,
-                        rgb8_pixels: cached.pixels.as_ref().clone(),
+                        pixel_buffer,
                     });
+                    benchmark.record_queue_depth(q.len());
                     continue;
                 }
 
-                // Check LMDB index for L2 PackStore location
+                benchmark.record_l1_miss();
+
                 match self
                     .library
                     .raw_db()
@@ -207,12 +226,7 @@ impl ThumbnailScheduler {
                     Ok(None) => {
                         missing_targets.push(target);
                     }
-                    Err(e) => {
-                        tracing::warn!(
-                            media_id = target.media_id,
-                            error = %e,
-                            "Failed to read thumbnail index record from LMDB"
-                        );
+                    Err(_) => {
                         missing_targets.push(target);
                     }
                 }
@@ -220,36 +234,6 @@ impl ThumbnailScheduler {
         }
 
         let existing_count = existing_locations.len();
-        let missing_count = missing_targets.len();
-        let stats_start = self.storage_stats();
-
-        tracing::info!(
-            pipeline_id = pipeline_id,
-            folder_id = folder_id,
-            total_folder_files = total_folder_media,
-            cached_in_db = existing_count,
-            missing_to_generate = missing_count,
-            l1_ram_slots = self.cache.capacity(),
-            target_db_size = config.max_bound,
-            target_format = %config.format.as_str(),
-            target_quality = config.quality,
-            scaling_algo = %config.scaling_algorithm.as_str(),
-            video_engine = %config.video_engine.as_str(),
-            video_offset = config.video_offset_percent,
-            generate_previews = config.generate_video_previews,
-            preview_frames = config.preview_frame_count,
-            preview_format = %config.preview_format.as_str(),
-            preview_quality = config.preview_quality,
-            pack_store_mb = format!("{:.2} MB ({} pack files)", stats_start.pack_total_mb, stats_start.pack_files_count),
-            lmdb_database_mb = format!("{:.2} MB", stats_start.lmdb_data_mb),
-            total_storage_mb = format!("{:.2} MB", stats_start.total_cache_mb),
-            total_stored_thumbnails = stats_start.lmdb_thumbnails_count,
-            total_stored_previews = stats_start.lmdb_previews_count,
-            total_preview_frames = stats_start.lmdb_preview_frames_count,
-            avg_frame_size = format!("{:.2} KB", stats_start.avg_thumbnail_kb()),
-            elapsed_ms = t_start.elapsed().as_millis(),
-            "=== THUMBNAIL PIPELINE START ==="
-        );
 
         // =========================================================================
         // PHASE 1: Bulk High-Throughput Parallel Preload (With Auto-Recovery)
@@ -260,13 +244,9 @@ impl ThumbnailScheduler {
             let t_phase1 = Instant::now();
             self.tracker.set_preload_total(existing_count);
 
-            tracing::info!(
-                count = existing_count,
-                "PHASE 1: Starting Parallel Preload of Cached Thumbnails..."
-            );
-
             use rayon::prelude::*;
             let corrupted_ref = corrupted_items.clone();
+            let bench_ref = benchmark.clone();
 
             existing_locations
                 .into_par_iter()
@@ -276,21 +256,45 @@ impl ThumbnailScheduler {
                     }
 
                     let mut load_successful = false;
+                    let t_read = Instant::now();
 
-                    if let Ok(compressed_bytes) = self.store.read(location)
-                        && let Ok((w, h, rgb8_data)) = self.generator.decompress(&compressed_bytes)
-                        && !self.is_pipeline_stale(pipeline_id)
-                    {
-                        let _ = self.cache.insert(media_id, w, h, &rgb8_data);
-                        self.ready_drain_queue.lock().push(ReadyThumbnailItem {
-                            pipeline_id,
-                            folder_id,
-                            media_id,
-                            width: w,
-                            height: h,
-                            rgb8_pixels: rgb8_data,
-                        });
-                        load_successful = true;
+                    if let Ok(compressed_bytes) = self.store.read(location) {
+                        let is_webp = ThumbnailFormat::detect(&compressed_bytes)
+                            != Some(ThumbnailFormat::Jpeg);
+                        bench_ref.record_pack_read(
+                            compressed_bytes.len() as u64,
+                            t_read.elapsed().as_micros() as u64,
+                        );
+
+                        let t_dec = Instant::now();
+                        if let Ok((w, h, rgb8_data)) =
+                            self.generator.decompress(&compressed_bytes)
+                        {
+                            let raw_len = rgb8_data.len() as u64;
+                            bench_ref.record_decompress(
+                                is_webp,
+                                raw_len,
+                                t_dec.elapsed().as_micros() as u64,
+                            );
+
+                            if !self.is_pipeline_stale(pipeline_id) {
+                                let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
+                                pixel_buffer.make_mut_bytes().copy_from_slice(&rgb8_data);
+
+                                let _ = self.cache.insert(media_id, w, h, &rgb8_data);
+                                let mut q = self.ready_drain_queue.lock();
+                                q.push(ReadyThumbnailItem {
+                                    pipeline_id,
+                                    folder_id,
+                                    media_id,
+                                    width: w,
+                                    height: h,
+                                    pixel_buffer,
+                                });
+                                bench_ref.record_queue_depth(q.len());
+                                load_successful = true;
+                            }
+                        }
                     }
 
                     if !load_successful && !self.is_pipeline_stale(pipeline_id) {
@@ -305,10 +309,7 @@ impl ThumbnailScheduler {
                     self.tracker.increment_preload_done();
                 });
 
-            tracing::info!(
-                elapsed_ms = t_phase1.elapsed().as_millis(),
-                "PHASE 1 Complete. Preload finished."
-            );
+            benchmark.set_preload_duration(t_phase1.elapsed().as_micros() as u64);
         }
 
         if self.is_pipeline_stale(pipeline_id) {
@@ -319,6 +320,8 @@ impl ThumbnailScheduler {
         let corrupted_list = corrupted_items.lock().drain(..).collect::<Vec<_>>();
         if !corrupted_list.is_empty() {
             let count = corrupted_list.len();
+            benchmark.record_corrupted_repaired(count);
+
             if let Ok(mut wtxn) = self.library.raw_db().env.write_txn() {
                 for item in &corrupted_list {
                     let _ = self
@@ -335,11 +338,6 @@ impl ThumbnailScheduler {
                 let _ = wtxn.commit();
             }
 
-            tracing::warn!(
-                repaired_count = count,
-                "[Auto-Recovery] Detected corrupted or truncated cache entries. Purged and queued for regeneration."
-            );
-
             for item in corrupted_list {
                 missing_targets.push(item);
             }
@@ -353,11 +351,6 @@ impl ThumbnailScheduler {
         if final_missing_count > 0 {
             self.tracker.set_generate_total(final_missing_count);
 
-            tracing::info!(
-                count = final_missing_count,
-                "PHASE 2: Starting Ordered Generation of Missing Thumbnails..."
-            );
-
             {
                 let mut q = self.generation_queue.lock();
                 q.clear();
@@ -366,18 +359,36 @@ impl ThumbnailScheduler {
                 }
             }
 
+            let t_phase2_start = Arc::new(Instant::now());
             let num_threads = self.pool.current_num_threads();
+
             for _ in 0..num_threads {
                 let scheduler = self.clone_handle();
                 let cfg = config.clone();
+                let bench_gen = benchmark.clone();
+                let t_p2 = t_phase2_start.clone();
+
                 self.pool.spawn(move || {
-                    scheduler.worker_generation_loop(pipeline_id, folder_id, cfg);
+                    scheduler.worker_generation_loop(
+                        pipeline_id,
+                        folder_id,
+                        cfg,
+                        bench_gen,
+                        t_p2,
+                    );
                 });
             }
         }
     }
 
-    fn worker_generation_loop(&self, pipeline_id: usize, folder_id: u64, config: ThumbnailConfig) {
+    fn worker_generation_loop(
+        &self,
+        pipeline_id: usize,
+        folder_id: u64,
+        config: ThumbnailConfig,
+        benchmark: Arc<ThumbnailPipelineBenchmark>,
+        t_phase2_start: Arc<Instant>,
+    ) {
         let mut batched_db_writes: Vec<(MediaId, ThumbnailLocation, Option<VideoPreviewRecord>)> =
             Vec::with_capacity(config.batch_commit_size);
 
@@ -397,167 +408,173 @@ impl ThumbnailScheduler {
             }
 
             self.tracker.increment_active_workers();
-            let t_gen = Instant::now();
 
             let is_video =
                 MediaFormat::from_path(&target.file_path).media_type() == Some(MediaType::Video);
 
             if is_video {
-                // =============================================================
-                // UNIFIED VIDEO EXTRACTION (Primary + Previews in 1 Open Pass)
-                // =============================================================
-                match self
+                let t_vid = Instant::now();
+                if let Ok(video_res) = self
                     .generator
                     .generate_video_thumbnails(&target.file_path, &config)
                 {
-                    Ok(video_res) => {
-                        if self.is_pipeline_stale(pipeline_id) {
-                            self.tracker.decrement_active_workers();
-                            break;
-                        }
+                    benchmark.record_video_extract(t_vid.elapsed().as_micros() as u64);
 
-                        let primary = video_res.primary_frame;
-                        match self.generator.compress(
-                            &primary.rgb_pixels,
-                            primary.width,
-                            primary.height,
-                            config.format,
-                            config.quality,
-                        ) {
-                            Ok(compressed_primary) => {
-                                match self.store.append(&compressed_primary) {
-                                    Ok(primary_loc) => {
-                                        let mut preview_rec = None;
-                                        if !video_res.preview_frames.is_empty() {
-                                            let (p_format, p_quality) =
-                                                if config.custom_preview_settings {
-                                                    (config.preview_format, config.preview_quality)
-                                                } else {
-                                                    (config.format, config.quality)
-                                                };
+                    if self.is_pipeline_stale(pipeline_id) {
+                        self.tracker.decrement_active_workers();
+                        break;
+                    }
 
-                                            let mut locations =
-                                                Vec::with_capacity(video_res.preview_frames.len());
-                                            for p_frame in &video_res.preview_frames {
-                                                if let Ok(p_bytes) = self.generator.compress(
-                                                    &p_frame.rgb_pixels,
-                                                    p_frame.width,
-                                                    p_frame.height,
-                                                    p_format,
-                                                    p_quality,
-                                                ) && let Ok(p_loc) = self.store.append(&p_bytes)
-                                                {
-                                                    locations.push(p_loc);
-                                                }
-                                            }
-                                            if !locations.is_empty() {
-                                                preview_rec = Some(VideoPreviewRecord {
-                                                    frame_count: locations.len() as u32,
-                                                    frame_locations: locations,
-                                                });
-                                            }
-                                        }
+                    let primary = video_res.primary_frame;
+                    let t_comp = Instant::now();
 
-                                        tracing::trace!(
-                                            media_target = %anonymize_target(&target.file_path, Some(target.media_id)),
-                                            width = primary.width,
-                                            height = primary.height,
-                                            preview_frames = video_res.preview_frames.len(),
-                                            primary_bytes = compressed_primary.len(),
-                                            total_gen_ms = t_gen.elapsed().as_millis(),
-                                            "Saved video thumbnail and previews to PackStore"
-                                        );
+                    if let Ok(compressed_primary) = self.generator.compress(
+                        &primary.rgb_pixels,
+                        primary.width,
+                        primary.height,
+                        config.format,
+                        config.quality,
+                    ) {
+                        benchmark.record_compress(
+                            compressed_primary.len() as u64,
+                            t_comp.elapsed().as_micros() as u64,
+                        );
 
-                                        if !self.is_pipeline_stale(pipeline_id) {
-                                            batched_db_writes.push((
-                                                target.media_id,
-                                                primary_loc,
-                                                preview_rec,
-                                            ));
-                                            let _ = self.cache.insert(
-                                                target.media_id,
-                                                primary.width,
-                                                primary.height,
-                                                &primary.rgb_pixels,
-                                            );
+                        let t_app = Instant::now();
+                        if let Ok(primary_loc) = self.store.append(&compressed_primary) {
+                            benchmark.record_pack_append(
+                                compressed_primary.len() as u64,
+                                t_app.elapsed().as_micros() as u64,
+                            );
 
-                                            self.ready_drain_queue.lock().push(ReadyThumbnailItem {
-                                                pipeline_id,
-                                                folder_id,
-                                                media_id: target.media_id,
-                                                width: primary.width,
-                                                height: primary.height,
-                                                rgb8_pixels: primary.rgb_pixels,
-                                            });
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(target = %LogObscurer::path(&target.file_path), error = %e, "Failed to append primary video thumb to PackStore");
+                            let mut preview_rec = None;
+                            if !video_res.preview_frames.is_empty() {
+                                let (p_format, p_quality) =
+                                    if config.custom_preview_settings {
+                                        (config.preview_format, config.preview_quality)
+                                    } else {
+                                        (config.format, config.quality)
+                                    };
+
+                                let mut locations =
+                                    Vec::with_capacity(video_res.preview_frames.len());
+                                for p_frame in &video_res.preview_frames {
+                                    if let Ok(p_bytes) = self.generator.compress(
+                                        &p_frame.rgb_pixels,
+                                        p_frame.width,
+                                        p_frame.height,
+                                        p_format,
+                                        p_quality,
+                                    ) && let Ok(p_loc) = self.store.append(&p_bytes)
+                                    {
+                                        locations.push(p_loc);
                                     }
                                 }
+                                if !locations.is_empty() {
+                                    preview_rec = Some(VideoPreviewRecord {
+                                        frame_count: locations.len() as u32,
+                                        frame_locations: locations,
+                                    });
+                                }
                             }
-                            Err(e) => {
-                                tracing::error!(target = %LogObscurer::path(&target.file_path), error = %e, "Primary video thumb compression failed");
+
+                            if !self.is_pipeline_stale(pipeline_id) {
+                                batched_db_writes.push((
+                                    target.media_id,
+                                    primary_loc,
+                                    preview_rec,
+                                ));
+
+                                let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(primary.width, primary.height);
+                                pixel_buffer.make_mut_bytes().copy_from_slice(&primary.rgb_pixels);
+
+                                let _ = self.cache.insert(
+                                    target.media_id,
+                                    primary.width,
+                                    primary.height,
+                                    &primary.rgb_pixels,
+                                );
+
+                                let mut q = self.ready_drain_queue.lock();
+                                q.push(ReadyThumbnailItem {
+                                    pipeline_id,
+                                    folder_id,
+                                    media_id: target.media_id,
+                                    width: primary.width,
+                                    height: primary.height,
+                                    pixel_buffer,
+                                });
+                                benchmark.record_queue_depth(q.len());
                             }
                         }
-                    }
-                    Err(e) => {
-                        tracing::warn!(target = %LogObscurer::path(&target.file_path), error = %e, "Failed to extract video thumbnail");
                     }
                 }
             } else {
-                // =============================================================
-                // IMAGE EXTRACTION
-                // =============================================================
-                match self.generator.generate_image_thumbnail(
+                let t_img = Instant::now();
+                if let Ok(frame) = self.generator.generate_image_thumbnail(
                     &target.file_path,
                     config.max_bound,
                     config.scaling_algorithm,
                 ) {
-                    Ok(frame) => match self.generator.compress(
+                    benchmark.record_image_decode_resize(t_img.elapsed().as_micros() as u64);
+
+                    let t_comp = Instant::now();
+                    if let Ok(compressed_bytes) = self.generator.compress(
                         &frame.rgb_pixels,
                         frame.width,
                         frame.height,
                         config.format,
                         config.quality,
                     ) {
-                        Ok(compressed_bytes) => match self.store.append(&compressed_bytes) {
-                            Ok(location) => {
-                                if !self.is_pipeline_stale(pipeline_id) {
-                                    batched_db_writes.push((target.media_id, location, None));
-                                    let _ = self.cache.insert(
-                                        target.media_id,
-                                        frame.width,
-                                        frame.height,
-                                        &frame.rgb_pixels,
-                                    );
+                        benchmark.record_compress(
+                            compressed_bytes.len() as u64,
+                            t_comp.elapsed().as_micros() as u64,
+                        );
 
-                                    self.ready_drain_queue.lock().push(ReadyThumbnailItem {
+                        let t_app = Instant::now();
+                        if let Ok(location) = self.store.append(&compressed_bytes) {
+                            benchmark.record_pack_append(
+                                compressed_bytes.len() as u64,
+                                t_app.elapsed().as_micros() as u64,
+                            );
+
+                            if !self.is_pipeline_stale(pipeline_id) {
+                                batched_db_writes.push((
+                                    target.media_id,
+                                    location,
+                                    None,
+                                ));
+
+                                let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(frame.width, frame.height);
+                                pixel_buffer.make_mut_bytes().copy_from_slice(&frame.rgb_pixels);
+
+                                let _ = self.cache.insert(
+                                    target.media_id,
+                                    frame.width,
+                                    frame.height,
+                                    &frame.rgb_pixels,
+                                );
+
+                                let mut q = self.ready_drain_queue.lock();
+                                q.push(
+                                    ReadyThumbnailItem {
                                         pipeline_id,
                                         folder_id,
                                         media_id: target.media_id,
                                         width: frame.width,
                                         height: frame.height,
-                                        rgb8_pixels: frame.rgb_pixels,
-                                    });
-                                }
+                                        pixel_buffer,
+                                    },
+                                );
+                                benchmark.record_queue_depth(q.len());
                             }
-                            Err(e) => {
-                                tracing::error!(target = %LogObscurer::path(&target.file_path), error = %e, "Failed to append image thumb to PackStore");
-                            }
-                        },
-                        Err(e) => {
-                            tracing::error!(target = %LogObscurer::path(&target.file_path), error = %e, "Image thumb compression failed");
                         }
-                    },
-                    Err(e) => {
-                        tracing::warn!(target = %LogObscurer::path(&target.file_path), error = %e, "Failed to decode image");
                     }
                 }
             }
 
             if batched_db_writes.len() >= config.batch_commit_size {
-                self.flush_db_batch(&mut batched_db_writes);
+                self.flush_db_batch(&mut batched_db_writes, &benchmark);
             }
 
             self.tracker.increment_generate_done();
@@ -565,36 +582,16 @@ impl ThumbnailScheduler {
         }
 
         if !batched_db_writes.is_empty() {
-            self.flush_db_batch(&mut batched_db_writes);
+            self.flush_db_batch(&mut batched_db_writes, &benchmark);
         }
 
-        // Output overall updated storage metrics once all generation workers finish
-        let snap = self.tracker.snapshot();
-        if !snap.is_generating && snap.generate_total > 0 && snap.generate_current >= snap.generate_total {
-            let stats_end = self.storage_stats();
-            tracing::info!(
-                pipeline_id = pipeline_id,
-                folder_id = folder_id,
-                total_generated = snap.generate_total,
-                target_format = %config.format.as_str(),
-                target_quality = config.quality,
-                preview_format = %config.preview_format.as_str(),
-                preview_quality = config.preview_quality,
-                pack_store_mb = format!("{:.2} MB ({} pack files)", stats_end.pack_total_mb, stats_end.pack_files_count),
-                lmdb_database_mb = format!("{:.2} MB", stats_end.lmdb_data_mb),
-                total_storage_mb = format!("{:.2} MB", stats_end.total_cache_mb),
-                total_stored_thumbnails = stats_end.lmdb_thumbnails_count,
-                total_stored_previews = stats_end.lmdb_previews_count,
-                total_preview_frames = stats_end.lmdb_preview_frames_count,
-                avg_frame_size = format!("{:.2} KB", stats_end.avg_thumbnail_kb()),
-                "[Thumbnail Storage] Generation batch completed. Total storage updated."
-            );
-        }
+        benchmark.set_generate_duration(t_phase2_start.elapsed().as_micros() as u64);
     }
 
     fn flush_db_batch(
         &self,
         batch: &mut Vec<(MediaId, ThumbnailLocation, Option<VideoPreviewRecord>)>,
+        benchmark: &ThumbnailPipelineBenchmark,
     ) {
         if batch.is_empty() {
             return;
@@ -614,11 +611,7 @@ impl ThumbnailScheduler {
                 }
             }
             let _ = wtxn.commit();
-            tracing::debug!(
-                batch_size = count,
-                elapsed_ms = t_db.elapsed().as_millis(),
-                "Committed batched thumbnail metadata records to LMDB"
-            );
+            benchmark.record_lmdb_commit(count, t_db.elapsed().as_micros() as u64);
         }
     }
 
@@ -639,6 +632,7 @@ impl ThumbnailScheduler {
             generation_queue: self.generation_queue.clone(),
             active_pipeline_id: self.active_pipeline_id.clone(),
             is_cancelled: self.is_cancelled.clone(),
+            active_benchmark: self.active_benchmark.clone(),
         }
     }
 
@@ -786,21 +780,6 @@ impl ThumbnailScheduler {
         let item = self
             .cache
             .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
-
-        let stats = self.storage_stats();
-
-        tracing::info!(
-            media = %LogObscurer::media(Some(media_id), file_path.to_string_lossy().as_ref()),
-            target = %LogObscurer::path(file_path),
-            width = frame.width,
-            height = frame.height,
-            format = %config.format.as_str(),
-            quality = config.quality,
-            compressed_bytes = compressed.len(),
-            total_pack_storage_mb = format!("{:.2} MB", stats.pack_total_mb),
-            total_cache_storage_mb = format!("{:.2} MB", stats.total_cache_mb),
-            "Successfully regenerated thumbnail and persisted to LMDB and L1 cache"
-        );
 
         Ok(item)
     }

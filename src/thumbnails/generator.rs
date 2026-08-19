@@ -6,7 +6,6 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ColorType;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Instant;
 
 pub struct ThumbnailGenerator {
     image_decoder: Arc<dyn ImageDecoder>,
@@ -53,7 +52,6 @@ impl ThumbnailGenerator {
         format: ThumbnailFormat,
         quality: u8,
     ) -> Result<Vec<u8>, ThumbnailError> {
-        let t0 = Instant::now();
         let quality = quality.clamp(10, 100);
 
         if rgb8_pixels.len() != (width as usize) * (height as usize) * 3 {
@@ -76,22 +74,11 @@ impl ThumbnailGenerator {
             }
         };
 
-        tracing::trace!(
-            format = %format.as_str(),
-            width = width,
-            height = height,
-            quality = quality,
-            output_bytes = buffer.len(),
-            encode_time_us = t0.elapsed().as_micros(),
-            "[Thumbnail Compression] Encoded RGB8 thumbnail into binary payload"
-        );
-
         Ok(buffer)
     }
 
     /// Decompresses packed thumbnail slice to (width, height, raw RGB8 bytes), automatically detecting WebP/JPEG.
     pub fn decompress(&self, compressed: &[u8]) -> Result<(u32, u32, Vec<u8>), ThumbnailError> {
-        let t0 = Instant::now();
         let detected = ThumbnailFormat::detect(compressed);
 
         let img = match detected {
@@ -107,15 +94,6 @@ impl ThumbnailGenerator {
         let width = img.width();
         let height = img.height();
         let raw = img.to_rgb8().into_raw();
-
-        tracing::trace!(
-            detected_format = ?detected,
-            width = width,
-            height = height,
-            decompressed_bytes = raw.len(),
-            decode_time_us = t0.elapsed().as_micros(),
-            "[Thumbnail Decompression] Decompressed packfile thumbnail slice"
-        );
 
         Ok((width, height, raw))
     }

@@ -155,8 +155,7 @@ impl<'a> FolderRefresher<'a> {
 
             let fs_meta = match std::fs::metadata(&scanned.path) {
                 Ok(m) => m,
-                Err(e) => {
-                    tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Cannot read file metadata");
+                Err(_) => {
                     continue;
                 }
             };
@@ -235,8 +234,7 @@ impl<'a> FolderRefresher<'a> {
                         let was_deleted = existing_record.is_deleted;
                         let new_hash = match MediaHasher::hash_file(&scanned.path) {
                             Ok(h) => h,
-                            Err(e) => {
-                                tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Failed to hash modified file");
+                            Err(_) => {
                                 return ProcessedResult::Failed;
                             }
                         };
@@ -258,8 +256,7 @@ impl<'a> FolderRefresher<'a> {
                         } else {
                             let raw_meta = match MetadataExtractor::extract(&scanned.path) {
                                 Ok(m) => m,
-                                Err(e) => {
-                                    tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Failed to extract metadata for modified file");
+                                Err(_) => {
                                     return ProcessedResult::Failed;
                                 }
                             };
@@ -284,8 +281,7 @@ impl<'a> FolderRefresher<'a> {
                     } => {
                         let new_hash = match MediaHasher::hash_file(&scanned.path) {
                             Ok(h) => h,
-                            Err(e) => {
-                                tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Failed to hash new file");
+                            Err(_) => {
                                 return ProcessedResult::Failed;
                             }
                         };
@@ -298,8 +294,7 @@ impl<'a> FolderRefresher<'a> {
 
                         let raw_meta = match MetadataExtractor::extract(&scanned.path) {
                             Ok(m) => m,
-                            Err(e) => {
-                                tracing::warn!(file = %LogObscurer::path(&scanned.path), error = %e, "Failed to extract metadata for new file");
+                            Err(_) => {
                                 return ProcessedResult::Failed;
                             }
                         };
@@ -437,7 +432,7 @@ impl<'a> FolderRefresher<'a> {
             }
         }
 
-        // 5. Zero-Data-Loss Soft Deletion: Mark missing files as is_deleted = true, strictly preserving tags & ratings
+        // 5. Zero-Data-Loss Soft Deletion
         let mut all_folder_media_ids = active_media_ids.clone();
 
         for (deleted_id, mut deleted_record) in existing_map.into_values() {
