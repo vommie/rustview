@@ -17,10 +17,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 
-// =============================================================================
-// Section 1: Domain & View Data Models
-// =============================================================================
-
 #[derive(Debug, Clone)]
 pub struct TagTreeNode {
     pub record: TagRecord,
@@ -107,10 +103,6 @@ pub struct TagFlattenContext<'a> {
     pub stats: &'a TagSelectionStats,
     pub is_assign_mode: bool,
 }
-
-// =============================================================================
-// Section 2: TagTreeBuilder
-// =============================================================================
 
 pub struct TagTreeBuilder;
 
@@ -208,10 +200,6 @@ impl TagTreeBuilder {
     }
 }
 
-// =============================================================================
-// Section 3: TagTreeSync
-// =============================================================================
-
 pub struct TagTreeSync;
 
 impl TagTreeSync {
@@ -264,7 +252,6 @@ impl TagTreeSync {
         window.set_has_file_selection(if is_assign { has_selection } else { true });
         window.set_has_active_query(is_resettable);
 
-        // Synchronize Rating Bar selection and partial badges
         if is_assign {
             let mut partial_arr = [false; 6];
             if stats.selected_files_count > 1 && stats.ratings_in_selection.len() > 1 {
@@ -289,7 +276,6 @@ impl TagTreeSync {
             window.set_selected_rating(query_rating as i32);
         }
 
-        // Safe exit without recursion when 0 rows are visible
         if row_count == 0 {
             return;
         }
@@ -338,10 +324,6 @@ impl TagTreeSync {
         );
     }
 }
-
-// =============================================================================
-// Section 4: TagActionHandler
-// =============================================================================
 
 pub struct TagActionHandler;
 
@@ -452,12 +434,6 @@ impl TagActionHandler {
             }
         }
 
-        tracing::info!(
-            tag = %LogObscurer::tag_id(tag_id),
-            active_filter_tags = ?state.read().filter.tag_ids,
-            "[TagAction: Query] Toggled tag selection in query filter"
-        );
-
         Self::execute_query_flow(window, library, thumbnails, settings, state);
     }
 
@@ -468,6 +444,8 @@ impl TagActionHandler {
         state: &RwLock<UiState>,
     ) {
         let media_model = window.get_media_items();
+        let start_window = window.get_visible_start_index() as usize;
+        let visible_count = media_model.row_count();
         let mut media_updates = Vec::new();
 
         {
@@ -487,17 +465,20 @@ impl TagActionHandler {
                         .is_empty();
                     item.has_tags = has_tags;
 
-                    if let Some(&row_idx) = media_row_map.get(&item.record.id) {
-                        media_updates.push((row_idx, has_tags));
+                    if let Some(&global_row_idx) = media_row_map.get(&item.record.id)
+                        && global_row_idx >= start_window
+                        && global_row_idx < start_window + visible_count
+                    {
+                        media_updates.push((global_row_idx - start_window, has_tags));
                     }
                 }
             }
         }
 
-        for (row_idx, has_tags) in media_updates {
-            if let Some(mut view) = media_model.row_data(row_idx) {
+        for (local_idx, has_tags) in media_updates {
+            if let Some(mut view) = media_model.row_data(local_idx) {
                 view.has_tags = has_tags;
-                media_model.set_row_data(row_idx, view);
+                media_model.set_row_data(local_idx, view);
             }
         }
     }
@@ -547,11 +528,6 @@ impl TagActionHandler {
                 st.filter.rating = if rating_val > 0 { Some(rating_val) } else { None };
             }
 
-            tracing::info!(
-                selected_rating = rating_val,
-                "[TagAction: Query] Rating query filter updated (0 = wildcard)"
-            );
-
             Self::execute_query_flow(window, library, thumbnails, settings, state);
         }
     }
@@ -570,6 +546,8 @@ impl TagActionHandler {
         }
 
         let media_model = window.get_media_items();
+        let start_window = window.get_visible_start_index() as usize;
+        let visible_count = media_model.row_count();
         let mut row_updates = Vec::new();
 
         {
@@ -583,19 +561,22 @@ impl TagActionHandler {
             for item in all_folder_media.iter_mut() {
                 if ids.contains(&item.record.id) {
                     item.record.rating = rating;
-                    if let Some(&row_idx) = media_row_map.get(&item.record.id) {
-                        row_updates.push((row_idx, item.record.id));
+                    if let Some(&global_row_idx) = media_row_map.get(&item.record.id)
+                        && global_row_idx >= start_window
+                        && global_row_idx < start_window + visible_count
+                    {
+                        row_updates.push((global_row_idx - start_window, item.record.id));
                     }
                 }
             }
         }
 
-        for (row_idx, media_id) in row_updates {
-            if let Some(mut view) = media_model.row_data(row_idx)
+        for (local_idx, media_id) in row_updates {
+            if let Some(mut view) = media_model.row_data(local_idx)
                 && view.id == media_id as i32
             {
                 view.rating = rating as i32;
-                media_model.set_row_data(row_idx, view);
+                media_model.set_row_data(local_idx, view);
             }
         }
 
@@ -631,8 +612,7 @@ impl TagActionHandler {
 
         window.set_selected_rating(0);
         window.set_search_query("".into());
-
-        tracing::info!("[TagAction: Reset] Query filters reset. Restoring regular folder view (preserving regex toggle)...");
+        window.invoke_scroll_media_to_top();
 
         if let (Some(f_id), Some(path)) = (current_f_id, current_f_path.as_ref()) {
             let raw_media = library.media().get_by_folder(f_id).unwrap_or_default();
@@ -662,6 +642,7 @@ impl TagActionHandler {
         let t_flow_start = Instant::now();
 
         window.set_search_query("".into());
+        window.invoke_scroll_media_to_top();
 
         let (params, current_folder_p) = {
             let mut st = state.write();
@@ -774,10 +755,6 @@ impl TagActionHandler {
     }
 }
 
-// =============================================================================
-// Section 5: BridgeTags (Unified Facade)
-// =============================================================================
-
 pub struct BridgeTags;
 
 impl BridgeTags {
@@ -838,10 +815,6 @@ impl BridgeTags {
         let lib = library.clone();
         let st = state.clone();
         window.on_tag_mode_toggled(move |is_assign| {
-            tracing::info!(
-                is_assign = is_assign,
-                "[TagRatePanel: Mode] Toggled Tag/Rate panel mode"
-            );
             st.write().is_assign_mode = is_assign;
             TagTreeSync::sync_in_place(&win, &lib, &st);
         });
@@ -914,11 +887,6 @@ impl BridgeTags {
         let lib = library.clone();
         let st = state.clone();
         window.on_tag_filter_changed(move |query| {
-            tracing::info!(
-                tag_query = %LogObscurer::query(&query),
-                tag_query_len = query.len(),
-                "[TagFilter: InputEvent] Tag filter query text changed"
-            );
             Self::filter_tags(&win, &lib, &st, &query);
         });
 
@@ -926,10 +894,6 @@ impl BridgeTags {
         let lib = library.clone();
         let st = state.clone();
         window.on_tag_regex_toggled(move |enabled| {
-            tracing::info!(
-                tag_regex_enabled = enabled,
-                "[TagFilter: InputEvent] Tag regex filter mode toggled"
-            );
             st.write().tag_filter_is_regex = enabled;
             Self::reload_tags(&win, &lib, &st);
         });
@@ -940,7 +904,6 @@ impl BridgeTags {
         let set = settings;
         let st = state;
         window.on_tag_reset_clicked(move || {
-            tracing::info!("[TagRatePanel: Reset] Query Reset button clicked on panel toolbar");
             Self::reset_query(&win, &lib, &thumb, &set, &st);
         });
     }
@@ -1029,10 +992,6 @@ impl BridgeTags {
         if cur_settings.tags.expanded_tag_ids != ids {
             cur_settings.tags.expanded_tag_ids = ids;
             settings.save_quiet(&cur_settings);
-            tracing::debug!(
-                expanded_count = cur_settings.tags.expanded_tag_ids.len(),
-                "[TagTree: Persistence] Saved expanded tag IDs to persistent settings"
-            );
         }
     }
 
@@ -1043,24 +1002,15 @@ impl BridgeTags {
         settings: &SettingsManager,
         state: &RwLock<UiState>,
     ) {
-        let is_now_expanded = {
+        {
             let mut st = state.write();
-            let expanded = if st.expanded_tag_ids.contains(&tag_id) {
+            if st.expanded_tag_ids.contains(&tag_id) {
                 st.expanded_tag_ids.remove(&tag_id);
-                false
             } else {
                 st.expanded_tag_ids.insert(tag_id);
-                true
-            };
+            }
             Self::persist_expanded_tags(settings, &st.expanded_tag_ids);
-            expanded
-        };
-
-        tracing::info!(
-            tag = %LogObscurer::tag_id(tag_id),
-            is_expanded = is_now_expanded,
-            "[TagTree: NodeToggle] Toggled parent tag expansion"
-        );
+        }
 
         Self::reload_tags(window, library, state);
     }
@@ -1079,7 +1029,6 @@ impl BridgeTags {
             }
             Self::persist_expanded_tags(settings, &st.expanded_tag_ids);
         }
-        tracing::info!("[TagTree: ExpandAll] Expanded all parent nodes");
         Self::reload_tags(window, library, state);
     }
 
@@ -1094,7 +1043,6 @@ impl BridgeTags {
             st.expanded_tag_ids.clear();
             Self::persist_expanded_tags(settings, &st.expanded_tag_ids);
         }
-        tracing::info!("[TagTree: CollapseAll] Collapsed all parent nodes");
         Self::reload_tags(window, library, state);
     }
 

@@ -81,7 +81,7 @@ impl BridgeFileSelection {
         let (changed_ids, sel_count) = Self::mutate_selection(event, state);
         let t_math = t_start.elapsed();
 
-        // 3. Fast In-Place Slint Model Mutation
+        // 3. Fast In-Place Slint Model Mutation with Viewport Translation
         let t_sync_start = Instant::now();
         Self::sync_selection_diff(window, state, &changed_ids);
         let t_sync = t_sync_start.elapsed();
@@ -161,7 +161,7 @@ impl BridgeFileSelection {
         (changed, count)
     }
 
-    /// Surgically modifies only changed rows in the Slint Model with strict ID verification.
+    /// Surgically modifies only changed rows in the Slint Model translating global indices to local viewport offsets.
     pub fn sync_selection_diff(
         window: &MainWindow,
         state: &RwLock<UiState>,
@@ -172,17 +172,24 @@ impl BridgeFileSelection {
         }
 
         let media_model = window.get_media_items();
+        let start_window = window.get_visible_start_index() as usize;
+        let visible_count = media_model.row_count();
         let st = state.read();
 
         for &id in changed_ids {
-            if let Some(&row_idx) = st.media_row_map.get(&id)
-                && let Some(mut item) = media_model.row_data(row_idx)
-                && item.id == id as i32
+            if let Some(&global_row_idx) = st.media_row_map.get(&id)
+                && global_row_idx >= start_window
+                && global_row_idx < start_window + visible_count
             {
-                let is_selected = st.file_selection.is_selected(id);
-                if item.is_selected != is_selected {
-                    item.is_selected = is_selected;
-                    media_model.set_row_data(row_idx, item);
+                let local_idx = global_row_idx - start_window;
+                if let Some(mut item) = media_model.row_data(local_idx)
+                    && item.id == id as i32
+                {
+                    let is_selected = st.file_selection.is_selected(id);
+                    if item.is_selected != is_selected {
+                        item.is_selected = is_selected;
+                        media_model.set_row_data(local_idx, item);
+                    }
                 }
             }
         }
@@ -258,7 +265,6 @@ impl BridgeFileSelection {
         library: &Arc<Library>,
         window: &MainWindow,
     ) {
-        // 1. Try finding in indexed in-memory records
         let full_path_opt = {
             let st = state.read();
             st.all_folder_media
@@ -267,7 +273,6 @@ impl BridgeFileSelection {
                 .map(|m| (m.record.filename.clone(), m.full_path.clone()))
         };
 
-        // 2. If not found in-memory, resolve from database via true rec.folder_id
         let (filename, full_path) = match full_path_opt {
             Some(pair) => pair,
             None => match library.resolve_media_path(media_id) {

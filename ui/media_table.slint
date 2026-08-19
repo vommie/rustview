@@ -2,18 +2,189 @@ import { Theme } from "styles.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
-import { MediaTablePanelToolbar } from "media_table_panel_toolbar.slint";
+
+export component MediaTableRow inherits Rectangle {
+    in property <MediaItemView> item;
+    in property <length> col-filename-width: 280px;
+    in property <length> col-dimensions-width: 140px;
+    in property <length> col-size-width: 110px;
+    in property <length> col-rating-width: 90px;
+    in property <length> row-height: 28px;
+    in property <length> scroll-offset-x: 0px;
+
+    callback clicked(bool /* ctrl */, bool /* shift */);
+    callback context-menu-requested(length /* x */, length /* y */);
+    callback drag-started(int /* id */, length /* x */, length /* y */);
+    callback drag-moved(length /* x */, length /* y */);
+    callback drag-ended();
+
+    height: root.row-height;
+    background: item.is-selected ? Theme.surface-selected : (row-touch.has-hover ? Theme.surface-hover : transparent);
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.border;
+    }
+
+    row-touch := TouchArea {
+        property <length> press-x: 0px;
+        property <length> press-y: 0px;
+        property <bool> is-drag-active: false;
+        property <bool> was-already-selected: false;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                if event.button == PointerEventButton.left {
+                    self.press-x = self.mouse-x;
+                    self.press-y = self.mouse-y;
+                    self.is-drag-active = false;
+                    self.was-already-selected = item.is-selected;
+
+                    if !item.is-selected || event.modifiers.control || event.modifiers.meta || event.modifiers.shift {
+                        root.clicked(
+                            event.modifiers.control || event.modifiers.meta,
+                            event.modifiers.shift
+                        );
+                    }
+                } else if event.button == PointerEventButton.right {
+                    root.context-menu-requested(
+                        row-touch.mouse-x + root.scroll-offset-x,
+                        row-touch.mouse-y
+                    );
+                }
+            }
+            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                if self.is-drag-active {
+                    self.is-drag-active = false;
+                    root.drag-ended();
+                } else {
+                    if self.was-already-selected && !event.modifiers.control && !event.modifiers.meta && !event.modifiers.shift {
+                        root.clicked(false, false);
+                    }
+                }
+            }
+        }
+
+        moved => {
+            if self.pressed && !self.is-drag-active {
+                let dx = self.mouse-x - self.press-x;
+                let dy = self.mouse-y - self.press-y;
+                if (dx * dx + dy * dy) > 25px * 1px {
+                    self.is-drag-active = true;
+                    root.drag-started(item.id, self.mouse-x + root.scroll-offset-x, self.mouse-y);
+                }
+            }
+            if self.is-drag-active {
+                root.drag-moved(self.mouse-x + root.scroll-offset-x, self.mouse-y);
+            }
+        }
+    }
+
+    HorizontalLayout {
+        padding: 0px;
+        spacing: 0px;
+
+        // Column 0: Filename
+        Rectangle {
+            width: root.col-filename-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                spacing: 8px;
+                alignment: start;
+
+                if item.is-video : Text {
+                    text: "🎬";
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: item.filename;
+                    color: item.is-selected ? Theme.primary : Theme.text;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 1: Dimensions
+        Rectangle {
+            width: root.col-dimensions-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.dimensions-str;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 2: Size
+        Rectangle {
+            width: root.col-size-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.filesize-str;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 3: Rating
+        Rectangle {
+            width: root.col-rating-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.rating > 0 ? ("★ " + item.rating) : "-";
+                    color: item.rating > 0 ? Theme.rating-color(item.rating) : Theme.text-muted;
+                    font-weight: item.rating > 0 ? 700 : 400;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}
 
 export component MediaTableView inherits Rectangle {
     background: Theme.background;
     clip: true;
 
     in property <[MediaItemView]> items: [];
+    in property <int> visible-start-index: 0;
+    in property <int> total-items-count: 0;
+
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
-    in-out property <string> search-text: "";
-    in-out property <bool> regex-mode: false;
-    in-out property <bool> is-table-view: true;
 
     in-out property <length> col-filename-width: 280px;
     in-out property <length> col-dimensions-width: 140px;
@@ -26,48 +197,53 @@ export component MediaTableView inherits Rectangle {
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
     callback background-clicked();
-    callback search-changed(string);
-    callback regex-toggled(bool);
-    callback refresh-clicked();
-    callback view-mode-toggled(bool);
     callback visible-chunk-changed(int /* first_item */, int /* last_item */, int /* total */);
 
     callback item-drag-started(int /* id */, length /* x */, length /* y */);
     callback item-drag-moved(length /* x */, length /* y */);
     callback item-drag-ended();
 
-    property <length> col-pos-0: 0px;
-    property <length> col-pos-1: root.col-filename-width;
-    property <length> col-pos-2: root.col-pos-1 + root.col-dimensions-width;
-    property <length> col-pos-3: root.col-pos-2 + root.col-size-width;
-    property <length> total-columns-width: root.col-pos-3 + root.col-rating-width;
+    property <length> total-columns-width: root.col-filename-width + root.col-dimensions-width + root.col-size-width + root.col-rating-width;
     property <length> content-scroll-width: Math.max(self.width, root.total-columns-width);
 
     property <length> row-height: 28px;
-    property <length> total-content-height: root.items.length * root.row-height;
+    property <length> total-content-height: root.total-items-count * root.row-height;
 
-    property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / root.row-height) - 2);
-    property <int> pool-rows-count: Math.min(root.items.length, Math.ceil(scroll-area.height / root.row-height) + 6);
+    property <int> pool-rows-count: Math.min(root.total-items-count, Math.ceil(scroll-area.height / root.row-height) + 12);
+    property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / root.row-height));
+    property <int> scroll-block: Math.floor(-scroll-area.clamped-y / (root.row-height * 6));
 
-    changed first-visible-row => {
-        let first-item = root.first-visible-row;
-        let last-item = Math.min(root.items.length, root.first-visible-row + root.pool-rows-count);
-        root.visible-chunk-changed(first-item, last-item, root.items.length);
+    /// Programmatically resets viewport scroll position to the top
+    public function scroll-to-top() {
+        scroll-area.scroll-to-top();
+    }
+
+    /// Programmatically scrolls to align viewport with target item index
+    public function scroll-to-index(item-idx: int) {
+        let target-y = -(item-idx * root.row-height);
+        scroll-area.viewport-y = target-y;
+    }
+
+    /// Returns the global item index currently at the top of the visible table viewport
+    pure public function get-top-visible-index() -> int {
+        return root.first-visible-row;
+    }
+
+    changed scroll-block => {
+        let first-item = self.scroll-block * 6;
+        let last-item = Math.min(root.total-items-count, first-item + root.pool-rows-count);
+        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
+    }
+
+    changed pool-rows-count => {
+        let first-item = self.scroll-block * 6;
+        let last-item = Math.min(root.total-items-count, first-item + root.pool-rows-count);
+        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
     }
 
     VerticalLayout {
         padding: 0px;
-        spacing: 4px;
-
-        MediaTablePanelToolbar {
-            search-text <=> root.search-text;
-            regex-mode <=> root.regex-mode;
-            is-table-view <=> root.is-table-view;
-            search-changed(t) => { root.search-changed(t); }
-            regex-toggled(r) => { root.regex-toggled(r); }
-            refresh-clicked => { root.refresh-clicked(); }
-            view-mode-toggled(is-table) => { root.view-mode-toggled(is-table); }
-        }
+        spacing: 0px;
 
         header-box := Rectangle {
             height: 28px;
@@ -123,139 +299,38 @@ export component MediaTableView inherits Rectangle {
                 width: root.content-scroll-width;
                 height: root.total-content-height;
 
-                for pool-idx in [
-                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-                    10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-                    20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-                    30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
-                    40, 41, 42, 43, 44, 45, 46, 47, 48, 49
-                ]: row-box := Rectangle {
-                    property <int> row-idx: root.first-visible-row + pool-idx;
-                    property <bool> has-row: self.row-idx >= 0 && self.row-idx < root.items.length && pool-idx < root.pool-rows-count;
+                for item[idx] in root.items: MediaTableRow {
+                    property <int> global-idx: root.visible-start-index + idx;
 
-                    visible: self.has-row;
                     x: 0px;
-                    y: self.row-idx * root.row-height;
-                    height: root.row-height;
+                    y: self.global-idx * root.row-height;
                     width: root.content-scroll-width;
+                    row-height: root.row-height;
+                    item: item;
+                    col-filename-width: root.col-filename-width;
+                    col-dimensions-width: root.col-dimensions-width;
+                    col-size-width: root.col-size-width;
+                    col-rating-width: root.col-rating-width;
+                    scroll-offset-x: scroll-area.clamped-x;
 
-                    property <MediaItemView> item: self.has-row ? root.items[self.row-idx] : { id: 0, filename: "", filesize-str: "", dimensions-str: "", rating: 0, has-tags: false, thumbnail: @image-url(""), is-selected: false, is-video: false };
-
-                    background: self.item.is-selected ? Theme.surface-selected : (row-touch.has-hover ? Theme.surface-hover : transparent);
-
-                    Rectangle {
-                        y: parent.height - 1px;
-                        height: 1px;
-                        background: Theme.border;
+                    clicked(ctrl, shift) => {
+                        root.item-clicked(item.id, ctrl, shift);
                     }
-
-                    row-touch := TouchArea {
-                        property <length> press-x: 0px;
-                        property <length> press-y: 0px;
-                        property <bool> is-drag-active: false;
-                        property <bool> was-already-selected: false;
-
-                        pointer-event(event) => {
-                            if event.kind == PointerEventKind.down {
-                                if event.button == PointerEventButton.left {
-                                    self.press-x = self.mouse-x;
-                                    self.press-y = self.mouse-y;
-                                    self.is-drag-active = false;
-                                    self.was-already-selected = row-box.item.is-selected;
-
-                                    if !row-box.item.is-selected || event.modifiers.control || event.modifiers.meta || event.modifiers.shift {
-                                        root.item-clicked(
-                                            row-box.item.id,
-                                            event.modifiers.control || event.modifiers.meta,
-                                            event.modifiers.shift
-                                        );
-                                    }
-                                } else if event.button == PointerEventButton.right {
-                                    root.item-context-menu(
-                                        row-box.item.id,
-                                        row-touch.mouse-x + scroll-area.clamped-x,
-                                        58px + row-box.y + row-touch.mouse-y + scroll-area.clamped-y
-                                    );
-                                }
-                            }
-                            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
-                                if self.is-drag-active {
-                                    self.is-drag-active = false;
-                                    root.item-drag-ended();
-                                } else {
-                                    if self.was-already-selected && !event.modifiers.control && !event.modifiers.meta && !event.modifiers.shift {
-                                        root.item-clicked(row-box.item.id, false, false);
-                                    }
-                                }
-                            }
-                        }
-
-                        moved => {
-                            if self.pressed && !self.is-drag-active {
-                                let dx = self.mouse-x - self.press-x;
-                                let dy = self.mouse-y - self.press-y;
-                                if (dx * dx + dy * dy) > 25px * 1px {
-                                    self.is-drag-active = true;
-                                    root.item-drag-started(row-box.item.id, self.mouse-x + scroll-area.clamped-x, 58px + row-box.y + self.mouse-y + scroll-area.clamped-y);
-                                }
-                            }
-                            if self.is-drag-active {
-                                root.item-drag-moved(self.mouse-x + scroll-area.clamped-x, 58px + row-box.y + self.mouse-y + scroll-area.clamped-y);
-                            }
-                        }
+                    context-menu-requested(mx, my) => {
+                        root.item-context-menu(
+                            item.id,
+                            mx,
+                            58px + self.y + my + scroll-area.clamped-y
+                        );
                     }
-
-                    if row-box.item.is-video : Text {
-                        x: 10px;
-                        y: (parent.height - self.height) / 2;
-                        text: "🎬";
-                        font-size: 10px;
-                        color: Theme.text;
+                    drag-started(id, mx, my) => {
+                        root.item-drag-started(id, mx, 58px + self.y + my + scroll-area.clamped-y);
                     }
-
-                    Text {
-                        x: row-box.item.is-video ? 28px : 10px;
-                        y: (parent.height - self.height) / 2;
-                        width: Math.max(0px, root.col-filename-width - (row-box.item.is-video ? 38px : 20px));
-                        text: row-box.item.filename;
-                        color: row-box.item.is-selected ? Theme.primary : Theme.text;
-                        font-size: 11px;
-                        horizontal-alignment: left;
-                        overflow: elide;
+                    drag-moved(mx, my) => {
+                        root.item-drag-moved(mx, 58px + self.y + my + scroll-area.clamped-y);
                     }
-
-                    Text {
-                        x: root.col-pos-1 + 10px;
-                        y: (parent.height - self.height) / 2;
-                        width: Math.max(0px, root.col-dimensions-width - 20px);
-                        text: row-box.item.dimensions-str;
-                        color: Theme.text-muted;
-                        font-size: 11px;
-                        horizontal-alignment: left;
-                        overflow: elide;
-                    }
-
-                    Text {
-                        x: root.col-pos-2 + 10px;
-                        y: (parent.height - self.height) / 2;
-                        width: Math.max(0px, root.col-size-width - 20px);
-                        text: row-box.item.filesize-str;
-                        color: Theme.text-muted;
-                        font-size: 11px;
-                        horizontal-alignment: left;
-                        overflow: elide;
-                    }
-
-                    Text {
-                        x: root.col-pos-3 + 10px;
-                        y: (parent.height - self.height) / 2;
-                        width: Math.max(0px, root.col-rating-width - 20px);
-                        text: row-box.item.rating > 0 ? ("★ " + row-box.item.rating) : "-";
-                        color: row-box.item.rating > 0 ? Theme.rating-color(row-box.item.rating) : Theme.text-muted;
-                        font-weight: row-box.item.rating > 0 ? 700 : 400;
-                        font-size: 11px;
-                        horizontal-alignment: left;
-                        overflow: elide;
+                    drag-ended => {
+                        root.item-drag-ended();
                     }
                 }
             }

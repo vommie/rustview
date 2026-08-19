@@ -197,7 +197,14 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline_and_storage_stats() {
     assert_eq!(stats.lmdb_thumbnails_count, 2);
     assert!(stats.avg_thumbnail_kb() > 0.0);
 
-    // 3. Test L1 Cache Invalidation & Seamless Reload from PackStore
+    // 3. Test try_load_existing directly (L1 & L2 PackStore)
+    let existing_buf = manager.try_load_existing(media_list[0].id);
+    assert!(existing_buf.is_some(), "Existing thumbnail should load from PackStore/L1");
+    let buf = existing_buf.unwrap();
+    assert_eq!(buf.width(), 256);
+    assert_eq!(buf.height(), 144);
+
+    // 4. Test L1 Cache Invalidation & Seamless Reload from PackStore
     manager.cache().clear();
     let reloaded = manager
         .get_or_load_sync(media_list[0].id, &img1_path, webp_config.clone())
@@ -205,7 +212,7 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline_and_storage_stats() {
     assert_eq!((reloaded.width, reloaded.height), (256, 144));
     assert_eq!(reloaded.pixels.len(), (256 * 144 * 3) as usize);
 
-    // 4. Test Mixed format decoding in PackStore
+    // 5. Test Mixed format decoding in PackStore
     let generator = ThumbnailGenerator::new();
     let raw_rgb = vec![200u8; 256 * 144 * 3];
 

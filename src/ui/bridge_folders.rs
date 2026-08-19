@@ -7,9 +7,12 @@ use crate::library::dot_hidden::DotHiddenCache;
 use crate::library::folders::normalize_path;
 use crate::library::models::{FolderId, FolderRecord};
 use crate::library::Library;
-use crate::settings::{GridAspectRatio, SettingsDialogController, SettingsManager};
+use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::telemetry::FolderLoadBenchmark;
-use crate::thumbnails::ThumbnailManager;
+use crate::thumbnails::{
+    PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager,
+    VideoThumbnailEngine,
+};
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
@@ -37,6 +40,15 @@ pub struct FolderFlattenContext<'a> {
     pub show_hidden: bool,
     pub support_dot_hidden: bool,
     pub dot_hidden_cache: &'a mut DotHiddenCache,
+}
+
+/// Grouped dependencies bundle for folder navigation and selection workflows.
+pub struct FolderNavigationContext<'a> {
+    pub window: &'a MainWindow,
+    pub library: &'a Arc<Library>,
+    pub thumbnails: &'a Arc<ThumbnailManager>,
+    pub settings: &'a Arc<SettingsManager>,
+    pub state: &'a Arc<RwLock<UiState>>,
 }
 
 pub struct FolderTreeBuilder;
@@ -195,13 +207,20 @@ impl BridgeFolders {
         let set = settings.clone();
         let st = state.clone();
         let win = window.clone_strong();
+
+        // 1. Explicit Folder Refresh via View Toolbar Refresh Button (Rule A)
         window.on_refresh_folder(move || {
             let (folder_id_opt, path_opt) = {
                 let s = st.read();
                 (s.current_folder_id, s.current_folder_path.clone())
             };
             if let (Some(id), Some(path)) = (folder_id_opt, path_opt) {
-                Self::select_folder(id, path, &win, &lib, &thumb, &set, &st);
+                tracing::info!(
+                    folder_id = id,
+                    path = %LogObscurer::path(&path),
+                    "[FolderRefresh: Toolbar] User clicked Toolbar Refresh button (Rule A). Executing explicit full refresh & thumbnail generation."
+                );
+                Self::refresh_folder_explicit(id, path, &win, &lib, &thumb, &set, &st);
             }
         });
 
@@ -210,6 +229,7 @@ impl BridgeFolders {
             dialog.borrow_mut().show();
         });
 
+        // 2. Normal Folder Selection via Tree Node Click (Opens known folders with Zero-FS LMDB speed)
         let lib = library.clone();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -522,7 +542,8 @@ impl BridgeFolders {
             .expect("Failed to spawn folder tree refresher background thread");
     }
 
-    /// Optimized 4-Stage Asynchronous Folder Navigation Workflow with immediate thumbnail preloading.
+    /// Standard folder navigation. Opens known folders instantly from LMDB without scanning.
+    /// If the folder is completely empty in LMDB, initiates Condition C initial scan & generation.
     pub fn select_folder(
         folder_id: FolderId,
         path: PathBuf,
@@ -532,13 +553,63 @@ impl BridgeFolders {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        Self::select_folder_internal(
+            folder_id,
+            path,
+            FolderNavigationContext {
+                window,
+                library,
+                thumbnails,
+                settings,
+                state,
+            },
+            false, // is_explicit_refresh = false
+        );
+    }
+
+    /// Explicit user-requested folder refresh (Rules A & B: Toolbar Refresh or Folder Context Menu Refresh).
+    /// Executes full directory scan on disk, updates LMDB, and launches dedicated full-folder thumbnail generation for all items.
+    pub fn refresh_folder_explicit(
+        folder_id: FolderId,
+        path: PathBuf,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        Self::select_folder_internal(
+            folder_id,
+            path,
+            FolderNavigationContext {
+                window,
+                library,
+                thumbnails,
+                settings,
+                state,
+            },
+            true, // is_explicit_refresh = true
+        );
+    }
+
+    /// Internal folder selection and refresh coordinator adhering to Rules A, B, and C.
+    fn select_folder_internal(
+        folder_id: FolderId,
+        path: PathBuf,
+        ctx: FolderNavigationContext<'_>,
+        is_explicit_refresh: bool,
+    ) {
         let normalized_path = normalize_path(&path);
         let folder_name = normalized_path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
 
-        thumbnails.cancel_pipeline();
+        // Cancel previous thumbnail generation pipeline
+        ctx.thumbnails.cancel_pipeline();
+
+        // Reset Viewport Scroll to Top immediately on folder change/refresh
+        ctx.window.invoke_scroll_media_to_top();
 
         let bench = Arc::new(FolderLoadBenchmark::new(
             folder_id,
@@ -546,7 +617,7 @@ impl BridgeFolders {
         ));
 
         let (request_token, cancel_flag) = {
-            let mut st = state.write();
+            let mut st = ctx.state.write();
 
             if let Some(prev_flag) = st.active_folder_cancel_flag.take() {
                 prev_flag.store(true, Ordering::Release);
@@ -575,26 +646,26 @@ impl BridgeFolders {
         };
 
         {
-            let mut s = settings.get();
+            let mut s = ctx.settings.get();
             if s.general.remember_last_folder {
                 s.general.last_folder_path = Some(normalized_path.clone());
-                settings.save_quiet_async(&s);
+                ctx.settings.save_quiet_async(&s);
             }
         }
 
-        window.set_search_query("".into());
-        window.set_selected_rating(0);
-        window.set_tag_filter_text("".into());
+        ctx.window.set_search_query("".into());
+        ctx.window.set_selected_rating(0);
+        ctx.window.set_tag_filter_text("".into());
 
-        Self::reload_tree(window, library, settings, state);
-        Self::scroll_to_selected(window);
+        Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
+        Self::scroll_to_selected(ctx.window);
 
         // Immediate Zero-Delay Database Fetch (Stage 1a & 1b)
         let t_id_start = Instant::now();
         let media_ids = {
-            let rtxn = library.raw_db().env.read_txn().ok();
+            let rtxn = ctx.library.raw_db().env.read_txn().ok();
             if let Some(ref txn) = rtxn {
-                library.raw_db().media_by_folder.get(txn, &folder_id).ok().flatten().unwrap_or_default()
+                ctx.library.raw_db().media_by_folder.get(txn, &folder_id).ok().flatten().unwrap_or_default()
             } else {
                 Vec::new()
             }
@@ -603,9 +674,9 @@ impl BridgeFolders {
 
         let t_rec_start = Instant::now();
         let mut known_media = Vec::with_capacity(media_ids.len());
-        if let Ok(rtxn) = library.raw_db().env.read_txn() {
+        if let Ok(rtxn) = ctx.library.raw_db().env.read_txn() {
             for id in media_ids {
-                if let Ok(Some(rec)) = library.raw_db().media.get(&rtxn, &id)
+                if let Ok(Some(rec)) = ctx.library.raw_db().media.get(&rtxn, &id)
                     && !rec.is_deleted
                 {
                     known_media.push(rec);
@@ -615,32 +686,57 @@ impl BridgeFolders {
         bench.lmdb_record_fetch_time_us.store(t_rec_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         bench.total_records_fetched.store(known_media.len(), Ordering::Relaxed);
 
-        // Stage 1c: String & Dimension Pre-Indexing
+        let is_empty_in_db = known_media.is_empty();
+        let should_scan_and_generate = is_explicit_refresh || is_empty_in_db;
+
+        // Stage 1c: Parallel Multi-Core Pre-Indexing
         let t_pre = Instant::now();
-        let indexed_media = BridgeMedia::preindex(library, known_media, &normalized_path);
+        let indexed_media = BridgeMedia::preindex(ctx.library, known_media, &normalized_path);
         bench.preindex_time_us.store(t_pre.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         {
-            let mut s = state.write();
+            let mut s = ctx.state.write();
             s.all_folder_media = indexed_media;
         }
 
-        // Immediately launch thumbnail preloading pipeline alongside initial display (start_pipeline: true)
-        BridgeMedia::reload(window, library, thumbnails, settings, state, true, false);
-        BridgeInspector::update(window, state);
-        BridgeTags::sync_tag_selection(window, library, state);
-        Self::scroll_to_selected(window);
+        // Render known media into view immediately
+        BridgeMedia::reload(ctx.window, ctx.library, ctx.thumbnails, ctx.settings, ctx.state, false, false);
+        BridgeInspector::update(ctx.window, ctx.state);
+        BridgeTags::sync_tag_selection(ctx.window, ctx.library, ctx.state);
+        Self::scroll_to_selected(ctx.window);
 
-        window.set_is_indexing_media(true);
-        window.set_media_index_current(0);
-        window.set_media_index_total(0);
-        window.set_status_text(format!("Scanning media files in '{}'...", folder_name).into());
+        if !should_scan_and_generate {
+            // Known folder opened normally -> Zero-FS load complete, no scan or full generation launched.
+            tracing::info!(
+                folder_id = folder_id,
+                folder_name = %folder_name,
+                known_items = ctx.state.read().all_folder_media.len(),
+                "[FolderNavigation: Zero-FS Load] Folder opened from LMDB cache with 0ms disk scan. Refresh/Generation awaiting user action."
+            );
+            ctx.window.set_is_indexing_media(false);
+            ctx.window.set_status_text("Ready.".into());
+            return;
+        }
 
-        let w_weak_scanner = window.as_weak();
-        let lib_scanner = library.clone();
-        let thumb_scanner = thumbnails.clone();
-        let set_scanner = settings.clone();
-        let st_scanner = state.clone();
+        // Triggered via Rule A (Toolbar), Rule B (Context Menu), or Rule C (Empty Folder) -> Run scan & full generation
+        tracing::info!(
+            folder_id = folder_id,
+            folder_name = %folder_name,
+            is_explicit_refresh = is_explicit_refresh,
+            is_empty_in_db = is_empty_in_db,
+            "[FolderRefresh: Execute] Executing filesystem scan and dedicated full-folder thumbnail generation..."
+        );
+
+        ctx.window.set_is_indexing_media(true);
+        ctx.window.set_media_index_current(0);
+        ctx.window.set_media_index_total(0);
+        ctx.window.set_status_text(format!("Scanning media files in '{}'...", folder_name).into());
+
+        let w_weak_scanner = ctx.window.as_weak();
+        let lib_scanner = ctx.library.clone();
+        let thumb_scanner = ctx.thumbnails.clone();
+        let set_scanner = ctx.settings.clone();
+        let st_scanner = ctx.state.clone();
         let target_p_scanner = normalized_path.clone();
         let cancel_ref = cancel_flag.clone();
         let bench_scanner = bench.clone();
@@ -684,7 +780,19 @@ impl BridgeFolders {
                         bench_scanner.deleted_files.store(report.deleted_media, Ordering::Relaxed);
                         bench_scanner.restored_files.store(report.restored_media, Ordering::Relaxed);
 
-                        let has_changes = report.new_media > 0 || report.deleted_media > 0 || report.restored_media > 0 || report.updated_media > 0;
+                        let raw_media = lib_scanner.media().get_by_folder(folder_id).unwrap_or_default();
+                        let active_count = raw_media.len();
+                        let indexed_media = BridgeMedia::preindex(&lib_scanner, raw_media, &target_p_scanner);
+
+                        let all_targets: Vec<PreparedTarget> = indexed_media
+                            .iter()
+                            .map(|item| PreparedTarget {
+                                pipeline_id: 0,
+                                folder_id: item.record.folder_id,
+                                media_id: item.record.id,
+                                file_path: item.full_path.clone(),
+                            })
+                            .collect();
 
                         let _ = w_weak_scanner.upgrade_in_event_loop(move |w| {
                             let is_still_current = {
@@ -693,25 +801,45 @@ impl BridgeFolders {
                             };
 
                             if is_still_current {
-                                if has_changes {
-                                    let raw_media = lib_scanner.media().get_by_folder(folder_id).unwrap_or_default();
-                                    let active_count = raw_media.len();
-                                    let indexed_media = BridgeMedia::preindex(&lib_scanner, raw_media, &target_p_scanner);
-
-                                    {
-                                        let mut s = st_scanner.write();
-                                        s.all_folder_media = indexed_media;
-                                        s.update_folder_media_count_in_cache(folder_id, active_count);
-                                    }
-
-                                    BridgeMedia::reload(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, true, false);
-                                    BridgeInspector::update(&w, &st_scanner);
-                                    BridgeTags::sync_tag_selection(&w, &lib_scanner, &st_scanner);
-                                    Self::reload_tree(&w, &lib_scanner, &set_scanner, &st_scanner);
+                                {
+                                    let mut s = st_scanner.write();
+                                    s.all_folder_media = indexed_media;
+                                    s.update_folder_media_count_in_cache(folder_id, active_count);
                                 }
+
+                                BridgeMedia::reload(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, false, false);
+                                BridgeInspector::update(&w, &st_scanner);
+                                BridgeTags::sync_tag_selection(&w, &lib_scanner, &st_scanner);
+                                Self::reload_tree(&w, &lib_scanner, &set_scanner, &st_scanner);
 
                                 w.set_is_indexing_media(false);
                                 w.set_status_text("Ready.".into());
+
+                                // Launch dedicated full-folder thumbnail generation for ALL items in folder
+                                if !all_targets.is_empty() {
+                                    let perf = set_scanner.get().performance;
+                                    let config = ThumbnailConfig {
+                                        max_bound: perf.thumbnail_db_size,
+                                        format: ThumbnailFormat::from_str_name(&perf.thumbnail_format),
+                                        quality: perf.thumbnail_quality,
+                                        scaling_algorithm: ScalingAlgorithm::from_str_name(&perf.scaling_algorithm),
+                                        batch_commit_size: perf.batch_commit_size,
+                                        video_engine: VideoThumbnailEngine::from_str_name(&perf.video_engine),
+                                        video_offset_percent: perf.video_offset_percent,
+                                        generate_video_previews: perf.generate_video_previews,
+                                        preview_frame_count: perf.preview_frame_count,
+                                        custom_preview_settings: perf.custom_preview_settings,
+                                        preview_format: ThumbnailFormat::from_str_name(&perf.preview_format),
+                                        preview_quality: perf.preview_quality,
+                                    };
+
+                                    tracing::info!(
+                                        folder_id = folder_id,
+                                        total_targets = all_targets.len(),
+                                        "[ThumbnailPipeline: Dedicated Launch] Launching full-folder thumbnail pipeline for ALL items"
+                                    );
+                                    thumb_scanner.start_pipeline(folder_id, all_targets, config);
+                                }
                             }
                         });
                     }

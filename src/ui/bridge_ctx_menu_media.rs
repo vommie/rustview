@@ -101,14 +101,14 @@ impl MediaContextMenu {
     pub fn build_menu(
         selected_count: usize,
         is_single_image: bool,
-        is_busy: bool,
+        _is_busy: bool,
         associated_apps: &[DesktopApp],
     ) -> CtxMenu {
         let is_single = selected_count == 1;
-        let can_open = selected_count > 0 && !is_busy;
-        let can_rename = is_single && !is_busy;
-        let can_copy = selected_count > 0 && !is_busy;
-        let can_refresh = selected_count > 0 && !is_busy;
+        let can_open = selected_count > 0;
+        let can_rename = is_single;
+        let can_copy = selected_count > 0;
+        let can_refresh = selected_count > 0;
 
         let refresh_text = if is_single {
             "Refresh File".to_string()
@@ -219,7 +219,7 @@ impl MediaContextMenu {
             .submenu(
                 "Rate Selection",
                 None,
-                selected_count > 0 && !is_busy,
+                selected_count > 0,
                 |sub| {
                     sub.action(CTX_ACTION_RATE_5, "5 Stars (★★★★★)", None, None, true)
                         .action(CTX_ACTION_RATE_4, "4 Stars (★★★★☆)", None, None, true)

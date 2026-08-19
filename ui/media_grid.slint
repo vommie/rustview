@@ -3,7 +3,6 @@ import { Icons, AppIcon } from "icons.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
-import { MediaGridPanelToolbar } from "media_grid_panel_toolbar.slint";
 
 export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
@@ -174,13 +173,13 @@ export component VirtualizedMediaGrid inherits Rectangle {
     clip: true;
 
     in property <[MediaItemView]> media-items: [];
-    in-out property <int> thumb-size: 190;
+    in property <int> visible-start-index: 0;
+    in property <int> total-items-count: 0;
+
+    in property <int> thumb-size: 190;
     in property <int> thumb-aspect-idx: 1;
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
-    in-out property <string> search-text: "";
-    in-out property <bool> regex-mode: false;
-    in-out property <bool> is-table-view: false;
 
     property <length> grid-padding: 12px;
     property <length> grid-spacing: 12px;
@@ -197,50 +196,64 @@ export component VirtualizedMediaGrid inherits Rectangle {
     property <length> available-width: Math.max(0px, self.width - (root.grid-padding * 2) - root.scrollbar-gutter-reserve + root.grid-spacing);
     out property <int> columns: Math.max(1, Math.floor(root.available-width / root.column-stride));
 
-    property <int> total-rows: Math.ceil(root.media-items.length / root.columns);
+    property <int> total-rows: Math.ceil(root.total-items-count / root.columns);
     property <length> total-content-height: (root.total-rows * root.row-stride) + (2 * root.grid-padding);
 
-    // Viewport Windowing Math
-    property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / root.row-stride) - 2);
     property <int> pool-rows-count: Math.min(root.total-rows, Math.ceil(scroll-area.height / root.row-stride) + 6);
+    property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / root.row-stride));
+    property <int> scroll-block: Math.floor(-scroll-area.clamped-y / (root.row-stride * 2));
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
     callback sort-clicked(int /* column_index */);
     callback background-clicked();
     callback item-hover-changed(int /* id */, bool /* is_hover */);
-    callback thumb-size-changed(int);
-    callback search-changed(string);
-    callback regex-toggled(bool);
-    callback refresh-clicked();
-    callback view-mode-toggled(bool);
     callback visible-chunk-changed(int /* first_item */, int /* last_item */, int /* total */);
 
     callback item-drag-started(int /* id */, length /* x */, length /* y */);
     callback item-drag-moved(length /* x */, length /* y */);
     callback item-drag-ended();
 
-    changed first-visible-row => {
-        let first-item = root.first-visible-row * root.columns;
-        let last-item = Math.min(root.media-items.length, (root.first-visible-row + root.pool-rows-count) * root.columns);
-        root.visible-chunk-changed(first-item, last-item, root.media-items.length);
+    /// Programmatically resets viewport scroll position to the top
+    public function scroll-to-top() {
+        scroll-area.scroll-to-top();
+    }
+
+    /// Programmatically scrolls to align viewport with target item index
+    public function scroll-to-index(item-idx: int) {
+        if root.columns > 0 {
+            let target-row = Math.floor(item-idx / root.columns);
+            let target-y = -(target-row * root.row-stride);
+            scroll-area.viewport-y = target-y;
+        }
+    }
+
+    /// Returns the global item index currently at the top of the visible grid viewport
+    pure public function get-top-visible-index() -> int {
+        return root.first-visible-row * root.columns;
+    }
+
+    changed scroll-block => {
+        let first-item = self.scroll-block * 2 * root.columns;
+        let last-item = Math.min(root.total-items-count, first-item + (root.pool-rows-count * root.columns));
+        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
+    }
+
+    changed columns => {
+        let first-item = self.scroll-block * 2 * root.columns;
+        let last-item = Math.min(root.total-items-count, first-item + (root.pool-rows-count * root.columns));
+        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
+    }
+
+    changed pool-rows-count => {
+        let first-item = self.scroll-block * 2 * root.columns;
+        let last-item = Math.min(root.total-items-count, first-item + (root.pool-rows-count * root.columns));
+        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
     }
 
     VerticalLayout {
         padding: 0px;
-        spacing: 4px;
-
-        MediaGridPanelToolbar {
-            thumb-width <=> root.thumb-size;
-            search-text <=> root.search-text;
-            regex-mode <=> root.regex-mode;
-            is-table-view <=> root.is-table-view;
-            thumb-width-changed(w) => { root.thumb-size-changed(w); }
-            search-changed(t) => { root.search-changed(t); }
-            regex-toggled(r) => { root.regex-toggled(r); }
-            refresh-clicked => { root.refresh-clicked(); }
-            view-mode-toggled(is-table) => { root.view-mode-toggled(is-table); }
-        }
+        spacing: 0px;
 
         MediaHeaderBar {
             sort-column: root.sort-column;
@@ -280,54 +293,44 @@ export component VirtualizedMediaGrid inherits Rectangle {
                 width: parent.width;
                 height: root.total-content-height;
 
-                for pool-r in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]: row-box := Rectangle {
-                    property <int> r-idx: root.first-visible-row + pool-r;
-                    visible: self.r-idx >= 0 && self.r-idx < root.total-rows && pool-r < root.pool-rows-count;
-                    y: (self.r-idx * root.row-stride) + root.grid-padding;
-                    x: root.grid-padding;
+                for item[idx] in root.media-items: MediaTile {
+                    property <int> global-idx: root.visible-start-index + idx;
+                    property <int> r-idx: Math.floor(self.global-idx / root.columns);
+                    property <int> c-idx: Math.mod(self.global-idx, root.columns);
+
+                    x: root.grid-padding + (self.c-idx * root.column-stride);
+                    y: root.grid-padding + (self.r-idx * root.row-stride);
+                    width: root.item-tile-width;
                     height: root.item-tile-height;
-                    width: parent.width - (2 * root.grid-padding);
 
-                    for pool-c in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]: col-box := Rectangle {
-                        property <int> item-idx: (row-box.r-idx * root.columns) + pool-c;
-                        property <bool> has-item: pool-c < root.columns && self.item-idx >= 0 && self.item-idx < root.media-items.length;
-                        visible: self.has-item;
-                        x: pool-c * root.column-stride;
-                        y: 0px;
-                        width: root.item-tile-width;
-                        height: root.item-tile-height;
+                    item: item;
+                    thumb-width: root.thumb-size;
+                    thumb-aspect-idx: root.thumb-aspect-idx;
 
-                        if self.has-item : MediaTile {
-                            item: root.media-items[col-box.item-idx];
-                            thumb-width: root.thumb-size;
-                            thumb-aspect-idx: root.thumb-aspect-idx;
-
-                            clicked(ctrl, shift) => { root.item-clicked(self.item.id, ctrl, shift); }
-                            hover-changed(hover) => { root.item-hover-changed(self.item.id, hover); }
-                            context-menu-requested(mx, my) => {
-                                root.item-context-menu(
-                                    self.item.id,
-                                    row-box.x + col-box.x + mx,
-                                    58px + row-box.y + col-box.y + my + scroll-area.clamped-y
-                                );
-                            }
-                            drag-started(id, mx, my) => {
-                                root.item-drag-started(
-                                    id,
-                                    row-box.x + col-box.x + mx,
-                                    58px + row-box.y + col-box.y + my + scroll-area.clamped-y
-                                );
-                            }
-                            drag-moved(mx, my) => {
-                                root.item-drag-moved(
-                                    row-box.x + col-box.x + mx,
-                                    58px + row-box.y + col-box.y + my + scroll-area.clamped-y
-                                );
-                            }
-                            drag-ended => {
-                                root.item-drag-ended();
-                            }
-                        }
+                    clicked(ctrl, shift) => { root.item-clicked(self.item.id, ctrl, shift); }
+                    hover-changed(hover) => { root.item-hover-changed(self.item.id, hover); }
+                    context-menu-requested(mx, my) => {
+                        root.item-context-menu(
+                            self.item.id,
+                            self.x + mx,
+                            58px + self.y + my + scroll-area.clamped-y
+                        );
+                    }
+                    drag-started(id, mx, my) => {
+                        root.item-drag-started(
+                            id,
+                            self.x + mx,
+                            58px + self.y + my + scroll-area.clamped-y
+                        );
+                    }
+                    drag-moved(mx, my) => {
+                        root.item-drag-moved(
+                            self.x + mx,
+                            58px + self.y + my + scroll-area.clamped-y
+                        );
+                    }
+                    drag-ended => {
+                        root.item-drag-ended();
                     }
                 }
             }

@@ -36,10 +36,13 @@ impl BridgeThumbnails {
 
                 let mut row_set_us = 0u64;
                 let items_drained = batch.len();
+                let is_table = window.get_is_table_view();
 
                 if !batch.is_empty() {
                     let mut st = st_ref.write();
                     let media_model = window.get_media_items();
+                    let start_window = window.get_visible_start_index() as usize;
+                    let visible_count = media_model.row_count();
 
                     for item_data in batch {
                         if !st.is_query_active
@@ -48,16 +51,28 @@ impl BridgeThumbnails {
                             continue;
                         }
 
-                        // Store pre-converted SharedPixelBuffer into bounded LRU store
+                        // Store pre-converted SharedPixelBuffer into bounded LRU cache
                         st.folder_thumbnails.insert(item_data.media_id, item_data.pixel_buffer.clone());
 
+                        // Table View Optimization: Skip GUI row mutation churn if not viewing grid thumbnails
+                        if is_table {
+                            continue;
+                        }
+
                         let t_row = Instant::now();
-                        if let Some(&row_idx) = st_read_map(&st, item_data.media_id)
-                            && let Some(mut item) = media_model.row_data(row_idx)
-                            && item.id == item_data.media_id as i32
+
+                        // Exact Local Viewport Translation: Maps global record index to Slint's active window slice
+                        if let Some(&global_row_idx) = st.media_row_map.get(&item_data.media_id)
+                            && global_row_idx >= start_window
+                            && global_row_idx < start_window + visible_count
                         {
-                            item.thumbnail = Image::from_rgb8(item_data.pixel_buffer);
-                            media_model.set_row_data(row_idx, item);
+                            let local_idx = global_row_idx - start_window;
+                            if let Some(mut item) = media_model.row_data(local_idx)
+                                && item.id == item_data.media_id as i32
+                            {
+                                item.thumbnail = Image::from_rgb8(item_data.pixel_buffer);
+                                media_model.set_row_data(local_idx, item);
+                            }
                         }
                         row_set_us += t_row.elapsed().as_micros() as u64;
                     }
@@ -85,8 +100,7 @@ impl BridgeThumbnails {
                 window.set_generate_total(progress.generate_total as i32);
                 window.set_active_workers(progress.active_workers as i32);
 
-                // Foolproof Final Benchmark Completion Check:
-                // Ensures all items are fully processed and the drain queue is 100% empty before finalizing!
+                // Final Benchmark Completion Check for P0 Initial Viewport Loading
                 if let Some(bench) = thumb_ref.active_benchmark() {
                     let total_targets = bench.total_targets.load(Ordering::Acquire);
                     let drained_items = bench.drained_items.load(Ordering::Acquire);
@@ -117,9 +131,4 @@ impl BridgeThumbnails {
         );
         timer
     }
-}
-
-#[inline]
-fn st_read_map(st: &UiState, media_id: u64) -> Option<&usize> {
-    st.media_row_map.get(&media_id)
 }

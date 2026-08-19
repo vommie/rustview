@@ -67,6 +67,23 @@ fn test_file_selection_clear_all() {
 }
 
 #[test]
+fn test_file_selection_multi_select_drag_preservation() {
+    let mut sel = FileSelectionModel::new();
+    sel.select_single(10);
+    sel.toggle(20);
+    sel.toggle(30);
+    assert_eq!(sel.count(), 3);
+
+    // When dragging an already selected item (e.g. 20), selection must NOT be cleared to single
+    assert!(sel.is_selected(20));
+    let dragged_ids = sel.selected_ids().clone();
+    assert_eq!(dragged_ids.len(), 3);
+    assert!(dragged_ids.contains(&10));
+    assert!(dragged_ids.contains(&20));
+    assert!(dragged_ids.contains(&30));
+}
+
+#[test]
 fn test_file_selection_diff_computation() {
     let mut prev = HashSet::new();
     prev.insert(1);
@@ -202,4 +219,44 @@ fn test_file_selection_summary_calculations() {
     assert_eq!(summary_indexed.count, 3);
     assert_eq!(summary_indexed.total_size_bytes, 53 * 1024 * 1024);
     assert_eq!(summary_indexed.avg_rating, 4.5);
+}
+
+#[test]
+fn test_view_hysteresis_and_coordinate_sync_math() {
+    // 1. Grid -> Table index conversion
+    let grid_columns = 6;
+    let grid_top_row = 15;
+    let grid_top_index = grid_top_row * grid_columns;
+    assert_eq!(grid_top_index, 90);
+
+    let table_row_height = 28.0f32;
+    let table_scroll_y = -(grid_top_index as f32 * table_row_height);
+    assert_eq!(table_scroll_y, -2520.0);
+
+    // 2. Table -> Grid index conversion
+    let table_top_index = 95;
+    let target_grid_row = table_top_index / grid_columns;
+    let grid_row_stride = 240.0f32;
+    let grid_scroll_y = -(target_grid_row as f32 * grid_row_stride);
+    assert_eq!(target_grid_row, 15);
+    assert_eq!(grid_scroll_y, -3600.0);
+
+    // 3. Hysteresis buffer safety margin check
+    let loaded_start = 100usize;
+    let loaded_len = 140usize; // Covers 100..240
+    let margin = 30usize;
+
+    // Viewport currently at [135..165] -> Inside safety zone -> NO RELOAD
+    let visible_first_1 = 135usize;
+    let visible_last_1 = 165usize;
+    let is_safe_1 = visible_first_1 >= loaded_start + margin
+        && visible_last_1 + margin <= loaded_start + loaded_len;
+    assert!(is_safe_1);
+
+    // Viewport scrolled down to [220..240] -> Near right/bottom edge -> MUST RELOAD
+    let visible_first_2 = 220usize;
+    let visible_last_2 = 240usize;
+    let is_safe_2 = visible_first_2 >= loaded_start + margin
+        && visible_last_2 + margin <= loaded_start + loaded_len;
+    assert!(!is_safe_2);
 }

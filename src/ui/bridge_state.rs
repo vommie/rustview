@@ -4,7 +4,7 @@ use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER};
 use crate::system::DesktopApp;
-use crate::telemetry::FolderLoadBenchmark;
+use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
 use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
@@ -117,13 +117,14 @@ impl LruThumbnailStore {
     }
 }
 
-/// Central persistent state for UI bridges, tree expansions, and caching.
+/// Central persistent state for UI bridges, tree expansions, virtualization windowing, and caching.
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
     pub current_folder_path: Option<PathBuf>,
     pub active_folder_token: usize,
     pub active_folder_cancel_flag: Option<Arc<AtomicBool>>,
     pub active_folder_bench: Option<Arc<FolderLoadBenchmark>>,
+    pub scroll_bench: Arc<ViewScrollBenchmark>,
     pub all_folder_media: Vec<IndexedMediaRecord>,
     pub folder_thumbnails: LruThumbnailStore,
     pub active_indices: Vec<usize>,
@@ -139,6 +140,11 @@ pub struct UiState {
     pub is_refreshing_media: bool,
     pub active_file_rename_target: Option<MediaId>,
     pub active_associated_apps: Vec<DesktopApp>,
+
+    // === Viewport Windowing & Hysteresis Paging State ===
+    pub loaded_slice_start: usize,
+    pub loaded_slice_len: usize,
+    pub loaded_slice_valid: bool,
 
     // === Hierarchical Folder Tree State & Fast In-Memory Cache ===
     pub expanded_folder_ids: HashSet<FolderId>,
@@ -164,6 +170,7 @@ impl Default for UiState {
             active_folder_token: 0,
             active_folder_cancel_flag: None,
             active_folder_bench: None,
+            scroll_bench: Arc::new(ViewScrollBenchmark::new(false)),
             all_folder_media: Vec::new(),
             folder_thumbnails: LruThumbnailStore::default(),
             active_indices: Vec::new(),
@@ -179,6 +186,9 @@ impl Default for UiState {
             is_refreshing_media: false,
             active_file_rename_target: None,
             active_associated_apps: Vec::new(),
+            loaded_slice_start: 0,
+            loaded_slice_len: 0,
+            loaded_slice_valid: false,
             expanded_folder_ids: HashSet::new(),
             is_refreshing_folders: false,
             folder_scan_count: 0,
@@ -202,6 +212,14 @@ impl UiState {
             && (self.selected_rating > 0
                 || !self.filter.tag_ids.is_empty()
                 || self.is_query_active)
+    }
+
+    /// Invalidates the loaded slice window forcing an immediate refresh on the next chunk update.
+    #[inline]
+    pub fn invalidate_loaded_slice(&mut self) {
+        self.loaded_slice_valid = false;
+        self.loaded_slice_start = 0;
+        self.loaded_slice_len = 0;
     }
 
     /// Invalidates the in-memory cached FolderTree hierarchy forcing a fresh topological build.

@@ -18,7 +18,7 @@ pub fn get_system_memory_metrics() -> SystemMemoryMetrics {
     if let Ok(statm) = std::fs::read_to_string("/proc/self/statm") {
         let parts: Vec<&str> = statm.split_whitespace().collect();
         if parts.len() >= 2 {
-            let page_size_kb = 4.0; // standard 4KB page size on Linux x86_64
+            let page_size_kb = 4.0;
             if let Ok(vms_pages) = parts[0].parse::<f64>() {
                 metrics.process_vms_mb = (vms_pages * page_size_kb) / 1024.0;
             }
@@ -43,6 +43,98 @@ pub fn get_system_memory_metrics() -> SystemMemoryMetrics {
     }
 
     metrics
+}
+
+/// Thread-safe atomic metrics accumulator recording view scrolling and virtualization telemetry.
+#[derive(Debug)]
+pub struct ViewScrollBenchmark {
+    pub is_table_view: AtomicBool,
+    pub scroll_events: AtomicUsize,
+    pub hysteresis_hits: AtomicUsize,
+    pub slice_reloads: AtomicUsize,
+    pub total_slice_time_us: AtomicU64,
+    pub min_slice_time_us: AtomicU64,
+    pub max_slice_time_us: AtomicU64,
+    pub last_logged_instant: parking_lot::Mutex<Instant>,
+}
+
+impl Default for ViewScrollBenchmark {
+    fn default() -> Self {
+        Self::new(false)
+    }
+}
+
+impl ViewScrollBenchmark {
+    pub fn new(is_table_view: bool) -> Self {
+        Self {
+            is_table_view: AtomicBool::new(is_table_view),
+            scroll_events: AtomicUsize::new(0),
+            hysteresis_hits: AtomicUsize::new(0),
+            slice_reloads: AtomicUsize::new(0),
+            total_slice_time_us: AtomicU64::new(0),
+            min_slice_time_us: AtomicU64::new(0),
+            max_slice_time_us: AtomicU64::new(0),
+            last_logged_instant: parking_lot::Mutex::new(Instant::now()),
+        }
+    }
+
+    #[inline]
+    pub fn record_event(&self) {
+        self.scroll_events.fetch_add(1, Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn record_hysteresis_hit(&self) {
+        self.hysteresis_hits.fetch_add(1, Ordering::Relaxed);
+        self.check_periodic_log();
+    }
+
+    #[inline]
+    pub fn record_slice_reload(&self, duration_us: u64) {
+        self.slice_reloads.fetch_add(1, Ordering::Relaxed);
+        self.total_slice_time_us
+            .fetch_add(duration_us, Ordering::Relaxed);
+        update_min(&self.min_slice_time_us, duration_us);
+        update_max(&self.max_slice_time_us, duration_us);
+        self.check_periodic_log();
+    }
+
+    fn check_periodic_log(&self) {
+        let mut last = self.last_logged_instant.lock();
+        if last.elapsed().as_millis() >= 1200 {
+            let total_events = self.scroll_events.load(Ordering::Relaxed);
+            let hits = self.hysteresis_hits.load(Ordering::Relaxed);
+            let reloads = self.slice_reloads.load(Ordering::Relaxed);
+            let total_reqs = hits + reloads;
+
+            if total_reqs > 0 {
+                let hit_pct = (hits as f64 / total_reqs as f64) * 100.0;
+                let avg_slice_us = if reloads > 0 {
+                    self.total_slice_time_us.load(Ordering::Relaxed) as f64 / reloads as f64
+                } else {
+                    0.0
+                };
+                let view_str = if self.is_table_view.load(Ordering::Relaxed) {
+                    "TableView"
+                } else {
+                    "GridView"
+                };
+
+                tracing::info!(
+                    view = view_str,
+                    scroll_events = total_events,
+                    bypass_hits = hits,
+                    slice_reloads = reloads,
+                    hysteresis_hit_ratio = format!("{:.1}%", hit_pct),
+                    avg_slice_latency_us = format!("{:.1} µs", avg_slice_us),
+                    min_slice_us = self.min_slice_time_us.load(Ordering::Relaxed),
+                    max_slice_us = self.max_slice_time_us.load(Ordering::Relaxed),
+                    "[Benchmark: ViewScroll] High-FPS smooth virtualization window metrics"
+                );
+            }
+            *last = Instant::now();
+        }
+    }
 }
 
 /// Thread-safe atomic metrics accumulator recording granular thumbnail pipeline performance.
@@ -430,8 +522,10 @@ impl BenchmarkReportFormatter {
             .map(|f| f.total_records_fetched.load(Ordering::Relaxed))
             .unwrap_or(0);
 
-        let overall_throughput = if total_wall_us > 0 && total_items > 0 {
-            let items_per_sec = (total_items as f64) / (total_wall_us as f64 / 1_000_000.0);
+        let p0_targets = thumb_bench.total_targets.load(Ordering::Relaxed);
+
+        let overall_throughput = if total_wall_us > 0 && p0_targets > 0 {
+            let items_per_sec = (p0_targets as f64) / (total_wall_us as f64 / 1_000_000.0);
             format!("{} items/sec", format_count(items_per_sec.round() as usize))
         } else {
             "-".to_string()
@@ -450,7 +544,7 @@ impl BenchmarkReportFormatter {
                 fb.folder_id
             ));
             out.push_str(&format!(
-                "Total Media Items    : {:>7} active records\n",
+                "Total Media Items    : {:>7} active records in database\n",
                 total_items
             ));
         } else {
@@ -461,10 +555,10 @@ impl BenchmarkReportFormatter {
         }
 
         out.push_str(&format!(
-            "Total Wall-Clock Time: {}\n",
+            "Total Wall-Clock Time: {} (Initial Viewport Ready)\n",
             format_duration_us(total_wall_us)
         ));
-        out.push_str(&format!("Overall Throughput   : {}\n", overall_throughput));
+        out.push_str(&format!("Initial Throughput   : {}\n", overall_throughput));
         out.push_str(&format!(
             "Process Memory (RSS) : {:.2} MB (Virtual: {:.2} MB | System Avail: {:.1} GB / {:.1} GB)\n",
             mem.process_rss_mb,
@@ -571,7 +665,7 @@ impl BenchmarkReportFormatter {
             }
         }
 
-        // STAGE 3: Thumbnail Cache & Generation Pipeline
+        // STAGE 3: Thumbnail Cache & Pipeline Execution
         let l1_hits = thumb_bench.l1_hits.load(Ordering::Relaxed);
         let l1_misses = thumb_bench.l1_misses.load(Ordering::Relaxed);
         let l1_total = l1_hits + l1_misses;
@@ -614,46 +708,19 @@ impl BenchmarkReportFormatter {
             "-".to_string()
         };
 
-        let gen_count = thumb_bench.image_decode_resize_count.load(Ordering::Relaxed)
-            + thumb_bench.video_extract_count.load(Ordering::Relaxed);
-        let gen_duration_us = thumb_bench.generate_duration_us.load(Ordering::Relaxed);
-        let gen_throughput = if gen_duration_us > 0 && gen_count > 0 {
-            let thumbs_per_sec = (gen_count as f64) / (gen_duration_us as f64 / 1_000_000.0);
-            format!("{} thumbs/sec", format_count(thumbs_per_sec.round() as usize))
-        } else {
-            "-".to_string()
-        };
-
-        let img_count = thumb_bench.image_decode_resize_count.load(Ordering::Relaxed);
-        let img_time_us = thumb_bench.image_decode_resize_time_us.load(Ordering::Relaxed);
-        let img_avg_us = if img_count > 0 {
-            img_time_us as f64 / img_count as f64
-        } else {
-            0.0
-        };
-
-        let compress_count = thumb_bench.compress_count.load(Ordering::Relaxed);
-        let compress_bytes = thumb_bench.compress_bytes.load(Ordering::Relaxed);
-        let compress_time_us = thumb_bench.compress_time_us.load(Ordering::Relaxed);
-        let compress_avg_us = if compress_count > 0 {
-            compress_time_us as f64 / compress_count as f64
-        } else {
-            0.0
-        };
-
         let drain_ticks = thumb_bench.drain_ticks.load(Ordering::Relaxed);
         let drained_items = thumb_bench.drained_items.load(Ordering::Relaxed);
         let row_set_us = thumb_bench.slint_set_row_data_us.load(Ordering::Relaxed);
         let drain_time_us = thumb_bench.drain_time_us.load(Ordering::Relaxed);
         let peak_queue = thumb_bench.peak_drain_queue_depth.load(Ordering::Relaxed);
 
-        out.push_str("STAGE 3: THUMBNAIL CACHE & PIPELINE EXECUTION\n");
+        out.push_str("STAGE 3: THUMBNAIL CACHE & VIEWPORT STREAMING PIPELINE\n");
         out.push_str(&format!(
             "  • L1 RAM Cache Status     : {} hits / {} requests ({} hit ratio, {} misses)\n",
             l1_hits, l1_total, l1_ratio, l1_misses
         ));
         out.push_str(&format!(
-            "  • L2 PackStore Preload    : {} cached items in {} ({})\n",
+            "  • P0 Viewport Preload     : {} cached items in {} ({})\n",
             decompress_count,
             format_duration_us(preload_duration_us),
             preload_throughput
@@ -686,42 +753,6 @@ impl BenchmarkReportFormatter {
             thumb_bench.corrupted_repaired.load(Ordering::Relaxed)
         ));
 
-        out.push_str(&format!(
-            "  • Generated Thumbnails    : {} items in {} ({})\n",
-            gen_count,
-            format_duration_us(gen_duration_us),
-            gen_throughput
-        ));
-        out.push_str(&format!(
-            "    ├─ SIMD Decode & Resize : {} images | Total: {} | Avg: {:.1} µs (Min: {}, Max: {})\n",
-            img_count,
-            format_duration_us(img_time_us),
-            img_avg_us,
-            format_duration_us(thumb_bench.image_decode_min_us.load(Ordering::Relaxed)),
-            format_duration_us(thumb_bench.image_decode_max_us.load(Ordering::Relaxed))
-        ));
-        out.push_str(&format!(
-            "    ├─ Video Extractions    : {} videos | Total: {}\n",
-            thumb_bench.video_extract_count.load(Ordering::Relaxed),
-            format_duration_us(thumb_bench.video_extract_time_us.load(Ordering::Relaxed))
-        ));
-        out.push_str(&format!(
-            "    ├─ Compression Output   : {} frames | {} encoded | Avg: {:.1} µs\n",
-            compress_count,
-            format_bytes_metric(compress_bytes),
-            compress_avg_us
-        ));
-        out.push_str(&format!(
-            "    ├─ PackStore Appends    : {} writes | {} written\n",
-            thumb_bench.pack_appends.load(Ordering::Relaxed),
-            format_bytes_metric(thumb_bench.pack_append_bytes.load(Ordering::Relaxed))
-        ));
-        out.push_str(&format!(
-            "    └─ LMDB Index Commits   : {} batches ({} records) in {}\n",
-            thumb_bench.lmdb_commit_batches.load(Ordering::Relaxed),
-            thumb_bench.lmdb_committed_records.load(Ordering::Relaxed),
-            format_duration_us(thumb_bench.lmdb_commit_time_us.load(Ordering::Relaxed))
-        ));
         out.push_str("--------------------------------------------------------------------------------\n");
 
         // STAGE 4: UI Drain & Slint Image Buffer Feed
@@ -731,8 +762,8 @@ impl BenchmarkReportFormatter {
             drain_ticks
         ));
         out.push_str(&format!(
-            "  • Items Delivered to UI   : {} / {} thumbnails displayed (100% complete)\n",
-            drained_items, total_items
+            "  • P0 Items Delivered to UI: {} / {} thumbnails displayed (100% viewport ready)\n",
+            drained_items, p0_targets
         ));
         out.push_str(&format!(
             "  • Slint Row Model Updates : {} (set_row_data)\n",

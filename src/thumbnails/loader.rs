@@ -13,7 +13,7 @@ use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
 use parking_lot::{Mutex, RwLock};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -49,6 +49,7 @@ pub struct ThumbnailScheduler {
     active_pipeline_id: Arc<AtomicUsize>,
     is_cancelled: Arc<AtomicBool>,
     active_benchmark: Arc<RwLock<Option<Arc<ThumbnailPipelineBenchmark>>>>,
+    active_in_flight: Arc<Mutex<HashSet<MediaId>>>,
 }
 
 impl ThumbnailScheduler {
@@ -73,11 +74,12 @@ impl ThumbnailScheduler {
             generator: Arc::new(ThumbnailGenerator::new()),
             pool,
             tracker: Arc::new(ThumbnailProgressTracker::new()),
-            ready_drain_queue: Arc::new(Mutex::new(Vec::with_capacity(1024))),
+            ready_drain_queue: Arc::new(Mutex::new(Vec::with_capacity(2048))),
             generation_queue: Arc::new(Mutex::new(VecDeque::new())),
             active_pipeline_id: Arc::new(AtomicUsize::new(0)),
             is_cancelled: Arc::new(AtomicBool::new(false)),
             active_benchmark: Arc::new(RwLock::new(None)),
+            active_in_flight: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -103,7 +105,14 @@ impl ThumbnailScheduler {
         queue.retain(|item| item.pipeline_id == current_pipeline);
 
         let take_count = queue.len().min(max_items);
-        queue.drain(0..take_count).collect()
+        let items: Vec<ReadyThumbnailItem> = queue.drain(0..take_count).collect();
+
+        let mut in_flight = self.active_in_flight.lock();
+        for item in &items {
+            in_flight.remove(&item.media_id);
+        }
+
+        items
     }
 
     pub fn snapshot_progress(&self) -> ThumbnailProgressSnapshot {
@@ -123,19 +132,50 @@ impl ThumbnailScheduler {
         self.active_pipeline_id.fetch_add(1, Ordering::SeqCst);
         self.generation_queue.lock().clear();
         self.ready_drain_queue.lock().clear();
+        self.active_in_flight.lock().clear();
         self.tracker.reset();
         *self.active_benchmark.write() = None;
     }
 
+    /// Fast, non-blocking synchronous check for an existing thumbnail in L1 cache or L2 PackStore.
+    /// Used by viewport virtualization during scrolling to display existing thumbnails without triggering generator threads.
+    pub fn try_load_existing(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+        // 1. L1 RAM Cache check
+        if let Some(cached) = self.cache.get(media_id) {
+            let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(cached.width, cached.height);
+            pixel_buffer.make_mut_bytes().copy_from_slice(&cached.pixels);
+            return Some(pixel_buffer);
+        }
+
+        // 2. L2 PackStore check
+        let location = {
+            let rtxn = self.library.raw_db().env.read_txn().ok()?;
+            self.library.raw_db().thumbnails.get(&rtxn, &media_id).ok().flatten()?
+        };
+
+        if let Ok(compressed_bytes) = self.store.read(location)
+            && let Ok((w, h, rgb8_data)) = self.generator.decompress(&compressed_bytes)
+        {
+            let _ = self.cache.insert(media_id, w, h, &rgb8_data);
+            let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
+            pixel_buffer.make_mut_bytes().copy_from_slice(&rgb8_data);
+            return Some(pixel_buffer);
+        }
+
+        None
+    }
+
+    /// Launches dedicated full-folder thumbnail pipeline processing ALL items in the folder.
+    /// Phase 1 preloads all existing thumbnails; Phase 2 generates missing thumbnails for all remaining items.
     pub fn start_folder_pipeline(
         self: &Arc<Self>,
         folder_id: u64,
-        mut sorted_targets: Vec<PreparedTarget>,
+        mut all_targets: Vec<PreparedTarget>,
         config: ThumbnailConfig,
     ) {
         self.cancel_current_pipeline();
 
-        let total_items = sorted_targets.len();
+        let total_items = all_targets.len();
         if total_items == 0 {
             return;
         }
@@ -143,10 +183,17 @@ impl ThumbnailScheduler {
         let pipeline_id = self.active_pipeline_id.load(Ordering::Acquire);
         self.is_cancelled.store(false, Ordering::Release);
 
+        tracing::info!(
+            folder_id = folder_id,
+            pipeline_id = pipeline_id,
+            total_items = total_items,
+            "[ThumbnailPipeline: Start] Initializing dedicated full-folder thumbnail pipeline..."
+        );
+
         let bench = Arc::new(ThumbnailPipelineBenchmark::new(pipeline_id, folder_id, total_items));
         *self.active_benchmark.write() = Some(bench.clone());
 
-        for target in sorted_targets.iter_mut() {
+        for target in all_targets.iter_mut() {
             target.pipeline_id = pipeline_id;
             target.folder_id = folder_id;
         }
@@ -157,7 +204,7 @@ impl ThumbnailScheduler {
             scheduler.execute_orchestration(
                 pipeline_id,
                 folder_id,
-                sorted_targets,
+                all_targets,
                 config,
                 bench_clone,
             );
@@ -168,7 +215,7 @@ impl ThumbnailScheduler {
         &self,
         pipeline_id: usize,
         folder_id: u64,
-        sorted_targets: Vec<PreparedTarget>,
+        all_targets: Vec<PreparedTarget>,
         config: ThumbnailConfig,
         benchmark: Arc<ThumbnailPipelineBenchmark>,
     ) {
@@ -179,17 +226,17 @@ impl ThumbnailScheduler {
         let mut existing_locations: Vec<(MediaId, PathBuf, ThumbnailLocation)> = Vec::new();
         let mut missing_targets: Vec<PreparedTarget> = Vec::new();
 
-        // 1. Single LMDB Read Transaction Query
+        // 1. Single LMDB Read Transaction Query across all targets
         {
             let rtxn = match self.library.raw_db().env.read_txn() {
                 Ok(txn) => txn,
                 Err(e) => {
-                    tracing::error!(error = %e, "Failed to acquire LMDB read transaction");
+                    tracing::error!(error = %e, "Failed to acquire LMDB read transaction for thumbnail pipeline");
                     return;
                 }
             };
 
-            for target in sorted_targets {
+            for target in all_targets {
                 if self.is_pipeline_stale(pipeline_id) {
                     return;
                 }
@@ -214,12 +261,7 @@ impl ThumbnailScheduler {
 
                 benchmark.record_l1_miss();
 
-                match self
-                    .library
-                    .raw_db()
-                    .thumbnails
-                    .get(&rtxn, &target.media_id)
-                {
+                match self.library.raw_db().thumbnails.get(&rtxn, &target.media_id) {
                     Ok(Some(location)) => {
                         existing_locations.push((target.media_id, target.file_path, location));
                     }
@@ -234,6 +276,15 @@ impl ThumbnailScheduler {
         }
 
         let existing_count = existing_locations.len();
+        let missing_count = missing_targets.len();
+
+        tracing::info!(
+            folder_id = folder_id,
+            pipeline_id = pipeline_id,
+            existing_cached = existing_count,
+            missing_to_generate = missing_count,
+            "[ThumbnailPipeline: Orchestration] Segregated items: preloading cached and generating missing..."
+        );
 
         // =========================================================================
         // PHASE 1: Bulk High-Throughput Parallel Preload (With Auto-Recovery)
@@ -267,9 +318,7 @@ impl ThumbnailScheduler {
                         );
 
                         let t_dec = Instant::now();
-                        if let Ok((w, h, rgb8_data)) =
-                            self.generator.decompress(&compressed_bytes)
-                        {
+                        if let Ok((w, h, rgb8_data)) = self.generator.decompress(&compressed_bytes) {
                             let raw_len = rgb8_data.len() as u64;
                             bench_ref.record_decompress(
                                 is_webp,
@@ -316,7 +365,7 @@ impl ThumbnailScheduler {
             return;
         }
 
-        // Auto-Recovery: Purge broken entries and re-queue for Phase 2
+        // Auto-Recovery: Purge corrupted entries and re-queue for Phase 2 generation
         let corrupted_list = corrupted_items.lock().drain(..).collect::<Vec<_>>();
         if !corrupted_list.is_empty() {
             let count = corrupted_list.len();
@@ -324,16 +373,8 @@ impl ThumbnailScheduler {
 
             if let Ok(mut wtxn) = self.library.raw_db().env.write_txn() {
                 for item in &corrupted_list {
-                    let _ = self
-                        .library
-                        .raw_db()
-                        .thumbnails
-                        .delete(&mut wtxn, &item.media_id);
-                    let _ = self
-                        .library
-                        .raw_db()
-                        .video_previews
-                        .delete(&mut wtxn, &item.media_id);
+                    let _ = self.library.raw_db().thumbnails.delete(&mut wtxn, &item.media_id);
+                    let _ = self.library.raw_db().video_previews.delete(&mut wtxn, &item.media_id);
                 }
                 let _ = wtxn.commit();
             }
@@ -344,12 +385,19 @@ impl ThumbnailScheduler {
         }
 
         // =========================================================================
-        // PHASE 2: Sorted Missing Thumbnail Generation
+        // PHASE 2: Dedicated Missing Thumbnail Generation for ALL Missing Items
         // =========================================================================
         let final_missing_count = missing_targets.len();
 
         if final_missing_count > 0 {
             self.tracker.set_generate_total(final_missing_count);
+
+            tracing::info!(
+                folder_id = folder_id,
+                missing_count = final_missing_count,
+                threads = self.pool.current_num_threads(),
+                "[ThumbnailPipeline: Phase 2] Generating missing thumbnails dedicatedly for all items..."
+            );
 
             {
                 let mut q = self.generation_queue.lock();
@@ -556,16 +604,14 @@ impl ThumbnailScheduler {
                                 );
 
                                 let mut q = self.ready_drain_queue.lock();
-                                q.push(
-                                    ReadyThumbnailItem {
-                                        pipeline_id,
-                                        folder_id,
-                                        media_id: target.media_id,
-                                        width: frame.width,
-                                        height: frame.height,
-                                        pixel_buffer,
-                                    },
-                                );
+                                q.push(ReadyThumbnailItem {
+                                    pipeline_id,
+                                    folder_id,
+                                    media_id: target.media_id,
+                                    width: frame.width,
+                                    height: frame.height,
+                                    pixel_buffer,
+                                });
                                 benchmark.record_queue_depth(q.len());
                             }
                         }
@@ -633,6 +679,7 @@ impl ThumbnailScheduler {
             active_pipeline_id: self.active_pipeline_id.clone(),
             is_cancelled: self.is_cancelled.clone(),
             active_benchmark: self.active_benchmark.clone(),
+            active_in_flight: self.active_in_flight.clone(),
         }
     }
 

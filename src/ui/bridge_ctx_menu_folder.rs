@@ -270,9 +270,9 @@ impl FolderContextMenu {
             } else if action_id == CTX_FOLDER_REFRESH {
                 tracing::info!(
                     folder = %LogObscurer::folder(Some(fid), &rec.path),
-                    "[FolderContextMenu] Refresh Folder action triggered via context menu"
+                    "[FolderContextMenu: Refresh] Explicit Refresh Folder action triggered via context menu (Rule B)"
                 );
-                BridgeFolders::select_folder(
+                BridgeFolders::refresh_folder_explicit(
                     fid,
                     PathBuf::from(&rec.path),
                     window,

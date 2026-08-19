@@ -561,6 +561,18 @@ impl UiBridge {
         );
     }
 
+    pub fn refresh_folder_explicit(&self, folder_id: FolderId, path: PathBuf) {
+        BridgeFolders::refresh_folder_explicit(
+            folder_id,
+            path,
+            &self.window,
+            &self.library,
+            &self.thumbnails,
+            &self.settings,
+            &self.state,
+        );
+    }
+
     pub fn reload_folders(&self) {
         BridgeFolders::reload_tree(&self.window, &self.library, &self.settings, &self.state);
     }

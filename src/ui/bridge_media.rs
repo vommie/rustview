@@ -11,8 +11,7 @@ use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, SortColumn, SortOrder};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
-    PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager,
-    VideoThumbnailEngine,
+    ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager, VideoThumbnailEngine,
 };
 use parking_lot::RwLock;
 use rayon::prelude::*;
@@ -24,6 +23,32 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Parameter configuration for reloading and slicing the media dataset.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MediaReloadOptions {
+    pub start_pipeline: bool,
+    pub reload_lmdb: bool,
+    pub anchor_index: Option<usize>,
+}
+
+impl MediaReloadOptions {
+    pub fn new(start_pipeline: bool, reload_lmdb: bool) -> Self {
+        Self {
+            start_pipeline,
+            reload_lmdb,
+            anchor_index: None,
+        }
+    }
+
+    pub fn with_anchor(start_pipeline: bool, reload_lmdb: bool, anchor_index: usize) -> Self {
+        Self {
+            start_pipeline,
+            reload_lmdb,
+            anchor_index: Some(anchor_index),
+        }
+    }
+}
 
 pub struct BridgeMedia;
 
@@ -110,39 +135,62 @@ impl BridgeMedia {
 
                     *timer_guard = VideoPreviewAnimator::start_animation(images, move |img| {
                         if let Some(w) = win_w.upgrade() {
-                            let model = w.get_media_items();
+                            let media_model = w.get_media_items();
+                            let start_window = w.get_visible_start_index() as usize;
+                            let visible_count = media_model.row_count();
                             let st_r = st_c.read();
-                            if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
-                                && let Some(mut item) = model.row_data(row_idx)
-                                && item.id == media_id as i32
+
+                            if let Some(&global_row_idx) = st_r.media_row_map.get(&media_id)
+                                && global_row_idx >= start_window
+                                && global_row_idx < start_window + visible_count
                             {
-                                item.thumbnail = img;
-                                model.set_row_data(row_idx, item);
+                                let local_idx = global_row_idx - start_window;
+                                if let Some(mut item) = media_model.row_data(local_idx)
+                                    && item.id == media_id as i32
+                                {
+                                    item.thumbnail = img;
+                                    media_model.set_row_data(local_idx, item);
+                                }
                             }
                         }
                     });
                 }
             } else {
-                let model = win_hover.get_media_items();
+                let media_model = win_hover.get_media_items();
+                let start_window = win_hover.get_visible_start_index() as usize;
+                let visible_count = media_model.row_count();
                 let st_r = st.read();
-                if let Some(&row_idx) = st_r.media_row_map.get(&media_id)
+
+                if let Some(&global_row_idx) = st_r.media_row_map.get(&media_id)
+                    && global_row_idx >= start_window
+                    && global_row_idx < start_window + visible_count
                     && let Some(buf) = st_r.folder_thumbnails.get(&media_id)
-                    && let Some(mut item) = model.row_data(row_idx)
-                    && item.id == media_id as i32
                 {
-                    item.thumbnail = Image::from_rgb8(buf.clone());
-                    model.set_row_data(row_idx, item);
+                    let local_idx = global_row_idx - start_window;
+                    if let Some(mut item) = media_model.row_data(local_idx)
+                        && item.id == media_id as i32
+                    {
+                        item.thumbnail = Image::from_rgb8(buf.clone());
+                        media_model.set_row_data(local_idx, item);
+                    }
                 }
             }
         });
 
-        // Real-Time Visible Scroll Chunk Logger
+        // Viewport Scrolling Virtualization (Pure Consumer: Fast L1 / L2 PackStore cache lookups with Zero Generator Contention)
+        let thumb_stream = thumbnails.clone();
+        let set_stream = settings.clone();
+        let st_stream = state.clone();
+        let win_stream = window.clone_strong();
         window.on_visible_chunk_changed(move |first_idx, last_idx, total| {
-            tracing::debug!(
-                first_visible = first_idx,
-                last_visible = last_idx,
-                total_items = total,
-                "[Viewport: ScrollChunk] Visible item window updated"
+            Self::handle_visible_chunk_changed(
+                first_idx as usize,
+                last_idx as usize,
+                total as usize,
+                &win_stream,
+                &st_stream,
+                &thumb_stream,
+                &set_stream,
             );
         });
 
@@ -177,15 +225,23 @@ impl BridgeMedia {
             set_res.save_quiet(&app_settings);
         });
 
+        // Instant View Mode Toggle Handler with 1:1 Scroll Synchronization
         let set_mode = settings;
-        let win_mode = window.as_weak();
-        window.on_view_mode_toggled(move |is_table| {
-            if let Some(w) = win_mode.upgrade() {
-                w.set_is_table_view(is_table);
-            }
-            let mut app_settings = set_mode.get();
-            app_settings.view.is_table_view = is_table;
-            set_mode.save_quiet(&app_settings);
+        let win_mode = window.clone_strong();
+        let lib_mode = library;
+        let thumb_mode = thumbnails;
+        let st_mode = state;
+
+        window.on_view_mode_toggled_with_index(move |is_table, top_item_idx| {
+            Self::handle_view_mode_toggled(
+                is_table,
+                top_item_idx as usize,
+                &win_mode,
+                &lib_mode,
+                &thumb_mode,
+                &set_mode,
+                &st_mode,
+            );
         });
     }
 
@@ -208,6 +264,179 @@ impl BridgeMedia {
         progress.is_preloading || progress.is_generating || progress.active_workers > 0
     }
 
+    /// Handles view mode toggle with seamless bidirectional scroll synchronization and centered slice extraction.
+    pub fn handle_view_mode_toggled(
+        is_table: bool,
+        anchor_item_idx: usize,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let t0 = Instant::now();
+
+        // 1. Persist new view mode setting
+        {
+            let mut app_settings = settings.get();
+            app_settings.view.is_table_view = is_table;
+            settings.save_quiet(&app_settings);
+        }
+
+        // 2. Invalidate virtualization slice to force fresh slice calculation around the anchor index
+        {
+            let mut st = state.write();
+            st.invalidate_loaded_slice();
+            st.scroll_bench.is_table_view.store(is_table, Ordering::Relaxed);
+        }
+
+        // 3. Update Slint state and synchronize scroll coordinates in the destination view
+        window.set_is_table_view(is_table);
+        window.invoke_scroll_media_to_index(anchor_item_idx as i32, is_table);
+
+        // 4. Reload the view model for the new view layout centered on anchor_item_idx
+        Self::reload_with_options(
+            window,
+            library,
+            thumbnails,
+            settings,
+            state,
+            MediaReloadOptions::with_anchor(false, false, anchor_item_idx),
+        );
+
+        let elapsed_us = t0.elapsed().as_micros();
+        tracing::info!(
+            target_view = if is_table { "TableView" } else { "GridView" },
+            anchor_index = anchor_item_idx,
+            transition_time_us = elapsed_us,
+            "[ViewTransition: Sync] View mode transition completed with scroll synchronization"
+        );
+    }
+
+    /// Decoupled virtualization handler with Hysteresis Windowing.
+    /// Pure consumer of cached thumbnails: checks L1 RAM cache first, then L2 PackStore directly, with ZERO generator task interruption.
+    pub fn handle_visible_chunk_changed(
+        first_idx: usize,
+        last_idx: usize,
+        total: usize,
+        window: &MainWindow,
+        state: &RwLock<UiState>,
+        thumbnails: &ThumbnailManager,
+        _settings: &SettingsManager,
+    ) {
+        if total == 0 {
+            return;
+        }
+
+        let is_table = window.get_is_table_view();
+        let scroll_bench = state.read().scroll_bench.clone();
+        scroll_bench.record_event();
+
+        // Optimal buffer sizes for instant rendering
+        let (buffer_size, margin_threshold) = if is_table {
+            (90usize, 20usize)
+        } else {
+            (60usize, 12usize)
+        };
+
+        // Hysteresis Check: If the currently loaded slice already comfortably covers the visible range, BYPASS completely
+        {
+            let st = state.read();
+            if st.loaded_slice_valid
+                && st.loaded_slice_len > 0
+                && first_idx >= st.loaded_slice_start + margin_threshold
+                && last_idx + margin_threshold <= st.loaded_slice_start + st.loaded_slice_len
+            {
+                scroll_bench.record_hysteresis_hit();
+                return;
+            }
+        }
+
+        let t_reload_start = Instant::now();
+
+        // Compute Centered Window Slice
+        let visible_center = (first_idx + last_idx) / 2;
+        let half_buf = buffer_size / 2;
+        let mut start_window = visible_center.saturating_sub(half_buf);
+        let end_window = (start_window + buffer_size).min(total);
+        start_window = end_window.saturating_sub(buffer_size);
+        let window_len = end_window.saturating_sub(start_window);
+
+        let mut slice_views = Vec::with_capacity(window_len);
+
+        {
+            let mut st = state.write();
+
+            for global_idx in start_window..end_window {
+                let item_info_opt = if !st.active_indices.is_empty() {
+                    st.active_indices.get(global_idx).and_then(|&idx| st.all_folder_media.get(idx))
+                } else {
+                    st.all_folder_media.get(global_idx)
+                }.map(|item| {
+                    (
+                        item.record.id,
+                        item.filename_slint.clone(),
+                        item.filesize_str.clone(),
+                        item.dimensions_str.clone(),
+                        item.record.rating as i32,
+                        item.has_tags,
+                        matches!(item.record.media_type, crate::media::MediaType::Video),
+                    )
+                });
+
+                if let Some((media_id, filename_slint, filesize_str, dimensions_str, rating, has_tags, is_video)) = item_info_opt {
+                    let is_selected = st.file_selection.is_selected(media_id);
+
+                    // Pure Cached Consumer: Retrieve from L1 cache or L2 PackStore
+                    let thumb_img = if is_table {
+                        Image::default()
+                    } else if let Some(buf) = st.folder_thumbnails.get(&media_id) {
+                        Image::from_rgb8(buf.clone())
+                    } else if let Some(buf) = thumbnails.try_load_existing(media_id) {
+                        st.folder_thumbnails.insert(media_id, buf.clone());
+                        Image::from_rgb8(buf)
+                    } else {
+                        Image::default()
+                    };
+
+                    slice_views.push(MediaItemView {
+                        id: media_id as i32,
+                        filename: filename_slint,
+                        filesize_str,
+                        dimensions_str,
+                        rating,
+                        has_tags,
+                        thumbnail: thumb_img,
+                        is_selected,
+                        is_video,
+                    });
+                }
+            }
+
+            st.loaded_slice_start = start_window;
+            st.loaded_slice_len = window_len;
+            st.loaded_slice_valid = true;
+        }
+
+        window.set_visible_start_index(start_window as i32);
+        window.set_media_items(ModelRc::new(VecModel::from(slice_views)));
+
+        let slice_us = t_reload_start.elapsed().as_micros() as u64;
+        scroll_bench.record_slice_reload(slice_us);
+
+        tracing::debug!(
+            is_table = is_table,
+            first_idx = first_idx,
+            last_idx = last_idx,
+            start_window = start_window,
+            window_len = window_len,
+            slice_time_us = slice_us,
+            "[Virtualization: HysteresisSlice] Reloaded buffer slice around visible range"
+        );
+    }
+
+    /// Dedicated manual refresh for selected media files via context menu.
+    /// Operates without blocking even if background folder-wide generation is running.
     pub fn refresh_selected_media(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -215,14 +444,12 @@ impl BridgeMedia {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        let (selected_ids, is_busy) = {
+        let selected_ids = {
             let st = state.read();
-            let sel = st.file_selection.selected_ids().clone();
-            let busy = st.is_refreshing_media || st.is_refreshing_folders;
-            (sel, busy)
+            st.file_selection.selected_ids().clone()
         };
 
-        if selected_ids.is_empty() || is_busy {
+        if selected_ids.is_empty() {
             return;
         }
 
@@ -372,19 +599,29 @@ impl BridgeMedia {
                         }
 
                         let media_model = w.get_media_items();
+                        let start_window = w.get_visible_start_index() as usize;
+                        let visible_count = media_model.row_count();
                         let st_read = st_update.read();
-                        if let Some(&row_idx) = st_read.media_row_map.get(&media_id)
-                            && let Some(mut view) = media_model.row_data(row_idx)
-                            && view.id == media_id as i32
+
+                        if let Some(&global_row_idx) = st_read.media_row_map.get(&media_id)
+                            && global_row_idx >= start_window
+                            && global_row_idx < start_window + visible_count
                         {
-                            view.thumbnail = Image::from_rgb8(shared_buf);
-                            view.filesize_str = filesize_str;
-                            view.dimensions_str = dimensions_str;
-                            view.filename = filename_slint;
-                            view.rating = updated_record.rating as i32;
-                            view.has_tags = has_tags;
-                            view.is_video = matches!(updated_record.media_type, crate::media::MediaType::Video);
-                            media_model.set_row_data(row_idx, view);
+                            let local_idx = global_row_idx - start_window;
+                            if let Some(mut view) = media_model.row_data(local_idx)
+                                && view.id == media_id as i32
+                            {
+                                if !w.get_is_table_view() {
+                                    view.thumbnail = Image::from_rgb8(shared_buf);
+                                }
+                                view.filesize_str = filesize_str;
+                                view.dimensions_str = dimensions_str;
+                                view.filename = filename_slint;
+                                view.rating = updated_record.rating as i32;
+                                view.has_tags = has_tags;
+                                view.is_video = matches!(updated_record.media_type, crate::media::MediaType::Video);
+                                media_model.set_row_data(local_idx, view);
+                            }
                         }
 
                         w.set_media_index_current(cur_step as i32);
@@ -517,9 +754,9 @@ impl BridgeMedia {
             .into_iter()
             .enumerate()
             .map(|(index, r)| {
-                let filesize_str = format_filesize(r.file_size).into();
-                let dimensions_str = format!("{} × {}", r.width, r.height).into();
-                let filename_slint = r.filename.clone().into();
+                let filesize_str: slint::SharedString = format_filesize(r.file_size).into();
+                let dimensions_str: slint::SharedString = format!("{} × {}", r.width, r.height).into();
+                let filename_slint: slint::SharedString = r.filename.clone().into();
                 let filename_lower = r.filename.to_lowercase();
 
                 let folder_p = folder_path_cache.entry(r.folder_id).or_insert_with(|| {
@@ -558,6 +795,24 @@ impl BridgeMedia {
         start_pipeline: bool,
         reload_lmdb: bool,
     ) {
+        Self::reload_with_options(
+            window,
+            library,
+            thumbnails,
+            settings,
+            state,
+            MediaReloadOptions::new(start_pipeline, reload_lmdb),
+        );
+    }
+
+    pub fn reload_with_options(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        _settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        options: MediaReloadOptions,
+    ) {
         let (folder_id, filter, sort_col, sort_ord, last_query, is_query_active, bench_opt) = {
             let s = state.read();
             (
@@ -572,7 +827,7 @@ impl BridgeMedia {
         };
 
         let path_opt = state.read().current_folder_path.clone();
-        if reload_lmdb
+        if options.reload_lmdb
             && !is_query_active
             && let Some(f_id) = folder_id
             && let Some(ref p) = path_opt
@@ -616,37 +871,41 @@ impl BridgeMedia {
 
         let t_map_start = Instant::now();
         let matched_len = sorted_refs.len();
-        let mut item_views = Vec::with_capacity(matched_len);
         let mut row_map = HashMap::with_capacity(matched_len);
-        let mut pipeline_targets = if start_pipeline {
-            Vec::with_capacity(matched_len)
-        } else {
-            Vec::new()
-        };
+        let is_table = window.get_is_table_view();
+        let p0_initial_window = if is_table { 90usize } else { 60usize };
 
         let mut matched_indices = Vec::with_capacity(matched_len);
 
         for (row_idx, &item) in sorted_refs.iter().enumerate() {
             matched_indices.push(item.index);
-            let is_selected = st.file_selection.is_selected(item.record.id);
             row_map.insert(item.record.id, row_idx);
+        }
 
-            if start_pipeline {
-                pipeline_targets.push(PreparedTarget {
-                    pipeline_id: 0,
-                    folder_id: item.record.folder_id,
-                    media_id: item.record.id,
-                    file_path: item.full_path.clone(),
-                });
-            }
+        // Calculate slice centered around the anchor index (or index 0 on default load)
+        let anchor = options.anchor_index.unwrap_or(0);
+        let half_buf = p0_initial_window / 2;
+        let mut start_window = anchor.saturating_sub(half_buf);
+        let end_window = (start_window + p0_initial_window).min(matched_len);
+        start_window = end_window.saturating_sub(p0_initial_window);
+        let slice_len = end_window.saturating_sub(start_window);
 
-            let thumbnail_img = if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
+        let mut slice_views = Vec::with_capacity(slice_len);
+
+        for &item in &sorted_refs[start_window..end_window] {
+            let is_selected = st.file_selection.is_selected(item.record.id);
+
+            let thumbnail_img = if is_table {
+                Image::default()
+            } else if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
                 Image::from_rgb8(buf.clone())
+            } else if let Some(buf) = thumbnails.try_load_existing(item.record.id) {
+                Image::from_rgb8(buf)
             } else {
                 Image::default()
             };
 
-            item_views.push(MediaItemView {
+            slice_views.push(MediaItemView {
                 id: item.record.id as i32,
                 filename: item.filename_slint.clone(),
                 filesize_str: item.filesize_str.clone(),
@@ -671,46 +930,30 @@ impl BridgeMedia {
             st_write.media_row_map = row_map;
             st_write.active_indices = matched_indices;
             st_write.last_executed_query = current_query.clone();
+            st_write.loaded_slice_start = start_window;
+            st_write.loaded_slice_len = slice_len;
+            st_write.loaded_slice_valid = true;
         }
 
         let t_slint_start = Instant::now();
-        let matched_count = item_views.len();
-        window.set_media_items(ModelRc::new(VecModel::from(item_views)));
+        window.set_total_items_count(matched_len as i32);
+        window.set_visible_start_index(start_window as i32);
+        window.set_media_items(ModelRc::new(VecModel::from(slice_views)));
 
         let metric_text = if is_query_active {
-            if matched_count == total_active_dataset_count {
-                format!("Query Items: {}", matched_count)
+            if matched_len == total_active_dataset_count {
+                format!("Query Items: {}", matched_len)
             } else {
-                format!("Query Filter: {} / {}", matched_count, total_active_dataset_count)
+                format!("Query Filter: {} / {}", matched_len, total_active_dataset_count)
             }
         } else {
-            format!("Items: {} / {}", matched_count, total_active_dataset_count)
+            format!("Items: {} / {}", matched_len, total_active_dataset_count)
         };
         window.set_items_metric_text(metric_text.into());
 
         let commit_us = t_slint_start.elapsed().as_micros() as u64;
         if let Some(ref bench) = bench_opt {
             bench.slint_commit_time_us.store(commit_us, Ordering::Relaxed);
-        }
-
-        if start_pipeline && !pipeline_targets.is_empty() {
-            let perf = settings.get().performance;
-            let config = ThumbnailConfig {
-                max_bound: perf.thumbnail_db_size,
-                format: ThumbnailFormat::from_str_name(&perf.thumbnail_format),
-                quality: perf.thumbnail_quality,
-                scaling_algorithm: ScalingAlgorithm::from_str_name(&perf.scaling_algorithm),
-                batch_commit_size: perf.batch_commit_size,
-                video_engine: VideoThumbnailEngine::from_str_name(&perf.video_engine),
-                video_offset_percent: perf.video_offset_percent,
-                generate_video_previews: perf.generate_video_previews,
-                preview_frame_count: perf.preview_frame_count,
-                custom_preview_settings: perf.custom_preview_settings,
-                preview_format: ThumbnailFormat::from_str_name(&perf.preview_format),
-                preview_quality: perf.preview_quality,
-            };
-            let pipeline_folder_id = folder_id.unwrap_or(0);
-            thumbnails.start_pipeline(pipeline_folder_id, pipeline_targets, config);
         }
     }
 }

@@ -1,0 +1,64 @@
+import { Theme } from "styles.slint";
+import { Icons } from "icons.slint";
+import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
+import { ToolbarThumbWidthControl } from "toolbar_thumb_width_control.slint";
+import { ToolbarSearchField } from "toolbar_search_field.slint";
+
+/// Persistent, unified toolbar for the central Media Area.
+/// Houses the Thumbnail Width Slider (visible in Grid View), Filter Search (with embedded Regex & Clear),
+/// Refresh button, and instant View Mode Switcher.
+export component MediaPanelToolbar inherits PanelToolbar {
+    in-out property <int> thumb-width: 190;
+    in-out property <string> search-text: "";
+    in-out property <bool> regex-mode: false;
+    in property <bool> is-table-view: false;
+
+    callback thumb-width-changed(int);
+    callback search-changed(string);
+    callback regex-toggled(bool);
+    callback refresh-clicked();
+    callback view-mode-toggled(bool /* target_is_table */);
+
+    toolbar-height: 26px;
+
+    // 1. Thumbnail Width Slider Control (Visible in Grid View only)
+    if !root.is-table-view : ToolbarThumbWidthControl {
+        thumb-width <=> root.thumb-width;
+        thumb-width-changed(w) => { root.thumb-width-changed(w); }
+    }
+
+    // 2. Expander / Spacer (Pushes search & view actions to the right)
+    ToolbarSpacer {}
+
+    // 3. Filter Search Field (with inline Regex Toggle and Clear button)
+    search-field := ToolbarSearchField {
+        placeholder-text: "Filter...";
+        field-width: 160px;
+        text <=> root.search-text;
+        is-regex <=> root.regex-mode;
+        search-changed(txt) => { root.search-changed(txt); }
+        regex-toggled(r) => { root.regex-toggled(r); }
+    }
+
+    // 4. Separator
+    ToolbarSeparator {}
+
+    // 5. Refresh Media Button
+    ToolbarButton {
+        icon: Icons.refresh;
+        tooltip: "Scan and refresh media in current folder";
+        clicked => { root.refresh-clicked(); }
+    }
+
+    // 6. Separator
+    ToolbarSeparator {}
+
+    // 7. Persistent View Mode Switcher Button (Instant response on very first click)
+    ToolbarButton {
+        icon: root.is-table-view ? Icons.grid-view : Icons.list-view;
+        tooltip: root.is-table-view ? "Switch to Grid View" : "Switch to Table View";
+        clicked => {
+            root.view-mode-toggled(!root.is-table-view);
+        }
+    }
+}

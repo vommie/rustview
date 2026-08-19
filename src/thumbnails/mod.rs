@@ -28,6 +28,7 @@ pub use types::{
 use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
+use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -64,11 +65,17 @@ impl ThumbnailManager {
     pub fn start_pipeline(
         &self,
         folder_id: u64,
-        sorted_targets: Vec<PreparedTarget>,
+        all_targets: Vec<PreparedTarget>,
         config: ThumbnailConfig,
     ) {
         self.scheduler
-            .start_folder_pipeline(folder_id, sorted_targets, config);
+            .start_folder_pipeline(folder_id, all_targets, config);
+    }
+
+    /// Fast synchronous lookup in L1 RAM cache or L2 PackStore.
+    #[inline]
+    pub fn try_load_existing(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+        self.scheduler.try_load_existing(media_id)
     }
 
     pub fn cancel_pipeline(&self) {
