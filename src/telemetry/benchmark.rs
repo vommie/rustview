@@ -694,6 +694,14 @@ impl BenchmarkReportFormatter {
             0.0
         };
 
+        let video_count = thumb_bench.video_extract_count.load(Ordering::Relaxed);
+        let video_cpu_us = thumb_bench.video_extract_time_us.load(Ordering::Relaxed);
+        let avg_video_extract_ms = if video_count > 0 {
+            (video_cpu_us as f64 / video_count as f64) / 1000.0
+        } else {
+            0.0
+        };
+
         let preload_duration_us = thumb_bench.preload_duration_us.load(Ordering::Relaxed);
         let preload_throughput = if preload_duration_us > 0 && decompress_count > 0 {
             let thumbs_per_sec = (decompress_count as f64) / (preload_duration_us as f64 / 1_000_000.0);
@@ -702,8 +710,11 @@ impl BenchmarkReportFormatter {
             "-".to_string()
         };
 
-        let parallel_speedup = if preload_duration_us > 0 && decompress_cpu_us > 0 {
-            format!("{:.2}x", decompress_cpu_us as f64 / preload_duration_us as f64)
+        let generate_duration_us = thumb_bench.generate_duration_us.load(Ordering::Relaxed);
+        let gen_count = thumb_bench.compress_count.load(Ordering::Relaxed);
+        let gen_throughput = if generate_duration_us > 0 && gen_count > 0 {
+            let items_per_sec = (gen_count as f64) / (generate_duration_us as f64 / 1_000_000.0);
+            format!("{} items/sec", format_count(items_per_sec.round() as usize))
         } else {
             "-".to_string()
         };
@@ -714,51 +725,65 @@ impl BenchmarkReportFormatter {
         let drain_time_us = thumb_bench.drain_time_us.load(Ordering::Relaxed);
         let peak_queue = thumb_bench.peak_drain_queue_depth.load(Ordering::Relaxed);
 
-        out.push_str("STAGE 3: THUMBNAIL CACHE & VIEWPORT STREAMING PIPELINE\n");
+        out.push_str("STAGE 3: THUMBNAIL CACHE & GENERATION PIPELINE\n");
         out.push_str(&format!(
             "  • L1 RAM Cache Status     : {} hits / {} requests ({} hit ratio, {} misses)\n",
             l1_hits, l1_total, l1_ratio, l1_misses
         ));
-        out.push_str(&format!(
-            "  • P0 Viewport Preload     : {} cached items in {} ({})\n",
-            decompress_count,
-            format_duration_us(preload_duration_us),
-            preload_throughput
-        ));
-        out.push_str(&format!(
-            "    ├─ Multi-Core CPU Time  : {} total ({} parallel speedup)\n",
-            format_duration_us(decompress_cpu_us),
-            parallel_speedup
-        ));
-        out.push_str(&format!(
-            "    ├─ Binary Pack Reads    : {} reads | {} read (Avg: {} / read)\n",
-            pack_reads,
-            format_bytes_metric(pack_bytes_read),
-            format_bytes_metric(avg_pack_read_bytes)
-        ));
-        out.push_str(&format!(
-            "    ├─ Decompress Breakdown : {} WebP / {} JPEG | {} raw RGB8 output\n",
-            decompress_webp,
-            decompress_jpeg,
-            format_bytes_metric(decompress_raw_bytes)
-        ));
-        out.push_str(&format!(
-            "    ├─ Decompress Latency   : Avg: {:.2} ms (Min: {}, Max: {})\n",
-            decompress_avg_us / 1000.0,
-            format_duration_us(thumb_bench.decompress_min_us.load(Ordering::Relaxed)),
-            format_duration_us(thumb_bench.decompress_max_us.load(Ordering::Relaxed))
-        ));
-        out.push_str(&format!(
-            "    └─ Corrupted / Repaired : {} entries\n",
-            thumb_bench.corrupted_repaired.load(Ordering::Relaxed)
-        ));
+        if decompress_count > 0 {
+            out.push_str(&format!(
+                "  • P0 Viewport Preload     : {} cached items in {} ({})\n",
+                decompress_count,
+                format_duration_us(preload_duration_us),
+                preload_throughput
+            ));
+            out.push_str(&format!(
+                "    ├─ Binary Pack Reads    : {} reads | {} read (Avg: {} / read)\n",
+                pack_reads,
+                format_bytes_metric(pack_bytes_read),
+                format_bytes_metric(avg_pack_read_bytes)
+            ));
+            out.push_str(&format!(
+                "    └─ Decompress Latency   : Avg: {:.2} ms ({} WebP / {} JPEG | {} raw RGB8)\n",
+                decompress_avg_us / 1000.0,
+                decompress_webp,
+                decompress_jpeg,
+                format_bytes_metric(decompress_raw_bytes)
+            ));
+        }
+        if video_count > 0 || gen_count > 0 {
+            out.push_str(&format!(
+                "  • Phase 2 Generation      : {} items in {} ({})\n",
+                gen_count,
+                format_duration_us(generate_duration_us),
+                gen_throughput
+            ));
+            if video_count > 0 {
+                out.push_str(&format!(
+                    "    ├─ Video Extractions    : {} videos | Avg: {:.2} ms / video\n",
+                    video_count,
+                    avg_video_extract_ms
+                ));
+            }
+            out.push_str(&format!(
+                "    ├─ Compressed Encodes   : {} items | {}\n",
+                thumb_bench.compress_count.load(Ordering::Relaxed),
+                format_bytes_metric(thumb_bench.compress_bytes.load(Ordering::Relaxed))
+            ));
+            out.push_str(&format!(
+                "    └─ LMDB Batched Commits : {} batches ({} records in {})\n",
+                thumb_bench.lmdb_commit_batches.load(Ordering::Relaxed),
+                thumb_bench.lmdb_committed_records.load(Ordering::Relaxed),
+                format_duration_us(thumb_bench.lmdb_commit_time_us.load(Ordering::Relaxed))
+            ));
+        }
 
         out.push_str("--------------------------------------------------------------------------------\n");
 
         // STAGE 4: UI Drain & Slint Image Buffer Feed
         out.push_str("STAGE 4: SLINT UI DRAIN & IMAGE BUFFER FEED\n");
         out.push_str(&format!(
-            "  • Drain Timer Ticks       : {} cycles (batch limit: adaptive)\n",
+            "  • Drain Timer Ticks       : {} cycles (capped batch: 64 items/tick)\n",
             drain_ticks
         ));
         out.push_str(&format!(

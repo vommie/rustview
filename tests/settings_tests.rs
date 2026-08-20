@@ -8,14 +8,15 @@ use rustview::settings::{
     DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS, DEFAULT_OBFUSCATE_LOGS,
     DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT,
     DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM,
-    DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS,
-    DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH,
-    DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER,
-    DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE,
-    DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE,
-    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH,
-    DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT,
-    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH,
+    DEFAULT_SHORT_VIDEO_THRESHOLD_SECS, DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES,
+    DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY,
+    DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN,
+    DEFAULT_SORT_ORDER, DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS,
+    DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO,
+    DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY,
+    DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE,
+    DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED,
+    DEFAULT_WINDOW_WIDTH,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -125,6 +126,10 @@ fn test_settings_persistence_sanitization_and_hooks() {
         DEFAULT_VIDEO_OFFSET_PERCENT
     );
     assert_eq!(
+        initial.performance.short_video_threshold_secs,
+        DEFAULT_SHORT_VIDEO_THRESHOLD_SECS
+    );
+    assert_eq!(
         initial.performance.generate_video_previews,
         DEFAULT_GENERATE_VIDEO_PREVIEWS
     );
@@ -206,6 +211,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.appearance.show_filenames = false;
     initial.appearance.enable_tooltips = false;
     initial.appearance.tooltip_delay_ms = 450;
+    initial.performance.short_video_threshold_secs = 20;
     initial.formats.auto_detect_extensionless_media = false;
     initial.debug.obfuscate_logs = false;
     manager.update(initial);
@@ -221,6 +227,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(!loaded.appearance.show_filenames);
     assert!(!loaded.appearance.enable_tooltips);
     assert_eq!(loaded.appearance.tooltip_delay_ms, 450);
+    assert_eq!(loaded.performance.short_video_threshold_secs, 20);
     assert!(!loaded.formats.auto_detect_extensionless_media);
     assert!(!loaded.debug.obfuscate_logs);
 
@@ -228,6 +235,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     let mut invalid_settings = AppSettings::default();
     invalid_settings.appearance.thumbnail_aspect_ratio = "invalid_ratio".to_string();
     invalid_settings.appearance.tooltip_delay_ms = 99999;
+    invalid_settings.performance.short_video_threshold_secs = 500;
     reloaded_store.save(&invalid_settings).unwrap();
 
     let sanitized = reloaded_store.load();
@@ -238,6 +246,10 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(
         sanitized.appearance.tooltip_delay_ms,
         rustview::settings::MAX_TOOLTIP_DELAY_MS
+    );
+    assert_eq!(
+        sanitized.performance.short_video_threshold_secs,
+        rustview::settings::MAX_SHORT_VIDEO_THRESHOLD_SECS
     );
 }
 
@@ -337,6 +349,10 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
         DEFAULT_THUMBNAIL_QUALITY
     );
     assert_eq!(
+        loaded.performance.short_video_threshold_secs,
+        DEFAULT_SHORT_VIDEO_THRESHOLD_SECS
+    );
+    assert_eq!(
         loaded.performance.custom_preview_settings,
         DEFAULT_CUSTOM_PREVIEW_SETTINGS
     );
@@ -362,7 +378,7 @@ fn test_log_obscurer_behavior_enabled_and_disabled() {
     let test_tag_name = "Family Vacation";
     let test_query = "beach 2026";
 
-    // 1. When Obfuscation is DISABLED (Cleartext with contextual info)
+    // 1. When Obfuscation is DISABLED
     LogObscurer::set_obfuscate(false);
     assert!(!LogObscurer::is_active());
 
@@ -381,7 +397,7 @@ fn test_log_obscurer_behavior_enabled_and_disabled() {
     );
     assert_eq!(LogObscurer::query(test_query), "\"beach 2026\"");
 
-    // 2. When Obfuscation is ENABLED (Privacy-Protected with IDs / Hash surrogates)
+    // 2. When Obfuscation is ENABLED
     LogObscurer::set_obfuscate(true);
     assert!(LogObscurer::is_active());
 

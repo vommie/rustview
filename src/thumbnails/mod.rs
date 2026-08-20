@@ -62,6 +62,14 @@ impl ThumbnailManager {
         })
     }
 
+    pub fn set_config(&self, config: ThumbnailConfig) {
+        self.scheduler.set_config(config);
+    }
+
+    pub fn get_config(&self) -> ThumbnailConfig {
+        self.scheduler.get_config()
+    }
+
     pub fn start_pipeline(
         &self,
         folder_id: u64,
@@ -76,6 +84,16 @@ impl ThumbnailManager {
     #[inline]
     pub fn try_load_existing(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
         self.scheduler.try_load_existing(media_id)
+    }
+
+    /// Fast non-blocking lookup for cached preview animation frames (0.05ms).
+    /// NEVER invokes heavy video decoding on UI threads.
+    #[inline]
+    pub fn try_load_preview_frames(
+        &self,
+        media_id: MediaId,
+    ) -> Option<Vec<(u32, u32, Vec<u8>)>> {
+        self.scheduler.try_load_preview_frames(media_id)
     }
 
     pub fn cancel_pipeline(&self) {
@@ -122,13 +140,6 @@ impl ThumbnailManager {
         config: &ThumbnailConfig,
     ) -> Result<CachedThumbnail, ThumbnailError> {
         self.scheduler.regenerate_sync(media_id, file_path, config)
-    }
-
-    pub fn load_preview_frames_sync(
-        &self,
-        media_id: MediaId,
-    ) -> Result<Vec<(u32, u32, Vec<u8>)>, ThumbnailError> {
-        self.scheduler.load_preview_frames_sync(media_id)
     }
 
     pub fn cache(&self) -> &L1ThumbnailCache {

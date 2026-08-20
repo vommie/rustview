@@ -22,7 +22,7 @@ impl BridgeThumbnails {
         let thumb_ref = thumbnails.clone();
         let st_ref = state.clone();
 
-        // 16ms cadence (~60 FPS) with dynamic adaptive batch sizing
+        // 16ms cadence (~60 FPS) with bounded batch size (max 64 items/tick) to guarantee butter-smooth UI rendering
         timer.start(
             slint::TimerMode::Repeated,
             std::time::Duration::from_millis(16),
@@ -32,7 +32,7 @@ impl BridgeThumbnails {
                 };
 
                 let t_drain_start = Instant::now();
-                let batch = thumb_ref.drain_ready_batch(512);
+                let batch = thumb_ref.drain_ready_batch(64);
 
                 let mut row_set_us = 0u64;
                 let items_drained = batch.len();

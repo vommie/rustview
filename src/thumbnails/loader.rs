@@ -50,6 +50,7 @@ pub struct ThumbnailScheduler {
     is_cancelled: Arc<AtomicBool>,
     active_benchmark: Arc<RwLock<Option<Arc<ThumbnailPipelineBenchmark>>>>,
     active_in_flight: Arc<Mutex<HashSet<MediaId>>>,
+    current_config: Arc<RwLock<ThumbnailConfig>>,
 }
 
 impl ThumbnailScheduler {
@@ -80,7 +81,16 @@ impl ThumbnailScheduler {
             is_cancelled: Arc::new(AtomicBool::new(false)),
             active_benchmark: Arc::new(RwLock::new(None)),
             active_in_flight: Arc::new(Mutex::new(HashSet::new())),
+            current_config: Arc::new(RwLock::new(ThumbnailConfig::default())),
         }
+    }
+
+    pub fn set_config(&self, config: ThumbnailConfig) {
+        *self.current_config.write() = config;
+    }
+
+    pub fn get_config(&self) -> ThumbnailConfig {
+        self.current_config.read().clone()
     }
 
     pub fn current_pipeline_id(&self) -> usize {
@@ -138,7 +148,6 @@ impl ThumbnailScheduler {
     }
 
     /// Fast, non-blocking synchronous check for an existing thumbnail in L1 cache or L2 PackStore.
-    /// Used by viewport virtualization during scrolling to display existing thumbnails without triggering generator threads.
     pub fn try_load_existing(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
         // 1. L1 RAM Cache check
         if let Some(cached) = self.cache.get(media_id) {
@@ -165,8 +174,32 @@ impl ThumbnailScheduler {
         None
     }
 
+    /// Fast non-blocking lookup for cached preview frames in LMDB / PackStore (0.05ms).
+    /// NEVER runs heavy synchronous video decoding on the UI thread.
+    pub fn try_load_preview_frames(
+        &self,
+        media_id: MediaId,
+    ) -> Option<Vec<(u32, u32, Vec<u8>)>> {
+        let rtxn = self.library.raw_db().env.read_txn().ok()?;
+        let p_rec = self.library.raw_db().video_previews.get(&rtxn, &media_id).ok().flatten()?;
+
+        let mut frames = Vec::with_capacity(p_rec.frame_locations.len());
+        for loc in &p_rec.frame_locations {
+            if let Ok(bytes) = self.store.read(*loc)
+                && let Ok((w, h, rgb8)) = self.generator.decompress(&bytes)
+            {
+                frames.push((w, h, rgb8));
+            }
+        }
+
+        if frames.is_empty() {
+            None
+        } else {
+            Some(frames)
+        }
+    }
+
     /// Launches dedicated full-folder thumbnail pipeline processing ALL items in the folder.
-    /// Phase 1 preloads all existing thumbnails; Phase 2 generates missing thumbnails for all remaining items.
     pub fn start_folder_pipeline(
         self: &Arc<Self>,
         folder_id: u64,
@@ -180,6 +213,7 @@ impl ThumbnailScheduler {
             return;
         }
 
+        self.set_config(config.clone());
         let pipeline_id = self.active_pipeline_id.load(Ordering::Acquire);
         self.is_cancelled.store(false, Ordering::Release);
 
@@ -187,6 +221,8 @@ impl ThumbnailScheduler {
             folder_id = folder_id,
             pipeline_id = pipeline_id,
             total_items = total_items,
+            generate_previews = config.generate_video_previews,
+            preview_frame_count = config.preview_frame_count,
             "[ThumbnailPipeline: Start] Initializing dedicated full-folder thumbnail pipeline..."
         );
 
@@ -241,6 +277,19 @@ impl ThumbnailScheduler {
                     return;
                 }
 
+                let is_video = MediaFormat::from_path(&target.file_path).media_type() == Some(MediaType::Video);
+                let has_primary = self.library.raw_db().thumbnails.get(&rtxn, &target.media_id).ok().flatten();
+
+                let previews_ok = if is_video && config.generate_video_previews {
+                    if let Ok(Some(prev)) = self.library.raw_db().video_previews.get(&rtxn, &target.media_id) {
+                        prev.frame_count >= config.preview_frame_count && !prev.frame_locations.is_empty()
+                    } else {
+                        false
+                    }
+                } else {
+                    true
+                };
+
                 if let Some(cached) = self.cache.get(target.media_id) {
                     benchmark.record_l1_hit();
                     let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(cached.width, cached.height);
@@ -256,21 +305,22 @@ impl ThumbnailScheduler {
                         pixel_buffer,
                     });
                     benchmark.record_queue_depth(q.len());
+
+                    if is_video && !previews_ok {
+                        missing_targets.push(target);
+                    }
                     continue;
                 }
 
                 benchmark.record_l1_miss();
 
-                match self.library.raw_db().thumbnails.get(&rtxn, &target.media_id) {
-                    Ok(Some(location)) => {
-                        existing_locations.push((target.media_id, target.file_path, location));
-                    }
-                    Ok(None) => {
+                if let Some(location) = has_primary {
+                    existing_locations.push((target.media_id, target.file_path.clone(), location));
+                    if is_video && !previews_ok {
                         missing_targets.push(target);
                     }
-                    Err(_) => {
-                        missing_targets.push(target);
-                    }
+                } else {
+                    missing_targets.push(target);
                 }
             }
         }
@@ -283,11 +333,11 @@ impl ThumbnailScheduler {
             pipeline_id = pipeline_id,
             existing_cached = existing_count,
             missing_to_generate = missing_count,
-            "[ThumbnailPipeline: Orchestration] Segregated items: preloading cached and generating missing..."
+            "[ThumbnailPipeline: Orchestration] Segregated items: preloading cached and generating missing/updated previews..."
         );
 
         // =========================================================================
-        // PHASE 1: Bulk High-Throughput Parallel Preload (With Auto-Recovery)
+        // PHASE 1: Bulk High-Throughput Parallel Preload
         // =========================================================================
         let corrupted_items = Arc::new(Mutex::new(Vec::new()));
 
@@ -365,7 +415,6 @@ impl ThumbnailScheduler {
             return;
         }
 
-        // Auto-Recovery: Purge corrupted entries and re-queue for Phase 2 generation
         let corrupted_list = corrupted_items.lock().drain(..).collect::<Vec<_>>();
         if !corrupted_list.is_empty() {
             let count = corrupted_list.len();
@@ -385,7 +434,7 @@ impl ThumbnailScheduler {
         }
 
         // =========================================================================
-        // PHASE 2: Dedicated Missing Thumbnail Generation for ALL Missing Items
+        // PHASE 2: Dedicated Missing Thumbnail & Video Preview Generation
         // =========================================================================
         let final_missing_count = missing_targets.len();
 
@@ -396,7 +445,7 @@ impl ThumbnailScheduler {
                 folder_id = folder_id,
                 missing_count = final_missing_count,
                 threads = self.pool.current_num_threads(),
-                "[ThumbnailPipeline: Phase 2] Generating missing thumbnails dedicatedly for all items..."
+                "[ThumbnailPipeline: Phase 2] Generating missing thumbnails and video previews dedicatedly..."
             );
 
             {
@@ -680,6 +729,7 @@ impl ThumbnailScheduler {
             is_cancelled: self.is_cancelled.clone(),
             active_benchmark: self.active_benchmark.clone(),
             active_in_flight: self.active_in_flight.clone(),
+            current_config: self.current_config.clone(),
         }
     }
 
@@ -829,38 +879,5 @@ impl ThumbnailScheduler {
             .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
 
         Ok(item)
-    }
-
-    pub fn load_preview_frames_sync(
-        &self,
-        media_id: MediaId,
-    ) -> Result<Vec<(u32, u32, Vec<u8>)>, ThumbnailError> {
-        let record = {
-            let rtxn = self.library.raw_db().env.read_txn()?;
-            self.library.raw_db().video_previews.get(&rtxn, &media_id)?
-        };
-
-        let Some(p_rec) = record else {
-            return Err(ThumbnailError::Ffmpeg(
-                "No video preview found in database".into(),
-            ));
-        };
-
-        let mut frames = Vec::with_capacity(p_rec.frame_locations.len());
-        for loc in p_rec.frame_locations {
-            if let Ok(bytes) = self.store.read(loc)
-                && let Ok((w, h, rgb8)) = self.generator.decompress(&bytes)
-            {
-                frames.push((w, h, rgb8));
-            }
-        }
-
-        if frames.is_empty() {
-            return Err(ThumbnailError::Ffmpeg(
-                "Failed to decompress video preview frames".into(),
-            ));
-        }
-
-        Ok(frames)
     }
 }

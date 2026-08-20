@@ -2,7 +2,6 @@ use super::obscurer::LogObscurer;
 use super::schema::AppSettings;
 
 /// Granular, domain-specific delta representation between two `AppSettings` states.
-/// Enables targeted subsystem updates without triggering unnecessary re-indexing or view reloads.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SettingsDiff {
     pub has_changes: bool,
@@ -83,6 +82,7 @@ impl SettingsDiff {
             || old.performance.batch_commit_size != new.performance.batch_commit_size
             || old.performance.video_engine != new.performance.video_engine
             || old.performance.video_offset_percent != new.performance.video_offset_percent
+            || old.performance.short_video_threshold_secs != new.performance.short_video_threshold_secs
             || old.performance.generate_video_previews != new.performance.generate_video_previews
             || old.performance.preview_frame_count != new.performance.preview_frame_count
             || old.performance.custom_preview_settings != new.performance.custom_preview_settings
@@ -279,6 +279,12 @@ impl SettingsDiff {
             changes.push(format!(
                 "Performance: video_offset_percent ({}% -> {}%)",
                 old.performance.video_offset_percent, new.performance.video_offset_percent
+            ));
+        }
+        if old.performance.short_video_threshold_secs != new.performance.short_video_threshold_secs {
+            changes.push(format!(
+                "Performance: short_video_threshold_secs ({}s -> {}s)",
+                old.performance.short_video_threshold_secs, new.performance.short_video_threshold_secs
             ));
         }
         if old.performance.generate_video_previews != new.performance.generate_video_previews {

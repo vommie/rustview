@@ -9,10 +9,7 @@ use crate::library::models::{FolderId, FolderRecord};
 use crate::library::Library;
 use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::telemetry::FolderLoadBenchmark;
-use crate::thumbnails::{
-    PreparedTarget, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager,
-    VideoThumbnailEngine,
-};
+use crate::thumbnails::{PreparedTarget, ThumbnailConfig, ThumbnailManager};
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
@@ -563,7 +560,7 @@ impl BridgeFolders {
                 settings,
                 state,
             },
-            false, // is_explicit_refresh = false
+            false,
         );
     }
 
@@ -588,7 +585,7 @@ impl BridgeFolders {
                 settings,
                 state,
             },
-            true, // is_explicit_refresh = true
+            true,
         );
     }
 
@@ -660,7 +657,7 @@ impl BridgeFolders {
         Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
-        // Immediate Zero-Delay Database Fetch (Stage 1a & 1b)
+        // Immediate Zero-Delay Database Fetch
         let t_id_start = Instant::now();
         let media_ids = {
             let rtxn = ctx.library.raw_db().env.read_txn().ok();
@@ -706,7 +703,6 @@ impl BridgeFolders {
         Self::scroll_to_selected(ctx.window);
 
         if !should_scan_and_generate {
-            // Known folder opened normally -> Zero-FS load complete, no scan or full generation launched.
             tracing::info!(
                 folder_id = folder_id,
                 folder_name = %folder_name,
@@ -718,7 +714,6 @@ impl BridgeFolders {
             return;
         }
 
-        // Triggered via Rule A (Toolbar), Rule B (Context Menu), or Rule C (Empty Folder) -> Run scan & full generation
         tracing::info!(
             folder_id = folder_id,
             folder_name = %folder_name,
@@ -817,24 +812,8 @@ impl BridgeFolders {
                                 w.set_is_indexing_media(false);
                                 w.set_status_text("Ready.".into());
 
-                                // Launch dedicated full-folder thumbnail generation for ALL items in folder
                                 if !all_targets.is_empty() {
-                                    let perf = set_scanner.get().performance;
-                                    let config = ThumbnailConfig {
-                                        max_bound: perf.thumbnail_db_size,
-                                        format: ThumbnailFormat::from_str_name(&perf.thumbnail_format),
-                                        quality: perf.thumbnail_quality,
-                                        scaling_algorithm: ScalingAlgorithm::from_str_name(&perf.scaling_algorithm),
-                                        batch_commit_size: perf.batch_commit_size,
-                                        video_engine: VideoThumbnailEngine::from_str_name(&perf.video_engine),
-                                        video_offset_percent: perf.video_offset_percent,
-                                        generate_video_previews: perf.generate_video_previews,
-                                        preview_frame_count: perf.preview_frame_count,
-                                        custom_preview_settings: perf.custom_preview_settings,
-                                        preview_format: ThumbnailFormat::from_str_name(&perf.preview_format),
-                                        preview_quality: perf.preview_quality,
-                                    };
-
+                                    let config = ThumbnailConfig::from_performance_settings(&set_scanner.get().performance);
                                     tracing::info!(
                                         folder_id = folder_id,
                                         total_targets = all_targets.len(),

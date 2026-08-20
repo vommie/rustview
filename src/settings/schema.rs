@@ -84,6 +84,10 @@ pub const DEFAULT_VIDEO_OFFSET_PERCENT: u8 = 10;
 pub const MIN_VIDEO_OFFSET_PERCENT: u8 = 1;
 pub const MAX_VIDEO_OFFSET_PERCENT: u8 = 90;
 
+pub const DEFAULT_SHORT_VIDEO_THRESHOLD_SECS: u32 = 10;
+pub const MIN_SHORT_VIDEO_THRESHOLD_SECS: u32 = 1;
+pub const MAX_SHORT_VIDEO_THRESHOLD_SECS: u32 = 60;
+
 pub const DEFAULT_GENERATE_VIDEO_PREVIEWS: bool = true;
 pub const DEFAULT_PREVIEW_FRAME_COUNT: u32 = 5;
 pub const MIN_PREVIEW_FRAME_COUNT: u32 = 2;
@@ -93,13 +97,23 @@ pub const DEFAULT_CUSTOM_PREVIEW_SETTINGS: bool = true;
 pub const DEFAULT_PREVIEW_FORMAT: &str = "WebP";
 pub const DEFAULT_PREVIEW_QUALITY: u8 = 40;
 
-/// Dynamically calculates default worker thread count based on physical CPU cores.
+/// Dynamically calculates default worker thread count, reserving CPU headroom for Slint UI responsiveness.
 #[inline]
 pub fn default_worker_threads() -> usize {
-    std::thread::available_parallelism()
+    let available = std::thread::available_parallelism()
         .map(|n| n.get())
-        .unwrap_or(4)
-        .clamp(MIN_WORKER_THREADS, MAX_WORKER_THREADS)
+        .unwrap_or(4);
+
+    // Reserve 1-2 cores for Slint GUI thread to guarantee 60 FPS stutter-free responsiveness
+    let reserved = if available > 4 {
+        available.saturating_sub(2)
+    } else if available > 1 {
+        available.saturating_sub(1)
+    } else {
+        1
+    };
+
+    reserved.clamp(MIN_WORKER_THREADS, MAX_WORKER_THREADS)
 }
 
 // =============================================================================
@@ -312,6 +326,7 @@ pub struct PerformanceSettings {
     pub batch_commit_size: usize,
     pub video_engine: String,
     pub video_offset_percent: u8,
+    pub short_video_threshold_secs: u32,
     pub generate_video_previews: bool,
     pub preview_frame_count: u32,
     pub custom_preview_settings: bool,
@@ -331,6 +346,7 @@ impl Default for PerformanceSettings {
             batch_commit_size: DEFAULT_BATCH_COMMIT_SIZE,
             video_engine: DEFAULT_VIDEO_ENGINE.to_string(),
             video_offset_percent: DEFAULT_VIDEO_OFFSET_PERCENT,
+            short_video_threshold_secs: DEFAULT_SHORT_VIDEO_THRESHOLD_SECS,
             generate_video_previews: DEFAULT_GENERATE_VIDEO_PREVIEWS,
             preview_frame_count: DEFAULT_PREVIEW_FRAME_COUNT,
             custom_preview_settings: DEFAULT_CUSTOM_PREVIEW_SETTINGS,

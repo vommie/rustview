@@ -2,11 +2,11 @@ use super::schema::{
     AppSettings, GridAspectRatio, DEFAULT_PREVIEW_FORMAT, DEFAULT_SCALING_ALGORITHM,
     DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_VIDEO_ENGINE,
     MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_L1_CACHE_SLOTS, MAX_PREVIEW_FRAME_COUNT,
-    MAX_QUALITY, MAX_SIDEBAR_WIDTH, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH,
-    MAX_TOOLTIP_DELAY_MS, MAX_VIDEO_OFFSET_PERCENT, MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE,
-    MIN_COL_WIDTH, MIN_L1_CACHE_SLOTS, MIN_PREVIEW_FRAME_COUNT, MIN_QUALITY, MIN_SIDEBAR_WIDTH,
-    MIN_THUMBNAIL_DB_SIZE, MIN_THUMBNAIL_WIDTH, MIN_TOOLTIP_DELAY_MS, MIN_VIDEO_OFFSET_PERCENT,
-    MIN_WORKER_THREADS,
+    MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH, MAX_THUMBNAIL_DB_SIZE,
+    MAX_THUMBNAIL_WIDTH, MAX_TOOLTIP_DELAY_MS, MAX_VIDEO_OFFSET_PERCENT, MAX_WORKER_THREADS,
+    MIN_BATCH_COMMIT_SIZE, MIN_COL_WIDTH, MIN_L1_CACHE_SLOTS, MIN_PREVIEW_FRAME_COUNT,
+    MIN_QUALITY, MIN_SHORT_VIDEO_THRESHOLD_SECS, MIN_SIDEBAR_WIDTH, MIN_THUMBNAIL_DB_SIZE,
+    MIN_THUMBNAIL_WIDTH, MIN_TOOLTIP_DELAY_MS, MIN_VIDEO_OFFSET_PERCENT, MIN_WORKER_THREADS,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -23,7 +23,6 @@ impl SettingsStore {
     }
 
     /// Loads settings from disk with tolerant forward/backward compatibility.
-    /// Missing or legacy fields are automatically populated from SPoT defaults without data loss.
     pub fn load(&self) -> AppSettings {
         if self.file_path.exists() {
             match fs::read_to_string(&self.file_path) {
@@ -143,6 +142,10 @@ impl SettingsStore {
             .performance
             .video_offset_percent
             .clamp(MIN_VIDEO_OFFSET_PERCENT, MAX_VIDEO_OFFSET_PERCENT);
+        settings.performance.short_video_threshold_secs = settings
+            .performance
+            .short_video_threshold_secs
+            .clamp(MIN_SHORT_VIDEO_THRESHOLD_SECS, MAX_SHORT_VIDEO_THRESHOLD_SECS);
         settings.performance.preview_frame_count = settings
             .performance
             .preview_frame_count

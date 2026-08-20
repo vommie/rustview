@@ -14,6 +14,7 @@ export component SettingsPagePerformance inherits VerticalLayout {
     in-out property <int> scaling-algo-idx: 0; // 0 = CatmullRom, 1 = Bilinear, 2 = Lanczos3, 3 = Nearest
     in-out property <int> video-engine-idx: 0; // 0 = FFmpeg, 1 = MPV
     in-out property <int> video-offset-percent: 10;
+    in-out property <int> short-video-threshold-secs: 10;
     in-out property <bool> generate-video-previews: true;
     in-out property <int> preview-frame-count: 5;
     in-out property <bool> custom-preview-settings: true;
@@ -194,7 +195,7 @@ export component SettingsPagePerformance inherits VerticalLayout {
     // Card 4: Video Thumbnailing & Previews
     SettingsCard {
         title: "Video Thumbnailing & Previews";
-        description: "Specify the backend video decoding library, extraction timestamp offset, and multi-frame preview animation generation.";
+        description: "Specify the backend video decoding library, extraction timestamp offset, short video handling threshold, and multi-frame preview animation generation.";
 
         HorizontalLayout {
             spacing: 8px;
@@ -228,6 +229,29 @@ export component SettingsPagePerformance inherits VerticalLayout {
             }
             Text {
                 text: root.video-offset-percent + "%";
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Short Video Threshold (Linear Scan):";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 150px;
+                minimum: 1;
+                maximum: 60;
+                value: root.short-video-threshold_secs;
+                changed(v) => { root.short-video-threshold-secs = Math.round(v); }
+            }
+            Text {
+                text: root.short-video-threshold-secs + " s";
                 color: Theme.primary;
                 width: 75px;
                 vertical-alignment: center;

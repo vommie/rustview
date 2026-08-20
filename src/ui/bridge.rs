@@ -23,7 +23,7 @@ use crate::settings::{
     AppSettings, GridAspectRatio, LogObscurer, SettingsDialogController, SettingsDiff,
     SettingsManager,
 };
-use crate::thumbnails::ThumbnailManager;
+use crate::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
@@ -236,31 +236,44 @@ impl UiBridge {
             let _ = w_weak.upgrade_in_event_loop(move |window| {
                 let t_start = Instant::now();
 
-                // 1. Tooltips update
+                // 1. Performance Pipeline / Preview Options Changed -> Update Scheduler Config & Invalidate Caches
+                if diff_clone.performance_pipeline_changed {
+                    let new_config = ThumbnailConfig::from_performance_settings(&new_clone.performance);
+                    thumbnails.set_config(new_config);
+                    thumbnails.cache().clear();
+                    state.write().folder_thumbnails.clear();
+
+                    // Re-run pipeline for active folder so updated preview frame counts / formats generate in background
+                    if state.read().current_folder_id.is_some() {
+                        BridgeMedia::reload(&window, &library, &thumbnails, &settings, &state, true, false);
+                    }
+                }
+
+                // 2. Tooltips update
                 if diff_clone.tooltip_settings_changed {
                     window.set_enable_tooltips(new_clone.appearance.enable_tooltips);
                     window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms as i32);
                 }
 
-                // 2. Appearance & Grid Presentation
+                // 3. Appearance & Grid Presentation
                 if diff_clone.appearance_grid_changed {
                     window.set_thumb_size(new_clone.appearance.default_thumbnail_size as i32);
                     let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
                     window.set_thumb_aspect_idx(ratio.to_index());
                 }
 
-                // 3. Debug & Privacy update
+                // 4. Debug & Privacy update
                 if diff_clone.debug_settings_changed {
                     LogObscurer::set_obfuscate(new_clone.debug.obfuscate_logs);
                 }
 
-                // 4. Folder Tree Presentation
+                // 5. Folder Tree Presentation
                 if diff_clone.folder_tree_presentation_changed && !diff_clone.root_folder_changed {
                     window.set_show_hidden_folders(new_clone.folders.show_hidden_folders);
                     BridgeFolders::reload_tree(&window, &library, &settings, &state);
                 }
 
-                // 5. Root Folder Changed
+                // 6. Root Folder Changed
                 if diff_clone.root_folder_changed {
                     state.write().invalidate_folder_tree_cache();
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);

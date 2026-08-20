@@ -1,4 +1,5 @@
 use rustview::library::Library;
+use rustview::settings::PerformanceSettings;
 use rustview::thumbnails::{
     calculate_aspect_dimensions, PreparedTarget, ScalingAlgorithm, ThumbnailConfig,
     ThumbnailFormat, ThumbnailGenerator, ThumbnailManager, VideoThumbnailEngine,
@@ -139,6 +140,7 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline_and_storage_stats() {
         batch_commit_size: 16,
         video_engine: VideoThumbnailEngine::Ffmpeg,
         video_offset_percent: 10,
+        short_video_threshold_secs: 10,
         generate_video_previews: true,
         preview_frame_count: 5,
         custom_preview_settings: true,
@@ -229,4 +231,40 @@ fn test_thumbnail_engine_webp_and_jpeg_mixed_pipeline_and_storage_stats() {
     let (w2, h2, decoded_jpeg) = generator.decompress(&jpeg_bytes).unwrap();
     assert_eq!((w2, h2), (256, 144));
     assert_eq!(decoded_jpeg.len(), 256 * 144 * 3);
+}
+
+#[test]
+fn test_thumbnail_config_from_settings_and_auto_preview_count() {
+    let perf = PerformanceSettings {
+        worker_threads: 6,
+        l1_cache_slots: 1024,
+        thumbnail_db_size: 384,
+        thumbnail_format: "JPEG".to_string(),
+        thumbnail_quality: 90,
+        scaling_algorithm: "Lanczos3".to_string(),
+        batch_commit_size: 64,
+        video_engine: "FFmpeg".to_string(),
+        video_offset_percent: 15,
+        short_video_threshold_secs: 12,
+        generate_video_previews: true,
+        preview_frame_count: 12,
+        custom_preview_settings: true,
+        preview_format: "WebP".to_string(),
+        preview_quality: 55,
+    };
+
+    let config = ThumbnailConfig::from_performance_settings(&perf);
+    assert_eq!(config.max_bound, 384);
+    assert_eq!(config.format, ThumbnailFormat::Jpeg);
+    assert_eq!(config.quality, 90);
+    assert_eq!(config.scaling_algorithm, ScalingAlgorithm::Lanczos3);
+    assert_eq!(config.batch_commit_size, 64);
+    assert_eq!(config.video_engine, VideoThumbnailEngine::Ffmpeg);
+    assert_eq!(config.video_offset_percent, 15);
+    assert_eq!(config.short_video_threshold_secs, 12);
+    assert!(config.generate_video_previews);
+    assert_eq!(config.preview_frame_count, 12);
+    assert!(config.custom_preview_settings);
+    assert_eq!(config.preview_format, ThumbnailFormat::Webp);
+    assert_eq!(config.preview_quality, 55);
 }

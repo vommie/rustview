@@ -119,6 +119,7 @@ impl SettingsDialogController {
             },
         );
         window.set_video_offset_percent(settings.performance.video_offset_percent as i32);
+        window.set_short_video_threshold_secs(settings.performance.short_video_threshold_secs as i32);
         window.set_generate_video_previews(settings.performance.generate_video_previews);
         window.set_preview_frame_count(settings.performance.preview_frame_count as i32);
         window.set_custom_preview_settings(settings.performance.custom_preview_settings);
@@ -224,6 +225,8 @@ impl SettingsDialogController {
                 };
                 current.performance.video_offset_percent =
                     w.get_video_offset_percent().clamp(1, 90) as u8;
+                current.performance.short_video_threshold_secs =
+                    w.get_short_video_threshold_secs().clamp(1, 60) as u32;
                 current.performance.generate_video_previews = w.get_generate_video_previews();
                 current.performance.preview_frame_count =
                     w.get_preview_frame_count().clamp(2, 100) as u32;

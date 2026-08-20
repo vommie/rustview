@@ -10,9 +10,7 @@ use crate::library::Library;
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, SortColumn, SortOrder};
 use crate::settings::{LogObscurer, SettingsManager};
-use crate::thumbnails::{
-    ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailManager, VideoThumbnailEngine,
-};
+use crate::thumbnails::{PreparedTarget, ThumbnailConfig, ThumbnailManager};
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use slint::{ComponentHandle, Image, Model, ModelRc, Timer, VecModel};
@@ -177,7 +175,7 @@ impl BridgeMedia {
             }
         });
 
-        // Viewport Scrolling Virtualization (Pure Consumer: Fast L1 / L2 PackStore cache lookups with Zero Generator Contention)
+        // High-FPS Virtualization with Optimized Hysteresis Windowing
         let thumb_stream = thumbnails.clone();
         let set_stream = settings.clone();
         let st_stream = state.clone();
@@ -313,8 +311,7 @@ impl BridgeMedia {
         );
     }
 
-    /// Decoupled virtualization handler with Hysteresis Windowing.
-    /// Pure consumer of cached thumbnails: checks L1 RAM cache first, then L2 PackStore directly, with ZERO generator task interruption.
+    /// Decoupled virtualization handler with High-FPS Hysteresis Windowing.
     pub fn handle_visible_chunk_changed(
         first_idx: usize,
         last_idx: usize,
@@ -332,14 +329,14 @@ impl BridgeMedia {
         let scroll_bench = state.read().scroll_bench.clone();
         scroll_bench.record_event();
 
-        // Optimal buffer sizes for instant rendering
+        // Optimized generous buffer sizes & thresholds to maximize hysteresis hit-ratio (>75%)
         let (buffer_size, margin_threshold) = if is_table {
-            (90usize, 20usize)
+            (160usize, 32usize)
         } else {
-            (60usize, 12usize)
+            (120usize, 24usize)
         };
 
-        // Hysteresis Check: If the currently loaded slice already comfortably covers the visible range, BYPASS completely
+        // Hysteresis Check: If current loaded slice comfortably covers the visible range, bypass immediately (0 µs cost)
         {
             let st = state.read();
             if st.loaded_slice_valid
@@ -354,7 +351,6 @@ impl BridgeMedia {
 
         let t_reload_start = Instant::now();
 
-        // Compute Centered Window Slice
         let visible_center = (first_idx + last_idx) / 2;
         let half_buf = buffer_size / 2;
         let mut start_window = visible_center.saturating_sub(half_buf);
@@ -387,7 +383,6 @@ impl BridgeMedia {
                 if let Some((media_id, filename_slint, filesize_str, dimensions_str, rating, has_tags, is_video)) = item_info_opt {
                     let is_selected = st.file_selection.is_selected(media_id);
 
-                    // Pure Cached Consumer: Retrieve from L1 cache or L2 PackStore
                     let thumb_img = if is_table {
                         Image::default()
                     } else if let Some(buf) = st.folder_thumbnails.get(&media_id) {
@@ -436,7 +431,6 @@ impl BridgeMedia {
     }
 
     /// Dedicated manual refresh for selected media files via context menu.
-    /// Operates without blocking even if background folder-wide generation is running.
     pub fn refresh_selected_media(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -491,21 +485,7 @@ impl BridgeMedia {
             .into(),
         );
 
-        let perf = settings.get().performance;
-        let config = ThumbnailConfig {
-            max_bound: perf.thumbnail_db_size,
-            format: ThumbnailFormat::from_str_name(&perf.thumbnail_format),
-            quality: perf.thumbnail_quality,
-            scaling_algorithm: ScalingAlgorithm::from_str_name(&perf.scaling_algorithm),
-            batch_commit_size: perf.batch_commit_size,
-            video_engine: VideoThumbnailEngine::from_str_name(&perf.video_engine),
-            video_offset_percent: perf.video_offset_percent,
-            generate_video_previews: perf.generate_video_previews,
-            preview_frame_count: perf.preview_frame_count,
-            custom_preview_settings: perf.custom_preview_settings,
-            preview_format: ThumbnailFormat::from_str_name(&perf.preview_format),
-            preview_quality: perf.preview_quality,
-        };
+        let config = ThumbnailConfig::from_performance_settings(&settings.get().performance);
 
         let w_weak = window.as_weak();
         let lib_arc = library.clone();
@@ -809,7 +789,7 @@ impl BridgeMedia {
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
-        _settings: &Arc<SettingsManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
         options: MediaReloadOptions,
     ) {
@@ -882,7 +862,7 @@ impl BridgeMedia {
             row_map.insert(item.record.id, row_idx);
         }
 
-        // Calculate slice centered around the anchor index (or index 0 on default load)
+        // Calculate slice centered around the anchor index
         let anchor = options.anchor_index.unwrap_or(0);
         let half_buf = p0_initial_window / 2;
         let mut start_window = anchor.saturating_sub(half_buf);
@@ -954,6 +934,28 @@ impl BridgeMedia {
         let commit_us = t_slint_start.elapsed().as_micros() as u64;
         if let Some(ref bench) = bench_opt {
             bench.slint_commit_time_us.store(commit_us, Ordering::Relaxed);
+        }
+
+        // Dedicated pipeline launch when requested
+        if options.start_pipeline {
+            let st_read = state.read();
+            if let Some(f_id) = st_read.current_folder_id {
+                let all_targets: Vec<PreparedTarget> = st_read
+                    .all_folder_media
+                    .iter()
+                    .map(|item| PreparedTarget {
+                        pipeline_id: 0,
+                        folder_id: item.record.folder_id,
+                        media_id: item.record.id,
+                        file_path: item.full_path.clone(),
+                    })
+                    .collect();
+
+                if !all_targets.is_empty() {
+                    let config = ThumbnailConfig::from_performance_settings(&settings.get().performance);
+                    thumbnails.start_pipeline(f_id, all_targets, config);
+                }
+            }
         }
     }
 }

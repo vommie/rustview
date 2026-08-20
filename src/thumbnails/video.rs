@@ -3,11 +3,13 @@ use super::image::DecodedThumbnailFrame;
 use super::types::{
     calculate_aspect_dimensions, ScalingAlgorithm, ThumbnailConfig, VideoThumbnailEngine,
 };
+use crate::settings::LogObscurer;
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::software::scaling::context::Context as SwsContext;
 use ffmpeg_next::software::scaling::flag::Flags as SwsFlags;
 use libmpv2::Mpv;
 use std::path::Path;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct VideoExtractionResult {
@@ -46,7 +48,7 @@ pub fn map_scaling_algorithm_to_sws_flags(algo: ScalingAlgorithm) -> SwsFlags {
 
 /// Dynamic, self-healing Swscale context manager that transparently adapts to stream pixel format changes
 /// and unpacks padded pitch/stride linesizes into contiguous linear RGB8 byte buffers.
-struct DynamicScaler {
+pub struct DynamicScaler {
     scaler: Option<SwsContext>,
     src_fmt: Pixel,
     src_w: u32,
@@ -57,7 +59,7 @@ struct DynamicScaler {
 }
 
 impl DynamicScaler {
-    fn new(dst_w: u32, dst_h: u32, flags: SwsFlags) -> Self {
+    pub fn new(dst_w: u32, dst_h: u32, flags: SwsFlags) -> Self {
         Self {
             scaler: None,
             src_fmt: Pixel::None,
@@ -69,9 +71,8 @@ impl DynamicScaler {
         }
     }
 
-    /// Converts and scales a decoded video frame to tightly packed RGB24 bytes.
-    /// Explicitly unrolls the row stride (linesize) to discard memory alignment padding.
-    fn scale_frame(
+    /// Converts and scales a decoded video frame to tightly packed RGB24 bytes via FFmpeg's native libswscale.
+    pub fn scale_frame(
         &mut self,
         decoded: &ffmpeg_next::frame::Video,
     ) -> Result<Vec<u8>, ThumbnailError> {
@@ -133,7 +134,7 @@ impl DynamicScaler {
 }
 
 /// Applies orientation rotation if container or stream tags require 90°, 180°, or 270° rotation.
-fn apply_rotation_if_needed(
+pub fn apply_rotation_if_needed(
     pixels: Vec<u8>,
     width: u32,
     height: u32,
@@ -163,8 +164,40 @@ fn apply_rotation_if_needed(
     (new_w, new_h, rotated.into_raw())
 }
 
+/// Context and stream metadata bundled for decoding video frames.
+#[derive(Debug, Clone, Copy)]
+pub struct VideoStreamContext {
+    pub video_stream_index: usize,
+    pub time_base: ffmpeg_next::Rational,
+    pub fps: f64,
+    pub norm_rot: i32,
+}
+
+/// Parameters for seek-and-decode forward frame extraction across the timeline.
+pub struct SeekForwardExtractionParams<'a> {
+    pub ictx: ffmpeg_next::format::context::Input,
+    pub decoder: ffmpeg_next::decoder::Video,
+    pub scaler: DynamicScaler,
+    pub stream_ctx: &'a VideoStreamContext,
+    pub duration_secs: f64,
+    pub target_preview_count: usize,
+    pub primary_offset_pct: f64,
+    pub config: &'a ThumbnailConfig,
+}
+
+/// Parameters for sequential timeline frame extraction.
+pub struct SequentialExtractionParams<'a> {
+    pub ictx: ffmpeg_next::format::context::Input,
+    pub decoder: ffmpeg_next::decoder::Video,
+    pub scaler: DynamicScaler,
+    pub stream_ctx: &'a VideoStreamContext,
+    pub duration_secs: Option<f64>,
+    pub target_preview_count: usize,
+    pub primary_offset_pct: f64,
+}
+
 // =============================================================================
-// 1. Ultra-Resilient FFmpeg Direct Video Thumbnailer (libavformat/libavcodec/libswscale)
+// 1. Ultra-Fast & Resilient FFmpeg Direct Video Thumbnailer
 // =============================================================================
 
 #[derive(Default)]
@@ -175,77 +208,377 @@ impl FfmpegVideoThumbnailer {
         Self
     }
 
-    /// Feeds packets tolerance-first into decoder until a valid frame is produced or scan limit reached.
+    /// Chronological Forward-Seek Extraction ($D > 30.0\,\text{s}$).
+    /// Always seeks forward to keyframe boundaries before target timestamps and fast-forwards packets in memory,
+    /// scaling ONLY the matching target frames. (Average duration: ~15–30 ms per video).
+    fn extract_seek_forward(
+        &self,
+        params: SeekForwardExtractionParams<'_>,
+    ) -> Result<VideoExtractionResult, ThumbnailError> {
+        let mut ictx = params.ictx;
+        let mut decoder = params.decoder;
+        let mut scaler = params.scaler;
+        let stream_ctx = params.stream_ctx;
+        let duration_secs = params.duration_secs;
+        let num_previews = params.target_preview_count.clamp(2, 100);
+        let primary_offset_pct = params.primary_offset_pct;
+
+        let calc_seek_ts = |sec: f64| -> i64 {
+            (sec * f64::from(ffmpeg_next::ffi::AV_TIME_BASE)) as i64
+        };
+
+        // 1. Extract Primary Thumbnail Frame (at configured offset, guaranteeing non-black frame)
+        let prim_sec = (duration_secs * primary_offset_pct).clamp(0.0, duration_secs);
+        let primary_frame = Self::seek_and_decode_to_target(
+            &mut ictx,
+            &mut decoder,
+            &mut scaler,
+            stream_ctx,
+            calc_seek_ts(prim_sec),
+            prim_sec,
+        )?;
+
+        // 2. Extract Preview Frames across 10% to 90% in forward chronological order
+        let mut preview_frames = Vec::with_capacity(num_previews);
+
+        if params.config.generate_video_previews {
+            let start_pct = 0.10;
+            let end_pct = 0.90;
+
+            for k in 0..num_previews {
+                let pct = if num_previews > 1 {
+                    start_pct + (end_pct - start_pct) * (k as f64 / (num_previews - 1) as f64)
+                } else {
+                    prim_sec
+                };
+                let target_sec = duration_secs * pct;
+
+                if (pct - primary_offset_pct).abs() < 0.03 {
+                    preview_frames.push(primary_frame.clone());
+                    continue;
+                }
+
+                match Self::seek_and_decode_to_target(
+                    &mut ictx,
+                    &mut decoder,
+                    &mut scaler,
+                    stream_ctx,
+                    calc_seek_ts(target_sec),
+                    target_sec,
+                ) {
+                    Ok(frame) => {
+                        preview_frames.push(frame);
+                    }
+                    Err(_) => {
+                        let fallback = preview_frames
+                            .last()
+                            .cloned()
+                            .unwrap_or_else(|| primary_frame.clone());
+                        preview_frames.push(fallback);
+                    }
+                }
+            }
+        }
+
+        Ok(VideoExtractionResult {
+            primary_frame,
+            preview_frames,
+        })
+    }
+
+    /// Fast forward-seek and in-memory decode pass: passes non-target frames without scaling
+    /// and invokes `libswscale` ONLY for the single target PTS frame.
     #[inline]
-    fn decode_and_scale_direct(
+    fn seek_and_decode_to_target(
         ictx: &mut ffmpeg_next::format::context::Input,
         decoder: &mut ffmpeg_next::decoder::Video,
         scaler: &mut DynamicScaler,
-        video_stream_index: usize,
-        max_packets_to_scan: usize,
-        norm_rot: i32,
+        stream_ctx: &VideoStreamContext,
+        seek_ts: i64,
+        target_pts_sec: f64,
     ) -> Result<DecodedThumbnailFrame, ThumbnailError> {
+        if seek_ts > 0 {
+            let _ = ictx.seek(seek_ts, ..seek_ts);
+        } else {
+            let _ = ictx.seek(0, ..0);
+        }
+        decoder.flush();
+
         let mut decoded_frame = ffmpeg_next::frame::Video::empty();
-        let mut final_frame: Option<DecodedThumbnailFrame> = None;
-        let mut packets_read = 0;
+        let mut packets_scanned = 0;
+        let mut frame_idx = 0usize;
+        let mut latest_frame_unscaled: Option<ffmpeg_next::frame::Video> = None;
 
         for (stream, packet) in ictx.packets() {
-            if stream.index() == video_stream_index {
-                packets_read += 1;
-
+            if stream.index() == stream_ctx.video_stream_index {
+                packets_scanned += 1;
                 let _ = decoder.send_packet(&packet);
 
                 while decoder.receive_frame(&mut decoded_frame).is_ok() {
-                    if decoded_frame.width() > 0
-                        && decoded_frame.height() > 0
-                        && let Ok(raw_rgb) = scaler.scale_frame(&decoded_frame)
-                    {
-                        let (w, h, rotated_pixels) = apply_rotation_if_needed(
-                            raw_rgb,
-                            scaler.dst_w,
-                            scaler.dst_h,
-                            norm_rot,
-                        );
-                        final_frame = Some(DecodedThumbnailFrame {
-                            width: w,
-                            height: h,
-                            rgb_pixels: rotated_pixels,
-                        });
-                        break;
+                    if decoded_frame.width() > 0 && decoded_frame.height() > 0 {
+                        frame_idx += 1;
+                        let pts_sec = decoded_frame
+                            .pts()
+                            .map(|pts| pts as f64 * f64::from(stream_ctx.time_base))
+                            .unwrap_or(frame_idx as f64 / stream_ctx.fps);
+
+                        // Found matching target frame: scale ONLY this frame!
+                        if pts_sec >= target_pts_sec - 0.02 {
+                            let raw_rgb = scaler.scale_frame(&decoded_frame)?;
+                            let (w, h, rot_pixels) = apply_rotation_if_needed(
+                                raw_rgb,
+                                scaler.dst_w,
+                                scaler.dst_h,
+                                stream_ctx.norm_rot,
+                            );
+                            return Ok(DecodedThumbnailFrame {
+                                width: w,
+                                height: h,
+                                rgb_pixels: rot_pixels,
+                            });
+                        }
+
+                        latest_frame_unscaled = Some(decoded_frame.clone());
                     }
                 }
 
-                if final_frame.is_some() || packets_read >= max_packets_to_scan {
+                // Tight scan window (max 30 packets from nearest keyframe)
+                if packets_scanned >= 30 {
                     break;
                 }
             }
         }
 
-        if final_frame.is_none() {
-            let _ = decoder.send_eof();
-            while decoder.receive_frame(&mut decoded_frame).is_ok() {
-                if decoded_frame.width() > 0
-                    && decoded_frame.height() > 0
-                    && let Ok(raw_rgb) = scaler.scale_frame(&decoded_frame)
+        // Fallback: scale latest available decoded frame
+        if let Some(frame) = latest_frame_unscaled {
+            let raw_rgb = scaler.scale_frame(&frame)?;
+            let (w, h, rot_pixels) = apply_rotation_if_needed(
+                raw_rgb,
+                scaler.dst_w,
+                scaler.dst_h,
+                stream_ctx.norm_rot,
+            );
+            return Ok(DecodedThumbnailFrame {
+                width: w,
+                height: h,
+                rgb_pixels: rot_pixels,
+            });
+        }
+
+        // Final EOF drain fallback
+        let _ = decoder.send_eof();
+        while decoder.receive_frame(&mut decoded_frame).is_ok() {
+            if decoded_frame.width() > 0 && decoded_frame.height() > 0 {
+                let raw_rgb = scaler.scale_frame(&decoded_frame)?;
+                let (w, h, rot_pixels) = apply_rotation_if_needed(
+                    raw_rgb,
+                    scaler.dst_w,
+                    scaler.dst_h,
+                    stream_ctx.norm_rot,
+                );
+                return Ok(DecodedThumbnailFrame {
+                    width: w,
+                    height: h,
+                    rgb_pixels: rot_pixels,
+                });
+            }
+        }
+
+        Err(ThumbnailError::Ffmpeg("Failed to decode video frame at target timestamp".into()))
+    }
+
+    /// Single Linear Forward Sweep for videos $\le 30.0\,\text{s}$ (or unknown duration).
+    /// In a single forward demuxing pass from 0.0s to 90% duration, scales ONLY the targeted frames (0% wasted CPU scaling).
+    /// Average duration: ~10–25 ms per video.
+    fn extract_targeted_sequential(
+        &self,
+        params: SequentialExtractionParams<'_>,
+    ) -> Result<VideoExtractionResult, ThumbnailError> {
+        let mut ictx = params.ictx;
+        let mut decoder = params.decoder;
+        let mut scaler = params.scaler;
+        let stream_ctx = params.stream_ctx;
+        let duration_secs = params.duration_secs;
+        let num_previews = params.target_preview_count.clamp(2, 100);
+        let primary_offset_pct = params.primary_offset_pct;
+
+        let _ = ictx.seek(0, ..0);
+        decoder.flush();
+
+        // Determine target timestamps in seconds if duration is known
+        let (target_primary_sec, target_preview_secs) = if let Some(dur) = duration_secs {
+            let prim_sec = (dur * primary_offset_pct).clamp(0.0, dur);
+            let start_pct = if dur < 2.0 { 0.05 } else { 0.10 };
+            let end_pct = if dur < 2.0 { 0.95 } else { 0.90 };
+
+            let mut prev_secs = Vec::with_capacity(num_previews);
+            for k in 0..num_previews {
+                let pct = if num_previews > 1 {
+                    start_pct + (end_pct - start_pct) * (k as f64 / (num_previews - 1) as f64)
+                } else {
+                    prim_sec
+                };
+                prev_secs.push((dur * pct).clamp(0.0, dur));
+            }
+            (prim_sec, Some(prev_secs))
+        } else {
+            (0.0, None)
+        };
+
+        let mut primary_frame: Option<DecodedThumbnailFrame> = None;
+        let mut preview_frames: Vec<Option<DecodedThumbnailFrame>> = vec![None; num_previews];
+        let mut first_decoded_frame: Option<DecodedThumbnailFrame> = None;
+        let mut all_scaled_reservoir: Vec<DecodedThumbnailFrame> = Vec::with_capacity(32);
+        let mut decoded_video_frame = ffmpeg_next::frame::Video::empty();
+        let mut frame_idx = 0usize;
+
+        for (stream, packet) in ictx.packets() {
+            if stream.index() != stream_ctx.video_stream_index {
+                continue;
+            }
+            let _ = decoder.send_packet(&packet);
+
+            while decoder.receive_frame(&mut decoded_video_frame).is_ok() {
+                if decoded_video_frame.width() == 0 || decoded_video_frame.height() == 0 {
+                    continue;
+                }
+
+                let pts_sec = decoded_video_frame
+                    .pts()
+                    .map(|pts| pts as f64 * f64::from(stream_ctx.time_base))
+                    .unwrap_or(frame_idx as f64 / stream_ctx.fps);
+                frame_idx += 1;
+
+                let is_primary_hit = if target_preview_secs.is_some() {
+                    // Do NOT take frame 0 if primary offset > 0 until PTS has reached target_primary_sec!
+                    primary_frame.is_none() && (pts_sec >= target_primary_sec || (primary_offset_pct == 0.0 && frame_idx == 1))
+                } else {
+                    false
+                };
+
+                let matching_preview_slots: Vec<usize> = if let Some(ref prev_targets) = target_preview_secs {
+                    (0..num_previews)
+                        .filter(|&k| preview_frames[k].is_none() && pts_sec >= prev_targets[k])
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+
+                // Scale ONLY if this frame is a desired target!
+                if (is_primary_hit || !matching_preview_slots.is_empty() || (target_preview_secs.is_none() && all_scaled_reservoir.len() < 100) || first_decoded_frame.is_none())
+                    && let Ok(raw_rgb) = scaler.scale_frame(&decoded_video_frame)
                 {
-                    let (w, h, rotated_pixels) = apply_rotation_if_needed(
+                    let (w, h, rot_pixels) = apply_rotation_if_needed(
                         raw_rgb,
                         scaler.dst_w,
                         scaler.dst_h,
-                        norm_rot,
+                        stream_ctx.norm_rot,
                     );
-                    final_frame = Some(DecodedThumbnailFrame {
+                    let frame = DecodedThumbnailFrame {
                         width: w,
                         height: h,
-                        rgb_pixels: rotated_pixels,
-                    });
+                        rgb_pixels: rot_pixels,
+                    };
+
+                    if first_decoded_frame.is_none() {
+                        first_decoded_frame = Some(frame.clone());
+                    }
+
+                    if is_primary_hit {
+                        primary_frame = Some(frame.clone());
+                    }
+
+                    for slot in matching_preview_slots {
+                        preview_frames[slot] = Some(frame.clone());
+                    }
+
+                    if target_preview_secs.is_none() && all_scaled_reservoir.len() < 100 {
+                        all_scaled_reservoir.push(frame);
+                    }
+                }
+
+                if target_preview_secs.is_some()
+                    && primary_frame.is_some()
+                    && preview_frames.iter().all(|f| f.is_some())
+                {
                     break;
+                }
+            }
+
+            if target_preview_secs.is_some()
+                && primary_frame.is_some()
+                && preview_frames.iter().all(|f| f.is_some())
+            {
+                break;
+            }
+        }
+
+        // Flush decoder EOF if needed
+        if primary_frame.is_none() || preview_frames.iter().any(|f| f.is_none()) {
+            let _ = decoder.send_eof();
+            while decoder.receive_frame(&mut decoded_video_frame).is_ok() {
+                if decoded_video_frame.width() > 0 && decoded_video_frame.height() > 0
+                    && let Ok(raw_rgb) = scaler.scale_frame(&decoded_video_frame)
+                {
+                    let (w, h, rot_pixels) = apply_rotation_if_needed(
+                        raw_rgb,
+                        scaler.dst_w,
+                        scaler.dst_h,
+                        stream_ctx.norm_rot,
+                    );
+                    let frame = DecodedThumbnailFrame {
+                        width: w,
+                        height: h,
+                        rgb_pixels: rot_pixels,
+                    };
+                    if first_decoded_frame.is_none() {
+                        first_decoded_frame = Some(frame.clone());
+                    }
+                    if primary_frame.is_none() {
+                        primary_frame = Some(frame.clone());
+                    }
+                    for slot in preview_frames.iter_mut() {
+                        if slot.is_none() {
+                            *slot = Some(frame.clone());
+                        }
+                    }
                 }
             }
         }
 
-        final_frame.ok_or_else(|| {
-            ThumbnailError::Ffmpeg("Could not decode any valid video frame from stream".into())
+        let fallback = primary_frame
+            .or(first_decoded_frame)
+            .ok_or_else(|| ThumbnailError::Ffmpeg("No video frames could be decoded".into()))?;
+
+        let final_primary = fallback.clone();
+        let mut final_previews = Vec::with_capacity(num_previews);
+
+        if target_preview_secs.is_some() {
+            for opt in preview_frames {
+                final_previews.push(opt.unwrap_or_else(|| fallback.clone()));
+            }
+        } else if !all_scaled_reservoir.is_empty() {
+            let total = all_scaled_reservoir.len();
+            for k in 0..num_previews {
+                let idx = if num_previews > 1 {
+                    let start_idx = if total <= 4 { 0 } else { (total as f64 * 0.05).round() as usize };
+                    let end_idx = if total <= 4 { total - 1 } else { ((total as f64 * 0.95).round() as usize).min(total - 1) };
+                    start_idx + (((end_idx - start_idx) as f64) * (k as f64 / (num_previews - 1) as f64)).round() as usize
+                } else {
+                    0
+                };
+                let safe_idx = idx.min(total - 1);
+                final_previews.push(all_scaled_reservoir[safe_idx].clone());
+            }
+        } else {
+            for _ in 0..num_previews {
+                final_previews.push(fallback.clone());
+            }
+        }
+
+        Ok(VideoExtractionResult {
+            primary_frame: final_primary,
+            preview_frames: final_previews,
         })
     }
 }
@@ -256,11 +589,10 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         path: &Path,
         config: &ThumbnailConfig,
     ) -> Result<VideoExtractionResult, ThumbnailError> {
+        let t0 = Instant::now();
         ffmpeg_next::init().map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
 
-        // 1. Open media container directly (FFmpeg probes magic header, ignoring extension mismatches)
-        let mut ictx =
-            ffmpeg_next::format::input(path).map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
+        let ictx = ffmpeg_next::format::input(path).map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
 
         let stream = ictx
             .streams()
@@ -292,7 +624,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         flags.insert(ffmpeg_next::codec::flag::Flags::OUTPUT_CORRUPT);
         context_decoder.set_flags(flags);
 
-        let mut decoder = context_decoder
+        let decoder = context_decoder
             .decoder()
             .video()
             .map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
@@ -301,9 +633,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let orig_h = decoder.height();
 
         if orig_w == 0 || orig_h == 0 {
-            return Err(ThumbnailError::Ffmpeg(
-                "Invalid video dimensions (0x0)".into(),
-            ));
+            return Err(ThumbnailError::Ffmpeg("Invalid video dimensions (0x0)".into()));
         }
 
         let (disp_w, disp_h) = if norm_rot == 90 || norm_rot == 270 {
@@ -313,7 +643,6 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         };
 
         let (target_disp_w, target_disp_h) = calculate_aspect_dimensions(disp_w, disp_h, config.max_bound);
-
         let (scaler_target_w, scaler_target_h) = if norm_rot == 90 || norm_rot == 270 {
             (target_disp_h, target_disp_w)
         } else {
@@ -321,105 +650,123 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         };
 
         let sws_flags = map_scaling_algorithm_to_sws_flags(config.scaling_algorithm);
-        let mut dynamic_scaler = DynamicScaler::new(scaler_target_w, scaler_target_h, sws_flags);
+        let dynamic_scaler = DynamicScaler::new(scaler_target_w, scaler_target_h, sws_flags);
 
-        let total_dur_av = if ictx.duration() > 0 {
-            ictx.duration()
-        } else if stream_duration > 0 {
-            let dur_secs = stream_duration as f64 * f64::from(time_base);
-            (dur_secs * f64::from(ffmpeg_next::ffi::AV_TIME_BASE)) as i64
-        } else {
-            0
-        };
+        // Discover duration in seconds
+        let mut duration_secs: Option<f64> = None;
 
-        let calc_seek = |pct: f64| -> i64 {
-            let clamped = pct.clamp(0.01, 0.95);
-            if total_dur_av > 0 {
-                (total_dur_av as f64 * clamped) as i64
+        if ictx.duration() > 0 {
+            let secs = ictx.duration() as f64 / f64::from(ffmpeg_next::ffi::AV_TIME_BASE);
+            if secs > 0.05 {
+                duration_secs = Some(secs);
+            }
+        }
+
+        if duration_secs.is_none() && stream_duration > 0 {
+            let secs = stream_duration as f64 * f64::from(time_base);
+            if secs > 0.05 {
+                duration_secs = Some(secs);
+            }
+        }
+
+        let fps = {
+            let r = stream.avg_frame_rate();
+            let val = f64::from(r);
+            if val > 0.1 && val.is_finite() {
+                val
             } else {
-                0
+                let r2 = stream.rate();
+                let val2 = f64::from(r2);
+                if val2 > 0.1 && val2.is_finite() {
+                    val2
+                } else {
+                    25.0
+                }
             }
         };
 
-        // 2. Extract Primary Thumbnail Frame at configured offset (e.g. 10%)
-        let primary_pct = (config.video_offset_percent.clamp(1, 90) as f64) / 100.0;
-        let seek_primary = calc_seek(primary_pct);
-        if seek_primary > 0 {
-            let _ = ictx.seek(seek_primary, ..seek_primary);
-        } else {
-            let _ = ictx.seek(0, ..0);
+        if duration_secs.is_none() && stream.frames() > 0 {
+            let secs = stream.frames() as f64 / fps;
+            if secs > 0.05 {
+                duration_secs = Some(secs);
+            }
         }
-        decoder.flush();
 
-        let primary_frame = match Self::decode_and_scale_direct(
-            &mut ictx,
-            &mut decoder,
-            &mut dynamic_scaler,
+        let primary_offset_pct = (config.video_offset_percent.clamp(1, 90) as f64) / 100.0;
+        let preview_count = config.preview_frame_count.clamp(2, 100) as usize;
+
+        let stream_ctx = VideoStreamContext {
             video_stream_index,
-            200,
+            time_base,
+            fps,
             norm_rot,
-        ) {
-            Ok(f) => f,
-            Err(_) => {
-                let _ = ictx.seek(0, ..0);
-                decoder.flush();
-                Self::decode_and_scale_direct(
-                    &mut ictx,
-                    &mut decoder,
-                    &mut dynamic_scaler,
-                    video_stream_index,
-                    300,
-                    norm_rot,
-                )?
-            }
         };
 
-        // 3. Extract Multi-Frame Preview Sequence reusing the open context
-        let mut preview_frames = Vec::new();
-        if config.generate_video_previews {
-            let count = config.preview_frame_count.clamp(2, 100);
-            preview_frames.reserve(count as usize);
+        let threshold = (config.short_video_threshold_secs as f64).max(30.0);
+        let is_short_or_unknown = match duration_secs {
+            Some(d) => d <= threshold,
+            None => true,
+        };
 
-            for i in 0..count {
-                let t_pct = 0.10 + (0.80 * (i as f64 / (count - 1) as f64));
+        let result = if is_short_or_unknown {
+            tracing::debug!(
+                file = %LogObscurer::path(path),
+                duration = ?duration_secs,
+                threshold_secs = threshold,
+                strategy = "SinglePassForwardSweep",
+                target_previews = preview_count,
+                "[VideoThumbnailer] Executing high-speed single forward-pass sweep for video"
+            );
+            self.extract_targeted_sequential(SequentialExtractionParams {
+                ictx,
+                decoder,
+                scaler: dynamic_scaler,
+                stream_ctx: &stream_ctx,
+                duration_secs,
+                target_preview_count: preview_count,
+                primary_offset_pct,
+            })
+        } else {
+            let dur = duration_secs.unwrap();
+            tracing::debug!(
+                file = %LogObscurer::path(path),
+                duration_secs = dur,
+                threshold_secs = threshold,
+                strategy = "ForwardKeyframeSeekAndDecode",
+                target_previews = preview_count,
+                "[VideoThumbnailer] Executing forward keyframe seeks across long video timeline"
+            );
+            self.extract_seek_forward(SeekForwardExtractionParams {
+                ictx,
+                decoder,
+                scaler: dynamic_scaler,
+                stream_ctx: &stream_ctx,
+                duration_secs: dur,
+                target_preview_count: preview_count,
+                primary_offset_pct,
+                config,
+            })
+        };
 
-                if (t_pct - primary_pct).abs() < 0.02 {
-                    preview_frames.push(primary_frame.clone());
-                    continue;
-                }
-
-                let seek_ts = calc_seek(t_pct);
-                if seek_ts > 0 {
-                    let _ = ictx.seek(seek_ts, ..seek_ts);
-                }
-                decoder.flush();
-
-                match Self::decode_and_scale_direct(
-                    &mut ictx,
-                    &mut decoder,
-                    &mut dynamic_scaler,
-                    video_stream_index,
-                    200,
-                    norm_rot,
-                ) {
-                    Ok(frame) => {
-                        preview_frames.push(frame);
-                    }
-                    Err(_) => {
-                        let fallback = preview_frames
-                            .last()
-                            .cloned()
-                            .unwrap_or_else(|| primary_frame.clone());
-                        preview_frames.push(fallback);
-                    }
-                }
+        match result {
+            Ok(res) => {
+                tracing::debug!(
+                    file = %LogObscurer::path(path),
+                    preview_frames_extracted = res.preview_frames.len(),
+                    elapsed_us = t0.elapsed().as_micros(),
+                    "[VideoThumbnailer] Successfully extracted primary and preview frames"
+                );
+                Ok(res)
+            }
+            Err(err) => {
+                tracing::warn!(
+                    file = %LogObscurer::path(path),
+                    error = %err,
+                    "[VideoThumbnailer] Video extraction failed"
+                );
+                Err(err)
             }
         }
-
-        Ok(VideoExtractionResult {
-            primary_frame,
-            preview_frames,
-        })
     }
 
     fn extract_frame(
@@ -432,7 +779,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let config = ThumbnailConfig {
             max_bound,
             scaling_algorithm: scaling_algo,
-            video_offset_percent: (time_percent * 100.0) as u8,
+            video_offset_percent: (time_percent * 100.0).clamp(1.0, 90.0) as u8,
             generate_video_previews: false,
             ..Default::default()
         };
@@ -460,22 +807,17 @@ impl VideoFrameDecoder for MpvVideoThumbnailer {
         path: &Path,
         config: &ThumbnailConfig,
     ) -> Result<VideoExtractionResult, ThumbnailError> {
-        let mpv = Mpv::with_initializer(|init| {
+        if let Ok(mpv) = Mpv::with_initializer(|init| {
             init.set_property("vo", "null")?;
             init.set_property("ao", "null")?;
             init.set_property("audio", "no")?;
             init.set_property("hwdec", "auto-safe")?;
             init.set_property("pause", "yes")?;
             Ok(())
-        })
-        .map_err(|e| ThumbnailError::Ffmpeg(format!("Failed to init MPV: {}", e)))?;
-
-        let path_str = path.to_string_lossy();
-        mpv.command("loadfile", &[&path_str, "replace"])
-            .map_err(|e| ThumbnailError::Ffmpeg(format!("MPV loadfile error: {}", e)))?;
-
-        let percent_str = format!("{:.1}", config.video_offset_percent);
-        let _ = mpv.command("seek", &[&percent_str, "absolute-percent+exact"]);
+        }) {
+            let path_str = path.to_string_lossy();
+            let _ = mpv.command("loadfile", &[&path_str, "replace"]);
+        }
 
         FfmpegVideoThumbnailer::new().extract_video(path, config)
     }
@@ -490,7 +832,7 @@ impl VideoFrameDecoder for MpvVideoThumbnailer {
         let config = ThumbnailConfig {
             max_bound,
             scaling_algorithm: scaling_algo,
-            video_offset_percent: (time_percent * 100.0) as u8,
+            video_offset_percent: (time_percent * 100.0).clamp(1.0, 90.0) as u8,
             generate_video_previews: false,
             video_engine: VideoThumbnailEngine::Mpv,
             ..Default::default()

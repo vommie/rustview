@@ -1,9 +1,10 @@
 use crate::settings::{
-    LogObscurer, DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_CUSTOM_PREVIEW_SETTINGS,
-    DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT,
-    DEFAULT_PREVIEW_QUALITY, DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_DB_SIZE,
-    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY, DEFAULT_VIDEO_ENGINE,
-    DEFAULT_VIDEO_OFFSET_PERCENT,
+    AppSettings, LogObscurer, PerformanceSettings, DEFAULT_BATCH_COMMIT_SIZE,
+    DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_PREVIEW_FORMAT,
+    DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY, DEFAULT_SCALING_ALGORITHM,
+    DEFAULT_SHORT_VIDEO_THRESHOLD_SECS, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
+    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT,
+    MAX_SHORT_VIDEO_THRESHOLD_SECS, MIN_SHORT_VIDEO_THRESHOLD_SECS,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -130,6 +131,7 @@ pub struct ThumbnailConfig {
     pub batch_commit_size: usize,
     pub video_engine: VideoThumbnailEngine,
     pub video_offset_percent: u8,
+    pub short_video_threshold_secs: u32,
     pub generate_video_previews: bool,
     pub preview_frame_count: u32,
     pub custom_preview_settings: bool,
@@ -147,12 +149,41 @@ impl Default for ThumbnailConfig {
             batch_commit_size: DEFAULT_BATCH_COMMIT_SIZE,
             video_engine: VideoThumbnailEngine::from_str_name(DEFAULT_VIDEO_ENGINE),
             video_offset_percent: DEFAULT_VIDEO_OFFSET_PERCENT,
+            short_video_threshold_secs: DEFAULT_SHORT_VIDEO_THRESHOLD_SECS,
             generate_video_previews: DEFAULT_GENERATE_VIDEO_PREVIEWS,
             preview_frame_count: DEFAULT_PREVIEW_FRAME_COUNT,
             custom_preview_settings: DEFAULT_CUSTOM_PREVIEW_SETTINGS,
             preview_format: ThumbnailFormat::from_str_name(DEFAULT_PREVIEW_FORMAT),
             preview_quality: DEFAULT_PREVIEW_QUALITY,
         }
+    }
+}
+
+impl ThumbnailConfig {
+    /// Creates a resolved `ThumbnailConfig` instance directly from `PerformanceSettings`.
+    pub fn from_performance_settings(perf: &PerformanceSettings) -> Self {
+        Self {
+            max_bound: perf.thumbnail_db_size,
+            format: ThumbnailFormat::from_str_name(&perf.thumbnail_format),
+            quality: perf.thumbnail_quality,
+            scaling_algorithm: ScalingAlgorithm::from_str_name(&perf.scaling_algorithm),
+            batch_commit_size: perf.batch_commit_size,
+            video_engine: VideoThumbnailEngine::from_str_name(&perf.video_engine),
+            video_offset_percent: perf.video_offset_percent,
+            short_video_threshold_secs: perf
+                .short_video_threshold_secs
+                .clamp(MIN_SHORT_VIDEO_THRESHOLD_SECS, MAX_SHORT_VIDEO_THRESHOLD_SECS),
+            generate_video_previews: perf.generate_video_previews,
+            preview_frame_count: perf.preview_frame_count.clamp(2, 100),
+            custom_preview_settings: perf.custom_preview_settings,
+            preview_format: ThumbnailFormat::from_str_name(&perf.preview_format),
+            preview_quality: perf.preview_quality,
+        }
+    }
+
+    /// Creates a resolved `ThumbnailConfig` from full `AppSettings`.
+    pub fn from_app_settings(settings: &AppSettings) -> Self {
+        Self::from_performance_settings(&settings.performance)
     }
 }
 

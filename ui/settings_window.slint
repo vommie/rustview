@@ -66,6 +66,7 @@ export component SettingsWindow inherits Window {
     in-out property <int> scaling-algo-idx: 0;
     in-out property <int> video-engine-idx: 0; // 0 = FFmpeg, 1 = MPV
     in-out property <int> video-offset-percent: 10;
+    in-out property <int> short-video-threshold-secs: 10;
     in-out property <bool> generate-video-previews: true;
     in-out property <int> preview-frame-count: 5;
     in-out property <bool> custom-preview-settings: true;
@@ -150,6 +151,7 @@ export component SettingsWindow inherits Window {
                         scaling-algo-idx <=> root.scaling-algo-idx;
                         video-engine-idx <=> root.video-engine-idx;
                         video-offset-percent <=> root.video-offset-percent;
+                        short-video-threshold-secs <=> root.short-video-threshold-secs;
                         generate-video-previews <=> root.generate-video-previews;
                         preview-frame-count <=> root.preview-frame-count;
                         custom-preview-settings <=> root.custom-preview-settings;
