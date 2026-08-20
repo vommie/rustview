@@ -68,7 +68,7 @@ impl FolderTreeBuilder {
                 root_idx = Some(idx);
             }
 
-            if let Some(pos) = memchr::memrchr(b'/', p_str.as_bytes()) {
+            if let Some(pos) = memchr::memrchr2(b'/', b'\\', p_str.as_bytes()) {
                 let parent_str = if pos == 0 { "/" } else { &p_str[..pos] };
                 subfolder_map.entry(parent_str).or_default().push(idx);
             }
@@ -918,7 +918,7 @@ impl BridgeFolders {
             }
         };
 
-        let mut dot_hidden_cache = DotHiddenCache::new();
+        let mut st_guard = state.write();
         let mut ctx = FolderFlattenContext {
             expanded_ids: &expanded_ids,
             selected_id: current_sel,
@@ -926,7 +926,7 @@ impl BridgeFolders {
             show_metrics: app_settings.folders.show_folder_metrics,
             show_hidden: app_settings.folders.show_hidden_folders,
             support_dot_hidden: app_settings.folders.support_dot_hidden_files,
-            dot_hidden_cache: &mut dot_hidden_cache,
+            dot_hidden_cache: &mut st_guard.dot_hidden_cache,
         };
 
         let mut folder_views = Vec::with_capacity(tree.len() * 4);

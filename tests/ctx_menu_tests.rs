@@ -1,10 +1,12 @@
 use rustview::ctx_menu::{
     CtxMenuActionId, CtxMenuBuilder, CtxMenuContext, CtxMenuDispatcher, CtxMenuItemKind,
 };
+use rustview::library::dot_hidden::DotHiddenCache;
 use rustview::library::models::FolderRecord;
 use rustview::system::DesktopApp;
 use rustview::ui::bridge_ctx_menu_folder::FolderContextMenu;
 use rustview::ui::bridge_ctx_menu_media::MediaContextMenu;
+use rustview::ui::bridge_folders::FolderTreeNode;
 use rustview::ui::bridge_state::{
     CTX_ACTION_COPY_IMAGE, CTX_ACTION_COPY_NAME, CTX_ACTION_COPY_PATH, CTX_ACTION_OPEN,
     CTX_ACTION_OPEN_IN_FILE_MANAGER, CTX_ACTION_OPEN_WITH_APP_BASE, CTX_ACTION_OPEN_WITH_OTHER,
@@ -161,9 +163,22 @@ fn test_folder_context_menu_open_in_file_manager_at_top() {
         added_at: 0,
         is_deleted: false,
     };
-    let all = vec![folder.clone()];
+    let tree = vec![FolderTreeNode {
+        record: folder.clone(),
+        subfolders_count: 0,
+        media_files_count: 0,
+        children: Vec::new(),
+    }];
 
-    let menu = FolderContextMenu::build_menu(&folder, &all, None, false);
+    let mut dot_hidden_cache = DotHiddenCache::new();
+    let menu = FolderContextMenu::build_menu_from_cached_tree(
+        &folder,
+        &tree,
+        false,
+        false,
+        true,
+        &mut dot_hidden_cache,
+    );
 
     // 0: Header
     assert_eq!(menu.items[0].kind, CtxMenuItemKind::Header);

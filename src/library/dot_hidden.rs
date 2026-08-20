@@ -14,6 +14,11 @@ impl DotHiddenCache {
         Self::default()
     }
 
+    /// Clears all cached `.hidden` file entries.
+    pub fn clear(&mut self) {
+        self.cache.clear();
+    }
+
     /// Checks whether a directory component name is considered hidden.
     /// Evaluates both standard dot-folders (name starting with '.') and entries in parent directory `.hidden` files.
     pub fn is_hidden(&mut self, folder_path: &Path, name: &str, support_dot_hidden: bool) -> bool {

@@ -1,13 +1,15 @@
 use heed::BytesDecode;
 use rustview::library::dot_hidden::DotHiddenCache;
 use rustview::library::Library;
-use rustview::library::models::FolderRecordCodec;
+use rustview::library::models::{FolderRecord, FolderRecordCodec};
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
-use rustview::ui::bridge_folders::{FolderFlattenContext, FolderTreeBuilder};
+use rustview::ui::bridge_folders::{FolderFlattenContext, FolderTreeBuilder, FolderTreeNode};
 use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB, CTX_FOLDER_REFRESH};
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::path::Path;
+use std::time::Instant;
 use tempfile::tempdir;
 
 #[test]
@@ -141,8 +143,20 @@ fn test_folder_context_menu_items_and_refresh_action() {
     let folders = lib.folders().list_folders().unwrap();
     let sub1_folder = lib.folders().get_folder_by_path(&sub1).unwrap().unwrap();
 
-    // Build context menu for non-root folder
-    let menu = FolderContextMenuBuilder::build_menu(&sub1_folder, &folders, Some(root), false);
+    let media_counts = HashMap::new();
+    let tree = FolderTreeBuilder::build_hierarchy(root, &folders, &media_counts);
+
+    let mut dot_hidden_cache = DotHiddenCache::new();
+
+    // Build context menu for non-root folder directly from tree
+    let menu = FolderContextMenuBuilder::build_menu(
+        &sub1_folder,
+        &tree,
+        false,
+        false,
+        true,
+        &mut dot_hidden_cache,
+    );
 
     // Verify "Refresh Folder" item exists and is enabled
     let refresh_item = menu
@@ -161,6 +175,188 @@ fn test_folder_context_menu_items_and_refresh_action() {
         .iter()
         .find(|item| item.text == "Move to...")
         .expect("Move to... item must exist");
+    assert!(move_item.is_enabled);
+}
+
+#[test]
+fn test_folder_context_menu_move_to_submenu_hides_hidden_folders() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let root = tmp_media.path();
+
+    let normal_sub1 = root.join("NormalSub1");
+    let normal_sub2 = root.join("NormalSub2");
+    let dot_hidden_dir = root.join(".hidden_dot_dir");
+    let nested_dot = dot_hidden_dir.join("NestedInDot");
+    let listed_hidden_dir = root.join("ListedHiddenDir");
+    let nested_listed = listed_hidden_dir.join("NestedInListed");
+
+    fs::create_dir_all(&normal_sub1).unwrap();
+    fs::create_dir_all(&normal_sub2).unwrap();
+    fs::create_dir_all(&nested_dot).unwrap();
+    fs::create_dir_all(&nested_listed).unwrap();
+
+    // Create .hidden file in root listing "ListedHiddenDir"
+    let dot_hidden_file = root.join(".hidden");
+    fs::write(&dot_hidden_file, "ListedHiddenDir\n").unwrap();
+
+    lib.folder_tree_refresher()
+        .refresh_tree(root, None::<fn(usize)>)
+        .unwrap();
+
+    let folders = lib.folders().list_folders().unwrap();
+    let sub1_folder = lib.folders().get_folder_by_path(&normal_sub1).unwrap().unwrap();
+
+    let media_counts = HashMap::new();
+    let tree = FolderTreeBuilder::build_hierarchy(root, &folders, &media_counts);
+
+    let mut dot_hidden_cache = DotHiddenCache::new();
+
+    // Helper recursive collector
+    fn collect_item_texts(item: &rustview::ctx_menu::CtxMenuItem, out: &mut Vec<String>) {
+        if !item.text.is_empty() {
+            out.push(item.text.clone());
+        }
+        for child in &item.children {
+            collect_item_texts(child, out);
+        }
+    }
+
+    // 1. When show_hidden_folders is FALSE
+    let menu_hide = FolderContextMenuBuilder::build_menu(
+        &sub1_folder,
+        &tree,
+        false,
+        false, // show_hidden_folders = false
+        true,  // support_dot_hidden_files = true
+        &mut dot_hidden_cache,
+    );
+
+    let move_to_hide = menu_hide
+        .items
+        .iter()
+        .find(|item| item.text == "Move to...")
+        .expect("Move to... submenu must exist");
+
+    let mut hide_texts = Vec::new();
+    for child in &move_to_hide.children {
+        collect_item_texts(child, &mut hide_texts);
+    }
+
+    assert!(hide_texts.iter().any(|t| t.contains("NormalSub2")));
+    assert!(!hide_texts.iter().any(|t| t.contains(".hidden_dot_dir")));
+    assert!(!hide_texts.iter().any(|t| t.contains("NestedInDot")));
+    assert!(!hide_texts.iter().any(|t| t.contains("ListedHiddenDir")));
+    assert!(!hide_texts.iter().any(|t| t.contains("NestedInListed")));
+
+    // 2. When show_hidden_folders is TRUE
+    let menu_show = FolderContextMenuBuilder::build_menu(
+        &sub1_folder,
+        &tree,
+        false,
+        true, // show_hidden_folders = true
+        true, // support_dot_hidden_files = true
+        &mut dot_hidden_cache,
+    );
+
+    let move_to_show = menu_show
+        .items
+        .iter()
+        .find(|item| item.text == "Move to...")
+        .expect("Move to... submenu must exist");
+
+    let mut show_texts = Vec::new();
+    for child in &move_to_show.children {
+        collect_item_texts(child, &mut show_texts);
+    }
+
+    assert!(show_texts.iter().any(|t| t.contains("NormalSub2")));
+    assert!(show_texts.iter().any(|t| t.contains(".hidden_dot_dir")));
+    assert!(show_texts.iter().any(|t| t.contains("ListedHiddenDir")));
+}
+
+#[test]
+fn test_folder_context_menu_performance_with_many_folders() {
+    let root_path = "/media/archive";
+    let mut folders = Vec::with_capacity(10_000);
+
+    // Root folder
+    folders.push(FolderRecord {
+        id: 1,
+        path: root_path.to_string(),
+        added_at: 1700000000,
+        is_deleted: false,
+    });
+
+    let mut id_counter = 2u64;
+
+    // Generate 5,000 synthetic nested and dot folders
+    for branch_idx in 0..100 {
+        let branch_path = format!("{}/Branch_{:03}", root_path, branch_idx);
+        let is_branch_hidden = branch_idx % 5 == 0;
+        let final_branch_path = if is_branch_hidden {
+            format!("{}/.Branch_{:03}", root_path, branch_idx)
+        } else {
+            branch_path
+        };
+
+        folders.push(FolderRecord {
+            id: id_counter,
+            path: final_branch_path.clone(),
+            added_at: 1700000000,
+            is_deleted: false,
+        });
+        id_counter += 1;
+
+        for sub_idx in 0..49 {
+            let sub_path = format!("{}/Sub_{:02}", final_branch_path, sub_idx);
+            let is_del = sub_idx % 10 == 0;
+
+            folders.push(FolderRecord {
+                id: id_counter,
+                path: sub_path,
+                added_at: 1700000000,
+                is_deleted: is_del,
+            });
+            id_counter += 1;
+        }
+    }
+
+    assert_eq!(folders.len(), 5001);
+
+    let media_counts = HashMap::new();
+    let tree = FolderTreeBuilder::build_hierarchy(Path::new(root_path), &folders, &media_counts);
+    assert_eq!(tree.len(), 1);
+
+    let target_folder = folders[1].clone();
+    let mut dot_hidden_cache = DotHiddenCache::new();
+
+    let t0 = Instant::now();
+    let menu = FolderContextMenuBuilder::build_menu(
+        &target_folder,
+        &tree,
+        false,
+        false,
+        true,
+        &mut dot_hidden_cache,
+    );
+    let elapsed = t0.elapsed();
+
+    // High performance guarantee: in-memory tree traversal for 5000+ folders must execute in < 2ms (typically < 0.1ms)
+    assert!(
+        elapsed.as_millis() < 2,
+        "Building folder context menu took too long: {} ms ({} us)",
+        elapsed.as_millis(),
+        elapsed.as_micros()
+    );
+
+    let move_item = menu
+        .items
+        .iter()
+        .find(|item| item.text == "Move to...")
+        .expect("Move to... must exist");
     assert!(move_item.is_enabled);
 }
 
@@ -355,24 +551,24 @@ fn test_collapse_all_except_active_path() {
 fn test_in_place_count_update_in_state() {
     let mut state = UiState::default();
 
-    let root_rec = rustview::library::models::FolderRecord {
+    let root_rec = FolderRecord {
         id: 1,
         path: "/root".to_string(),
         added_at: 0,
         is_deleted: false,
     };
-    let child_rec = rustview::library::models::FolderRecord {
+    let child_rec = FolderRecord {
         id: 2,
         path: "/root/child".to_string(),
         added_at: 0,
         is_deleted: false,
     };
 
-    let tree = vec![rustview::ui::bridge_folders::FolderTreeNode {
+    let tree = vec![FolderTreeNode {
         record: root_rec,
         subfolders_count: 1,
         media_files_count: 0,
-        children: vec![rustview::ui::bridge_folders::FolderTreeNode {
+        children: vec![FolderTreeNode {
             record: child_rec,
             subfolders_count: 0,
             media_files_count: 0,
@@ -469,9 +665,20 @@ fn test_orphaned_folder_context_menu_and_db_purge_workflow() {
     orphaned_rec.is_deleted = true;
 
     let folders = lib.folders().list_folders().unwrap();
+    let media_counts = HashMap::new();
+    let tree = FolderTreeBuilder::build_hierarchy(root, &folders, &media_counts);
+
+    let mut dot_hidden_cache = DotHiddenCache::new();
 
     // 2. Check Context Menu: must contain "Remove from Database..."
-    let menu = FolderContextMenuBuilder::build_menu(&orphaned_rec, &folders, Some(root), false);
+    let menu = FolderContextMenuBuilder::build_menu(
+        &orphaned_rec,
+        &tree,
+        false,
+        true,
+        true,
+        &mut dot_hidden_cache,
+    );
     let purge_action = menu
         .items
         .iter()
@@ -589,7 +796,6 @@ fn test_folder_deletion_preserves_root_and_sibling_expansion() {
     let media_counts = HashMap::new();
     let tree = FolderTreeBuilder::build_hierarchy(root, &folders, &media_counts);
 
-    let mut flattened = Vec::new();
     let mut dot_hidden_cache = DotHiddenCache::new();
     let mut ctx = FolderFlattenContext {
         expanded_ids: &expanded_ids,
@@ -600,6 +806,7 @@ fn test_folder_deletion_preserves_root_and_sibling_expansion() {
         support_dot_hidden: true,
         dot_hidden_cache: &mut dot_hidden_cache,
     };
+    let mut flattened = Vec::new();
     FolderTreeBuilder::flatten(&tree, 0, &mut ctx, &mut flattened);
 
     // Should contain: Root (depth 0), KeepBranch (depth 1), KeepSub (depth 2) -> 3 rows

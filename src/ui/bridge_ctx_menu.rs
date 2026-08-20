@@ -11,13 +11,14 @@ pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter as SlintContextMenuPr
 pub use super::bridge_file_dialogs::FileRenameDialogController as FileRenameController;
 
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
+use super::bridge_folders::{FolderTreeBuilder, FolderTreeNode};
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_tag_dialogs::TagDialogController;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{CtxMenu, CtxMenuDispatcher};
 use crate::library::Library;
-use crate::library::models::{FolderId, MediaId};
+use crate::library::models::{FolderId, FolderRecord, MediaId};
 use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
@@ -171,26 +172,70 @@ impl BridgeContextMenu {
         x: f32,
         y: f32,
     ) {
-        let Ok(Some(folder_rec)) = library.folders().get_folder(folder_id) else {
+        let app_settings = settings.get();
+        let root_setting = app_settings.general.root_folder;
+        let show_hidden_folders = app_settings.folders.show_hidden_folders;
+        let support_dot_hidden_files = app_settings.folders.support_dot_hidden_files;
+
+        let mut st = state.write();
+        st.active_folder_dialog_target = Some(folder_id);
+
+        // Ensure cached_folder_tree is available in memory with zero disk I/O
+        if st.cached_folder_tree.is_none()
+            && let Some(ref root_dir) = root_setting
+        {
+            let folders = library.folders().list_folders().unwrap_or_default();
+            let media_counts = library.folders().get_all_media_counts().unwrap_or_default();
+            let built_tree = FolderTreeBuilder::build_hierarchy(root_dir, &folders, &media_counts);
+            st.cached_folder_tree = Some(built_tree);
+            st.cached_media_counts = media_counts;
+        }
+
+        // Borrow disjoint fields simultaneously from *st to satisfy the borrow checker
+        let UiState {
+            cached_folder_tree: ref tree_opt,
+            ref mut dot_hidden_cache,
+            ref mut active_context_menu,
+            ..
+        } = *st;
+
+        let Some(tree) = tree_opt.as_ref() else {
             return;
         };
 
-        state.write().active_folder_dialog_target = Some(folder_id);
+        // Find target folder record from in-memory hierarchy
+        let target_record = Self::find_record_in_tree(tree, folder_id);
+        let Some(folder_rec) = target_record else {
+            return;
+        };
 
-        let all_folders = library.folders().list_folders().unwrap_or_default();
-        let root_setting = settings.get().general.root_folder;
         let is_root = root_setting
             .as_ref()
             .map(|r| Path::new(&folder_rec.path) == r)
             .unwrap_or(false);
 
-        let menu = FolderContextMenu::build_menu(
+        let menu = FolderContextMenu::build_menu_from_cached_tree(
             &folder_rec,
-            &all_folders,
-            root_setting.as_deref(),
+            tree,
             is_root,
+            show_hidden_folders,
+            support_dot_hidden_files,
+            dot_hidden_cache,
         );
-        Self::open_custom_menu(window, state, menu, x, y);
+
+        CtxMenuPresenter::open(window, active_context_menu, menu, x, y);
+    }
+
+    fn find_record_in_tree(nodes: &[FolderTreeNode], target_id: FolderId) -> Option<FolderRecord> {
+        for node in nodes {
+            if node.record.id == target_id {
+                return Some(node.record.clone());
+            }
+            if let Some(rec) = Self::find_record_in_tree(&node.children, target_id) {
+                return Some(rec);
+            }
+        }
+        None
     }
 
     #[inline]

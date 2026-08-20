@@ -1,4 +1,5 @@
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId};
+use crate::library::dot_hidden::DotHiddenCache;
 use crate::library::models::{FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
@@ -153,6 +154,7 @@ pub struct UiState {
     pub active_folder_dialog_target: Option<FolderId>,
     pub cached_folder_tree: Option<Vec<FolderTreeNode>>,
     pub cached_media_counts: HashMap<FolderId, usize>,
+    pub dot_hidden_cache: DotHiddenCache,
 
     // === Hierarchical Tag Tree State ===
     pub expanded_tag_ids: HashSet<TagId>,
@@ -195,6 +197,7 @@ impl Default for UiState {
             active_folder_dialog_target: None,
             cached_folder_tree: None,
             cached_media_counts: HashMap::new(),
+            dot_hidden_cache: DotHiddenCache::default(),
             expanded_tag_ids: HashSet::new(),
             tag_filter_query: String::new(),
             tag_filter_is_regex: false,
@@ -227,6 +230,7 @@ impl UiState {
     pub fn invalidate_folder_tree_cache(&mut self) {
         self.cached_folder_tree = None;
         self.cached_media_counts.clear();
+        self.dot_hidden_cache.clear();
     }
 
     /// Updates media count of a single folder in-place without rebuilding the entire hierarchy.
