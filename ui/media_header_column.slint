@@ -1,22 +1,25 @@
 import { Theme } from "styles.slint";
 
 /// Standalone, reusable single column header component with title, sort indicator, and drag resizer handle.
+/// Supports both fixed-width mode (TableView) and automatic content-based dynamic width mode (GridView).
 export component MediaHeaderColumn inherits Rectangle {
     in property <string> title: "";
     in property <int> column-index: 0;
     in property <int> active-sort-column: 0;
     in property <int> active-sort-order: 0; // 0 = Ascending, 1 = Descending
     in property <bool> enable-resize: true;
-    in property <length> column-min-width: 60px;
+    in property <bool> auto-width: false;
+    in property <length> column-min-width: 50px;
     in-out property <length> column-width: 150px;
 
     callback sort-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
 
-    width: root.column-width;
+    width: root.auto-width ? content-layout.preferred-width : root.column-width;
     height: 100%;
     background: col-touch.has-hover ? Theme.surface-hover : Theme.surface;
+    border-radius: root.auto-width ? 3px : 0px;
     clip: false;
 
     property <bool> is-sorted: root.column-index == root.active-sort-column;
@@ -27,15 +30,16 @@ export component MediaHeaderColumn inherits Rectangle {
         y: 0px;
         width: parent.width - (root.enable-resize ? 8px : 0px);
         height: 100%;
+        mouse-cursor: pointer;
         clicked => {
             root.sort-clicked(root.column-index);
         }
     }
 
-    HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 6px;
+    content-layout := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 5px;
         alignment: start;
 
         Text {
@@ -58,8 +62,8 @@ export component MediaHeaderColumn inherits Rectangle {
         }
     }
 
-    // Right Separator Line
-    Rectangle {
+    // Right Separator Line (only when not auto-width / in TableView)
+    if !root.auto-width : Rectangle {
         x: parent.width - 1px;
         width: 1px;
         height: 100%;
@@ -78,7 +82,6 @@ export component MediaHeaderColumn inherits Rectangle {
 
         pointer-event(e) => {
             if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
-                // Record initial absolute screen position relative to header container
                 self.start-abs-x = root.x + resizer-touch.x + self.mouse-x;
                 self.start-w = root.column-width;
             }

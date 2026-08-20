@@ -2,6 +2,7 @@ use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFile
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
+use super::models::format_timestamp;
 use super::{FileRenameDialog, MainWindow};
 use crate::library::error::LibraryError;
 use crate::library::models::{MediaId, MediaRecord};
@@ -83,7 +84,6 @@ impl FileRenameDialogController {
         dialog_ref: &Rc<RefCell<Option<FileRenameDialog>>>,
         missing_dialog: &MissingFileDialogController,
     ) {
-        // Pre-check if original file physically exists on storage via absolute library path resolution
         let current_target = {
             let st = ctx.state.read();
             st.all_folder_media
@@ -177,6 +177,9 @@ impl FileRenameDialogController {
         {
             item.filename_slint = updated_record.filename.clone().into();
             item.filename_lower = updated_record.filename.to_lowercase();
+            item.modified_date_str = format_timestamp(updated_record.modification_time).into();
+            item.created_date_str = format_timestamp(updated_record.creation_time).into();
+            item.format_str = updated_record.format.default_extension().to_ascii_lowercase().into();
             if let Some(ref folder_path) = folder_path_opt {
                 item.full_path = folder_path.join(&updated_record.filename);
             }

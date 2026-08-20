@@ -3,7 +3,7 @@ import { MediaHeaderColumn } from "media_header_column.slint";
 
 export { MediaHeaderColumn } from "media_header_column.slint";
 
-/// Unified modular column header bar shared across TableView and GridView with direct X positioning.
+/// Unified modular column header bar shared across TableView (fixed/resizable widths) and GridView (dynamic auto-widths).
 export component MediaHeaderBar inherits Rectangle {
     height: 28px;
     background: Theme.surface;
@@ -11,16 +11,33 @@ export component MediaHeaderBar inherits Rectangle {
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
     in property <bool> enable-resize: true;
+    in property <bool> auto-width: false;
 
-    in-out property <length> col-filename-width: 280px;
-    in-out property <length> col-dimensions-width: 140px;
-    in-out property <length> col-size-width: 110px;
-    in-out property <length> col-rating-width: 90px;
+    // All 11 Table Columns Widths (used in TableView fixed mode)
+    in-out property <length> col-filename-width: 260px;
+    in-out property <length> col-modified-date-width: 145px;
+    in-out property <length> col-created-date-width: 145px;
+    in-out property <length> col-size-width: 95px;
+    in-out property <length> col-rating-width: 65px;
+    in-out property <length> col-tags-width: 65px;
+    in-out property <length> col-width-width: 70px;
+    in-out property <length> col-height-width: 70px;
+    in-out property <length> col-ar-width: 65px;
+    in-out property <length> col-duration-width: 110px;
+    in-out property <length> col-format-width: 75px;
 
+    // Calculated Cumulative X Offsets for TableView 1:1 Alignments
     property <length> col-pos-0: 0px;
     property <length> col-pos-1: root.col-filename-width;
-    property <length> col-pos-2: root.col-pos-1 + root.col-dimensions-width;
-    property <length> col-pos-3: root.col-pos-2 + root.col-size-width;
+    property <length> col-pos-2: root.col-pos-1 + root.col-modified-date-width;
+    property <length> col-pos-3: root.col-pos-2 + root.col-created-date-width;
+    property <length> col-pos-4: root.col-pos-3 + root.col-size-width;
+    property <length> col-pos-5: root.col-pos-4 + root.col-rating-width;
+    property <length> col-pos-6: root.col-pos-5 + root.col-tags-width;
+    property <length> col-pos-7: root.col-pos-6 + root.col-width-width;
+    property <length> col-pos-8: root.col-pos-7 + root.col-height-width;
+    property <length> col-pos-9: root.col-pos-8 + root.col-ar-width;
+    property <length> col-pos-10: root.col-pos-9 + root.col-duration-width;
 
     callback sort-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
@@ -33,59 +50,303 @@ export component MediaHeaderBar inherits Rectangle {
         background: Theme.border;
     }
 
-    MediaHeaderColumn {
-        x: root.col-pos-0;
-        title: "Filename";
-        column-index: 0;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        enable-resize: root.enable-resize;
-        column-width <=> root.col-filename-width;
-        column-min-width: 100px;
-        sort-clicked(idx) => { root.sort-clicked(idx); }
-        column-resized(idx, w) => { root.column-resized(idx, w); }
-        column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+    // 1. DYNAMIC AUTO-WIDTH MODE (Grid View: adapts width automatically to text length)
+    if root.auto-width : HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 6px;
+        spacing: 4px;
+        alignment: start;
+
+        MediaHeaderColumn {
+            title: "Filename";
+            column-index: 0;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Modified Date";
+            column-index: 1;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Created Date";
+            column-index: 2;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Filesize (MB)";
+            column-index: 3;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Rating";
+            column-index: 4;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Tags";
+            column-index: 5;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Width";
+            column-index: 6;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Height";
+            column-index: 7;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "AR";
+            column-index: 8;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Duration";
+            column-index: 9;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Format";
+            column-index: 10;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
     }
 
-    MediaHeaderColumn {
-        x: root.col-pos-1;
-        title: "Dimensions";
-        column-index: 1;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        enable-resize: root.enable-resize;
-        column-width <=> root.col-dimensions-width;
-        column-min-width: 80px;
-        sort-clicked(idx) => { root.sort-clicked(idx); }
-        column-resized(idx, w) => { root.column-resized(idx, w); }
-        column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
-    }
+    // 2. FIXED / RESIZABLE MODE (Table View: pixel-aligned with table columns)
+    if !root.auto-width : Rectangle {
+        width: 100%;
+        height: 100%;
 
-    MediaHeaderColumn {
-        x: root.col-pos-2;
-        title: "Size";
-        column-index: 2;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        enable-resize: root.enable-resize;
-        column-width <=> root.col-size-width;
-        column-min-width: 70px;
-        sort-clicked(idx) => { root.sort-clicked(idx); }
-        column-resized(idx, w) => { root.column-resized(idx, w); }
-        column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
-    }
+        // Col 0: Filename
+        MediaHeaderColumn {
+            x: root.col-pos-0;
+            title: "Filename";
+            column-index: 0;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-filename-width;
+            column-min-width: 80px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
 
-    MediaHeaderColumn {
-        x: root.col-pos-3;
-        title: "Rating";
-        column-index: 3;
-        active-sort-column: root.sort-column;
-        active-sort-order: root.sort-order;
-        enable-resize: root.enable-resize;
-        column-width <=> root.col-rating-width;
-        column-min-width: 60px;
-        sort-clicked(idx) => { root.sort-clicked(idx); }
-        column-resized(idx, w) => { root.column-resized(idx, w); }
-        column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        // Col 1: Modified Date
+        MediaHeaderColumn {
+            x: root.col-pos-1;
+            title: "Modified Date";
+            column-index: 1;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-modified-date-width;
+            column-min-width: 90px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 2: Created Date
+        MediaHeaderColumn {
+            x: root.col-pos-2;
+            title: "Created Date";
+            column-index: 2;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-created-date-width;
+            column-min-width: 90px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 3: Filesize (MB)
+        MediaHeaderColumn {
+            x: root.col-pos-3;
+            title: "Filesize (MB)";
+            column-index: 3;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-size-width;
+            column-min-width: 70px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 4: Rating
+        MediaHeaderColumn {
+            x: root.col-pos-4;
+            title: "Rating";
+            column-index: 4;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-rating-width;
+            column-min-width: 50px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 5: Tags
+        MediaHeaderColumn {
+            x: root.col-pos-5;
+            title: "Tags";
+            column-index: 5;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-tags-width;
+            column-min-width: 50px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 6: Width
+        MediaHeaderColumn {
+            x: root.col-pos-6;
+            title: "Width";
+            column-index: 6;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-width-width;
+            column-min-width: 50px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 7: Height
+        MediaHeaderColumn {
+            x: root.col-pos-7;
+            title: "Height";
+            column-index: 7;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-height-width;
+            column-min-width: 50px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 8: AR
+        MediaHeaderColumn {
+            x: root.col-pos-8;
+            title: "AR";
+            column-index: 8;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-ar-width;
+            column-min-width: 45px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 9: Duration
+        MediaHeaderColumn {
+            x: root.col-pos-9;
+            title: "Duration";
+            column-index: 9;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-duration-width;
+            column-min-width: 80px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 10: Format
+        MediaHeaderColumn {
+            x: root.col-pos-10;
+            title: "Format";
+            column-index: 10;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-format-width;
+            column-min-width: 55px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
     }
 }

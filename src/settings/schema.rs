@@ -41,11 +41,21 @@ pub const MAX_TOOLTIP_DELAY_MS: u32 = 2000;
 pub const DEFAULT_IS_TABLE_VIEW: bool = false;
 pub const DEFAULT_SORT_COLUMN: &str = "Filename";
 pub const DEFAULT_SORT_ORDER: &str = "Ascending";
-pub const DEFAULT_COL_FILENAME_WIDTH: f32 = 280.0;
-pub const DEFAULT_COL_DIMENSIONS_WIDTH: f32 = 140.0;
-pub const DEFAULT_COL_SIZE_WIDTH: f32 = 110.0;
-pub const DEFAULT_COL_RATING_WIDTH: f32 = 90.0;
-pub const MIN_COL_WIDTH: f32 = 50.0;
+
+// All 11 Table Columns Defaults
+pub const DEFAULT_COL_FILENAME_WIDTH: f32 = 260.0;
+pub const DEFAULT_COL_MODIFIED_DATE_WIDTH: f32 = 145.0;
+pub const DEFAULT_COL_CREATED_DATE_WIDTH: f32 = 145.0;
+pub const DEFAULT_COL_SIZE_WIDTH: f32 = 95.0;
+pub const DEFAULT_COL_RATING_WIDTH: f32 = 65.0;
+pub const DEFAULT_COL_TAGS_WIDTH: f32 = 65.0;
+pub const DEFAULT_COL_WIDTH_WIDTH: f32 = 70.0;
+pub const DEFAULT_COL_HEIGHT_WIDTH: f32 = 70.0;
+pub const DEFAULT_COL_AR_WIDTH: f32 = 65.0;
+pub const DEFAULT_COL_DURATION_WIDTH: f32 = 110.0;
+pub const DEFAULT_COL_FORMAT_WIDTH: f32 = 75.0;
+
+pub const MIN_COL_WIDTH: f32 = 40.0;
 pub const MAX_COL_WIDTH: f32 = 1200.0;
 
 // Sidebar Width Constants
@@ -104,7 +114,6 @@ pub fn default_worker_threads() -> usize {
         .map(|n| n.get())
         .unwrap_or(4);
 
-    // Reserve 1-2 cores for Slint GUI thread to guarantee 60 FPS stutter-free responsiveness
     let reserved = if available > 4 {
         available.saturating_sub(2)
     } else if available > 1 {
@@ -290,10 +299,20 @@ pub struct ViewSettings {
     pub is_table_view: bool,
     pub sort_column: String,
     pub sort_order: String,
+
+    // All 11 Column Widths
     pub col_filename_width: f32,
-    pub col_dimensions_width: f32,
+    pub col_modified_date_width: f32,
+    pub col_created_date_width: f32,
     pub col_size_width: f32,
     pub col_rating_width: f32,
+    pub col_tags_width: f32,
+    pub col_width_width: f32,
+    pub col_height_width: f32,
+    pub col_ar_width: f32,
+    pub col_duration_width: f32,
+    pub col_format_width: f32,
+
     pub sidebar_left_width: f32,
     pub sidebar_right_width: f32,
 }
@@ -304,10 +323,19 @@ impl Default for ViewSettings {
             is_table_view: DEFAULT_IS_TABLE_VIEW,
             sort_column: DEFAULT_SORT_COLUMN.to_string(),
             sort_order: DEFAULT_SORT_ORDER.to_string(),
+
             col_filename_width: DEFAULT_COL_FILENAME_WIDTH,
-            col_dimensions_width: DEFAULT_COL_DIMENSIONS_WIDTH,
+            col_modified_date_width: DEFAULT_COL_MODIFIED_DATE_WIDTH,
+            col_created_date_width: DEFAULT_COL_CREATED_DATE_WIDTH,
             col_size_width: DEFAULT_COL_SIZE_WIDTH,
             col_rating_width: DEFAULT_COL_RATING_WIDTH,
+            col_tags_width: DEFAULT_COL_TAGS_WIDTH,
+            col_width_width: DEFAULT_COL_WIDTH_WIDTH,
+            col_height_width: DEFAULT_COL_HEIGHT_WIDTH,
+            col_ar_width: DEFAULT_COL_AR_WIDTH,
+            col_duration_width: DEFAULT_COL_DURATION_WIDTH,
+            col_format_width: DEFAULT_COL_FORMAT_WIDTH,
+
             sidebar_left_width: DEFAULT_SIDEBAR_LEFT_WIDTH,
             sidebar_right_width: DEFAULT_SIDEBAR_RIGHT_WIDTH,
         }

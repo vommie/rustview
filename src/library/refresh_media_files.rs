@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 pub struct RefreshedFileAttributes {
     pub file_size: u64,
     pub modification_time: i64,
+    pub creation_time: i64,
     pub file_hash: FileHash,
     pub raw_metadata: RawMetadata,
 }
@@ -42,6 +43,7 @@ impl<'a> MediaItemRefresher<'a> {
             file_size = updated_record.file_size,
             width = updated_record.width,
             height = updated_record.height,
+            duration_ms = updated_record.duration_ms,
             rating = updated_record.rating,
             "Committed media metadata refresh to LMDB storage successfully"
         );
@@ -79,7 +81,7 @@ impl<'a> MediaItemRefresher<'a> {
         Ok((record, file_path))
     }
 
-    /// Inspects physical file on disk: reads metadata, hashes file content, and extracts container dimensions.
+    /// Inspects physical file on disk: reads metadata, hashes file content, and extracts container dimensions & duration.
     pub fn inspect_physical_file(
         &self,
         file_path: &Path,
@@ -98,12 +100,20 @@ impl<'a> MediaItemRefresher<'a> {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
 
+        let creation_time = fs_meta
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(modification_time);
+
         let file_hash = MediaHasher::hash_file(file_path)?;
         let raw_metadata = MetadataExtractor::extract(file_path)?;
 
         Ok(RefreshedFileAttributes {
             file_size,
             modification_time,
+            creation_time,
             file_hash,
             raw_metadata,
         })
@@ -131,6 +141,8 @@ impl<'a> MediaItemRefresher<'a> {
         record.file_hash = attributes.file_hash;
         record.file_size = attributes.file_size;
         record.modification_time = attributes.modification_time;
+        record.creation_time = attributes.creation_time;
+        record.duration_ms = attributes.raw_metadata.duration_ms;
         record.media_type = attributes.raw_metadata.media_type;
         record.format = attributes.raw_metadata.format;
         record.width = attributes.raw_metadata.width;

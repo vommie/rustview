@@ -2,11 +2,13 @@ use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFile
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
 use super::bridge_tags::BridgeTags;
-use super::models::{format_filesize, rgb8_to_shared_buffer};
+use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::video_preview_animator::VideoPreviewAnimator;
 use super::{MainWindow, MediaItemView};
 use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::Library;
+use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
+use crate::media::MediaType;
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, SortColumn, SortOrder};
 use crate::settings::{LogObscurer, SettingsManager};
@@ -15,7 +17,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use slint::{ComponentHandle, Image, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -214,9 +216,16 @@ impl BridgeMedia {
 
             match col_idx {
                 0 => app_settings.view.col_filename_width = width_f32,
-                1 => app_settings.view.col_dimensions_width = width_f32,
-                2 => app_settings.view.col_size_width = width_f32,
-                3 => app_settings.view.col_rating_width = width_f32,
+                1 => app_settings.view.col_modified_date_width = width_f32,
+                2 => app_settings.view.col_created_date_width = width_f32,
+                3 => app_settings.view.col_size_width = width_f32,
+                4 => app_settings.view.col_rating_width = width_f32,
+                5 => app_settings.view.col_tags_width = width_f32,
+                6 => app_settings.view.col_width_width = width_f32,
+                7 => app_settings.view.col_height_width = width_f32,
+                8 => app_settings.view.col_ar_width = width_f32,
+                9 => app_settings.view.col_duration_width = width_f32,
+                10 => app_settings.view.col_format_width = width_f32,
                 _ => {}
             }
 
@@ -311,7 +320,7 @@ impl BridgeMedia {
         );
     }
 
-    /// Decoupled virtualization handler with High-FPS Hysteresis Windowing.
+    /// Decoupled virtualization handler with High-FPS Hysteresis Windowing across all 11 columns.
     pub fn handle_visible_chunk_changed(
         first_idx: usize,
         last_idx: usize,
@@ -329,7 +338,6 @@ impl BridgeMedia {
         let scroll_bench = state.read().scroll_bench.clone();
         scroll_bench.record_event();
 
-        // Optimized generous buffer sizes & thresholds to maximize hysteresis hit-ratio (>75%)
         let (buffer_size, margin_threshold) = if is_table {
             (160usize, 32usize)
         } else {
@@ -372,15 +380,41 @@ impl BridgeMedia {
                     (
                         item.record.id,
                         item.filename_slint.clone(),
-                        item.filesize_str.clone(),
-                        item.dimensions_str.clone(),
+                        item.modified_date_str.clone(),
+                        item.created_date_str.clone(),
+                        item.filesize_mb_str.clone(),
                         item.record.rating as i32,
+                        item.rating_str.clone(),
+                        item.tags_count as i32,
+                        item.tags_count_str.clone(),
+                        item.width_str.clone(),
+                        item.height_str.clone(),
+                        item.ar_str.clone(),
+                        item.duration_str.clone(),
+                        item.format_str.clone(),
                         item.has_tags,
-                        matches!(item.record.media_type, crate::media::MediaType::Video),
+                        matches!(item.record.media_type, MediaType::Video),
                     )
                 });
 
-                if let Some((media_id, filename_slint, filesize_str, dimensions_str, rating, has_tags, is_video)) = item_info_opt {
+                if let Some((
+                    media_id,
+                    filename_slint,
+                    modified_date_str,
+                    created_date_str,
+                    filesize_str,
+                    rating,
+                    rating_str,
+                    tags_count,
+                    tags_str,
+                    width_str,
+                    height_str,
+                    ar_str,
+                    duration_str,
+                    format_str,
+                    has_tags,
+                    is_video,
+                )) = item_info_opt {
                     let is_selected = st.file_selection.is_selected(media_id);
 
                     let thumb_img = if is_table {
@@ -397,9 +431,18 @@ impl BridgeMedia {
                     slice_views.push(MediaItemView {
                         id: media_id as i32,
                         filename: filename_slint,
+                        modified_date_str,
+                        created_date_str,
                         filesize_str,
-                        dimensions_str,
                         rating,
+                        rating_str,
+                        tags_count,
+                        tags_str,
+                        width_str,
+                        height_str,
+                        ar_str,
+                        duration_str,
+                        format_str,
                         has_tags,
                         thumbnail: thumb_img,
                         is_selected,
@@ -539,15 +582,25 @@ impl BridgeMedia {
 
                     refreshed_count += 1;
 
-                    let filesize_str: slint::SharedString = format_filesize(updated_record.file_size).into();
-                    let dimensions_str: slint::SharedString = format!("{} × {}", updated_record.width, updated_record.height).into();
+                    let modified_date_str: slint::SharedString = format_timestamp(updated_record.modification_time).into();
+                    let created_date_str: slint::SharedString = format_timestamp(updated_record.creation_time).into();
+                    let filesize_mb_str: slint::SharedString = format_filesize_mb(updated_record.file_size).into();
+                    let rating_str: slint::SharedString = updated_record.rating.to_string().into();
+                    let is_video = matches!(updated_record.media_type, MediaType::Video);
+                    let duration_str: slint::SharedString = format_duration_hms_ms(updated_record.duration_ms, is_video).into();
+                    let format_str: slint::SharedString = updated_record.format.default_extension().to_ascii_lowercase().into();
+                    let ar_str: slint::SharedString = approximate_aspect_ratio(updated_record.width, updated_record.height).into();
+                    let ar_value = if updated_record.height > 0 { updated_record.width as f32 / updated_record.height as f32 } else { 0.0 };
+                    let width_str: slint::SharedString = if updated_record.width > 0 { updated_record.width.to_string().into() } else { "-".into() };
+                    let height_str: slint::SharedString = if updated_record.height > 0 { updated_record.height.to_string().into() } else { "-".into() };
+
+                    let assigned_tags = lib_arc.tags().get_tags_for_media(media_id).unwrap_or_default();
+                    let tags_count = assigned_tags.len();
+                    let tags_count_str: slint::SharedString = tags_count.to_string().into();
+                    let has_tags = tags_count > 0;
+
                     let filename_slint: slint::SharedString = updated_record.filename.clone().into();
                     let filename_lower = updated_record.filename.to_lowercase();
-                    let has_tags = !lib_arc
-                        .tags()
-                        .get_tags_for_media(media_id)
-                        .unwrap_or_default()
-                        .is_empty();
 
                     let shared_buf = rgb8_to_shared_buffer(
                         &cached_thumb.pixels,
@@ -567,8 +620,18 @@ impl BridgeMedia {
 
                             if let Some(item) = st.all_folder_media.iter_mut().find(|m| m.record.id == media_id) {
                                 item.record = updated_record.clone();
-                                item.filesize_str = filesize_str.clone();
-                                item.dimensions_str = dimensions_str.clone();
+                                item.modified_date_str = modified_date_str.clone();
+                                item.created_date_str = created_date_str.clone();
+                                item.filesize_mb_str = filesize_mb_str.clone();
+                                item.rating_str = rating_str.clone();
+                                item.tags_count = tags_count;
+                                item.tags_count_str = tags_count_str.clone();
+                                item.width_str = width_str.clone();
+                                item.height_str = height_str.clone();
+                                item.ar_str = ar_str.clone();
+                                item.ar_value = ar_value;
+                                item.duration_str = duration_str.clone();
+                                item.format_str = format_str.clone();
                                 item.filename_slint = filename_slint.clone();
                                 item.filename_lower = filename_lower;
                                 item.has_tags = has_tags;
@@ -594,12 +657,21 @@ impl BridgeMedia {
                                 if !w.get_is_table_view() {
                                     view.thumbnail = Image::from_rgb8(shared_buf);
                                 }
-                                view.filesize_str = filesize_str;
-                                view.dimensions_str = dimensions_str;
                                 view.filename = filename_slint;
+                                view.modified_date_str = modified_date_str;
+                                view.created_date_str = created_date_str;
+                                view.filesize_str = filesize_mb_str;
                                 view.rating = updated_record.rating as i32;
+                                view.rating_str = rating_str;
+                                view.tags_count = tags_count as i32;
+                                view.tags_str = tags_count_str;
+                                view.width_str = width_str;
+                                view.height_str = height_str;
+                                view.ar_str = ar_str;
+                                view.duration_str = duration_str;
+                                view.format_str = format_str;
                                 view.has_tags = has_tags;
-                                view.is_video = matches!(updated_record.media_type, crate::media::MediaType::Video);
+                                view.is_video = is_video;
                                 media_model.set_row_data(local_idx, view);
                             }
                         }
@@ -652,7 +724,7 @@ impl BridgeMedia {
             .expect("Failed to spawn media item refresher thread");
     }
 
-    /// Parallel multi-core string formatting and pre-indexing using Rayon and 1-txn tag lookup.
+    /// Parallel multi-core string formatting and pre-indexing for all 11 columns in Rayon.
     pub fn preindex(
         library: &Library,
         raw_records: Vec<MediaRecord>,
@@ -660,35 +732,46 @@ impl BridgeMedia {
     ) -> Vec<IndexedMediaRecord> {
         let folder_path_buf = folder_path.to_path_buf();
 
-        let tagged_media_ids: HashSet<MediaId> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
+        let tag_counts_map: HashMap<MediaId, usize> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
             raw_records
                 .iter()
                 .filter_map(|r| {
                     if let Ok(Some(tags)) = library.raw_db().tags_by_media.get(&rtxn, &r.id) {
-                        if !tags.is_empty() {
-                            Some(r.id)
-                        } else {
-                            None
-                        }
+                        Some((r.id, tags.len()))
                     } else {
                         None
                     }
                 })
                 .collect()
         } else {
-            HashSet::new()
+            HashMap::new()
         };
 
         raw_records
             .into_par_iter()
             .enumerate()
             .map(|(index, r)| {
-                let filesize_str: slint::SharedString = format_filesize(r.file_size).into();
-                let dimensions_str: slint::SharedString = format!("{} × {}", r.width, r.height).into();
+                let modified_date_str: slint::SharedString = format_timestamp(r.modification_time).into();
+                let created_date_str: slint::SharedString = format_timestamp(r.creation_time).into();
+                let filesize_mb_str: slint::SharedString = format_filesize_mb(r.file_size).into();
+                let rating_str: slint::SharedString = r.rating.to_string().into();
+
+                let tags_count = tag_counts_map.get(&r.id).copied().unwrap_or(0);
+                let tags_count_str: slint::SharedString = tags_count.to_string().into();
+                let has_tags = tags_count > 0;
+
+                let width_str: slint::SharedString = if r.width > 0 { r.width.to_string().into() } else { "-".into() };
+                let height_str: slint::SharedString = if r.height > 0 { r.height.to_string().into() } else { "-".into() };
+                let ar_str: slint::SharedString = approximate_aspect_ratio(r.width, r.height).into();
+                let ar_value = if r.height > 0 { r.width as f32 / r.height as f32 } else { 0.0 };
+
+                let is_video = matches!(r.media_type, MediaType::Video);
+                let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
+                let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
+
                 let filename_slint: slint::SharedString = r.filename.clone().into();
                 let filename_lower = r.filename.to_lowercase();
                 let full_path = folder_path_buf.join(&r.filename);
-                let has_tags = tagged_media_ids.contains(&r.id);
 
                 IndexedMediaRecord {
                     index,
@@ -696,8 +779,18 @@ impl BridgeMedia {
                     full_path,
                     filename_lower,
                     filename_slint,
-                    filesize_str,
-                    dimensions_str,
+                    modified_date_str,
+                    created_date_str,
+                    filesize_mb_str,
+                    rating_str,
+                    tags_count,
+                    tags_count_str,
+                    width_str,
+                    height_str,
+                    ar_str,
+                    ar_value,
+                    duration_str,
+                    format_str,
                     has_tags,
                 }
             })
@@ -711,31 +804,43 @@ impl BridgeMedia {
     ) -> Vec<IndexedMediaRecord> {
         let mut folder_path_cache: HashMap<FolderId, PathBuf> = HashMap::new();
 
-        let tagged_media_ids: HashSet<MediaId> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
+        let tag_counts_map: HashMap<MediaId, usize> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
             raw_records
                 .iter()
                 .filter_map(|r| {
                     if let Ok(Some(tags)) = library.raw_db().tags_by_media.get(&rtxn, &r.id) {
-                        if !tags.is_empty() {
-                            Some(r.id)
-                        } else {
-                            None
-                        }
+                        Some((r.id, tags.len()))
                     } else {
                         None
                     }
                 })
                 .collect()
         } else {
-            HashSet::new()
+            HashMap::new()
         };
 
         raw_records
             .into_iter()
             .enumerate()
             .map(|(index, r)| {
-                let filesize_str: slint::SharedString = format_filesize(r.file_size).into();
-                let dimensions_str: slint::SharedString = format!("{} × {}", r.width, r.height).into();
+                let modified_date_str: slint::SharedString = format_timestamp(r.modification_time).into();
+                let created_date_str: slint::SharedString = format_timestamp(r.creation_time).into();
+                let filesize_mb_str: slint::SharedString = format_filesize_mb(r.file_size).into();
+                let rating_str: slint::SharedString = r.rating.to_string().into();
+
+                let tags_count = tag_counts_map.get(&r.id).copied().unwrap_or(0);
+                let tags_count_str: slint::SharedString = tags_count.to_string().into();
+                let has_tags = tags_count > 0;
+
+                let width_str: slint::SharedString = if r.width > 0 { r.width.to_string().into() } else { "-".into() };
+                let height_str: slint::SharedString = if r.height > 0 { r.height.to_string().into() } else { "-".into() };
+                let ar_str: slint::SharedString = approximate_aspect_ratio(r.width, r.height).into();
+                let ar_value = if r.height > 0 { r.width as f32 / r.height as f32 } else { 0.0 };
+
+                let is_video = matches!(r.media_type, MediaType::Video);
+                let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
+                let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
+
                 let filename_slint: slint::SharedString = r.filename.clone().into();
                 let filename_lower = r.filename.to_lowercase();
 
@@ -750,7 +855,6 @@ impl BridgeMedia {
                 });
 
                 let full_path = folder_p.join(&r.filename);
-                let has_tags = tagged_media_ids.contains(&r.id);
 
                 IndexedMediaRecord {
                     index,
@@ -758,8 +862,18 @@ impl BridgeMedia {
                     full_path,
                     filename_lower,
                     filename_slint,
-                    filesize_str,
-                    dimensions_str,
+                    modified_date_str,
+                    created_date_str,
+                    filesize_mb_str,
+                    rating_str,
+                    tags_count,
+                    tags_count_str,
+                    width_str,
+                    height_str,
+                    ar_str,
+                    ar_value,
+                    duration_str,
+                    format_str,
                     has_tags,
                 }
             })
@@ -888,13 +1002,22 @@ impl BridgeMedia {
             slice_views.push(MediaItemView {
                 id: item.record.id as i32,
                 filename: item.filename_slint.clone(),
-                filesize_str: item.filesize_str.clone(),
-                dimensions_str: item.dimensions_str.clone(),
+                modified_date_str: item.modified_date_str.clone(),
+                created_date_str: item.created_date_str.clone(),
+                filesize_str: item.filesize_mb_str.clone(),
                 rating: item.record.rating as i32,
+                rating_str: item.rating_str.clone(),
+                tags_count: item.tags_count as i32,
+                tags_str: item.tags_count_str.clone(),
+                width_str: item.width_str.clone(),
+                height_str: item.height_str.clone(),
+                ar_str: item.ar_str.clone(),
+                duration_str: item.duration_str.clone(),
+                format_str: item.format_str.clone(),
                 has_tags: item.has_tags,
                 thumbnail: thumbnail_img,
                 is_selected,
-                is_video: matches!(item.record.media_type, crate::media::MediaType::Video),
+                is_video: matches!(item.record.media_type, MediaType::Video),
             });
         }
 
@@ -936,7 +1059,6 @@ impl BridgeMedia {
             bench.slint_commit_time_us.store(commit_us, Ordering::Relaxed);
         }
 
-        // Dedicated pipeline launch when requested
         if options.start_pipeline {
             let st_read = state.read();
             if let Some(f_id) = st_read.current_folder_id {

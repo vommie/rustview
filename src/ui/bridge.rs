@@ -98,10 +98,18 @@ impl UiBridge {
         window.set_sort_column_idx(initial_sort_col.to_index());
         window.set_sort_order_idx(initial_sort_ord.to_index());
 
+        // Restore All 11 Table Column Widths
         window.set_col_filename_width(v_settings.col_filename_width);
-        window.set_col_dimensions_width(v_settings.col_dimensions_width);
+        window.set_col_modified_date_width(v_settings.col_modified_date_width);
+        window.set_col_created_date_width(v_settings.col_created_date_width);
         window.set_col_size_width(v_settings.col_size_width);
         window.set_col_rating_width(v_settings.col_rating_width);
+        window.set_col_tags_width(v_settings.col_tags_width);
+        window.set_col_width_width(v_settings.col_width_width);
+        window.set_col_height_width(v_settings.col_height_width);
+        window.set_col_ar_width(v_settings.col_ar_width);
+        window.set_col_duration_width(v_settings.col_duration_width);
+        window.set_col_format_width(v_settings.col_format_width);
 
         // Apply centralized appearance & tooltip settings
         let app_settings = settings.get();
@@ -113,7 +121,7 @@ impl UiBridge {
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
         window.set_status_text("Initializing RustView...".into());
 
-        // Initialize Tag & Rate panel properties (Default Scope: Global / Index 2)
+        // Initialize Tag & Rate panel properties
         window.set_selected_rating(0);
         window.set_tag_is_assign_mode(false);
         window.set_tag_scope_mode_idx(ScopeMode::default().to_index());

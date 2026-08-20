@@ -255,14 +255,12 @@ export component VirtualizedMediaGrid inherits Rectangle {
         padding: 0px;
         spacing: 0px;
 
+        // Dynamic auto-width header bar for GridView
         MediaHeaderBar {
             sort-column: root.sort-column;
             sort-order: root.sort-order;
             enable-resize: false;
-            col-filename-width: 120px;
-            col-dimensions-width: 110px;
-            col-size-width: 90px;
-            col-rating-width: 80px;
+            auto-width: true;
             sort-clicked(idx) => { root.sort-clicked(idx); }
         }
 

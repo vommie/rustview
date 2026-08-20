@@ -75,10 +75,14 @@ pub struct MediaRecord {
     pub last_seen: u64,
     #[serde(default)]
     pub is_deleted: bool,
+    #[serde(default)]
+    pub creation_time: i64,
+    #[serde(default)]
+    pub duration_ms: u64,
 }
 
 #[derive(Deserialize)]
-struct LegacyMediaRecord {
+struct LegacyMediaRecordV1 {
     id: MediaId,
     folder_id: FolderId,
     filename: String,
@@ -93,35 +97,70 @@ struct LegacyMediaRecord {
     last_seen: u64,
 }
 
-/// Custom codec providing seamless backward compatibility for databases
-/// created before the `is_deleted` field was introduced for media records.
+#[derive(Deserialize)]
+struct LegacyMediaRecordV2 {
+    id: MediaId,
+    folder_id: FolderId,
+    filename: String,
+    file_hash: FileHash,
+    file_size: u64,
+    modification_time: i64,
+    media_type: MediaType,
+    format: MediaFormat,
+    width: u32,
+    height: u32,
+    rating: u8,
+    last_seen: u64,
+    is_deleted: bool,
+}
+
+/// Custom codec providing seamless backward compatibility across all schema iterations.
 pub struct MediaRecordCodec;
 
 impl<'a> BytesDecode<'a> for MediaRecordCodec {
     type DItem = MediaRecord;
 
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
-        match bincode::deserialize::<MediaRecord>(bytes) {
-            Ok(record) => Ok(record),
-            Err(_) => {
-                let legacy: LegacyMediaRecord = bincode::deserialize(bytes)?;
-                Ok(MediaRecord {
-                    id: legacy.id,
-                    folder_id: legacy.folder_id,
-                    filename: legacy.filename,
-                    file_hash: legacy.file_hash,
-                    file_size: legacy.file_size,
-                    modification_time: legacy.modification_time,
-                    media_type: legacy.media_type,
-                    format: legacy.format,
-                    width: legacy.width,
-                    height: legacy.height,
-                    rating: legacy.rating,
-                    last_seen: legacy.last_seen,
-                    is_deleted: false,
-                })
-            }
+        if let Ok(record) = bincode::deserialize::<MediaRecord>(bytes) {
+            return Ok(record);
         }
+        if let Ok(legacy2) = bincode::deserialize::<LegacyMediaRecordV2>(bytes) {
+            return Ok(MediaRecord {
+                id: legacy2.id,
+                folder_id: legacy2.folder_id,
+                filename: legacy2.filename,
+                file_hash: legacy2.file_hash,
+                file_size: legacy2.file_size,
+                modification_time: legacy2.modification_time,
+                media_type: legacy2.media_type,
+                format: legacy2.format,
+                width: legacy2.width,
+                height: legacy2.height,
+                rating: legacy2.rating,
+                last_seen: legacy2.last_seen,
+                is_deleted: legacy2.is_deleted,
+                creation_time: legacy2.modification_time,
+                duration_ms: 0,
+            });
+        }
+        let legacy1: LegacyMediaRecordV1 = bincode::deserialize(bytes)?;
+        Ok(MediaRecord {
+            id: legacy1.id,
+            folder_id: legacy1.folder_id,
+            filename: legacy1.filename,
+            file_hash: legacy1.file_hash,
+            file_size: legacy1.file_size,
+            modification_time: legacy1.modification_time,
+            media_type: legacy1.media_type,
+            format: legacy1.format,
+            width: legacy1.width,
+            height: legacy1.height,
+            rating: legacy1.rating,
+            last_seen: legacy1.last_seen,
+            is_deleted: false,
+            creation_time: legacy1.modification_time,
+            duration_ms: 0,
+        })
     }
 }
 
@@ -150,7 +189,7 @@ pub struct DatabaseMeta {
     pub created_at: i64,
 }
 
-/// Dedicated external hash record storing checksums and timestamps from external sources (e.g. XnViewMP Hashes table).
+/// Dedicated external hash record storing checksums and timestamps from external sources.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalHashRecord {
     pub hash_id: u64,
@@ -194,6 +233,8 @@ pub struct FileConflictItemDetails {
     pub full_path: PathBuf,
     pub file_size: u64,
     pub modification_time: i64,
+    pub creation_time: i64,
+    pub duration_ms: u64,
     pub file_hash: FileHash,
     pub width: u32,
     pub height: u32,

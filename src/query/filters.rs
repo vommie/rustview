@@ -1,5 +1,5 @@
-use crate::library::Library;
 use crate::library::models::{MediaRecord, TagId};
+use crate::library::Library;
 use crate::settings::{LogObscurer, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE};
 use memchr::memmem;
 use regex::{Regex, RegexBuilder};
@@ -118,8 +118,18 @@ pub struct IndexedMediaRecord {
     pub full_path: PathBuf,
     pub filename_lower: String,
     pub filename_slint: SharedString,
-    pub filesize_str: SharedString,
-    pub dimensions_str: SharedString,
+    pub modified_date_str: SharedString,
+    pub created_date_str: SharedString,
+    pub filesize_mb_str: SharedString,
+    pub rating_str: SharedString,
+    pub tags_count: usize,
+    pub tags_count_str: SharedString,
+    pub width_str: SharedString,
+    pub height_str: SharedString,
+    pub ar_str: SharedString,
+    pub ar_value: f32,
+    pub duration_str: SharedString,
+    pub format_str: SharedString,
     pub has_tags: bool,
 }
 

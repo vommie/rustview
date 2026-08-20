@@ -1,3 +1,4 @@
+pub use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 
 pub fn format_filesize(size_bytes: u64) -> String {

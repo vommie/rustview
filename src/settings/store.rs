@@ -167,23 +167,18 @@ impl SettingsStore {
             .preview_quality
             .clamp(MIN_QUALITY, MAX_QUALITY);
 
-        // Sanitize view column widths
-        settings.view.col_filename_width = settings
-            .view
-            .col_filename_width
-            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
-        settings.view.col_dimensions_width = settings
-            .view
-            .col_dimensions_width
-            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
-        settings.view.col_size_width = settings
-            .view
-            .col_size_width
-            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
-        settings.view.col_rating_width = settings
-            .view
-            .col_rating_width
-            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        // Sanitize all 11 view column widths
+        settings.view.col_filename_width = settings.view.col_filename_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_modified_date_width = settings.view.col_modified_date_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_created_date_width = settings.view.col_created_date_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_size_width = settings.view.col_size_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_rating_width = settings.view.col_rating_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_tags_width = settings.view.col_tags_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_width_width = settings.view.col_width_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_height_width = settings.view.col_height_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_ar_width = settings.view.col_ar_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_duration_width = settings.view.col_duration_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_format_width = settings.view.col_format_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
 
         // Sanitize sidebar widths
         settings.view.sidebar_left_width = settings

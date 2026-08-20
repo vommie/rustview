@@ -35,11 +35,13 @@ enum ProcessingCandidate {
         existing_record: MediaRecord,
         file_size: u64,
         mtime: i64,
+        ctime: i64,
     },
     New {
         scanned: ScannedFile,
         file_size: u64,
         mtime: i64,
+        ctime: i64,
     },
 }
 
@@ -53,6 +55,7 @@ enum ProcessedResult {
         existing_record: MediaRecord,
         file_size: u64,
         mtime: i64,
+        ctime: i64,
         was_deleted: bool,
     },
     ModifiedContentChanged {
@@ -61,6 +64,7 @@ enum ProcessedResult {
         new_hash: FileHash,
         file_size: u64,
         mtime: i64,
+        ctime: i64,
         raw_meta: RawMetadata,
         filename: String,
         preserved_rating: u8,
@@ -71,6 +75,7 @@ enum ProcessedResult {
         file_hash: FileHash,
         file_size: u64,
         mtime: i64,
+        ctime: i64,
         raw_meta: RawMetadata,
     },
     Failed,
@@ -199,6 +204,13 @@ impl<'a> FolderRefresher<'a> {
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or(0);
 
+            let ctime = fs_meta
+                .created()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(mtime);
+
             if let Some((existing_id, existing_record)) = existing_map.remove(&scanned.filename) {
                 if !existing_record.is_deleted
                     && existing_record.file_size == file_size
@@ -215,6 +227,7 @@ impl<'a> FolderRefresher<'a> {
                         existing_record,
                         file_size,
                         mtime,
+                        ctime,
                     });
                 }
             } else {
@@ -222,6 +235,7 @@ impl<'a> FolderRefresher<'a> {
                     scanned,
                     file_size,
                     mtime,
+                    ctime,
                 });
             }
         }
@@ -261,6 +275,7 @@ impl<'a> FolderRefresher<'a> {
                         existing_record,
                         file_size,
                         mtime,
+                        ctime,
                     } => {
                         let was_deleted = existing_record.is_deleted;
                         let new_hash = match MediaHasher::hash_file(&scanned.path) {
@@ -282,6 +297,7 @@ impl<'a> FolderRefresher<'a> {
                                 existing_record,
                                 file_size,
                                 mtime,
+                                ctime,
                                 was_deleted,
                             }
                         } else {
@@ -298,6 +314,7 @@ impl<'a> FolderRefresher<'a> {
                                 new_hash,
                                 file_size,
                                 mtime,
+                                ctime,
                                 raw_meta,
                                 filename: scanned.filename,
                                 preserved_rating: existing_record.rating,
@@ -309,6 +326,7 @@ impl<'a> FolderRefresher<'a> {
                         scanned,
                         file_size,
                         mtime,
+                        ctime,
                     } => {
                         let new_hash = match MediaHasher::hash_file(&scanned.path) {
                             Ok(h) => h,
@@ -335,6 +353,7 @@ impl<'a> FolderRefresher<'a> {
                             file_hash: new_hash,
                             file_size,
                             mtime,
+                            ctime,
                             raw_meta,
                         }
                     }
@@ -378,9 +397,11 @@ impl<'a> FolderRefresher<'a> {
                     mut existing_record,
                     file_size,
                     mtime,
+                    ctime,
                     was_deleted,
                 } => {
                     existing_record.modification_time = mtime;
+                    existing_record.creation_time = ctime;
                     existing_record.file_size = file_size;
                     existing_record.last_seen = current_generation;
                     existing_record.is_deleted = false;
@@ -398,6 +419,7 @@ impl<'a> FolderRefresher<'a> {
                     new_hash,
                     file_size,
                     mtime,
+                    ctime,
                     raw_meta,
                     filename,
                     preserved_rating,
@@ -412,6 +434,8 @@ impl<'a> FolderRefresher<'a> {
                         file_hash: new_hash,
                         file_size,
                         modification_time: mtime,
+                        creation_time: ctime,
+                        duration_ms: raw_meta.duration_ms,
                         media_type: raw_meta.media_type,
                         format: raw_meta.format,
                         width: raw_meta.width,
@@ -434,6 +458,7 @@ impl<'a> FolderRefresher<'a> {
                     file_hash,
                     file_size,
                     mtime,
+                    ctime,
                     raw_meta,
                 } => {
                     let new_media_id = self.db.next_id(&mut wtxn, SEQ_MEDIA_ID)?;
@@ -444,6 +469,8 @@ impl<'a> FolderRefresher<'a> {
                         file_hash,
                         file_size,
                         modification_time: mtime,
+                        creation_time: ctime,
+                        duration_ms: raw_meta.duration_ms,
                         media_type: raw_meta.media_type,
                         format: raw_meta.format,
                         width: raw_meta.width,
@@ -518,7 +545,6 @@ impl<'a> FolderRefresher<'a> {
             let path = entry.path();
             let filename = entry.file_name().to_string_lossy().to_string();
 
-            // Ignore hidden dot-files (like .hidden, .gitignore) and files that already have an extension
             if !filename.starts_with('.')
                 && path.extension().is_none()
                 && let Some((format, ext)) = MediaDetector::detect_format(&path)

@@ -50,7 +50,7 @@ export component MainWindow inherits Window {
     in-out property <int> visible-start-index: 0;
     in-out property <int> total-items-count: 0;
 
-    // Drag and Drop (media_file_dnd) State Properties
+    // Drag and Drop State Properties
     in-out property <bool> is-dragging-media: false;
     in-out property <int> drag-count: 0;
     in-out property <string> drag-title: "";
@@ -86,10 +86,18 @@ export component MainWindow inherits Window {
     in-out property <int> sort-column-idx: 0;
     in-out property <int> sort-order-idx: 0;
 
-    in-out property <length> col-filename-width: 280px;
-    in-out property <length> col-dimensions-width: 140px;
-    in-out property <length> col-size-width: 110px;
-    in-out property <length> col-rating-width: 90px;
+    // All 11 Table Column Widths
+    in-out property <length> col-filename-width: 260px;
+    in-out property <length> col-modified-date-width: 145px;
+    in-out property <length> col-created-date-width: 145px;
+    in-out property <length> col-size-width: 95px;
+    in-out property <length> col-rating-width: 65px;
+    in-out property <length> col-tags-width: 65px;
+    in-out property <length> col-width-width: 70px;
+    in-out property <length> col-height-width: 70px;
+    in-out property <length> col-ar-width: 65px;
+    in-out property <length> col-duration-width: 110px;
+    in-out property <length> col-format-width: 75px;
 
     in-out property <bool> is-refreshing-folders: false;
     in-out property <int> folder-scan-count: 0;
@@ -203,7 +211,6 @@ export component MainWindow inherits Window {
         sidebar_left.scroll-folder-to-row(row-idx);
     }
 
-    /// Programmatically resets media viewport scroll position to top
     public function scroll-media-to-top() {
         if !root.is-table-view {
             grid-view.scroll-to-top();
@@ -212,7 +219,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    /// Programmatically scrolls the active view to keep the target item at the top of the viewport
     public function scroll-media-to-index(item-idx: int, is-table: bool) {
         if is-table {
             table-view.scroll-to-index(item-idx);
@@ -221,7 +227,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    /// Queries the currently top-visible item index from the active view
     pure public function get-current-top-item-index() -> int {
         if root.is-table-view {
             return table-view.get-top-visible-index();
@@ -278,7 +283,6 @@ export component MainWindow inherits Window {
                 horizontal-stretch: 1;
                 spacing: 0px;
 
-                // Persistent, Unified Media Area Toolbar
                 MediaPanelToolbar {
                     thumb-width <=> root.thumb-size;
                     search-text <=> root.search-query;
@@ -328,10 +332,19 @@ export component MainWindow inherits Window {
                         total-items-count: root.total-items-count;
                         sort-column: root.sort-column-idx;
                         sort-order: root.sort-order-idx;
+
                         col-filename-width <=> root.col-filename-width;
-                        col-dimensions-width <=> root.col-dimensions-width;
+                        col-modified-date-width <=> root.col-modified-date-width;
+                        col-created-date-width <=> root.col-created-date-width;
                         col-size-width <=> root.col-size-width;
                         col-rating-width <=> root.col-rating-width;
+                        col-tags-width <=> root.col-tags-width;
+                        col-width-width <=> root.col-width-width;
+                        col-height-width <=> root.col-height-width;
+                        col-ar-width <=> root.col-ar-width;
+                        col-duration-width <=> root.col-duration-width;
+                        col-format-width <=> root.col-format-width;
+
                         visible-chunk-changed(first, last, tot) => {
                             root.visible-chunk-changed(first, last, tot);
                         }
@@ -441,7 +454,7 @@ export component MainWindow inherits Window {
         dismissed => { root.choice-popup-dismissed(); }
     }
 
-    // Flying Ghost Drag & Drop Visual Overlay
+    // Flying Ghost Drag & Drop Overlay
     if root.is-dragging-media : Rectangle {
         x: root.drag-x + 12px;
         y: root.drag-y + 12px;

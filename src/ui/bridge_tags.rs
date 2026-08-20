@@ -412,6 +412,7 @@ impl TagActionHandler {
             );
         }
 
+        // In-place updates without list re-sorting!
         Self::update_grid_tag_badges(selected_ids, window, library, state);
         TagTreeSync::sync_in_place(window, library, state);
         BridgeInspector::update(window, state);
@@ -437,6 +438,7 @@ impl TagActionHandler {
         Self::execute_query_flow(window, library, thumbnails, settings, state);
     }
 
+    /// Surgically updates the tag indicators and tag count values in-place without re-sorting the active view.
     fn update_grid_tag_badges(
         selected_ids: &HashSet<MediaId>,
         window: &MainWindow,
@@ -458,26 +460,30 @@ impl TagActionHandler {
 
             for item in all_folder_media.iter_mut() {
                 if selected_ids.contains(&item.record.id) {
-                    let has_tags = !library
+                    let assigned_tags = library
                         .tags()
                         .get_tags_for_media(item.record.id)
-                        .unwrap_or_default()
-                        .is_empty();
-                    item.has_tags = has_tags;
+                        .unwrap_or_default();
+                    let count = assigned_tags.len();
+                    item.tags_count = count;
+                    item.tags_count_str = count.to_string().into();
+                    item.has_tags = count > 0;
 
                     if let Some(&global_row_idx) = media_row_map.get(&item.record.id)
                         && global_row_idx >= start_window
                         && global_row_idx < start_window + visible_count
                     {
-                        media_updates.push((global_row_idx - start_window, has_tags));
+                        media_updates.push((global_row_idx - start_window, count, item.has_tags));
                     }
                 }
             }
         }
 
-        for (local_idx, has_tags) in media_updates {
+        for (local_idx, count, has_tags) in media_updates {
             if let Some(mut view) = media_model.row_data(local_idx) {
                 view.has_tags = has_tags;
+                view.tags_count = count as i32;
+                view.tags_str = count.to_string().into();
                 media_model.set_row_data(local_idx, view);
             }
         }
@@ -532,6 +538,7 @@ impl TagActionHandler {
         }
     }
 
+    /// Surgically updates rating scores in-place on both data structures and visible UI rows without re-sorting the active view.
     pub fn apply_rating_to_ids(
         ids: &HashSet<MediaId>,
         rating: u8,
@@ -561,6 +568,7 @@ impl TagActionHandler {
             for item in all_folder_media.iter_mut() {
                 if ids.contains(&item.record.id) {
                     item.record.rating = rating;
+                    item.rating_str = rating.to_string().into();
                     if let Some(&global_row_idx) = media_row_map.get(&item.record.id)
                         && global_row_idx >= start_window
                         && global_row_idx < start_window + visible_count
@@ -576,6 +584,7 @@ impl TagActionHandler {
                 && view.id == media_id as i32
             {
                 view.rating = rating as i32;
+                view.rating_str = rating.to_string().into();
                 media_model.set_row_data(local_idx, view);
             }
         }

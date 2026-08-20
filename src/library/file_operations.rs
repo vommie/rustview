@@ -228,7 +228,7 @@ impl<'a> FileOperations<'a> {
         }
     }
 
-    /// Probes full file metadata, checksum, dimensions, and rating for conflict comparison.
+    /// Probes full file metadata, checksum, dimensions, duration, and rating for conflict comparison.
     pub fn probe_file_details(
         &self,
         path: &Path,
@@ -257,26 +257,34 @@ impl<'a> FileOperations<'a> {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
 
+        let creation_time = fs_meta
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(modification_time);
+
         let format = MediaFormat::from_path(path);
 
-        let (width, height, rating, file_hash) = if let Some(m_id) = media_id
+        let (width, height, duration_ms, rating, file_hash) = if let Some(m_id) = media_id
             && let Ok(Some(rec)) = self.db.media.get(&rtxn, &m_id)
         {
-            (rec.width, rec.height, rec.rating, rec.file_hash)
+            (rec.width, rec.height, rec.duration_ms, rec.rating, rec.file_hash)
         } else {
-            let (w, h) = if let Ok(meta) = MetadataExtractor::extract(path) {
-                (meta.width, meta.height)
+            let (w, h, dur) = if let Ok(meta) = MetadataExtractor::extract(path) {
+                (meta.width, meta.height, meta.duration_ms)
             } else {
-                (0, 0)
+                (0, 0, 0)
             };
             let hash = MediaHasher::hash_file(path).unwrap_or_default();
-            (w, h, 0, hash)
+            (w, h, dur, 0, hash)
         };
 
         tracing::debug!(
             file = %LogObscurer::path(path),
             size_bytes = file_size,
             dimensions = format!("{}x{}", width, height),
+            duration_ms = duration_ms,
             hash = %MediaHasher::to_hex(&file_hash),
             elapsed_us = t0.elapsed().as_micros(),
             "[FileOperations: Probe] File attributes inspected for conflict check"
@@ -290,6 +298,8 @@ impl<'a> FileOperations<'a> {
             full_path: path.to_path_buf(),
             file_size,
             modification_time,
+            creation_time,
+            duration_ms,
             file_hash,
             width,
             height,
@@ -466,6 +476,13 @@ impl<'a> FileOperations<'a> {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(source_record.modification_time);
 
+        let ctime = fs_meta
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(source_record.creation_time);
+
         // 2. Overwrite handling in LMDB: delete overwritten target record if one existed in destination
         if overwrite_existing {
             let mut target_media_ids = self
@@ -506,6 +523,7 @@ impl<'a> FileOperations<'a> {
         source_record.folder_id = target_folder_id;
         source_record.filename = validated_name.clone();
         source_record.modification_time = mtime;
+        source_record.creation_time = ctime;
         source_record.file_size = fs_meta.len();
         source_record.is_deleted = false;
         self.db.media.put(&mut wtxn, &media_id, &source_record)?;
@@ -627,6 +645,13 @@ impl<'a> FileOperations<'a> {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(source_record.modification_time);
 
+        let ctime = fs_meta
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(source_record.creation_time);
+
         // 2. Overwrite cleanup in target if existing destination record is replaced
         let mut target_media_ids = self
             .db
@@ -670,6 +695,8 @@ impl<'a> FileOperations<'a> {
             file_hash: source_record.file_hash,
             file_size: fs_meta.len(),
             modification_time: mtime,
+            creation_time: ctime,
+            duration_ms: source_record.duration_ms,
             media_type: source_record.media_type,
             format: source_record.format,
             width: source_record.width,

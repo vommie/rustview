@@ -62,8 +62,13 @@ impl BridgeInspector {
 
     fn render_single(window: &MainWindow, item: &IndexedMediaRecord) {
         window.set_info_filename(item.filename_slint.clone());
-        window.set_info_size(item.filesize_str.clone());
-        window.set_info_dimensions(item.dimensions_str.clone());
+        window.set_info_size(format_filesize(item.record.file_size).into());
+        let dim_str = if item.record.width > 0 && item.record.height > 0 {
+            format!("{} × {}", item.record.width, item.record.height)
+        } else {
+            "-".to_string()
+        };
+        window.set_info_dimensions(dim_str.into());
         window.set_info_format(format!("{:?}", item.record.format).into());
         window.set_info_hash(MediaHasher::to_hex(&item.record.file_hash).into());
         window.set_info_selection_count(1);

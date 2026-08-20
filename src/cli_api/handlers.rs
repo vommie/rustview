@@ -210,12 +210,18 @@ impl ApiHandler {
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(rec.modification_time);
+
+                        rec.creation_time = meta
+                            .created()
+                            .ok()
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(rec.modification_time);
                     }
-                    if (rec.width == 0 || rec.height == 0)
-                        && let Ok(raw_meta) = MetadataExtractor::extract(path)
-                    {
+                    if let Ok(raw_meta) = MetadataExtractor::extract(path) {
                         rec.width = raw_meta.width;
                         rec.height = raw_meta.height;
+                        rec.duration_ms = raw_meta.duration_ms;
                     }
                 }
 
@@ -233,8 +239,10 @@ impl ApiHandler {
 
                 let mut file_size = 0u64;
                 let mut mtime = 0i64;
+                let mut ctime = 0i64;
                 let mut width = 0u32;
                 let mut height = 0u32;
+                let mut duration_ms = 0u64;
 
                 if path.exists() {
                     if let Ok(meta) = std::fs::metadata(path) {
@@ -245,10 +253,17 @@ impl ApiHandler {
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(0);
+                        ctime = meta
+                            .created()
+                            .ok()
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(mtime);
                     }
                     if let Ok(raw_meta) = MetadataExtractor::extract(path) {
                         width = raw_meta.width;
                         height = raw_meta.height;
+                        duration_ms = raw_meta.duration_ms;
                     }
                 }
 
@@ -272,6 +287,8 @@ impl ApiHandler {
                     file_hash,
                     file_size,
                     modification_time: mtime,
+                    creation_time: ctime,
+                    duration_ms,
                     media_type,
                     format,
                     width,
@@ -284,7 +301,6 @@ impl ApiHandler {
                 lib.raw_db().media.put(&mut wtxn, &new_id, &new_rec)?;
                 lib.raw_db().update_media_hash_index(&mut wtxn, new_id, None, Some(&file_hash))?;
 
-                // Append to folder media list
                 let mut folder_media = lib
                     .raw_db()
                     .media_by_folder
@@ -325,7 +341,6 @@ impl ApiHandler {
 
             // Assign new tags
             for &tag_id in &unique_tags {
-                // Ensure tag exists
                 if lib.raw_db().tags.get(&wtxn, &tag_id)?.is_some() {
                     let mut t_media = lib.raw_db().media_by_tag.get(&wtxn, &tag_id)?.unwrap_or_default();
                     if !t_media.contains(&target_media_id) {
@@ -465,7 +480,6 @@ impl ApiHandler {
 
         let rtxn = lib.raw_db().env.read_txn()?;
 
-        // 1. Check external_hashes table
         let mut found_ext: Option<ExternalHashRecord> = None;
         for entry in lib.raw_db().external_hashes.iter(&rtxn)? {
             let (_, rec) = entry?;
@@ -475,7 +489,6 @@ impl ApiHandler {
             }
         }
 
-        // 2. Check media_by_hash table and resolve file paths
         let mut associated_files = Vec::new();
         if let Ok(bin_hash) = file_hash_res
             && let Some(media_ids) = lib.raw_db().media_by_hash.get(&rtxn, &bin_hash[..])?

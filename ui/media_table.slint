@@ -5,10 +5,18 @@ import { MediaHeaderBar } from "media_header_bar.slint";
 
 export component MediaTableRow inherits Rectangle {
     in property <MediaItemView> item;
-    in property <length> col-filename-width: 280px;
-    in property <length> col-dimensions-width: 140px;
-    in property <length> col-size-width: 110px;
-    in property <length> col-rating-width: 90px;
+    in property <length> col-filename-width: 260px;
+    in property <length> col-modified-date-width: 145px;
+    in property <length> col-created-date-width: 145px;
+    in property <length> col-size-width: 95px;
+    in property <length> col-rating-width: 65px;
+    in property <length> col-tags-width: 65px;
+    in property <length> col-width-width: 70px;
+    in property <length> col-height-width: 70px;
+    in property <length> col-ar-width: 65px;
+    in property <length> col-duration-width: 110px;
+    in property <length> col-format-width: 75px;
+
     in property <length> row-height: 28px;
     in property <length> scroll-offset-x: 0px;
 
@@ -112,9 +120,9 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 1: Dimensions
+        // Column 1: Modified Date
         Rectangle {
-            width: root.col-dimensions-width;
+            width: root.col-modified-date-width;
             clip: true;
 
             HorizontalLayout {
@@ -123,7 +131,7 @@ export component MediaTableRow inherits Rectangle {
                 alignment: start;
 
                 Text {
-                    text: item.dimensions-str;
+                    text: item.modified_date_str;
                     color: Theme.text-muted;
                     font-size: 11px;
                     vertical-alignment: center;
@@ -132,7 +140,27 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 2: Size
+        // Column 2: Created Date
+        Rectangle {
+            width: root.col-created-date-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.created_date_str;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 3: Filesize (MB) (pure number, e.g. 310.01)
         Rectangle {
             width: root.col-size-width;
             clip: true;
@@ -143,7 +171,7 @@ export component MediaTableRow inherits Rectangle {
                 alignment: start;
 
                 Text {
-                    text: item.filesize-str;
+                    text: item.filesize_str;
                     color: Theme.text-muted;
                     font-size: 11px;
                     vertical-alignment: center;
@@ -152,7 +180,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 3: Rating
+        // Column 4: Rating (pure integer like 3, 0, or -)
         Rectangle {
             width: root.col-rating-width;
             clip: true;
@@ -163,9 +191,130 @@ export component MediaTableRow inherits Rectangle {
                 alignment: start;
 
                 Text {
-                    text: item.rating > 0 ? ("★ " + item.rating) : "-";
+                    text: item.rating_str;
                     color: item.rating > 0 ? Theme.rating-color(item.rating) : Theme.text-muted;
                     font-weight: item.rating > 0 ? 700 : 400;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 5: Tags (pure count of assigned tags like 4)
+        Rectangle {
+            width: root.col-tags-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.tags_str;
+                    color: item.tags_count > 0 ? Theme.primary : Theme.text-muted;
+                    font-weight: item.tags_count > 0 ? 700 : 400;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 6: Width
+        Rectangle {
+            width: root.col-width-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.width_str;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 7: Height
+        Rectangle {
+            width: root.col-height-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.height_str;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 8: AR (Aspect Ratio approximated to 16:9, 4:3, 1:1, etc.)
+        Rectangle {
+            width: root.col-ar-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.ar_str;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 9: Duration (hh:mm:ss.ms or -)
+        Rectangle {
+            width: root.col-duration-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.duration_str;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 10: Format (lowercase, e.g. mp4, jpg)
+        Rectangle {
+            width: root.col-format-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.format_str;
+                    color: Theme.text-muted;
                     font-size: 11px;
                     vertical-alignment: center;
                     overflow: elide;
@@ -186,10 +335,18 @@ export component MediaTableView inherits Rectangle {
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
 
-    in-out property <length> col-filename-width: 280px;
-    in-out property <length> col-dimensions-width: 140px;
-    in-out property <length> col-size-width: 110px;
-    in-out property <length> col-rating-width: 90px;
+    // All 11 Table Column Widths
+    in-out property <length> col-filename-width: 260px;
+    in-out property <length> col-modified-date-width: 145px;
+    in-out property <length> col-created-date-width: 145px;
+    in-out property <length> col-size-width: 95px;
+    in-out property <length> col-rating-width: 65px;
+    in-out property <length> col-tags-width: 65px;
+    in-out property <length> col-width-width: 70px;
+    in-out property <length> col-height-width: 70px;
+    in-out property <length> col-ar-width: 65px;
+    in-out property <length> col-duration-width: 110px;
+    in-out property <length> col-format-width: 75px;
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
@@ -203,7 +360,18 @@ export component MediaTableView inherits Rectangle {
     callback item-drag-moved(length /* x */, length /* y */);
     callback item-drag-ended();
 
-    property <length> total-columns-width: root.col-filename-width + root.col-dimensions-width + root.col-size-width + root.col-rating-width;
+    property <length> total-columns-width: root.col-filename-width
+        + root.col-modified-date-width
+        + root.col-created-date-width
+        + root.col-size-width
+        + root.col-rating-width
+        + root.col-tags-width
+        + root.col-width-width
+        + root.col-height-width
+        + root.col-ar-width
+        + root.col-duration-width
+        + root.col-format-width;
+
     property <length> content-scroll-width: Math.max(self.width, root.total-columns-width);
 
     property <length> row-height: 28px;
@@ -261,10 +429,20 @@ export component MediaTableView inherits Rectangle {
                     sort-column: root.sort-column;
                     sort-order: root.sort-order;
                     enable-resize: true;
+                    auto-width: false;
+
                     col-filename-width <=> root.col-filename-width;
-                    col-dimensions-width <=> root.col-dimensions-width;
+                    col-modified-date-width <=> root.col-modified-date-width;
+                    col-created-date-width <=> root.col-created-date-width;
                     col-size-width <=> root.col-size-width;
                     col-rating-width <=> root.col-rating-width;
+                    col-tags-width <=> root.col-tags-width;
+                    col-width-width <=> root.col-width-width;
+                    col-height-width <=> root.col-height-width;
+                    col-ar-width <=> root.col-ar-width;
+                    col-duration-width <=> root.col-duration-width;
+                    col-format-width <=> root.col-format-width;
+
                     sort-clicked(idx) => { root.sort-clicked(idx); }
                     column-resized(idx, w) => { root.column-resized(idx, w); }
                     column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
@@ -307,10 +485,19 @@ export component MediaTableView inherits Rectangle {
                     width: root.content-scroll-width;
                     row-height: root.row-height;
                     item: item;
+
                     col-filename-width: root.col-filename-width;
-                    col-dimensions-width: root.col-dimensions-width;
+                    col-modified-date-width: root.col-modified-date-width;
+                    col-created-date-width: root.col-created-date-width;
                     col-size-width: root.col-size-width;
                     col-rating-width: root.col-rating-width;
+                    col-tags-width: root.col-tags-width;
+                    col-width-width: root.col-width-width;
+                    col-height-width: root.col-height-width;
+                    col-ar-width: root.col-ar-width;
+                    col-duration-width: root.col-duration-width;
+                    col-format-width: root.col-format-width;
+
                     scroll-offset-x: scroll-area.clamped-x;
 
                     clicked(ctrl, shift) => {

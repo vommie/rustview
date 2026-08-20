@@ -17,6 +17,7 @@ struct DirItemInfo {
     is_file: bool,
     size: u64,
     mtime: i64,
+    ctime: i64,
 }
 
 struct TagReindexContext<'a> {
@@ -170,7 +171,7 @@ impl XnViewMapper {
                             let name = entry.file_name().to_string_lossy().to_string();
                             let is_dir = ft.is_dir();
                             let is_file = ft.is_file() || ft.is_symlink();
-                            let (size, mtime) = if is_file {
+                            let (size, mtime, ctime) = if is_file {
                                 entry
                                     .metadata()
                                     .map(|m| {
@@ -183,11 +184,19 @@ impl XnViewMapper {
                                             })
                                             .map(|d| d.as_secs() as i64)
                                             .unwrap_or(0);
-                                        (s, mt)
+                                        let ct = m
+                                            .created()
+                                            .ok()
+                                            .and_then(|t| {
+                                                t.duration_since(std::time::UNIX_EPOCH).ok()
+                                            })
+                                            .map(|d| d.as_secs() as i64)
+                                            .unwrap_or(mt);
+                                        (s, mt, ct)
                                     })
-                                    .unwrap_or((0, 0))
+                                    .unwrap_or((0, 0, 0))
                             } else {
-                                (0, 0)
+                                (0, 0, 0)
                             };
                             dir_items.insert(
                                 name,
@@ -196,6 +205,7 @@ impl XnViewMapper {
                                     is_file,
                                     size,
                                     mtime,
+                                    ctime,
                                 },
                             );
                         }
@@ -315,16 +325,17 @@ impl XnViewMapper {
             let file_path = folder_dir.map(|p| p.join(&img.filename));
             let media_type = format.media_type().unwrap_or(MediaType::Image);
 
-            let (mut width, mut height) = if let Some(info) = raw.image_info.get(&img.image_id) {
-                (info.width, info.height)
+            let (mut width, mut height, mut duration_ms) = if let Some(info) = raw.image_info.get(&img.image_id) {
+                (info.width, info.height, info.duration)
             } else {
-                (0, 0)
+                (0, 0, 0)
             };
 
             let mut file_size = img.size.max(0) as u64;
             let mut mtime = img.modified_date.max(0);
+            let mut ctime = mtime;
 
-            // Populate size and mtime from in-memory cache if missing in XnView DB
+            // Populate size, mtime, and ctime from in-memory cache if missing in XnView DB
             if let Some(cached_info) = item_in_cache {
                 if file_size == 0 {
                     file_size = cached_info.size;
@@ -332,6 +343,7 @@ impl XnViewMapper {
                 if mtime == 0 {
                     mtime = cached_info.mtime;
                 }
+                ctime = cached_info.ctime;
             }
 
             // Hash Resolution (Hashes Table -> Live Probe -> Seeded Fallback)
@@ -343,11 +355,12 @@ impl XnViewMapper {
             } else if let Some(ref path) = file_path
                 && file_physically_exists
             {
-                if (width == 0 || height == 0)
+                if (width == 0 || height == 0 || (media_type == MediaType::Video && duration_ms == 0))
                     && let Ok(raw_meta) = MetadataExtractor::extract(path)
                 {
                     width = raw_meta.width;
                     height = raw_meta.height;
+                    duration_ms = raw_meta.duration_ms;
                 }
 
                 match MediaHasher::hash_file(path) {
@@ -383,6 +396,8 @@ impl XnViewMapper {
                 file_hash,
                 file_size,
                 modification_time: mtime,
+                creation_time: ctime,
+                duration_ms,
                 media_type,
                 format,
                 width,

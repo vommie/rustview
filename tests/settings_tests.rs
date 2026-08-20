@@ -1,22 +1,25 @@
 use rustview::settings::{
     AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager, SettingsStore,
     DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA, DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER,
-    DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_DIMENSIONS_WIDTH, DEFAULT_COL_FILENAME_WIDTH,
-    DEFAULT_COL_RATING_WIDTH, DEFAULT_COL_SIZE_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE,
-    DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE,
-    DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS,
-    DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS, DEFAULT_OBFUSCATE_LOGS,
-    DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT,
-    DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM,
-    DEFAULT_SHORT_VIDEO_THRESHOLD_SECS, DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES,
-    DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY,
-    DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN,
-    DEFAULT_SORT_ORDER, DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS,
-    DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO,
-    DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY,
-    DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE,
-    DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED,
-    DEFAULT_WINDOW_WIDTH,
+    DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_AR_WIDTH, DEFAULT_COL_CREATED_DATE_WIDTH,
+    DEFAULT_COL_DURATION_WIDTH, DEFAULT_COL_FILENAME_WIDTH, DEFAULT_COL_FORMAT_WIDTH,
+    DEFAULT_COL_HEIGHT_WIDTH, DEFAULT_COL_MODIFIED_DATE_WIDTH, DEFAULT_COL_RATING_WIDTH,
+    DEFAULT_COL_SIZE_WIDTH, DEFAULT_COL_TAGS_WIDTH, DEFAULT_COL_WIDTH_WIDTH,
+    DEFAULT_CONFIRM_ON_FILE_DELETE, DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME,
+    DEFAULT_DELETION_MODE, DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS,
+    DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
+    DEFAULT_OBFUSCATE_LOGS, DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT,
+    DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER,
+    DEFAULT_SCALING_ALGORITHM, DEFAULT_SHORT_VIDEO_THRESHOLD_SECS, DEFAULT_SHOW_DELETED_FOLDERS,
+    DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY,
+    DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH,
+    DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_SUPPORTED_IMAGE_FORMATS,
+    DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
+    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
+    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
+    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT,
+    DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH, MAX_SHORT_VIDEO_THRESHOLD_SECS,
+    MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -163,17 +166,21 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("mpeg"));
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("flv"));
 
-    // View Defaults
+    // View Defaults - All 11 Columns
     assert_eq!(initial.view.is_table_view, DEFAULT_IS_TABLE_VIEW);
     assert_eq!(initial.view.sort_column, DEFAULT_SORT_COLUMN);
     assert_eq!(initial.view.sort_order, DEFAULT_SORT_ORDER);
     assert_eq!(initial.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
-    assert_eq!(
-        initial.view.col_dimensions_width,
-        DEFAULT_COL_DIMENSIONS_WIDTH
-    );
+    assert_eq!(initial.view.col_modified_date_width, DEFAULT_COL_MODIFIED_DATE_WIDTH);
+    assert_eq!(initial.view.col_created_date_width, DEFAULT_COL_CREATED_DATE_WIDTH);
     assert_eq!(initial.view.col_size_width, DEFAULT_COL_SIZE_WIDTH);
     assert_eq!(initial.view.col_rating_width, DEFAULT_COL_RATING_WIDTH);
+    assert_eq!(initial.view.col_tags_width, DEFAULT_COL_TAGS_WIDTH);
+    assert_eq!(initial.view.col_width_width, DEFAULT_COL_WIDTH_WIDTH);
+    assert_eq!(initial.view.col_height_width, DEFAULT_COL_HEIGHT_WIDTH);
+    assert_eq!(initial.view.col_ar_width, DEFAULT_COL_AR_WIDTH);
+    assert_eq!(initial.view.col_duration_width, DEFAULT_COL_DURATION_WIDTH);
+    assert_eq!(initial.view.col_format_width, DEFAULT_COL_FORMAT_WIDTH);
     assert_eq!(initial.view.sidebar_left_width, DEFAULT_SIDEBAR_LEFT_WIDTH);
     assert_eq!(initial.view.sidebar_right_width, DEFAULT_SIDEBAR_RIGHT_WIDTH);
 
@@ -181,7 +188,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(initial.tags.default_match_mode, DEFAULT_TAG_MATCH_MODE);
     assert_eq!(initial.tags.default_scope_mode, DEFAULT_TAG_SCOPE_MODE);
 
-    // Debug & Logging Defaults (Default = true)
+    // Debug & Logging Defaults
     assert_eq!(initial.debug.obfuscate_logs, DEFAULT_OBFUSCATE_LOGS);
     assert!(initial.debug.obfuscate_logs);
 
@@ -236,6 +243,8 @@ fn test_settings_persistence_sanitization_and_hooks() {
     invalid_settings.appearance.thumbnail_aspect_ratio = "invalid_ratio".to_string();
     invalid_settings.appearance.tooltip_delay_ms = 99999;
     invalid_settings.performance.short_video_threshold_secs = 500;
+    invalid_settings.view.col_filename_width = 10.0; // Below MIN_COL_WIDTH (40.0)
+    invalid_settings.view.col_size_width = 5000.0; // Above MAX_COL_WIDTH (1200.0)
     reloaded_store.save(&invalid_settings).unwrap();
 
     let sanitized = reloaded_store.load();
@@ -245,19 +254,20 @@ fn test_settings_persistence_sanitization_and_hooks() {
     );
     assert_eq!(
         sanitized.appearance.tooltip_delay_ms,
-        rustview::settings::MAX_TOOLTIP_DELAY_MS
+        MAX_TOOLTIP_DELAY_MS
     );
     assert_eq!(
         sanitized.performance.short_video_threshold_secs,
-        rustview::settings::MAX_SHORT_VIDEO_THRESHOLD_SECS
+        MAX_SHORT_VIDEO_THRESHOLD_SECS
     );
+    assert_eq!(sanitized.view.col_filename_width, MIN_COL_WIDTH);
+    assert_eq!(sanitized.view.col_size_width, MAX_COL_WIDTH);
 }
 
 #[test]
 fn test_settings_diff_granularity_and_noop_bypass() {
     let base = AppSettings::default();
 
-    // 1. Identical settings -> has_changes is false
     let diff_identical = SettingsDiff::compute(&base, &base);
     assert!(!diff_identical.has_changes);
     assert!(!diff_identical.root_folder_changed);
@@ -266,7 +276,6 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_identical.formats_settings_changed);
     assert!(!diff_identical.debug_settings_changed);
 
-    // 2. Only formats setting changed -> only formats_settings_changed is true
     let mut modified_formats = base.clone();
     modified_formats.formats.auto_detect_extensionless_media = false;
     let diff_formats = SettingsDiff::compute(&base, &modified_formats);
@@ -276,7 +285,6 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_formats.appearance_grid_changed);
     assert!(!diff_formats.debug_settings_changed);
 
-    // 3. Only root folder path changed -> only root_folder_changed is true
     let mut modified_root = base.clone();
     modified_root.general.root_folder = Some(PathBuf::from("/media/photos"));
     let diff_root = SettingsDiff::compute(&base, &modified_root);
@@ -286,7 +294,6 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_root.tooltip_settings_changed);
     assert!(!diff_root.debug_settings_changed);
 
-    // 4. Verify detailed summary output
     let summary = diff_formats.detailed_summary(&base, &modified_formats);
     assert_eq!(summary.len(), 1);
     assert!(summary[0].contains("auto_detect_extensionless_media"));
@@ -297,7 +304,6 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
     let tmp_config = tempdir().unwrap();
     let file_path = tmp_config.path().join("settings.json");
 
-    // Simulate an incomplete legacy JSON file with missing new fields
     let legacy_json = r#"{
         "general": {
             "remember_last_folder": false
@@ -315,12 +321,10 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
     let store = SettingsStore::new(tmp_config.path());
     let loaded = store.load();
 
-    // Preserved existing fields
     assert!(!loaded.general.remember_last_folder);
     assert_eq!(loaded.appearance.default_thumbnail_size, 220);
     assert_eq!(loaded.performance.worker_threads, 8);
 
-    // Missing fields automatically populated from Single Point of Truth defaults
     assert_eq!(
         loaded.appearance.thumbnail_aspect_ratio,
         DEFAULT_THUMBNAIL_ASPECT_RATIO
@@ -366,6 +370,16 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
     );
     assert_eq!(loaded.performance.video_engine, DEFAULT_VIDEO_ENGINE);
     assert_eq!(loaded.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
+    assert_eq!(loaded.view.col_modified_date_width, DEFAULT_COL_MODIFIED_DATE_WIDTH);
+    assert_eq!(loaded.view.col_created_date_width, DEFAULT_COL_CREATED_DATE_WIDTH);
+    assert_eq!(loaded.view.col_size_width, DEFAULT_COL_SIZE_WIDTH);
+    assert_eq!(loaded.view.col_rating_width, DEFAULT_COL_RATING_WIDTH);
+    assert_eq!(loaded.view.col_tags_width, DEFAULT_COL_TAGS_WIDTH);
+    assert_eq!(loaded.view.col_width_width, DEFAULT_COL_WIDTH_WIDTH);
+    assert_eq!(loaded.view.col_height_width, DEFAULT_COL_HEIGHT_WIDTH);
+    assert_eq!(loaded.view.col_ar_width, DEFAULT_COL_AR_WIDTH);
+    assert_eq!(loaded.view.col_duration_width, DEFAULT_COL_DURATION_WIDTH);
+    assert_eq!(loaded.view.col_format_width, DEFAULT_COL_FORMAT_WIDTH);
     assert_eq!(loaded.view.sidebar_left_width, DEFAULT_SIDEBAR_LEFT_WIDTH);
     assert_eq!(loaded.view.sidebar_right_width, DEFAULT_SIDEBAR_RIGHT_WIDTH);
     assert_eq!(loaded.debug.obfuscate_logs, DEFAULT_OBFUSCATE_LOGS);
@@ -378,7 +392,6 @@ fn test_log_obscurer_behavior_enabled_and_disabled() {
     let test_tag_name = "Family Vacation";
     let test_query = "beach 2026";
 
-    // 1. When Obfuscation is DISABLED
     LogObscurer::set_obfuscate(false);
     assert!(!LogObscurer::is_active());
 
@@ -397,7 +410,6 @@ fn test_log_obscurer_behavior_enabled_and_disabled() {
     );
     assert_eq!(LogObscurer::query(test_query), "\"beach 2026\"");
 
-    // 2. When Obfuscation is ENABLED
     LogObscurer::set_obfuscate(true);
     assert!(LogObscurer::is_active());
 
@@ -424,11 +436,9 @@ fn test_log_obscurer_behavior_enabled_and_disabled() {
     assert_eq!(obscured_query, "[Query:10 chars]");
     assert!(!obscured_query.contains("beach"));
 
-    // Target formatting
     let obscured_target = LogObscurer::target(test_path, Some(101));
     assert!(!obscured_target.contains("alice"));
     assert!(obscured_target.contains("MediaId(101) [*.jpg"));
 
-    // Cleanup: Reset to SPoT default state
     LogObscurer::set_obfuscate(DEFAULT_OBFUSCATE_LOGS);
 }
