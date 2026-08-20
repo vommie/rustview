@@ -1,4 +1,5 @@
 use super::error::ApiError;
+use std::io::Read;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +26,10 @@ pub enum ApiCommand {
         hash: String,
         json: bool,
     },
+    CheckHashes {
+        hashes: Vec<String>,
+        json: bool,
+    },
     InsertHash {
         hash: String,
         json: bool,
@@ -45,6 +50,11 @@ pub fn is_api_requested(args: &[String]) -> bool {
         || first == "get-media"
         || first == "set-media"
         || first == "check-hash"
+        || first == "check-hashes"
+        || first == "batch-check-hashes"
+        || first == "batch-check-hash"
+        || first == "check-hash-batch"
+        || first == "hashes-check"
         || first == "insert-hash"
 }
 
@@ -56,6 +66,9 @@ pub fn parse_api_args(args: &[String]) -> Result<ApiCommand, ApiError> {
     let mut rating: Option<u8> = None;
     let mut tags: Option<Vec<u32>> = None;
     let mut hash: Option<String> = None;
+    let mut hashes_list: Vec<String> = Vec::new();
+    let mut hashes_file: Option<PathBuf> = None;
+    let mut from_stdin = false;
 
     let mut skip_next = false;
     let mut relevant_args: Vec<&str> = Vec::new();
@@ -141,7 +154,95 @@ pub fn parse_api_args(args: &[String]) -> Result<ApiCommand, ApiError> {
             continue;
         }
 
+        if arg == "--hashes" || arg == "-H" {
+            if let Some(val) = args.get(i + 1) {
+                if val == "-" {
+                    from_stdin = true;
+                } else {
+                    for part in val.split([',', ';', ' ', '\t', '\n']) {
+                        let trimmed = part.trim().to_lowercase();
+                        if !trimmed.is_empty() {
+                            hashes_list.push(trimmed);
+                        }
+                    }
+                }
+                skip_next = true;
+                continue;
+            }
+        } else if let Some(val) = arg.strip_prefix("--hashes=") {
+            if val == "-" {
+                from_stdin = true;
+            } else {
+                for part in val.split([',', ';', ' ', '\t', '\n']) {
+                    let trimmed = part.trim().to_lowercase();
+                    if !trimmed.is_empty() {
+                        hashes_list.push(trimmed);
+                    }
+                }
+            }
+            continue;
+        }
+
+        if arg == "--hashes-file" || arg == "--file" || arg == "-f" {
+            if let Some(val) = args.get(i + 1) {
+                hashes_file = Some(PathBuf::from(val));
+                skip_next = true;
+                continue;
+            }
+        } else if let Some(val) = arg.strip_prefix("--hashes-file=") {
+            hashes_file = Some(PathBuf::from(val));
+            continue;
+        } else if let Some(val) = arg.strip_prefix("--file=") {
+            hashes_file = Some(PathBuf::from(val));
+            continue;
+        }
+
+        if arg == "--stdin" || arg == "-" {
+            from_stdin = true;
+            continue;
+        }
+
         relevant_args.push(arg);
+    }
+
+    // Read hashes from file if requested
+    if let Some(ref file_p) = hashes_file {
+        match std::fs::read_to_string(file_p) {
+            Ok(content) => {
+                for line in content.lines() {
+                    let trimmed_line = line.trim();
+                    if !trimmed_line.is_empty() && !trimmed_line.starts_with('#') {
+                        for part in trimmed_line.split([',', ';', ' ', '\t']) {
+                            let clean = part.trim().to_lowercase();
+                            if !clean.is_empty() {
+                                hashes_list.push(clean);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(ApiError::Io(e));
+            }
+        }
+    }
+
+    // Read hashes from STDIN if requested
+    if from_stdin {
+        let mut buffer = String::new();
+        if std::io::stdin().read_to_string(&mut buffer).is_ok() {
+            for line in buffer.lines() {
+                let trimmed_line = line.trim();
+                if !trimmed_line.is_empty() && !trimmed_line.starts_with('#') {
+                    for part in trimmed_line.split([',', ';', ' ', '\t']) {
+                        let clean = part.trim().to_lowercase();
+                        if !clean.is_empty() {
+                            hashes_list.push(clean);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     let act = action.unwrap_or_else(|| "help".to_string());
@@ -149,18 +250,22 @@ pub fn parse_api_args(args: &[String]) -> Result<ApiCommand, ApiError> {
     match act.as_str() {
         "tag-tree" | "tags-tree" | "tags" => Ok(ApiCommand::TagTree { json }),
         "get-media" | "get" | "query" | "info" => {
-            let target_path = path.or_else(|| relevant_args.first().map(PathBuf::from)).ok_or_else(|| {
-                ApiError::MissingArgument("Target file path is required (--path <PATH>)".into())
-            })?;
+            let target_path = path
+                .or_else(|| relevant_args.first().map(PathBuf::from))
+                .ok_or_else(|| {
+                    ApiError::MissingArgument("Target file path is required (--path <PATH>)".into())
+                })?;
             Ok(ApiCommand::GetMedia {
                 path: target_path,
                 json,
             })
         }
         "set-media" | "set" | "upsert" | "tag" | "rate" => {
-            let target_path = path.or_else(|| relevant_args.first().map(PathBuf::from)).ok_or_else(|| {
-                ApiError::MissingArgument("Target file path is required (--path <PATH>)".into())
-            })?;
+            let target_path = path
+                .or_else(|| relevant_args.first().map(PathBuf::from))
+                .ok_or_else(|| {
+                    ApiError::MissingArgument("Target file path is required (--path <PATH>)".into())
+                })?;
             Ok(ApiCommand::SetMedia {
                 path: target_path,
                 rating,
@@ -170,27 +275,58 @@ pub fn parse_api_args(args: &[String]) -> Result<ApiCommand, ApiError> {
             })
         }
         "delete-media" | "delete" | "remove" => {
-            let target_path = path.or_else(|| relevant_args.first().map(PathBuf::from)).ok_or_else(|| {
-                ApiError::MissingArgument("Target file path is required (--path <PATH>)".into())
-            })?;
+            let target_path = path
+                .or_else(|| relevant_args.first().map(PathBuf::from))
+                .ok_or_else(|| {
+                    ApiError::MissingArgument("Target file path is required (--path <PATH>)".into())
+                })?;
             Ok(ApiCommand::DeleteMedia {
                 path: target_path,
                 json,
             })
         }
         "check-hash" | "hash-check" => {
-            let target_hash = hash.or_else(|| relevant_args.first().map(|s| s.to_string())).ok_or_else(|| {
-                ApiError::MissingArgument("MD5 hash string is required (--hash <MD5>)".into())
-            })?;
+            let target_hash = hash
+                .or_else(|| relevant_args.first().map(|s| s.to_string()))
+                .ok_or_else(|| {
+                    ApiError::MissingArgument("MD5 hash string is required (--hash <MD5>)".into())
+                })?;
             Ok(ApiCommand::CheckHash {
                 hash: target_hash,
                 json,
             })
         }
+        "check-hashes"
+        | "batch-check-hashes"
+        | "batch-check-hash"
+        | "check-hash-batch"
+        | "hashes-check"
+        | "hashes" => {
+            for arg in &relevant_args {
+                for part in arg.split([',', ';', ' ', '\t']) {
+                    let clean = part.trim().to_lowercase();
+                    if !clean.is_empty() {
+                        hashes_list.push(clean);
+                    }
+                }
+            }
+            if hashes_list.is_empty() {
+                return Err(ApiError::MissingArgument(
+                    "At least one MD5 hash string is required (--hashes <MD5,MD5...>, --hashes-file <FILE>, or positional arguments)"
+                        .into(),
+                ));
+            }
+            Ok(ApiCommand::CheckHashes {
+                hashes: hashes_list,
+                json,
+            })
+        }
         "insert-hash" | "hash-insert" => {
-            let target_hash = hash.or_else(|| relevant_args.first().map(|s| s.to_string())).ok_or_else(|| {
-                ApiError::MissingArgument("MD5 hash string is required (--hash <MD5>)".into())
-            })?;
+            let target_hash = hash
+                .or_else(|| relevant_args.first().map(|s| s.to_string()))
+                .ok_or_else(|| {
+                    ApiError::MissingArgument("MD5 hash string is required (--hash <MD5>)".into())
+                })?;
             Ok(ApiCommand::InsertHash {
                 hash: target_hash,
                 json,
@@ -207,7 +343,10 @@ fn parse_tag_list(input: &str) -> Result<Vec<u32>, ApiError> {
         let trimmed = part.trim();
         if !trimmed.is_empty() {
             let id: u32 = trimmed.parse().map_err(|_| {
-                ApiError::InvalidArgument(format!("Invalid tag ID '{}'. Tag IDs must be numbers.", trimmed))
+                ApiError::InvalidArgument(format!(
+                    "Invalid tag ID '{}'. Tag IDs must be numbers.",
+                    trimmed
+                ))
             })?;
             list.push(id);
         }

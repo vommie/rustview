@@ -79,6 +79,26 @@ pub struct ApiHashCheckResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiBatchHashCheckItem {
+    pub hash: String,
+    pub known: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_time: Option<String>,
+    pub associated_files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiBatchHashCheckResponse {
+    pub success: bool,
+    pub total_requested: usize,
+    pub known_count: usize,
+    pub unknown_count: usize,
+    pub results: Vec<ApiBatchHashCheckItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiHashInsertResponse {
     pub success: bool,
     pub is_new: bool,

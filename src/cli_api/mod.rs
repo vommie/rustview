@@ -46,6 +46,9 @@ pub fn run_api_with_library(cmd: ApiCommand, library: &Library) -> Result<i32, A
             ApiHandler::delete_media(library, &path, json)
         }
         ApiCommand::CheckHash { hash, json } => ApiHandler::check_hash(library, &hash, json),
+        ApiCommand::CheckHashes { hashes, json } => {
+            ApiHandler::check_hashes(library, &hashes, json)
+        }
         ApiCommand::InsertHash { hash, json } => ApiHandler::insert_hash(library, &hash, json),
         ApiCommand::Help => {
             print_api_help();
@@ -57,7 +60,7 @@ pub fn run_api_with_library(cmd: ApiCommand, library: &Library) -> Result<i32, A
 pub fn print_api_help() {
     println!();
     println!("RustView Headless CLI-API Suite");
-    println!("High-performance headless command-line interface for external tool integration (e.g. PyCut)");
+    println!("High-performance headless command-line interface for external tool integration (e.g. PyCut, remove_dups)");
     println!();
     println!("Usage:");
     println!("  rustview api <COMMAND> [OPTIONS]");
@@ -67,7 +70,8 @@ pub fn print_api_help() {
     println!("  get-media                  Inspect and get database details for a media file");
     println!("  set-media                  Upsert media record, assign tags, ratings & ensure folder");
     println!("  delete-media               Remove media record and unassign associated tags");
-    println!("  check-hash                 Query duplicate tracking database by MD5 checksum");
+    println!("  check-hash                 Query duplicate tracking database by single MD5 checksum");
+    println!("  check-hashes               Batch-query duplicate database for multiple MD5 checksums");
     println!("  insert-hash                Register a new checksum in the external hashes table");
     println!();
     println!("Options:");
@@ -75,6 +79,9 @@ pub fn print_api_help() {
     println!("  -r, --rating <0-5>         Star rating (0 = unrated, 1..=5 stars)");
     println!("  -t, --tags <ID,ID,...>     Comma-separated list of Tag IDs");
     println!("      --hash <MD5_HEX>       32-character hexadecimal MD5 hash string");
+    println!("  -H, --hashes <MD5,MD5...>  Comma- or space-separated list of MD5 hash strings");
+    println!("  -f, --hashes-file <FILE>   Path to file containing MD5 hashes (one per line)");
+    println!("      --stdin, -             Read MD5 hashes directly from standard input");
     println!("      --json                 Output machine-readable JSON to stdout");
     println!("  -h, --help                 Print this help message");
     println!();
@@ -83,5 +90,8 @@ pub fn print_api_help() {
     println!("  rustview api get-media --path /media/clip.mp4 --json");
     println!("  rustview api set-media --path /media/clip.mp4 --rating 5 --tags 1,4,7 --json");
     println!("  rustview api check-hash --hash d5dd11d265f453dee9d51a40ba717efb --json");
+    println!("  rustview api check-hashes --hashes d5dd11d265f453dee9d51a40ba717efb,e4d909c290d0fb1ca068ffaddf22cbd0 --json");
+    println!("  rustview api check-hashes --hashes-file /tmp/hashes_list.txt --json");
+    println!("  cat hashes.txt | rustview api check-hashes --stdin --json");
     println!();
 }

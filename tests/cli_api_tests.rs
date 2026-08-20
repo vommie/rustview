@@ -108,7 +108,21 @@ fn test_cli_api_lifecycle_full_suite() {
     let cmd_check_hash = parse_api_args(&args_check_hash).unwrap();
     assert_eq!(run_api_with_library(cmd_check_hash, &lib).unwrap(), 0);
 
-    // 9. Test `delete-media`
+    // 9. Test `check-hashes` (Batch endpoint)
+    let unknown_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let media_hash_hex = rustview::media::MediaHasher::to_hex(&media_list[0].file_hash);
+    let args_batch_check = vec![
+        "rustview".to_string(),
+        "api".to_string(),
+        "check-hashes".to_string(),
+        "--hashes".to_string(),
+        format!("{},{},{}", dummy_hash, unknown_hash, media_hash_hex),
+        "--json".to_string(),
+    ];
+    let cmd_batch = parse_api_args(&args_batch_check).unwrap();
+    assert_eq!(run_api_with_library(cmd_batch, &lib).unwrap(), 0);
+
+    // 10. Test `delete-media`
     let args_delete = vec![
         "rustview".to_string(),
         "api".to_string(),
@@ -122,6 +136,58 @@ fn test_cli_api_lifecycle_full_suite() {
 
     let media_after_delete = lib.media().get_by_folder(folder.id).unwrap();
     assert!(media_after_delete.is_empty());
+}
+
+#[test]
+fn test_cli_api_batch_hashes_from_file_and_positional() {
+    let tmp_data = tempdir().unwrap();
+    let tmp_dir = tempdir().unwrap();
+
+    let db_path = tmp_data.path().join("library.lmdb");
+    let lib = Library::open(&db_path).unwrap();
+
+    let hash1 = "11111111111111111111111111111111";
+    let hash2 = "22222222222222222222222222222222";
+    let hash3 = "33333333333333333333333333333333";
+
+    // Insert hash1
+    let args_ins = vec![
+        "rustview".to_string(),
+        "api".to_string(),
+        "insert-hash".to_string(),
+        "--hash".to_string(),
+        hash1.to_string(),
+        "--json".to_string(),
+    ];
+    let cmd_ins = parse_api_args(&args_ins).unwrap();
+    assert_eq!(run_api_with_library(cmd_ins, &lib).unwrap(), 0);
+
+    // Create a temporary hashes file
+    let file_path = tmp_dir.path().join("hashes.txt");
+    std::fs::write(&file_path, format!("{}\n# comment\n{}, {}\n", hash1, hash2, hash3)).unwrap();
+
+    let args_file = vec![
+        "rustview".to_string(),
+        "api".to_string(),
+        "check-hashes".to_string(),
+        "--hashes-file".to_string(),
+        file_path.to_string_lossy().to_string(),
+        "--json".to_string(),
+    ];
+    let cmd_file = parse_api_args(&args_file).unwrap();
+    assert_eq!(run_api_with_library(cmd_file, &lib).unwrap(), 0);
+
+    // Test positional hashes
+    let args_pos = vec![
+        "rustview".to_string(),
+        "api".to_string(),
+        "check-hashes".to_string(),
+        hash1.to_string(),
+        hash2.to_string(),
+        "--json".to_string(),
+    ];
+    let cmd_pos = parse_api_args(&args_pos).unwrap();
+    assert_eq!(run_api_with_library(cmd_pos, &lib).unwrap(), 0);
 }
 
 #[test]
