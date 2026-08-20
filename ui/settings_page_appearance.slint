@@ -10,9 +10,18 @@ export component SettingsPageAppearance inherits VerticalLayout {
     in-out property <bool> show-filenames: true;
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
+    in-out property <bool> show-media-type-badges: true;
     in-out property <bool> enable-hover-previews: true;
     in-out property <bool> enable-tooltips: true;
     in-out property <int> tooltip-delay-ms: 750;
+
+    // Grid Items Layout Configuration
+    in-out property <int> grid-item-padding-h: 8;
+    in-out property <int> grid-item-padding-v: 6;
+    in-out property <int> grid-spacing: 12;
+    in-out property <int> grid-padding: 12;
+    in-out property <int> grid-item-border-width: 1;
+    in-out property <int> grid-item-corner-radius: 4;
 
     SettingsCard {
         title: "Grid & Thumbnail Presentation";
@@ -72,8 +81,156 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         CheckBox {
+            text: "Show media type badge on thumbnails (Video / Image)";
+            checked <=> root.show-media-type-badges;
+        }
+
+        CheckBox {
             text: "Enable hover video preview animation (YouTube-style)";
             checked <=> root.enable-hover-previews;
+        }
+    }
+
+    SettingsCard {
+        title: "Grid Items Layout";
+        description: "Customize spacing, padding, borders, and corner rounding for media items in the Grid View.";
+
+        HorizontalLayout {
+            Text {
+                text: "Horizontal Item Padding (Left / Right):";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 140px;
+                minimum: 0;
+                maximum: 32;
+                value: root.grid-item-padding-h;
+                changed(v) => { root.grid-item-padding-h = Math.round(v); }
+            }
+            Text {
+                text: root.grid-item-padding-h + "px";
+                color: Theme.primary;
+                width: 50px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Vertical Item Padding (Top / Bottom):";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 140px;
+                minimum: 0;
+                maximum: 32;
+                value: root.grid-item-padding-v;
+                changed(v) => { root.grid-item-padding-v = Math.round(v); }
+            }
+            Text {
+                text: root.grid-item-padding-v + "px";
+                color: Theme.primary;
+                width: 50px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Spacing Between Items:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 140px;
+                minimum: 0;
+                maximum: 48;
+                value: root.grid-spacing;
+                changed(v) => { root.grid-spacing = Math.round(v); }
+            }
+            Text {
+                text: root.grid-spacing + "px";
+                color: Theme.primary;
+                width: 50px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Outer Grid Padding:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 140px;
+                minimum: 0;
+                maximum: 48;
+                value: root.grid-padding;
+                changed(v) => { root.grid-padding = Math.round(v); }
+            }
+            Text {
+                text: root.grid-padding + "px";
+                color: Theme.primary;
+                width: 50px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Tile Border Width:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 140px;
+                minimum: 0;
+                maximum: 6;
+                value: root.grid-item-border-width;
+                changed(v) => { root.grid-item-border-width = Math.round(v); }
+            }
+            Text {
+                text: root.grid-item-border-width == 0 ? "0px (None)" : (root.grid-item-border-width + "px");
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        HorizontalLayout {
+            Text {
+                text: "Tile Corner Radius:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 140px;
+                minimum: 0;
+                maximum: 24;
+                value: root.grid-item-corner-radius;
+                changed(v) => { root.grid-item-corner-radius = Math.round(v); }
+            }
+            Text {
+                text: root.grid-item-corner-radius == 0 ? "0px (Square)" : (root.grid-item-corner-radius + "px");
+                color: Theme.primary;
+                width: 75px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
         }
     }
 

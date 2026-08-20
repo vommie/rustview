@@ -7,19 +7,22 @@ use rustview::settings::{
     DEFAULT_COL_SIZE_WIDTH, DEFAULT_COL_TAGS_WIDTH, DEFAULT_COL_WIDTH_WIDTH,
     DEFAULT_CONFIRM_ON_FILE_DELETE, DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME,
     DEFAULT_DELETION_MODE, DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS,
-    DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
+    DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_GRID_ITEM_BORDER_WIDTH,
+    DEFAULT_GRID_ITEM_CORNER_RADIUS, DEFAULT_GRID_ITEM_PADDING_H, DEFAULT_GRID_ITEM_PADDING_V,
+    DEFAULT_GRID_PADDING, DEFAULT_GRID_SPACING, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
     DEFAULT_OBFUSCATE_LOGS, DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT,
     DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER,
     DEFAULT_SCALING_ALGORITHM, DEFAULT_SHORT_VIDEO_THRESHOLD_SECS, DEFAULT_SHOW_DELETED_FOLDERS,
-    DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_RATINGS_OVERLAY,
-    DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH,
-    DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_SUPPORTED_IMAGE_FORMATS,
-    DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
-    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
-    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
-    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT,
-    DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH, MAX_SHORT_VIDEO_THRESHOLD_SECS,
-    MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
+    DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_MEDIA_TYPE_BADGES,
+    DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH,
+    DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER,
+    DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE,
+    DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE,
+    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH,
+    DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT,
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH,
+    MAX_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H,
+    MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -58,6 +61,34 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(
         initial.appearance.show_tags_overlay,
         DEFAULT_SHOW_TAGS_OVERLAY
+    );
+    assert_eq!(
+        initial.appearance.show_media_type_badges,
+        DEFAULT_SHOW_MEDIA_TYPE_BADGES
+    );
+    assert_eq!(
+        initial.appearance.grid_item_padding_horizontal,
+        DEFAULT_GRID_ITEM_PADDING_H
+    );
+    assert_eq!(
+        initial.appearance.grid_item_padding_vertical,
+        DEFAULT_GRID_ITEM_PADDING_V
+    );
+    assert_eq!(
+        initial.appearance.grid_spacing,
+        DEFAULT_GRID_SPACING
+    );
+    assert_eq!(
+        initial.appearance.grid_padding,
+        DEFAULT_GRID_PADDING
+    );
+    assert_eq!(
+        initial.appearance.grid_item_border_width,
+        DEFAULT_GRID_ITEM_BORDER_WIDTH
+    );
+    assert_eq!(
+        initial.appearance.grid_item_corner_radius,
+        DEFAULT_GRID_ITEM_CORNER_RADIUS
     );
     assert_eq!(
         initial.appearance.enable_hover_previews,
@@ -216,6 +247,13 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.appearance.default_thumbnail_size = 240;
     initial.appearance.thumbnail_aspect_ratio = "16:9".to_string();
     initial.appearance.show_filenames = false;
+    initial.appearance.show_media_type_badges = false;
+    initial.appearance.grid_item_padding_horizontal = 16;
+    initial.appearance.grid_item_padding_vertical = 10;
+    initial.appearance.grid_spacing = 20;
+    initial.appearance.grid_padding = 16;
+    initial.appearance.grid_item_border_width = 3;
+    initial.appearance.grid_item_corner_radius = 8;
     initial.appearance.enable_tooltips = false;
     initial.appearance.tooltip_delay_ms = 450;
     initial.performance.short_video_threshold_secs = 20;
@@ -232,6 +270,13 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(loaded.appearance.default_thumbnail_size, 240);
     assert_eq!(loaded.appearance.thumbnail_aspect_ratio, "16:9");
     assert!(!loaded.appearance.show_filenames);
+    assert!(!loaded.appearance.show_media_type_badges);
+    assert_eq!(loaded.appearance.grid_item_padding_horizontal, 16);
+    assert_eq!(loaded.appearance.grid_item_padding_vertical, 10);
+    assert_eq!(loaded.appearance.grid_spacing, 20);
+    assert_eq!(loaded.appearance.grid_padding, 16);
+    assert_eq!(loaded.appearance.grid_item_border_width, 3);
+    assert_eq!(loaded.appearance.grid_item_corner_radius, 8);
     assert!(!loaded.appearance.enable_tooltips);
     assert_eq!(loaded.appearance.tooltip_delay_ms, 450);
     assert_eq!(loaded.performance.short_video_threshold_secs, 20);
@@ -242,6 +287,9 @@ fn test_settings_persistence_sanitization_and_hooks() {
     let mut invalid_settings = AppSettings::default();
     invalid_settings.appearance.thumbnail_aspect_ratio = "invalid_ratio".to_string();
     invalid_settings.appearance.tooltip_delay_ms = 99999;
+    invalid_settings.appearance.grid_item_padding_horizontal = 100; // Above MAX (32)
+    invalid_settings.appearance.grid_item_border_width = 50; // Above MAX (6)
+    invalid_settings.appearance.grid_item_corner_radius = 100; // Above MAX (24)
     invalid_settings.performance.short_video_threshold_secs = 500;
     invalid_settings.view.col_filename_width = 10.0; // Below MIN_COL_WIDTH (40.0)
     invalid_settings.view.col_size_width = 5000.0; // Above MAX_COL_WIDTH (1200.0)
@@ -255,6 +303,18 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(
         sanitized.appearance.tooltip_delay_ms,
         MAX_TOOLTIP_DELAY_MS
+    );
+    assert_eq!(
+        sanitized.appearance.grid_item_padding_horizontal,
+        MAX_GRID_ITEM_PADDING_H
+    );
+    assert_eq!(
+        sanitized.appearance.grid_item_border_width,
+        MAX_GRID_ITEM_BORDER_WIDTH
+    );
+    assert_eq!(
+        sanitized.appearance.grid_item_corner_radius,
+        MAX_GRID_ITEM_CORNER_RADIUS
     );
     assert_eq!(
         sanitized.performance.short_video_threshold_secs,
@@ -328,6 +388,34 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
     assert_eq!(
         loaded.appearance.thumbnail_aspect_ratio,
         DEFAULT_THUMBNAIL_ASPECT_RATIO
+    );
+    assert_eq!(
+        loaded.appearance.show_media_type_badges,
+        DEFAULT_SHOW_MEDIA_TYPE_BADGES
+    );
+    assert_eq!(
+        loaded.appearance.grid_item_padding_horizontal,
+        DEFAULT_GRID_ITEM_PADDING_H
+    );
+    assert_eq!(
+        loaded.appearance.grid_item_padding_vertical,
+        DEFAULT_GRID_ITEM_PADDING_V
+    );
+    assert_eq!(
+        loaded.appearance.grid_spacing,
+        DEFAULT_GRID_SPACING
+    );
+    assert_eq!(
+        loaded.appearance.grid_padding,
+        DEFAULT_GRID_PADDING
+    );
+    assert_eq!(
+        loaded.appearance.grid_item_border_width,
+        DEFAULT_GRID_ITEM_BORDER_WIDTH
+    );
+    assert_eq!(
+        loaded.appearance.grid_item_corner_radius,
+        DEFAULT_GRID_ITEM_CORNER_RADIUS
     );
     assert_eq!(
         loaded.appearance.enable_hover_previews,

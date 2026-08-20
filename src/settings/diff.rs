@@ -65,7 +65,14 @@ impl SettingsDiff {
             || old.appearance.show_filenames != new.appearance.show_filenames
             || old.appearance.show_ratings_overlay != new.appearance.show_ratings_overlay
             || old.appearance.show_tags_overlay != new.appearance.show_tags_overlay
-            || old.appearance.dark_theme != new.appearance.dark_theme;
+            || old.appearance.show_media_type_badges != new.appearance.show_media_type_badges
+            || old.appearance.dark_theme != new.appearance.dark_theme
+            || old.appearance.grid_item_padding_horizontal != new.appearance.grid_item_padding_horizontal
+            || old.appearance.grid_item_padding_vertical != new.appearance.grid_item_padding_vertical
+            || old.appearance.grid_spacing != new.appearance.grid_spacing
+            || old.appearance.grid_padding != new.appearance.grid_padding
+            || old.appearance.grid_item_border_width != new.appearance.grid_item_border_width
+            || old.appearance.grid_item_corner_radius != new.appearance.grid_item_corner_radius;
 
         let tooltip_settings_changed = old.appearance.enable_tooltips != new.appearance.enable_tooltips
             || old.appearance.tooltip_delay_ms != new.appearance.tooltip_delay_ms;
@@ -212,6 +219,48 @@ impl SettingsDiff {
             changes.push(format!(
                 "Appearance: show_tags_overlay ({} -> {})",
                 old.appearance.show_tags_overlay, new.appearance.show_tags_overlay
+            ));
+        }
+        if old.appearance.show_media_type_badges != new.appearance.show_media_type_badges {
+            changes.push(format!(
+                "Appearance: show_media_type_badges ({} -> {})",
+                old.appearance.show_media_type_badges, new.appearance.show_media_type_badges
+            ));
+        }
+        if old.appearance.grid_item_padding_horizontal != new.appearance.grid_item_padding_horizontal {
+            changes.push(format!(
+                "Appearance: grid_item_padding_horizontal ({}px -> {}px)",
+                old.appearance.grid_item_padding_horizontal, new.appearance.grid_item_padding_horizontal
+            ));
+        }
+        if old.appearance.grid_item_padding_vertical != new.appearance.grid_item_padding_vertical {
+            changes.push(format!(
+                "Appearance: grid_item_padding_vertical ({}px -> {}px)",
+                old.appearance.grid_item_padding_vertical, new.appearance.grid_item_padding_vertical
+            ));
+        }
+        if old.appearance.grid_spacing != new.appearance.grid_spacing {
+            changes.push(format!(
+                "Appearance: grid_spacing ({}px -> {}px)",
+                old.appearance.grid_spacing, new.appearance.grid_spacing
+            ));
+        }
+        if old.appearance.grid_padding != new.appearance.grid_padding {
+            changes.push(format!(
+                "Appearance: grid_padding ({}px -> {}px)",
+                old.appearance.grid_padding, new.appearance.grid_padding
+            ));
+        }
+        if old.appearance.grid_item_border_width != new.appearance.grid_item_border_width {
+            changes.push(format!(
+                "Appearance: grid_item_border_width ({}px -> {}px)",
+                old.appearance.grid_item_border_width, new.appearance.grid_item_border_width
+            ));
+        }
+        if old.appearance.grid_item_corner_radius != new.appearance.grid_item_corner_radius {
+            changes.push(format!(
+                "Appearance: grid_item_corner_radius ({}px -> {}px)",
+                old.appearance.grid_item_corner_radius, new.appearance.grid_item_corner_radius
             ));
         }
         if old.appearance.enable_hover_previews != new.appearance.enable_hover_previews {

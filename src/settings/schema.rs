@@ -28,12 +28,38 @@ pub const DEFAULT_THUMBNAIL_ASPECT_RATIO: &str = "4:3";
 pub const DEFAULT_SHOW_FILENAMES: bool = true;
 pub const DEFAULT_SHOW_RATINGS_OVERLAY: bool = true;
 pub const DEFAULT_SHOW_TAGS_OVERLAY: bool = true;
+pub const DEFAULT_SHOW_MEDIA_TYPE_BADGES: bool = true;
 pub const DEFAULT_ENABLE_HOVER_PREVIEWS: bool = true;
 pub const DEFAULT_DARK_THEME: bool = true;
 pub const DEFAULT_ENABLE_TOOLTIPS: bool = true;
 pub const DEFAULT_TOOLTIP_DELAY_MS: u32 = 750;
 pub const MIN_TOOLTIP_DELAY_MS: u32 = 50;
 pub const MAX_TOOLTIP_DELAY_MS: u32 = 2000;
+
+// Grid Items Layout - Single Point of Truth Constants
+pub const DEFAULT_GRID_ITEM_PADDING_H: u32 = 8;
+pub const MIN_GRID_ITEM_PADDING_H: u32 = 0;
+pub const MAX_GRID_ITEM_PADDING_H: u32 = 32;
+
+pub const DEFAULT_GRID_ITEM_PADDING_V: u32 = 6;
+pub const MIN_GRID_ITEM_PADDING_V: u32 = 0;
+pub const MAX_GRID_ITEM_PADDING_V: u32 = 32;
+
+pub const DEFAULT_GRID_SPACING: u32 = 12;
+pub const MIN_GRID_SPACING: u32 = 0;
+pub const MAX_GRID_SPACING: u32 = 48;
+
+pub const DEFAULT_GRID_PADDING: u32 = 12;
+pub const MIN_GRID_PADDING: u32 = 0;
+pub const MAX_GRID_PADDING: u32 = 48;
+
+pub const DEFAULT_GRID_ITEM_BORDER_WIDTH: u32 = 1;
+pub const MIN_GRID_ITEM_BORDER_WIDTH: u32 = 0;
+pub const MAX_GRID_ITEM_BORDER_WIDTH: u32 = 6;
+
+pub const DEFAULT_GRID_ITEM_CORNER_RADIUS: u32 = 4;
+pub const MIN_GRID_ITEM_CORNER_RADIUS: u32 = 0;
+pub const MAX_GRID_ITEM_CORNER_RADIUS: u32 = 24;
 
 // =============================================================================
 // SECTION 4: View & Column Layout - Single Point of Truth Constants
@@ -271,10 +297,19 @@ pub struct AppearanceSettings {
     pub show_filenames: bool,
     pub show_ratings_overlay: bool,
     pub show_tags_overlay: bool,
+    pub show_media_type_badges: bool,
     pub enable_hover_previews: bool,
     pub dark_theme: bool,
     pub enable_tooltips: bool,
     pub tooltip_delay_ms: u32,
+
+    // Grid Items Layout
+    pub grid_item_padding_horizontal: u32,
+    pub grid_item_padding_vertical: u32,
+    pub grid_spacing: u32,
+    pub grid_padding: u32,
+    pub grid_item_border_width: u32,
+    pub grid_item_corner_radius: u32,
 }
 
 impl Default for AppearanceSettings {
@@ -285,10 +320,17 @@ impl Default for AppearanceSettings {
             show_filenames: DEFAULT_SHOW_FILENAMES,
             show_ratings_overlay: DEFAULT_SHOW_RATINGS_OVERLAY,
             show_tags_overlay: DEFAULT_SHOW_TAGS_OVERLAY,
+            show_media_type_badges: DEFAULT_SHOW_MEDIA_TYPE_BADGES,
             enable_hover_previews: DEFAULT_ENABLE_HOVER_PREVIEWS,
             dark_theme: DEFAULT_DARK_THEME,
             enable_tooltips: DEFAULT_ENABLE_TOOLTIPS,
             tooltip_delay_ms: DEFAULT_TOOLTIP_DELAY_MS,
+            grid_item_padding_horizontal: DEFAULT_GRID_ITEM_PADDING_H,
+            grid_item_padding_vertical: DEFAULT_GRID_ITEM_PADDING_V,
+            grid_spacing: DEFAULT_GRID_SPACING,
+            grid_padding: DEFAULT_GRID_PADDING,
+            grid_item_border_width: DEFAULT_GRID_ITEM_BORDER_WIDTH,
+            grid_item_corner_radius: DEFAULT_GRID_ITEM_CORNER_RADIUS,
         }
     }
 }

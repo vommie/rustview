@@ -8,19 +8,24 @@ export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
     in property <int> thumb-width: 190;
     in property <int> thumb-aspect-idx: 1;
+    in property <bool> show-media-type-badges: true;
+    in property <length> padding-h: 8px;
+    in property <length> padding-v: 6px;
+    in property <length> border-width-val: 1px;
+    in property <length> corner-radius-val: 4px;
 
     property <length> item-thumb-w: root.thumb-width * 1px;
     property <length> item-thumb-h: Theme.calculate-thumb-height(root.thumb-width, root.thumb-aspect-idx);
 
-    property <length> tile-width: root.item-thumb-w + 16px;
-    property <length> tile-height: root.item-thumb-h + 42px;
+    property <length> tile-width: root.item-thumb-w + (root.padding-h * 2);
+    property <length> tile-height: root.item-thumb-h + (root.padding-v * 2) + 22px;
 
     width: root.tile-width;
     height: root.tile-height;
     background: item.is-selected ? Theme.surface-selected : (tile-touch.has-hover ? Theme.surface-hover : Theme.surface);
-    border-width: item.is-selected ? 2px : 1px;
-    border-color: item.is-selected ? Theme.primary : Theme.border;
-    border-radius: 4px;
+    border-width: item.is-selected ? Math.max(2px, root.border-width-val + 1px) : root.border-width-val;
+    border-color: item.is-selected ? Theme.primary : (root.border-width-val > 0px ? Theme.border : transparent);
+    border-radius: root.corner-radius-val;
     clip: true;
 
     callback clicked(bool /* is_ctrl */, bool /* is_shift */);
@@ -86,7 +91,10 @@ export component MediaTile inherits Rectangle {
     }
 
     VerticalLayout {
-        padding: 4px;
+        padding-left: root.padding-h;
+        padding-right: root.padding-h;
+        padding-top: root.padding-v;
+        padding-bottom: root.padding-v;
         spacing: 4px;
         alignment: center;
 
@@ -94,7 +102,7 @@ export component MediaTile inherits Rectangle {
             width: root.item-thumb-w;
             height: root.item-thumb-h;
             background: #000000;
-            border-radius: 2px;
+            border-radius: Math.max(0px, root.corner-radius-val - 2px);
             clip: true;
 
             Image {
@@ -137,8 +145,8 @@ export component MediaTile inherits Rectangle {
                 }
             }
 
-            // Bottom Video Indicator Tag
-            if item.is-video : Rectangle {
+            // Bottom Media Type Badge (Image or Video)
+            if root.show-media-type-badges : Rectangle {
                 x: 4px;
                 y: parent.height - 18px;
                 width: 32px;
@@ -147,7 +155,7 @@ export component MediaTile inherits Rectangle {
                 border-radius: 2px;
 
                 Text {
-                    text: "VIDEO";
+                    text: item.is-video ? "VIDEO" : "IMAGE";
                     font-size: 8px;
                     font-weight: 700;
                     color: #ffffff;
@@ -181,27 +189,39 @@ export component VirtualizedMediaGrid inherits Rectangle {
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
 
-    property <length> grid-padding: 12px;
-    property <length> grid-spacing: 12px;
+    in property <bool> show-media-type-badges: true;
+    in property <int> grid-item-padding-h: 8;
+    in property <int> grid-item-padding-v: 6;
+    in property <int> grid-spacing-val: 12;
+    in property <int> grid-padding-val: 12;
+    in property <int> grid-item-border-width: 1;
+    in property <int> grid-item-corner-radius: 4;
+
+    property <length> grid-padding: root.grid-padding-val * 1px;
+    property <length> grid-spacing: root.grid-spacing-val * 1px;
+    property <length> item-padding-h: root.grid-item-padding-h * 1px;
+    property <length> item-padding-v: root.grid-item-padding-v * 1px;
+    property <length> border-w: root.grid-item-border-width * 1px;
+    property <length> corner-r: root.grid-item-corner-radius * 1px;
     property <length> scrollbar-gutter-reserve: 16px;
 
     property <length> item-thumb-w: root.thumb-size * 1px;
     property <length> item-thumb-h: Theme.calculate-thumb-height(root.thumb-size, root.thumb-aspect-idx);
 
-    property <length> item-tile-width: root.item-thumb-w + 16px;
-    property <length> item-tile-height: root.item-thumb-h + 42px;
+    property <length> item-tile-width: root.item-thumb-w + (root.item-padding-h * 2);
+    property <length> item-tile-height: root.item-thumb-h + (root.item-padding-v * 2) + 22px;
     property <length> column-stride: root.item-tile-width + root.grid-spacing;
     property <length> row-stride: root.item-tile-height + root.grid-spacing;
 
     property <length> available-width: Math.max(0px, self.width - (root.grid-padding * 2) - root.scrollbar-gutter-reserve + root.grid-spacing);
-    out property <int> columns: Math.max(1, Math.floor(root.available-width / root.column-stride));
+    out property <int> columns: Math.max(1, Math.floor(root.available-width / Math.max(1px, root.column-stride)));
 
     property <int> total-rows: Math.ceil(root.total-items-count / root.columns);
     property <length> total-content-height: (root.total-rows * root.row-stride) + (2 * root.grid-padding);
 
-    property <int> pool-rows-count: Math.min(root.total-rows, Math.ceil(scroll-area.height / root.row-stride) + 6);
-    property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / root.row-stride));
-    property <int> scroll-block: Math.floor(-scroll-area.clamped-y / (root.row-stride * 2));
+    property <int> pool-rows-count: Math.min(root.total-rows, Math.ceil(scroll-area.height / Math.max(1px, root.row-stride)) + 6);
+    property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / Math.max(1px, root.row-stride)));
+    property <int> scroll-block: Math.floor(-scroll-area.clamped-y / Math.max(1px, root.row-stride * 2));
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
@@ -304,6 +324,11 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     item: item;
                     thumb-width: root.thumb-size;
                     thumb-aspect-idx: root.thumb-aspect-idx;
+                    show-media-type-badges: root.show-media-type-badges;
+                    padding-h: root.item-padding-h;
+                    padding-v: root.item-padding-v;
+                    border-width-val: root.border-w;
+                    corner-radius-val: root.corner-r;
 
                     clicked(ctrl, shift) => { root.item-clicked(self.item.id, ctrl, shift); }
                     hover-changed(hover) => { root.item-hover-changed(self.item.id, hover); }

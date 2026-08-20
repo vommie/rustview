@@ -73,9 +73,18 @@ impl SettingsDialogController {
         window.set_show_filenames(settings.appearance.show_filenames);
         window.set_show_rating_badge(settings.appearance.show_ratings_overlay);
         window.set_show_tag_badge(settings.appearance.show_tags_overlay);
+        window.set_show_media_type_badges(settings.appearance.show_media_type_badges);
         window.set_enable_hover_previews(settings.appearance.enable_hover_previews);
         window.set_enable_tooltips(settings.appearance.enable_tooltips);
         window.set_tooltip_delay_ms(settings.appearance.tooltip_delay_ms as i32);
+
+        // Grid Items Layout properties
+        window.set_grid_item_padding_h(settings.appearance.grid_item_padding_horizontal as i32);
+        window.set_grid_item_padding_v(settings.appearance.grid_item_padding_vertical as i32);
+        window.set_grid_spacing(settings.appearance.grid_spacing as i32);
+        window.set_grid_padding(settings.appearance.grid_padding as i32);
+        window.set_grid_item_border_width(settings.appearance.grid_item_border_width as i32);
+        window.set_grid_item_corner_radius(settings.appearance.grid_item_corner_radius as i32);
 
         // Performance properties
         window.set_worker_threads(settings.performance.worker_threads as i32);
@@ -192,10 +201,25 @@ impl SettingsDialogController {
                 current.appearance.show_filenames = w.get_show_filenames();
                 current.appearance.show_ratings_overlay = w.get_show_rating_badge();
                 current.appearance.show_tags_overlay = w.get_show_tag_badge();
+                current.appearance.show_media_type_badges = w.get_show_media_type_badges();
                 current.appearance.enable_hover_previews = w.get_enable_hover_previews();
                 current.appearance.enable_tooltips = w.get_enable_tooltips();
                 current.appearance.tooltip_delay_ms =
                     w.get_tooltip_delay_ms().clamp(50, 2000) as u32;
+
+                // Save Grid Items Layout Properties
+                current.appearance.grid_item_padding_horizontal =
+                    w.get_grid_item_padding_h().clamp(0, 32) as u32;
+                current.appearance.grid_item_padding_vertical =
+                    w.get_grid_item_padding_v().clamp(0, 32) as u32;
+                current.appearance.grid_spacing =
+                    w.get_grid_spacing().clamp(0, 48) as u32;
+                current.appearance.grid_padding =
+                    w.get_grid_padding().clamp(0, 48) as u32;
+                current.appearance.grid_item_border_width =
+                    w.get_grid_item_border_width().clamp(0, 6) as u32;
+                current.appearance.grid_item_corner_radius =
+                    w.get_grid_item_corner_radius().clamp(0, 24) as u32;
 
                 // Save Performance Parameters
                 current.performance.worker_threads = w.get_worker_threads().clamp(1, 32) as usize;

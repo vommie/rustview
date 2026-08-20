@@ -1,11 +1,15 @@
 use super::schema::{
     AppSettings, GridAspectRatio, DEFAULT_PREVIEW_FORMAT, DEFAULT_SCALING_ALGORITHM,
     DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_VIDEO_ENGINE,
-    MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_L1_CACHE_SLOTS, MAX_PREVIEW_FRAME_COUNT,
-    MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH, MAX_THUMBNAIL_DB_SIZE,
+    MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
+    MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_GRID_ITEM_PADDING_V,
+    MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_L1_CACHE_SLOTS, MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY,
+    MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH, MAX_THUMBNAIL_DB_SIZE,
     MAX_THUMBNAIL_WIDTH, MAX_TOOLTIP_DELAY_MS, MAX_VIDEO_OFFSET_PERCENT, MAX_WORKER_THREADS,
-    MIN_BATCH_COMMIT_SIZE, MIN_COL_WIDTH, MIN_L1_CACHE_SLOTS, MIN_PREVIEW_FRAME_COUNT,
-    MIN_QUALITY, MIN_SHORT_VIDEO_THRESHOLD_SECS, MIN_SIDEBAR_WIDTH, MIN_THUMBNAIL_DB_SIZE,
+    MIN_BATCH_COMMIT_SIZE, MIN_COL_WIDTH, MIN_GRID_ITEM_BORDER_WIDTH,
+    MIN_GRID_ITEM_CORNER_RADIUS, MIN_GRID_ITEM_PADDING_H, MIN_GRID_ITEM_PADDING_V,
+    MIN_GRID_PADDING, MIN_GRID_SPACING, MIN_L1_CACHE_SLOTS, MIN_PREVIEW_FRAME_COUNT, MIN_QUALITY,
+    MIN_SHORT_VIDEO_THRESHOLD_SECS, MIN_SIDEBAR_WIDTH, MIN_THUMBNAIL_DB_SIZE,
     MIN_THUMBNAIL_WIDTH, MIN_TOOLTIP_DELAY_MS, MIN_VIDEO_OFFSET_PERCENT, MIN_WORKER_THREADS,
 };
 use std::fs;
@@ -89,6 +93,37 @@ impl SettingsStore {
             .appearance
             .tooltip_delay_ms
             .clamp(MIN_TOOLTIP_DELAY_MS, MAX_TOOLTIP_DELAY_MS);
+
+        // Grid Items Layout sanitization
+        settings.appearance.grid_item_padding_horizontal = settings
+            .appearance
+            .grid_item_padding_horizontal
+            .clamp(MIN_GRID_ITEM_PADDING_H, MAX_GRID_ITEM_PADDING_H);
+
+        settings.appearance.grid_item_padding_vertical = settings
+            .appearance
+            .grid_item_padding_vertical
+            .clamp(MIN_GRID_ITEM_PADDING_V, MAX_GRID_ITEM_PADDING_V);
+
+        settings.appearance.grid_spacing = settings
+            .appearance
+            .grid_spacing
+            .clamp(MIN_GRID_SPACING, MAX_GRID_SPACING);
+
+        settings.appearance.grid_padding = settings
+            .appearance
+            .grid_padding
+            .clamp(MIN_GRID_PADDING, MAX_GRID_PADDING);
+
+        settings.appearance.grid_item_border_width = settings
+            .appearance
+            .grid_item_border_width
+            .clamp(MIN_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH);
+
+        settings.appearance.grid_item_corner_radius = settings
+            .appearance
+            .grid_item_corner_radius
+            .clamp(MIN_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_CORNER_RADIUS);
 
         // Performance sanitization
         settings.performance.l1_cache_slots = settings

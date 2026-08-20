@@ -111,11 +111,18 @@ impl UiBridge {
         window.set_col_duration_width(v_settings.col_duration_width);
         window.set_col_format_width(v_settings.col_format_width);
 
-        // Apply centralized appearance & tooltip settings
+        // Apply centralized appearance, layout & tooltip settings
         let app_settings = settings.get();
         window.set_thumb_size(app_settings.appearance.default_thumbnail_size as i32);
         let ratio = GridAspectRatio::from_str_name(&app_settings.appearance.thumbnail_aspect_ratio);
         window.set_thumb_aspect_idx(ratio.to_index());
+        window.set_show_media_type_badges(app_settings.appearance.show_media_type_badges);
+        window.set_grid_item_padding_h(app_settings.appearance.grid_item_padding_horizontal as i32);
+        window.set_grid_item_padding_v(app_settings.appearance.grid_item_padding_vertical as i32);
+        window.set_grid_spacing(app_settings.appearance.grid_spacing as i32);
+        window.set_grid_padding(app_settings.appearance.grid_padding as i32);
+        window.set_grid_item_border_width(app_settings.appearance.grid_item_border_width as i32);
+        window.set_grid_item_corner_radius(app_settings.appearance.grid_item_corner_radius as i32);
         window.set_enable_tooltips(app_settings.appearance.enable_tooltips);
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
@@ -196,6 +203,13 @@ impl UiBridge {
             sort_ord = ?initial_sort_ord,
             thumb_size = app_settings.appearance.default_thumbnail_size,
             aspect_ratio = %app_settings.appearance.thumbnail_aspect_ratio,
+            show_media_type_badges = app_settings.appearance.show_media_type_badges,
+            grid_item_padding_h = app_settings.appearance.grid_item_padding_horizontal,
+            grid_item_padding_v = app_settings.appearance.grid_item_padding_vertical,
+            grid_spacing = app_settings.appearance.grid_spacing,
+            grid_padding = app_settings.appearance.grid_padding,
+            grid_item_border_width = app_settings.appearance.grid_item_border_width,
+            grid_item_corner_radius = app_settings.appearance.grid_item_corner_radius,
             show_hidden_folders = app_settings.folders.show_hidden_folders,
             support_dot_hidden = app_settings.folders.support_dot_hidden_files,
             enable_tooltips = app_settings.appearance.enable_tooltips,
@@ -263,11 +277,18 @@ impl UiBridge {
                     window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms as i32);
                 }
 
-                // 3. Appearance & Grid Presentation
+                // 3. Appearance & Grid Presentation + Grid Items Layout update
                 if diff_clone.appearance_grid_changed {
                     window.set_thumb_size(new_clone.appearance.default_thumbnail_size as i32);
                     let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
                     window.set_thumb_aspect_idx(ratio.to_index());
+                    window.set_show_media_type_badges(new_clone.appearance.show_media_type_badges);
+                    window.set_grid_item_padding_h(new_clone.appearance.grid_item_padding_horizontal as i32);
+                    window.set_grid_item_padding_v(new_clone.appearance.grid_item_padding_vertical as i32);
+                    window.set_grid_spacing(new_clone.appearance.grid_spacing as i32);
+                    window.set_grid_padding(new_clone.appearance.grid_padding as i32);
+                    window.set_grid_item_border_width(new_clone.appearance.grid_item_border_width as i32);
+                    window.set_grid_item_corner_radius(new_clone.appearance.grid_item_corner_radius as i32);
                 }
 
                 // 4. Debug & Privacy update

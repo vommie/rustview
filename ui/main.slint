@@ -41,10 +41,19 @@ export component MainWindow inherits Window {
     in-out property <bool> is-modal-locked: false;
     in-out property <int> thumb-size: 190;
     in-out property <int> thumb-aspect-idx: 1;
+    in-out property <bool> show-media-type-badges: true;
     in-out property <string> status-text: "Ready.";
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
+
+    // Grid Items Layout properties
+    in-out property <int> grid-item-padding-h: 8;
+    in-out property <int> grid-item-padding-v: 6;
+    in-out property <int> grid-spacing: 12;
+    in-out property <int> grid-padding: 12;
+    in-out property <int> grid-item-border-width: 1;
+    in-out property <int> grid-item-corner-radius: 4;
 
     // Viewport windowing properties
     in-out property <int> visible-start-index: 0;
@@ -310,6 +319,13 @@ export component MainWindow inherits Window {
                         total-items-count: root.total-items-count;
                         thumb-size: root.thumb-size;
                         thumb-aspect-idx: root.thumb-aspect-idx;
+                        show-media-type-badges: root.show-media-type-badges;
+                        grid-item-padding-h: root.grid-item-padding-h;
+                        grid-item-padding-v: root.grid-item-padding-v;
+                        grid-spacing-val: root.grid-spacing;
+                        grid-padding-val: root.grid-padding;
+                        grid-item-border-width: root.grid-item-border-width;
+                        grid-item-corner-radius: root.grid-item-corner-radius;
                         sort-column: root.sort-column-idx;
                         sort-order: root.sort-order-idx;
                         visible-chunk-changed(first, last, tot) => {

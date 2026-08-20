@@ -52,9 +52,18 @@ export component SettingsWindow inherits Window {
     in-out property <bool> show-filenames: true;
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
+    in-out property <bool> show-media-type-badges: true;
     in-out property <bool> enable-hover-previews: true;
     in-out property <bool> enable-tooltips: true;
     in-out property <int> tooltip-delay-ms: 750;
+
+    // Grid Items Layout options
+    in-out property <int> grid-item-padding-h: 8;
+    in-out property <int> grid-item-padding-v: 6;
+    in-out property <int> grid-spacing: 12;
+    in-out property <int> grid-padding: 12;
+    in-out property <int> grid-item-border-width: 1;
+    in-out property <int> grid-item-corner-radius: 4;
 
     // Performance options
     in-out property <int> worker-threads: 4;
@@ -136,9 +145,16 @@ export component SettingsWindow inherits Window {
                         show-filenames <=> root.show-filenames;
                         show-rating-badge <=> root.show-rating-badge;
                         show-tag-badge <=> root.show-tag-badge;
+                        show-media-type-badges <=> root.show-media-type-badges;
                         enable-hover-previews <=> root.enable-hover-previews;
                         enable-tooltips <=> root.enable-tooltips;
                         tooltip-delay-ms <=> root.tooltip-delay-ms;
+                        grid-item-padding-h <=> root.grid-item-padding-h;
+                        grid-item-padding-v <=> root.grid-item-padding-v;
+                        grid-spacing <=> root.grid-spacing;
+                        grid-padding <=> root.grid-padding;
+                        grid-item-border-width <=> root.grid-item-border-width;
+                        grid-item-corner-radius <=> root.grid-item-corner-radius;
                     }
 
                     if root.active-category == 3 : SettingsPagePerformance {
