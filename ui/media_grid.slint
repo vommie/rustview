@@ -336,20 +336,20 @@ export component VirtualizedMediaGrid inherits Rectangle {
                         root.item-context-menu(
                             self.item.id,
                             self.x + mx,
-                            58px + self.y + my + scroll-area.clamped-y
+                            28px + self.y + my + scroll-area.clamped-y
                         );
                     }
                     drag-started(id, mx, my) => {
                         root.item-drag-started(
                             id,
                             self.x + mx,
-                            58px + self.y + my + scroll-area.clamped-y
+                            28px + self.y + my + scroll-area.clamped-y
                         );
                     }
                     drag-moved(mx, my) => {
                         root.item-drag-moved(
                             self.x + mx,
-                            58px + self.y + my + scroll-area.clamped-y
+                            28px + self.y + my + scroll-area.clamped-y
                         );
                     }
                     drag-ended => {

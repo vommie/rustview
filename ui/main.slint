@@ -470,10 +470,10 @@ export component MainWindow inherits Window {
         dismissed => { root.choice-popup-dismissed(); }
     }
 
-    // Flying Ghost Drag & Drop Overlay
+    // Flying Ghost Drag & Drop Overlay (Positioned directly beside cursor pointer)
     if root.is-dragging-media : Rectangle {
-        x: root.drag-x + 12px;
-        y: root.drag-y + 12px;
+        x: root.drag-x + 10px;
+        y: root.drag-y + 10px;
         width: drag-layout.preferred-width;
         height: 38px;
         z: 100;

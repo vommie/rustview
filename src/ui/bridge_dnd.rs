@@ -114,7 +114,7 @@ impl BridgeDnd {
             start_x = params.start_x,
             start_y = params.start_y,
             ghost_prep_us = t0.elapsed().as_micros(),
-            "[MediaDrag: Start] Media drag gesture initiated with flying ghost overlay"
+            "[MediaDrag: Start] Media drag gesture initiated with flying ghost overlay at cursor position"
         );
 
         params.window.set_is_dragging_media(true);

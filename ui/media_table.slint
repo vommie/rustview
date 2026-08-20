@@ -507,14 +507,14 @@ export component MediaTableView inherits Rectangle {
                         root.item-context-menu(
                             item.id,
                             mx,
-                            58px + self.y + my + scroll-area.clamped-y
+                            28px + self.y + my + scroll-area.clamped-y
                         );
                     }
                     drag-started(id, mx, my) => {
-                        root.item-drag-started(id, mx, 58px + self.y + my + scroll-area.clamped-y);
+                        root.item-drag-started(id, mx, 28px + self.y + my + scroll-area.clamped-y);
                     }
                     drag-moved(mx, my) => {
-                        root.item-drag-moved(mx, 58px + self.y + my + scroll-area.clamped-y);
+                        root.item-drag-moved(mx, 28px + self.y + my + scroll-area.clamped-y);
                     }
                     drag-ended => {
                         root.item-drag-ended();
