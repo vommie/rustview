@@ -3,7 +3,7 @@ use super::bridge_ctx_menu_tag::TagContextMenu;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
-use super::{MainWindow, TagNodeView};
+use super::{MainWindow, TagColumnView, TagNodeView};
 use crate::ctx_menu::CtxMenuActionId;
 use crate::library::models::{MediaId, MediaSearchParams, TagId, TagRecord};
 use crate::library::Library;
@@ -16,6 +16,17 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
+
+// =============================================================================
+// Tag Tree Geometry & Sizing - Single Point of Truth (SPoT) Constants
+// =============================================================================
+pub const MAX_TAG_ITEM_WIDTH: f32 = 180.0; // Central max limit cap before text ellipsis begins
+pub const MIN_TAG_ITEM_WIDTH: f32 = 60.0;  // Base minimum width for short tags
+pub const TAG_ITEM_HEIGHT: f32 = 22.0;
+pub const TAG_ROW_SPACING: f32 = 2.0;
+pub const TAG_COLUMN_SPACING: f32 = 6.0;
+pub const TAG_PADDING_H: f32 = 4.0;
+pub const TAG_PADDING_V: f32 = 4.0;
 
 #[derive(Debug, Clone)]
 pub struct TagTreeNode {
@@ -198,6 +209,30 @@ impl TagTreeBuilder {
 
         any_match_in_branch
     }
+
+    /// Groups flattened visual nodes into waterfall columns of `rows_per_col` height for Slint's native layout engine.
+    pub fn chunk_into_columns(
+        nodes: Vec<TagNodeView>,
+        available_height: f32,
+    ) -> (Vec<TagColumnView>, usize) {
+        let total_items = nodes.len();
+        if total_items == 0 {
+            return (Vec::new(), 1);
+        }
+
+        let usable_h = (available_height - (TAG_PADDING_V * 2.0)).max(TAG_ITEM_HEIGHT);
+        let stride_y = TAG_ITEM_HEIGHT + TAG_ROW_SPACING;
+        let rows_per_col = ((usable_h + TAG_ROW_SPACING) / stride_y).floor().max(1.0) as usize;
+
+        let mut columns = Vec::new();
+        for chunk in nodes.chunks(rows_per_col) {
+            columns.push(TagColumnView {
+                tags: ModelRc::new(VecModel::from(chunk.to_vec())),
+            });
+        }
+
+        (columns, rows_per_col)
+    }
 }
 
 pub struct TagTreeSync;
@@ -219,8 +254,8 @@ impl TagTreeSync {
 
     pub fn sync_in_place(window: &MainWindow, library: &Library, state: &RwLock<UiState>) {
         let t0 = Instant::now();
-        let current_model = window.get_tags();
-        let row_count = current_model.row_count();
+        let current_columns = window.get_tag_columns();
+        let col_count = current_columns.row_count();
 
         let (
             is_assign,
@@ -276,51 +311,60 @@ impl TagTreeSync {
             window.set_selected_rating(query_rating as i32);
         }
 
-        if row_count == 0 {
+        if col_count == 0 {
             return;
         }
 
         let mut modified_rows = 0;
+        let mut total_rows = 0;
 
-        for idx in 0..row_count {
-            if let Some(mut row) = current_model.row_data(idx) {
-                let tag_id = row.id as TagId;
-                let is_assigned = is_assign && stats.is_fully_assigned(tag_id);
-                let is_partial = is_assign && stats.is_partially_assigned(tag_id);
-                let is_selected = !is_assign && selected_query_tags.contains(&tag_id);
+        for col_idx in 0..col_count {
+            if let Some(col_view) = current_columns.row_data(col_idx) {
+                let col_model = col_view.tags;
+                let rows_in_col = col_model.row_count();
+                total_rows += rows_in_col;
 
-                let raw_name = Self::strip_count_suffix(row.name.as_str());
-                let formatted_name = if is_assign {
-                    stats.format_display_name(raw_name, tag_id)
-                } else {
-                    raw_name.to_string()
-                };
-                let formatted_slint = formatted_name.into();
+                for row_idx in 0..rows_in_col {
+                    if let Some(mut row) = col_model.row_data(row_idx) {
+                        let tag_id = row.id as TagId;
+                        let is_assigned = is_assign && stats.is_fully_assigned(tag_id);
+                        let is_partial = is_assign && stats.is_partially_assigned(tag_id);
+                        let is_selected = !is_assign && selected_query_tags.contains(&tag_id);
 
-                let needs_update = row.name != formatted_slint
-                    || row.is_assigned != is_assigned
-                    || row.is_partial != is_partial
-                    || row.is_selected != is_selected;
+                        let raw_name = Self::strip_count_suffix(row.name.as_str());
+                        let formatted_name = if is_assign {
+                            stats.format_display_name(raw_name, tag_id)
+                        } else {
+                            raw_name.to_string()
+                        };
 
-                if needs_update {
-                    row.name = formatted_slint;
-                    row.is_assigned = is_assigned;
-                    row.is_partial = is_partial;
-                    row.is_selected = is_selected;
-                    current_model.set_row_data(idx, row);
-                    modified_rows += 1;
+                        let formatted_slint: slint::SharedString = formatted_name.into();
+                        if row.name != formatted_slint
+                            || row.is_assigned != is_assigned
+                            || row.is_partial != is_partial
+                            || row.is_selected != is_selected
+                        {
+                            row.name = formatted_slint;
+                            row.is_assigned = is_assigned;
+                            row.is_partial = is_partial;
+                            row.is_selected = is_selected;
+                            col_model.set_row_data(row_idx, row);
+                            modified_rows += 1;
+                        }
+                    }
                 }
             }
         }
 
         tracing::debug!(
             mode = if is_assign { "ASSIGN" } else { "QUERY" },
-            total_rows = row_count,
+            total_columns = col_count,
+            total_rows = total_rows,
             modified_rows = modified_rows,
             selected_files = stats.selected_files_count,
             is_resettable = is_resettable,
             elapsed_us = t0.elapsed().as_micros(),
-            "[TagTree: InPlace Selection Sync] Tag & Rating panel state synchronized in-place"
+            "[TagTree: InPlace Selection Sync] Tag & Rating panel state synchronized in-place with native column layouts"
         );
     }
 }
@@ -908,12 +952,36 @@ impl BridgeTags {
         });
 
         let win = window.clone_strong();
-        let lib = library;
+        let lib = library.clone();
         let thumb = thumbnails;
         let set = settings;
-        let st = state;
+        let st = state.clone();
         window.on_tag_reset_clicked(move || {
             Self::reset_query(&win, &lib, &thumb, &set, &st);
+        });
+
+        let lib_geom = library;
+        let st_geom = state;
+        let win_geom = window.clone_strong();
+        window.on_tag_tree_geometry_changed(move |available_h| {
+            let (height_changed, prev_h) = {
+                let mut st = st_geom.write();
+                let prev = st.tag_tree_available_height;
+                let changed = (prev - available_h).abs() > 4.0;
+                if changed {
+                    st.tag_tree_available_height = available_h;
+                }
+                (changed, prev)
+            };
+
+            if height_changed {
+                tracing::debug!(
+                    prev_height = prev_h,
+                    new_height = available_h,
+                    "[TagTree: GeometryChanged] Tag tree container height updated, recalculating waterfall layout..."
+                );
+                Self::reload_tags(&win_geom, &lib_geom, &st_geom);
+            }
         });
     }
 
@@ -927,7 +995,7 @@ impl BridgeTags {
             st.expanded_tag_ids.retain(|id| valid_ids.contains(id));
         }
 
-        let (is_assign, expanded_set, selected_query_tags, filter_text, is_regex, selected_file_ids) = {
+        let (is_assign, expanded_set, selected_query_tags, filter_text, is_regex, selected_file_ids, available_h) = {
             let s = state.read();
             (
                 s.is_assign_mode,
@@ -936,6 +1004,7 @@ impl BridgeTags {
                 s.tag_filter_query.clone(),
                 s.tag_filter_is_regex,
                 s.file_selection.selected_ids().clone(),
+                s.tag_tree_available_height,
             )
         };
 
@@ -974,19 +1043,27 @@ impl BridgeTags {
         let mut visual_nodes = Vec::new();
         TagTreeBuilder::flatten(&tree, 0, &ctx, &mut visual_nodes);
 
+        // Group visual nodes into waterfall columns for Slint's native engine
+        let (tag_columns, rows_per_col) = TagTreeBuilder::chunk_into_columns(visual_nodes, available_h);
+        {
+            let mut st = state.write();
+            st.tag_tree_rows_per_column = rows_per_col;
+        }
+
+        window.set_tag_columns(ModelRc::new(VecModel::from(tag_columns)));
+        TagTreeSync::sync_in_place(window, library, state);
+
         tracing::debug!(
             total_tags_in_db = tags.len(),
-            visible_rows = visual_nodes.len(),
+            total_columns = window.get_tag_columns().row_count(),
+            rows_per_column = rows_per_col,
             expanded_parents = expanded_set.len(),
             selected_files = stats.selected_files_count,
             filter = %LogObscurer::query(&filter_text),
             is_regex = is_regex,
             elapsed_us = t0.elapsed().as_micros(),
-            "[TagTree: Visual Model Sync] Synchronized tag tree to Slint UI"
+            "[TagTree: Visual Model Sync] Synchronized tag tree to Slint UI with native dynamic column layouts"
         );
-
-        window.set_tags(ModelRc::new(VecModel::from(visual_nodes)));
-        TagTreeSync::sync_in_place(window, library, state);
     }
 
     #[inline]

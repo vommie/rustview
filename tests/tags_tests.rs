@@ -5,8 +5,11 @@ use rustview::query::{MatchMode, ScopeMode};
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_state::UiState;
 use rustview::ui::bridge_tags::{
-    BridgeTags, TagFlattenContext, TagSelectionStats, TagTreeBuilder,
+    BridgeTags, TagFlattenContext, TagSelectionStats, TagTreeBuilder, MAX_TAG_ITEM_WIDTH,
+    MIN_TAG_ITEM_WIDTH,
 };
+use rustview::ui::TagNodeView;
+use slint::Model;
 use std::collections::HashSet;
 use tempfile::tempdir;
 
@@ -446,4 +449,89 @@ fn test_query_fast_path_when_inactive() {
 
     state.filter.scope_mode = ScopeMode::Global;
     assert!(!state.is_query_resettable());
+}
+
+#[test]
+fn test_tag_tree_column_chunking_and_spot_constants() {
+    // Verify Single Point of Truth boundary constants
+    assert_eq!(MAX_TAG_ITEM_WIDTH, 180.0);
+    assert_eq!(MIN_TAG_ITEM_WIDTH, 60.0);
+
+    let nodes = vec![
+        TagNodeView {
+            id: 1,
+            name: "Short".into(),
+            depth: 0,
+            has_children: false,
+            is_expanded: false,
+            is_selected: false,
+            is_assigned: false,
+            is_partial: false,
+            is_dimmed: false,
+        },
+        TagNodeView {
+            id: 2,
+            name: "Medium Name Tag".into(),
+            depth: 0,
+            has_children: false,
+            is_expanded: false,
+            is_selected: false,
+            is_assigned: false,
+            is_partial: false,
+            is_dimmed: false,
+        },
+        TagNodeView {
+            id: 3,
+            name: "Cat".into(),
+            depth: 0,
+            has_children: false,
+            is_expanded: false,
+            is_selected: false,
+            is_assigned: false,
+            is_partial: false,
+            is_dimmed: false,
+        },
+        TagNodeView {
+            id: 4,
+            name: "This is an extremely long tag name that exceeds the limit".into(),
+            depth: 0,
+            has_children: false,
+            is_expanded: false,
+            is_selected: false,
+            is_assigned: false,
+            is_partial: false,
+            is_dimmed: false,
+        },
+        TagNodeView {
+            id: 5,
+            name: "Dog".into(),
+            depth: 0,
+            has_children: false,
+            is_expanded: false,
+            is_selected: false,
+            is_assigned: false,
+            is_partial: false,
+            is_dimmed: false,
+        },
+        TagNodeView {
+            id: 6,
+            name: "Bird".into(),
+            depth: 0,
+            has_children: false,
+            is_expanded: false,
+            is_selected: false,
+            is_assigned: false,
+            is_partial: false,
+            is_dimmed: false,
+        },
+    ];
+
+    // Compute column chunks for a container height fitting 3 rows (3 * 24px = 72px)
+    let available_height = 80.0;
+    let (columns, rows_per_col) = TagTreeBuilder::chunk_into_columns(nodes, available_height);
+
+    assert_eq!(rows_per_col, 3);
+    assert_eq!(columns.len(), 2);
+    assert_eq!(columns[0].tags.row_count(), 3);
+    assert_eq!(columns[1].tags.row_count(), 3);
 }

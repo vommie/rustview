@@ -158,12 +158,14 @@ pub struct UiState {
     pub cached_media_counts: HashMap<FolderId, usize>,
     pub dot_hidden_cache: DotHiddenCache,
 
-    // === Hierarchical Tag Tree State ===
+    // === Hierarchical Tag Tree State & Dynamic Layout ===
     pub expanded_tag_ids: HashSet<TagId>,
     pub tag_filter_query: String,
     pub tag_filter_is_regex: bool,
     pub active_tag_dialog_target: Option<TagId>,
     pub active_context_menu: Option<CtxMenu>,
+    pub tag_tree_available_height: f32,
+    pub tag_tree_rows_per_column: usize,
 }
 
 impl Default for UiState {
@@ -205,6 +207,8 @@ impl Default for UiState {
             tag_filter_is_regex: false,
             active_tag_dialog_target: None,
             active_context_menu: None,
+            tag_tree_available_height: 450.0,
+            tag_tree_rows_per_column: 18,
         }
     }
 }

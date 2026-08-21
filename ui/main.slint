@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
 import { TooltipSettings } from "tooltips.slint";
-import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, ContextMenuItemModel, ConflictFileView } from "types.slint";
+import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
 import { SidebarRight } from "sidebar_right.slint";
@@ -148,7 +148,7 @@ export component MainWindow inherits Window {
     in property <[MediaItemView]> media-items: [];
     in property <[FolderNodeView]> folders: [];
     in property <[FavoriteItemView]> favorites: [];
-    in property <[TagNodeView]> tags: [];
+    in property <[TagColumnView]> tag-columns: [];
 
     in property <string> info-filename: "-";
     in property <string> info-size: "-";
@@ -201,6 +201,7 @@ export component MainWindow inherits Window {
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
     callback tag-reset-clicked();
+    callback tag-tree-geometry-changed(length /* available_height */);
 
     callback sort-column-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
@@ -394,7 +395,7 @@ export component MainWindow inherits Window {
 
             sidebar_right := SidebarRight {
                 sidebar-width: root.sidebar-right-width;
-                tags: root.tags;
+                tag-columns: root.tag-columns;
                 is-assign-mode <=> root.tag-is-assign-mode;
                 match-mode-idx <=> root.tag-match-mode-idx;
                 scope-mode-idx <=> root.tag-scope-mode-idx;
@@ -422,6 +423,7 @@ export component MainWindow inherits Window {
                 match-mode-changed(m) => { root.match-mode-changed(m); }
                 scope-mode-changed(s) => { root.scope-mode-changed(s); }
                 reset-clicked => { root.tag-reset-clicked(); }
+                tag-tree-geometry-changed(h) => { root.tag-tree-geometry-changed(h); }
             }
         }
 

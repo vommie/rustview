@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { TagNodeView } from "types.slint";
+import { TagColumnView } from "types.slint";
 import { TagPanel } from "tag_panel.slint";
 import { MetadataInspector } from "metadata_inspector.slint";
 
@@ -21,7 +21,7 @@ export component SidebarRight inherits Rectangle {
     in property <bool> has-active-query: false;
     in-out property <string> tag-filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
-    in property <[TagNodeView]> tags: [];
+    in property <[TagColumnView]> tag-columns: [];
 
     in property <string> info-filename: "-";
     in property <string> info-size: "-";
@@ -41,6 +41,7 @@ export component SidebarRight inherits Rectangle {
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
     callback reset-clicked();
+    callback tag-tree-geometry-changed(length /* available_height */);
 
     VerticalLayout {
         padding: 8px;
@@ -57,7 +58,7 @@ export component SidebarRight inherits Rectangle {
             has-active-query: root.has-active-query;
             filter-text <=> root.tag-filter-text;
             tag-filter-is-regex <=> root.tag-filter-is-regex;
-            tags: root.tags;
+            tag-columns: root.tag-columns;
 
             mode-toggled(assign) => { root.mode-toggled(assign); }
             match-mode-changed(m) => { root.match-mode-changed(m); }
@@ -70,6 +71,7 @@ export component SidebarRight inherits Rectangle {
             tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
             tag-context-menu(id, x, y) => { root.tag-context-menu(id, tag-panel.x + x, tag-panel.y + y); }
             root-context-menu(x, y) => { root.root-context-menu(tag-panel.x + x, tag-panel.y + y); }
+            tree-geometry-changed(h) => { root.tag-tree-geometry-changed(h); }
         }
 
         // Media Metadata Inspector Subsystem
