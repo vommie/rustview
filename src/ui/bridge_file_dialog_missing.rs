@@ -1,4 +1,5 @@
 use super::{MainWindow, MissingFileDialog};
+use crate::settings::LogObscurer;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -41,6 +42,13 @@ impl MissingFileDialogController {
             let count = missing_files.len();
             let has_multiple = count > 1;
 
+            tracing::warn!(
+                operation_context = operation_context,
+                missing_count = count,
+                first_missing = %missing_files.first().map(|f| LogObscurer::path(&f.path)).unwrap_or_default(),
+                "[MissingFileDialog] Displaying missing files notification dialog with focusable read-only text area"
+            );
+
             win.set_operation_context(operation_context.into());
             win.set_has_multiple(has_multiple);
             win.set_missing_files_count(count as i32);
@@ -58,7 +66,7 @@ impl MissingFileDialogController {
                 let single = &missing_files[0];
                 win.set_single_file_name(single.filename.clone().into());
                 win.set_single_file_path(single.path.to_string_lossy().to_string().into());
-                win.set_missing_files_text("".into());
+                win.set_missing_files_text(format!("{} ({})", single.filename, single.path.display()).into());
             }
 
             window.set_is_modal_locked(true);
@@ -72,6 +80,7 @@ impl MissingFileDialogController {
             let _ = win.hide();
         }
         window.set_is_modal_locked(false);
+        tracing::debug!("[MissingFileDialog] Dialog dismissed by user, releasing modal lock");
     }
 
     fn ensure_dialog_instantiated(&self) {

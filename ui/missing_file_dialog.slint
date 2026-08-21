@@ -1,13 +1,13 @@
+import { TextEdit, LineEdit } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { ButtonBar } from "button_bar.slint";
-import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export component MissingFileDialog inherits Window {
     title: "RustView - File Not Found on Disk";
-    preferred-width: 540px;
-    preferred-height: 320px;
-    min-width: 460px;
-    min-height: 260px;
+    preferred-width: 560px;
+    preferred-height: 340px;
+    min-width: 480px;
+    min-height: 280px;
     background: Theme.background;
 
     in-out property <bool> has-multiple: false;
@@ -45,7 +45,7 @@ export component MissingFileDialog inherits Window {
                 wrap: word-wrap;
             }
 
-            // Single File Presentation Card
+            // Single File Presentation Card with selectable read-only LineEdit path
             if !root.has-multiple : Rectangle {
                 background: #fab38718;
                 border-radius: 4px;
@@ -54,7 +54,7 @@ export component MissingFileDialog inherits Window {
 
                 VerticalLayout {
                     padding: 10px;
-                    spacing: 4px;
+                    spacing: 6px;
 
                     Text {
                         text: root.single-file-name;
@@ -64,42 +64,22 @@ export component MissingFileDialog inherits Window {
                         wrap: word-wrap;
                     }
 
-                    Text {
+                    LineEdit {
                         text: root.single-file-path;
                         font-size: 11px;
-                        font-italic: true;
-                        color: Theme.text-muted;
-                        wrap: word-wrap;
+                        read-only: true;
                     }
                 }
             }
 
-            // Multiple Files Scrollable List Presentation
-            if root.has-multiple : Rectangle {
+            // Multiple Files Read-Only Textarea (TextEdit) Presentation
+            if root.has-multiple : TextEdit {
                 vertical-stretch: 1;
-                min-height: 100px;
-                background: #fab38718;
-                border-radius: 4px;
-                border-width: 1px;
-                border-color: #fab38744;
-                clip: true;
-
-                SmoothScrollArea {
-                    width: 100%;
-                    height: 100%;
-                    enable-horizontal: true;
-                    enable-vertical: true;
-                    content-width: Math.max(self.width, files-text-elem.preferred-width + 20px);
-                    content-height: files-text-elem.preferred-height + 16px;
-
-                    files-text-elem := Text {
-                        x: 10px;
-                        y: 8px;
-                        text: root.missing-files-text;
-                        font-size: 11px;
-                        color: Theme.text;
-                    }
-                }
+                min-height: 120px;
+                text: root.missing-files-text;
+                read-only: true;
+                wrap: no-wrap;
+                font-size: 11px;
             }
 
             Text {
