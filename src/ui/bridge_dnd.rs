@@ -19,6 +19,7 @@ use crate::library::models::{
 };
 use crate::library::Library;
 use crate::settings::{LogObscurer, SettingsManager};
+use crate::system::SystemDndHandler;
 use crate::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, Model, Timer};
@@ -53,16 +54,17 @@ pub struct BatchTransferParams<'a> {
     pub transfer_kind: FileTransferKind,
 }
 
-/// Encapsulated coordinator managing media drag gestures, flying ghost overlays, drop hit-testing, floating choice popups, and batched file relocations.
+/// Encapsulated coordinator managing media drag gestures, flying ghost overlays, drop hit-testing,
+/// floating choice popups, internal batched folder relocations, and external Drag & Drop exports to 3rd-party applications.
 pub struct BridgeDnd;
 
 impl BridgeDnd {
-    /// Handles drag initiation from media grid tiles or table rows.
+    /// Handles drag initiation from media grid tiles or table rows, strictly preserving the visual sorted order of selected items.
     pub fn handle_drag_started(params: DragStartParams<'_>) {
         let t0 = Instant::now();
         params.autoscroller.stop();
 
-        let (drag_ids, changed_selection) = {
+        let (_drag_ids, changed_selection) = {
             let mut st = params.state.write();
             let mut changed = Vec::new();
             if !st.file_selection.is_selected(params.media_id) {
@@ -80,32 +82,63 @@ impl BridgeDnd {
             BridgeTags::sync_tag_selection(params.window, params.library, params.state);
         }
 
-        let drag_count = drag_ids.len();
-        let (title, thumbnail_img) = {
+        // Collect all selected items in exact visual sorted order (top-to-bottom)
+        let (drag_count, title, thumbnail_img, ordered_file_paths, temp_thumb_path) = {
             let st = params.state.read();
-            let first_item = st.all_folder_media.iter().find(|m| m.record.id == params.media_id);
+            let ordered_selected = st.get_selected_media_ordered();
+            let count = ordered_selected.len();
+
+            let first_item = ordered_selected
+                .first()
+                .copied()
+                .or_else(|| st.all_folder_media.iter().find(|m| m.record.id == params.media_id));
 
             let name = first_item
                 .map(|m| m.record.filename.clone())
                 .unwrap_or_else(|| format!("Media #{}", params.media_id));
 
-            let thumb = if let Some(buf) = st.folder_thumbnails.get(&params.media_id) {
-                Image::from_rgb8(buf.clone())
+            let (thumb, temp_thumb) = if let Some(buf) = st.folder_thumbnails.get(&params.media_id) {
+                let w = buf.width();
+                let h = buf.height();
+                let bytes = buf.as_bytes();
+                let tmp_p = std::env::temp_dir().join("rustview_dnd_ghost_thumb.png");
+                if let Ok(mut f) = std::fs::File::create(&tmp_p) {
+                    let encoder = image::codecs::png::PngEncoder::new_with_quality(
+                        &mut f,
+                        image::codecs::png::CompressionType::Fast,
+                        image::codecs::png::FilterType::NoFilter,
+                    );
+                    let _ = image::ImageEncoder::write_image(
+                        encoder,
+                        bytes,
+                        w,
+                        h,
+                        image::ExtendedColorType::Rgb8,
+                    );
+                }
+                (Image::from_rgb8(buf.clone()), Some(tmp_p))
             } else if let Some(item) = first_item
                 && let Ok(cached) = params.thumbnails.get_or_load_sync(params.media_id, &item.full_path, ThumbnailConfig::default())
             {
-                rgb8_to_slint_image(&cached.pixels, cached.width, cached.height)
+                (rgb8_to_slint_image(&cached.pixels, cached.width, cached.height), None)
             } else {
-                Image::default()
+                (Image::default(), None)
             };
 
-            let title_text = if drag_count > 1 {
-                format!("{} (+{} more)", name, drag_count - 1)
+            let title_text = if count > 1 {
+                format!("{} (+{} more)", name, count - 1)
             } else {
                 name
             };
 
-            (title_text, thumb)
+            let mut paths: Vec<PathBuf> = ordered_selected.into_iter().map(|item| item.full_path.clone()).collect();
+            if paths.is_empty()
+                && let Ok(p) = params.library.resolve_media_path(params.media_id)
+            {
+                paths.push(p);
+            }
+
+            (count, title_text, thumb, paths, temp_thumb)
         };
 
         tracing::info!(
@@ -114,16 +147,22 @@ impl BridgeDnd {
             start_x = params.start_x,
             start_y = params.start_y,
             ghost_prep_us = t0.elapsed().as_micros(),
-            "[MediaDrag: Start] Media drag gesture initiated with flying ghost overlay at cursor position"
+            "[MediaDrag: Start] Media drag gesture initiated with visual sorted order and OS-wide ghost overlay"
         );
 
         params.window.set_is_dragging_media(true);
         params.window.set_drag_count(drag_count as i32);
-        params.window.set_drag_title(title.into());
+        params.window.set_drag_title(title.clone().into());
         params.window.set_drag_thumbnail(thumbnail_img);
         params.window.set_drag_x(params.start_x);
         params.window.set_drag_y(params.start_y);
         params.window.set_drop_target_folder_id(-1);
+
+        // Start OS-wide click-through floating ghost overlay tracking mouse everywhere with real thumbnail and Catppuccin theme
+        let thumb_opt = temp_thumb_path
+            .as_deref()
+            .or_else(|| ordered_file_paths.first().map(|p| p.as_path()));
+        SystemDndHandler::start_ghost_overlay(&title, drag_count, thumb_opt);
     }
 
     /// Handles pointer movement during active media dragging with continuous auto-scroller updates and FolderTree hit-testing.
@@ -217,7 +256,8 @@ impl BridgeDnd {
         }
     }
 
-    /// Handles drag release, concluding the drag session and presenting the floating choice popup anchored at the drop folder.
+    /// Handles drag release: if dropped on an internal folder, opens Choice Popup.
+    /// If dropped outside internal folders (e.g. over VLC, MPV, Chrome, Dolphin, Discord, etc.), executes direct XDND drop transaction.
     pub fn handle_drag_ended(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -232,6 +272,9 @@ impl BridgeDnd {
 
         window.set_is_dragging_media(false);
         window.set_drop_target_folder_id(-1);
+
+        // Immediately dismiss the OS ghost overlay window (0ms latency)
+        SystemDndHandler::cancel_ghost_overlay();
 
         if !is_dragging {
             return;
@@ -269,7 +312,15 @@ impl BridgeDnd {
                 window.set_is_choice_popup_open(true);
             }
         } else {
-            tracing::info!("[MediaDrag: Drop] Drag released outside of valid drop targets. Gesture cancelled.");
+            // Drag released outside internal folder targets -> Execute external Drop into 3rd-party application
+            let ordered_paths = state.read().get_selected_paths_ordered();
+            if !ordered_paths.is_empty() {
+                tracing::info!(
+                    files_count = ordered_paths.len(),
+                    "[MediaDrag: ExternalDrop] Dropped outside RustView folder tree. Triggering external application XDND drop..."
+                );
+                SystemDndHandler::execute_external_drop_async(&ordered_paths);
+            }
         }
     }
 
@@ -297,17 +348,18 @@ impl BridgeDnd {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| target_folder_rec.path.clone());
 
-        let selected_ids = params.state.read().file_selection.selected_ids().clone();
-        if selected_ids.is_empty() {
+        // Extract selected IDs in exact visual sorted order
+        let ordered_selected_ids = params.state.read().get_selected_ids_ordered();
+        if ordered_selected_ids.is_empty() {
             return;
         }
 
         // For Move: Filter out items already in the target folder
         // For Copy: Allow copying into target folder even if source is the same folder
-        let mut items_to_transfer = Vec::new();
+        let mut items_to_transfer = Vec::with_capacity(ordered_selected_ids.len());
         {
             let st = params.state.read();
-            for &id in &selected_ids {
+            for &id in &ordered_selected_ids {
                 let folder_id = st
                     .all_folder_media
                     .iter()
@@ -324,7 +376,7 @@ impl BridgeDnd {
         if items_to_transfer.is_empty() {
             tracing::info!(
                 target_folder = %LogObscurer::folder(Some(params.target_folder_id), &target_folder_path),
-                total_selected = selected_ids.len(),
+                total_selected = ordered_selected_ids.len(),
                 "[BatchTransfer] All selected media files already reside in the target directory. No-op."
             );
             params.window.set_status_text(

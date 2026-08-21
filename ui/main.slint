@@ -458,7 +458,7 @@ export component MainWindow inherits Window {
         dismissed => { root.context-menu-dismissed(); }
     }
 
-    // Floating Choice Popup Overlay
+    // Floating Choice Popup Overlay (Inside-app folder drop decision)
     if root.is-choice-popup-open : FloatingChoicePopup {
         target-folder-name: root.choice-target-folder-name;
         item-count: root.choice-item-count;
@@ -468,125 +468,6 @@ export component MainWindow inherits Window {
         move-clicked => { root.choice-popup-move(root.choice-target-folder-id); }
         cancel-clicked => { root.choice-popup-cancel(); }
         dismissed => { root.choice-popup-dismissed(); }
-    }
-
-    // Flying Ghost Drag & Drop Overlay (Positioned directly beside cursor pointer)
-    if root.is-dragging-media : Rectangle {
-        x: root.drag-x + 10px;
-        y: root.drag-y + 10px;
-        width: drag-layout.preferred-width;
-        height: 38px;
-        z: 100;
-
-        if root.drag-count >= 3 : Rectangle {
-            x: 6px;
-            y: 6px;
-            width: parent.width;
-            height: parent.height;
-            background: Theme.surface;
-            opacity: 0.25;
-            border-radius: 6px;
-            border-width: 1px;
-            border-color: Theme.primary;
-        }
-
-        if root.drag-count >= 2 : Rectangle {
-            x: 3px;
-            y: 3px;
-            width: parent.width;
-            height: parent.height;
-            background: Theme.surface;
-            opacity: 0.60;
-            border-radius: 6px;
-            border-width: 1.2px;
-            border-color: Theme.primary;
-        }
-
-        Rectangle {
-            width: 100%;
-            height: 100%;
-            background: #1e1e2ef8;
-            border-radius: 6px;
-            border-width: 1.5px;
-            border-color: Theme.primary;
-            drop-shadow-blur: 16px;
-            drop-shadow-color: #000000cc;
-            drop-shadow-offset-y: 4px;
-
-            drag-layout := HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 10px;
-                spacing: 8px;
-
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 0;
-
-                    Rectangle {
-                        width: 24px;
-                        height: 24px;
-                        background: #000000;
-                        border-radius: 3px;
-                        clip: true;
-
-                        if root.drag-thumbnail.width > 0 : Image {
-                            source: root.drag-thumbnail;
-                            width: 100%;
-                            height: 100%;
-                            image-fit: contain;
-                        }
-                        if root.drag-thumbnail.width == 0 : Text {
-                            text: "📄";
-                            font-size: 13px;
-                            vertical-alignment: center;
-                            horizontal-alignment: center;
-                        }
-                    }
-                }
-
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-
-                    Text {
-                        text: root.drag-title;
-                        color: Theme.text;
-                        font-size: 11px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                        horizontal-alignment: left;
-                        max-width: 220px;
-                        overflow: elide;
-                    }
-                }
-
-                if root.drag-count > 1 : VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 0;
-
-                    Rectangle {
-                        height: 20px;
-                        background: Theme.primary;
-                        border-radius: 10px;
-
-                        HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
-                            alignment: center;
-
-                            Text {
-                                text: root.drag-count + " Files";
-                                font-size: 10px;
-                                font-weight: 700;
-                                color: #000000;
-                                vertical-alignment: center;
-                                horizontal-alignment: center;
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
     if root.is-modal-locked : Rectangle {

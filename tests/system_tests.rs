@@ -1,4 +1,7 @@
-use rustview::system::{DesktopApp, DesktopIntegration, SystemClipboard, SystemFileHandler, SystemHandlerError};
+use rustview::system::{
+    DesktopApp, DesktopIntegration, SystemClipboard, SystemDndHandler,
+    SystemFileHandler, SystemHandlerError,
+};
 use std::fs;
 use std::sync::mpsc::channel;
 use std::time::Duration;
@@ -175,4 +178,55 @@ fn test_system_clipboard_image_copying_sync_and_async() {
     assert_eq!(w_async, 128);
     assert_eq!(h_async, 96);
     assert!(metrics_async.success);
+}
+
+#[test]
+fn test_system_dnd_uri_formatting_and_session() {
+    let p1 = std::path::PathBuf::from("/media/photos/summer 2026/beach.jpg");
+    let p2 = std::path::PathBuf::from("/media/videos/clip01.mp4");
+
+    let uri1 = SystemDndHandler::path_to_file_uri(&p1);
+    assert!(uri1.starts_with("file://"));
+    assert!(uri1.contains("summer%202026"));
+    assert!(uri1.ends_with("beach.jpg"));
+
+    let uri_list = SystemDndHandler::format_uri_list(&[&p1, &p2]);
+    assert!(uri_list.contains("file://"));
+    assert!(uri_list.ends_with("\r\n"));
+
+    let plain_paths = SystemDndHandler::format_plain_paths(&[&p1, &p2]);
+    assert_eq!(
+        plain_paths,
+        "/media/photos/summer 2026/beach.jpg\n/media/videos/clip01.mp4"
+    );
+
+    let session = SystemDndHandler::detect_session_type();
+    assert!(session == "Wayland" || session == "X11");
+}
+
+#[test]
+fn test_system_dnd_execute_external_drop_sync() {
+    let tmp = tempdir().unwrap();
+    let file1 = tmp.path().join("drop_test_1.png");
+    let file2 = tmp.path().join("drop_test_2.mp4");
+
+    fs::write(&file1, b"test payload 1").unwrap();
+    fs::write(&file2, b"test payload 2").unwrap();
+
+    let metrics = SystemDndHandler::execute_external_drop_sync(&[file1.clone(), file2.clone()]).unwrap();
+    assert_eq!(metrics.files_count, 2);
+    assert!(metrics.total_bytes > 0);
+
+    // Test async execution
+    SystemDndHandler::execute_external_drop_async(&[file1, file2]);
+}
+
+#[test]
+fn test_system_dnd_ghost_lifecycle() {
+    // Start ghost
+    SystemDndHandler::start_ghost_overlay("test_video.mp4", 3, None);
+    std::thread::sleep(Duration::from_millis(50));
+
+    // Cancel ghost
+    SystemDndHandler::cancel_ghost_overlay();
 }

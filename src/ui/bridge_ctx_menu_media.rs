@@ -396,18 +396,19 @@ impl MediaContextMenu {
     fn handle_open_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        _selected_ids: &std::collections::HashSet<MediaId>,
     ) {
-        if selected_ids.is_empty() {
+        let ordered_ids = ctx.state.read().get_selected_ids_ordered();
+        if ordered_ids.is_empty() {
             return;
         }
 
         tracing::info!(
-            selected_count = selected_ids.len(),
-            "[MediaContextMenu] 'Open' action triggered from context menu"
+            selected_count = ordered_ids.len(),
+            "[MediaContextMenu] 'Open' action triggered from context menu in visual sorted order"
         );
 
-        for &id in selected_ids {
+        for id in ordered_ids {
             BridgeFileSelection::open_media(id, ctx.state, ctx.library, window);
         }
     }
@@ -432,7 +433,7 @@ impl MediaContextMenu {
         tracing::info!(
             app = %app.name,
             paths_count = paths.len(),
-            "[MediaContextMenu] Launching selected file(s) with specific desktop app"
+            "[MediaContextMenu] Launching selected file(s) with specific desktop app in visual sorted order"
         );
 
         if let Err(e) = DesktopIntegration::launch_app(&app, &paths) {
@@ -468,27 +469,21 @@ impl MediaContextMenu {
 
     fn collect_selected_paths(
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        _selected_ids: &std::collections::HashSet<MediaId>,
     ) -> Vec<PathBuf> {
-        let st = ctx.state.read();
-        let mut paths: Vec<PathBuf> = Vec::with_capacity(selected_ids.len());
-
-        for item in &st.all_folder_media {
-            if selected_ids.contains(&item.record.id) {
-                paths.push(item.full_path.clone());
-            }
-        }
-        drop(st);
-
-        if paths.is_empty() {
-            for &id in selected_ids {
-                if let Ok(p) = ctx.library.resolve_media_path(id) {
-                    paths.push(p);
-                }
-            }
+        let paths = ctx.state.read().get_selected_paths_ordered();
+        if !paths.is_empty() {
+            return paths;
         }
 
-        paths
+        let selected_ids = ctx.state.read().file_selection.selected_ids().clone();
+        let mut fallback_paths = Vec::with_capacity(selected_ids.len());
+        for &id in &selected_ids {
+            if let Ok(p) = ctx.library.resolve_media_path(id) {
+                fallback_paths.push(p);
+            }
+        }
+        fallback_paths
     }
 
     fn handle_open_in_file_manager_action(
@@ -531,28 +526,18 @@ impl MediaContextMenu {
     fn handle_copy_name_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        _selected_ids: &std::collections::HashSet<MediaId>,
     ) {
-        if selected_ids.is_empty() {
-            return;
-        }
-
         let st = ctx.state.read();
-        let mut names = Vec::with_capacity(selected_ids.len());
-
-        for item in &st.all_folder_media {
-            if selected_ids.contains(&item.record.id) {
-                names.push(item.record.filename.clone());
-            }
-        }
+        let names: Vec<String> = st
+            .get_selected_media_ordered()
+            .into_iter()
+            .map(|item| item.record.filename.clone())
+            .collect();
         drop(st);
 
         if names.is_empty() {
-            for &id in selected_ids {
-                if let Ok(Some(rec)) = ctx.library.media().get(id) {
-                    names.push(rec.filename);
-                }
-            }
+            return;
         }
 
         let count = names.len();
@@ -563,7 +548,7 @@ impl MediaContextMenu {
             tracing::info!(name = %LogObscurer::filename(&names[0]), "[MediaContextMenu] Copied single file name to clipboard");
             window.set_status_text(format!("Copied file name to clipboard: '{}'", names[0]).into());
         } else {
-            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file names to clipboard");
+            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file names to clipboard in visual sorted order");
             window.set_status_text(format!("Copied {} file names to clipboard.", count).into());
         }
     }
@@ -587,7 +572,7 @@ impl MediaContextMenu {
             tracing::info!(path = %LogObscurer::path(&paths[0]), "[MediaContextMenu] Copied single file path to clipboard");
             window.set_status_text(format!("Copied file path to clipboard: '{}'", path_str).into());
         } else {
-            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file paths to clipboard");
+            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file paths to clipboard in visual sorted order");
             window.set_status_text(format!("Copied {} file paths to clipboard.", count).into());
         }
     }

@@ -2,6 +2,7 @@ use rustview::library::models::MediaRecord;
 use rustview::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
 use rustview::media::{MediaFormat, MediaType};
 use rustview::query::filters::IndexedMediaRecord;
+use rustview::ui::bridge_state::UiState;
 use rustview::ui::file_selection::{FileSelectionModel, FileSelectionSummary};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -160,6 +161,104 @@ fn test_file_selection_ctrl_shift_additive_range() {
     assert!(sel.is_selected(4));
     assert!(sel.is_selected(5));
     assert!(sel.is_selected(6));
+}
+
+#[test]
+fn test_file_selection_visual_sort_order_preservation() {
+    let mut state = UiState::default();
+
+    // Create 3 records in unsorted database order: ID 100, ID 200, ID 300
+    let r1 = create_dummy_record(100, "C_File.mp4", 1000, 1920, 1080, MediaFormat::Mp4, 1);
+    let r2 = create_dummy_record(200, "A_File.mp4", 2000, 1920, 1080, MediaFormat::Mp4, 2);
+    let r3 = create_dummy_record(300, "B_File.mp4", 3000, 1920, 1080, MediaFormat::Mp4, 3);
+
+    let idx1 = IndexedMediaRecord {
+        index: 0,
+        full_path: PathBuf::from("/media/C_File.mp4"),
+        filename_lower: "c_file.mp4".into(),
+        filename_slint: "C_File.mp4".into(),
+        modified_date_str: "-".into(),
+        created_date_str: "-".into(),
+        filesize_mb_str: "1.00".into(),
+        rating_str: "1".into(),
+        tags_count: 0,
+        tags_count_str: "0".into(),
+        width_str: "1920".into(),
+        height_str: "1080".into(),
+        ar_str: "16:9".into(),
+        ar_value: 1.77,
+        duration_str: "00:00:10.500".into(),
+        format_str: "mp4".into(),
+        has_tags: false,
+        record: r1,
+    };
+
+    let idx2 = IndexedMediaRecord {
+        index: 1,
+        full_path: PathBuf::from("/media/A_File.mp4"),
+        filename_lower: "a_file.mp4".into(),
+        filename_slint: "A_File.mp4".into(),
+        modified_date_str: "-".into(),
+        created_date_str: "-".into(),
+        filesize_mb_str: "2.00".into(),
+        rating_str: "2".into(),
+        tags_count: 0,
+        tags_count_str: "0".into(),
+        width_str: "1920".into(),
+        height_str: "1080".into(),
+        ar_str: "16:9".into(),
+        ar_value: 1.77,
+        duration_str: "00:00:10.500".into(),
+        format_str: "mp4".into(),
+        has_tags: false,
+        record: r2,
+    };
+
+    let idx3 = IndexedMediaRecord {
+        index: 2,
+        full_path: PathBuf::from("/media/B_File.mp4"),
+        filename_lower: "b_file.mp4".into(),
+        filename_slint: "B_File.mp4".into(),
+        modified_date_str: "-".into(),
+        created_date_str: "-".into(),
+        filesize_mb_str: "3.00".into(),
+        rating_str: "3".into(),
+        tags_count: 0,
+        tags_count_str: "0".into(),
+        width_str: "1920".into(),
+        height_str: "1080".into(),
+        ar_str: "16:9".into(),
+        ar_value: 1.77,
+        duration_str: "00:00:10.500".into(),
+        format_str: "mp4".into(),
+        has_tags: false,
+        record: r3,
+    };
+
+    state.all_folder_media = vec![idx1, idx2, idx3];
+
+    // Simulate sorting view by Filename Ascending: Row 0 is A_File (idx 1), Row 1 is B_File (idx 2), Row 2 is C_File (idx 0)
+    state.active_indices = vec![1, 2, 0];
+
+    // Select all 3 items (inserted in random set order)
+    state.file_selection.select_single(100);
+    state.file_selection.toggle(200);
+    state.file_selection.toggle(300);
+
+    // Verify ordered selection strictly matches visual sorted order
+    let ordered_media = state.get_selected_media_ordered();
+    assert_eq!(ordered_media.len(), 3);
+    assert_eq!(ordered_media[0].record.filename, "A_File.mp4");
+    assert_eq!(ordered_media[1].record.filename, "B_File.mp4");
+    assert_eq!(ordered_media[2].record.filename, "C_File.mp4");
+
+    let ordered_paths = state.get_selected_paths_ordered();
+    assert_eq!(ordered_paths[0], PathBuf::from("/media/A_File.mp4"));
+    assert_eq!(ordered_paths[1], PathBuf::from("/media/B_File.mp4"));
+    assert_eq!(ordered_paths[2], PathBuf::from("/media/C_File.mp4"));
+
+    let ordered_ids = state.get_selected_ids_ordered();
+    assert_eq!(ordered_ids, vec![200, 300, 100]);
 }
 
 #[test]

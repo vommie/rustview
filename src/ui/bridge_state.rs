@@ -210,6 +210,50 @@ impl Default for UiState {
 }
 
 impl UiState {
+    /// Returns selected media items in the exact visual sorted order of the active view (top-to-bottom).
+    pub fn get_selected_media_ordered(&self) -> Vec<&IndexedMediaRecord> {
+        let selected_ids = self.file_selection.selected_ids();
+        if selected_ids.is_empty() {
+            return Vec::new();
+        }
+
+        let mut ordered = Vec::with_capacity(selected_ids.len());
+
+        if !self.active_indices.is_empty() {
+            for &idx in &self.active_indices {
+                if let Some(item) = self.all_folder_media.get(idx)
+                    && selected_ids.contains(&item.record.id)
+                {
+                    ordered.push(item);
+                }
+            }
+        } else {
+            for item in &self.all_folder_media {
+                if selected_ids.contains(&item.record.id) {
+                    ordered.push(item);
+                }
+            }
+        }
+
+        ordered
+    }
+
+    /// Returns selected file paths in the exact visual sorted order of the active view (top-to-bottom).
+    pub fn get_selected_paths_ordered(&self) -> Vec<PathBuf> {
+        self.get_selected_media_ordered()
+            .into_iter()
+            .map(|item| item.full_path.clone())
+            .collect()
+    }
+
+    /// Returns selected media IDs in the exact visual sorted order of the active view (top-to-bottom).
+    pub fn get_selected_ids_ordered(&self) -> Vec<MediaId> {
+        self.get_selected_media_ordered()
+            .into_iter()
+            .map(|item| item.record.id)
+            .collect()
+    }
+
     /// Single Point of Truth determining whether there is an active query/filter state that can be reset.
     #[inline]
     pub fn is_query_resettable(&self) -> bool {

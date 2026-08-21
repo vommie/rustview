@@ -17,4 +17,7 @@ pub enum SystemHandlerError {
 
     #[error("Clipboard operation failed: {0}")]
     Clipboard(String),
+
+    #[error("Drag and drop operation failed: {0}")]
+    DragAndDrop(String),
 }
