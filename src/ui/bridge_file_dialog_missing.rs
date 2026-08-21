@@ -23,6 +23,14 @@ impl MissingFileDialogController {
         Self::default()
     }
 
+    pub fn format_missing_paths_list(missing_files: &[MissingFileItem]) -> String {
+        missing_files
+            .iter()
+            .map(|item| item.path.to_string_lossy().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Displays the Missing File modal dialog for one or multiple missing files.
     pub fn show(
         &self,
@@ -54,19 +62,16 @@ impl MissingFileDialogController {
             win.set_missing_files_count(count as i32);
 
             if has_multiple {
-                let formatted_list = missing_files
-                    .iter()
-                    .map(|item| format!("• {} ({})", item.filename, item.path.display()))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let formatted_list = Self::format_missing_paths_list(&missing_files);
                 win.set_missing_files_text(formatted_list.into());
                 win.set_single_file_name("".into());
                 win.set_single_file_path("".into());
             } else {
                 let single = &missing_files[0];
+                let path_str = single.path.to_string_lossy().to_string();
                 win.set_single_file_name(single.filename.clone().into());
-                win.set_single_file_path(single.path.to_string_lossy().to_string().into());
-                win.set_missing_files_text(format!("{} ({})", single.filename, single.path.display()).into());
+                win.set_single_file_path(path_str.clone().into());
+                win.set_missing_files_text(path_str.into());
             }
 
             window.set_is_modal_locked(true);

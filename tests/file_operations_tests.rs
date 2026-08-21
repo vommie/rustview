@@ -2,6 +2,8 @@ use rustview::library::error::LibraryError;
 use rustview::library::file_operations::FileOperations;
 use rustview::library::models::FileTransferKind;
 use rustview::library::Library;
+use rustview::ui::{MissingFileDialogController, MissingFileItem};
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[test]
@@ -436,4 +438,31 @@ fn test_move_with_overwrite_replaces_target() {
     let dst_items = lib.media().get_by_folder(folder_dst.id).unwrap();
     assert_eq!(dst_items.len(), 1);
     assert_eq!(dst_items[0].id, media_src.id);
+}
+
+#[test]
+fn test_missing_files_formatting_produces_pure_paths() {
+    let items = vec![
+        MissingFileItem {
+            filename: "photo1.jpg".to_string(),
+            path: PathBuf::from("/media/photos/photo1.jpg"),
+        },
+        MissingFileItem {
+            filename: "photo2.png".to_string(),
+            path: PathBuf::from("/media/photos/photo2.png"),
+        },
+        MissingFileItem {
+            filename: "video_clip.mp4".to_string(),
+            path: PathBuf::from("/media/videos/holiday/video_clip.mp4"),
+        },
+    ];
+
+    let formatted = MissingFileDialogController::format_missing_paths_list(&items);
+    assert_eq!(
+        formatted,
+        "/media/photos/photo1.jpg\n/media/photos/photo2.png\n/media/videos/holiday/video_clip.mp4"
+    );
+    assert!(!formatted.contains('•'));
+    assert!(!formatted.contains('('));
+    assert!(!formatted.contains(')'));
 }
