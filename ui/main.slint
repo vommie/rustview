@@ -281,7 +281,7 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-left-width;
                 }
                 dragged(delta) => {
-                    root.sidebar-left-width = Math.max(150px, Math.min(700px, self.start-w - delta));
+                    root.sidebar-left-width = Math.max(150px, Math.min(700px, self.start-w + delta));
                     root.sidebar-left-resized(root.sidebar-left-width);
                 }
                 drag-finished => {

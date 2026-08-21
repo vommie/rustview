@@ -1,8 +1,5 @@
 import { Theme } from "styles.slint";
 
-/// Generic, decoupled, high-performance Resizer Bar component for Slint.
-/// Supports horizontal (column width) and vertical (row height) resizing with 1:1 real-time mouse tracking,
-/// persistent hover styling during active dragging, customizable hit-box grasp thickness, and theme integration.
 export component ResizerBar inherits Rectangle {
     // Configuration Properties
     in property <bool> is-horizontal: true; // true = vertical bar resizing horizontal width, false = horizontal bar resizing vertical height
