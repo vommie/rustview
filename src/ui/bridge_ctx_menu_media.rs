@@ -110,10 +110,16 @@ impl MediaContextMenu {
         let can_copy = selected_count > 0;
         let can_refresh = selected_count > 0;
 
-        let refresh_text = if is_single {
-            "Refresh File".to_string()
+        let refresh_full_text = if is_single {
+            "Refresh File (Full)".to_string()
         } else {
-            format!("Refresh {} Files", selected_count)
+            format!("Refresh {} Files (Full)", selected_count)
+        };
+
+        let refresh_meta_text = if is_single {
+            "Refresh File (Metadata)".to_string()
+        } else {
+            format!("Refresh {} Files (Metadata)", selected_count)
         };
 
         let copy_name_text = if is_single {
@@ -233,25 +239,32 @@ impl MediaContextMenu {
             .separator()
             .action(
                 CTX_ACTION_REFRESH_FILES,
-                refresh_text,
+                refresh_full_text,
                 Some("F5"),
+                Some("refresh"),
+                can_refresh,
+            )
+            .action(
+                CTX_ACTION_REFRESH_METADATA,
+                refresh_meta_text,
                 None,
+                Some("refresh"),
                 can_refresh,
             )
             .separator()
-            .action(
-                CTX_ACTION_CLEAR_SELECTION,
-                "Clear Selection",
-                Some("Esc"),
-                None,
-                selected_count > 0,
-            )
             .action(
                 CTX_ACTION_SELECT_ALL,
                 "Select All",
                 Some("Ctrl+A"),
                 None,
                 true,
+            )
+            .action(
+                CTX_ACTION_CLEAR_SELECTION,
+                "Clear Selection",
+                Some("Esc"),
+                None,
+                selected_count > 0,
             );
 
         builder.build()
@@ -294,6 +307,13 @@ impl MediaContextMenu {
             }
             CTX_ACTION_COPY_IMAGE => {
                 Self::handle_copy_image_action(window, ctx, &selected_ids);
+            }
+            CTX_ACTION_REFRESH_METADATA => {
+                BridgeMedia::refresh_selected_metadata_only(
+                    window,
+                    ctx.library,
+                    ctx.state,
+                );
             }
             CTX_ACTION_REFRESH_FILES => {
                 BridgeMedia::refresh_selected_media(

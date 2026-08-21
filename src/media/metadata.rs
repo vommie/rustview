@@ -1,7 +1,17 @@
 use super::formats::{MediaFormat, MediaType};
 use std::fs;
 use std::path::Path;
+use std::sync::Once;
 use thiserror::Error;
+
+static FFMPEG_INIT: Once = Once::new();
+
+/// Ensures FFmpeg global subsystems are initialized exactly once across the process lifecycle.
+pub fn ensure_ffmpeg_initialized() {
+    FFMPEG_INIT.call_once(|| {
+        let _ = ffmpeg_next::init();
+    });
+}
 
 #[derive(Debug, Error)]
 pub enum MetadataError {
@@ -30,7 +40,7 @@ pub struct RawMetadata {
 pub struct MetadataExtractor;
 
 impl MetadataExtractor {
-    /// Extracts metadata by inspecting container headers and filesystem attributes without fully decoding pixel data.
+    /// Extracts metadata by inspecting container headers and filesystem attributes without decoding pixel data.
     pub fn extract(path: &Path) -> Result<RawMetadata, MetadataError> {
         let format = MediaFormat::from_path(path);
         let media_type = format
@@ -77,13 +87,14 @@ impl MetadataExtractor {
         if let Ok(dims) = image::image_dimensions(path) {
             return Ok(dims);
         }
-        // Fallback for image formats not handled natively by the image crate (e.g. PSD)
-        let (w, h, _) = Self::extract_video_details(path).map_err(|e| MetadataError::ImageError(e.to_string()))?;
+        // Fallback for formats not natively handled by the image crate (e.g. PSD)
+        let (w, h, _) = Self::extract_video_details(path)
+            .map_err(|e| MetadataError::ImageError(e.to_string()))?;
         Ok((w, h))
     }
 
     fn extract_video_details(path: &Path) -> Result<(u32, u32, u64), MetadataError> {
-        ffmpeg_next::init().map_err(|e| MetadataError::VideoError(e.to_string()))?;
+        ensure_ffmpeg_initialized();
 
         let ictx = ffmpeg_next::format::input(path)
             .map_err(|e| MetadataError::VideoError(e.to_string()))?;

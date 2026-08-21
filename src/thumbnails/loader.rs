@@ -19,6 +19,21 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProbedMetadata {
+    pub width: u32,
+    pub height: u32,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+struct BatchedDbWriteItem {
+    media_id: MediaId,
+    location: ThumbnailLocation,
+    preview_record: Option<VideoPreviewRecord>,
+    probed_metadata: Option<ProbedMetadata>,
+}
+
 #[derive(Debug, Clone)]
 pub struct PreparedTarget {
     pub pipeline_id: usize,
@@ -35,6 +50,9 @@ pub struct ReadyThumbnailItem {
     pub width: u32,
     pub height: u32,
     pub pixel_buffer: SharedPixelBuffer<Rgb8Pixel>,
+    pub orig_width: u32,
+    pub orig_height: u32,
+    pub duration_ms: u64,
 }
 
 pub struct ThumbnailScheduler {
@@ -175,7 +193,6 @@ impl ThumbnailScheduler {
     }
 
     /// Fast non-blocking lookup for cached preview frames in LMDB / PackStore (0.05ms).
-    /// NEVER runs heavy synchronous video decoding on the UI thread.
     pub fn try_load_preview_frames(
         &self,
         media_id: MediaId,
@@ -303,6 +320,9 @@ impl ThumbnailScheduler {
                         width: cached.width,
                         height: cached.height,
                         pixel_buffer,
+                        orig_width: 0,
+                        orig_height: 0,
+                        duration_ms: 0,
                     });
                     benchmark.record_queue_depth(q.len());
 
@@ -389,6 +409,9 @@ impl ThumbnailScheduler {
                                     width: w,
                                     height: h,
                                     pixel_buffer,
+                                    orig_width: 0,
+                                    orig_height: 0,
+                                    duration_ms: 0,
                                 });
                                 bench_ref.record_queue_depth(q.len());
                                 load_successful = true;
@@ -486,7 +509,7 @@ impl ThumbnailScheduler {
         benchmark: Arc<ThumbnailPipelineBenchmark>,
         t_phase2_start: Arc<Instant>,
     ) {
-        let mut batched_db_writes: Vec<(MediaId, ThumbnailLocation, Option<VideoPreviewRecord>)> =
+        let mut batched_db_writes: Vec<BatchedDbWriteItem> =
             Vec::with_capacity(config.batch_commit_size);
 
         while !self.is_pipeline_stale(pipeline_id) {
@@ -576,11 +599,22 @@ impl ThumbnailScheduler {
                             }
 
                             if !self.is_pipeline_stale(pipeline_id) {
-                                batched_db_writes.push((
-                                    target.media_id,
-                                    primary_loc,
-                                    preview_rec,
-                                ));
+                                let meta_update = if video_res.orig_width > 0 && video_res.orig_height > 0 {
+                                    Some(ProbedMetadata {
+                                        width: video_res.orig_width,
+                                        height: video_res.orig_height,
+                                        duration_ms: video_res.duration_ms,
+                                    })
+                                } else {
+                                    None
+                                };
+
+                                batched_db_writes.push(BatchedDbWriteItem {
+                                    media_id: target.media_id,
+                                    location: primary_loc,
+                                    preview_record: preview_rec,
+                                    probed_metadata: meta_update,
+                                });
 
                                 let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(primary.width, primary.height);
                                 pixel_buffer.make_mut_bytes().copy_from_slice(&primary.rgb_pixels);
@@ -600,6 +634,9 @@ impl ThumbnailScheduler {
                                     width: primary.width,
                                     height: primary.height,
                                     pixel_buffer,
+                                    orig_width: video_res.orig_width,
+                                    orig_height: video_res.orig_height,
+                                    duration_ms: video_res.duration_ms,
                                 });
                                 benchmark.record_queue_depth(q.len());
                             }
@@ -636,11 +673,22 @@ impl ThumbnailScheduler {
                             );
 
                             if !self.is_pipeline_stale(pipeline_id) {
-                                batched_db_writes.push((
-                                    target.media_id,
+                                let meta_update = if frame.orig_width > 0 && frame.orig_height > 0 {
+                                    Some(ProbedMetadata {
+                                        width: frame.orig_width,
+                                        height: frame.orig_height,
+                                        duration_ms: 0,
+                                    })
+                                } else {
+                                    None
+                                };
+
+                                batched_db_writes.push(BatchedDbWriteItem {
+                                    media_id: target.media_id,
                                     location,
-                                    None,
-                                ));
+                                    preview_record: None,
+                                    probed_metadata: meta_update,
+                                });
 
                                 let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(frame.width, frame.height);
                                 pixel_buffer.make_mut_bytes().copy_from_slice(&frame.rgb_pixels);
@@ -660,6 +708,9 @@ impl ThumbnailScheduler {
                                     width: frame.width,
                                     height: frame.height,
                                     pixel_buffer,
+                                    orig_width: frame.orig_width,
+                                    orig_height: frame.orig_height,
+                                    duration_ms: 0,
                                 });
                                 benchmark.record_queue_depth(q.len());
                             }
@@ -685,7 +736,7 @@ impl ThumbnailScheduler {
 
     fn flush_db_batch(
         &self,
-        batch: &mut Vec<(MediaId, ThumbnailLocation, Option<VideoPreviewRecord>)>,
+        batch: &mut Vec<BatchedDbWriteItem>,
         benchmark: &ThumbnailPipelineBenchmark,
     ) {
         if batch.is_empty() {
@@ -695,14 +746,36 @@ impl ThumbnailScheduler {
         let t_db = Instant::now();
         if let Ok(mut wtxn) = self.library.raw_db().env.write_txn() {
             let count = batch.len();
-            for (id, loc, preview_rec) in batch.drain(..) {
-                let _ = self.library.raw_db().thumbnails.put(&mut wtxn, &id, &loc);
-                if let Some(p_rec) = preview_rec {
+            for item in batch.drain(..) {
+                let _ = self.library.raw_db().thumbnails.put(&mut wtxn, &item.media_id, &item.location);
+                if let Some(p_rec) = item.preview_record {
                     let _ = self
                         .library
                         .raw_db()
                         .video_previews
-                        .put(&mut wtxn, &id, &p_rec);
+                        .put(&mut wtxn, &item.media_id, &p_rec);
+                }
+
+                // If original dimensions or duration were probed during generation, persist them directly to MediaRecord in LMDB!
+                if let Some(meta) = item.probed_metadata
+                    && let Ok(Some(mut rec)) = self.library.raw_db().media.get(&wtxn, &item.media_id)
+                {
+                    let mut changed = false;
+                    if rec.width == 0 && meta.width > 0 {
+                        rec.width = meta.width;
+                        changed = true;
+                    }
+                    if rec.height == 0 && meta.height > 0 {
+                        rec.height = meta.height;
+                        changed = true;
+                    }
+                    if rec.duration_ms == 0 && meta.duration_ms > 0 {
+                        rec.duration_ms = meta.duration_ms;
+                        changed = true;
+                    }
+                    if changed {
+                        let _ = self.library.raw_db().media.put(&mut wtxn, &item.media_id, &rec);
+                    }
                 }
             }
             let _ = wtxn.commit();

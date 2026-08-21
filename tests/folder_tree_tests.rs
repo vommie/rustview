@@ -5,7 +5,7 @@ use rustview::library::models::{FolderRecord, FolderRecordCodec};
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
 use rustview::ui::bridge_folders::{FolderFlattenContext, FolderTreeBuilder, FolderTreeNode};
-use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB, CTX_FOLDER_REFRESH};
+use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB, CTX_FOLDER_REFRESH, CTX_FOLDER_REFRESH_METADATA};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -148,7 +148,6 @@ fn test_folder_context_menu_items_and_refresh_action() {
 
     let mut dot_hidden_cache = DotHiddenCache::new();
 
-    // Build context menu for non-root folder directly from tree
     let menu = FolderContextMenuBuilder::build_menu(
         &sub1_folder,
         &tree,
@@ -158,16 +157,26 @@ fn test_folder_context_menu_items_and_refresh_action() {
         &mut dot_hidden_cache,
     );
 
-    // Verify "Refresh Folder" item exists and is enabled
+    // Verify "Refresh Folder (Full)" item exists and is enabled
     let refresh_item = menu
         .items
         .iter()
         .find(|item| item.id == CTX_FOLDER_REFRESH)
-        .expect("Refresh Folder menu item must exist in folder context menu");
+        .expect("Refresh Folder (Full) menu item must exist in folder context menu");
 
-    assert_eq!(refresh_item.text, "Refresh Folder");
+    assert_eq!(refresh_item.text, "Refresh Folder (Full)");
     assert_eq!(refresh_item.shortcut, Some("F5".to_string()));
     assert!(refresh_item.is_enabled);
+
+    // Verify "Refresh Folder (Metadata)" item exists and is enabled
+    let refresh_meta_item = menu
+        .items
+        .iter()
+        .find(|item| item.id == CTX_FOLDER_REFRESH_METADATA)
+        .expect("Refresh Folder (Metadata) menu item must exist in folder context menu");
+
+    assert_eq!(refresh_meta_item.text, "Refresh Folder (Metadata)");
+    assert!(refresh_meta_item.is_enabled);
 
     // Verify "Move to..." exists
     let move_item = menu

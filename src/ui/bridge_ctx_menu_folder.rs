@@ -78,12 +78,19 @@ impl FolderContextMenu {
             builder = builder.item(move_submenu);
         }
 
-        // Separator above and below Refresh Folder
+        // Separator above and below Refresh Folder options
         builder = builder.separator();
         builder = builder.action(
             CTX_FOLDER_REFRESH,
-            "Refresh Folder",
+            "Refresh Folder (Full)",
             Some("F5"),
+            Some("refresh"),
+            !target_folder.is_deleted,
+        );
+        builder = builder.action(
+            CTX_FOLDER_REFRESH_METADATA,
+            "Refresh Folder (Metadata)",
+            None,
             Some("refresh"),
             !target_folder.is_deleted,
         );
@@ -197,7 +204,6 @@ impl FolderContextMenu {
 
         let build_time_us = t_start.elapsed().as_micros() as u64;
 
-        // Structured benchmark telemetry line (zero spam during traversal)
         tracing::info!(
             folder_id = current_folder.id,
             target_folder = %LogObscurer::folder(Some(current_folder.id), &current_folder.path),
@@ -242,7 +248,7 @@ impl FolderContextMenu {
                     .is_hidden(path_obj, &raw_name, ctx.support_dot_hidden_files)
             {
                 ctx.hidden_excluded += 1;
-                continue; // Prune this hidden folder AND all its children immediately
+                continue;
             }
 
             ctx.valid_destinations += 1;
@@ -293,7 +299,7 @@ impl FolderContextMenu {
             return;
         }
 
-        // 2. Standard Folder Actions (Open in File Manager / Rename / Delete / Purge Orphaned / Refresh)
+        // 2. Standard Folder Actions (Open in File Manager / Rename / Delete / Purge Orphaned / Refresh Full / Refresh Metadata)
         if let Some(fid) = target_folder_id
             && let Ok(Some(rec)) = ctx.library.folders().get_folder(fid)
         {
@@ -321,7 +327,7 @@ impl FolderContextMenu {
             } else if action_id == CTX_FOLDER_REFRESH {
                 tracing::info!(
                     folder = %LogObscurer::folder(Some(fid), &rec.path),
-                    "[FolderContextMenu: Refresh] Explicit Refresh Folder action triggered via context menu (Rule B)"
+                    "[FolderContextMenu: Refresh Full] Explicit Refresh Folder (Full) action triggered via context menu"
                 );
                 BridgeFolders::refresh_folder_explicit(
                     fid,
@@ -330,6 +336,18 @@ impl FolderContextMenu {
                     &ctx.library,
                     &ctx.thumbnails,
                     &ctx.settings,
+                    &ctx.state,
+                );
+            } else if action_id == CTX_FOLDER_REFRESH_METADATA {
+                tracing::info!(
+                    folder = %LogObscurer::folder(Some(fid), &rec.path),
+                    "[FolderContextMenu: Refresh Metadata] Explicit Refresh Folder (Metadata) action triggered via context menu"
+                );
+                BridgeFolders::refresh_folder_metadata_only(
+                    fid,
+                    PathBuf::from(&rec.path),
+                    window,
+                    &ctx.library,
                     &ctx.state,
                 );
             } else if action_id == CTX_FOLDER_RENAME {

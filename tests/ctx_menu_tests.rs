@@ -10,8 +10,9 @@ use rustview::ui::bridge_folders::FolderTreeNode;
 use rustview::ui::bridge_state::{
     CTX_ACTION_COPY_IMAGE, CTX_ACTION_COPY_NAME, CTX_ACTION_COPY_PATH, CTX_ACTION_OPEN,
     CTX_ACTION_OPEN_IN_FILE_MANAGER, CTX_ACTION_OPEN_WITH_APP_BASE, CTX_ACTION_OPEN_WITH_OTHER,
-    CTX_ACTION_REFRESH_FILES, CTX_ACTION_RENAME, CTX_FOLDER_OPEN_IN_FILE_MANAGER,
-    CTX_FOLDER_REFRESH,
+    CTX_ACTION_REFRESH_FILES, CTX_ACTION_REFRESH_METADATA, CTX_ACTION_RENAME,
+    CTX_ACTION_SELECT_ALL, CTX_ACTION_CLEAR_SELECTION,
+    CTX_FOLDER_OPEN_IN_FILE_MANAGER, CTX_FOLDER_REFRESH, CTX_FOLDER_REFRESH_METADATA,
 };
 use slint::Model;
 use std::sync::Arc;
@@ -151,8 +152,14 @@ fn test_media_context_menu_order_and_open_with_submenu() {
     assert_eq!(copy_sub.children[1].id, CTX_ACTION_COPY_PATH);
     assert_eq!(copy_sub.children[2].id, CTX_ACTION_COPY_IMAGE);
 
-    // Menu also contains Refresh Files
+    // Refresh entries present
     assert!(menu.items.iter().any(|i| i.id == CTX_ACTION_REFRESH_FILES));
+    assert!(menu.items.iter().any(|i| i.id == CTX_ACTION_REFRESH_METADATA));
+
+    // Select All and Clear Selection order
+    let select_all_pos = menu.items.iter().position(|i| i.id == CTX_ACTION_SELECT_ALL).unwrap();
+    let clear_sel_pos = menu.items.iter().position(|i| i.id == CTX_ACTION_CLEAR_SELECTION).unwrap();
+    assert!(select_all_pos < clear_sel_pos, "Select All must appear above Clear Selection");
 }
 
 #[test]
@@ -193,6 +200,7 @@ fn test_folder_context_menu_open_in_file_manager_at_top() {
     // 3: Rename Folder...
     assert_eq!(menu.items[3].text, "Rename Folder...");
 
-    // Menu also contains Refresh Folder
+    // Menu contains both Refresh Folder (Full) and Refresh Folder (Metadata)
     assert!(menu.items.iter().any(|i| i.id == CTX_FOLDER_REFRESH));
+    assert!(menu.items.iter().any(|i| i.id == CTX_FOLDER_REFRESH_METADATA));
 }

@@ -13,6 +13,8 @@ pub struct DecodedThumbnailFrame {
     pub width: u32,
     pub height: u32,
     pub rgb_pixels: Vec<u8>,
+    pub orig_width: u32,
+    pub orig_height: u32,
 }
 
 pub trait ImageDecoder: Send + Sync {
@@ -65,6 +67,8 @@ impl ImageDecoder for SimdImageThumbnailer {
                     width: target_w,
                     height: target_h,
                     rgb_pixels: resized_raw,
+                    orig_width: orig_w,
+                    orig_height: orig_h,
                 });
             }
         }

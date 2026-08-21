@@ -24,6 +24,7 @@ pub const CTX_ACTION_RENAME: CtxMenuActionId = 1001;
 pub const CTX_ACTION_SELECT_ALL: CtxMenuActionId = 1002;
 pub const CTX_ACTION_CLEAR_SELECTION: CtxMenuActionId = 1003;
 pub const CTX_ACTION_REFRESH_FILES: CtxMenuActionId = 1004;
+pub const CTX_ACTION_REFRESH_METADATA: CtxMenuActionId = 1009;
 
 pub const CTX_ACTION_COPY_NAME: CtxMenuActionId = 1005;
 pub const CTX_ACTION_COPY_PATH: CtxMenuActionId = 1006;
@@ -54,6 +55,7 @@ pub const CTX_FOLDER_RENAME: CtxMenuActionId = 3001;
 pub const CTX_FOLDER_DELETE: CtxMenuActionId = 3002;
 pub const CTX_FOLDER_PURGE_DB: CtxMenuActionId = 3003;
 pub const CTX_FOLDER_REFRESH: CtxMenuActionId = 3004;
+pub const CTX_FOLDER_REFRESH_METADATA: CtxMenuActionId = 3005;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 /// High-performance LRU-managed bounded in-memory thumbnail store preventing RAM bloat on 100k+ datasets.

@@ -1,5 +1,7 @@
 use super::MainWindow;
 use super::bridge_state::UiState;
+use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms};
+use crate::media::MediaType;
 use crate::telemetry::BenchmarkReportFormatter;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
@@ -54,9 +56,31 @@ impl BridgeThumbnails {
                         // Store pre-converted SharedPixelBuffer into bounded LRU cache
                         st.folder_thumbnails.insert(item_data.media_id, item_data.pixel_buffer.clone());
 
-                        // Table View Optimization: Skip GUI row mutation churn if not viewing grid thumbnails
-                        if is_table {
-                            continue;
+                        // Backfill probed dimensions & duration into in-memory metadata if they were discovered during thumbnail generation
+                        let mut meta_changed = false;
+                        if (item_data.orig_width > 0 || item_data.orig_height > 0 || item_data.duration_ms > 0)
+                            && let Some(item) = st.all_folder_media.iter_mut().find(|m| m.record.id == item_data.media_id)
+                        {
+                            if item_data.orig_width > 0 && item.record.width == 0 {
+                                item.record.width = item_data.orig_width;
+                                item.width_str = item_data.orig_width.to_string().into();
+                                meta_changed = true;
+                            }
+                            if item_data.orig_height > 0 && item.record.height == 0 {
+                                item.record.height = item_data.orig_height;
+                                item.height_str = item_data.orig_height.to_string().into();
+                                meta_changed = true;
+                            }
+                            if item_data.duration_ms > 0 && item.record.duration_ms == 0 {
+                                item.record.duration_ms = item_data.duration_ms;
+                                let is_video = matches!(item.record.media_type, MediaType::Video);
+                                item.duration_str = format_duration_hms_ms(item_data.duration_ms, is_video).into();
+                                meta_changed = true;
+                            }
+                            if meta_changed {
+                                item.ar_str = approximate_aspect_ratio(item.record.width, item.record.height).into();
+                                item.ar_value = if item.record.height > 0 { item.record.width as f32 / item.record.height as f32 } else { 0.0 };
+                            }
                         }
 
                         let t_row = Instant::now();
@@ -70,7 +94,19 @@ impl BridgeThumbnails {
                             if let Some(mut item) = media_model.row_data(local_idx)
                                 && item.id == item_data.media_id as i32
                             {
-                                item.thumbnail = Image::from_rgb8(item_data.pixel_buffer);
+                                if !is_table {
+                                    item.thumbnail = Image::from_rgb8(item_data.pixel_buffer);
+                                }
+
+                                if meta_changed
+                                    && let Some(updated_rec) = st.all_folder_media.iter().find(|m| m.record.id == item_data.media_id)
+                                {
+                                    item.width_str = updated_rec.width_str.clone();
+                                    item.height_str = updated_rec.height_str.clone();
+                                    item.ar_str = updated_rec.ar_str.clone();
+                                    item.duration_str = updated_rec.duration_str.clone();
+                                }
+
                                 media_model.set_row_data(local_idx, item);
                             }
                         }

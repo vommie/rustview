@@ -3,6 +3,7 @@ use super::image::DecodedThumbnailFrame;
 use super::types::{
     calculate_aspect_dimensions, ScalingAlgorithm, ThumbnailConfig, VideoThumbnailEngine,
 };
+use crate::media::metadata::ensure_ffmpeg_initialized;
 use crate::settings::LogObscurer;
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::software::scaling::context::Context as SwsContext;
@@ -15,6 +16,9 @@ use std::time::Instant;
 pub struct VideoExtractionResult {
     pub primary_frame: DecodedThumbnailFrame,
     pub preview_frames: Vec<DecodedThumbnailFrame>,
+    pub orig_width: u32,
+    pub orig_height: u32,
+    pub duration_ms: u64,
 }
 
 pub trait VideoFrameDecoder: Send + Sync {
@@ -171,6 +175,8 @@ pub struct VideoStreamContext {
     pub time_base: ffmpeg_next::Rational,
     pub fps: f64,
     pub norm_rot: i32,
+    pub orig_disp_w: u32,
+    pub orig_disp_h: u32,
 }
 
 /// Parameters for seek-and-decode forward frame extraction across the timeline.
@@ -208,9 +214,7 @@ impl FfmpegVideoThumbnailer {
         Self
     }
 
-    /// Chronological Forward-Seek Extraction ($D > 30.0\,\text{s}$).
-    /// Always seeks forward to keyframe boundaries before target timestamps and fast-forwards packets in memory,
-    /// scaling ONLY the matching target frames. (Average duration: ~15–30 ms per video).
+    /// Chronological Forward-Seek Extraction (D > 30.0s).
     fn extract_seek_forward(
         &self,
         params: SeekForwardExtractionParams<'_>,
@@ -227,7 +231,7 @@ impl FfmpegVideoThumbnailer {
             (sec * f64::from(ffmpeg_next::ffi::AV_TIME_BASE)) as i64
         };
 
-        // 1. Extract Primary Thumbnail Frame (at configured offset, guaranteeing non-black frame)
+        // 1. Extract Primary Thumbnail Frame
         let prim_sec = (duration_secs * primary_offset_pct).clamp(0.0, duration_secs);
         let primary_frame = Self::seek_and_decode_to_target(
             &mut ictx,
@@ -280,14 +284,17 @@ impl FfmpegVideoThumbnailer {
             }
         }
 
+        let duration_ms = (duration_secs * 1000.0).round() as u64;
+
         Ok(VideoExtractionResult {
             primary_frame,
             preview_frames,
+            orig_width: stream_ctx.orig_disp_w,
+            orig_height: stream_ctx.orig_disp_h,
+            duration_ms,
         })
     }
 
-    /// Fast forward-seek and in-memory decode pass: passes non-target frames without scaling
-    /// and invokes `libswscale` ONLY for the single target PTS frame.
     #[inline]
     fn seek_and_decode_to_target(
         ictx: &mut ffmpeg_next::format::context::Input,
@@ -322,7 +329,6 @@ impl FfmpegVideoThumbnailer {
                             .map(|pts| pts as f64 * f64::from(stream_ctx.time_base))
                             .unwrap_or(frame_idx as f64 / stream_ctx.fps);
 
-                        // Found matching target frame: scale ONLY this frame!
                         if pts_sec >= target_pts_sec - 0.02 {
                             let raw_rgb = scaler.scale_frame(&decoded_frame)?;
                             let (w, h, rot_pixels) = apply_rotation_if_needed(
@@ -335,6 +341,8 @@ impl FfmpegVideoThumbnailer {
                                 width: w,
                                 height: h,
                                 rgb_pixels: rot_pixels,
+                                orig_width: stream_ctx.orig_disp_w,
+                                orig_height: stream_ctx.orig_disp_h,
                             });
                         }
 
@@ -342,14 +350,12 @@ impl FfmpegVideoThumbnailer {
                     }
                 }
 
-                // Tight scan window (max 30 packets from nearest keyframe)
                 if packets_scanned >= 30 {
                     break;
                 }
             }
         }
 
-        // Fallback: scale latest available decoded frame
         if let Some(frame) = latest_frame_unscaled {
             let raw_rgb = scaler.scale_frame(&frame)?;
             let (w, h, rot_pixels) = apply_rotation_if_needed(
@@ -362,10 +368,11 @@ impl FfmpegVideoThumbnailer {
                 width: w,
                 height: h,
                 rgb_pixels: rot_pixels,
+                orig_width: stream_ctx.orig_disp_w,
+                orig_height: stream_ctx.orig_disp_h,
             });
         }
 
-        // Final EOF drain fallback
         let _ = decoder.send_eof();
         while decoder.receive_frame(&mut decoded_frame).is_ok() {
             if decoded_frame.width() > 0 && decoded_frame.height() > 0 {
@@ -380,6 +387,8 @@ impl FfmpegVideoThumbnailer {
                     width: w,
                     height: h,
                     rgb_pixels: rot_pixels,
+                    orig_width: stream_ctx.orig_disp_w,
+                    orig_height: stream_ctx.orig_disp_h,
                 });
             }
         }
@@ -387,9 +396,7 @@ impl FfmpegVideoThumbnailer {
         Err(ThumbnailError::Ffmpeg("Failed to decode video frame at target timestamp".into()))
     }
 
-    /// Single Linear Forward Sweep for videos $\le 30.0\,\text{s}$ (or unknown duration).
-    /// In a single forward demuxing pass from 0.0s to 90% duration, scales ONLY the targeted frames (0% wasted CPU scaling).
-    /// Average duration: ~10–25 ms per video.
+    /// Single Linear Forward Sweep for videos <= 30.0s (or unknown duration).
     fn extract_targeted_sequential(
         &self,
         params: SequentialExtractionParams<'_>,
@@ -405,7 +412,6 @@ impl FfmpegVideoThumbnailer {
         let _ = ictx.seek(0, ..0);
         decoder.flush();
 
-        // Determine target timestamps in seconds if duration is known
         let (target_primary_sec, target_preview_secs) = if let Some(dur) = duration_secs {
             let prim_sec = (dur * primary_offset_pct).clamp(0.0, dur);
             let start_pct = if dur < 2.0 { 0.05 } else { 0.10 };
@@ -450,7 +456,6 @@ impl FfmpegVideoThumbnailer {
                 frame_idx += 1;
 
                 let is_primary_hit = if target_preview_secs.is_some() {
-                    // Do NOT take frame 0 if primary offset > 0 until PTS has reached target_primary_sec!
                     primary_frame.is_none() && (pts_sec >= target_primary_sec || (primary_offset_pct == 0.0 && frame_idx == 1))
                 } else {
                     false
@@ -464,7 +469,6 @@ impl FfmpegVideoThumbnailer {
                     Vec::new()
                 };
 
-                // Scale ONLY if this frame is a desired target!
                 if (is_primary_hit || !matching_preview_slots.is_empty() || (target_preview_secs.is_none() && all_scaled_reservoir.len() < 100) || first_decoded_frame.is_none())
                     && let Ok(raw_rgb) = scaler.scale_frame(&decoded_video_frame)
                 {
@@ -478,6 +482,8 @@ impl FfmpegVideoThumbnailer {
                         width: w,
                         height: h,
                         rgb_pixels: rot_pixels,
+                        orig_width: stream_ctx.orig_disp_w,
+                        orig_height: stream_ctx.orig_disp_h,
                     };
 
                     if first_decoded_frame.is_none() {
@@ -530,6 +536,8 @@ impl FfmpegVideoThumbnailer {
                         width: w,
                         height: h,
                         rgb_pixels: rot_pixels,
+                        orig_width: stream_ctx.orig_disp_w,
+                        orig_height: stream_ctx.orig_disp_h,
                     };
                     if first_decoded_frame.is_none() {
                         first_decoded_frame = Some(frame.clone());
@@ -576,9 +584,14 @@ impl FfmpegVideoThumbnailer {
             }
         }
 
+        let dur_ms = duration_secs.map(|d| (d * 1000.0).round() as u64).unwrap_or(0);
+
         Ok(VideoExtractionResult {
             primary_frame: final_primary,
             preview_frames: final_previews,
+            orig_width: stream_ctx.orig_disp_w,
+            orig_height: stream_ctx.orig_disp_h,
+            duration_ms: dur_ms,
         })
     }
 }
@@ -590,7 +603,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         config: &ThumbnailConfig,
     ) -> Result<VideoExtractionResult, ThumbnailError> {
         let t0 = Instant::now();
-        ffmpeg_next::init().map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
+        ensure_ffmpeg_initialized();
 
         let ictx = ffmpeg_next::format::input(path).map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
 
@@ -700,6 +713,8 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
             time_base,
             fps,
             norm_rot,
+            orig_disp_w: disp_w,
+            orig_disp_h: disp_h,
         };
 
         let threshold = (config.short_video_threshold_secs as f64).max(30.0);
@@ -753,8 +768,11 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                 tracing::debug!(
                     file = %LogObscurer::path(path),
                     preview_frames_extracted = res.preview_frames.len(),
+                    orig_width = res.orig_width,
+                    orig_height = res.orig_height,
+                    duration_ms = res.duration_ms,
                     elapsed_us = t0.elapsed().as_micros(),
-                    "[VideoThumbnailer] Successfully extracted primary and preview frames"
+                    "[VideoThumbnailer] Successfully extracted primary and preview frames with metadata"
                 );
                 Ok(res)
             }

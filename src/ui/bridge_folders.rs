@@ -5,7 +5,7 @@ use super::bridge_tags::BridgeTags;
 use super::{FolderNodeView, MainWindow};
 use crate::library::dot_hidden::DotHiddenCache;
 use crate::library::folders::normalize_path;
-use crate::library::models::{FolderId, FolderRecord};
+use crate::library::models::{FolderId, FolderRecord, MediaId, MediaRecord};
 use crate::library::Library;
 use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::telemetry::FolderLoadBenchmark;
@@ -586,6 +586,50 @@ impl BridgeFolders {
                 state,
             },
             true,
+        );
+    }
+
+    /// Explicit user-requested folder metadata-only refresh (re-reads container headers for all files in folder without thumbnail generation).
+    pub fn refresh_folder_metadata_only(
+        folder_id: FolderId,
+        path: PathBuf,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let normalized_path = normalize_path(&path);
+        let folder_name = normalized_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
+
+        let raw_media = library.media().get_by_folder(folder_id).unwrap_or_default();
+        if raw_media.is_empty() {
+            window.set_status_text(format!("No media files in folder '{}' to refresh metadata.", folder_name).into());
+            return;
+        }
+
+        let targets: Vec<(MediaId, PathBuf, MediaRecord)> = raw_media
+            .into_iter()
+            .map(|rec| {
+                let full_p = normalized_path.join(&rec.filename);
+                (rec.id, full_p, rec)
+            })
+            .collect();
+
+        tracing::info!(
+            folder_id = folder_id,
+            folder_name = %folder_name,
+            total_items = targets.len(),
+            "[FolderMetadataRefresh] Starting fast metadata-only refresh for folder..."
+        );
+
+        BridgeMedia::execute_metadata_only_refresh(
+            targets,
+            window,
+            library,
+            state,
+            &format!("folder '{}'", folder_name),
         );
     }
 
