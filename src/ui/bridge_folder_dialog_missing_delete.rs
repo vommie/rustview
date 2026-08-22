@@ -110,6 +110,22 @@ impl MissingFolderDeleteDialogController {
             }
         }
 
+        let metrics_opt = ctx.library.folder_operations().get_metrics(folder_id).ok();
+        let fallback = [folder_id];
+        let affected_ids = metrics_opt
+            .as_ref()
+            .map(|m| m.affected_folder_ids.as_slice())
+            .unwrap_or(&fallback);
+
+        // Determine successor target BEFORE purging database
+        let successor_target = BridgeFolders::find_visible_successor_folder(
+            folder_id,
+            affected_ids,
+            &ctx.library,
+            &ctx.settings,
+            &ctx.state,
+        );
+
         match ctx
             .library
             .folder_operations()
@@ -118,15 +134,6 @@ impl MissingFolderDeleteDialogController {
             Ok(report) => {
                 BridgeFolders::prune_expanded_folders(
                     &report.deleted_folder_ids,
-                    &ctx.settings,
-                    &ctx.state,
-                );
-
-                BridgeFolders::fallback_to_root_if_affected(
-                    &report.deleted_folder_ids,
-                    window,
-                    &ctx.library,
-                    &ctx.thumbnails,
                     &ctx.settings,
                     &ctx.state,
                 );
@@ -142,7 +149,16 @@ impl MissingFolderDeleteDialogController {
                     .into(),
                 );
 
-                BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
+                BridgeFolders::navigate_to_successor_if_affected(
+                    successor_target,
+                    &report.deleted_folder_ids,
+                    window,
+                    &ctx.library,
+                    &ctx.thumbnails,
+                    &ctx.settings,
+                    &ctx.state,
+                );
+
                 BridgeInspector::update(window, &ctx.state);
             }
             Err(e) => {

@@ -48,6 +48,11 @@ pub struct FolderNavigationContext<'a> {
     pub state: &'a Arc<RwLock<UiState>>,
 }
 
+struct ParentNodeInfo<'a> {
+    parent: &'a FolderTreeNode,
+    deleted_child_idx: usize,
+}
+
 pub struct FolderTreeBuilder;
 
 impl FolderTreeBuilder {
@@ -1011,6 +1016,209 @@ impl BridgeFolders {
         }
         st.invalidate_folder_tree_cache();
         Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
+    }
+
+    /// Recursively locates the immediate parent node in the hierarchy containing the specified target ID.
+    /// Operates in clean linear O(N) traversal with zero redundant branch visits.
+    fn find_parent_in_tree<'a>(
+        nodes: &'a [FolderTreeNode],
+        target_id: FolderId,
+    ) -> Option<ParentNodeInfo<'a>> {
+        for node in nodes {
+            for (idx, child) in node.children.iter().enumerate() {
+                if child.record.id == target_id {
+                    return Some(ParentNodeInfo {
+                        parent: node,
+                        deleted_child_idx: idx,
+                    });
+                }
+            }
+            if let Some(info) = Self::find_parent_in_tree(&node.children, target_id) {
+                return Some(info);
+            }
+        }
+        None
+    }
+
+    /// Determines the optimal successor folder to navigate to when a folder node is deleted.
+    /// Strictly adheres to Node-Scoped Sibling & Parent Resolution and the Zero-Expansion Invariant:
+    ///
+    /// Resolution Order:
+    /// 1. Next visible sibling within the same parent node.
+    /// 2. Preceding visible sibling ("nachrückender Ordner") within the same parent node.
+    /// 3. Parent node itself if no siblings remain in the current node.
+    /// 4. Root folder fallback.
+    pub fn find_visible_successor_folder(
+        deleted_id: FolderId,
+        affected_subtree_ids: &[FolderId],
+        library: &Library,
+        settings: &SettingsManager,
+        state: &RwLock<UiState>,
+    ) -> Option<(FolderId, PathBuf)> {
+        let t0 = Instant::now();
+        let app_settings = settings.get();
+        let root_setting = app_settings.general.root_folder.as_ref()?;
+        let normalized_root = normalize_path(root_setting);
+
+        let cached_tree_opt = state.read().cached_folder_tree.clone();
+
+        let tree = match cached_tree_opt {
+            Some(cached) => cached,
+            None => {
+                let folders = library.folders().list_folders().unwrap_or_default();
+                let media_counts = library.folders().get_all_media_counts().unwrap_or_default();
+                FolderTreeBuilder::build_hierarchy(&normalized_root, &folders, &media_counts)
+            }
+        };
+
+        if tree.is_empty() {
+            return None;
+        }
+
+        let affected_set: HashSet<FolderId> = affected_subtree_ids.iter().copied().collect();
+        let mut st_guard = state.write();
+        let dot_hidden_cache = &mut st_guard.dot_hidden_cache;
+
+        let show_deleted = app_settings.folders.show_deleted_folders;
+        let show_hidden = app_settings.folders.show_hidden_folders;
+        let support_dot_hidden = app_settings.folders.support_dot_hidden_files;
+
+        let is_valid_sibling = |child: &FolderTreeNode, cache: &mut DotHiddenCache| -> bool {
+            if affected_set.contains(&child.record.id) {
+                return false;
+            }
+            if child.record.is_deleted && !show_deleted {
+                return false;
+            }
+            let path_obj = Path::new(&child.record.path);
+            let raw_name = path_obj
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| child.record.path.clone());
+            if !show_hidden && cache.is_hidden(path_obj, &raw_name, support_dot_hidden) {
+                return false;
+            }
+            true
+        };
+
+        // 1. Locate the parent node containing the deleted folder among its direct children
+        if let Some(parent_info) = Self::find_parent_in_tree(&tree, deleted_id) {
+            // (a) Search for NEXT visible sibling in the parent node
+            for child in parent_info.parent.children.iter().skip(parent_info.deleted_child_idx + 1) {
+                if is_valid_sibling(child, dot_hidden_cache) {
+                    let succ_id = child.record.id;
+                    let succ_path = PathBuf::from(&child.record.path);
+                    tracing::info!(
+                        deleted_id = deleted_id,
+                        successor_id = succ_id,
+                        successor_path = %LogObscurer::path(&succ_path),
+                        strategy = "NextSiblingInNode",
+                        elapsed_us = t0.elapsed().as_micros(),
+                        "[FolderSuccessor: Resolved] Selected next visible sibling in parent node"
+                    );
+                    return Some((succ_id, succ_path));
+                }
+            }
+
+            // (b) Search for PRECEDING visible sibling ("nachrückender Ordner") in the parent node
+            for child in parent_info.parent.children[..parent_info.deleted_child_idx].iter().rev() {
+                if is_valid_sibling(child, dot_hidden_cache) {
+                    let succ_id = child.record.id;
+                    let succ_path = PathBuf::from(&child.record.path);
+                    tracing::info!(
+                        deleted_id = deleted_id,
+                        successor_id = succ_id,
+                        successor_path = %LogObscurer::path(&succ_path),
+                        strategy = "PrecedingSiblingInNode",
+                        elapsed_us = t0.elapsed().as_micros(),
+                        "[FolderSuccessor: Resolved] Selected preceding visible sibling in parent node"
+                    );
+                    return Some((succ_id, succ_path));
+                }
+            }
+
+            // (c) No siblings remain in the parent node -> Select parent node itself (or Root if parent is Root)
+            let parent_id = parent_info.parent.record.id;
+            let parent_path = PathBuf::from(&parent_info.parent.record.path);
+            tracing::info!(
+                deleted_id = deleted_id,
+                successor_id = parent_id,
+                successor_path = %LogObscurer::path(&parent_path),
+                strategy = "ParentNode",
+                elapsed_us = t0.elapsed().as_micros(),
+                "[FolderSuccessor: Resolved] No siblings left in node. Selected parent node."
+            );
+            return Some((parent_id, parent_path));
+        }
+
+        // 2. Fallback to Root folder (e.g. if root itself was deleted or top-level lookup failed)
+        let root_fallback = library
+            .folders()
+            .get_folder_by_path(&normalized_root)
+            .ok()
+            .flatten()
+            .map(|f| (f.id, normalize_path(Path::new(&f.path))));
+
+        tracing::info!(
+            deleted_id = deleted_id,
+            strategy = "RootFallback",
+            elapsed_us = t0.elapsed().as_micros(),
+            "[FolderSuccessor: Resolved] Reached root level. Falling back to root directory."
+        );
+
+        root_fallback
+    }
+
+    /// Selects and navigates to the successor folder if the currently active folder was inside the deleted subtree.
+    /// If the active folder was outside the deleted subtree, it remains selected and the tree view is refreshed.
+    pub fn navigate_to_successor_if_affected(
+        successor_target: Option<(FolderId, PathBuf)>,
+        affected_folder_ids: &[FolderId],
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let is_current_affected = state
+            .read()
+            .current_folder_id
+            .map(|id| affected_folder_ids.contains(&id))
+            .unwrap_or(false);
+
+        if is_current_affected {
+            if let Some((succ_id, succ_path)) = successor_target {
+                tracing::info!(
+                    successor_id = succ_id,
+                    successor_path = %LogObscurer::path(&succ_path),
+                    "[FolderNavigation: Successor] Navigating active view to resolved successor folder."
+                );
+                Self::select_folder(
+                    succ_id,
+                    succ_path,
+                    window,
+                    library,
+                    thumbnails,
+                    settings,
+                    state,
+                );
+            } else {
+                Self::fallback_to_root_if_affected(
+                    affected_folder_ids,
+                    window,
+                    library,
+                    thumbnails,
+                    settings,
+                    state,
+                );
+            }
+        } else {
+            tracing::debug!(
+                "[FolderNavigation: Successor] Active folder was not in deleted subtree. Maintaining active selection."
+            );
+            Self::reload_tree(window, library, settings, state);
+            Self::scroll_to_selected(window);
+        }
     }
 
     pub fn fallback_to_root_if_affected(

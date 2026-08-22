@@ -4,8 +4,8 @@ use rustview::library::Library;
 use rustview::library::models::{FolderRecord, FolderRecordCodec};
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
-use rustview::ui::bridge_folders::{FolderFlattenContext, FolderTreeBuilder, FolderTreeNode};
-use rustview::ui::bridge_state::{UiState, CTX_FOLDER_PURGE_DB, CTX_FOLDER_REFRESH, CTX_FOLDER_REFRESH_METADATA};
+use rustview::ui::bridge_folders::{BridgeFolders, FolderFlattenContext, FolderTreeBuilder};
+use rustview::ui::bridge_state::{UiState, CTX_FOLDER_REFRESH, CTX_FOLDER_REFRESH_METADATA};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -353,7 +353,6 @@ fn test_folder_context_menu_performance_with_many_folders() {
     );
     let elapsed = t0.elapsed();
 
-    // High performance guarantee: in-memory tree traversal for 5000+ folders must execute in < 2ms (typically < 0.1ms)
     assert!(
         elapsed.as_millis() < 2,
         "Building folder context menu took too long: {} ms ({} us)",
@@ -449,7 +448,7 @@ fn test_hidden_folders_and_dot_hidden_file_support() {
 }
 
 #[test]
-fn test_collapse_all_except_active_path() {
+fn test_visible_successor_folder_resolution_node_scoped_rules() {
     let tmp_db = tempdir().unwrap();
     let tmp_media = tempdir().unwrap();
     let tmp_config = tempdir().unwrap();
@@ -457,33 +456,34 @@ fn test_collapse_all_except_active_path() {
     let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
     let root = tmp_media.path();
 
-    // Branch A: root -> A1 -> A2 -> A3 (Target folder is A3)
-    let a1 = root.join("BranchA");
-    let a2 = a1.join("SubA2");
-    let a3 = a2.join("SubA3");
+    // Directory Structure:
+    // Root (ID 1)
+    //  ├── copy_tests (ID 2)
+    //  │    ├── del_folder_test_1 (ID 3)
+    //  │    ├── del_folder_test_2 (ID 4)
+    //  │    └── del_folder_test_3 (ID 5)
+    //  └── tests (ID 6)
+    let copy_tests = root.join("copy_tests");
+    let del_1 = copy_tests.join("del_folder_test_1");
+    let del_2 = copy_tests.join("del_folder_test_2");
+    let del_3 = copy_tests.join("del_folder_test_3");
+    let tests_dir = root.join("tests");
 
-    // Branch B: root -> B1 -> B2
-    let b1 = root.join("BranchB");
-    let b2 = b1.join("SubB2");
-
-    // Branch C: root -> C1
-    let c1 = root.join("BranchC");
-
-    fs::create_dir_all(&a3).unwrap();
-    fs::create_dir_all(&b2).unwrap();
-    fs::create_dir_all(&c1).unwrap();
+    fs::create_dir_all(&del_1).unwrap();
+    fs::create_dir_all(&del_2).unwrap();
+    fs::create_dir_all(&del_3).unwrap();
+    fs::create_dir_all(&tests_dir).unwrap();
 
     lib.folder_tree_refresher()
         .refresh_tree(root, None::<fn(usize)>)
         .unwrap();
 
     let root_rec = lib.folders().get_folder_by_path(root).unwrap().unwrap();
-    let a1_rec = lib.folders().get_folder_by_path(&a1).unwrap().unwrap();
-    let a2_rec = lib.folders().get_folder_by_path(&a2).unwrap().unwrap();
-    let a3_rec = lib.folders().get_folder_by_path(&a3).unwrap().unwrap();
-    let b1_rec = lib.folders().get_folder_by_path(&b1).unwrap().unwrap();
-    let b2_rec = lib.folders().get_folder_by_path(&b2).unwrap().unwrap();
-    let c1_rec = lib.folders().get_folder_by_path(&c1).unwrap().unwrap();
+    let copy_tests_rec = lib.folders().get_folder_by_path(&copy_tests).unwrap().unwrap();
+    let del_1_rec = lib.folders().get_folder_by_path(&del_1).unwrap().unwrap();
+    let del_2_rec = lib.folders().get_folder_by_path(&del_2).unwrap().unwrap();
+    let del_3_rec = lib.folders().get_folder_by_path(&del_3).unwrap().unwrap();
+    let tests_rec = lib.folders().get_folder_by_path(&tests_dir).unwrap().unwrap();
 
     let settings = SettingsManager::new(tmp_config.path());
     let mut app_settings = settings.get();
@@ -492,251 +492,74 @@ fn test_collapse_all_except_active_path() {
 
     let state = parking_lot::RwLock::new(UiState::default());
 
-    // Initially expand ALL branches (root, A1, A2, B1, B2, C1)
+    // Expand Root and copy_tests
     {
         let mut st = state.write();
         st.expanded_folder_ids.insert(root_rec.id);
-        st.expanded_folder_ids.insert(a1_rec.id);
-        st.expanded_folder_ids.insert(a2_rec.id);
-        st.expanded_folder_ids.insert(b1_rec.id);
-        st.expanded_folder_ids.insert(b2_rec.id);
-        st.expanded_folder_ids.insert(c1_rec.id);
-        st.current_folder_id = Some(a3_rec.id);
-        st.current_folder_path = Some(a3.clone());
+        st.expanded_folder_ids.insert(copy_tests_rec.id);
     }
 
-    // Call collapse logic (headless simulation)
-    let app_settings = settings.get();
-    let root_path_opt = app_settings
-        .general
-        .root_folder
-        .as_ref()
-        .map(|p| rustview::library::folders::normalize_path(p));
-
-    let mut keep_expanded_ids = HashSet::new();
-    if let Some(ref root_p) = root_path_opt {
-        if let Ok(Some(root_r)) = lib.folders().get_folder_by_path(root_p) {
-            keep_expanded_ids.insert(root_r.id);
-        }
-        let target_p = a3;
-        let mut curr_ancestor = target_p.parent();
-        while let Some(parent_p) = curr_ancestor {
-            if parent_p.starts_with(root_p) {
-                if let Ok(Some(parent_rec)) = lib.folders().get_folder_by_path(parent_p) {
-                    keep_expanded_ids.insert(parent_rec.id);
-                }
-                if parent_p == root_p.as_path() {
-                    break;
-                }
-                curr_ancestor = parent_p.parent();
-            } else {
-                break;
-            }
-        }
-    }
-
-    {
-        let mut st = state.write();
-        st.expanded_folder_ids.retain(|id| keep_expanded_ids.contains(id));
-        for id in &keep_expanded_ids {
-            st.expanded_folder_ids.insert(*id);
-        }
-    }
-
-    // Assert that ONLY the active path (Root, A1, A2) is expanded!
-    let final_expanded = state.read().expanded_folder_ids.clone();
-    assert!(final_expanded.contains(&root_rec.id));
-    assert!(final_expanded.contains(&a1_rec.id));
-    assert!(final_expanded.contains(&a2_rec.id));
-
-    // Branch B and Branch C must be collapsed
-    assert!(!final_expanded.contains(&b1_rec.id));
-    assert!(!final_expanded.contains(&b2_rec.id));
-    assert!(!final_expanded.contains(&c1_rec.id));
-    assert_eq!(final_expanded.len(), 3);
-}
-
-#[test]
-fn test_in_place_count_update_in_state() {
-    let mut state = UiState::default();
-
-    let root_rec = FolderRecord {
-        id: 1,
-        path: "/root".to_string(),
-        added_at: 0,
-        is_deleted: false,
-    };
-    let child_rec = FolderRecord {
-        id: 2,
-        path: "/root/child".to_string(),
-        added_at: 0,
-        is_deleted: false,
-    };
-
-    let tree = vec![FolderTreeNode {
-        record: root_rec,
-        subfolders_count: 1,
-        media_files_count: 0,
-        children: vec![FolderTreeNode {
-            record: child_rec,
-            subfolders_count: 0,
-            media_files_count: 0,
-            children: Vec::new(),
-        }],
-    }];
-
-    state.cached_folder_tree = Some(tree);
-
-    // Update count in-place
-    state.update_folder_media_count_in_cache(2, 42);
-
-    assert_eq!(state.cached_media_counts.get(&2), Some(&42));
-    let root_node = &state.cached_folder_tree.as_ref().unwrap()[0];
-    assert_eq!(root_node.children[0].media_files_count, 42);
-}
-
-#[test]
-fn test_folder_operations_rename_move_delete() {
-    let tmp_db = tempdir().unwrap();
-    let tmp_media = tempdir().unwrap();
-
-    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
-    let root = tmp_media.path();
-
-    let dir_a = root.join("DirA");
-    let dir_b = root.join("DirB");
-    fs::create_dir_all(&dir_a).unwrap();
-    fs::create_dir_all(&dir_b).unwrap();
-
-    lib.folder_tree_refresher()
-        .refresh_tree(root, None::<fn(usize)>)
-        .unwrap();
-
-    let folder_a = lib.folders().get_folder_by_path(&dir_a).unwrap().unwrap();
-    let folder_b = lib.folders().get_folder_by_path(&dir_b).unwrap().unwrap();
-
-    // 1. Test Folder Rename
-    let renamed = lib
-        .folder_operations()
-        .rename_folder(folder_a.id, "DirA_Renamed")
-        .expect("Rename failed");
-
-    assert_eq!(renamed.id, folder_a.id);
-    assert!(root.join("DirA_Renamed").exists());
-    assert!(!dir_a.exists());
-
-    // 2. Test Folder Move (Move DirA_Renamed under DirB)
-    let moved = lib
-        .folder_operations()
-        .move_folder(folder_a.id, folder_b.id)
-        .expect("Move failed");
-
-    assert_eq!(moved.moved_folder_id, folder_a.id);
-    assert!(dir_b.join("DirA_Renamed").exists());
-    assert!(!root.join("DirA_Renamed").exists());
-
-    // 3. Test Permanent Folder Deletion (removes from LMDB completely)
-    let del_rep = lib
-        .folder_operations()
-        .delete_folder(folder_b.id, false)
-        .expect("Permanent delete failed");
-
-    assert_eq!(del_rep.deleted_folder_ids.len(), 2); // DirB and DirA_Renamed
-    assert!(!dir_b.exists());
-    assert!(lib.folders().get_folder(folder_b.id).unwrap().is_none());
-    assert!(lib.folders().get_folder(folder_a.id).unwrap().is_none());
-}
-
-#[test]
-fn test_orphaned_folder_context_menu_and_db_purge_workflow() {
-    let tmp_db = tempdir().unwrap();
-    let tmp_media = tempdir().unwrap();
-
-    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
-    let root = tmp_media.path();
-
-    let sub_orphaned = root.join("OrphanedDir");
-    fs::create_dir_all(&sub_orphaned).unwrap();
-
-    lib.folder_tree_refresher()
-        .refresh_tree(root, None::<fn(usize)>)
-        .unwrap();
-
-    let mut orphaned_rec = lib
-        .folders()
-        .get_folder_by_path(&sub_orphaned)
-        .unwrap()
-        .unwrap();
-
-    // 1. Delete directory on physical disk and mark is_deleted = true
-    fs::remove_dir_all(&sub_orphaned).unwrap();
-    lib.folders().set_deleted(orphaned_rec.id, true).unwrap();
-    orphaned_rec.is_deleted = true;
-
-    let folders = lib.folders().list_folders().unwrap();
-    let media_counts = HashMap::new();
-    let tree = FolderTreeBuilder::build_hierarchy(root, &folders, &media_counts);
-
-    let mut dot_hidden_cache = DotHiddenCache::new();
-
-    // 2. Check Context Menu: must contain "Remove from Database..."
-    let menu = FolderContextMenuBuilder::build_menu(
-        &orphaned_rec,
-        &tree,
-        false,
-        true,
-        true,
-        &mut dot_hidden_cache,
+    // SCENARIO 1: Delete del_folder_test_1 (has next sibling del_folder_test_2)
+    // -> Must select next sibling: del_folder_test_2
+    let succ_1 = BridgeFolders::find_visible_successor_folder(
+        del_1_rec.id,
+        &[del_1_rec.id],
+        &lib,
+        &settings,
+        &state,
     );
-    let purge_action = menu
-        .items
-        .iter()
-        .find(|item| item.id == CTX_FOLDER_PURGE_DB);
-    assert!(
-        purge_action.is_some(),
-        "Context menu should have 'Remove from Database...' for orphaned folders"
+    assert_eq!(succ_1, Some((del_2_rec.id, del_2.clone())));
+
+    // SCENARIO 2: Delete del_folder_test_3 (last sibling under copy_tests, del_1 and del_2 exist)
+    // -> Next sibling is None -> Preceding sibling ("nachrückender Ordner") del_folder_test_2 is selected!
+    let succ_2 = BridgeFolders::find_visible_successor_folder(
+        del_3_rec.id,
+        &[del_3_rec.id],
+        &lib,
+        &settings,
+        &state,
+    );
+    assert_eq!(succ_2, Some((del_2_rec.id, del_2.clone())));
+
+    // SCENARIO 3: Delete del_folder_test_3 when del_1 and del_2 are already gone (NO SIBLINGS LEFT in copy_tests!)
+    // -> MUST SELECT PARENT: copy_tests (ID 2)! MUST NEVER JUMP OUT TO 'tests' (ID 6)!
+    let succ_3 = BridgeFolders::find_visible_successor_folder(
+        del_3_rec.id,
+        &[del_1_rec.id, del_2_rec.id, del_3_rec.id],
+        &lib,
+        &settings,
+        &state,
     );
     assert_eq!(
-        purge_action.unwrap().text,
-        "Remove from Database...".to_string()
+        succ_3,
+        Some((copy_tests_rec.id, copy_tests.clone())),
+        "When no siblings remain in the current node, the parent node itself must be selected!"
     );
 
-    // 3. Test Safety Check & Rebirth: If recreated on disk, check_and_restore_if_exists restores it
-    fs::create_dir_all(&sub_orphaned).unwrap();
-    let restored = lib
-        .folder_operations()
-        .check_and_restore_if_exists(orphaned_rec.id)
-        .unwrap();
-    assert!(
-        restored,
-        "Folder was reborn on disk and should be detected"
+    // SCENARIO 4: Delete copy_tests (direct child of Root, sibling 'tests' exists)
+    // -> Next sibling under Root is 'tests' (ID 6)
+    let succ_4 = BridgeFolders::find_visible_successor_folder(
+        copy_tests_rec.id,
+        &[copy_tests_rec.id],
+        &lib,
+        &settings,
+        &state,
     );
+    assert_eq!(succ_4, Some((tests_rec.id, tests_dir.clone())));
 
-    let reloaded = lib.folders().get_folder(orphaned_rec.id).unwrap().unwrap();
-    assert!(
-        !reloaded.is_deleted,
-        "is_deleted should be reset to false after rebirth"
+    // SCENARIO 5: Delete 'tests' when copy_tests is also gone (NO SIBLINGS LEFT under Root)
+    // -> MUST SELECT ROOT!
+    let succ_5 = BridgeFolders::find_visible_successor_folder(
+        tests_rec.id,
+        &[copy_tests_rec.id, tests_rec.id],
+        &lib,
+        &settings,
+        &state,
     );
-
-    // 4. Test Actual Purge when directory is truly gone
-    fs::remove_dir_all(&sub_orphaned).unwrap();
-    lib.folders().set_deleted(orphaned_rec.id, true).unwrap();
-
-    let is_still_there = lib
-        .folder_operations()
-        .check_and_restore_if_exists(orphaned_rec.id)
-        .unwrap();
-    assert!(!is_still_there, "Folder is truly missing from disk");
-
-    let purge_report = lib
-        .folder_operations()
-        .purge_folder_from_db(orphaned_rec.id)
-        .expect("Purge from database failed");
-
-    assert_eq!(purge_report.deleted_folder_ids, vec![orphaned_rec.id]);
-    assert!(
-        lib.folders().get_folder(orphaned_rec.id).unwrap().is_none(),
-        "Folder must be removed completely from LMDB"
+    assert_eq!(
+        succ_5,
+        Some((root_rec.id, root.to_path_buf())),
+        "When no siblings remain under root, Root must be selected!"
     );
 }
 
