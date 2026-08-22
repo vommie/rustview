@@ -16,6 +16,7 @@ pub enum SortColumn {
     AspectRatio = 8,
     Duration = 9,
     Format = 10,
+    Flags = 11,
 }
 
 impl SortColumn {
@@ -32,6 +33,7 @@ impl SortColumn {
             SortColumn::AspectRatio => "AR",
             SortColumn::Duration => "Duration",
             SortColumn::Format => "Format",
+            SortColumn::Flags => "Flags",
         }
     }
 
@@ -47,6 +49,7 @@ impl SortColumn {
             "AR" | "AspectRatio" | "Dimensions" => SortColumn::AspectRatio,
             "Duration" => SortColumn::Duration,
             "Format" => SortColumn::Format,
+            "Flags" | "Flag" | "Status" | "State" => SortColumn::Flags,
             _ => SortColumn::Filename,
         }
     }
@@ -67,6 +70,7 @@ impl SortColumn {
             8 => SortColumn::AspectRatio,
             9 => SortColumn::Duration,
             10 => SortColumn::Format,
+            11 => SortColumn::Flags,
             _ => SortColumn::Filename,
         }
     }
@@ -159,6 +163,12 @@ impl MediaSorter {
                     let fb = b.format.default_extension();
                     fa.cmp(fb).then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
                 }
+                SortColumn::Flags => {
+                    let flag_val = |r: &MediaRecord| -> u8 {
+                        if r.is_deleted { 2 } else if r.is_corrupted { 1 } else { 0 }
+                    };
+                    flag_val(a).cmp(&flag_val(b)).then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
+                }
             };
 
             match order {
@@ -219,6 +229,10 @@ impl MediaSorter {
                 SortColumn::Format => a
                     .format_str
                     .cmp(&b.format_str)
+                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
+                SortColumn::Flags => a
+                    .flags_str
+                    .cmp(&b.flags_str)
                     .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
             };
 
@@ -284,6 +298,10 @@ impl MediaSorter {
                 SortColumn::Format => a
                     .format_str
                     .cmp(&b.format_str)
+                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
+                SortColumn::Flags => a
+                    .flags_str
+                    .cmp(&b.flags_str)
                     .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
             };
 

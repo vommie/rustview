@@ -36,7 +36,7 @@ impl<'a> MediaRepository<'a> {
         Ok(Path::new(&folder.path).join(&rec.filename))
     }
 
-    /// Retrieves all active (non-deleted) media records for the specified folder.
+    /// Retrieves all active (non-deleted) media records for the specified folder with ID deduplication.
     pub fn get_by_folder(&self, folder_id: FolderId) -> Result<Vec<MediaRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let media_ids = self
@@ -45,9 +45,11 @@ impl<'a> MediaRepository<'a> {
             .get(&rtxn, &folder_id)?
             .unwrap_or_default();
         let mut records = Vec::with_capacity(media_ids.len());
+        let mut seen = HashSet::new();
 
         for id in media_ids {
-            if let Some(record) = self.db.media.get(&rtxn, &id)?
+            if seen.insert(id)
+                && let Some(record) = self.db.media.get(&rtxn, &id)?
                 && !record.is_deleted
             {
                 records.push(record);
@@ -57,7 +59,7 @@ impl<'a> MediaRepository<'a> {
         Ok(records)
     }
 
-    /// Retrieves all media records (including soft-deleted) for the specified folder.
+    /// Retrieves all media records (including soft-deleted/missing) for the specified folder with ID deduplication.
     pub fn get_all_by_folder(&self, folder_id: FolderId) -> Result<Vec<MediaRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let media_ids = self
@@ -66,9 +68,12 @@ impl<'a> MediaRepository<'a> {
             .get(&rtxn, &folder_id)?
             .unwrap_or_default();
         let mut records = Vec::with_capacity(media_ids.len());
+        let mut seen = HashSet::new();
 
         for id in media_ids {
-            if let Some(record) = self.db.media.get(&rtxn, &id)? {
+            if seen.insert(id)
+                && let Some(record) = self.db.media.get(&rtxn, &id)?
+            {
                 records.push(record);
             }
         }
@@ -85,8 +90,11 @@ impl<'a> MediaRepository<'a> {
             .get(&rtxn, &folder_id)?
             .unwrap_or_default();
         let mut count = 0;
+        let mut seen = HashSet::new();
+
         for id in media_ids {
-            if let Some(rec) = self.db.media.get(&rtxn, &id)?
+            if seen.insert(id)
+                && let Some(rec) = self.db.media.get(&rtxn, &id)?
                 && !rec.is_deleted
             {
                 count += 1;
@@ -103,9 +111,11 @@ impl<'a> MediaRepository<'a> {
             .get(&rtxn, &hash[..])?
             .unwrap_or_default();
         let mut records = Vec::with_capacity(media_ids.len());
+        let mut seen = HashSet::new();
 
         for id in media_ids {
-            if let Some(record) = self.db.media.get(&rtxn, &id)?
+            if seen.insert(id)
+                && let Some(record) = self.db.media.get(&rtxn, &id)?
                 && !record.is_deleted
             {
                 records.push(record);
@@ -120,6 +130,20 @@ impl<'a> MediaRepository<'a> {
         if let Some(mut record) = self.db.media.get(&wtxn, &media_id)? {
             if record.is_deleted != is_deleted {
                 record.is_deleted = is_deleted;
+                self.db.media.put(&mut wtxn, &media_id, &record)?;
+            }
+        } else {
+            return Err(LibraryError::MediaNotFound(media_id));
+        }
+        wtxn.commit()?;
+        Ok(())
+    }
+
+    pub fn set_corrupted(&self, media_id: MediaId, is_corrupted: bool) -> Result<(), LibraryError> {
+        let mut wtxn = self.db.env.write_txn()?;
+        if let Some(mut record) = self.db.media.get(&wtxn, &media_id)? {
+            if record.is_corrupted != is_corrupted {
+                record.is_corrupted = is_corrupted;
                 self.db.media.put(&mut wtxn, &media_id, &record)?;
             }
         } else {
@@ -145,6 +169,7 @@ impl<'a> MediaRepository<'a> {
     }
 
     /// Performs a high-speed database search evaluating combinatorial tags, ratings, and hierarchical scopes.
+    /// Preserves and finds both active and soft-deleted records matching the requested tags and ratings.
     pub fn search(&self, params: &MediaSearchParams) -> Result<Vec<MediaRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
 
@@ -159,7 +184,7 @@ impl<'a> MediaRepository<'a> {
             if params.scope_mode == ScopeMode::Folder
                 && let Some(f_id) = params.folder_id
             {
-                return self.get_by_folder(f_id);
+                return self.get_all_by_folder(f_id);
             }
             return Ok(Vec::new());
         }
@@ -235,7 +260,7 @@ impl<'a> MediaRepository<'a> {
                     if is_rating_active {
                         for entry in self.db.media.iter(&rtxn)? {
                             let (id, rec) = entry?;
-                            if !rec.is_deleted && rec.rating == target_rating {
+                            if rec.rating == target_rating {
                                 candidate_ids.insert(id);
                             }
                         }
@@ -243,7 +268,7 @@ impl<'a> MediaRepository<'a> {
                 } else {
                     for entry in self.db.media.iter(&rtxn)? {
                         let (id, rec) = entry?;
-                        if !rec.is_deleted && rec.rating == target_rating {
+                        if rec.rating == target_rating {
                             candidate_ids.insert(id);
                         }
                     }
@@ -258,10 +283,6 @@ impl<'a> MediaRepository<'a> {
             let Some(rec) = self.db.media.get(&rtxn, &media_id)? else {
                 continue;
             };
-
-            if rec.is_deleted {
-                continue;
-            }
 
             let is_folder_active = *folder_active_cache.entry(rec.folder_id).or_insert_with(|| {
                 self.db

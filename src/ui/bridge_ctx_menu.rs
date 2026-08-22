@@ -2,8 +2,10 @@ pub use super::bridge_ctx_menu_folder::FolderContextMenu;
 pub use super::bridge_ctx_menu_media::{MediaActionContext, MediaContextMenu};
 pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use super::bridge_ctx_menu_tag::TagContextMenu;
+pub use super::bridge_file_dialog_delete::DeleteFileDialogController;
 pub use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
-pub use super::bridge_file_dialogs::{FileRenameContext, FileRenameDialogController};
+pub use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
+pub use super::bridge_file_dialogs::{FileDialogContext, FileRenameContext, FileRenameDialogController};
 
 pub use super::bridge_ctx_menu_folder::FolderContextMenu as FolderContextMenuBuilder;
 pub use super::bridge_ctx_menu_media::MediaContextMenu as MediaContextMenuBuilder;
@@ -35,6 +37,8 @@ pub struct ContextMenuRegistration {
     pub dispatcher: Arc<CtxMenuDispatcher>,
     pub rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
     pub missing_file_dialog: MissingFileDialogController,
+    pub delete_file_dialog: DeleteFileDialogController,
+    pub remove_orphaned_dialog: RemoveOrphanedFileDialogController,
     pub tag_dialogs: TagDialogController,
     pub folder_dialogs: FolderDialogController,
     pub settings: Arc<SettingsManager>,
@@ -103,6 +107,8 @@ impl BridgeContextMenu {
         let disp = reg.dispatcher;
         let ren_dlg = reg.rename_dialog;
         let missing_file_dlg = reg.missing_file_dialog;
+        let delete_file_dlg = reg.delete_file_dialog;
+        let remove_orphaned_dlg = reg.remove_orphaned_dialog;
         let tag_dlg = reg.tag_dialogs;
         let fld_dlg = reg.folder_dialogs;
 
@@ -142,6 +148,8 @@ impl BridgeContextMenu {
                     dispatcher: &disp,
                     rename_dialog: &ren_dlg,
                     missing_file_dialog: &missing_file_dlg,
+                    delete_file_dialog: &delete_file_dlg,
+                    remove_orphaned_dialog: &remove_orphaned_dlg,
                 },
             );
         });
@@ -156,10 +164,10 @@ impl BridgeContextMenu {
         x: f32,
         y: f32,
     ) {
-        let (selected_count, is_single_image, associated_apps) =
+        let (all_selected_deleted, selected_count, is_single_image, associated_apps) =
             MediaContextMenu::prepare_selection(window, library, state, media_id);
         let is_busy = BridgeMedia::is_system_busy(window, thumbnails, state);
-        let menu = MediaContextMenu::build_menu(selected_count, is_single_image, is_busy, &associated_apps);
+        let menu = MediaContextMenu::build_menu(selected_count, is_single_image, all_selected_deleted, is_busy, &associated_apps);
         Self::open_custom_menu(window, state, menu, x, y);
     }
 
@@ -180,7 +188,6 @@ impl BridgeContextMenu {
         let mut st = state.write();
         st.active_folder_dialog_target = Some(folder_id);
 
-        // Ensure cached_folder_tree is available in memory with zero disk I/O
         if st.cached_folder_tree.is_none()
             && let Some(ref root_dir) = root_setting
         {
@@ -191,7 +198,6 @@ impl BridgeContextMenu {
             st.cached_media_counts = media_counts;
         }
 
-        // Borrow disjoint fields simultaneously from *st to satisfy the borrow checker
         let UiState {
             cached_folder_tree: ref tree_opt,
             ref mut dot_hidden_cache,
@@ -203,7 +209,6 @@ impl BridgeContextMenu {
             return;
         };
 
-        // Find target folder record from in-memory hierarchy
         let target_record = Self::find_record_in_tree(tree, folder_id);
         let Some(folder_rec) = target_record else {
             return;

@@ -13,10 +13,13 @@ export struct MediaItemView {
     ar_str: string,
     duration_str: string,
     format_str: string,
+    flags_str: string,
     has_tags: bool,
     thumbnail: image,
     is_selected: bool,
     is_video: bool,
+    is_corrupted: bool,
+    is_deleted: bool,
 }
 
 export struct FolderNodeView {

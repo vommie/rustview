@@ -13,7 +13,7 @@ export component MediaHeaderBar inherits Rectangle {
     in property <bool> enable-resize: true;
     in property <bool> auto-width: false;
 
-    // All 11 Table Columns Widths (used in TableView fixed mode)
+    // All 12 Table Columns Widths
     in-out property <length> col-filename-width: 260px;
     in-out property <length> col-modified-date-width: 145px;
     in-out property <length> col-created-date-width: 145px;
@@ -25,6 +25,7 @@ export component MediaHeaderBar inherits Rectangle {
     in-out property <length> col-ar-width: 65px;
     in-out property <length> col-duration-width: 110px;
     in-out property <length> col-format-width: 75px;
+    in-out property <length> col-flags-width: 85px;
 
     // Calculated Cumulative X Offsets for TableView 1:1 Alignments
     property <length> col-pos-0: 0px;
@@ -38,6 +39,7 @@ export component MediaHeaderBar inherits Rectangle {
     property <length> col-pos-8: root.col-pos-7 + root.col-height-width;
     property <length> col-pos-9: root.col-pos-8 + root.col-ar-width;
     property <length> col-pos-10: root.col-pos-9 + root.col-duration-width;
+    property <length> col-pos-11: root.col-pos-10 + root.col-format-width;
 
     callback sort-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
@@ -160,6 +162,16 @@ export component MediaHeaderBar inherits Rectangle {
         MediaHeaderColumn {
             title: "Format";
             column-index: 10;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Flags";
+            column-index: 11;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: false;
@@ -343,6 +355,22 @@ export component MediaHeaderBar inherits Rectangle {
             enable-resize: root.enable-resize;
             auto-width: false;
             column-width <=> root.col-format-width;
+            column-min-width: 55px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 11: Flags
+        MediaHeaderColumn {
+            x: root.col-pos-11;
+            title: "Flags";
+            column-index: 11;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-flags-width;
             column-min-width: 55px;
             sort-clicked(idx) => { root.sort-clicked(idx); }
             column-resized(idx, w) => { root.column-resized(idx, w); }

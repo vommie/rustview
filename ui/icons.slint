@@ -25,6 +25,8 @@ export global Icons {
     out property <image> rating-3: @image-url("icons/rating_3.svg");
     out property <image> rating-4: @image-url("icons/rating_4.svg");
     out property <image> rating-5: @image-url("icons/rating_5.svg");
+    out property <image> media-file-corrupted: @image-url("icons/media_file_corrupted.svg");
+    out property <image> media-file-missing: @image-url("icons/media_file_missing.svg");
 
     /// Returns the rating icon for a rating value (0..5). Never colorized.
     pure public function rating-icon(rating: int) -> image {
@@ -55,20 +57,34 @@ export global Icons {
         if name == "folders" || name == "query_subfolders" { return @image-url("icons/query_mode_folder_and_subfolders.svg"); }
         if name == "world" || name == "global" || name == "query_global" { return @image-url("icons/query_mode_gobal.svg"); }
         if name == "tag" { return @image-url("icons/tag.svg"); }
-        if name == "application" || name == "open" { return @image-url("icons/settings.svg"); }
+        if name == "media_file_corrupted" || name == "corrupt" || name == "corrupted" { return @image-url("icons/media_file_corrupted.svg"); }
+        if name == "media_file_missing" || name == "missing" || name == "deleted" { return @image-url("icons/media_file_missing.svg"); }
         return @image-url("icons/settings.svg");
     }
 }
 
-/// Dedicated, modular Vector Icon component with intelligent tinting/colorization support.
-export component AppIcon inherits Image {
-    in property <image> icon <=> self.source;
+/// Dedicated Vector Icon component with robust dual-mode rendering (tinted vs original SVG colors).
+export component AppIcon {
+    in property <image> icon;
     in property <color> color: Theme.text;
     in property <bool> allow-tint: true;
     in property <length> size: 16px;
 
     width: root.size;
     height: root.size;
-    image-fit: contain;
-    colorize: root.allow-tint ? root.color : transparent;
+
+    if root.allow-tint : Image {
+        source: root.icon;
+        width: 100%;
+        height: 100%;
+        image-fit: contain;
+        colorize: root.color;
+    }
+
+    if !root.allow-tint : Image {
+        source: root.icon;
+        width: 100%;
+        height: 100%;
+        image-fit: contain;
+    }
 }

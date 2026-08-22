@@ -205,7 +205,6 @@ impl BridgeFolders {
         let st = state.clone();
         let win = window.clone_strong();
 
-        // 1. Explicit Folder Refresh via View Toolbar Refresh Button (Rule A)
         window.on_refresh_folder(move || {
             let (folder_id_opt, path_opt) = {
                 let s = st.read();
@@ -226,7 +225,6 @@ impl BridgeFolders {
             dialog.borrow_mut().show();
         });
 
-        // 2. Normal Folder Selection via Tree Node Click (Opens known folders with Zero-FS LMDB speed)
         let lib = library.clone();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -539,8 +537,6 @@ impl BridgeFolders {
             .expect("Failed to spawn folder tree refresher background thread");
     }
 
-    /// Standard folder navigation. Opens known folders instantly from LMDB without scanning.
-    /// If the folder is completely empty in LMDB, initiates Condition C initial scan & generation.
     pub fn select_folder(
         folder_id: FolderId,
         path: PathBuf,
@@ -564,8 +560,6 @@ impl BridgeFolders {
         );
     }
 
-    /// Explicit user-requested folder refresh (Rules A & B: Toolbar Refresh or Folder Context Menu Refresh).
-    /// Executes full directory scan on disk, updates LMDB, and launches dedicated full-folder thumbnail generation for all items.
     pub fn refresh_folder_explicit(
         folder_id: FolderId,
         path: PathBuf,
@@ -589,7 +583,6 @@ impl BridgeFolders {
         );
     }
 
-    /// Explicit user-requested folder metadata-only refresh (re-reads container headers for all files in folder without thumbnail generation).
     pub fn refresh_folder_metadata_only(
         folder_id: FolderId,
         path: PathBuf,
@@ -603,7 +596,7 @@ impl BridgeFolders {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
 
-        let raw_media = library.media().get_by_folder(folder_id).unwrap_or_default();
+        let raw_media = library.media().get_all_by_folder(folder_id).unwrap_or_default();
         if raw_media.is_empty() {
             window.set_status_text(format!("No media files in folder '{}' to refresh metadata.", folder_name).into());
             return;
@@ -633,7 +626,6 @@ impl BridgeFolders {
         );
     }
 
-    /// Internal folder selection and refresh coordinator adhering to Rules A, B, and C.
     fn select_folder_internal(
         folder_id: FolderId,
         path: PathBuf,
@@ -646,10 +638,7 @@ impl BridgeFolders {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
 
-        // Cancel previous thumbnail generation pipeline
         ctx.thumbnails.cancel_pipeline();
-
-        // Reset Viewport Scroll to Top immediately on folder change/refresh
         ctx.window.invoke_scroll_media_to_top();
 
         let bench = Arc::new(FolderLoadBenchmark::new(
@@ -701,7 +690,7 @@ impl BridgeFolders {
         Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
-        // Immediate Zero-Delay Database Fetch
+        // Immediate Zero-Delay Database Fetch (loads all records including soft-deleted/missing ones)
         let t_id_start = Instant::now();
         let media_ids = {
             let rtxn = ctx.library.raw_db().env.read_txn().ok();
@@ -715,10 +704,12 @@ impl BridgeFolders {
 
         let t_rec_start = Instant::now();
         let mut known_media = Vec::with_capacity(media_ids.len());
+        let mut seen_ids = HashSet::new();
+
         if let Ok(rtxn) = ctx.library.raw_db().env.read_txn() {
             for id in media_ids {
-                if let Ok(Some(rec)) = ctx.library.raw_db().media.get(&rtxn, &id)
-                    && !rec.is_deleted
+                if seen_ids.insert(id)
+                    && let Ok(Some(rec)) = ctx.library.raw_db().media.get(&rtxn, &id)
                 {
                     known_media.push(rec);
                 }
@@ -730,7 +721,6 @@ impl BridgeFolders {
         let is_empty_in_db = known_media.is_empty();
         let should_scan_and_generate = is_explicit_refresh || is_empty_in_db;
 
-        // Stage 1c: Parallel Multi-Core Pre-Indexing
         let t_pre = Instant::now();
         let indexed_media = BridgeMedia::preindex(ctx.library, known_media, &normalized_path);
         bench.preindex_time_us.store(t_pre.elapsed().as_micros() as u64, Ordering::Relaxed);
@@ -740,7 +730,6 @@ impl BridgeFolders {
             s.all_folder_media = indexed_media;
         }
 
-        // Render known media into view immediately
         BridgeMedia::reload(ctx.window, ctx.library, ctx.thumbnails, ctx.settings, ctx.state, false, false);
         BridgeInspector::update(ctx.window, ctx.state);
         BridgeTags::sync_tag_selection(ctx.window, ctx.library, ctx.state);
@@ -821,12 +810,14 @@ impl BridgeFolders {
                         bench_scanner.deleted_files.store(report.deleted_media, Ordering::Relaxed);
                         bench_scanner.restored_files.store(report.restored_media, Ordering::Relaxed);
 
-                        let raw_media = lib_scanner.media().get_by_folder(folder_id).unwrap_or_default();
-                        let active_count = raw_media.len();
+                        // Load ALL media including soft-deleted/orphaned to display them correctly
+                        let raw_media = lib_scanner.media().get_all_by_folder(folder_id).unwrap_or_default();
+                        let active_count = raw_media.iter().filter(|m| !m.is_deleted).count();
                         let indexed_media = BridgeMedia::preindex(&lib_scanner, raw_media, &target_p_scanner);
 
                         let all_targets: Vec<PreparedTarget> = indexed_media
                             .iter()
+                            .filter(|item| !item.is_deleted)
                             .map(|item| PreparedTarget {
                                 pipeline_id: 0,
                                 folder_id: item.record.folder_id,
@@ -900,7 +891,6 @@ impl BridgeFolders {
         }
     }
 
-    /// Fast-Path node expand/collapse toggle leveraging in-memory cached tree hierarchy.
     pub fn toggle_expand(
         folder_id: FolderId,
         window: &MainWindow,
@@ -921,7 +911,6 @@ impl BridgeFolders {
         Self::reload_tree(window, library, settings, state);
     }
 
-    /// Hierarchical folder tree rendering with zero disk syscalls when cached.
     pub fn reload_tree(
         window: &MainWindow,
         library: &Library,

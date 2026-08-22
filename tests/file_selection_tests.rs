@@ -36,6 +36,7 @@ fn create_dummy_record(
         rating,
         last_seen: 1,
         is_deleted: false,
+        is_corrupted: false,
     }
 }
 
@@ -167,7 +168,6 @@ fn test_file_selection_ctrl_shift_additive_range() {
 fn test_file_selection_visual_sort_order_preservation() {
     let mut state = UiState::default();
 
-    // Create 3 records in unsorted database order: ID 100, ID 200, ID 300
     let r1 = create_dummy_record(100, "C_File.mp4", 1000, 1920, 1080, MediaFormat::Mp4, 1);
     let r2 = create_dummy_record(200, "A_File.mp4", 2000, 1920, 1080, MediaFormat::Mp4, 2);
     let r3 = create_dummy_record(300, "B_File.mp4", 3000, 1920, 1080, MediaFormat::Mp4, 3);
@@ -189,6 +189,9 @@ fn test_file_selection_visual_sort_order_preservation() {
         ar_value: 1.77,
         duration_str: "00:00:10.500".into(),
         format_str: "mp4".into(),
+        flags_str: "OK".into(),
+        is_corrupted: false,
+        is_deleted: false,
         has_tags: false,
         record: r1,
     };
@@ -210,6 +213,9 @@ fn test_file_selection_visual_sort_order_preservation() {
         ar_value: 1.77,
         duration_str: "00:00:10.500".into(),
         format_str: "mp4".into(),
+        flags_str: "OK".into(),
+        is_corrupted: false,
+        is_deleted: false,
         has_tags: false,
         record: r2,
     };
@@ -231,21 +237,20 @@ fn test_file_selection_visual_sort_order_preservation() {
         ar_value: 1.77,
         duration_str: "00:00:10.500".into(),
         format_str: "mp4".into(),
+        flags_str: "OK".into(),
+        is_corrupted: false,
+        is_deleted: false,
         has_tags: false,
         record: r3,
     };
 
     state.all_folder_media = vec![idx1, idx2, idx3];
-
-    // Simulate sorting view by Filename Ascending: Row 0 is A_File (idx 1), Row 1 is B_File (idx 2), Row 2 is C_File (idx 0)
     state.active_indices = vec![1, 2, 0];
 
-    // Select all 3 items (inserted in random set order)
     state.file_selection.select_single(100);
     state.file_selection.toggle(200);
     state.file_selection.toggle(300);
 
-    // Verify ordered selection strictly matches visual sorted order
     let ordered_media = state.get_selected_media_ordered();
     assert_eq!(ordered_media.len(), 3);
     assert_eq!(ordered_media[0].record.filename, "A_File.mp4");
@@ -296,7 +301,6 @@ fn test_file_selection_summary_calculations() {
     assert_eq!(summary.format_breakdown[0], (MediaFormat::Jpeg, 2));
     assert_eq!(summary.format_breakdown[1], (MediaFormat::Mp4, 1));
 
-    // Test zero-copy summary aggregation
     let indexed = recs
         .into_iter()
         .enumerate()
@@ -321,6 +325,9 @@ fn test_file_selection_summary_calculations() {
                 ar_value,
                 duration_str: format_duration_hms_ms(r.duration_ms, is_video).into(),
                 format_str: r.format.default_extension().into(),
+                flags_str: "OK".into(),
+                is_corrupted: false,
+                is_deleted: false,
                 has_tags: false,
                 record: r,
             }

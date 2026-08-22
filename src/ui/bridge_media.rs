@@ -21,7 +21,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use slint::{ComponentHandle, Image, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -60,7 +60,7 @@ struct ProcessedRefreshedItem {
     old_hash: crate::media::FileHash,
     new_hash: crate::media::FileHash,
     updated_record: MediaRecord,
-    primary_loc: ThumbnailLocation,
+    primary_loc: Option<ThumbnailLocation>,
     preview_rec: Option<VideoPreviewRecord>,
     primary_pixels: Vec<u8>,
     primary_width: u32,
@@ -251,13 +251,13 @@ impl BridgeMedia {
                 8 => app_settings.view.col_ar_width = width_f32,
                 9 => app_settings.view.col_duration_width = width_f32,
                 10 => app_settings.view.col_format_width = width_f32,
+                11 => app_settings.view.col_flags_width = width_f32,
                 _ => {}
             }
 
             set_res.save_quiet(&app_settings);
         });
 
-        // Instant View Mode Toggle Handler with 1:1 Scroll Synchronization
         let set_mode = settings;
         let win_mode = window.clone_strong();
         let lib_mode = library;
@@ -296,7 +296,6 @@ impl BridgeMedia {
         progress.is_preloading || progress.is_generating || progress.active_workers > 0
     }
 
-    /// Handles view mode toggle with seamless bidirectional scroll synchronization and centered slice extraction.
     pub fn handle_view_mode_toggled(
         is_table: bool,
         anchor_item_idx: usize,
@@ -308,25 +307,21 @@ impl BridgeMedia {
     ) {
         let t0 = Instant::now();
 
-        // 1. Persist new view mode setting
         {
             let mut app_settings = settings.get();
             app_settings.view.is_table_view = is_table;
             settings.save_quiet(&app_settings);
         }
 
-        // 2. Invalidate virtualization slice to force fresh slice calculation around the anchor index
         {
             let mut st = state.write();
             st.invalidate_loaded_slice();
             st.scroll_bench.is_table_view.store(is_table, Ordering::Relaxed);
         }
 
-        // 3. Update Slint state and synchronize scroll coordinates in the destination view
         window.set_is_table_view(is_table);
         window.invoke_scroll_media_to_index(anchor_item_idx as i32, is_table);
 
-        // 4. Reload the view model for the new view layout centered on anchor_item_idx
         Self::reload_with_options(
             window,
             library,
@@ -345,7 +340,6 @@ impl BridgeMedia {
         );
     }
 
-    /// Decoupled virtualization handler with High-FPS Hysteresis Windowing across all 11 columns.
     pub fn handle_visible_chunk_changed(
         first_idx: usize,
         last_idx: usize,
@@ -369,7 +363,6 @@ impl BridgeMedia {
             (120usize, 24usize)
         };
 
-        // Hysteresis Check: If current loaded slice comfortably covers the visible range, bypass immediately (0 µs cost)
         {
             let st = state.read();
             if st.loaded_slice_valid
@@ -417,6 +410,9 @@ impl BridgeMedia {
                         item.ar_str.clone(),
                         item.duration_str.clone(),
                         item.format_str.clone(),
+                        item.flags_str.clone(),
+                        item.is_corrupted,
+                        item.is_deleted,
                         item.has_tags,
                         matches!(item.record.media_type, MediaType::Video),
                     )
@@ -437,6 +433,9 @@ impl BridgeMedia {
                     ar_str,
                     duration_str,
                     format_str,
+                    flags_str,
+                    is_corrupted,
+                    is_deleted,
                     has_tags,
                     is_video,
                 )) = item_info_opt {
@@ -468,10 +467,13 @@ impl BridgeMedia {
                         ar_str,
                         duration_str,
                         format_str,
+                        flags_str,
                         has_tags,
                         thumbnail: thumb_img,
                         is_selected,
                         is_video,
+                        is_corrupted,
+                        is_deleted,
                     });
                 }
             }
@@ -498,9 +500,6 @@ impl BridgeMedia {
         );
     }
 
-    /// Shared, high-performance multi-threaded metadata-only refresh engine via Rayon.
-    /// Re-reads container headers (width, height, AR, duration, format) and filesystem attributes
-    /// WITHOUT regenerating thumbnails or video preview frames, with atomic batched LMDB commit.
     pub fn execute_metadata_only_refresh(
         targets: Vec<(MediaId, PathBuf, MediaRecord)>,
         window: &MainWindow,
@@ -553,9 +552,6 @@ impl BridgeMedia {
                     }
                 });
 
-                // =========================================================================
-                // 1. Parallel Header Inspection via Rayon (Zero Thumbnail / Preview Overhead)
-                // =========================================================================
                 let progress_counter_ref = progress_counter.clone();
                 let progress_cb_ref = progress_cb.clone();
                 let lib_ref = lib_arc.clone();
@@ -587,9 +583,39 @@ impl BridgeMedia {
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(old_record.creation_time);
 
-                        let raw_meta = match MetadataExtractor::extract(&file_path) {
-                            Ok(m) => m,
-                            Err(e) => return Err((media_id, file_path, e.to_string())),
+                        let is_zero_byte = file_size == 0;
+
+                        let (raw_meta, meta_ok) = if is_zero_byte {
+                            (
+                                crate::media::RawMetadata {
+                                    file_size: 0,
+                                    modification_time: mtime,
+                                    creation_time: ctime,
+                                    duration_ms: 0,
+                                    width: 0,
+                                    height: 0,
+                                    media_type: old_record.format.media_type().unwrap_or(MediaType::Image),
+                                    format: old_record.format,
+                                },
+                                false,
+                            )
+                        } else {
+                            match MetadataExtractor::extract(&file_path) {
+                                Ok(m) => (m, true),
+                                Err(_) => (
+                                    crate::media::RawMetadata {
+                                        file_size,
+                                        modification_time: mtime,
+                                        creation_time: ctime,
+                                        duration_ms: 0,
+                                        width: 0,
+                                        height: 0,
+                                        media_type: old_record.format.media_type().unwrap_or(MediaType::Image),
+                                        format: old_record.format,
+                                    },
+                                    false,
+                                ),
+                            }
                         };
 
                         let assigned_tags_count = lib_ref
@@ -597,6 +623,8 @@ impl BridgeMedia {
                             .get_tags_for_media(media_id)
                             .map(|t| t.len())
                             .unwrap_or(0);
+
+                        let is_corrupted = is_zero_byte || !meta_ok || (raw_meta.width == 0 && raw_meta.height == 0);
 
                         let updated_record = MediaRecord {
                             id: media_id,
@@ -614,6 +642,7 @@ impl BridgeMedia {
                             rating: old_record.rating,
                             last_seen: 1,
                             is_deleted: false,
+                            is_corrupted,
                         };
 
                         let cur_count = progress_counter_ref.fetch_add(1, Ordering::Relaxed) + 1;
@@ -633,7 +662,8 @@ impl BridgeMedia {
                 for res in processed_results {
                     match res {
                         Ok(item) => successful_items.push(item),
-                        Err((_id, path, _err)) => {
+                        Err((id, path, _err)) => {
+                            let _ = lib_arc.media().set_deleted(id, true);
                             let fname = path
                                 .file_name()
                                 .map(|n| n.to_string_lossy().to_string())
@@ -646,9 +676,6 @@ impl BridgeMedia {
                     }
                 }
 
-                // =========================================================================
-                // 2. Single Atomic Batched LMDB Write Transaction
-                // =========================================================================
                 if !successful_items.is_empty()
                     && let Ok(mut wtxn) = lib_arc.raw_db().env.write_txn()
                 {
@@ -662,9 +689,6 @@ impl BridgeMedia {
                     let _ = wtxn.commit();
                 }
 
-                // =========================================================================
-                // 3. In-Place UI State & Slint View Updates
-                // =========================================================================
                 let refreshed_count = successful_items.len();
                 let missing_count = missing_files.len();
 
@@ -703,6 +727,14 @@ impl BridgeMedia {
                             let created_date_str: slint::SharedString = format_timestamp(item.updated_record.creation_time).into();
                             let format_str: slint::SharedString = item.updated_record.format.default_extension().to_ascii_lowercase().into();
 
+                            let flags_str: slint::SharedString = if item.updated_record.is_deleted {
+                                "Deleted".into()
+                            } else if item.updated_record.is_corrupted {
+                                "Corrupted".into()
+                            } else {
+                                "OK".into()
+                            };
+
                             if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.record.id == item.media_id) {
                                 target_indexed.record = item.updated_record.clone();
                                 target_indexed.width_str = width_str;
@@ -714,14 +746,25 @@ impl BridgeMedia {
                                 target_indexed.modified_date_str = modified_date_str;
                                 target_indexed.created_date_str = created_date_str;
                                 target_indexed.format_str = format_str;
+                                target_indexed.flags_str = flags_str;
+                                target_indexed.is_corrupted = item.updated_record.is_corrupted;
+                                target_indexed.is_deleted = item.updated_record.is_deleted;
                                 target_indexed.tags_count = item.tags_count;
                                 target_indexed.tags_count_str = item.tags_count.to_string().into();
                                 target_indexed.has_tags = item.tags_count > 0;
                             }
                         }
+
+                        // Mark any missing files in-memory as is_deleted = true
+                        for missing in &missing_files {
+                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path) {
+                                target_indexed.record.is_deleted = true;
+                                target_indexed.is_deleted = true;
+                                target_indexed.flags_str = "Deleted".into();
+                            }
+                        }
                     }
 
-                    // Refresh visible rows in Slint in-place
                     let media_model = w.get_media_items();
                     let start_window = w.get_visible_start_index() as usize;
                     let visible_count = media_model.row_count();
@@ -745,6 +788,9 @@ impl BridgeMedia {
                                     view.modified_date_str = indexed.modified_date_str.clone();
                                     view.created_date_str = indexed.created_date_str.clone();
                                     view.format_str = indexed.format_str.clone();
+                                    view.flags_str = indexed.flags_str.clone();
+                                    view.is_corrupted = indexed.is_corrupted;
+                                    view.is_deleted = indexed.is_deleted;
                                     view.tags_count = indexed.tags_count as i32;
                                     view.tags_str = indexed.tags_count_str.clone();
                                     view.has_tags = indexed.has_tags;
@@ -757,16 +803,17 @@ impl BridgeMedia {
 
                     w.set_is_indexing_media(false);
 
-                    if missing_count > 0 {
+                    if missing_count > 0 && total_items == 1 {
+                        let missing_dialog = MissingFileDialogController::new();
+                        missing_dialog.show(&w, "Refresh Metadata", missing_files);
+                    } else if missing_count > 0 {
                         w.set_status_text(
                             format!(
-                                "Refreshed metadata for {} file(s). {} file(s) missing from storage.",
+                                "Refreshed metadata for {} file(s). ({} missing)",
                                 refreshed_count, missing_count
                             )
                             .into(),
                         );
-                        let missing_dialog = MissingFileDialogController::new();
-                        missing_dialog.show(&w, "Refresh Metadata", missing_files);
                     } else {
                         w.set_status_text(
                             format!(
@@ -780,21 +827,11 @@ impl BridgeMedia {
 
                     BridgeInspector::update(&w, &st_arc);
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
-
-                    tracing::info!(
-                        operation = %op_desc_owned,
-                        total_requested = total_items,
-                        refreshed = refreshed_count,
-                        missing = missing_count,
-                        elapsed_ms = t_start.elapsed().as_millis(),
-                        "[Benchmark: RefreshMetadataOnly] High-speed parallel metadata refresh completed without thumbnail generation"
-                    );
                 });
             })
             .expect("Failed to spawn parallel media metadata refresher thread");
     }
 
-    /// Ultra-fast multi-threaded metadata-only refresh for selected media files via Rayon.
     pub fn refresh_selected_metadata_only(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -845,8 +882,6 @@ impl BridgeMedia {
         );
     }
 
-    /// High-performance multi-threaded manual refresh for selected media files via Rayon.
-    /// Combines file metadata, container headers, and thumbnail regeneration in a single pass with batched LMDB commit.
     pub fn refresh_selected_media(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -930,9 +965,6 @@ impl BridgeMedia {
                     }
                 });
 
-                // =========================================================================
-                // 1. Parallel Multi-Core Extraction & Generation via Rayon
-                // =========================================================================
                 let progress_counter_ref = progress_counter.clone();
                 let progress_cb_ref = progress_cb.clone();
                 let lib_ref = lib_arc.clone();
@@ -966,78 +998,85 @@ impl BridgeMedia {
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(old_record.creation_time);
 
-                        let new_hash = match MediaHasher::hash_file(&file_path) {
-                            Ok(h) => h,
-                            Err(e) => return Err((media_id, file_path, e.to_string())),
+                        let is_zero_byte = file_size == 0;
+
+                        let (new_hash, hash_ok) = if is_zero_byte {
+                            (MediaHasher::hash_bytes(b""), true)
+                        } else {
+                            match MediaHasher::hash_file(&file_path) {
+                                Ok(h) => (h, true),
+                                Err(_) => (MediaHasher::hash_bytes(file_path.to_string_lossy().as_bytes()), false),
+                            }
                         };
 
                         let format = MediaFormat::from_path(&file_path);
                         let is_video = format.media_type() == Some(MediaType::Video);
 
-                        let (primary_frame, preview_rec, orig_w, orig_h, duration_ms) = if is_video {
-                            let video_res = match gen_ref.generate_video_thumbnails(&file_path, &cfg_ref) {
-                                Ok(res) => res,
-                                Err(e) => return Err((media_id, file_path, e.to_string())),
-                            };
+                        let (primary_frame_opt, preview_rec, orig_w, orig_h, duration_ms, gen_ok) = if is_zero_byte {
+                            (None, None, 0, 0, 0, false)
+                        } else if is_video {
+                            match gen_ref.generate_video_thumbnails(&file_path, &cfg_ref) {
+                                Ok(video_res) => {
+                                    let primary = video_res.primary_frame;
+                                    let mut preview_rec = None;
 
-                            let primary = video_res.primary_frame;
-                            let mut preview_rec = None;
+                                    if !video_res.preview_frames.is_empty() {
+                                        let (p_format, p_quality) = if cfg_ref.custom_preview_settings {
+                                            (cfg_ref.preview_format, cfg_ref.preview_quality)
+                                        } else {
+                                            (cfg_ref.format, cfg_ref.quality)
+                                        };
 
-                            if !video_res.preview_frames.is_empty() {
-                                let (p_format, p_quality) = if cfg_ref.custom_preview_settings {
-                                    (cfg_ref.preview_format, cfg_ref.preview_quality)
-                                } else {
-                                    (cfg_ref.format, cfg_ref.quality)
-                                };
-
-                                let mut locations = Vec::with_capacity(video_res.preview_frames.len());
-                                for p_frame in &video_res.preview_frames {
-                                    if let Ok(p_bytes) = gen_ref.compress(
-                                        &p_frame.rgb_pixels,
-                                        p_frame.width,
-                                        p_frame.height,
-                                        p_format,
-                                        p_quality,
-                                    ) && let Ok(p_loc) = store.append(&p_bytes)
-                                    {
-                                        locations.push(p_loc);
+                                        let mut locations = Vec::with_capacity(video_res.preview_frames.len());
+                                        for p_frame in &video_res.preview_frames {
+                                            if let Ok(p_bytes) = gen_ref.compress(
+                                                &p_frame.rgb_pixels,
+                                                p_frame.width,
+                                                p_frame.height,
+                                                p_format,
+                                                p_quality,
+                                            ) && let Ok(p_loc) = store.append(&p_bytes)
+                                            {
+                                                locations.push(p_loc);
+                                            }
+                                        }
+                                        if !locations.is_empty() {
+                                            preview_rec = Some(VideoPreviewRecord {
+                                                frame_count: locations.len() as u32,
+                                                frame_locations: locations,
+                                            });
+                                        }
                                     }
-                                }
-                                if !locations.is_empty() {
-                                    preview_rec = Some(VideoPreviewRecord {
-                                        frame_count: locations.len() as u32,
-                                        frame_locations: locations,
-                                    });
-                                }
-                            }
 
-                            (primary, preview_rec, video_res.orig_width, video_res.orig_height, video_res.duration_ms)
+                                    (Some(primary), preview_rec, video_res.orig_width, video_res.orig_height, video_res.duration_ms, true)
+                                }
+                                Err(_) => (None, None, 0, 0, 0, false),
+                            }
                         } else {
-                            let frame = match gen_ref.generate_image_thumbnail(
+                            match gen_ref.generate_image_thumbnail(
                                 &file_path,
                                 cfg_ref.max_bound,
                                 cfg_ref.scaling_algorithm,
                             ) {
-                                Ok(f) => f,
-                                Err(e) => return Err((media_id, file_path, e.to_string())),
-                            };
-                            (frame.clone(), None, frame.orig_width, frame.orig_height, 0u64)
+                                Ok(frame) => (Some(frame.clone()), None, frame.orig_width, frame.orig_height, 0u64, true),
+                                Err(_) => (None, None, 0, 0, 0, false),
+                            }
                         };
 
-                        let compressed_primary = match gen_ref.compress(
-                            &primary_frame.rgb_pixels,
-                            primary_frame.width,
-                            primary_frame.height,
-                            cfg_ref.format,
-                            cfg_ref.quality,
-                        ) {
-                            Ok(b) => b,
-                            Err(e) => return Err((media_id, file_path, e.to_string())),
-                        };
-
-                        let primary_loc = match store.append(&compressed_primary) {
-                            Ok(loc) => loc,
-                            Err(e) => return Err((media_id, file_path, e.to_string())),
+                        let primary_loc = if let Some(ref primary_frame) = primary_frame_opt {
+                            if let Ok(compressed_primary) = gen_ref.compress(
+                                &primary_frame.rgb_pixels,
+                                primary_frame.width,
+                                primary_frame.height,
+                                cfg_ref.format,
+                                cfg_ref.quality,
+                            ) {
+                                store.append(&compressed_primary).ok()
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
                         };
 
                         let assigned_tags_count = lib_ref
@@ -1045,6 +1084,8 @@ impl BridgeMedia {
                             .get_tags_for_media(media_id)
                             .map(|t| t.len())
                             .unwrap_or(0);
+
+                        let is_corrupted = is_zero_byte || !hash_ok || !gen_ok || (orig_w == 0 && orig_h == 0);
 
                         let updated_record = MediaRecord {
                             id: media_id,
@@ -1062,10 +1103,17 @@ impl BridgeMedia {
                             rating: old_record.rating,
                             last_seen: 1,
                             is_deleted: false,
+                            is_corrupted,
                         };
 
                         let cur_count = progress_counter_ref.fetch_add(1, Ordering::Relaxed) + 1;
                         progress_cb_ref(cur_count, total_items);
+
+                        let (pixels, pw, ph) = if let Some(f) = primary_frame_opt {
+                            (f.rgb_pixels, f.width, f.height)
+                        } else {
+                            (Vec::new(), 0, 0)
+                        };
 
                         Ok(ProcessedRefreshedItem {
                             media_id,
@@ -1074,9 +1122,9 @@ impl BridgeMedia {
                             updated_record,
                             primary_loc,
                             preview_rec,
-                            primary_pixels: primary_frame.rgb_pixels,
-                            primary_width: primary_frame.width,
-                            primary_height: primary_frame.height,
+                            primary_pixels: pixels,
+                            primary_width: pw,
+                            primary_height: ph,
                             tags_count: assigned_tags_count,
                         })
                     })
@@ -1088,7 +1136,8 @@ impl BridgeMedia {
                 for res in processed_results {
                     match res {
                         Ok(item) => successful_items.push(item),
-                        Err((_id, path, _err)) => {
+                        Err((id, path, _err)) => {
+                            let _ = lib_arc.media().set_deleted(id, true);
                             let fname = path
                                 .file_name()
                                 .map(|n| n.to_string_lossy().to_string())
@@ -1101,9 +1150,6 @@ impl BridgeMedia {
                     }
                 }
 
-                // =========================================================================
-                // 2. Single Atomic Batched LMDB Write Transaction
-                // =========================================================================
                 if !successful_items.is_empty()
                     && let Ok(mut wtxn) = lib_arc.raw_db().env.write_txn()
                 {
@@ -1122,7 +1168,12 @@ impl BridgeMedia {
                         let mut rec = item.updated_record.clone();
                         rec.last_seen = current_gen;
                         let _ = lib_arc.raw_db().media.put(&mut wtxn, &item.media_id, &rec);
-                        let _ = lib_arc.raw_db().thumbnails.put(&mut wtxn, &item.media_id, &item.primary_loc);
+
+                        if let Some(loc) = item.primary_loc {
+                            let _ = lib_arc.raw_db().thumbnails.put(&mut wtxn, &item.media_id, &loc);
+                        } else {
+                            let _ = lib_arc.raw_db().thumbnails.delete(&mut wtxn, &item.media_id);
+                        }
 
                         if let Some(ref p_rec) = item.preview_rec {
                             let _ = lib_arc.raw_db().video_previews.put(&mut wtxn, &item.media_id, p_rec);
@@ -1133,9 +1184,6 @@ impl BridgeMedia {
                     let _ = wtxn.commit();
                 }
 
-                // =========================================================================
-                // 3. Batch Update UI State, In-Memory Index & Slint Models
-                // =========================================================================
                 let refreshed_count = successful_items.len();
                 let missing_count = missing_files.len();
 
@@ -1145,19 +1193,21 @@ impl BridgeMedia {
                         st.is_refreshing_media = false;
 
                         for item in &successful_items {
-                            let shared_buf = rgb8_to_shared_buffer(
-                                &item.primary_pixels,
-                                item.primary_width,
-                                item.primary_height,
-                            );
+                            if item.primary_width > 0 && item.primary_height > 0 && !item.primary_pixels.is_empty() {
+                                let shared_buf = rgb8_to_shared_buffer(
+                                    &item.primary_pixels,
+                                    item.primary_width,
+                                    item.primary_height,
+                                );
 
-                            st.folder_thumbnails.insert(item.media_id, shared_buf.clone());
-                            let _ = thumb_arc.cache().insert(
-                                item.media_id,
-                                item.primary_width,
-                                item.primary_height,
-                                &item.primary_pixels,
-                            );
+                                st.folder_thumbnails.insert(item.media_id, shared_buf.clone());
+                                let _ = thumb_arc.cache().insert(
+                                    item.media_id,
+                                    item.primary_width,
+                                    item.primary_height,
+                                    &item.primary_pixels,
+                                );
+                            }
 
                             let is_video = matches!(item.updated_record.media_type, MediaType::Video);
                             let width_str: slint::SharedString = if item.updated_record.width > 0 {
@@ -1188,6 +1238,14 @@ impl BridgeMedia {
                             let created_date_str: slint::SharedString = format_timestamp(item.updated_record.creation_time).into();
                             let format_str: slint::SharedString = item.updated_record.format.default_extension().to_ascii_lowercase().into();
 
+                            let flags_str: slint::SharedString = if item.updated_record.is_deleted {
+                                "Deleted".into()
+                            } else if item.updated_record.is_corrupted {
+                                "Corrupted".into()
+                            } else {
+                                "OK".into()
+                            };
+
                             if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.record.id == item.media_id) {
                                 target_indexed.record = item.updated_record.clone();
                                 target_indexed.width_str = width_str;
@@ -1199,14 +1257,25 @@ impl BridgeMedia {
                                 target_indexed.modified_date_str = modified_date_str;
                                 target_indexed.created_date_str = created_date_str;
                                 target_indexed.format_str = format_str;
+                                target_indexed.flags_str = flags_str;
+                                target_indexed.is_corrupted = item.updated_record.is_corrupted;
+                                target_indexed.is_deleted = item.updated_record.is_deleted;
                                 target_indexed.tags_count = item.tags_count;
                                 target_indexed.tags_count_str = item.tags_count.to_string().into();
                                 target_indexed.has_tags = item.tags_count > 0;
                             }
                         }
+
+                        // Mark any missing files in-memory as is_deleted = true
+                        for missing in &missing_files {
+                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path) {
+                                target_indexed.record.is_deleted = true;
+                                target_indexed.is_deleted = true;
+                                target_indexed.flags_str = "Deleted".into();
+                            }
+                        }
                     }
 
-                    // Refresh visible rows in Slint
                     let media_model = w.get_media_items();
                     let start_window = w.get_visible_start_index() as usize;
                     let visible_count = media_model.row_count();
@@ -1237,6 +1306,9 @@ impl BridgeMedia {
                                     view.modified_date_str = indexed.modified_date_str.clone();
                                     view.created_date_str = indexed.created_date_str.clone();
                                     view.format_str = indexed.format_str.clone();
+                                    view.flags_str = indexed.flags_str.clone();
+                                    view.is_corrupted = indexed.is_corrupted;
+                                    view.is_deleted = indexed.is_deleted;
                                     view.tags_count = indexed.tags_count as i32;
                                     view.tags_str = indexed.tags_count_str.clone();
                                     view.has_tags = indexed.has_tags;
@@ -1249,16 +1321,17 @@ impl BridgeMedia {
 
                     w.set_is_indexing_media(false);
 
-                    if missing_count > 0 {
+                    if missing_count > 0 && total_items == 1 {
+                        let missing_dialog = MissingFileDialogController::new();
+                        missing_dialog.show(&w, "Refresh File", missing_files);
+                    } else if missing_count > 0 {
                         w.set_status_text(
                             format!(
-                                "Refreshed {} file(s). {} file(s) missing from storage.",
+                                "Refreshed {} file(s). ({} missing)",
                                 refreshed_count, missing_count
                             )
                             .into(),
                         );
-                        let missing_dialog = MissingFileDialogController::new();
-                        missing_dialog.show(&w, "Refresh File(s)", missing_files);
                     } else {
                         w.set_status_text(
                             format!(
@@ -1274,20 +1347,11 @@ impl BridgeMedia {
 
                     BridgeInspector::update(&w, &st_arc);
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
-
-                    tracing::info!(
-                        total_requested = total_items,
-                        refreshed = refreshed_count,
-                        missing = missing_count,
-                        elapsed_ms = t_start.elapsed().as_millis(),
-                        "[Benchmark: RefreshSelectedMedia] High-performance parallel refresh completed with Rayon multi-threading and batched LMDB commit"
-                    );
                 });
             })
             .expect("Failed to spawn parallel media item refresher thread");
     }
 
-    /// Parallel multi-core string formatting and pre-indexing for all 11 columns in Rayon.
     pub fn preindex(
         library: &Library,
         raw_records: Vec<MediaRecord>,
@@ -1295,8 +1359,16 @@ impl BridgeMedia {
     ) -> Vec<IndexedMediaRecord> {
         let folder_path_buf = folder_path.to_path_buf();
 
+        let mut seen_ids = HashSet::new();
+        let mut unique_records = Vec::with_capacity(raw_records.len());
+        for r in raw_records {
+            if seen_ids.insert(r.id) {
+                unique_records.push(r);
+            }
+        }
+
         let tag_counts_map: HashMap<MediaId, usize> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
-            raw_records
+            unique_records
                 .iter()
                 .filter_map(|r| {
                     if let Ok(Some(tags)) = library.raw_db().tags_by_media.get(&rtxn, &r.id) {
@@ -1310,7 +1382,7 @@ impl BridgeMedia {
             HashMap::new()
         };
 
-        raw_records
+        unique_records
             .into_par_iter()
             .enumerate()
             .map(|(index, r)| {
@@ -1332,13 +1404,21 @@ impl BridgeMedia {
                 let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
                 let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
 
+                let flags_str: slint::SharedString = if r.is_deleted {
+                    "Deleted".into()
+                } else if r.is_corrupted {
+                    "Corrupted".into()
+                } else {
+                    "OK".into()
+                };
+
                 let filename_slint: slint::SharedString = r.filename.clone().into();
                 let filename_lower = r.filename.to_lowercase();
                 let full_path = folder_path_buf.join(&r.filename);
 
                 IndexedMediaRecord {
                     index,
-                    record: r,
+                    record: r.clone(),
                     full_path,
                     filename_lower,
                     filename_slint,
@@ -1354,21 +1434,31 @@ impl BridgeMedia {
                     ar_value,
                     duration_str,
                     format_str,
+                    flags_str,
+                    is_corrupted: r.is_corrupted,
+                    is_deleted: r.is_deleted,
                     has_tags,
                 }
             })
             .collect()
     }
 
-    /// Preindexes media records across multiple folders (used for Global queries).
     pub fn preindex_records(
         library: &Library,
         raw_records: Vec<MediaRecord>,
     ) -> Vec<IndexedMediaRecord> {
         let mut folder_path_cache: HashMap<FolderId, PathBuf> = HashMap::new();
 
+        let mut seen_ids = HashSet::new();
+        let mut unique_records = Vec::with_capacity(raw_records.len());
+        for r in raw_records {
+            if seen_ids.insert(r.id) {
+                unique_records.push(r);
+            }
+        }
+
         let tag_counts_map: HashMap<MediaId, usize> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
-            raw_records
+            unique_records
                 .iter()
                 .filter_map(|r| {
                     if let Ok(Some(tags)) = library.raw_db().tags_by_media.get(&rtxn, &r.id) {
@@ -1382,7 +1472,7 @@ impl BridgeMedia {
             HashMap::new()
         };
 
-        raw_records
+        unique_records
             .into_iter()
             .enumerate()
             .map(|(index, r)| {
@@ -1404,6 +1494,14 @@ impl BridgeMedia {
                 let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
                 let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
 
+                let flags_str: slint::SharedString = if r.is_deleted {
+                    "Deleted".into()
+                } else if r.is_corrupted {
+                    "Corrupted".into()
+                } else {
+                    "OK".into()
+                };
+
                 let filename_slint: slint::SharedString = r.filename.clone().into();
                 let filename_lower = r.filename.to_lowercase();
 
@@ -1421,7 +1519,7 @@ impl BridgeMedia {
 
                 IndexedMediaRecord {
                     index,
-                    record: r,
+                    record: r.clone(),
                     full_path,
                     filename_lower,
                     filename_slint,
@@ -1437,6 +1535,9 @@ impl BridgeMedia {
                     ar_value,
                     duration_str,
                     format_str,
+                    flags_str,
+                    is_corrupted: r.is_corrupted,
+                    is_deleted: r.is_deleted,
                     has_tags,
                 }
             })
@@ -1489,7 +1590,7 @@ impl BridgeMedia {
             && let Some(f_id) = folder_id
             && let Some(ref p) = path_opt
         {
-            let raw_media = library.media().get_by_folder(f_id).unwrap_or_default();
+            let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
             let indexed = Self::preindex(library, raw_media, p);
             state.write().all_folder_media = indexed;
         }
@@ -1539,7 +1640,6 @@ impl BridgeMedia {
             row_map.insert(item.record.id, row_idx);
         }
 
-        // Calculate slice centered around the anchor index
         let anchor = options.anchor_index.unwrap_or(0);
         let half_buf = p0_initial_window / 2;
         let mut start_window = anchor.saturating_sub(half_buf);
@@ -1577,10 +1677,13 @@ impl BridgeMedia {
                 ar_str: item.ar_str.clone(),
                 duration_str: item.duration_str.clone(),
                 format_str: item.format_str.clone(),
+                flags_str: item.flags_str.clone(),
                 has_tags: item.has_tags,
                 thumbnail: thumbnail_img,
                 is_selected,
                 is_video: matches!(item.record.media_type, MediaType::Video),
+                is_corrupted: item.is_corrupted,
+                is_deleted: item.is_deleted,
             });
         }
 
@@ -1628,6 +1731,7 @@ impl BridgeMedia {
                 let all_targets: Vec<PreparedTarget> = st_read
                     .all_folder_media
                     .iter()
+                    .filter(|item| !item.is_deleted)
                     .map(|item| PreparedTarget {
                         pipeline_id: 0,
                         folder_id: item.record.folder_id,

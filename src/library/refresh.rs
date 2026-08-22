@@ -3,12 +3,12 @@ use super::error::LibraryError;
 use super::models::{FolderId, MediaId, MediaRecord};
 use super::schema::SEQ_MEDIA_ID;
 use crate::media::{
-    DirectoryScanner, FileHash, MediaDetector, MediaHasher, MetadataExtractor, RawMetadata,
-    ScannedFile,
+    DirectoryScanner, FileHash, MediaDetector, MediaHasher, MediaType,
+    MetadataExtractor, RawMetadata, ScannedFile,
 };
 use crate::settings::LogObscurer;
 use rayon::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -22,6 +22,7 @@ pub struct RefreshReport {
     pub unchanged_media: usize,
     pub deleted_media: usize,
     pub restored_media: usize,
+    pub corrupted_media: usize,
 }
 
 enum ProcessingCandidate {
@@ -68,6 +69,7 @@ enum ProcessedResult {
         raw_meta: RawMetadata,
         filename: String,
         preserved_rating: u8,
+        is_corrupted: bool,
         was_deleted: bool,
     },
     NewItem {
@@ -77,8 +79,8 @@ enum ProcessedResult {
         mtime: i64,
         ctime: i64,
         raw_meta: RawMetadata,
+        is_corrupted: bool,
     },
-    Failed,
     Cancelled,
 }
 
@@ -132,7 +134,7 @@ impl<'a> FolderRefresher<'a> {
 
         let folder_path = Path::new(&folder_record.path);
 
-        // 0. Auto-detect MIME type & append extension for extensionless files if option is enabled
+        // Auto-detect MIME type & append extension for extensionless files if option is enabled
         if auto_detect_extensionless && folder_path.is_dir() {
             Self::auto_detect_and_fix_extensionless(folder_path, cancel_flag.as_deref());
         }
@@ -162,7 +164,7 @@ impl<'a> FolderRefresher<'a> {
             return Ok(report);
         }
 
-        // 1. Snapshot existing media records from LMDB
+        // 1. Snapshot existing media records from LMDB and deduplicate by filename
         let rtxn = self.db.env.read_txn()?;
         let existing_ids = self
             .db
@@ -172,8 +174,12 @@ impl<'a> FolderRefresher<'a> {
 
         let mut existing_map: HashMap<String, (MediaId, MediaRecord)> =
             HashMap::with_capacity(existing_ids.len());
+        let mut seen_ids = HashSet::new();
+
         for id in existing_ids {
-            if let Some(rec) = self.db.media.get(&rtxn, &id)? {
+            if seen_ids.insert(id)
+                && let Some(rec) = self.db.media.get(&rtxn, &id)?
+            {
                 existing_map.insert(rec.filename.clone(), (id, rec));
             }
         }
@@ -247,7 +253,7 @@ impl<'a> FolderRefresher<'a> {
             cb(0, total_candidates);
         }
 
-        // 3. Parallelize Rayon computation (MD5 hashing & Metadata extraction) across CPU cores
+        // 3. Parallelize Rayon computation across CPU cores
         let cb_arc = progress_callback.map(Arc::new);
         let counter_ref = processed_counter.clone();
         let cancel_ref = cancel_flag.clone();
@@ -278,10 +284,14 @@ impl<'a> FolderRefresher<'a> {
                         ctime,
                     } => {
                         let was_deleted = existing_record.is_deleted;
-                        let new_hash = match MediaHasher::hash_file(&scanned.path) {
-                            Ok(h) => h,
-                            Err(_) => {
-                                return ProcessedResult::Failed;
+                        let is_zero_byte = file_size == 0;
+
+                        let (new_hash, hash_ok) = if is_zero_byte {
+                            (MediaHasher::hash_bytes(b""), true)
+                        } else {
+                            match MediaHasher::hash_file(&scanned.path) {
+                                Ok(h) => (h, true),
+                                Err(_) => (MediaHasher::hash_bytes(scanned.path.to_string_lossy().as_bytes()), false),
                             }
                         };
 
@@ -291,7 +301,42 @@ impl<'a> FolderRefresher<'a> {
                             return ProcessedResult::Cancelled;
                         }
 
-                        if new_hash == existing_record.file_hash {
+                        let (raw_meta, meta_ok) = if is_zero_byte {
+                            (
+                                RawMetadata {
+                                    file_size: 0,
+                                    modification_time: mtime,
+                                    creation_time: ctime,
+                                    duration_ms: 0,
+                                    width: 0,
+                                    height: 0,
+                                    media_type: scanned.format.media_type().unwrap_or(MediaType::Image),
+                                    format: scanned.format,
+                                },
+                                false,
+                            )
+                        } else {
+                            match MetadataExtractor::extract(&scanned.path) {
+                                Ok(m) => (m, true),
+                                Err(_) => (
+                                    RawMetadata {
+                                        file_size,
+                                        modification_time: mtime,
+                                        creation_time: ctime,
+                                        duration_ms: 0,
+                                        width: 0,
+                                        height: 0,
+                                        media_type: scanned.format.media_type().unwrap_or(MediaType::Image),
+                                        format: scanned.format,
+                                    },
+                                    false,
+                                ),
+                            }
+                        };
+
+                        let is_corrupted = is_zero_byte || !hash_ok || !meta_ok || (raw_meta.width == 0 && raw_meta.height == 0);
+
+                        if !is_corrupted && new_hash == existing_record.file_hash && !existing_record.is_corrupted {
                             ProcessedResult::ModifiedHashUnchanged {
                                 existing_id,
                                 existing_record,
@@ -301,13 +346,6 @@ impl<'a> FolderRefresher<'a> {
                                 was_deleted,
                             }
                         } else {
-                            let raw_meta = match MetadataExtractor::extract(&scanned.path) {
-                                Ok(m) => m,
-                                Err(_) => {
-                                    return ProcessedResult::Failed;
-                                }
-                            };
-
                             ProcessedResult::ModifiedContentChanged {
                                 existing_id,
                                 old_hash: existing_record.file_hash,
@@ -318,6 +356,7 @@ impl<'a> FolderRefresher<'a> {
                                 raw_meta,
                                 filename: scanned.filename,
                                 preserved_rating: existing_record.rating,
+                                is_corrupted,
                                 was_deleted,
                             }
                         }
@@ -328,10 +367,14 @@ impl<'a> FolderRefresher<'a> {
                         mtime,
                         ctime,
                     } => {
-                        let new_hash = match MediaHasher::hash_file(&scanned.path) {
-                            Ok(h) => h,
-                            Err(_) => {
-                                return ProcessedResult::Failed;
+                        let is_zero_byte = file_size == 0;
+
+                        let (new_hash, hash_ok) = if is_zero_byte {
+                            (MediaHasher::hash_bytes(b""), true)
+                        } else {
+                            match MediaHasher::hash_file(&scanned.path) {
+                                Ok(h) => (h, true),
+                                Err(_) => (MediaHasher::hash_bytes(scanned.path.to_string_lossy().as_bytes()), false),
                             }
                         };
 
@@ -341,12 +384,40 @@ impl<'a> FolderRefresher<'a> {
                             return ProcessedResult::Cancelled;
                         }
 
-                        let raw_meta = match MetadataExtractor::extract(&scanned.path) {
-                            Ok(m) => m,
-                            Err(_) => {
-                                return ProcessedResult::Failed;
+                        let (raw_meta, meta_ok) = if is_zero_byte {
+                            (
+                                RawMetadata {
+                                    file_size: 0,
+                                    modification_time: mtime,
+                                    creation_time: ctime,
+                                    duration_ms: 0,
+                                    width: 0,
+                                    height: 0,
+                                    media_type: scanned.format.media_type().unwrap_or(MediaType::Image),
+                                    format: scanned.format,
+                                },
+                                false,
+                            )
+                        } else {
+                            match MetadataExtractor::extract(&scanned.path) {
+                                Ok(m) => (m, true),
+                                Err(_) => (
+                                    RawMetadata {
+                                        file_size,
+                                        modification_time: mtime,
+                                        creation_time: ctime,
+                                        duration_ms: 0,
+                                        width: 0,
+                                        height: 0,
+                                        media_type: scanned.format.media_type().unwrap_or(MediaType::Image),
+                                        format: scanned.format,
+                                    },
+                                    false,
+                                ),
                             }
                         };
+
+                        let is_corrupted = is_zero_byte || !hash_ok || !meta_ok || (raw_meta.width == 0 && raw_meta.height == 0);
 
                         ProcessedResult::NewItem {
                             filename: scanned.filename,
@@ -355,6 +426,7 @@ impl<'a> FolderRefresher<'a> {
                             mtime,
                             ctime,
                             raw_meta,
+                            is_corrupted,
                         }
                     }
                 };
@@ -390,6 +462,9 @@ impl<'a> FolderRefresher<'a> {
                     existing_record.is_deleted = false;
                     self.db.media.put(&mut wtxn, &existing_id, &existing_record)?;
                     active_media_ids.push(existing_id);
+                    if existing_record.is_corrupted {
+                        report.corrupted_media += 1;
+                    }
                     report.unchanged_media += 1;
                 }
                 ProcessedResult::ModifiedHashUnchanged {
@@ -407,6 +482,9 @@ impl<'a> FolderRefresher<'a> {
                     existing_record.is_deleted = false;
                     self.db.media.put(&mut wtxn, &existing_id, &existing_record)?;
                     active_media_ids.push(existing_id);
+                    if existing_record.is_corrupted {
+                        report.corrupted_media += 1;
+                    }
                     if was_deleted {
                         report.restored_media += 1;
                     } else {
@@ -423,6 +501,7 @@ impl<'a> FolderRefresher<'a> {
                     raw_meta,
                     filename,
                     preserved_rating,
+                    is_corrupted,
                     was_deleted,
                 } => {
                     self.db.update_media_hash_index(&mut wtxn, existing_id, Some(&old_hash), Some(&new_hash))?;
@@ -443,10 +522,14 @@ impl<'a> FolderRefresher<'a> {
                         rating: preserved_rating,
                         last_seen: current_generation,
                         is_deleted: false,
+                        is_corrupted,
                     };
 
                     self.db.media.put(&mut wtxn, &existing_id, &updated_record)?;
                     active_media_ids.push(existing_id);
+                    if is_corrupted {
+                        report.corrupted_media += 1;
+                    }
                     if was_deleted {
                         report.restored_media += 1;
                     } else {
@@ -460,6 +543,7 @@ impl<'a> FolderRefresher<'a> {
                     mtime,
                     ctime,
                     raw_meta,
+                    is_corrupted,
                 } => {
                     let new_media_id = self.db.next_id(&mut wtxn, SEQ_MEDIA_ID)?;
                     let new_record = MediaRecord {
@@ -478,19 +562,23 @@ impl<'a> FolderRefresher<'a> {
                         rating: 0,
                         last_seen: current_generation,
                         is_deleted: false,
+                        is_corrupted,
                     };
 
                     self.db.media.put(&mut wtxn, &new_media_id, &new_record)?;
                     self.db.update_media_hash_index(&mut wtxn, new_media_id, None, Some(&file_hash))?;
 
                     active_media_ids.push(new_media_id);
+                    if is_corrupted {
+                        report.corrupted_media += 1;
+                    }
                     report.new_media += 1;
                 }
-                ProcessedResult::Failed | ProcessedResult::Cancelled => {}
+                ProcessedResult::Cancelled => {}
             }
         }
 
-        // 5. Zero-Data-Loss Soft Deletion
+        // 5. Zero-Data-Loss Soft Deletion with absolute deduplication
         let mut all_folder_media_ids = active_media_ids.clone();
 
         for (deleted_id, mut deleted_record) in existing_map.into_values() {
@@ -502,7 +590,15 @@ impl<'a> FolderRefresher<'a> {
             all_folder_media_ids.push(deleted_id);
         }
 
-        self.db.media_by_folder.put(&mut wtxn, &folder_id, &all_folder_media_ids)?;
+        let mut final_unique_ids = Vec::with_capacity(all_folder_media_ids.len());
+        let mut id_dedup = HashSet::new();
+        for id in all_folder_media_ids {
+            if id_dedup.insert(id) {
+                final_unique_ids.push(id);
+            }
+        }
+
+        self.db.media_by_folder.put(&mut wtxn, &folder_id, &final_unique_ids)?;
         wtxn.commit()?;
 
         tracing::info!(
@@ -513,13 +609,13 @@ impl<'a> FolderRefresher<'a> {
             unchanged = report.unchanged_media,
             marked_deleted = report.deleted_media,
             restored = report.restored_media,
+            corrupted = report.corrupted_media,
             "Folder refresh committed successfully to LMDB"
         );
 
         Ok(report)
     }
 
-    /// Automatically scans directory for extensionless files, sniffs magic headers, and renames matching supported files.
     fn auto_detect_and_fix_extensionless(folder_path: &Path, cancel_flag: Option<&AtomicBool>) {
         let entries = match std::fs::read_dir(folder_path) {
             Ok(e) => e,

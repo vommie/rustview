@@ -31,6 +31,7 @@ pub struct ApiMediaDetails {
     pub media_type: String,
     pub format: String,
     pub is_deleted: bool,
+    pub is_corrupted: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

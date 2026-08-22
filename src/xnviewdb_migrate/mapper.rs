@@ -73,12 +73,9 @@ impl XnViewMapper {
         stats.extracted_external_hashes = raw.hashes.len();
         stats.hashes_table_found = raw.hashes_table_found;
 
-        // =========================================================================
         // 1. External Hashes Table Mapping (Contiguous 1-based IDs)
-        // =========================================================================
         let mut external_hashes = Vec::with_capacity(raw.hashes.len());
-        let mut hash_lookup_map: HashMap<i64, FileHash> =
-            HashMap::with_capacity(raw.hashes.len());
+        let mut hash_lookup_map: HashMap<i64, FileHash> = HashMap::with_capacity(raw.hashes.len());
 
         for (idx, h) in raw.hashes.into_iter().enumerate() {
             let next_ext_hash_id = (idx + 1) as u64;
@@ -102,9 +99,7 @@ impl XnViewMapper {
         }
         stats.total_external_hashes = external_hashes.len();
 
-        // =========================================================================
-        // 2. Folder Filtering & Bulk Directory Cache (Linux getdents64 optimization)
-        // =========================================================================
+        // 2. Folder Filtering & Bulk Directory Cache
         let mut folders = Vec::with_capacity(raw.folders.len());
         let mut folder_id_map: HashMap<i64, FolderId> = HashMap::with_capacity(raw.folders.len());
         let mut folder_path_map: HashMap<FolderId, PathBuf> =
@@ -117,7 +112,6 @@ impl XnViewMapper {
         for f in raw.folders {
             let normalized_path_buf = normalize_path(Path::new(f.pathname.trim()));
 
-            // 2a. Base/Root Path Subtree Check
             if let Some(root_path) = root_filter {
                 let is_under_root =
                     normalized_path_buf == root_path || normalized_path_buf.starts_with(root_path);
@@ -135,7 +129,6 @@ impl XnViewMapper {
                 }
             }
 
-            // 2b. Filesystem Existence Check
             let exists_on_disk = normalized_path_buf.is_dir();
             if skip_missing && !exists_on_disk {
                 stats.skipped_folders_missing += 1;
@@ -161,8 +154,6 @@ impl XnViewMapper {
 
             logger.log_folder_migrated(f.folder_id, new_folder_id, &normalized_path_str);
 
-            // High-Performance Linux Cache: Read directory once via read_dir / getdents64
-            // Caches both regular files and subdirectories with zero subsequent stat() syscalls
             if exists_on_disk {
                 let mut dir_items = HashMap::new();
                 if let Ok(entries) = std::fs::read_dir(&normalized_path_buf) {
@@ -226,13 +217,10 @@ impl XnViewMapper {
         }
         stats.total_folders = folders.len();
 
-        // =========================================================================
         // 3. Hierarchical Tag Ordering, Re-indexing & Visual Tree Logging
-        // =========================================================================
         let (tags, tag_id_map, tag_tree_roots) = Self::reindex_tags(raw.tags, logger);
         stats.total_tags = tags.len();
 
-        // Output the visual hierarchical Tag Tree to the audit log
         logger.log_tag_tree(&tag_tree_roots);
 
         tracing::info!(
@@ -240,10 +228,7 @@ impl XnViewMapper {
             root_tags_count = tag_tree_roots.len(),
             "[XnViewMapper] Hierarchical tag tree re-indexed and logged to audit trail"
         );
-
-        // =========================================================================
         // 4. Media Filtering & Resolving via in-memory O(1) Cache
-        // =========================================================================
         let mut media = Vec::with_capacity(raw.images.len());
         let mut media_id_map: HashMap<i64, MediaId> = HashMap::with_capacity(raw.images.len());
         let mut media_by_folder: HashMap<FolderId, Vec<MediaId>> = HashMap::new();
@@ -251,7 +236,6 @@ impl XnViewMapper {
         let mut next_media_id = 1u64;
 
         for img in raw.images {
-            // 4a. Check if parent folder was migrated (under root and existing)
             let Some(&mapped_folder_id) = folder_id_map.get(&img.folder_id) else {
                 if root_filter.is_some() {
                     stats.skipped_media_outside_root += 1;
@@ -278,10 +262,8 @@ impl XnViewMapper {
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            // 4b. O(1) in-memory check for item type in the directory
             let item_in_cache = dir_cache.and_then(|c| c.get(&img.filename));
 
-            // Case 1: Item is a subdirectory recorded in XnView's Images table for browser grid display
             if let Some(info) = item_in_cache
                 && info.is_dir
             {
@@ -290,22 +272,13 @@ impl XnViewMapper {
                 continue;
             }
 
-            // Case 2: Media format validation (only image & video files belong in RustView's DB_MEDIA)
             let format = MediaFormat::from_path(Path::new(&img.filename));
-            if !format.is_supported() {
-                // If it exists as a regular file on disk but is a non-media format (.txt, .py, etc.)
-                if item_in_cache.is_some_and(|i| i.is_file) {
-                    stats.skipped_unsupported_media += 1;
-                    logger.log_unsupported_file_skipped(
-                        img.image_id,
-                        &img.filename,
-                        &folder_display,
-                    );
-                    continue;
-                }
+            if !format.is_supported() && item_in_cache.is_some_and(|i| i.is_file) {
+                stats.skipped_unsupported_media += 1;
+                logger.log_unsupported_file_skipped(img.image_id, &img.filename, &folder_display);
+                continue;
             }
 
-            // Case 3: Missing media file check
             let file_physically_exists = item_in_cache.is_some_and(|i| i.is_file);
             if skip_missing && !file_physically_exists {
                 stats.skipped_media_missing_file += 1;
@@ -325,17 +298,17 @@ impl XnViewMapper {
             let file_path = folder_dir.map(|p| p.join(&img.filename));
             let media_type = format.media_type().unwrap_or(MediaType::Image);
 
-            let (mut width, mut height, mut duration_ms) = if let Some(info) = raw.image_info.get(&img.image_id) {
-                (info.width, info.height, info.duration)
-            } else {
-                (0, 0, 0)
-            };
+            let (mut width, mut height, mut duration_ms) =
+                if let Some(info) = raw.image_info.get(&img.image_id) {
+                    (info.width, info.height, info.duration)
+                } else {
+                    (0, 0, 0)
+                };
 
             let mut file_size = img.size.max(0) as u64;
             let mut mtime = img.modified_date.max(0);
             let mut ctime = mtime;
 
-            // Populate size, mtime, and ctime from in-memory cache if missing in XnView DB
             if let Some(cached_info) = item_in_cache {
                 if file_size == 0 {
                     file_size = cached_info.size;
@@ -346,7 +319,6 @@ impl XnViewMapper {
                 ctime = cached_info.ctime;
             }
 
-            // Hash Resolution (Hashes Table -> Live Probe -> Seeded Fallback)
             let file_hash = if let Some(hash_id) = img.hash_id
                 && let Some(&h) = hash_lookup_map.get(&hash_id)
             {
@@ -355,7 +327,9 @@ impl XnViewMapper {
             } else if let Some(ref path) = file_path
                 && file_physically_exists
             {
-                if (width == 0 || height == 0 || (media_type == MediaType::Video && duration_ms == 0))
+                if (width == 0
+                    || height == 0
+                    || (media_type == MediaType::Video && duration_ms == 0))
                     && let Ok(raw_meta) = MetadataExtractor::extract(path)
                 {
                     width = raw_meta.width;
@@ -389,6 +363,8 @@ impl XnViewMapper {
                 &hash_hex,
             );
 
+            let is_corrupted = file_size == 0 || (width == 0 && height == 0);
+
             let record = MediaRecord {
                 id: new_media_id,
                 folder_id: mapped_folder_id,
@@ -405,6 +381,7 @@ impl XnViewMapper {
                 rating: (img.rating.clamp(0, 5)) as u8,
                 last_seen: 1,
                 is_deleted: false,
+                is_corrupted,
             };
 
             media_by_folder
@@ -421,9 +398,7 @@ impl XnViewMapper {
         }
         stats.total_media = media.len();
 
-        // =========================================================================
         // 5. Relational Tag Associations (TagsTree) Mapping
-        // =========================================================================
         let mut tags_by_media: HashMap<MediaId, Vec<TagId>> = HashMap::new();
         let mut media_by_tag: HashMap<TagId, Vec<MediaId>> = HashMap::new();
         let mut mapped_link_count = 0usize;
@@ -495,19 +470,19 @@ impl XnViewMapper {
         }
     }
 
-    /// Topologically sorts tags and re-indexes them with contiguous IDs (1..=N), preserving hierarchy and capturing tree structure.
     fn reindex_tags(
         raw_tags: Vec<XnViewTag>,
         logger: &mut MigrationLogger,
-    ) -> (Vec<TagRecord>, HashMap<i64, TagId>, Vec<MigratedTagTreeNode>) {
+    ) -> (
+        Vec<TagRecord>,
+        HashMap<i64, TagId>,
+        Vec<MigratedTagTreeNode>,
+    ) {
         let mut old_tags_map: HashMap<i64, XnViewTag> = HashMap::new();
         let mut children_map: HashMap<Option<i64>, Vec<i64>> = HashMap::new();
 
         for t in raw_tags {
-            children_map
-                .entry(t.parent_id)
-                .or_default()
-                .push(t.tag_id);
+            children_map.entry(t.parent_id).or_default().push(t.tag_id);
             old_tags_map.insert(t.tag_id, t);
         }
 
@@ -528,7 +503,6 @@ impl XnViewMapper {
             logger,
         };
 
-        // Traverse hierarchy from Root level downwards and collect the tree hierarchy
         let root_nodes = Self::traverse_and_reindex(None, None, &mut ctx);
 
         (reindexed_tags, tag_id_map, root_nodes)
@@ -568,12 +542,8 @@ impl XnViewMapper {
                         name: tag_name.clone(),
                     });
 
-                    // Recurse into children of this tag
-                    let child_tree = Self::traverse_and_reindex(
-                        Some(child_old_id),
-                        Some(new_id),
-                        ctx,
-                    );
+                    let child_tree =
+                        Self::traverse_and_reindex(Some(child_old_id), Some(new_id), ctx);
 
                     nodes.push(MigratedTagTreeNode {
                         old_id: child_old_id,

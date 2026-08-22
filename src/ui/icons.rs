@@ -21,6 +21,8 @@ pub enum IconAsset {
     QueryGlobal,
     Tag,
     Rating(u8),
+    MediaFileCorrupted,
+    MediaFileMissing,
 }
 
 /// Metadata describing visual capabilities, path locations, and theme-tinting permissions.
@@ -230,6 +232,22 @@ impl IconAsset {
                 allow_tint: false,
                 description: "Fallback rating badge (never tint)",
             },
+            Self::MediaFileCorrupted => IconMetadata {
+                asset: *self,
+                name: "media_file_corrupted",
+                file_name: "media_file_corrupted.svg",
+                relative_path: "ui/icons/media_file_corrupted.svg",
+                allow_tint: false,
+                description: "Corrupted or unreadable media file warning icon",
+            },
+            Self::MediaFileMissing => IconMetadata {
+                asset: *self,
+                name: "media_file_missing",
+                file_name: "media_file_missing.svg",
+                relative_path: "ui/icons/media_file_missing.svg",
+                allow_tint: false,
+                description: "Missing or deleted media file placeholder icon",
+            },
         }
     }
 
@@ -278,6 +296,8 @@ impl IconAsset {
             "rating_3" | "rate_3" => Some(Self::Rating(3)),
             "rating_4" | "rate_4" => Some(Self::Rating(4)),
             "rating_5" | "rate_5" => Some(Self::Rating(5)),
+            "media_file_corrupted" | "corrupt" | "corrupted" => Some(Self::MediaFileCorrupted),
+            "media_file_missing" | "missing" | "deleted" => Some(Self::MediaFileMissing),
             _ => None,
         }
     }
@@ -308,6 +328,8 @@ impl IconAsset {
             Self::Rating(3),
             Self::Rating(4),
             Self::Rating(5),
+            Self::MediaFileCorrupted,
+            Self::MediaFileMissing,
         ]
     }
 }

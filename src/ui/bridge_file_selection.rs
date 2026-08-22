@@ -270,18 +270,19 @@ impl BridgeFileSelection {
             st.all_folder_media
                 .iter()
                 .find(|m| m.record.id == media_id)
-                .map(|m| (m.record.filename.clone(), m.full_path.clone()))
+                .map(|m| (m.record.filename.clone(), m.full_path.clone(), m.record.is_corrupted))
         };
 
-        let (filename, full_path) = match full_path_opt {
-            Some(pair) => pair,
+        let (filename, full_path, is_corrupted) = match full_path_opt {
+            Some(tuple) => tuple,
             None => match library.resolve_media_path(media_id) {
                 Ok(p) => {
                     let name = p
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
-                    (name, p)
+                    let corrupt = library.media().get(media_id).ok().flatten().map(|m| m.is_corrupted).unwrap_or(false);
+                    (name, p, corrupt)
                 }
                 Err(e) => {
                     tracing::error!(
@@ -297,6 +298,7 @@ impl BridgeFileSelection {
             },
         };
 
+        // Strict Check: Missing Files Dialog ONLY shown if the file physically does not exist on disk
         if !full_path.exists() {
             tracing::warn!(
                 media_id = media_id,
@@ -315,6 +317,14 @@ impl BridgeFileSelection {
             return;
         }
 
+        if is_corrupted {
+            tracing::warn!(
+                media = %LogObscurer::media(Some(media_id), &filename),
+                path = %LogObscurer::path(&full_path),
+                "Opening file flagged as corrupted. Attempting launch with OS default application..."
+            );
+        }
+
         tracing::info!(
             media = %LogObscurer::media(Some(media_id), &filename),
             file = %LogObscurer::path(&full_path),
@@ -329,9 +339,12 @@ impl BridgeFileSelection {
             );
             window.set_status_text(format!("Failed to open file: {}", e).into());
         } else {
-            window.set_status_text(
-                format!("Opened '{}' with system default application.", filename).into(),
-            );
+            let status_msg = if is_corrupted {
+                format!("Opened file '{}' (Flagged: Corrupted) with system application.", filename)
+            } else {
+                format!("Opened '{}' with system default application.", filename)
+            };
+            window.set_status_text(status_msg.into());
         }
     }
 }

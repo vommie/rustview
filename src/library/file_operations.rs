@@ -444,7 +444,6 @@ impl<'a> FileOperations<'a> {
 
         let is_same_file = is_same_file_path(&src_path, &dst_path);
 
-        // Self-Move: If moving to the exact same file path, safely no-op
         if is_same_file {
             tracing::debug!(
                 media_id = media_id,
@@ -458,7 +457,6 @@ impl<'a> FileOperations<'a> {
             return Err(LibraryError::FileOperationAlreadyExists(validated_name));
         }
 
-        // 1. Physical move on storage
         tracing::info!(
             media = %LogObscurer::media(Some(media_id), &source_record.filename),
             src = %LogObscurer::path(&src_path),
@@ -483,7 +481,6 @@ impl<'a> FileOperations<'a> {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(source_record.creation_time);
 
-        // 2. Overwrite handling in LMDB: delete overwritten target record if one existed in destination
         if overwrite_existing {
             let mut target_media_ids = self
                 .db
@@ -519,7 +516,6 @@ impl<'a> FileOperations<'a> {
             }
         }
 
-        // 3. Update source media record in LMDB
         source_record.folder_id = target_folder_id;
         source_record.filename = validated_name.clone();
         source_record.modification_time = mtime;
@@ -528,15 +524,12 @@ impl<'a> FileOperations<'a> {
         source_record.is_deleted = false;
         self.db.media.put(&mut wtxn, &media_id, &source_record)?;
 
-        // 4. Update folder membership indices in LMDB
         if old_folder_id != target_folder_id {
-            // Remove from old folder
             if let Some(mut old_list) = self.db.media_by_folder.get(&wtxn, &old_folder_id)? {
                 old_list.retain(|&id| id != media_id);
                 self.db.media_by_folder.put(&mut wtxn, &old_folder_id, &old_list)?;
             }
 
-            // Add to new folder
             let mut new_list = self
                 .db
                 .media_by_folder
@@ -606,7 +599,6 @@ impl<'a> FileOperations<'a> {
 
         let is_same_file = is_same_file_path(&src_path, &dst_path);
 
-        // Self-Overwrite Guard: Copying a file onto itself with overwrite must NOT truncate/re-copy the file
         if is_same_file {
             if overwrite_existing {
                 tracing::warn!(
@@ -627,7 +619,6 @@ impl<'a> FileOperations<'a> {
             return Err(LibraryError::FileOperationAlreadyExists(validated_name));
         }
 
-        // 1. Physical copy on storage
         tracing::info!(
             media = %LogObscurer::media(Some(media_id), &source_record.filename),
             src = %LogObscurer::path(&src_path),
@@ -652,7 +643,6 @@ impl<'a> FileOperations<'a> {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(source_record.creation_time);
 
-        // 2. Overwrite cleanup in target if existing destination record is replaced
         let mut target_media_ids = self
             .db
             .media_by_folder
@@ -662,7 +652,8 @@ impl<'a> FileOperations<'a> {
         if overwrite_existing && dst_path.exists() {
             let mut overwritten_id_opt = None;
             for &t_id in &target_media_ids {
-                if let Some(t_rec) = self.db.media.get(&wtxn, &t_id)?
+                if t_id != media_id
+                    && let Some(t_rec) = self.db.media.get(&wtxn, &t_id)?
                     && t_rec.filename.eq_ignore_ascii_case(&validated_name)
                 {
                     overwritten_id_opt = Some((t_id, t_rec.file_hash));
@@ -686,7 +677,6 @@ impl<'a> FileOperations<'a> {
             }
         }
 
-        // 3. Allocate new Media ID and create new MediaRecord
         let new_media_id = self.db.next_id(&mut wtxn, SEQ_MEDIA_ID)?;
         let new_record = MediaRecord {
             id: new_media_id,
@@ -704,18 +694,17 @@ impl<'a> FileOperations<'a> {
             rating: source_record.rating,
             last_seen: 1,
             is_deleted: false,
+            is_corrupted: source_record.is_corrupted,
         };
 
         self.db.media.put(&mut wtxn, &new_media_id, &new_record)?;
         self.db.update_media_hash_index(&mut wtxn, new_media_id, None, Some(&new_record.file_hash))?;
 
-        // 4. Update folder media list
         if !target_media_ids.contains(&new_media_id) {
             target_media_ids.push(new_media_id);
             self.db.media_by_folder.put(&mut wtxn, &target_folder_id, &target_media_ids)?;
         }
 
-        // 5. Clone Tag Associations
         if let Some(source_tags) = self.db.tags_by_media.get(&wtxn, &media_id)? {
             self.db.tags_by_media.put(&mut wtxn, &new_media_id, &source_tags)?;
             for &t_id in &source_tags {
@@ -727,7 +716,6 @@ impl<'a> FileOperations<'a> {
             }
         }
 
-        // 6. Reuse Packfile Thumbnail & Preview locations (Zero-copy in PackStore)
         if let Some(thumb_loc) = self.db.thumbnails.get(&wtxn, &media_id)? {
             self.db.thumbnails.put(&mut wtxn, &new_media_id, &thumb_loc)?;
         }
@@ -748,6 +736,46 @@ impl<'a> FileOperations<'a> {
         );
 
         Ok(new_record)
+    }
+
+    /// Purges media records completely from LMDB storage (database-only cleanup without deleting files on disk).
+    pub fn purge_media_from_db(&self, media_ids: &[MediaId]) -> Result<usize, LibraryError> {
+        let mut wtxn = self.db.env.write_txn()?;
+        let mut purged_count = 0;
+
+        for &mid in media_ids {
+            if let Some(rec) = self.db.media.get(&wtxn, &mid)? {
+                self.db.update_media_hash_index(&mut wtxn, mid, Some(&rec.file_hash), None)?;
+                self.db.media.delete(&mut wtxn, &mid)?;
+                self.db.thumbnails.delete(&mut wtxn, &mid)?;
+                self.db.video_previews.delete(&mut wtxn, &mid)?;
+
+                if let Some(tags) = self.db.tags_by_media.get(&wtxn, &mid)? {
+                    for tag_id in tags {
+                        if let Some(mut t_media) = self.db.media_by_tag.get(&wtxn, &tag_id)? {
+                            t_media.retain(|&id| id != mid);
+                            if t_media.is_empty() {
+                                self.db.media_by_tag.delete(&mut wtxn, &tag_id)?;
+                            } else {
+                                self.db.media_by_tag.put(&mut wtxn, &tag_id, &t_media)?;
+                            }
+                        }
+                    }
+                    self.db.tags_by_media.delete(&mut wtxn, &mid)?;
+                }
+
+                if let Some(mut folder_media) = self.db.media_by_folder.get(&wtxn, &rec.folder_id)? {
+                    folder_media.retain(|&id| id != mid);
+                    self.db.media_by_folder.put(&mut wtxn, &rec.folder_id, &folder_media)?;
+                }
+
+                purged_count += 1;
+            }
+        }
+
+        wtxn.commit()?;
+        tracing::info!(purged_count, "[FileOperations: PurgeMedia] Purged media records from LMDB storage");
+        Ok(purged_count)
     }
 
     /// Delegates media refresh to the dedicated `MediaItemRefresher` subsystem.

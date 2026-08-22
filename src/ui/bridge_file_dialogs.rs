@@ -1,9 +1,12 @@
-use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
-use super::bridge_inspector::BridgeInspector;
-use super::bridge_media::BridgeMedia;
-use super::bridge_state::UiState;
-use super::models::format_timestamp;
-use super::{FileRenameDialog, MainWindow};
+pub use super::bridge_file_dialog_conflict::{ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController};
+pub use super::bridge_file_dialog_delete::DeleteFileDialogController;
+pub use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
+pub use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
+pub use super::bridge_inspector::BridgeInspector;
+pub use super::bridge_media::BridgeMedia;
+pub use super::bridge_state::UiState;
+pub use super::models::format_timestamp;
+pub use super::{FileRenameDialog, MainWindow};
 use crate::library::error::LibraryError;
 use crate::library::models::{MediaId, MediaRecord};
 use crate::library::Library;
@@ -16,13 +19,17 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+/// Unified, decoupled context bundle grouping storage, settings, and UI state dependencies for file dialogs.
 #[derive(Clone)]
-pub struct FileRenameContext {
+pub struct FileDialogContext {
     pub library: Arc<Library>,
     pub thumbnails: Arc<ThumbnailManager>,
     pub settings: Arc<SettingsManager>,
     pub state: Arc<RwLock<UiState>>,
 }
+
+// Backward-compatible alias for existing file rename flows
+pub type FileRenameContext = FileDialogContext;
 
 pub struct FileRenameDialogController;
 
@@ -79,7 +86,7 @@ impl FileRenameDialogController {
     pub fn execute(
         media_id: MediaId,
         new_name: &str,
-        ctx: &FileRenameContext,
+        ctx: &FileDialogContext,
         window: &MainWindow,
         dialog_ref: &Rc<RefCell<Option<FileRenameDialog>>>,
         missing_dialog: &MissingFileDialogController,
@@ -180,6 +187,15 @@ impl FileRenameDialogController {
             item.modified_date_str = format_timestamp(updated_record.modification_time).into();
             item.created_date_str = format_timestamp(updated_record.creation_time).into();
             item.format_str = updated_record.format.default_extension().to_ascii_lowercase().into();
+            item.is_corrupted = updated_record.is_corrupted;
+            item.is_deleted = updated_record.is_deleted;
+            item.flags_str = if updated_record.is_deleted {
+                "Deleted".into()
+            } else if updated_record.is_corrupted {
+                "Corrupted".into()
+            } else {
+                "OK".into()
+            };
             if let Some(ref folder_path) = folder_path_opt {
                 item.full_path = folder_path.join(&updated_record.filename);
             }

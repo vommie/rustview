@@ -79,6 +79,8 @@ pub struct MediaRecord {
     pub creation_time: i64,
     #[serde(default)]
     pub duration_ms: u64,
+    #[serde(default)]
+    pub is_corrupted: bool,
 }
 
 #[derive(Deserialize)]
@@ -114,6 +116,25 @@ struct LegacyMediaRecordV2 {
     is_deleted: bool,
 }
 
+#[derive(Deserialize)]
+struct LegacyMediaRecordV3 {
+    id: MediaId,
+    folder_id: FolderId,
+    filename: String,
+    file_hash: FileHash,
+    file_size: u64,
+    modification_time: i64,
+    media_type: MediaType,
+    format: MediaFormat,
+    width: u32,
+    height: u32,
+    rating: u8,
+    last_seen: u64,
+    is_deleted: bool,
+    creation_time: i64,
+    duration_ms: u64,
+}
+
 /// Custom codec providing seamless backward compatibility across all schema iterations.
 pub struct MediaRecordCodec;
 
@@ -123,6 +144,26 @@ impl<'a> BytesDecode<'a> for MediaRecordCodec {
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
         if let Ok(record) = bincode::deserialize::<MediaRecord>(bytes) {
             return Ok(record);
+        }
+        if let Ok(legacy3) = bincode::deserialize::<LegacyMediaRecordV3>(bytes) {
+            return Ok(MediaRecord {
+                id: legacy3.id,
+                folder_id: legacy3.folder_id,
+                filename: legacy3.filename,
+                file_hash: legacy3.file_hash,
+                file_size: legacy3.file_size,
+                modification_time: legacy3.modification_time,
+                media_type: legacy3.media_type,
+                format: legacy3.format,
+                width: legacy3.width,
+                height: legacy3.height,
+                rating: legacy3.rating,
+                last_seen: legacy3.last_seen,
+                is_deleted: legacy3.is_deleted,
+                creation_time: legacy3.creation_time,
+                duration_ms: legacy3.duration_ms,
+                is_corrupted: false,
+            });
         }
         if let Ok(legacy2) = bincode::deserialize::<LegacyMediaRecordV2>(bytes) {
             return Ok(MediaRecord {
@@ -141,6 +182,7 @@ impl<'a> BytesDecode<'a> for MediaRecordCodec {
                 is_deleted: legacy2.is_deleted,
                 creation_time: legacy2.modification_time,
                 duration_ms: 0,
+                is_corrupted: false,
             });
         }
         let legacy1: LegacyMediaRecordV1 = bincode::deserialize(bytes)?;
@@ -160,6 +202,7 @@ impl<'a> BytesDecode<'a> for MediaRecordCodec {
             is_deleted: false,
             creation_time: legacy1.modification_time,
             duration_ms: 0,
+            is_corrupted: false,
         })
     }
 }
@@ -200,7 +243,7 @@ pub struct ExternalHashRecord {
 /// Dynamic search parameters for combinatorial tag & rating queries against LMDB storage.
 #[derive(Debug, Clone, Default)]
 pub struct MediaSearchParams {
-    pub rating: Option<u8>, // None or Some(0) = wildcard, Some(1..=5) = exact match
+    pub rating: Option<u8>,
     pub tag_ids: HashSet<TagId>,
     pub match_mode: MatchMode,
     pub scope_mode: ScopeMode,

@@ -1,0 +1,98 @@
+import { Theme } from "styles.slint";
+import { ButtonBar } from "button_bar.slint";
+
+export component RemoveOrphanedFileDialog inherits Window {
+    title: "RustView - Remove Missing File from Database";
+    preferred-width: 500px;
+    preferred-height: 240px;
+    min-width: 440px;
+    min-height: 220px;
+    background: Theme.background;
+
+    in-out property <string> file-name: "";
+    in-out property <int> files-count: 1;
+    in property <string> error-message: "";
+
+    callback confirmed();
+    callback cancelled();
+
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
+        alignment: space-between;
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+            vertical-stretch: 1;
+
+            Text {
+                text: "🗄 Clean Missing File from Database";
+                font-size: 15px;
+                font-weight: 700;
+                color: #fab387;
+            }
+
+            Text {
+                text: root.files-count > 1
+                    ? ("The " + root.files-count + " selected files no longer physically exist on disk:")
+                    : ("The file '" + root.file-name + "' no longer physically exists on disk:");
+                font-size: 12px;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+
+            Rectangle {
+                background: #fab38718;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: #fab38744;
+
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 4px;
+
+                    Text {
+                        text: "Database records to be permanently purged:";
+                        font-size: 11px;
+                        font-weight: 700;
+                        color: #fab387;
+                    }
+
+                    Text {
+                        text: root.files-count > 1
+                            ? ("• " + root.files-count + " missing media record(s), tag associations and thumbnail caches")
+                            : "• Missing media record, tag links and thumbnail cache";
+                        font-size: 11px;
+                        color: Theme.text;
+                    }
+                }
+            }
+
+            Text {
+                text: "This operation cleans the library database without modifying physical disk storage.";
+                font-size: 11px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+
+            if root.error-message != "" : Text {
+                text: root.error-message;
+                font-size: 11px;
+                color: #ff5555;
+                wrap: word-wrap;
+            }
+        }
+
+        ButtonBar {
+            vertical-stretch: 0;
+            bar-height: 48px;
+            show-cancel: true;
+            show-save: true;
+            text-save: "Remove from Database";
+            text-cancel: "Cancel";
+            cancel-clicked => { root.cancelled(); }
+            save-clicked => { root.confirmed(); }
+        }
+    }
+}

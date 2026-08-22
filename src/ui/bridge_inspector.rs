@@ -53,6 +53,8 @@ impl BridgeInspector {
 
     fn render_empty(window: &MainWindow) {
         window.set_info_filename("- (No selection)".into());
+        window.set_info_status("-".into());
+        window.set_info_status_color(slint::Color::from_rgb_u8(166, 173, 200)); // #a6adc8 (Theme.text-muted)
         window.set_info_size("-".into());
         window.set_info_dimensions("-".into());
         window.set_info_format("-".into());
@@ -62,6 +64,18 @@ impl BridgeInspector {
 
     fn render_single(window: &MainWindow, item: &IndexedMediaRecord) {
         window.set_info_filename(item.filename_slint.clone());
+
+        if item.record.is_deleted {
+            window.set_info_status("Deleted / Missing".into());
+            window.set_info_status_color(slint::Color::from_rgb_u8(108, 112, 134)); // #6c7086 (Theme.status-deleted)
+        } else if item.record.is_corrupted {
+            window.set_info_status("Corrupted / Unreadable".into());
+            window.set_info_status_color(slint::Color::from_rgb_u8(243, 139, 168)); // #f38ba8 (Theme.status-corrupt)
+        } else {
+            window.set_info_status("OK (Healthy)".into());
+            window.set_info_status_color(slint::Color::from_rgb_u8(166, 227, 161)); // #a6e3a1 (Theme.status-ok)
+        }
+
         window.set_info_size(format_filesize(item.record.file_size).into());
         let dim_str = if item.record.width > 0 && item.record.height > 0 {
             format!("{} × {}", item.record.width, item.record.height)
@@ -77,6 +91,8 @@ impl BridgeInspector {
     fn render_multiple(window: &MainWindow, summary: &FileSelectionSummary) {
         window.set_info_selection_count(summary.count as i32);
         window.set_info_filename(format!("{} multiple files selected", summary.count).into());
+        window.set_info_status(format!("{} files selected", summary.count).into());
+        window.set_info_status_color(slint::Color::from_rgb_u8(137, 180, 250)); // #89b4fa (Theme.primary)
         window
             .set_info_size(format!("{} (total)", format_filesize(summary.total_size_bytes)).into());
 

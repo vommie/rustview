@@ -74,7 +74,7 @@ impl ScopeMode {
 
 #[derive(Debug, Clone)]
 pub struct QueryFilter {
-    pub rating: Option<u8>, // None or Some(0) = wildcard, Some(1..=5) = exact
+    pub rating: Option<u8>,
     pub search_query: String,
     pub is_regex: bool,
     pub tag_ids: HashSet<TagId>,
@@ -130,6 +130,9 @@ pub struct IndexedMediaRecord {
     pub ar_value: f32,
     pub duration_str: SharedString,
     pub format_str: SharedString,
+    pub flags_str: SharedString,
+    pub is_corrupted: bool,
+    pub is_deleted: bool,
     pub has_tags: bool,
 }
 
@@ -180,7 +183,6 @@ impl PreparedFilter {
         media_tags: &[TagId],
         simd_finder: Option<&memmem::Finder<'_>>,
     ) -> bool {
-        // 1. Rating match (0 or None is wildcard/any)
         let is_rating_active = match self.rating {
             Some(r) => r > 0,
             None => false,
@@ -191,7 +193,6 @@ impl PreparedFilter {
             true
         };
 
-        // 2. Tag matching
         let has_tags = !self.tag_ids.is_empty();
         let item_tags_set: HashSet<TagId> = if has_tags {
             media_tags.iter().copied().collect()
@@ -237,7 +238,6 @@ impl PreparedFilter {
             return false;
         }
 
-        // 3. Filename Search (Precompiled Regex or SIMD memmem Substring Match)
         if !self.query_trimmed.is_empty() {
             if let Some(ref re) = self.regex_matcher
                 && !re.is_match(&item.record.filename)

@@ -2,12 +2,12 @@ use rustview::settings::{
     AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager, SettingsStore,
     DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA, DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER,
     DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_AR_WIDTH, DEFAULT_COL_CREATED_DATE_WIDTH,
-    DEFAULT_COL_DURATION_WIDTH, DEFAULT_COL_FILENAME_WIDTH, DEFAULT_COL_FORMAT_WIDTH,
-    DEFAULT_COL_HEIGHT_WIDTH, DEFAULT_COL_MODIFIED_DATE_WIDTH, DEFAULT_COL_RATING_WIDTH,
-    DEFAULT_COL_SIZE_WIDTH, DEFAULT_COL_TAGS_WIDTH, DEFAULT_COL_WIDTH_WIDTH,
-    DEFAULT_CONFIRM_ON_FILE_DELETE, DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME,
-    DEFAULT_DELETION_MODE, DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS,
-    DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_GRID_ITEM_BORDER_WIDTH,
+    DEFAULT_COL_DURATION_WIDTH, DEFAULT_COL_FILENAME_WIDTH, DEFAULT_COL_FLAGS_WIDTH,
+    DEFAULT_COL_FORMAT_WIDTH, DEFAULT_COL_HEIGHT_WIDTH, DEFAULT_COL_MODIFIED_DATE_WIDTH,
+    DEFAULT_COL_RATING_WIDTH, DEFAULT_COL_SIZE_WIDTH, DEFAULT_COL_TAGS_WIDTH,
+    DEFAULT_COL_WIDTH_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE, DEFAULT_CUSTOM_PREVIEW_SETTINGS,
+    DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE, DEFAULT_ENABLE_HOVER_PREVIEWS,
+    DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_GRID_ITEM_BORDER_WIDTH,
     DEFAULT_GRID_ITEM_CORNER_RADIUS, DEFAULT_GRID_ITEM_PADDING_H, DEFAULT_GRID_ITEM_PADDING_V,
     DEFAULT_GRID_PADDING, DEFAULT_GRID_SPACING, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
     DEFAULT_OBFUSCATE_LOGS, DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT,
@@ -197,7 +197,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("mpeg"));
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("flv"));
 
-    // View Defaults - All 11 Columns
+    // View Defaults - All 12 Columns
     assert_eq!(initial.view.is_table_view, DEFAULT_IS_TABLE_VIEW);
     assert_eq!(initial.view.sort_column, DEFAULT_SORT_COLUMN);
     assert_eq!(initial.view.sort_order, DEFAULT_SORT_ORDER);
@@ -212,6 +212,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(initial.view.col_ar_width, DEFAULT_COL_AR_WIDTH);
     assert_eq!(initial.view.col_duration_width, DEFAULT_COL_DURATION_WIDTH);
     assert_eq!(initial.view.col_format_width, DEFAULT_COL_FORMAT_WIDTH);
+    assert_eq!(initial.view.col_flags_width, DEFAULT_COL_FLAGS_WIDTH);
     assert_eq!(initial.view.sidebar_left_width, DEFAULT_SIDEBAR_LEFT_WIDTH);
     assert_eq!(initial.view.sidebar_right_width, DEFAULT_SIDEBAR_RIGHT_WIDTH);
 
@@ -259,6 +260,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.performance.short_video_threshold_secs = 20;
     initial.formats.auto_detect_extensionless_media = false;
     initial.debug.obfuscate_logs = false;
+    initial.view.col_flags_width = 110.0;
     manager.update(initial);
 
     assert!(hook_fired.load(Ordering::SeqCst));
@@ -282,17 +284,19 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(loaded.performance.short_video_threshold_secs, 20);
     assert!(!loaded.formats.auto_detect_extensionless_media);
     assert!(!loaded.debug.obfuscate_logs);
+    assert_eq!(loaded.view.col_flags_width, 110.0);
 
     // 5. Test validation & sanitization
     let mut invalid_settings = AppSettings::default();
     invalid_settings.appearance.thumbnail_aspect_ratio = "invalid_ratio".to_string();
     invalid_settings.appearance.tooltip_delay_ms = 99999;
-    invalid_settings.appearance.grid_item_padding_horizontal = 100; // Above MAX (32)
-    invalid_settings.appearance.grid_item_border_width = 50; // Above MAX (6)
-    invalid_settings.appearance.grid_item_corner_radius = 100; // Above MAX (24)
+    invalid_settings.appearance.grid_item_padding_horizontal = 100;
+    invalid_settings.appearance.grid_item_border_width = 50;
+    invalid_settings.appearance.grid_item_corner_radius = 100;
     invalid_settings.performance.short_video_threshold_secs = 500;
-    invalid_settings.view.col_filename_width = 10.0; // Below MIN_COL_WIDTH (40.0)
-    invalid_settings.view.col_size_width = 5000.0; // Above MAX_COL_WIDTH (1200.0)
+    invalid_settings.view.col_filename_width = 10.0;
+    invalid_settings.view.col_size_width = 5000.0;
+    invalid_settings.view.col_flags_width = 1.0;
     reloaded_store.save(&invalid_settings).unwrap();
 
     let sanitized = reloaded_store.load();
@@ -322,6 +326,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     );
     assert_eq!(sanitized.view.col_filename_width, MIN_COL_WIDTH);
     assert_eq!(sanitized.view.col_size_width, MAX_COL_WIDTH);
+    assert_eq!(sanitized.view.col_flags_width, MIN_COL_WIDTH);
 }
 
 #[test]
@@ -468,6 +473,7 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
     assert_eq!(loaded.view.col_ar_width, DEFAULT_COL_AR_WIDTH);
     assert_eq!(loaded.view.col_duration_width, DEFAULT_COL_DURATION_WIDTH);
     assert_eq!(loaded.view.col_format_width, DEFAULT_COL_FORMAT_WIDTH);
+    assert_eq!(loaded.view.col_flags_width, DEFAULT_COL_FLAGS_WIDTH);
     assert_eq!(loaded.view.sidebar_left_width, DEFAULT_SIDEBAR_LEFT_WIDTH);
     assert_eq!(loaded.view.sidebar_right_width, DEFAULT_SIDEBAR_RIGHT_WIDTH);
     assert_eq!(loaded.debug.obfuscate_logs, DEFAULT_OBFUSCATE_LOGS);

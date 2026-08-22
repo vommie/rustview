@@ -22,9 +22,26 @@ export component MediaTile inherits Rectangle {
 
     width: root.tile-width;
     height: root.tile-height;
-    background: item.is-selected ? Theme.surface-selected : (tile-touch.has-hover ? Theme.surface-hover : Theme.surface);
-    border-width: item.is-selected ? Math.max(2px, root.border-width-val + 1px) : root.border-width-val;
-    border-color: item.is-selected ? Theme.primary : (root.border-width-val > 0px ? Theme.border : transparent);
+
+    // Strict State Priority: Selected > Deleted > Corrupted > Normal
+    background: item.is-selected ? Theme.surface-selected : (
+        tile-touch.has-hover ? Theme.surface-hover : (
+            item.is-deleted ? #31324440 : (
+                item.is-corrupted ? #f38ba812 : Theme.surface
+            )
+        )
+    );
+
+    border-width: item.is-selected ? Math.max(2px, root.border-width-val + 1px) : (
+        (item.is-deleted || item.is-corrupted) ? Math.max(1.5px, root.border-width-val) : root.border-width-val
+    );
+
+    border-color: item.is-selected ? Theme.primary : (
+        item.is-deleted ? #6c7086 : (
+            item.is-corrupted ? #f38ba8 : (root.border-width-val > 0px ? Theme.border : transparent)
+        )
+    );
+
     border-radius: root.corner-radius-val;
     clip: true;
 
@@ -101,18 +118,52 @@ export component MediaTile inherits Rectangle {
         Rectangle {
             width: root.item-thumb-w;
             height: root.item-thumb-h;
-            background: #000000;
+            background: item.is-deleted ? #1e1e2e : (item.is-corrupted ? #2d161d : #000000);
             border-radius: Math.max(0px, root.corner-radius-val - 2px);
             clip: true;
 
-            Image {
+            if item.thumbnail.width > 0 : Image {
                 source: item.thumbnail;
                 width: 100%;
                 height: 100%;
                 image-fit: contain;
+                opacity: item.is-deleted ? 0.45 : (item.is-corrupted ? 0.70 : 1.0);
             }
 
-            // Top-Right Rating Badge
+            // Fallback Vector SVG icon when no thumbnail image exists (Priority: Deleted > Corrupted > Default)
+            if item.thumbnail.width == 0 : Rectangle {
+                width: 100%;
+                height: 100%;
+                background: transparent;
+
+                if item.is-deleted : AppIcon {
+                    icon: Icons.media-file-missing;
+                    allow-tint: true;
+                    color: #6c7086;
+                    size: Math.min(48px, root.item-thumb-h - 16px);
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+
+                if !item.is-deleted && item.is-corrupted : AppIcon {
+                    icon: Icons.media-file-corrupted;
+                    allow-tint: true;
+                    color: #f38ba8;
+                    size: Math.min(48px, root.item-thumb-h - 16px);
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+
+                if !item.is-deleted && !item.is-corrupted : Text {
+                    text: "📄";
+                    font-size: 32px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Top-Right Rating Badge: Always visible whenever item has rating > 0
             if item.rating > 0 : Rectangle {
                 x: parent.width - 20px;
                 y: 4px;
@@ -131,7 +182,7 @@ export component MediaTile inherits Rectangle {
                 }
             }
 
-            // Top-Left Tag Badge
+            // Top-Left Tag Badge: Always visible whenever item has assigned tags
             if item.has-tags : Rectangle {
                 x: 4px;
                 y: 4px;
@@ -145,20 +196,24 @@ export component MediaTile inherits Rectangle {
                 }
             }
 
-            // Bottom Media Type Badge (Image or Video)
+            // Bottom Media Type / Status Badges (Strictly guarded by show_media_type_badges, Priority: Deleted > Corrupted > Type)
             if root.show-media-type-badges : Rectangle {
                 x: 4px;
                 y: parent.height - 18px;
-                width: 32px;
+                width: (item.is-deleted || item.is-corrupted) ? 48px : 32px;
                 height: 14px;
-                background: #000000aa;
+                background: item.is-deleted ? #6c7086cc : (item.is-corrupted ? #f38ba8cc : #000000aa);
                 border-radius: 2px;
 
                 Text {
-                    text: item.is-video ? "VIDEO" : "IMAGE";
+                    text: item.is-deleted ? "DELETED" : (
+                        item.is-corrupted ? "CORRUPT" : (
+                            item.is-video ? "VIDEO" : "IMAGE"
+                        )
+                    );
                     font-size: 8px;
                     font-weight: 700;
-                    color: #ffffff;
+                    color: (item.is-deleted || !item.is-corrupted) ? #ffffff : #11111b;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
@@ -167,8 +222,14 @@ export component MediaTile inherits Rectangle {
 
         Text {
             text: item.filename;
-            color: item.is-selected ? Theme.primary : Theme.text;
+            color: item.is-selected ? Theme.primary : (
+                item.is-deleted ? #6c7086 : (
+                    item.is-corrupted ? #f38ba8 : Theme.text
+                )
+            );
             font-size: 11px;
+            font-weight: item.is-selected ? 700 : 400;
+            font-italic: item.is-deleted;
             horizontal-alignment: center;
             overflow: elide;
             height: 18px;
@@ -234,12 +295,10 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-drag-moved(length /* x */, length /* y */);
     callback item-drag-ended();
 
-    /// Programmatically resets viewport scroll position to the top
     public function scroll-to-top() {
         scroll-area.scroll-to-top();
     }
 
-    /// Programmatically scrolls to align viewport with target item index
     public function scroll-to-index(item-idx: int) {
         if root.columns > 0 {
             let target-row = Math.floor(item-idx / root.columns);
@@ -248,7 +307,6 @@ export component VirtualizedMediaGrid inherits Rectangle {
         }
     }
 
-    /// Returns the global item index currently at the top of the visible grid viewport
     pure public function get-top-visible-index() -> int {
         return root.first-visible-row * root.columns;
     }
@@ -275,7 +333,6 @@ export component VirtualizedMediaGrid inherits Rectangle {
         padding: 0px;
         spacing: 0px;
 
-        // Dynamic auto-width header bar for GridView
         MediaHeaderBar {
             sort-column: root.sort-column;
             sort-order: root.sort-order;

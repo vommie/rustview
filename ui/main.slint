@@ -16,6 +16,8 @@ import { MediaPanelToolbar } from "media_panel_toolbar.slint";
 export { SettingsWindow } from "settings_window.slint";
 export { FileRenameDialog } from "file_rename_dialog.slint";
 export { FileOpsConflictDialog } from "file_ops_conflict_dialog.slint";
+export { DeleteFileDialog } from "delete_file_dialog.slint";
+export { RemoveOrphanedFileDialog } from "remove_orphaned_file_dialog.slint";
 export { AddTagDialog } from "add_tag_dialog.slint";
 export { RenameTagDialog } from "rename_tag_dialog.slint";
 export { DeleteTagDialog } from "delete_tag_dialog.slint";
@@ -95,7 +97,7 @@ export component MainWindow inherits Window {
     in-out property <int> sort-column-idx: 0;
     in-out property <int> sort-order-idx: 0;
 
-    // All 11 Table Column Widths
+    // All 12 Table Column Widths
     in-out property <length> col-filename-width: 260px;
     in-out property <length> col-modified-date-width: 145px;
     in-out property <length> col-created-date-width: 145px;
@@ -107,6 +109,7 @@ export component MainWindow inherits Window {
     in-out property <length> col-ar-width: 65px;
     in-out property <length> col-duration-width: 110px;
     in-out property <length> col-format-width: 75px;
+    in-out property <length> col-flags-width: 85px;
 
     in-out property <bool> is-refreshing-folders: false;
     in-out property <int> folder-scan-count: 0;
@@ -155,6 +158,8 @@ export component MainWindow inherits Window {
     in property <string> info-dimensions: "-";
     in property <string> info-format: "-";
     in property <string> info-hash: "-";
+    in property <string> info-status: "OK";
+    in property <color> info-status-color: Theme.status-ok;
     in property <int> info-selection-count: 0;
 
     callback refresh-folder();
@@ -361,6 +366,7 @@ export component MainWindow inherits Window {
                         col-ar-width <=> root.col-ar-width;
                         col-duration-width <=> root.col-duration-width;
                         col-format-width <=> root.col-format-width;
+                        col-flags-width <=> root.col-flags-width;
 
                         visible-chunk-changed(first, last, tot) => {
                             root.visible-chunk-changed(first, last, tot);
@@ -410,6 +416,8 @@ export component MainWindow inherits Window {
                 info-dimensions: root.info-dimensions;
                 info-format: root.info-format;
                 info-hash: root.info-hash;
+                info-status: root.info-status;
+                info-status-color: root.info-status-color;
                 info-selection-count: root.info-selection-count;
 
                 mode-toggled(assign) => { root.tag-mode-toggled(assign); }
@@ -460,7 +468,7 @@ export component MainWindow inherits Window {
         dismissed => { root.context-menu-dismissed(); }
     }
 
-    // Floating Choice Popup Overlay (Inside-app folder drop decision)
+    // Floating Choice Popup Overlay
     if root.is-choice-popup-open : FloatingChoicePopup {
         target-folder-name: root.choice-target-folder-name;
         item-count: root.choice-item-count;

@@ -17,11 +17,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 
-// =============================================================================
-// Tag Tree Geometry & Sizing - Single Point of Truth (SPoT) Constants
-// =============================================================================
-pub const MAX_TAG_ITEM_WIDTH: f32 = 180.0; // Central max limit cap before text ellipsis begins
-pub const MIN_TAG_ITEM_WIDTH: f32 = 60.0;  // Base minimum width for short tags
+pub const MAX_TAG_ITEM_WIDTH: f32 = 180.0;
+pub const MIN_TAG_ITEM_WIDTH: f32 = 60.0;
 pub const TAG_ITEM_HEIGHT: f32 = 22.0;
 pub const TAG_ROW_SPACING: f32 = 2.0;
 pub const TAG_COLUMN_SPACING: f32 = 6.0;
@@ -210,7 +207,6 @@ impl TagTreeBuilder {
         any_match_in_branch
     }
 
-    /// Groups flattened visual nodes into waterfall columns of `rows_per_col` height for Slint's native layout engine.
     pub fn chunk_into_columns(
         nodes: Vec<TagNodeView>,
         available_height: f32,
@@ -456,7 +452,6 @@ impl TagActionHandler {
             );
         }
 
-        // In-place updates without list re-sorting!
         Self::update_grid_tag_badges(selected_ids, window, library, state);
         TagTreeSync::sync_in_place(window, library, state);
         BridgeInspector::update(window, state);
@@ -482,7 +477,6 @@ impl TagActionHandler {
         Self::execute_query_flow(window, library, thumbnails, settings, state);
     }
 
-    /// Surgically updates the tag indicators and tag count values in-place without re-sorting the active view.
     fn update_grid_tag_badges(
         selected_ids: &HashSet<MediaId>,
         window: &MainWindow,
@@ -582,7 +576,6 @@ impl TagActionHandler {
         }
     }
 
-    /// Surgically updates rating scores in-place on both data structures and visible UI rows without re-sorting the active view.
     pub fn apply_rating_to_ids(
         ids: &HashSet<MediaId>,
         rating: u8,
@@ -668,7 +661,7 @@ impl TagActionHandler {
         window.invoke_scroll_media_to_top();
 
         if let (Some(f_id), Some(path)) = (current_f_id, current_f_path.as_ref()) {
-            let raw_media = library.media().get_by_folder(f_id).unwrap_or_default();
+            let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
             let indexed = BridgeMedia::preindex(library, raw_media, path);
             let valid_ids: HashSet<MediaId> = indexed.iter().map(|m| m.record.id).collect();
 
@@ -732,7 +725,7 @@ impl TagActionHandler {
                 let mut st = state.write();
                 st.is_query_active = false;
                 if let (Some(f_id), Some(path)) = (st.current_folder_id, current_folder_p.as_ref()) {
-                    let raw_media = library.media().get_by_folder(f_id).unwrap_or_default();
+                    let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
                     st.all_folder_media = BridgeMedia::preindex(library, raw_media, path);
                     let valid_ids: HashSet<MediaId> =
                         st.all_folder_media.iter().map(|m| m.record.id).collect();
@@ -1043,7 +1036,6 @@ impl BridgeTags {
         let mut visual_nodes = Vec::new();
         TagTreeBuilder::flatten(&tree, 0, &ctx, &mut visual_nodes);
 
-        // Group visual nodes into waterfall columns for Slint's native engine
         let (tag_columns, rows_per_col) = TagTreeBuilder::chunk_into_columns(visual_nodes, available_h);
         {
             let mut st = state.write();

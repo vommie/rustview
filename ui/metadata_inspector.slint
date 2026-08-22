@@ -25,7 +25,7 @@ export component MetadataRow inherits HorizontalLayout {
 }
 
 export component MetadataInspector inherits Rectangle {
-    height: 140px;
+    height: 160px;
     background: Theme.background;
     border-radius: 4px;
     border-width: 1px;
@@ -36,6 +36,8 @@ export component MetadataInspector inherits Rectangle {
     in property <string> dimensions: "-";
     in property <string> format-name: "-";
     in property <string> hash-or-rating: "-";
+    in property <string> info-status: "OK";
+    in property <color> info-status-color: Theme.status-ok;
     in property <int> selection-count: 0;
 
     VerticalLayout {
@@ -55,6 +57,12 @@ export component MetadataInspector inherits Rectangle {
             label: "File:";
             value: root.filename;
             value-color: Theme.text;
+        }
+
+        MetadataRow {
+            label: "Status:";
+            value: root.info-status;
+            value-color: root.info-status-color;
         }
 
         MetadataRow {

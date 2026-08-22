@@ -2,7 +2,9 @@ use super::bridge_ctx_menu::{BridgeContextMenu, ContextMenuRegistration};
 use super::bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
+use super::bridge_file_dialog_delete::DeleteFileDialogController;
 use super::bridge_file_dialog_missing::MissingFileDialogController;
+use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folder_dialogs::FolderDialogController;
 use super::bridge_folders::BridgeFolders;
@@ -41,6 +43,8 @@ pub struct UiBridge {
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
     missing_file_dialog: MissingFileDialogController,
+    delete_file_dialog: DeleteFileDialogController,
+    remove_orphaned_dialog: RemoveOrphanedFileDialogController,
     conflict_dialog: FileOpsConflictDialogController,
     dnd_foldertree_autoscroller: DndFolderTreeAutoScroller,
     tag_dialogs: TagDialogController,
@@ -67,6 +71,8 @@ impl UiBridge {
         let settings_dialog = Rc::new(RefCell::new(controller));
         let rename_dialog = Rc::new(RefCell::new(None));
         let missing_file_dialog = MissingFileDialogController::new();
+        let delete_file_dialog = DeleteFileDialogController::new();
+        let remove_orphaned_dialog = RemoveOrphanedFileDialogController::new();
         let conflict_dialog = FileOpsConflictDialogController::new();
         let dnd_foldertree_autoscroller = DndFolderTreeAutoScroller::new();
         let tag_dialogs = TagDialogController::new();
@@ -86,7 +92,6 @@ impl UiBridge {
         let v_settings = settings.get().view;
         window.set_is_table_view(v_settings.is_table_view);
 
-        // Restore Sidebar Widths from Persistent Settings
         window.set_sidebar_left_width(v_settings.sidebar_left_width);
         window.set_sidebar_right_width(v_settings.sidebar_right_width);
 
@@ -98,7 +103,7 @@ impl UiBridge {
         window.set_sort_column_idx(initial_sort_col.to_index());
         window.set_sort_order_idx(initial_sort_ord.to_index());
 
-        // Restore All 11 Table Column Widths
+        // Restore All 12 Table Column Widths
         window.set_col_filename_width(v_settings.col_filename_width);
         window.set_col_modified_date_width(v_settings.col_modified_date_width);
         window.set_col_created_date_width(v_settings.col_created_date_width);
@@ -110,8 +115,8 @@ impl UiBridge {
         window.set_col_ar_width(v_settings.col_ar_width);
         window.set_col_duration_width(v_settings.col_duration_width);
         window.set_col_format_width(v_settings.col_format_width);
+        window.set_col_flags_width(v_settings.col_flags_width);
 
-        // Apply centralized appearance, layout & tooltip settings
         let app_settings = settings.get();
         window.set_thumb_size(app_settings.appearance.default_thumbnail_size as i32);
         let ratio = GridAspectRatio::from_str_name(&app_settings.appearance.thumbnail_aspect_ratio);
@@ -128,7 +133,6 @@ impl UiBridge {
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
         window.set_status_text("Initializing RustView...".into());
 
-        // Initialize Tag & Rate panel properties
         window.set_selected_rating(0);
         window.set_tag_is_assign_mode(false);
         window.set_tag_scope_mode_idx(ScopeMode::default().to_index());
@@ -156,6 +160,8 @@ impl UiBridge {
             settings_dialog,
             rename_dialog,
             missing_file_dialog,
+            delete_file_dialog,
+            remove_orphaned_dialog,
             conflict_dialog,
             dnd_foldertree_autoscroller,
             tag_dialogs,
@@ -179,7 +185,6 @@ impl UiBridge {
             &bridge.state,
         );
 
-        // Defer root folder synchronization until Slint has entered the event loop and painted the initial window
         let w_weak = bridge.window.as_weak();
         let lib = bridge.library.clone();
         let thumb = bridge.thumbnails.clone();
@@ -195,28 +200,6 @@ impl UiBridge {
             }
         });
 
-        tracing::info!(
-            is_table = v_settings.is_table_view,
-            sidebar_left_width = v_settings.sidebar_left_width,
-            sidebar_right_width = v_settings.sidebar_right_width,
-            sort_col = ?initial_sort_col,
-            sort_ord = ?initial_sort_ord,
-            thumb_size = app_settings.appearance.default_thumbnail_size,
-            aspect_ratio = %app_settings.appearance.thumbnail_aspect_ratio,
-            show_media_type_badges = app_settings.appearance.show_media_type_badges,
-            grid_item_padding_h = app_settings.appearance.grid_item_padding_horizontal,
-            grid_item_padding_v = app_settings.appearance.grid_item_padding_vertical,
-            grid_spacing = app_settings.appearance.grid_spacing,
-            grid_padding = app_settings.appearance.grid_padding,
-            grid_item_border_width = app_settings.appearance.grid_item_border_width,
-            grid_item_corner_radius = app_settings.appearance.grid_item_corner_radius,
-            show_hidden_folders = app_settings.folders.show_hidden_folders,
-            support_dot_hidden = app_settings.folders.support_dot_hidden_files,
-            enable_tooltips = app_settings.appearance.enable_tooltips,
-            tooltip_delay_ms = app_settings.appearance.tooltip_delay_ms,
-            "[UiBridge] Initialized all UI bridges, scheduled deferred initial mount"
-        );
-
         bridge
     }
 
@@ -224,7 +207,6 @@ impl UiBridge {
         &self.window
     }
 
-    /// Registers the intelligent delta-based settings subscriber.
     fn register_settings_subscriber(&self) {
         let w_weak = self.window.as_weak();
         let library = self.library.clone();
@@ -234,19 +216,8 @@ impl UiBridge {
 
         self.settings.subscribe(move |_old_settings: &AppSettings, new_settings: &AppSettings, diff: &SettingsDiff| {
             if !diff.has_changes {
-                tracing::debug!("[UiBridge: SettingsSubscriber] No functional changes in settings diff. Bypassing UI updates.");
                 return;
             }
-
-            tracing::info!(
-                root_changed = diff.root_folder_changed,
-                tree_presentation_changed = diff.folder_tree_presentation_changed,
-                grid_appearance_changed = diff.appearance_grid_changed,
-                tooltips_changed = diff.tooltip_settings_changed,
-                pipeline_changed = diff.performance_pipeline_changed,
-                debug_changed = diff.debug_settings_changed,
-                "[UiBridge: SettingsSubscriber] Granular settings diff received. Dispatching targeted updates..."
-            );
 
             let library = library.clone();
             let thumbnails = thumbnails.clone();
@@ -256,28 +227,22 @@ impl UiBridge {
             let new_clone = new_settings.clone();
 
             let _ = w_weak.upgrade_in_event_loop(move |window| {
-                let t_start = Instant::now();
-
-                // 1. Performance Pipeline / Preview Options Changed -> Update Scheduler Config & Invalidate Caches
                 if diff_clone.performance_pipeline_changed {
                     let new_config = ThumbnailConfig::from_performance_settings(&new_clone.performance);
                     thumbnails.set_config(new_config);
                     thumbnails.cache().clear();
                     state.write().folder_thumbnails.clear();
 
-                    // Re-run pipeline for active folder so updated preview frame counts / formats generate in background
                     if state.read().current_folder_id.is_some() {
                         BridgeMedia::reload(&window, &library, &thumbnails, &settings, &state, true, false);
                     }
                 }
 
-                // 2. Tooltips update
                 if diff_clone.tooltip_settings_changed {
                     window.set_enable_tooltips(new_clone.appearance.enable_tooltips);
                     window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms as i32);
                 }
 
-                // 3. Appearance & Grid Presentation + Grid Items Layout update
                 if diff_clone.appearance_grid_changed {
                     window.set_thumb_size(new_clone.appearance.default_thumbnail_size as i32);
                     let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
@@ -291,27 +256,19 @@ impl UiBridge {
                     window.set_grid_item_corner_radius(new_clone.appearance.grid_item_corner_radius as i32);
                 }
 
-                // 4. Debug & Privacy update
                 if diff_clone.debug_settings_changed {
                     LogObscurer::set_obfuscate(new_clone.debug.obfuscate_logs);
                 }
 
-                // 5. Folder Tree Presentation
                 if diff_clone.folder_tree_presentation_changed && !diff_clone.root_folder_changed {
                     window.set_show_hidden_folders(new_clone.folders.show_hidden_folders);
                     BridgeFolders::reload_tree(&window, &library, &settings, &state);
                 }
 
-                // 6. Root Folder Changed
                 if diff_clone.root_folder_changed {
                     state.write().invalidate_folder_tree_cache();
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
                 }
-
-                tracing::debug!(
-                    elapsed_us = t_start.elapsed().as_micros(),
-                    "[UiBridge: SettingsUpdate] Targeted UI settings update completed successfully"
-                );
             });
         });
     }
@@ -342,6 +299,8 @@ impl UiBridge {
                 dispatcher: self.ctx_menu_dispatcher.clone(),
                 rename_dialog: self.rename_dialog.clone(),
                 missing_file_dialog: self.missing_file_dialog.clone(),
+                delete_file_dialog: self.delete_file_dialog.clone(),
+                remove_orphaned_dialog: self.remove_orphaned_dialog.clone(),
                 tag_dialogs: self.tag_dialogs.clone(),
                 folder_dialogs: self.folder_dialogs.clone(),
                 settings: self.settings.clone(),
@@ -426,7 +385,6 @@ impl UiBridge {
             );
         });
 
-        // Floating Choice Popup Callbacks: Copy, Move, Cancel, Dismissed
         let win_copy = self.window.clone_strong();
         let lib_copy = self.library.clone();
         let thumb_copy = self.thumbnails.clone();
@@ -469,13 +427,11 @@ impl UiBridge {
 
         let win_cancel = self.window.clone_strong();
         self.window.on_choice_popup_cancel(move || {
-            tracing::info!("[DndChoicePopup] User clicked Cancel. Drop aborted, selection preserved.");
             win_cancel.set_is_choice_popup_open(false);
         });
 
         let win_dism = self.window.clone_strong();
         self.window.on_choice_popup_dismissed(move || {
-            tracing::info!("[DndChoicePopup] Popup dismissed. Drop aborted, selection preserved.");
             win_dism.set_is_choice_popup_open(false);
         });
     }
@@ -515,19 +471,10 @@ impl UiBridge {
 
         let set_left = self.settings.clone();
         self.window.on_sidebar_left_resize_finished(move |final_width| {
-            let t0 = Instant::now();
             let width_f32 = final_width;
             let mut app_settings = set_left.get();
             app_settings.view.sidebar_left_width = width_f32;
             set_left.save_quiet(&app_settings);
-            let elapsed_us = t0.elapsed().as_micros();
-
-            tracing::info!(
-                sidebar = "left",
-                final_width = width_f32,
-                save_time_us = elapsed_us,
-                "[Benchmark: SidebarResizeCommit] Left sidebar width persisted to disk settings"
-            );
         });
 
         let last_right_resize = Arc::new(Mutex::new(Instant::now()));
@@ -564,19 +511,10 @@ impl UiBridge {
 
         let set_right = self.settings.clone();
         self.window.on_sidebar_right_resize_finished(move |final_width| {
-            let t0 = Instant::now();
             let width_f32 = final_width;
             let mut app_settings = set_right.get();
             app_settings.view.sidebar_right_width = width_f32;
             set_right.save_quiet(&app_settings);
-            let elapsed_us = t0.elapsed().as_micros();
-
-            tracing::info!(
-                sidebar = "right",
-                final_width = width_f32,
-                save_time_us = elapsed_us,
-                "[Benchmark: SidebarResizeCommit] Right sidebar width persisted to disk settings"
-            );
         });
     }
 

@@ -29,9 +29,10 @@ pub struct ProbedMetadata {
 #[derive(Debug, Clone)]
 struct BatchedDbWriteItem {
     media_id: MediaId,
-    location: ThumbnailLocation,
+    location: Option<ThumbnailLocation>,
     preview_record: Option<VideoPreviewRecord>,
     probed_metadata: Option<ProbedMetadata>,
+    is_corrupted: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -49,10 +50,11 @@ pub struct ReadyThumbnailItem {
     pub media_id: MediaId,
     pub width: u32,
     pub height: u32,
-    pub pixel_buffer: SharedPixelBuffer<Rgb8Pixel>,
+    pub pixel_buffer: Option<SharedPixelBuffer<Rgb8Pixel>>,
     pub orig_width: u32,
     pub orig_height: u32,
     pub duration_ms: u64,
+    pub is_corrupted: bool,
 }
 
 pub struct ThumbnailScheduler {
@@ -279,7 +281,6 @@ impl ThumbnailScheduler {
         let mut existing_locations: Vec<(MediaId, PathBuf, ThumbnailLocation)> = Vec::new();
         let mut missing_targets: Vec<PreparedTarget> = Vec::new();
 
-        // 1. Single LMDB Read Transaction Query across all targets
         {
             let rtxn = match self.library.raw_db().env.read_txn() {
                 Ok(txn) => txn,
@@ -319,10 +320,11 @@ impl ThumbnailScheduler {
                         media_id: target.media_id,
                         width: cached.width,
                         height: cached.height,
-                        pixel_buffer,
+                        pixel_buffer: Some(pixel_buffer),
                         orig_width: 0,
                         orig_height: 0,
                         duration_ms: 0,
+                        is_corrupted: false,
                     });
                     benchmark.record_queue_depth(q.len());
 
@@ -408,10 +410,11 @@ impl ThumbnailScheduler {
                                     media_id,
                                     width: w,
                                     height: h,
-                                    pixel_buffer,
+                                    pixel_buffer: Some(pixel_buffer),
                                     orig_width: 0,
                                     orig_height: 0,
                                     duration_ms: 0,
+                                    is_corrupted: false,
                                 });
                                 bench_ref.record_queue_depth(q.len());
                                 load_successful = true;
@@ -532,191 +535,234 @@ impl ThumbnailScheduler {
             let is_video =
                 MediaFormat::from_path(&target.file_path).media_type() == Some(MediaType::Video);
 
+            let mut is_corrupted = false;
+
             if is_video {
                 let t_vid = Instant::now();
-                if let Ok(video_res) = self
+                match self
                     .generator
                     .generate_video_thumbnails(&target.file_path, &config)
                 {
-                    benchmark.record_video_extract(t_vid.elapsed().as_micros() as u64);
+                    Ok(video_res) => {
+                        benchmark.record_video_extract(t_vid.elapsed().as_micros() as u64);
 
-                    if self.is_pipeline_stale(pipeline_id) {
-                        self.tracker.decrement_active_workers();
-                        break;
-                    }
+                        if self.is_pipeline_stale(pipeline_id) {
+                            self.tracker.decrement_active_workers();
+                            break;
+                        }
 
-                    let primary = video_res.primary_frame;
-                    let t_comp = Instant::now();
+                        let primary = video_res.primary_frame;
+                        let t_comp = Instant::now();
 
-                    if let Ok(compressed_primary) = self.generator.compress(
-                        &primary.rgb_pixels,
-                        primary.width,
-                        primary.height,
-                        config.format,
-                        config.quality,
-                    ) {
-                        benchmark.record_compress(
-                            compressed_primary.len() as u64,
-                            t_comp.elapsed().as_micros() as u64,
-                        );
-
-                        let t_app = Instant::now();
-                        if let Ok(primary_loc) = self.store.append(&compressed_primary) {
-                            benchmark.record_pack_append(
+                        if let Ok(compressed_primary) = self.generator.compress(
+                            &primary.rgb_pixels,
+                            primary.width,
+                            primary.height,
+                            config.format,
+                            config.quality,
+                        ) {
+                            benchmark.record_compress(
                                 compressed_primary.len() as u64,
-                                t_app.elapsed().as_micros() as u64,
+                                t_comp.elapsed().as_micros() as u64,
                             );
 
-                            let mut preview_rec = None;
-                            if !video_res.preview_frames.is_empty() {
-                                let (p_format, p_quality) =
-                                    if config.custom_preview_settings {
-                                        (config.preview_format, config.preview_quality)
-                                    } else {
-                                        (config.format, config.quality)
-                                    };
-
-                                let mut locations =
-                                    Vec::with_capacity(video_res.preview_frames.len());
-                                for p_frame in &video_res.preview_frames {
-                                    if let Ok(p_bytes) = self.generator.compress(
-                                        &p_frame.rgb_pixels,
-                                        p_frame.width,
-                                        p_frame.height,
-                                        p_format,
-                                        p_quality,
-                                    ) && let Ok(p_loc) = self.store.append(&p_bytes)
-                                    {
-                                        locations.push(p_loc);
-                                    }
-                                }
-                                if !locations.is_empty() {
-                                    preview_rec = Some(VideoPreviewRecord {
-                                        frame_count: locations.len() as u32,
-                                        frame_locations: locations,
-                                    });
-                                }
-                            }
-
-                            if !self.is_pipeline_stale(pipeline_id) {
-                                let meta_update = if video_res.orig_width > 0 && video_res.orig_height > 0 {
-                                    Some(ProbedMetadata {
-                                        width: video_res.orig_width,
-                                        height: video_res.orig_height,
-                                        duration_ms: video_res.duration_ms,
-                                    })
-                                } else {
-                                    None
-                                };
-
-                                batched_db_writes.push(BatchedDbWriteItem {
-                                    media_id: target.media_id,
-                                    location: primary_loc,
-                                    preview_record: preview_rec,
-                                    probed_metadata: meta_update,
-                                });
-
-                                let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(primary.width, primary.height);
-                                pixel_buffer.make_mut_bytes().copy_from_slice(&primary.rgb_pixels);
-
-                                let _ = self.cache.insert(
-                                    target.media_id,
-                                    primary.width,
-                                    primary.height,
-                                    &primary.rgb_pixels,
+                            let t_app = Instant::now();
+                            if let Ok(primary_loc) = self.store.append(&compressed_primary) {
+                                benchmark.record_pack_append(
+                                    compressed_primary.len() as u64,
+                                    t_app.elapsed().as_micros() as u64,
                                 );
 
-                                let mut q = self.ready_drain_queue.lock();
-                                q.push(ReadyThumbnailItem {
-                                    pipeline_id,
-                                    folder_id,
-                                    media_id: target.media_id,
-                                    width: primary.width,
-                                    height: primary.height,
-                                    pixel_buffer,
-                                    orig_width: video_res.orig_width,
-                                    orig_height: video_res.orig_height,
-                                    duration_ms: video_res.duration_ms,
-                                });
-                                benchmark.record_queue_depth(q.len());
+                                let mut preview_rec = None;
+                                if !video_res.preview_frames.is_empty() {
+                                    let (p_format, p_quality) =
+                                        if config.custom_preview_settings {
+                                            (config.preview_format, config.preview_quality)
+                                        } else {
+                                            (config.format, config.quality)
+                                        };
+
+                                    let mut locations =
+                                        Vec::with_capacity(video_res.preview_frames.len());
+                                    for p_frame in &video_res.preview_frames {
+                                        if let Ok(p_bytes) = self.generator.compress(
+                                            &p_frame.rgb_pixels,
+                                            p_frame.width,
+                                            p_frame.height,
+                                            p_format,
+                                            p_quality,
+                                        ) && let Ok(p_loc) = self.store.append(&p_bytes)
+                                        {
+                                            locations.push(p_loc);
+                                        }
+                                    }
+                                    if !locations.is_empty() {
+                                        preview_rec = Some(VideoPreviewRecord {
+                                            frame_count: locations.len() as u32,
+                                            frame_locations: locations,
+                                        });
+                                    }
+                                }
+
+                                if !self.is_pipeline_stale(pipeline_id) {
+                                    let meta_update = if video_res.orig_width > 0 && video_res.orig_height > 0 {
+                                        Some(ProbedMetadata {
+                                            width: video_res.orig_width,
+                                            height: video_res.orig_height,
+                                            duration_ms: video_res.duration_ms,
+                                        })
+                                    } else {
+                                        None
+                                    };
+
+                                    batched_db_writes.push(BatchedDbWriteItem {
+                                        media_id: target.media_id,
+                                        location: Some(primary_loc),
+                                        preview_record: preview_rec,
+                                        probed_metadata: meta_update,
+                                        is_corrupted: false,
+                                    });
+
+                                    let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(primary.width, primary.height);
+                                    pixel_buffer.make_mut_bytes().copy_from_slice(&primary.rgb_pixels);
+
+                                    let _ = self.cache.insert(
+                                        target.media_id,
+                                        primary.width,
+                                        primary.height,
+                                        &primary.rgb_pixels,
+                                    );
+
+                                    let mut q = self.ready_drain_queue.lock();
+                                    q.push(ReadyThumbnailItem {
+                                        pipeline_id,
+                                        folder_id,
+                                        media_id: target.media_id,
+                                        width: primary.width,
+                                        height: primary.height,
+                                        pixel_buffer: Some(pixel_buffer),
+                                        orig_width: video_res.orig_width,
+                                        orig_height: video_res.orig_height,
+                                        duration_ms: video_res.duration_ms,
+                                        is_corrupted: false,
+                                    });
+                                    benchmark.record_queue_depth(q.len());
+                                }
                             }
                         }
+                    }
+                    Err(e) => {
+                        tracing::warn!(media_id = target.media_id, error = %e, "[ThumbnailPipeline] Video thumbnail generation failed, marking file as corrupted");
+                        is_corrupted = true;
                     }
                 }
             } else {
                 let t_img = Instant::now();
-                if let Ok(frame) = self.generator.generate_image_thumbnail(
+                match self.generator.generate_image_thumbnail(
                     &target.file_path,
                     config.max_bound,
                     config.scaling_algorithm,
                 ) {
-                    benchmark.record_image_decode_resize(t_img.elapsed().as_micros() as u64);
+                    Ok(frame) => {
+                        benchmark.record_image_decode_resize(t_img.elapsed().as_micros() as u64);
 
-                    let t_comp = Instant::now();
-                    if let Ok(compressed_bytes) = self.generator.compress(
-                        &frame.rgb_pixels,
-                        frame.width,
-                        frame.height,
-                        config.format,
-                        config.quality,
-                    ) {
-                        benchmark.record_compress(
-                            compressed_bytes.len() as u64,
-                            t_comp.elapsed().as_micros() as u64,
-                        );
-
-                        let t_app = Instant::now();
-                        if let Ok(location) = self.store.append(&compressed_bytes) {
-                            benchmark.record_pack_append(
+                        let t_comp = Instant::now();
+                        if let Ok(compressed_bytes) = self.generator.compress(
+                            &frame.rgb_pixels,
+                            frame.width,
+                            frame.height,
+                            config.format,
+                            config.quality,
+                        ) {
+                            benchmark.record_compress(
                                 compressed_bytes.len() as u64,
-                                t_app.elapsed().as_micros() as u64,
+                                t_comp.elapsed().as_micros() as u64,
                             );
 
-                            if !self.is_pipeline_stale(pipeline_id) {
-                                let meta_update = if frame.orig_width > 0 && frame.orig_height > 0 {
-                                    Some(ProbedMetadata {
-                                        width: frame.orig_width,
-                                        height: frame.orig_height,
-                                        duration_ms: 0,
-                                    })
-                                } else {
-                                    None
-                                };
-
-                                batched_db_writes.push(BatchedDbWriteItem {
-                                    media_id: target.media_id,
-                                    location,
-                                    preview_record: None,
-                                    probed_metadata: meta_update,
-                                });
-
-                                let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(frame.width, frame.height);
-                                pixel_buffer.make_mut_bytes().copy_from_slice(&frame.rgb_pixels);
-
-                                let _ = self.cache.insert(
-                                    target.media_id,
-                                    frame.width,
-                                    frame.height,
-                                    &frame.rgb_pixels,
+                            let t_app = Instant::now();
+                            if let Ok(location) = self.store.append(&compressed_bytes) {
+                                benchmark.record_pack_append(
+                                    compressed_bytes.len() as u64,
+                                    t_app.elapsed().as_micros() as u64,
                                 );
 
-                                let mut q = self.ready_drain_queue.lock();
-                                q.push(ReadyThumbnailItem {
-                                    pipeline_id,
-                                    folder_id,
-                                    media_id: target.media_id,
-                                    width: frame.width,
-                                    height: frame.height,
-                                    pixel_buffer,
-                                    orig_width: frame.orig_width,
-                                    orig_height: frame.orig_height,
-                                    duration_ms: 0,
-                                });
-                                benchmark.record_queue_depth(q.len());
+                                if !self.is_pipeline_stale(pipeline_id) {
+                                    let meta_update = if frame.orig_width > 0 && frame.orig_height > 0 {
+                                        Some(ProbedMetadata {
+                                            width: frame.orig_width,
+                                            height: frame.orig_height,
+                                            duration_ms: 0,
+                                        })
+                                    } else {
+                                        None
+                                    };
+
+                                    batched_db_writes.push(BatchedDbWriteItem {
+                                        media_id: target.media_id,
+                                        location: Some(location),
+                                        preview_record: None,
+                                        probed_metadata: meta_update,
+                                        is_corrupted: false,
+                                    });
+
+                                    let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(frame.width, frame.height);
+                                    pixel_buffer.make_mut_bytes().copy_from_slice(&frame.rgb_pixels);
+
+                                    let _ = self.cache.insert(
+                                        target.media_id,
+                                        frame.width,
+                                        frame.height,
+                                        &frame.rgb_pixels,
+                                    );
+
+                                    let mut q = self.ready_drain_queue.lock();
+                                    q.push(ReadyThumbnailItem {
+                                        pipeline_id,
+                                        folder_id,
+                                        media_id: target.media_id,
+                                        width: frame.width,
+                                        height: frame.height,
+                                        pixel_buffer: Some(pixel_buffer),
+                                        orig_width: frame.orig_width,
+                                        orig_height: frame.orig_height,
+                                        duration_ms: 0,
+                                        is_corrupted: false,
+                                    });
+                                    benchmark.record_queue_depth(q.len());
+                                }
                             }
                         }
                     }
+                    Err(e) => {
+                        tracing::warn!(media_id = target.media_id, error = %e, "[ThumbnailPipeline] Image thumbnail generation failed, marking file as corrupted");
+                        is_corrupted = true;
+                    }
                 }
+            }
+
+            if is_corrupted && !self.is_pipeline_stale(pipeline_id) {
+                batched_db_writes.push(BatchedDbWriteItem {
+                    media_id: target.media_id,
+                    location: None,
+                    preview_record: None,
+                    probed_metadata: None,
+                    is_corrupted: true,
+                });
+
+                let mut q = self.ready_drain_queue.lock();
+                q.push(ReadyThumbnailItem {
+                    pipeline_id,
+                    folder_id,
+                    media_id: target.media_id,
+                    width: 0,
+                    height: 0,
+                    pixel_buffer: None,
+                    orig_width: 0,
+                    orig_height: 0,
+                    duration_ms: 0,
+                    is_corrupted: true,
+                });
+                benchmark.record_queue_depth(q.len());
             }
 
             if batched_db_writes.len() >= config.batch_commit_size {
@@ -747,7 +793,9 @@ impl ThumbnailScheduler {
         if let Ok(mut wtxn) = self.library.raw_db().env.write_txn() {
             let count = batch.len();
             for item in batch.drain(..) {
-                let _ = self.library.raw_db().thumbnails.put(&mut wtxn, &item.media_id, &item.location);
+                if let Some(loc) = item.location {
+                    let _ = self.library.raw_db().thumbnails.put(&mut wtxn, &item.media_id, &loc);
+                }
                 if let Some(p_rec) = item.preview_record {
                     let _ = self
                         .library
@@ -756,22 +804,25 @@ impl ThumbnailScheduler {
                         .put(&mut wtxn, &item.media_id, &p_rec);
                 }
 
-                // If original dimensions or duration were probed during generation, persist them directly to MediaRecord in LMDB!
-                if let Some(meta) = item.probed_metadata
-                    && let Ok(Some(mut rec)) = self.library.raw_db().media.get(&wtxn, &item.media_id)
-                {
+                if let Ok(Some(mut rec)) = self.library.raw_db().media.get(&wtxn, &item.media_id) {
                     let mut changed = false;
-                    if rec.width == 0 && meta.width > 0 {
-                        rec.width = meta.width;
+                    if rec.is_corrupted != item.is_corrupted {
+                        rec.is_corrupted = item.is_corrupted;
                         changed = true;
                     }
-                    if rec.height == 0 && meta.height > 0 {
-                        rec.height = meta.height;
-                        changed = true;
-                    }
-                    if rec.duration_ms == 0 && meta.duration_ms > 0 {
-                        rec.duration_ms = meta.duration_ms;
-                        changed = true;
+                    if let Some(meta) = item.probed_metadata {
+                        if rec.width == 0 && meta.width > 0 {
+                            rec.width = meta.width;
+                            changed = true;
+                        }
+                        if rec.height == 0 && meta.height > 0 {
+                            rec.height = meta.height;
+                            changed = true;
+                        }
+                        if rec.duration_ms == 0 && meta.duration_ms > 0 {
+                            rec.duration_ms = meta.duration_ms;
+                            changed = true;
+                        }
                     }
                     if changed {
                         let _ = self.library.raw_db().media.put(&mut wtxn, &item.media_id, &rec);

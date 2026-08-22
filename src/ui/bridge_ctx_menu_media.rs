@@ -1,5 +1,7 @@
+use super::bridge_file_dialog_delete::DeleteFileDialogController;
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
-use super::bridge_file_dialogs::{FileRenameContext, FileRenameDialogController};
+use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
+use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController};
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
@@ -32,6 +34,8 @@ pub struct MediaActionContext<'a> {
     pub dispatcher: &'a Arc<CtxMenuDispatcher>,
     pub rename_dialog: &'a Rc<RefCell<Option<FileRenameDialog>>>,
     pub missing_file_dialog: &'a MissingFileDialogController,
+    pub delete_file_dialog: &'a DeleteFileDialogController,
+    pub remove_orphaned_dialog: &'a RemoveOrphanedFileDialogController,
 }
 
 pub struct MediaContextMenu;
@@ -42,7 +46,7 @@ impl MediaContextMenu {
         library: &Library,
         state: &Arc<RwLock<UiState>>,
         media_id: MediaId,
-    ) -> (usize, bool, Vec<DesktopApp>) {
+    ) -> (bool, usize, bool, Vec<DesktopApp>) {
         let (selected_count, changed_ids) = {
             let mut st = state.write();
             let mut changed = Vec::new();
@@ -70,10 +74,16 @@ impl MediaContextMenu {
             .copied()
             .unwrap_or(media_id);
 
-        let (is_single_image, target_path_opt) = {
+        let (is_single_image, all_selected_deleted, target_path_opt) = {
             let st = state.read();
+            let selected_ids = st.file_selection.selected_ids();
+
+            let all_deleted = !selected_ids.is_empty() && selected_ids.iter().all(|&id| {
+                st.all_folder_media.iter().find(|m| m.record.id == id).map(|m| m.record.is_deleted).unwrap_or(false)
+            });
+
             if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
-                (matches!(item.record.media_type, MediaType::Image), Some(item.full_path.clone()))
+                (matches!(item.record.media_type, MediaType::Image), all_deleted, Some(item.full_path.clone()))
             } else {
                 let is_img = library
                     .media()
@@ -83,7 +93,7 @@ impl MediaContextMenu {
                     .map(|m| matches!(m.media_type, MediaType::Image))
                     .unwrap_or(false);
                 let path = library.resolve_media_path(single_id).ok();
-                (is_img, path)
+                (is_img, all_deleted, path)
             }
         };
 
@@ -95,12 +105,13 @@ impl MediaContextMenu {
 
         state.write().active_associated_apps = associated_apps.clone();
 
-        (selected_count, is_single && is_single_image, associated_apps)
+        (all_selected_deleted, selected_count, is_single && is_single_image, associated_apps)
     }
 
     pub fn build_menu(
         selected_count: usize,
         is_single_image: bool,
+        all_selected_deleted: bool,
         _is_busy: bool,
         associated_apps: &[DesktopApp],
     ) -> CtxMenu {
@@ -134,6 +145,24 @@ impl MediaContextMenu {
             format!("File Paths ({})", selected_count)
         };
 
+        let delete_action_text = if all_selected_deleted {
+            if is_single {
+                "Remove from Database...".to_string()
+            } else {
+                format!("Remove {} Files from Database...", selected_count)
+            }
+        } else if is_single {
+            "Delete File...".to_string()
+        } else {
+            format!("Delete {} Files...", selected_count)
+        };
+
+        let delete_action_id = if all_selected_deleted {
+            CTX_ACTION_REMOVE_FROM_DB
+        } else {
+            CTX_ACTION_DELETE_MEDIA
+        };
+
         let mut builder = CtxMenuBuilder::new()
             .header(if is_single {
                 "Selected File"
@@ -152,7 +181,6 @@ impl MediaContextMenu {
                 can_open,
             );
 
-        // Submenu: Open With... (directly below Open with real Freedesktop application icons)
         if can_open {
             let apps = associated_apps.to_vec();
             builder = builder.submenu("Open With...", None, true, move |mut sub| {
@@ -221,6 +249,14 @@ impl MediaContextMenu {
                 }
                 sub_builder
             })
+            // Context-sensitive deletion / database purge action (directly below Copy without separator)
+            .action(
+                delete_action_id,
+                delete_action_text,
+                Some("Del"),
+                Some("trash"),
+                selected_count > 0,
+            )
             .separator()
             .submenu(
                 "Rate Selection",
@@ -307,6 +343,26 @@ impl MediaContextMenu {
             }
             CTX_ACTION_COPY_IMAGE => {
                 Self::handle_copy_image_action(window, ctx, &selected_ids);
+            }
+            CTX_ACTION_DELETE_MEDIA => {
+                let ids_vec: Vec<MediaId> = selected_ids.into_iter().collect();
+                let dialog_ctx = FileDialogContext {
+                    library: ctx.library.clone(),
+                    thumbnails: ctx.thumbnails.clone(),
+                    settings: ctx.settings.clone(),
+                    state: ctx.state.clone(),
+                };
+                ctx.delete_file_dialog.show(window, ids_vec, dialog_ctx);
+            }
+            CTX_ACTION_REMOVE_FROM_DB => {
+                let ids_vec: Vec<MediaId> = selected_ids.into_iter().collect();
+                let dialog_ctx = FileDialogContext {
+                    library: ctx.library.clone(),
+                    thumbnails: ctx.thumbnails.clone(),
+                    settings: ctx.settings.clone(),
+                    state: ctx.state.clone(),
+                };
+                ctx.remove_orphaned_dialog.show(window, ids_vec, dialog_ctx);
             }
             CTX_ACTION_REFRESH_METADATA => {
                 BridgeMedia::refresh_selected_metadata_only(
@@ -655,7 +711,7 @@ impl MediaContextMenu {
         {
             ctx.state.write().active_file_rename_target = Some(target_id);
 
-            let rename_ctx = FileRenameContext {
+            let dialog_ctx = FileDialogContext {
                 library: ctx.library.clone(),
                 thumbnails: ctx.thumbnails.clone(),
                 settings: ctx.settings.clone(),
@@ -680,7 +736,7 @@ impl MediaContextMenu {
                     FileRenameDialogController::execute(
                         target_id,
                         &new_name,
-                        &rename_ctx,
+                        &dialog_ctx,
                         &win_exec,
                         &ren_exec,
                         &missing_dlg,

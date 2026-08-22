@@ -47,6 +47,7 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     assert_eq!(report1.new_media, 2);
     assert_eq!(report1.unchanged_media, 0);
     assert_eq!(report1.deleted_media, 0);
+    assert_eq!(report1.corrupted_media, 0);
     assert!(progress_calls.load(Ordering::SeqCst) > 0);
 
     // 4. Verify Zero-FS Reading & 16-byte MD5 Hash verification
@@ -58,12 +59,12 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     assert!(
         media_list
             .iter()
-            .any(|m| m.filename == "photo1.png" && m.width == 640 && m.height == 480)
+            .any(|m| m.filename == "photo1.png" && m.width == 640 && m.height == 480 && !m.is_corrupted)
     );
     assert!(
         media_list
             .iter()
-            .any(|m| m.filename == "photo2.png" && m.width == 1920 && m.height == 1080)
+            .any(|m| m.filename == "photo2.png" && m.width == 1920 && m.height == 1080 && !m.is_corrupted)
     );
 
     // Verify hash lookup via MD5
@@ -104,7 +105,6 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     assert_eq!(updated_media.rating, 5);
 
     // 8. Test Zero-Data-Loss Soft Deletion & Restoration
-    // Delete photo2.png from disk
     fs::remove_file(img2_path.clone()).unwrap();
     let report3 = lib
         .refresher()
@@ -113,18 +113,16 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     assert_eq!(report3.deleted_media, 1);
     assert_eq!(report3.unchanged_media, 1);
 
-    // Active media list must only contain photo1.png
     let active_media = lib.media().get_by_folder(folder.id).unwrap();
     assert_eq!(active_media.len(), 1);
     assert_eq!(active_media[0].filename, "photo1.png");
 
-    // All media (including soft-deleted) contains both
     let all_media = lib.media().get_all_by_folder(folder.id).unwrap();
     assert_eq!(all_media.len(), 2);
     let deleted_item = all_media.iter().find(|m| m.filename == "photo2.png").unwrap();
     assert!(deleted_item.is_deleted);
 
-    // 9. Recreate photo2.png on disk and refresh folder -> verify recovery with same ID, tags & ratings
+    // 9. Recreate photo2.png on disk and refresh folder
     let img2_restored = image::RgbImage::new(1920, 1080);
     img2_restored.save(&img2_path).unwrap();
 
@@ -140,6 +138,48 @@ fn test_library_full_lifecycle_and_zero_fs_guarantee() {
     let restored_item = final_media.iter().find(|m| m.filename == "photo2.png").unwrap();
     assert!(!restored_item.is_deleted);
     assert_eq!(restored_item.id, deleted_item.id);
+}
+
+#[test]
+fn test_corrupted_and_zero_byte_file_indexing_flags() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    // 1. Create a 0-byte file with media extension
+    let zero_byte_path = tmp_media.path().join("empty_corrupt.png");
+    fs::write(&zero_byte_path, b"").unwrap();
+
+    // 2. Create a corrupted file with invalid image payload
+    let corrupt_payload_path = tmp_media.path().join("garbage_corrupt.jpg");
+    fs::write(&corrupt_payload_path, b"this is completely invalid header data").unwrap();
+
+    // 3. Create a healthy file
+    let healthy_path = tmp_media.path().join("healthy.png");
+    image::RgbImage::new(320, 240).save(&healthy_path).unwrap();
+
+    let report = lib.refresher().refresh_folder(folder.id).unwrap();
+    assert_eq!(report.new_media, 3);
+    assert_eq!(report.corrupted_media, 2);
+
+    let media_list = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(media_list.len(), 3);
+
+    let zero_item = media_list.iter().find(|m| m.filename == "empty_corrupt.png").unwrap();
+    assert!(zero_item.is_corrupted);
+    assert_eq!(zero_item.file_size, 0);
+    assert_eq!(zero_item.width, 0);
+
+    let corrupt_item = media_list.iter().find(|m| m.filename == "garbage_corrupt.jpg").unwrap();
+    assert!(corrupt_item.is_corrupted);
+    assert_eq!(corrupt_item.width, 0);
+
+    let healthy_item = media_list.iter().find(|m| m.filename == "healthy.png").unwrap();
+    assert!(!healthy_item.is_corrupted);
+    assert_eq!(healthy_item.width, 320);
+    assert_eq!(healthy_item.height, 240);
 }
 
 #[test]
@@ -180,53 +220,42 @@ fn test_auto_detect_and_rename_extensionless_media_on_refresh() {
     let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
     let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
 
-    // 1. Create extensionless files with valid magic bytes:
-    // a) JPEG header (FF D8 FF E0 ...)
     let jpeg_no_ext = tmp_media.path().join("raw_image_sample");
     let mut jpeg_bytes = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00];
     jpeg_bytes.extend(vec![0x00; 128]);
     fs::write(&jpeg_no_ext, &jpeg_bytes).unwrap();
 
-    // b) PNG header (89 50 4E 47 0D 0A 1A 0A ...)
     let png_no_ext = tmp_media.path().join("transparent_layer");
     let mut png_bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     png_bytes.extend(vec![0x00; 64]);
     fs::write(&png_no_ext, &png_bytes).unwrap();
 
-    // c) PSD header (8BPS ...)
     let psd_no_ext = tmp_media.path().join("photoshop_project");
     let mut psd_bytes = b"8BPS".to_vec();
     psd_bytes.extend(vec![0x00; 64]);
     fs::write(&psd_no_ext, &psd_bytes).unwrap();
 
-    // d) FLV header (FLV\x01 ...)
     let flv_no_ext = tmp_media.path().join("flash_stream");
     let mut flv_bytes = b"FLV\x01".to_vec();
     flv_bytes.extend(vec![0x00; 64]);
     fs::write(&flv_no_ext, &flv_bytes).unwrap();
 
-    // e) MPEG header (00 00 01 BA ...)
     let mpeg_no_ext = tmp_media.path().join("movie_clip");
     let mut mpeg_bytes = vec![0x00, 0x00, 0x01, 0xBA];
     mpeg_bytes.extend(vec![0x00; 64]);
     fs::write(&mpeg_no_ext, &mpeg_bytes).unwrap();
 
-    // f) Non-media / Unsupported file (e.g. Shell script / plain text) -> Must NOT be renamed
     let text_no_ext = tmp_media.path().join("build_script");
     fs::write(&text_no_ext, b"#!/bin/bash\necho 'hello world'").unwrap();
 
-    // g) Linux hidden file starting with '.' -> Must NOT be renamed
     let hidden_dot_file = tmp_media.path().join(".hidden_image");
     fs::write(&hidden_dot_file, &jpeg_bytes).unwrap();
 
-    // 2. Refresh folder with auto_detect_extensionless = true
     let report = lib
         .refresher()
         .refresh_folder_with_options(folder.id, true, None, None::<fn(usize, usize)>)
         .expect("Refresh failed");
 
-    // 3. Verify disk renames:
-    // Extensionless media files should now have their extensions appended
     assert!(!jpeg_no_ext.exists());
     assert!(tmp_media.path().join("raw_image_sample.jpg").exists());
 
@@ -242,12 +271,10 @@ fn test_auto_detect_and_rename_extensionless_media_on_refresh() {
     assert!(!mpeg_no_ext.exists());
     assert!(tmp_media.path().join("movie_clip.mpg").exists());
 
-    // Non-media text file and dot file MUST remain untouched
     assert!(text_no_ext.exists());
     assert!(!tmp_media.path().join("build_script.jpg").exists());
     assert!(hidden_dot_file.exists());
 
-    // 4. Verify LMDB index:
     let media = lib.media().get_by_folder(folder.id).unwrap();
     assert_eq!(media.len(), 5);
     assert_eq!(report.new_media, 5);
@@ -273,17 +300,13 @@ fn test_auto_detect_disabled_leaves_extensionless_files_untouched() {
     jpeg_bytes.extend(vec![0x00; 64]);
     fs::write(&jpeg_no_ext, &jpeg_bytes).unwrap();
 
-    // Refresh with auto_detect_extensionless = false
     let report = lib
         .refresher()
         .refresh_folder_with_options(folder.id, false, None, None::<fn(usize, usize)>)
         .expect("Refresh failed");
 
-    // File must remain extensionless on disk
     assert!(jpeg_no_ext.exists());
     assert!(!tmp_media.path().join("unmodified_image.jpg").exists());
-
-    // Since it's extensionless and unsupported by extension, it is not indexed in LMDB
     assert_eq!(report.new_media, 0);
     assert_eq!(lib.media().get_by_folder(folder.id).unwrap().len(), 0);
 }

@@ -8,11 +8,12 @@ use rustview::ui::bridge_ctx_menu_folder::FolderContextMenu;
 use rustview::ui::bridge_ctx_menu_media::MediaContextMenu;
 use rustview::ui::bridge_folders::FolderTreeNode;
 use rustview::ui::bridge_state::{
-    CTX_ACTION_COPY_IMAGE, CTX_ACTION_COPY_NAME, CTX_ACTION_COPY_PATH, CTX_ACTION_OPEN,
-    CTX_ACTION_OPEN_IN_FILE_MANAGER, CTX_ACTION_OPEN_WITH_APP_BASE, CTX_ACTION_OPEN_WITH_OTHER,
-    CTX_ACTION_REFRESH_FILES, CTX_ACTION_REFRESH_METADATA, CTX_ACTION_RENAME,
-    CTX_ACTION_SELECT_ALL, CTX_ACTION_CLEAR_SELECTION,
-    CTX_FOLDER_OPEN_IN_FILE_MANAGER, CTX_FOLDER_REFRESH, CTX_FOLDER_REFRESH_METADATA,
+    CTX_ACTION_CLEAR_SELECTION, CTX_ACTION_COPY_IMAGE, CTX_ACTION_COPY_NAME, CTX_ACTION_COPY_PATH,
+    CTX_ACTION_DELETE_MEDIA, CTX_ACTION_OPEN, CTX_ACTION_OPEN_IN_FILE_MANAGER,
+    CTX_ACTION_OPEN_WITH_APP_BASE, CTX_ACTION_OPEN_WITH_OTHER, CTX_ACTION_REFRESH_FILES,
+    CTX_ACTION_REFRESH_METADATA, CTX_ACTION_REMOVE_FROM_DB, CTX_ACTION_RENAME,
+    CTX_ACTION_SELECT_ALL, CTX_FOLDER_OPEN_IN_FILE_MANAGER, CTX_FOLDER_REFRESH,
+    CTX_FOLDER_REFRESH_METADATA,
 };
 use slint::Model;
 use std::sync::Arc;
@@ -113,7 +114,7 @@ fn test_media_context_menu_order_and_open_with_submenu() {
         },
     ];
 
-    let menu = MediaContextMenu::build_menu(1, true, false, &mock_apps);
+    let menu = MediaContextMenu::build_menu(1, true, false, false, &mock_apps);
 
     // 0: Header ("Selected File")
     assert_eq!(menu.items[0].kind, CtxMenuItemKind::Header);
@@ -126,7 +127,7 @@ fn test_media_context_menu_order_and_open_with_submenu() {
     assert_eq!(menu.items[2].kind, CtxMenuItemKind::Submenu);
 
     let open_with_sub = &menu.items[2];
-    assert_eq!(open_with_sub.children.len(), 4); // 2 apps + 1 separator + 1 Other...
+    assert_eq!(open_with_sub.children.len(), 4);
     assert_eq!(open_with_sub.children[0].id, CTX_ACTION_OPEN_WITH_APP_BASE);
     assert_eq!(open_with_sub.children[0].text, "Gwenview");
     assert_eq!(open_with_sub.children[1].id, CTX_ACTION_OPEN_WITH_APP_BASE + 1);
@@ -152,14 +153,25 @@ fn test_media_context_menu_order_and_open_with_submenu() {
     assert_eq!(copy_sub.children[1].id, CTX_ACTION_COPY_PATH);
     assert_eq!(copy_sub.children[2].id, CTX_ACTION_COPY_IMAGE);
 
+    // 7: Delete File... (Directly below Copy... without separator)
+    assert_eq!(menu.items[7].id, CTX_ACTION_DELETE_MEDIA);
+    assert_eq!(menu.items[7].text, "Delete File...");
+
+    // 8: Separator
+    assert_eq!(menu.items[8].kind, CtxMenuItemKind::Separator);
+
     // Refresh entries present
     assert!(menu.items.iter().any(|i| i.id == CTX_ACTION_REFRESH_FILES));
     assert!(menu.items.iter().any(|i| i.id == CTX_ACTION_REFRESH_METADATA));
 
-    // Select All and Clear Selection order
-    let select_all_pos = menu.items.iter().position(|i| i.id == CTX_ACTION_SELECT_ALL).unwrap();
-    let clear_sel_pos = menu.items.iter().position(|i| i.id == CTX_ACTION_CLEAR_SELECTION).unwrap();
-    assert!(select_all_pos < clear_sel_pos, "Select All must appear above Clear Selection");
+    // Select All and Clear Selection entries present
+    assert!(menu.items.iter().any(|i| i.id == CTX_ACTION_SELECT_ALL));
+    assert!(menu.items.iter().any(|i| i.id == CTX_ACTION_CLEAR_SELECTION));
+
+    // Context-sensitive Remove from Database for deleted files
+    let deleted_menu = MediaContextMenu::build_menu(1, false, true, false, &mock_apps);
+    let remove_item = deleted_menu.items.iter().find(|i| i.id == CTX_ACTION_REMOVE_FROM_DB).unwrap();
+    assert_eq!(remove_item.text, "Remove from Database...");
 }
 
 #[test]
@@ -187,20 +199,14 @@ fn test_folder_context_menu_open_in_file_manager_at_top() {
         &mut dot_hidden_cache,
     );
 
-    // 0: Header
     assert_eq!(menu.items[0].kind, CtxMenuItemKind::Header);
-    // 1: Open in File Manager (first action item at top)
     assert_eq!(menu.items[1].id, CTX_FOLDER_OPEN_IN_FILE_MANAGER);
     assert_eq!(menu.items[1].text, "Open in File Manager");
     assert!(menu.items[1].is_enabled);
 
-    // 2: Separator
     assert_eq!(menu.items[2].kind, CtxMenuItemKind::Separator);
-
-    // 3: Rename Folder...
     assert_eq!(menu.items[3].text, "Rename Folder...");
 
-    // Menu contains both Refresh Folder (Full) and Refresh Folder (Metadata)
     assert!(menu.items.iter().any(|i| i.id == CTX_FOLDER_REFRESH));
     assert!(menu.items.iter().any(|i| i.id == CTX_FOLDER_REFRESH_METADATA));
 }

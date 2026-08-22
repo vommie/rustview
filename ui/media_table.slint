@@ -16,6 +16,7 @@ export component MediaTableRow inherits Rectangle {
     in property <length> col-ar-width: 65px;
     in property <length> col-duration-width: 110px;
     in property <length> col-format-width: 75px;
+    in property <length> col-flags-width: 85px;
 
     in property <length> row-height: 28px;
     in property <length> scroll-offset-x: 0px;
@@ -27,7 +28,14 @@ export component MediaTableRow inherits Rectangle {
     callback drag-ended();
 
     height: root.row-height;
-    background: item.is-selected ? Theme.surface-selected : (row-touch.has-hover ? Theme.surface-hover : transparent);
+    // Strict Priority: Selected > Deleted > Corrupted > Normal
+    background: item.is-selected ? Theme.surface-selected : (
+        row-touch.has-hover ? Theme.surface-hover : (
+            item.is-deleted ? #31324450 : (
+                item.is-corrupted ? #f38ba818 : transparent
+            )
+        )
+    );
 
     Rectangle {
         y: parent.height - 1px;
@@ -93,7 +101,7 @@ export component MediaTableRow inherits Rectangle {
         padding: 0px;
         spacing: 0px;
 
-        // Column 0: Filename
+        // Column 0: Filename (Pure filename text with zero emojis)
         Rectangle {
             width: root.col-filename-width;
             clip: true;
@@ -101,19 +109,17 @@ export component MediaTableRow inherits Rectangle {
             HorizontalLayout {
                 padding-left: 10px;
                 padding-right: 10px;
-                spacing: 8px;
                 alignment: start;
-
-                if item.is-video : Text {
-                    text: "🎬";
-                    font-size: 10px;
-                    vertical-alignment: center;
-                }
 
                 Text {
                     text: item.filename;
-                    color: item.is-selected ? Theme.primary : Theme.text;
+                    color: item.is-selected ? Theme.primary : (
+                        item.is-deleted ? #6c7086 : (
+                            item.is-corrupted ? #f38ba8 : Theme.text
+                        )
+                    );
                     font-size: 11px;
+                    font-italic: item.is-deleted;
                     vertical-alignment: center;
                     overflow: elide;
                 }
@@ -160,7 +166,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 3: Filesize (MB) (pure number, e.g. 310.01)
+        // Column 3: Filesize (MB)
         Rectangle {
             width: root.col-size-width;
             clip: true;
@@ -180,7 +186,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 4: Rating (pure integer like 3, 0, or -)
+        // Column 4: Rating
         Rectangle {
             width: root.col-rating-width;
             clip: true;
@@ -201,7 +207,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 5: Tags (pure count of assigned tags like 4)
+        // Column 5: Tags
         Rectangle {
             width: root.col-tags-width;
             clip: true;
@@ -262,7 +268,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 8: AR (Aspect Ratio approximated to 16:9, 4:3, 1:1, etc.)
+        // Column 8: AR
         Rectangle {
             width: root.col-ar-width;
             clip: true;
@@ -282,7 +288,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 9: Duration (hh:mm:ss.ms or -)
+        // Column 9: Duration
         Rectangle {
             width: root.col-duration-width;
             clip: true;
@@ -302,7 +308,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 10: Format (lowercase, e.g. mp4, jpg)
+        // Column 10: Format
         Rectangle {
             width: root.col-format-width;
             clip: true;
@@ -315,6 +321,27 @@ export component MediaTableRow inherits Rectangle {
                 Text {
                     text: item.format_str;
                     color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 11: Flags (Priority: Deleted > Corrupted > OK)
+        Rectangle {
+            width: root.col-flags-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.flags_str;
+                    color: item.is-deleted ? #6c7086 : (item.is-corrupted ? #f38ba8 : #a6e3a1);
+                    font-weight: (item.is-deleted || item.is-corrupted) ? 700 : 400;
                     font-size: 11px;
                     vertical-alignment: center;
                     overflow: elide;
@@ -335,7 +362,7 @@ export component MediaTableView inherits Rectangle {
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
 
-    // All 11 Table Column Widths
+    // All 12 Table Column Widths
     in-out property <length> col-filename-width: 260px;
     in-out property <length> col-modified-date-width: 145px;
     in-out property <length> col-created-date-width: 145px;
@@ -347,6 +374,7 @@ export component MediaTableView inherits Rectangle {
     in-out property <length> col-ar-width: 65px;
     in-out property <length> col-duration-width: 110px;
     in-out property <length> col-format-width: 75px;
+    in-out property <length> col-flags-width: 85px;
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
@@ -370,7 +398,8 @@ export component MediaTableView inherits Rectangle {
         + root.col-height-width
         + root.col-ar-width
         + root.col-duration-width
-        + root.col-format-width;
+        + root.col-format-width
+        + root.col-flags-width;
 
     property <length> content-scroll-width: Math.max(self.width, root.total-columns-width);
 
@@ -381,18 +410,15 @@ export component MediaTableView inherits Rectangle {
     property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / root.row-height));
     property <int> scroll-block: Math.floor(-scroll-area.clamped-y / (root.row-height * 6));
 
-    /// Programmatically resets viewport scroll position to the top
     public function scroll-to-top() {
         scroll-area.scroll-to-top();
     }
 
-    /// Programmatically scrolls to align viewport with target item index
     public function scroll-to-index(item-idx: int) {
         let target-y = -(item-idx * root.row-height);
         scroll-area.viewport-y = target-y;
     }
 
-    /// Returns the global item index currently at the top of the visible table viewport
     pure public function get-top-visible-index() -> int {
         return root.first-visible-row;
     }
@@ -442,6 +468,7 @@ export component MediaTableView inherits Rectangle {
                     col-ar-width <=> root.col-ar-width;
                     col-duration-width <=> root.col-duration-width;
                     col-format-width <=> root.col-format-width;
+                    col-flags-width <=> root.col-flags-width;
 
                     sort-clicked(idx) => { root.sort-clicked(idx); }
                     column-resized(idx, w) => { root.column-resized(idx, w); }
@@ -497,6 +524,7 @@ export component MediaTableView inherits Rectangle {
                     col-ar-width: root.col-ar-width;
                     col-duration-width: root.col-duration-width;
                     col-format-width: root.col-format-width;
+                    col-flags-width: root.col-flags-width;
 
                     scroll-offset-x: scroll-area.clamped-x;
 

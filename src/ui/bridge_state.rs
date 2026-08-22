@@ -16,26 +16,25 @@ use std::sync::Arc;
 
 // Standard File Context Menu Action IDs
 pub const CTX_ACTION_OPEN: CtxMenuActionId = 1000;
-pub const CTX_ACTION_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 1008;
-pub const CTX_ACTION_OPEN_WITH_OTHER: CtxMenuActionId = 1050;
-pub const CTX_ACTION_OPEN_WITH_APP_BASE: CtxMenuActionId = 10_000;
-
 pub const CTX_ACTION_RENAME: CtxMenuActionId = 1001;
 pub const CTX_ACTION_SELECT_ALL: CtxMenuActionId = 1002;
 pub const CTX_ACTION_CLEAR_SELECTION: CtxMenuActionId = 1003;
-pub const CTX_ACTION_REFRESH_FILES: CtxMenuActionId = 1004;
-pub const CTX_ACTION_REFRESH_METADATA: CtxMenuActionId = 1009;
-
+pub const CTX_ACTION_DELETE_MEDIA: CtxMenuActionId = 1004;
 pub const CTX_ACTION_COPY_NAME: CtxMenuActionId = 1005;
 pub const CTX_ACTION_COPY_PATH: CtxMenuActionId = 1006;
 pub const CTX_ACTION_COPY_IMAGE: CtxMenuActionId = 1007;
-
-pub const CTX_ACTION_RATE_5: CtxMenuActionId = 1015;
-pub const CTX_ACTION_RATE_4: CtxMenuActionId = 1014;
-pub const CTX_ACTION_RATE_3: CtxMenuActionId = 1013;
-pub const CTX_ACTION_RATE_2: CtxMenuActionId = 1012;
-pub const CTX_ACTION_RATE_1: CtxMenuActionId = 1011;
+pub const CTX_ACTION_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 1008;
+pub const CTX_ACTION_REFRESH_METADATA: CtxMenuActionId = 1009;
 pub const CTX_ACTION_RATE_0: CtxMenuActionId = 1010;
+pub const CTX_ACTION_RATE_1: CtxMenuActionId = 1011;
+pub const CTX_ACTION_RATE_2: CtxMenuActionId = 1012;
+pub const CTX_ACTION_RATE_3: CtxMenuActionId = 1013;
+pub const CTX_ACTION_RATE_4: CtxMenuActionId = 1014;
+pub const CTX_ACTION_RATE_5: CtxMenuActionId = 1015;
+pub const CTX_ACTION_REMOVE_FROM_DB: CtxMenuActionId = 1016;
+pub const CTX_ACTION_REFRESH_FILES: CtxMenuActionId = 1017;
+pub const CTX_ACTION_OPEN_WITH_OTHER: CtxMenuActionId = 1050;
+pub const CTX_ACTION_OPEN_WITH_APP_BASE: CtxMenuActionId = 10_000;
 
 // Tag Tree Context Menu Action IDs
 pub const CTX_TAG_ADD_ROOT: CtxMenuActionId = 2001;
@@ -144,12 +143,12 @@ pub struct UiState {
     pub active_file_rename_target: Option<MediaId>,
     pub active_associated_apps: Vec<DesktopApp>,
 
-    // === Viewport Windowing & Hysteresis Paging State ===
+    // Viewport Windowing & Hysteresis Paging State
     pub loaded_slice_start: usize,
     pub loaded_slice_len: usize,
     pub loaded_slice_valid: bool,
 
-    // === Hierarchical Folder Tree State & Fast In-Memory Cache ===
+    // Hierarchical Folder Tree State & Fast In-Memory Cache
     pub expanded_folder_ids: HashSet<FolderId>,
     pub is_refreshing_folders: bool,
     pub folder_scan_count: usize,
@@ -158,7 +157,7 @@ pub struct UiState {
     pub cached_media_counts: HashMap<FolderId, usize>,
     pub dot_hidden_cache: DotHiddenCache,
 
-    // === Hierarchical Tag Tree State & Dynamic Layout ===
+    // Hierarchical Tag Tree State & Dynamic Layout
     pub expanded_tag_ids: HashSet<TagId>,
     pub tag_filter_query: String,
     pub tag_filter_is_regex: bool,

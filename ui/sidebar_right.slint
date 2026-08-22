@@ -28,6 +28,8 @@ export component SidebarRight inherits Rectangle {
     in property <string> info-dimensions: "-";
     in property <string> info-format: "-";
     in property <string> info-hash: "-";
+    in property <string> info-status: "OK";
+    in property <color> info-status-color: Theme.status-ok;
     in property <int> info-selection-count: 0;
 
     callback mode-toggled(bool);
@@ -81,6 +83,8 @@ export component SidebarRight inherits Rectangle {
             dimensions: root.info-dimensions;
             format-name: root.info-format;
             hash-or-rating: root.info-hash;
+            info-status: root.info-status;
+            info-status-color: root.info-status-color;
             selection-count: root.info-selection-count;
         }
     }

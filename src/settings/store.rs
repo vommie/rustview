@@ -1,7 +1,7 @@
 use super::schema::{
-    AppSettings, GridAspectRatio, DEFAULT_PREVIEW_FORMAT, DEFAULT_SCALING_ALGORITHM,
-    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_VIDEO_ENGINE,
-    MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
+    AppSettings, GridAspectRatio, DEFAULT_COL_FLAGS_WIDTH, DEFAULT_PREVIEW_FORMAT,
+    DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT,
+    DEFAULT_VIDEO_ENGINE, MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
     MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_GRID_ITEM_PADDING_V,
     MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_L1_CACHE_SLOTS, MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY,
     MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH, MAX_THUMBNAIL_DB_SIZE,
@@ -202,7 +202,7 @@ impl SettingsStore {
             .preview_quality
             .clamp(MIN_QUALITY, MAX_QUALITY);
 
-        // Sanitize all 11 view column widths
+        // Sanitize all 12 view column widths
         settings.view.col_filename_width = settings.view.col_filename_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         settings.view.col_modified_date_width = settings.view.col_modified_date_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         settings.view.col_created_date_width = settings.view.col_created_date_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
@@ -214,6 +214,11 @@ impl SettingsStore {
         settings.view.col_ar_width = settings.view.col_ar_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         settings.view.col_duration_width = settings.view.col_duration_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         settings.view.col_format_width = settings.view.col_format_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        if settings.view.col_flags_width == 0.0 {
+            settings.view.col_flags_width = DEFAULT_COL_FLAGS_WIDTH;
+        } else {
+            settings.view.col_flags_width = settings.view.col_flags_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        }
 
         // Sanitize sidebar widths
         settings.view.sidebar_left_width = settings

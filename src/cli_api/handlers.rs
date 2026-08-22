@@ -98,6 +98,7 @@ impl ApiHandler {
                         media_type: format!("{:?}", rec.media_type),
                         format: format!("{:?}", rec.format),
                         is_deleted: rec.is_deleted,
+                        is_corrupted: rec.is_corrupted,
                     })
                 } else {
                     None
@@ -132,6 +133,8 @@ impl ApiHandler {
             println!("  • Hash (MD5): {}", m.file_hash);
             println!("  • Dimensions: {}x{}", m.width, m.height);
             println!("  • Size      : {} bytes", m.file_size);
+            println!("  • Corrupted : {}", m.is_corrupted);
+            println!("  • Deleted   : {}", m.is_deleted);
         } else {
             println!(
                 "Notice: File '{}' is not registered in the database.",
@@ -153,13 +156,11 @@ impl ApiHandler {
     ) -> Result<i32, ApiError> {
         let (folder_path, filename) = split_folder_and_filename(path)?;
 
-        // 1. Ensure Folder is Registered
         let folder = match lib.folders().get_folder_by_path(&folder_path)? {
             Some(f) => f,
             None => lib.folders().add_folder(&folder_path)?,
         };
 
-        // 2. Check if MediaRecord Already Exists in this Folder
         let mut existing_record: Option<MediaRecord> = None;
 
         {
@@ -188,12 +189,10 @@ impl ApiHandler {
                 let mid = rec.id;
                 let old_hash = rec.file_hash;
 
-                // Update rating if provided
                 if let Some(r) = rating_opt {
                     rec.rating = r.min(5);
                 }
 
-                // Update hash if provided
                 if let Some(ref h_str) = hash_opt
                     && let Ok(new_hash) = MediaHasher::from_hex(h_str)
                     && new_hash != old_hash
@@ -207,7 +206,8 @@ impl ApiHandler {
                     rec.file_hash = new_hash;
                 }
 
-                // Live probe disk if file exists to update size/dimensions if necessary
+                let mut is_corrupted = false;
+
                 if path.exists() {
                     if let Ok(meta) = std::fs::metadata(path) {
                         rec.file_size = meta.len();
@@ -224,16 +224,26 @@ impl ApiHandler {
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(rec.modification_time);
+
+                        if rec.file_size == 0 {
+                            is_corrupted = true;
+                        }
                     }
                     if let Ok(raw_meta) = MetadataExtractor::extract(path) {
                         rec.width = raw_meta.width;
                         rec.height = raw_meta.height;
                         rec.duration_ms = raw_meta.duration_ms;
+                        if raw_meta.width == 0 && raw_meta.height == 0 {
+                            is_corrupted = true;
+                        }
+                    } else {
+                        is_corrupted = true;
                     }
                 }
 
                 rec.last_seen = current_gen;
                 rec.is_deleted = false;
+                rec.is_corrupted = is_corrupted;
 
                 lib.raw_db().media.put(&mut wtxn, &mid, &rec)?;
                 ("updated", rec, mid)
@@ -252,6 +262,7 @@ impl ApiHandler {
                 let mut width = 0u32;
                 let mut height = 0u32;
                 let mut duration_ms = 0u64;
+                let mut is_corrupted = false;
 
                 if path.exists() {
                     if let Ok(meta) = std::fs::metadata(path) {
@@ -268,15 +279,23 @@ impl ApiHandler {
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(mtime);
+
+                        if file_size == 0 {
+                            is_corrupted = true;
+                        }
                     }
                     if let Ok(raw_meta) = MetadataExtractor::extract(path) {
                         width = raw_meta.width;
                         height = raw_meta.height;
                         duration_ms = raw_meta.duration_ms;
+                        if raw_meta.width == 0 && raw_meta.height == 0 {
+                            is_corrupted = true;
+                        }
+                    } else {
+                        is_corrupted = true;
                     }
                 }
 
-                // Resolve hash
                 let file_hash = if let Some(ref h_str) = hash_opt
                     && let Ok(parsed) = MediaHasher::from_hex(h_str)
                 {
@@ -305,6 +324,7 @@ impl ApiHandler {
                     rating: rating_opt.unwrap_or(0).min(5),
                     last_seen: current_gen,
                     is_deleted: false,
+                    is_corrupted,
                 };
 
                 lib.raw_db().media.put(&mut wtxn, &new_id, &new_rec)?;
@@ -331,7 +351,6 @@ impl ApiHandler {
             }
         };
 
-        // 3. Update Tags if Provided
         if let Some(target_tag_ids) = tags_opt {
             let unique_tags: Vec<TagId> = target_tag_ids
                 .into_iter()
@@ -339,7 +358,6 @@ impl ApiHandler {
                 .into_iter()
                 .collect();
 
-            // Clear old tags for this media
             if let Some(old_tags) = lib.raw_db().tags_by_media.get(&wtxn, &target_media_id)? {
                 for old_t in old_tags {
                     if let Some(mut t_media) = lib.raw_db().media_by_tag.get(&wtxn, &old_t)? {
@@ -355,7 +373,6 @@ impl ApiHandler {
                 }
             }
 
-            // Assign new tags
             for &tag_id in &unique_tags {
                 if lib.raw_db().tags.get(&wtxn, &tag_id)?.is_some() {
                     let mut t_media = lib
@@ -416,6 +433,7 @@ impl ApiHandler {
             println!("  • Rating    : {} ★", response.rating);
             println!("  • Tags      : {:?}", response.tags);
             println!("  • Hash (MD5): {}", response.file_hash);
+            println!("  • Corrupted : {}", final_record.is_corrupted);
         }
 
         Ok(0)
@@ -455,7 +473,6 @@ impl ApiHandler {
                 lib.raw_db().thumbnails.delete(&mut wtxn, &mid)?;
                 lib.raw_db().video_previews.delete(&mut wtxn, &mid)?;
 
-                // Clean tags
                 if let Some(tags) = lib.raw_db().tags_by_media.get(&wtxn, &mid)? {
                     for tag_id in tags {
                         if let Some(mut t_media) =
@@ -574,14 +591,12 @@ impl ApiHandler {
         let t0 = Instant::now();
         let rtxn = lib.raw_db().env.read_txn()?;
 
-        // Build in-memory lookup cache for external hashes (O(1) lookup per query hash)
         let mut external_map: HashMap<String, (u64, String)> = HashMap::new();
         for entry in lib.raw_db().external_hashes.iter(&rtxn)? {
             let (_, rec) = entry?;
             external_map.insert(rec.hash.to_lowercase(), (rec.hash_id, rec.date_time));
         }
 
-        // Cache folder paths in-memory to avoid repeated LMDB lookups
         let mut folder_path_cache: HashMap<u64, String> = HashMap::new();
 
         let mut results = Vec::with_capacity(hashes.len());

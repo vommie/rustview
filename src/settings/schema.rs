@@ -68,7 +68,7 @@ pub const DEFAULT_IS_TABLE_VIEW: bool = false;
 pub const DEFAULT_SORT_COLUMN: &str = "Filename";
 pub const DEFAULT_SORT_ORDER: &str = "Ascending";
 
-// All 11 Table Columns Defaults
+// All 12 Table Columns Defaults
 pub const DEFAULT_COL_FILENAME_WIDTH: f32 = 260.0;
 pub const DEFAULT_COL_MODIFIED_DATE_WIDTH: f32 = 145.0;
 pub const DEFAULT_COL_CREATED_DATE_WIDTH: f32 = 145.0;
@@ -80,6 +80,7 @@ pub const DEFAULT_COL_HEIGHT_WIDTH: f32 = 70.0;
 pub const DEFAULT_COL_AR_WIDTH: f32 = 65.0;
 pub const DEFAULT_COL_DURATION_WIDTH: f32 = 110.0;
 pub const DEFAULT_COL_FORMAT_WIDTH: f32 = 75.0;
+pub const DEFAULT_COL_FLAGS_WIDTH: f32 = 85.0;
 
 pub const MIN_COL_WIDTH: f32 = 40.0;
 pub const MAX_COL_WIDTH: f32 = 1200.0;
@@ -342,7 +343,7 @@ pub struct ViewSettings {
     pub sort_column: String,
     pub sort_order: String,
 
-    // All 11 Column Widths
+    // All 12 Column Widths
     pub col_filename_width: f32,
     pub col_modified_date_width: f32,
     pub col_created_date_width: f32,
@@ -354,6 +355,7 @@ pub struct ViewSettings {
     pub col_ar_width: f32,
     pub col_duration_width: f32,
     pub col_format_width: f32,
+    pub col_flags_width: f32,
 
     pub sidebar_left_width: f32,
     pub sidebar_right_width: f32,
@@ -377,6 +379,7 @@ impl Default for ViewSettings {
             col_ar_width: DEFAULT_COL_AR_WIDTH,
             col_duration_width: DEFAULT_COL_DURATION_WIDTH,
             col_format_width: DEFAULT_COL_FORMAT_WIDTH,
+            col_flags_width: DEFAULT_COL_FLAGS_WIDTH,
 
             sidebar_left_width: DEFAULT_SIDEBAR_LEFT_WIDTH,
             sidebar_right_width: DEFAULT_SIDEBAR_RIGHT_WIDTH,
