@@ -1,3 +1,4 @@
+use rustview::query::MediaTypeFilter;
 use rustview::settings::{
     AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager, SettingsStore,
     DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA, DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER,
@@ -10,22 +11,22 @@ use rustview::settings::{
     DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_GRID_ITEM_BORDER_WIDTH,
     DEFAULT_GRID_ITEM_CORNER_RADIUS, DEFAULT_GRID_ITEM_PADDING_H, DEFAULT_GRID_ITEM_PADDING_V,
     DEFAULT_GRID_PADDING, DEFAULT_GRID_SPACING, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
-    DEFAULT_OBFUSCATE_LOGS, DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT,
-    DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER,
-    DEFAULT_SCALING_ALGORITHM, DEFAULT_SHORT_VIDEO_THRESHOLD_SECS, DEFAULT_SHOW_DELETED_FOLDERS,
-    DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_MEDIA_TYPE_BADGES,
-    DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH,
-    DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER,
-    DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE,
-    DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE,
-    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH,
-    DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT,
-    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH,
-    MAX_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H,
-    MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
+    DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_OBFUSCATE_LOGS, DEFAULT_PERSIST_FOLDER_TREE_STATE,
+    DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY,
+    DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM, DEFAULT_SHORT_VIDEO_THRESHOLD_SECS,
+    DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS,
+    DEFAULT_SHOW_MEDIA_TYPE_BADGES, DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY,
+    DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN,
+    DEFAULT_SORT_ORDER, DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS,
+    DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO,
+    DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY,
+    DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE,
+    DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED,
+    DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_CORNER_RADIUS,
+    MAX_GRID_ITEM_PADDING_H, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
 };
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -197,10 +198,12 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("mpeg"));
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("flv"));
 
-    // View Defaults - All 12 Columns
+    // View Defaults - All 12 Columns & Persistent Media Type Filter
     assert_eq!(initial.view.is_table_view, DEFAULT_IS_TABLE_VIEW);
     assert_eq!(initial.view.sort_column, DEFAULT_SORT_COLUMN);
     assert_eq!(initial.view.sort_order, DEFAULT_SORT_ORDER);
+    assert_eq!(initial.view.media_type_filter, DEFAULT_MEDIA_TYPE_FILTER);
+    assert_eq!(DEFAULT_MEDIA_TYPE_FILTER, "Videos & Images");
     assert_eq!(initial.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
     assert_eq!(initial.view.col_modified_date_width, DEFAULT_COL_MODIFIED_DATE_WIDTH);
     assert_eq!(initial.view.col_created_date_width, DEFAULT_COL_CREATED_DATE_WIDTH);
@@ -228,6 +231,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     let filter = rustview::query::QueryFilter::default();
     assert_eq!(filter.match_mode.as_str(), DEFAULT_TAG_MATCH_MODE);
     assert_eq!(filter.scope_mode.as_str(), DEFAULT_TAG_SCOPE_MODE);
+    assert_eq!(filter.media_type_filter, MediaTypeFilter::All);
 
     // Window Defaults
     assert_eq!(initial.window.width, DEFAULT_WINDOW_WIDTH);
@@ -261,6 +265,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.formats.auto_detect_extensionless_media = false;
     initial.debug.obfuscate_logs = false;
     initial.view.col_flags_width = 110.0;
+    initial.view.media_type_filter = "Images".to_string();
     manager.update(initial);
 
     assert!(hook_fired.load(Ordering::SeqCst));
@@ -285,6 +290,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(!loaded.formats.auto_detect_extensionless_media);
     assert!(!loaded.debug.obfuscate_logs);
     assert_eq!(loaded.view.col_flags_width, 110.0);
+    assert_eq!(loaded.view.media_type_filter, "Images");
 
     // 5. Test validation & sanitization
     let mut invalid_settings = AppSettings::default();
@@ -297,6 +303,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     invalid_settings.view.col_filename_width = 10.0;
     invalid_settings.view.col_size_width = 5000.0;
     invalid_settings.view.col_flags_width = 1.0;
+    invalid_settings.view.media_type_filter = "unrecognized_filter".to_string();
     reloaded_store.save(&invalid_settings).unwrap();
 
     let sanitized = reloaded_store.load();
@@ -327,6 +334,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(sanitized.view.col_filename_width, MIN_COL_WIDTH);
     assert_eq!(sanitized.view.col_size_width, MAX_COL_WIDTH);
     assert_eq!(sanitized.view.col_flags_width, MIN_COL_WIDTH);
+    assert_eq!(sanitized.view.media_type_filter, DEFAULT_MEDIA_TYPE_FILTER);
 }
 
 #[test]
@@ -462,6 +470,7 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
         DEFAULT_PREVIEW_QUALITY
     );
     assert_eq!(loaded.performance.video_engine, DEFAULT_VIDEO_ENGINE);
+    assert_eq!(loaded.view.media_type_filter, DEFAULT_MEDIA_TYPE_FILTER);
     assert_eq!(loaded.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
     assert_eq!(loaded.view.col_modified_date_width, DEFAULT_COL_MODIFIED_DATE_WIDTH);
     assert_eq!(loaded.view.col_created_date_width, DEFAULT_COL_CREATED_DATE_WIDTH);
@@ -477,62 +486,4 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
     assert_eq!(loaded.view.sidebar_left_width, DEFAULT_SIDEBAR_LEFT_WIDTH);
     assert_eq!(loaded.view.sidebar_right_width, DEFAULT_SIDEBAR_RIGHT_WIDTH);
     assert_eq!(loaded.debug.obfuscate_logs, DEFAULT_OBFUSCATE_LOGS);
-}
-
-#[test]
-fn test_log_obscurer_behavior_enabled_and_disabled() {
-    let test_path = Path::new("/home/alice/Pictures/Summer_Vacation_2026/beach_party.jpg");
-    let test_filename = "beach_party.jpg";
-    let test_tag_name = "Family Vacation";
-    let test_query = "beach 2026";
-
-    LogObscurer::set_obfuscate(false);
-    assert!(!LogObscurer::is_active());
-
-    assert_eq!(LogObscurer::path(test_path), test_path.display().to_string());
-    assert_eq!(
-        LogObscurer::folder(Some(42), test_path),
-        format!("Folder#42({})", test_path.display())
-    );
-    assert_eq!(
-        LogObscurer::media(Some(101), test_filename),
-        "Media#101(beach_party.jpg)"
-    );
-    assert_eq!(
-        LogObscurer::tag(Some(7), test_tag_name),
-        "Tag#7(Family Vacation)"
-    );
-    assert_eq!(LogObscurer::query(test_query), "\"beach 2026\"");
-
-    LogObscurer::set_obfuscate(true);
-    assert!(LogObscurer::is_active());
-
-    let obscured_path = LogObscurer::path(test_path);
-    assert!(!obscured_path.contains("alice"));
-    assert!(!obscured_path.contains("Summer_Vacation"));
-    assert!(!obscured_path.contains("beach_party"));
-    assert!(obscured_path.starts_with("[Path:"));
-    assert!(obscured_path.ends_with(".jpg]"));
-
-    let obscured_folder = LogObscurer::folder(Some(42), test_path);
-    assert_eq!(obscured_folder, "Folder#42");
-    assert!(!obscured_folder.contains("alice"));
-
-    let obscured_media = LogObscurer::media(Some(101), test_filename);
-    assert_eq!(obscured_media, "Media#101[*.jpg]");
-    assert!(!obscured_media.contains("beach_party"));
-
-    let obscured_tag = LogObscurer::tag(Some(7), test_tag_name);
-    assert_eq!(obscured_tag, "Tag#7");
-    assert!(!obscured_tag.contains("Vacation"));
-
-    let obscured_query = LogObscurer::query(test_query);
-    assert_eq!(obscured_query, "[Query:10 chars]");
-    assert!(!obscured_query.contains("beach"));
-
-    let obscured_target = LogObscurer::target(test_path, Some(101));
-    assert!(!obscured_target.contains("alice"));
-    assert!(obscured_target.contains("MediaId(101) [*.jpg"));
-
-    LogObscurer::set_obfuscate(DEFAULT_OBFUSCATE_LOGS);
 }

@@ -1,7 +1,7 @@
 use regex::RegexBuilder;
 use rustview::library::models::{MediaSearchParams, TagRecord};
 use rustview::library::Library;
-use rustview::query::{MatchMode, ScopeMode};
+use rustview::query::{MatchMode, MediaTypeFilter, ScopeMode};
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_state::UiState;
 use rustview::ui::bridge_tags::{
@@ -237,6 +237,7 @@ fn test_database_search_all_vs_any_and_scope_modes() {
         match_mode: MatchMode::All,
         scope_mode: ScopeMode::Folder,
         folder_id: Some(folder1.id),
+        media_type_filter: MediaTypeFilter::All,
     };
     let res_folder = lib.media().search(&params_folder).unwrap();
     assert_eq!(res_folder.len(), 1);
@@ -249,6 +250,7 @@ fn test_database_search_all_vs_any_and_scope_modes() {
         match_mode: MatchMode::All,
         scope_mode: ScopeMode::FolderAndSubfolders,
         folder_id: Some(folder1.id),
+        media_type_filter: MediaTypeFilter::All,
     };
     let res_subfolders = lib.media().search(&params_subfolders).unwrap();
     let sub_ids: HashSet<_> = res_subfolders.iter().map(|m| m.id).collect();
@@ -261,10 +263,23 @@ fn test_database_search_all_vs_any_and_scope_modes() {
         match_mode: MatchMode::All,
         scope_mode: ScopeMode::Global,
         folder_id: None,
+        media_type_filter: MediaTypeFilter::All,
     };
     let res_global = lib.media().search(&params_global).unwrap();
     let glob_ids: HashSet<_> = res_global.iter().map(|m| m.id).collect();
     assert_eq!(glob_ids, HashSet::from([m1_1, m1_sub, m2_1]));
+
+    // Test 4: MediaTypeFilter Video vs Image check
+    let params_videos_only = MediaSearchParams {
+        rating: Some(5),
+        tag_ids: HashSet::from([tag_cat.id]),
+        match_mode: MatchMode::All,
+        scope_mode: ScopeMode::Global,
+        folder_id: None,
+        media_type_filter: MediaTypeFilter::Videos,
+    };
+    let res_videos = lib.media().search(&params_videos_only).unwrap();
+    assert_eq!(res_videos.len(), 0); // All test fixtures were images (.png)
 }
 
 #[test]

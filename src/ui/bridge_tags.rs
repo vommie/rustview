@@ -711,6 +711,7 @@ impl TagActionHandler {
                 match_mode: st.filter.match_mode,
                 scope_mode: st.filter.scope_mode,
                 folder_id: st.current_folder_id,
+                media_type_filter: st.filter.media_type_filter,
             };
 
             (params, st.current_folder_path.clone())
@@ -791,6 +792,7 @@ impl TagActionHandler {
             tags_count = params.tag_ids.len(),
             match_mode = ?params.match_mode,
             scope_mode = ?params.scope_mode,
+            media_type_filter = ?params.media_type_filter,
             matched_count = result_count,
             db_search_us = db_search_us,
             preindex_us = preindex_us,

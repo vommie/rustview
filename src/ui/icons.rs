@@ -23,6 +23,9 @@ pub enum IconAsset {
     Rating(u8),
     MediaFileCorrupted,
     MediaFileMissing,
+    MediaFilterVideos,
+    MediaFilterImages,
+    MediaFilterVideosImages,
 }
 
 /// Metadata describing visual capabilities, path locations, and theme-tinting permissions.
@@ -248,6 +251,30 @@ impl IconAsset {
                 allow_tint: false,
                 description: "Missing or deleted media file placeholder icon",
             },
+            Self::MediaFilterVideos => IconMetadata {
+                asset: *self,
+                name: "media_filter_videos",
+                file_name: "media_filter_videos.svg",
+                relative_path: "ui/icons/media_filter_videos.svg",
+                allow_tint: true,
+                description: "Filter display to show only video media items",
+            },
+            Self::MediaFilterImages => IconMetadata {
+                asset: *self,
+                name: "media_filter_images",
+                file_name: "media_filter_images.svg",
+                relative_path: "ui/icons/media_filter_images.svg",
+                allow_tint: true,
+                description: "Filter display to show only image media items",
+            },
+            Self::MediaFilterVideosImages => IconMetadata {
+                asset: *self,
+                name: "media_filter_videos_images",
+                file_name: "media_filter_videos_images.svg",
+                relative_path: "ui/icons/media_filter_videos_images.svg",
+                allow_tint: true,
+                description: "Filter display to show both video and image media items",
+            },
         }
     }
 
@@ -298,6 +325,11 @@ impl IconAsset {
             "rating_5" | "rate_5" => Some(Self::Rating(5)),
             "media_file_corrupted" | "corrupt" | "corrupted" => Some(Self::MediaFileCorrupted),
             "media_file_missing" | "missing" | "deleted" => Some(Self::MediaFileMissing),
+            "media_filter_videos" | "filter_videos" | "videos" => Some(Self::MediaFilterVideos),
+            "media_filter_images" | "filter_images" | "images" => Some(Self::MediaFilterImages),
+            "media_filter_videos_images" | "filter_videos_images" | "videos_images" | "both" => {
+                Some(Self::MediaFilterVideosImages)
+            }
             _ => None,
         }
     }
@@ -330,6 +362,9 @@ impl IconAsset {
             Self::Rating(5),
             Self::MediaFileCorrupted,
             Self::MediaFileMissing,
+            Self::MediaFilterVideos,
+            Self::MediaFilterImages,
+            Self::MediaFilterVideosImages,
         ]
     }
 }

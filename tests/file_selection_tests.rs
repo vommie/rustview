@@ -1,11 +1,13 @@
 use rustview::library::models::MediaRecord;
+use rustview::library::Library;
 use rustview::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
 use rustview::media::{MediaFormat, MediaType};
-use rustview::query::filters::IndexedMediaRecord;
+use rustview::query::filters::{IndexedMediaRecord, MediaTypeFilter, QueryFilter};
 use rustview::ui::bridge_state::UiState;
 use rustview::ui::file_selection::{FileSelectionModel, FileSelectionSummary};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use tempfile::tempdir;
 
 fn create_dummy_record(
     id: u64,
@@ -165,9 +167,91 @@ fn test_file_selection_ctrl_shift_additive_range() {
 }
 
 #[test]
-fn test_file_selection_visual_sort_order_preservation() {
-    let mut state = UiState::default();
+fn test_file_selection_filter_pruning_lifecycle() {
+    let tmp_db = tempdir().unwrap();
+    let lib = Library::open(tmp_db.path()).unwrap();
 
+    let r_vid1 = create_dummy_record(1, "clip_alpha.mp4", 1000, 1920, 1080, MediaFormat::Mp4, 5);
+    let r_vid2 = create_dummy_record(2, "clip_beta.mp4", 2000, 1920, 1080, MediaFormat::Mp4, 4);
+    let r_img1 = create_dummy_record(3, "photo_gamma.jpg", 500, 800, 600, MediaFormat::Jpeg, 5);
+    let r_img2 = create_dummy_record(4, "photo_delta.png", 600, 1024, 768, MediaFormat::Png, 3);
+
+    let indexed: Vec<IndexedMediaRecord> = vec![r_vid1, r_vid2, r_img1, r_img2]
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let is_video = matches!(r.media_type, MediaType::Video);
+            let ar_str = approximate_aspect_ratio(r.width, r.height);
+            let ar_value = if r.height > 0 { r.width as f32 / r.height as f32 } else { 0.0 };
+            IndexedMediaRecord {
+                index: i,
+                full_path: PathBuf::from(&r.filename),
+                filename_lower: r.filename.to_lowercase(),
+                filename_slint: r.filename.clone().into(),
+                modified_date_str: "2026-08-20 12:00:00".into(),
+                created_date_str: "2026-08-20 10:00:00".into(),
+                filesize_mb_str: format_filesize_mb(r.file_size).into(),
+                rating_str: r.rating.to_string().into(),
+                tags_count: 0,
+                tags_count_str: "0".into(),
+                width_str: r.width.to_string().into(),
+                height_str: r.height.to_string().into(),
+                ar_str: ar_str.into(),
+                ar_value,
+                duration_str: format_duration_hms_ms(r.duration_ms, is_video).into(),
+                format_str: r.format.default_extension().into(),
+                flags_str: "OK".into(),
+                is_corrupted: false,
+                is_deleted: false,
+                has_tags: false,
+                record: r,
+            }
+        })
+        .collect();
+
+    let mut sel = FileSelectionModel::new();
+    sel.select_single(1); // clip_alpha.mp4 (Video)
+    sel.toggle(2);        // clip_beta.mp4 (Video)
+    sel.toggle(3);        // photo_gamma.jpg (Image)
+    assert_eq!(sel.count(), 3);
+
+    // 1. Filter: "Images" only -> Items 3 & 4 match. Item 1 & 2 must be pruned. Item 3 must stay selected!
+    let filter_images = QueryFilter {
+        media_type_filter: MediaTypeFilter::Images,
+        ..Default::default()
+    };
+    let matched_images = filter_images.execute_indexed_refs(&lib, &indexed, None);
+    let matched_ids_images: HashSet<u64> = matched_images.iter().map(|m| m.record.id).collect();
+    assert_eq!(matched_ids_images, HashSet::from([3, 4]));
+
+    sel.prune_missing(&matched_ids_images);
+    assert_eq!(sel.count(), 1);
+    assert!(sel.is_selected(3));
+    assert!(!sel.is_selected(1));
+    assert!(!sel.is_selected(2));
+
+    // 2. Select item 4 as well (both images selected)
+    sel.toggle(4);
+    assert_eq!(sel.count(), 2);
+
+    // 3. Search query: "gamma" -> Only photo_gamma.jpg (ID 3) matches. Item 4 must be pruned!
+    let filter_search = QueryFilter {
+        media_type_filter: MediaTypeFilter::Images,
+        search_query: "gamma".to_string(),
+        ..Default::default()
+    };
+    let matched_search = filter_search.execute_indexed_refs(&lib, &indexed, None);
+    let matched_ids_search: HashSet<u64> = matched_search.iter().map(|m| m.record.id).collect();
+    assert_eq!(matched_ids_search, HashSet::from([3]));
+
+    sel.prune_missing(&matched_ids_search);
+    assert_eq!(sel.count(), 1);
+    assert!(sel.is_selected(3));
+    assert!(!sel.is_selected(4));
+}
+
+#[test]
+fn test_file_selection_visual_sort_order_preservation() {
     let r1 = create_dummy_record(100, "C_File.mp4", 1000, 1920, 1080, MediaFormat::Mp4, 1);
     let r2 = create_dummy_record(200, "A_File.mp4", 2000, 1920, 1080, MediaFormat::Mp4, 2);
     let r3 = create_dummy_record(300, "B_File.mp4", 3000, 1920, 1080, MediaFormat::Mp4, 3);
@@ -244,8 +328,11 @@ fn test_file_selection_visual_sort_order_preservation() {
         record: r3,
     };
 
-    state.all_folder_media = vec![idx1, idx2, idx3];
-    state.active_indices = vec![1, 2, 0];
+    let mut state = UiState {
+        all_folder_media: vec![idx1, idx2, idx3],
+        active_indices: vec![1, 2, 0],
+        ..Default::default()
+    };
 
     state.file_selection.select_single(100);
     state.file_selection.toggle(200);

@@ -20,6 +20,11 @@ fn test_icon_asset_metadata_and_spot_tint_rules() {
     assert!(IconAsset::QueryFolderAndSubfolders.is_tintable());
     assert!(IconAsset::QueryGlobal.is_tintable());
 
+    // Verify the 3 new media filter icons are tintable (supporting dark & light themes)
+    assert!(IconAsset::MediaFilterVideos.is_tintable());
+    assert!(IconAsset::MediaFilterImages.is_tintable());
+    assert!(IconAsset::MediaFilterVideosImages.is_tintable());
+
     // 2. Verify multi-color semantic icons MUST NEVER be tinted
     assert!(!IconAsset::Tag.is_tintable());
     assert!(!IconAsset::Rating(0).is_tintable());
@@ -61,10 +66,25 @@ fn test_icon_manager_resolution_by_name() {
         IconAsset::from_name("media_file_missing"),
         Some(IconAsset::MediaFileMissing)
     );
+    assert_eq!(
+        IconAsset::from_name("media_filter_videos"),
+        Some(IconAsset::MediaFilterVideos)
+    );
+    assert_eq!(
+        IconAsset::from_name("media_filter_images"),
+        Some(IconAsset::MediaFilterImages)
+    );
+    assert_eq!(
+        IconAsset::from_name("media_filter_videos_images"),
+        Some(IconAsset::MediaFilterVideosImages)
+    );
     assert_eq!(IconAsset::from_name("unknown_icon"), None);
 
     assert!(IconManager::is_tintable("settings"));
     assert!(IconManager::is_tintable("folder_tree_nodes_fold"));
+    assert!(IconManager::is_tintable("media_filter_videos"));
+    assert!(IconManager::is_tintable("media_filter_images"));
+    assert!(IconManager::is_tintable("media_filter_videos_images"));
     assert!(!IconManager::is_tintable("tag"));
     assert!(!IconManager::is_tintable("rating_4"));
     assert!(!IconManager::is_tintable("media_file_corrupted"));

@@ -1,12 +1,61 @@
 use crate::library::models::{MediaRecord, TagId};
 use crate::library::Library;
-use crate::settings::{LogObscurer, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE};
+use crate::media::MediaType;
+use crate::settings::{LogObscurer, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE};
 use memchr::memmem;
 use regex::{Regex, RegexBuilder};
+use serde::{Deserialize, Serialize};
 use slint::SharedString;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Instant;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum MediaTypeFilter {
+    Videos = 0,
+    Images = 1,
+    #[default]
+    All = 2,
+}
+
+impl MediaTypeFilter {
+    pub fn from_index(idx: i32) -> Self {
+        match idx {
+            0 => Self::Videos,
+            1 => Self::Images,
+            _ => Self::All,
+        }
+    }
+
+    pub fn to_index(&self) -> i32 {
+        *self as i32
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.trim().to_lowercase().as_str() {
+            "videos" | "video" => Self::Videos,
+            "images" | "image" => Self::Images,
+            _ => Self::All,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Videos => "Videos",
+            Self::Images => "Images",
+            Self::All => "Videos & Images",
+        }
+    }
+
+    #[inline]
+    pub fn matches(&self, media_type: MediaType) -> bool {
+        match self {
+            Self::Videos => media_type == MediaType::Video,
+            Self::Images => media_type == MediaType::Image,
+            Self::All => true,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MatchMode {
@@ -80,6 +129,7 @@ pub struct QueryFilter {
     pub tag_ids: HashSet<TagId>,
     pub match_mode: MatchMode,
     pub scope_mode: ScopeMode,
+    pub media_type_filter: MediaTypeFilter,
 }
 
 impl Default for QueryFilter {
@@ -91,6 +141,7 @@ impl Default for QueryFilter {
             tag_ids: HashSet::new(),
             match_mode: MatchMode::from_str_name(DEFAULT_TAG_MATCH_MODE),
             scope_mode: ScopeMode::from_str_name(DEFAULT_TAG_SCOPE_MODE),
+            media_type_filter: MediaTypeFilter::from_str_name(DEFAULT_MEDIA_TYPE_FILTER),
         }
     }
 }
@@ -101,6 +152,7 @@ impl QueryFilter {
         self.search_query.trim().is_empty()
             && self.rating.map(|r| r == 0).unwrap_or(true)
             && self.tag_ids.is_empty()
+            && self.media_type_filter == MediaTypeFilter::All
     }
 
     #[inline]
@@ -143,6 +195,7 @@ pub struct PreparedFilter {
     regex_matcher: Option<Regex>,
     tag_ids: HashSet<TagId>,
     match_mode: MatchMode,
+    media_type_filter: MediaTypeFilter,
 }
 
 impl PreparedFilter {
@@ -173,6 +226,7 @@ impl PreparedFilter {
             regex_matcher,
             tag_ids: filter.tag_ids.clone(),
             match_mode: filter.match_mode,
+            media_type_filter: filter.media_type_filter,
         }
     }
 
@@ -183,6 +237,11 @@ impl PreparedFilter {
         media_tags: &[TagId],
         simd_finder: Option<&memmem::Finder<'_>>,
     ) -> bool {
+        // 1. Instant Media Type Filter Check (Zero allocation, 1 CPU instruction)
+        if !self.media_type_filter.matches(item.record.media_type) {
+            return false;
+        }
+
         let is_rating_active = match self.rating {
             Some(r) => r > 0,
             None => false,
@@ -317,6 +376,7 @@ impl QueryFilter {
                 let elapsed_us = t0.elapsed().as_micros();
                 tracing::debug!(
                     query = %LogObscurer::query(&self.search_query),
+                    media_type = ?self.media_type_filter,
                     is_regex = self.is_regex,
                     mode = "Refinement Subset",
                     input_candidates = input_count,
@@ -349,6 +409,7 @@ impl QueryFilter {
                 let elapsed_us = t0.elapsed().as_micros();
                 tracing::debug!(
                     query = %LogObscurer::query(&self.search_query),
+                    media_type = ?self.media_type_filter,
                     is_regex = self.is_regex,
                     mode = "Full Set",
                     input_candidates = input_count,

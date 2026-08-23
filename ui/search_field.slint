@@ -199,6 +199,11 @@ export component SearchField inherits Rectangle {
                 regex-touch := TouchArea {
                     enabled: root.is-enabled;
                     mouse-cursor: pointer;
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down {
+                            regex-tooltip-host.on-hover-leave();
+                        }
+                    }
                     clicked => {
                         regex-tooltip-host.on-hover-leave();
                         root.is-regex = !root.is-regex;
@@ -251,6 +256,11 @@ export component SearchField inherits Rectangle {
                 clear-touch := TouchArea {
                     enabled: root.is-enabled;
                     mouse-cursor: pointer;
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down {
+                            clear-tooltip-host.on-hover-leave();
+                        }
+                    }
                     clicked => {
                         clear-tooltip-host.on-hover-leave();
                         root.text = "";

@@ -20,7 +20,7 @@ use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
 use crate::library::models::{FileTransferKind, FolderId, MediaId, TagId};
 use crate::library::Library;
-use crate::query::{ScopeMode, SortColumn, SortOrder};
+use crate::query::{MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::{
     AppSettings, GridAspectRatio, LogObscurer, SettingsDialogController, SettingsDiff,
     SettingsManager,
@@ -102,6 +102,11 @@ impl UiBridge {
 
         window.set_sort_column_idx(initial_sort_col.to_index());
         window.set_sort_order_idx(initial_sort_ord.to_index());
+
+        // Restore Persistent Media Type Filter (Default: Videos)
+        let initial_media_type_filter = MediaTypeFilter::from_str_name(&v_settings.media_type_filter);
+        initial_state.filter.media_type_filter = initial_media_type_filter;
+        window.set_media_type_filter_idx(initial_media_type_filter.to_index());
 
         // Restore All 12 Table Column Widths
         window.set_col_filename_width(v_settings.col_filename_width);

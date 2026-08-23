@@ -258,6 +258,7 @@ impl UiState {
     }
 
     /// Single Point of Truth determining whether there is an active query/filter state that can be reset.
+    /// Note: MediaTypeFilter is a persistent global setting and does not make a query resettable.
     #[inline]
     pub fn is_query_resettable(&self) -> bool {
         !self.is_assign_mode

@@ -93,6 +93,11 @@ export component ToolbarToggleButton inherits Rectangle {
     touch-area := TouchArea {
         enabled: root.is-enabled;
         mouse-cursor: root.is-enabled ? pointer : default;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                tooltip-host.on-hover-leave();
+            }
+        }
         clicked => {
             tooltip-host.on-hover-leave();
             root.is-active = !root.is-active;

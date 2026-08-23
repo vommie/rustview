@@ -1,6 +1,6 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
-import { TooltipSettings } from "tooltips.slint";
+import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
@@ -28,7 +28,7 @@ export { RemoveOrphanedFolderDialog } from "remove_orphaned_folder_dialog.slint"
 export { RebornFolderDeleteWarnDialog } from "reborn_folder_delete_warn_dialog.slint";
 export { MissingFolderDeleteDialog } from "missing_folder_delete_dialog.slint";
 export { MissingFileDialog } from "missing_file_dialog.slint";
-export { TooltipSettings } from "tooltips.slint";
+export { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 
 export component MainWindow inherits Window {
     title: "RustView";
@@ -48,6 +48,7 @@ export component MainWindow inherits Window {
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
+    in-out property <int> media-type-filter-idx: 2;
 
     // Grid Items Layout properties
     in-out property <int> grid-item-padding-h: 8;
@@ -195,6 +196,7 @@ export component MainWindow inherits Window {
 
     callback search-query-changed(string);
     callback regex-mode-toggled(bool);
+    callback media-type-filter-changed(int /* index */);
     callback rating-applied(int);
     callback tag-toggled(int);
     callback tag-toggle-expand(int);
@@ -303,9 +305,11 @@ export component MainWindow inherits Window {
                     search-text <=> root.search-query;
                     regex-mode <=> root.regex-mode;
                     is-table-view: root.is-table-view;
+                    media-type-filter-idx <=> root.media-type-filter-idx;
                     thumb-width-changed(w) => { }
                     search-changed(t) => { root.search-query-changed(t); }
                     regex-toggled(r) => { root.regex-mode-toggled(r); }
+                    media-type-filter-changed(m) => { root.media-type-filter-changed(m); }
                     refresh-clicked => { root.refresh-folder(); }
                     view-mode-toggled(new-is-table) => {
                         let anchor-top-idx = new-is-table ? grid-view.get-top-visible-index() : table-view.get-top-visible-index();
@@ -478,6 +482,83 @@ export component MainWindow inherits Window {
         move-clicked => { root.choice-popup-move(root.choice-target-folder-id); }
         cancel-clicked => { root.choice-popup-cancel(); }
         dismissed => { root.choice-popup-dismissed(); }
+    }
+
+    // Global Non-Blocking Tooltip Overlay (Never steals mouse clicks or touches!)
+    if GlobalTooltip.is-visible && TooltipSettings.enabled : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        z: 200;
+        background: transparent;
+
+        // Position the tooltip bubble without any TouchArea or event blocking
+        Rectangle {
+            property <length> bubble-w: bubble-layout.preferred-width;
+            property <length> bubble-h: bubble-layout.preferred-height;
+
+            x: Math.max(8px, Math.min(parent.width - self.bubble-w - 8px, GlobalTooltip.pos-x));
+            y: Math.max(8px, Math.min(parent.height - self.bubble-h - 8px, GlobalTooltip.pos-y));
+            width: self.bubble-w;
+            height: self.bubble-h;
+
+            background: TooltipSettings.default-background;
+            border-radius: TooltipSettings.default-corner-radius;
+            border-width: 1px;
+            border-color: TooltipSettings.default-border;
+            drop-shadow-blur: 8px;
+            drop-shadow-color: #000000aa;
+            drop-shadow-offset-y: 2px;
+
+            bubble-layout := HorizontalLayout {
+                padding-left: TooltipSettings.default-padding-h;
+                padding-right: TooltipSettings.default-padding-h;
+                padding-top: TooltipSettings.default-padding-v;
+                padding-bottom: TooltipSettings.default-padding-v;
+                spacing: 6px;
+                alignment: center;
+
+                if GlobalTooltip.icon.width > 0 : AppIcon {
+                    icon: GlobalTooltip.icon;
+                    size: 13px;
+                    allow-tint: GlobalTooltip.allow-icon-tint;
+                    color: TooltipSettings.default-text;
+                    y: (parent.height - self.height) / 2;
+                }
+
+                Text {
+                    text: GlobalTooltip.text;
+                    font-size: TooltipSettings.default-font-size;
+                    color: TooltipSettings.default-text;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                }
+
+                if GlobalTooltip.shortcut != "" : Rectangle {
+                    background: #ffffff14;
+                    border-radius: 3px;
+                    border-width: 1px;
+                    border-color: #ffffff22;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+
+                    HorizontalLayout {
+                        padding-left: 5px;
+                        padding-right: 5px;
+                        alignment: center;
+
+                        Text {
+                            text: GlobalTooltip.shortcut;
+                            font-size: 10.5px;
+                            font-weight: 700;
+                            color: TooltipSettings.default-shortcut-color;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if root.is-modal-locked : Rectangle {

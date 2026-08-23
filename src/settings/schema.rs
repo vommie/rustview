@@ -67,6 +67,7 @@ pub const MAX_GRID_ITEM_CORNER_RADIUS: u32 = 24;
 pub const DEFAULT_IS_TABLE_VIEW: bool = false;
 pub const DEFAULT_SORT_COLUMN: &str = "Filename";
 pub const DEFAULT_SORT_ORDER: &str = "Ascending";
+pub const DEFAULT_MEDIA_TYPE_FILTER: &str = "Videos & Images";
 
 // All 12 Table Columns Defaults
 pub const DEFAULT_COL_FILENAME_WIDTH: f32 = 260.0;
@@ -342,6 +343,7 @@ pub struct ViewSettings {
     pub is_table_view: bool,
     pub sort_column: String,
     pub sort_order: String,
+    pub media_type_filter: String,
 
     // All 12 Column Widths
     pub col_filename_width: f32,
@@ -367,6 +369,7 @@ impl Default for ViewSettings {
             is_table_view: DEFAULT_IS_TABLE_VIEW,
             sort_column: DEFAULT_SORT_COLUMN.to_string(),
             sort_order: DEFAULT_SORT_ORDER.to_string(),
+            media_type_filter: DEFAULT_MEDIA_TYPE_FILTER.to_string(),
 
             col_filename_width: DEFAULT_COL_FILENAME_WIDTH,
             col_modified_date_width: DEFAULT_COL_MODIFIED_DATE_WIDTH,

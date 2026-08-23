@@ -367,6 +367,13 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.media_type_filter != new.view.media_type_filter {
+            changes.push(format!(
+                "View: media_type_filter ({} -> {})",
+                old.view.media_type_filter, new.view.media_type_filter
+            ));
+        }
+
         if old.view.col_flags_width != new.view.col_flags_width {
             changes.push(format!(
                 "View: col_flags_width ({}px -> {}px)",

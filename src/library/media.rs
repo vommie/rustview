@@ -2,7 +2,7 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{FolderId, MediaId, MediaRecord, MediaSearchParams, TagId};
 use crate::media::FileHash;
-use crate::query::{MatchMode, ScopeMode};
+use crate::query::{MatchMode, MediaTypeFilter, ScopeMode};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -169,7 +169,7 @@ impl<'a> MediaRepository<'a> {
     }
 
     /// Performs a high-speed database search evaluating combinatorial tags, ratings, and hierarchical scopes.
-    /// Preserves and finds both active and soft-deleted records matching the requested tags and ratings.
+    /// Preserves and finds both active and soft-deleted records matching the requested tags, ratings, and media type filter.
     pub fn search(&self, params: &MediaSearchParams) -> Result<Vec<MediaRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
 
@@ -184,7 +184,15 @@ impl<'a> MediaRepository<'a> {
             if params.scope_mode == ScopeMode::Folder
                 && let Some(f_id) = params.folder_id
             {
-                return self.get_all_by_folder(f_id);
+                let all_folder_media = self.get_all_by_folder(f_id)?;
+                if params.media_type_filter == MediaTypeFilter::All {
+                    return Ok(all_folder_media);
+                } else {
+                    return Ok(all_folder_media
+                        .into_iter()
+                        .filter(|m| params.media_type_filter.matches(m.media_type))
+                        .collect());
+                }
             }
             return Ok(Vec::new());
         }
@@ -283,6 +291,11 @@ impl<'a> MediaRepository<'a> {
             let Some(rec) = self.db.media.get(&rtxn, &media_id)? else {
                 continue;
             };
+
+            // Fast Media Type Filter Check
+            if !params.media_type_filter.matches(rec.media_type) {
+                continue;
+            }
 
             let is_folder_active = *folder_active_cache.entry(rec.folder_id).or_insert_with(|| {
                 self.db

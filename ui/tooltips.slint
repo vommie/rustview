@@ -21,6 +21,39 @@ export global TooltipSettings {
     in-out property <length> max-width: 340px;
 }
 
+/// Global non-blocking Tooltip Overlay state manager.
+/// Manages tooltip visibility and positioning without creating modal popup window grabs.
+export global GlobalTooltip {
+    in-out property <bool> is-visible: false;
+    in-out property <string> text: "";
+    in-out property <string> shortcut: "";
+    in-out property <image> icon;
+    in-out property <bool> allow-icon-tint: true;
+    in-out property <length> pos-x: 0px;
+    in-out property <length> pos-y: 0px;
+
+    public function show(
+        text: string,
+        shortcut: string,
+        icon: image,
+        allow-tint: bool,
+        x: length,
+        y: length
+    ) {
+        root.text = text;
+        root.shortcut = shortcut;
+        root.icon = icon;
+        root.allow-icon-tint = allow-tint;
+        root.pos-x = x;
+        root.pos-y = y;
+        root.is-visible = true;
+    }
+
+    public function hide() {
+        root.is-visible = false;
+    }
+}
+
 /// Standalone visual tooltip bubble component with border, drop shadow, text, and optional shortcut badge.
 export component TooltipBubble inherits Rectangle {
     in property <string> text: "";
@@ -93,7 +126,8 @@ export component TooltipBubble inherits Rectangle {
 }
 
 /// Generic, modular TooltipHost controller component.
-/// Embedded directly inside any button or UI element to manage hover timing, delay, cursor tracking, and PopupWindow positioning.
+/// Embedded directly inside any button or UI element to manage hover timing, delay, cursor tracking,
+/// and instant click-through without modal input interception.
 export component TooltipHost inherits Rectangle {
     in property <string> text: "";
     in property <string> shortcut: "";
@@ -107,115 +141,55 @@ export component TooltipHost inherits Rectangle {
     in property <length> offset-x: 0px;
     in property <length> offset-y: 0px;
 
-    // Custom Style Overrides
-    in property <color> custom-bg: transparent;
-    in property <color> custom-border: transparent;
-    in property <color> custom-text: transparent;
-    in property <length> custom-font-size: 0px;
-
     // Internal State
     property <bool> is-hovered: false;
-    property <bool> has-icon: root.icon.width > 0 && root.icon.height > 0;
     property <duration> effective-delay: (root.delay > 0ms) ? root.delay : TooltipSettings.default-delay;
-    in-out property <length> popup-x: 0px;
-    in-out property <length> popup-y: 0px;
 
     width: 100%;
     height: 100%;
     x: 0px;
     y: 0px;
+    background: transparent;
 
     hover-timer := Timer {
         interval: root.effective-delay;
         running: false;
         triggered() => {
             if root.is-hovered && TooltipSettings.enabled && root.is-enabled && root.text != "" {
-                popup.show();
+                let target-x = root.absolute-position.x + root.offset-x;
+                let target-y = root.absolute-position.y + root.height + 4px + root.offset-y;
+                GlobalTooltip.show(
+                    root.text,
+                    root.shortcut,
+                    root.icon,
+                    root.allow-icon-tint,
+                    target-x,
+                    target-y
+                );
             }
             self.running = false;
-        }
-    }
-
-    popup := PopupWindow {
-        close-policy: no-auto-close;
-        x: root.popup-x;
-        y: root.popup-y;
-        width: tooltip-layout.preferred-width;
-        height: tooltip-layout.preferred-height;
-
-        Rectangle {
-            background: (root.custom-bg != transparent) ? root.custom-bg : TooltipSettings.default-background;
-            border-radius: TooltipSettings.default-corner-radius;
-            border-width: 1px;
-            border-color: (root.custom-border != transparent) ? root.custom-border : TooltipSettings.default-border;
-            drop-shadow-blur: 8px;
-            drop-shadow-color: #000000aa;
-            drop-shadow-offset-y: 2px;
-
-            tooltip-layout := HorizontalLayout {
-                padding-left: TooltipSettings.default-padding-h;
-                padding-right: TooltipSettings.default-padding-h;
-                padding-top: TooltipSettings.default-padding-v;
-                padding-bottom: TooltipSettings.default-padding-v;
-                spacing: 6px;
-                alignment: center;
-
-                if root.has-icon : AppIcon {
-                    icon: root.icon;
-                    size: 13px;
-                    allow-tint: root.allow-icon-tint;
-                    color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
-                    y: (parent.height - self.height) / 2;
-                }
-
-                Text {
-                    text: root.text;
-                    font-size: (root.custom-font-size > 0px) ? root.custom-font-size : TooltipSettings.default-font-size;
-                    color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
-                    vertical-alignment: center;
-                    horizontal-alignment: left;
-                }
-
-                if root.shortcut != "" : Rectangle {
-                    background: #ffffff14;
-                    border-radius: 3px;
-                    border-width: 1px;
-                    border-color: #ffffff22;
-                    height: 18px;
-                    y: (parent.height - self.height) / 2;
-
-                    HorizontalLayout {
-                        padding-left: 5px;
-                        padding-right: 5px;
-                        alignment: center;
-
-                        Text {
-                            text: root.shortcut;
-                            font-size: 10.5px;
-                            font-weight: 700;
-                            color: TooltipSettings.default-shortcut-color;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-            }
         }
     }
 
     /// Invoked when mouse enters the host component area
     public function on-hover-enter(mx: length, my: length) {
         root.is-hovered = true;
-        if root.follow-cursor {
-            root.popup-x = mx + root.offset-x + 8px;
-            root.popup-y = my + root.offset-y + 16px;
-        } else {
-            root.popup-x = root.offset-x;
-            root.popup-y = root.height + 4px + root.offset-y;
-        }
-
         if TooltipSettings.enabled && root.is-enabled && root.text != "" {
             if root.effective-delay <= 0ms {
-                popup.show();
+                let target-x = root.follow-cursor
+                    ? (root.absolute-position.x + mx + 8px)
+                    : (root.absolute-position.x + root.offset-x);
+                let target-y = root.follow-cursor
+                    ? (root.absolute-position.y + my + 16px)
+                    : (root.absolute-position.y + root.height + 4px + root.offset-y);
+                GlobalTooltip.show(
+                    root.text,
+                    root.shortcut,
+                    root.icon,
+                    root.allow-icon-tint,
+                    target-x,
+                    target-y
+                );
             } else {
                 hover-timer.running = true;
             }
@@ -226,14 +200,14 @@ export component TooltipHost inherits Rectangle {
     public function on-hover-leave() {
         root.is-hovered = false;
         hover-timer.running = false;
-        popup.close();
+        GlobalTooltip.hide();
     }
 
     /// Invoked during mouse move when follow-cursor is active
     public function on-mouse-move(mx: length, my: length) {
-        if root.follow-cursor {
-            root.popup-x = mx + root.offset-x + 8px;
-            root.popup-y = my + root.offset-y + 16px;
+        if root.follow-cursor && root.is-hovered && GlobalTooltip.is-visible {
+            GlobalTooltip.pos-x = root.absolute-position.x + mx + 8px;
+            GlobalTooltip.pos-y = root.absolute-position.y + my + 16px;
         }
     }
 }
@@ -249,10 +223,6 @@ export component TooltipArea inherits Rectangle {
     in property <bool> follow-cursor: false;
     in property <length> offset-x: 0px;
     in property <length> offset-y: 0px;
-    in property <color> custom-bg: transparent;
-    in property <color> custom-border: transparent;
-    in property <color> custom-text: transparent;
-    in property <length> custom-font-size: 0px;
 
     callback clicked();
 
@@ -266,15 +236,16 @@ export component TooltipArea inherits Rectangle {
         follow-cursor: root.follow-cursor;
         offset-x: root.offset-x;
         offset-y: root.offset-y;
-        custom-bg: root.custom-bg;
-        custom-border: root.custom-border;
-        custom-text: root.custom-text;
-        custom-font-size: root.custom-font-size;
     }
 
     touch := TouchArea {
         width: 100%;
         height: 100%;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                tooltip-host.on-hover-leave();
+            }
+        }
         clicked => {
             tooltip-host.on-hover-leave();
             root.clicked();

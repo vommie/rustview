@@ -1,5 +1,5 @@
 use crate::media::{FileHash, MediaFormat, MediaType};
-use crate::query::{MatchMode, ScopeMode};
+use crate::query::{MatchMode, MediaTypeFilter, ScopeMode};
 pub use crate::thumbnails::types::{ThumbnailLocation, VideoPreviewRecord};
 use heed::{BoxedError, BytesDecode, BytesEncode};
 use serde::{Deserialize, Serialize};
@@ -248,6 +248,7 @@ pub struct MediaSearchParams {
     pub match_mode: MatchMode,
     pub scope_mode: ScopeMode,
     pub folder_id: Option<FolderId>,
+    pub media_type_filter: MediaTypeFilter,
 }
 
 /// Supported file transfer modes when dropping files onto folders.

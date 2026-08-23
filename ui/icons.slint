@@ -27,6 +27,9 @@ export global Icons {
     out property <image> rating-5: @image-url("icons/rating_5.svg");
     out property <image> media-file-corrupted: @image-url("icons/media_file_corrupted.svg");
     out property <image> media-file-missing: @image-url("icons/media_file_missing.svg");
+    out property <image> media-filter-videos: @image-url("icons/media_filter_videos.svg");
+    out property <image> media-filter-images: @image-url("icons/media_filter_images.svg");
+    out property <image> media-filter-videos-images: @image-url("icons/media_filter_videos_images.svg");
 
     /// Returns the rating icon for a rating value (0..5). Never colorized.
     pure public function rating-icon(rating: int) -> image {
@@ -59,6 +62,9 @@ export global Icons {
         if name == "tag" { return @image-url("icons/tag.svg"); }
         if name == "media_file_corrupted" || name == "corrupt" || name == "corrupted" { return @image-url("icons/media_file_corrupted.svg"); }
         if name == "media_file_missing" || name == "missing" || name == "deleted" { return @image-url("icons/media_file_missing.svg"); }
+        if name == "media_filter_videos" || name == "filter_videos" { return @image-url("icons/media_filter_videos.svg"); }
+        if name == "media_filter_images" || name == "filter_images" { return @image-url("icons/media_filter_images.svg"); }
+        if name == "media_filter_videos_images" || name == "filter_videos_images" { return @image-url("icons/media_filter_videos_images.svg"); }
         return @image-url("icons/settings.svg");
     }
 }

@@ -1,20 +1,22 @@
 import { Theme } from "styles.slint";
 import { Icons } from "icons.slint";
-import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
+import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
 import { ToolbarThumbWidthControl } from "toolbar_thumb_width_control.slint";
 import { ToolbarSearchField } from "toolbar_search_field.slint";
 
 /// Dedicated modular toolbar for the Media Grid View.
-/// Integrates Thumbnail Width Slider (left-aligned), Expander, Filter Search (with embedded Regex & Clear), Refresh, and ViewMode Switcher.
+/// Integrates Thumbnail Width Slider (left-aligned), Expander, Media Type Selector, Filter Search (with embedded Regex & Clear), Refresh, and ViewMode Switcher.
 export component MediaGridPanelToolbar inherits PanelToolbar {
     in-out property <int> thumb-width: 190;
     in-out property <string> search-text: "";
     in-out property <bool> regex-mode: false;
-    in-out property <bool> is-table-view: false;
+    in property <bool> is-table-view: false;
+    in-out property <int> media-type-filter-idx: 2;
 
     callback thumb-width-changed(int);
     callback search-changed(string);
     callback regex-toggled(bool);
+    callback media-type-filter-changed(int);
     callback refresh-clicked();
     callback view-mode-toggled(bool);
 
@@ -26,10 +28,42 @@ export component MediaGridPanelToolbar inherits PanelToolbar {
         thumb-width-changed(w) => { root.thumb-width-changed(w); }
     }
 
-    // 2. Expander / Spacer (Expands to push search & view actions to the right)
+    // 2. Expander / Spacer (Pushes search & view actions to the right)
     ToolbarSpacer {}
 
-    // 3. Filter Search Field (with inline Regex Toggle and Clear button)
+    // 3. Media Type Select Button (Videos, Images, Videos & Images)
+    ToolbarSelectButton {
+        current-index <=> root.media-type-filter-idx;
+        button-display-mode: 0; // Icon only on main button
+        popup-display-mode: 2;  // Icon + Text in dropdown options
+        tooltip: "Filter media types (Videos, Images, Videos & Images)";
+
+        model: [
+            {
+                id: 0,
+                text: "Videos",
+                icon: Icons.media-filter-videos
+            },
+            {
+                id: 1,
+                text: "Images",
+                icon: Icons.media-filter-images
+            },
+            {
+                id: 2,
+                text: "Videos & Images",
+                icon: Icons.media-filter-videos-images
+            }
+        ];
+
+        selected(idx) => {
+            root.media-type-filter-changed(idx);
+        }
+    }
+
+    ToolbarSeparator {}
+
+    // 4. Filter Search Field (with inline Regex Toggle and Clear button)
     search-field := ToolbarSearchField {
         placeholder-text: "Filter...";
         field-width: 160px;
@@ -39,20 +73,20 @@ export component MediaGridPanelToolbar inherits PanelToolbar {
         regex-toggled(r) => { root.regex-toggled(r); }
     }
 
-    // 4. Separator
+    // 5. Separator
     ToolbarSeparator {}
 
-    // 5. Refresh Media Button
+    // 6. Refresh Media Button
     ToolbarButton {
         icon: Icons.refresh;
         tooltip: "Scan and refresh media in current folder";
         clicked => { root.refresh-clicked(); }
     }
 
-    // 6. Separator
+    // 7. Separator
     ToolbarSeparator {}
 
-    // 7. View Mode Switcher Button
+    // 8. View Mode Switcher Button
     ToolbarButton {
         icon: root.is-table-view ? Icons.grid-view : Icons.list-view;
         tooltip: root.is-table-view ? "Switch to Grid View" : "Switch to Table View";

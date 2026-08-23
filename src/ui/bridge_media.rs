@@ -11,7 +11,7 @@ use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, fo
 use crate::media::metadata::MetadataExtractor;
 use crate::media::{MediaFormat, MediaHasher, MediaType};
 use crate::query::filters::IndexedMediaRecord;
-use crate::query::{MediaSorter, SortColumn, SortOrder};
+use crate::query::{MediaSorter, MediaTypeFilter, SortColumn, SortOrder};
 use crate::settings::SettingsManager;
 use crate::thumbnails::{
     PreparedTarget, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager,
@@ -85,6 +85,7 @@ impl BridgeMedia {
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
     ) {
+        // 1. Search Query Filter Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -95,6 +96,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
+        // 2. Regular Expression Mode Toggle Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -105,6 +107,41 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
+        // 3. Media Type Filter Selector Callback (Videos / Images / Both)
+        let win = window.clone_strong();
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        window.on_media_type_filter_changed(move |idx| {
+            let t0 = Instant::now();
+            let new_filter = MediaTypeFilter::from_index(idx);
+
+            {
+                let mut s = st.write();
+                s.filter.media_type_filter = new_filter;
+            }
+
+            {
+                let mut app_settings = set.get();
+                app_settings.view.media_type_filter = new_filter.as_str().to_string();
+                set.save_quiet_async(&app_settings);
+            }
+
+            tracing::info!(
+                media_type_filter = ?new_filter,
+                elapsed_us = t0.elapsed().as_micros(),
+                "[MediaPanelToolbar: MediaTypeFilter] Media type filter changed and persisted"
+            );
+
+            if st.read().is_query_active {
+                BridgeTags::execute_query_flow(&win, &lib, &thumb, &set, &st);
+            } else {
+                Self::reload(&win, &lib, &thumb, &set, &st, false, false);
+            }
+        });
+
+        // 4. Sort Column Click Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -136,6 +173,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
+        // 5. Hover Video Preview Animation Callback
         let win = window.clone_strong();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -202,7 +240,7 @@ impl BridgeMedia {
             }
         });
 
-        // High-FPS Virtualization with Optimized Hysteresis Windowing
+        // 6. High-FPS Virtualization Chunk Update Callback
         let thumb_stream = thumbnails.clone();
         let set_stream = settings.clone();
         let st_stream = state.clone();
@@ -219,6 +257,7 @@ impl BridgeMedia {
             );
         });
 
+        // 7. Table Column Resizing Callbacks
         let last_resize_time = Arc::new(parking_lot::Mutex::new(Instant::now()));
         let resize_events_count = Arc::new(AtomicUsize::new(0));
 
@@ -258,6 +297,7 @@ impl BridgeMedia {
             set_res.save_quiet(&app_settings);
         });
 
+        // 8. View Mode Switcher Callback (Grid <-> Table)
         let set_mode = settings;
         let win_mode = window.clone_strong();
         let lib_mode = library;
@@ -1694,8 +1734,27 @@ impl BridgeMedia {
             bench.view_model_map_time_us.store(map_us, Ordering::Relaxed);
         }
 
+        let mut selection_pruned = false;
         {
             let mut st_write = state.write();
+
+            // Automatic Deselection of Hidden/Filtered-out Items
+            let prev_sel_count = st_write.file_selection.count();
+            if prev_sel_count > 0 {
+                let valid_ids: HashSet<MediaId> = row_map.keys().copied().collect();
+                st_write.file_selection.prune_missing(&valid_ids);
+                let new_sel_count = st_write.file_selection.count();
+                if new_sel_count != prev_sel_count {
+                    selection_pruned = true;
+                    tracing::info!(
+                        previous_selected = prev_sel_count,
+                        remaining_selected = new_sel_count,
+                        pruned_hidden_items = prev_sel_count - new_sel_count,
+                        "[FileSelection: FilterPrune] Deselected hidden items no longer matching active filter"
+                    );
+                }
+            }
+
             st_write.media_row_map = row_map;
             st_write.active_indices = matched_indices;
             st_write.last_executed_query = current_query.clone();
@@ -1723,6 +1782,12 @@ impl BridgeMedia {
         let commit_us = t_slint_start.elapsed().as_micros() as u64;
         if let Some(ref bench) = bench_opt {
             bench.slint_commit_time_us.store(commit_us, Ordering::Relaxed);
+        }
+
+        // If selection was altered due to filter pruning, synchronize Inspector and TagTree
+        if selection_pruned {
+            BridgeInspector::update(window, state);
+            BridgeTags::sync_tag_selection(window, library, state);
         }
 
         if options.start_pipeline {
