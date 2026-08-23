@@ -49,6 +49,10 @@ export component MainWindow inherits Window {
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
+    in-out property <bool> is-virtual-folder: false;
+    in property <bool> is-virtual-folder-btn-enabled: false;
+    in property <string> virtual-folder-tooltip: "";
+    in-out property <int> virtual-folder-count: 0;
     in-out property <int> media-type-filter-idx: 2;
 
     // Fallback Empty State Properties
@@ -105,8 +109,9 @@ export component MainWindow inherits Window {
     in-out property <int> sort-column-idx: 0;
     in-out property <int> sort-order-idx: 0;
 
-    // All 12 Table Column Widths
+    // All 13 Table Column Widths
     in-out property <length> col-filename-width: 260px;
+    in-out property <length> col-path-width: 180px;
     in-out property <length> col-modified-date-width: 145px;
     in-out property <length> col-created-date-width: 145px;
     in-out property <length> col-size-width: 95px;
@@ -162,12 +167,12 @@ export component MainWindow inherits Window {
     in property <[TagColumnView]> tag-columns: [];
 
     in property <string> info-filename: "-";
+    in property <string> info-path-label: "Path:";
+    in property <string> info-path: "-";
     in property <string> info-size: "-";
     in property <string> info-dimensions: "-";
     in property <string> info-format: "-";
     in property <string> info-hash: "-";
-    in property <string> info-status: "OK";
-    in property <color> info-status-color: Theme.status-ok;
     in property <int> info-selection-count: 0;
 
     callback refresh-folder();
@@ -203,6 +208,7 @@ export component MainWindow inherits Window {
 
     callback search-query-changed(string);
     callback regex-mode-toggled(bool);
+    callback virtual-folder-toggled(bool);
     callback media-type-filter-changed(int /* index */);
     callback rating-applied(int);
     callback tag-toggled(int);
@@ -312,10 +318,14 @@ export component MainWindow inherits Window {
                     search-text <=> root.search-query;
                     regex-mode <=> root.regex-mode;
                     is-table-view: root.is-table-view;
+                    is-virtual-folder <=> root.is-virtual-folder;
+                    is-virtual-folder-enabled: root.is-virtual-folder-btn-enabled;
+                    virtual-folder-tooltip: root.virtual-folder-tooltip;
                     media-type-filter-idx <=> root.media-type-filter-idx;
                     thumb-width-changed(w) => { }
                     search-changed(t) => { root.search-query-changed(t); }
                     regex-toggled(r) => { root.regex-mode-toggled(r); }
+                    virtual-folder-toggled(v) => { root.virtual-folder-toggled(v); }
                     media-type-filter-changed(m) => { root.media-type-filter-changed(m); }
                     refresh-clicked => { root.refresh-folder(); }
                     view-mode-toggled(new-is-table) => {
@@ -367,6 +377,7 @@ export component MainWindow inherits Window {
                         sort-order: root.sort-order-idx;
 
                         col-filename-width <=> root.col-filename-width;
+                        col-path-width <=> root.col-path-width;
                         col-modified-date-width <=> root.col-modified-date-width;
                         col-created-date-width <=> root.col-created-date-width;
                         col-size-width <=> root.col-size-width;
@@ -431,12 +442,12 @@ export component MainWindow inherits Window {
                 tag-filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
                 info-filename: root.info-filename;
+                info-path-label: root.info-path-label;
+                info-path: root.info-path;
                 info-size: root.info-size;
                 info-dimensions: root.info-dimensions;
                 info-format: root.info-format;
                 info-hash: root.info-hash;
-                info-status: root.info-status;
-                info-status-color: root.info-status-color;
                 info-selection-count: root.info-selection-count;
 
                 mode-toggled(assign) => { root.tag-mode-toggled(assign); }
@@ -457,6 +468,8 @@ export component MainWindow inherits Window {
         StatusBar {
             status-message: root.status-text;
             item-count-str: root.items-metric-text;
+            is-virtual-folder: root.is-virtual-folder;
+            virtual-folder-count: root.virtual-folder-count;
             is-refreshing-folders: root.is-refreshing-folders;
             folder-scan-count: root.folder-scan-count;
             is-indexing-media: root.is-indexing-media;
@@ -499,7 +512,7 @@ export component MainWindow inherits Window {
         dismissed => { root.choice-popup-dismissed(); }
     }
 
-    // Global Non-Blocking Tooltip Overlay (Never steals mouse clicks or touches!)
+    // Global Non-Blocking Tooltip Overlay
     if GlobalTooltip.is-visible && TooltipSettings.enabled : Rectangle {
         x: 0px;
         y: 0px;
@@ -508,7 +521,6 @@ export component MainWindow inherits Window {
         z: 200;
         background: transparent;
 
-        // Position the tooltip bubble without any TouchArea or event blocking
         Rectangle {
             property <length> bubble-w: bubble-layout.preferred-width;
             property <length> bubble-h: bubble-layout.preferred-height;

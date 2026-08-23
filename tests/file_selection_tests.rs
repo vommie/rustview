@@ -186,6 +186,8 @@ fn test_file_selection_filter_pruning_lifecycle() {
             IndexedMediaRecord {
                 index: i,
                 full_path: PathBuf::from(&r.filename),
+                folder_path_str: "/media/photos".into(),
+                folder_path_lower: "/media/photos".to_string(),
                 filename_lower: r.filename.to_lowercase(),
                 filename_slint: r.filename.clone().into(),
                 modified_date_str: "2026-08-20 12:00:00".into(),
@@ -259,6 +261,8 @@ fn test_file_selection_visual_sort_order_preservation() {
     let idx1 = IndexedMediaRecord {
         index: 0,
         full_path: PathBuf::from("/media/C_File.mp4"),
+        folder_path_str: "/media".into(),
+        folder_path_lower: "/media".to_string(),
         filename_lower: "c_file.mp4".into(),
         filename_slint: "C_File.mp4".into(),
         modified_date_str: "-".into(),
@@ -283,6 +287,8 @@ fn test_file_selection_visual_sort_order_preservation() {
     let idx2 = IndexedMediaRecord {
         index: 1,
         full_path: PathBuf::from("/media/A_File.mp4"),
+        folder_path_str: "/media".into(),
+        folder_path_lower: "/media".to_string(),
         filename_lower: "a_file.mp4".into(),
         filename_slint: "A_File.mp4".into(),
         modified_date_str: "-".into(),
@@ -307,6 +313,8 @@ fn test_file_selection_visual_sort_order_preservation() {
     let idx3 = IndexedMediaRecord {
         index: 2,
         full_path: PathBuf::from("/media/B_File.mp4"),
+        folder_path_str: "/media".into(),
+        folder_path_lower: "/media".to_string(),
         filename_lower: "b_file.mp4".into(),
         filename_slint: "B_File.mp4".into(),
         modified_date_str: "-".into(),
@@ -398,6 +406,8 @@ fn test_file_selection_summary_calculations() {
             IndexedMediaRecord {
                 index: i,
                 full_path: PathBuf::from(&r.filename),
+                folder_path_str: "/media/photos".into(),
+                folder_path_lower: "/media/photos".to_string(),
                 filename_lower: r.filename.to_lowercase(),
                 filename_slint: r.filename.clone().into(),
                 modified_date_str: "2026-08-20 12:00:00".into(),

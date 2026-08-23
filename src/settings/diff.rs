@@ -374,6 +374,13 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.col_path_width != new.view.col_path_width {
+            changes.push(format!(
+                "View: col_path_width ({}px -> {}px)",
+                old.view.col_path_width, new.view.col_path_width
+            ));
+        }
+
         if old.view.col_flags_width != new.view.col_flags_width {
             changes.push(format!(
                 "View: col_flags_width ({}px -> {}px)",

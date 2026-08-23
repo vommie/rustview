@@ -6,6 +6,7 @@ import { MediaHeaderBar } from "media_header_bar.slint";
 export component MediaTableRow inherits Rectangle {
     in property <MediaItemView> item;
     in property <length> col-filename-width: 260px;
+    in property <length> col-path-width: 180px;
     in property <length> col-modified-date-width: 145px;
     in property <length> col-created-date-width: 145px;
     in property <length> col-size-width: 95px;
@@ -101,7 +102,7 @@ export component MediaTableRow inherits Rectangle {
         padding: 0px;
         spacing: 0px;
 
-        // Column 0: Filename (Pure filename text with zero emojis)
+        // Column 0: Filename
         Rectangle {
             width: root.col-filename-width;
             clip: true;
@@ -126,7 +127,27 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 1: Modified Date
+        // Column 1: Path
+        Rectangle {
+            width: root.col-path-width;
+            clip: true;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                alignment: start;
+
+                Text {
+                    text: item.path_str;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Column 2: Modified Date
         Rectangle {
             width: root.col-modified-date-width;
             clip: true;
@@ -146,7 +167,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 2: Created Date
+        // Column 3: Created Date
         Rectangle {
             width: root.col-created-date-width;
             clip: true;
@@ -166,7 +187,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 3: Filesize (MB)
+        // Column 4: Filesize (MB)
         Rectangle {
             width: root.col-size-width;
             clip: true;
@@ -186,7 +207,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 4: Rating
+        // Column 5: Rating
         Rectangle {
             width: root.col-rating-width;
             clip: true;
@@ -207,7 +228,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 5: Tags
+        // Column 6: Tags
         Rectangle {
             width: root.col-tags-width;
             clip: true;
@@ -228,7 +249,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 6: Width
+        // Column 7: Width
         Rectangle {
             width: root.col-width-width;
             clip: true;
@@ -248,7 +269,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 7: Height
+        // Column 8: Height
         Rectangle {
             width: root.col-height-width;
             clip: true;
@@ -268,7 +289,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 8: AR
+        // Column 9: AR
         Rectangle {
             width: root.col-ar-width;
             clip: true;
@@ -288,7 +309,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 9: Duration
+        // Column 10: Duration
         Rectangle {
             width: root.col-duration-width;
             clip: true;
@@ -308,7 +329,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 10: Format
+        // Column 11: Format
         Rectangle {
             width: root.col-format-width;
             clip: true;
@@ -328,7 +349,7 @@ export component MediaTableRow inherits Rectangle {
             }
         }
 
-        // Column 11: Flags (Priority: Deleted > Corrupted > OK)
+        // Column 12: Flags
         Rectangle {
             width: root.col-flags-width;
             clip: true;
@@ -362,8 +383,9 @@ export component MediaTableView inherits Rectangle {
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
 
-    // All 12 Table Column Widths
+    // All 13 Table Column Widths
     in-out property <length> col-filename-width: 260px;
+    in-out property <length> col-path-width: 180px;
     in-out property <length> col-modified-date-width: 145px;
     in-out property <length> col-created-date-width: 145px;
     in-out property <length> col-size-width: 95px;
@@ -389,6 +411,7 @@ export component MediaTableView inherits Rectangle {
     callback item-drag-ended();
 
     property <length> total-columns-width: root.col-filename-width
+        + root.col-path-width
         + root.col-modified-date-width
         + root.col-created-date-width
         + root.col-size-width
@@ -458,6 +481,7 @@ export component MediaTableView inherits Rectangle {
                     auto-width: false;
 
                     col-filename-width <=> root.col-filename-width;
+                    col-path-width <=> root.col-path-width;
                     col-modified-date-width <=> root.col-modified-date-width;
                     col-created-date-width <=> root.col-created-date-width;
                     col-size-width <=> root.col-size-width;
@@ -514,6 +538,7 @@ export component MediaTableView inherits Rectangle {
                     item: item;
 
                     col-filename-width: root.col-filename-width;
+                    col-path-width: root.col-path-width;
                     col-modified-date-width: root.col-modified-date-width;
                     col-created-date-width: root.col-created-date-width;
                     col-size-width: root.col-size-width;

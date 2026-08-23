@@ -46,9 +46,12 @@ impl BridgeThumbnails {
                     let visible_count = media_model.row_count();
 
                     for item_data in batch {
-                        if !st.is_query_active
-                            && st.current_folder_id != Some(item_data.folder_id)
-                        {
+                        // Accept items if query is active, virtual recursive view is active, or folder matches exactly
+                        let is_folder_match = st.is_query_active
+                            || st.is_virtual_folder_mode
+                            || st.current_folder_id == Some(item_data.folder_id);
+
+                        if !is_folder_match {
                             continue;
                         }
 

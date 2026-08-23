@@ -10,6 +10,10 @@ export component StatusBar inherits Rectangle {
     in property <string> status-message: "Ready.";
     in property <string> item-count-str: "Items: 0";
 
+    // Virtual Folder / Recursive Subfolders View Indicator Properties
+    in property <bool> is-virtual-folder: false;
+    in property <int> virtual-folder-count: 0;
+
     // Folder Structure Scan Progress Properties
     in property <bool> is-refreshing-folders: false;
     in property <int> folder-scan-count: 0;
@@ -50,6 +54,30 @@ export component StatusBar inherits Rectangle {
             vertical-alignment: center;
             horizontal-stretch: 1;
             overflow: elide;
+        }
+
+        // Virtual Recursive Folder Indicator Badge
+        if root.is-virtual-folder : Rectangle {
+            height: 18px;
+            background: #89b4fa22;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: #89b4fa66;
+
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 6px;
+                spacing: 4px;
+                alignment: center;
+
+                Text {
+                    text: "Recursive: " + root.virtual-folder-count + " folder" + (root.virtual-folder-count == 1 ? "" : "s");
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                    vertical-alignment: center;
+                }
+            }
         }
 
         // Dedicated Folder Structure Refresh Progress Indicator

@@ -123,6 +123,8 @@ impl LruThumbnailStore {
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
     pub current_folder_path: Option<PathBuf>,
+    pub is_virtual_folder_mode: bool,
+    pub virtual_folder_count: usize,
     pub active_folder_token: usize,
     pub active_folder_cancel_flag: Option<Arc<AtomicBool>>,
     pub active_folder_bench: Option<Arc<FolderLoadBenchmark>>,
@@ -172,6 +174,8 @@ impl Default for UiState {
         Self {
             current_folder_id: None,
             current_folder_path: None,
+            is_virtual_folder_mode: false,
+            virtual_folder_count: 0,
             active_folder_token: 0,
             active_folder_cancel_flag: None,
             active_folder_bench: None,
@@ -258,7 +262,6 @@ impl UiState {
     }
 
     /// Single Point of Truth determining whether there is an active query/filter state that can be reset.
-    /// Note: MediaTypeFilter is a persistent global setting and does not make a query resettable.
     #[inline]
     pub fn is_query_resettable(&self) -> bool {
         !self.is_assign_mode

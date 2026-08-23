@@ -12,7 +12,7 @@ use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, fo
 use crate::media::metadata::MetadataExtractor;
 use crate::media::{MediaFormat, MediaHasher, MediaType};
 use crate::query::filters::IndexedMediaRecord;
-use crate::query::{MediaSorter, MediaTypeFilter, SortColumn, SortOrder};
+use crate::query::{MediaSorter, MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::SettingsManager;
 use crate::thumbnails::{
     PreparedTarget, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager,
@@ -25,7 +25,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -108,7 +108,17 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 3. Media Type Filter Selector Callback (Videos / Images / Both)
+        // 3. Virtual Folder / Recursive Subfolders View Toggle Callback
+        let win = window.clone_strong();
+        let lib = library.clone();
+        let thumb = thumbnails.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        window.on_virtual_folder_toggled(move |_active| {
+            Self::toggle_virtual_folder_mode(&win, &lib, &thumb, &set, &st);
+        });
+
+        // 4. Media Type Filter Selector Callback (Videos / Images / Both)
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -142,7 +152,7 @@ impl BridgeMedia {
             }
         });
 
-        // 4. Sort Column Click Callback
+        // 5. Sort Column Click Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -174,7 +184,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 5. Hover Video Preview Animation Callback
+        // 6. Hover Video Preview Animation Callback
         let win = window.clone_strong();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -241,7 +251,7 @@ impl BridgeMedia {
             }
         });
 
-        // 6. High-FPS Virtualization Chunk Update Callback
+        // 7. High-FPS Virtualization Chunk Update Callback
         let thumb_stream = thumbnails.clone();
         let set_stream = settings.clone();
         let st_stream = state.clone();
@@ -258,7 +268,7 @@ impl BridgeMedia {
             );
         });
 
-        // 7. Table Column Resizing Callbacks
+        // 8. Table Column Resizing Callbacks
         let last_resize_time = Arc::new(parking_lot::Mutex::new(Instant::now()));
         let resize_events_count = Arc::new(AtomicUsize::new(0));
 
@@ -281,24 +291,25 @@ impl BridgeMedia {
 
             match col_idx {
                 0 => app_settings.view.col_filename_width = width_f32,
-                1 => app_settings.view.col_modified_date_width = width_f32,
-                2 => app_settings.view.col_created_date_width = width_f32,
-                3 => app_settings.view.col_size_width = width_f32,
-                4 => app_settings.view.col_rating_width = width_f32,
-                5 => app_settings.view.col_tags_width = width_f32,
-                6 => app_settings.view.col_width_width = width_f32,
-                7 => app_settings.view.col_height_width = width_f32,
-                8 => app_settings.view.col_ar_width = width_f32,
-                9 => app_settings.view.col_duration_width = width_f32,
-                10 => app_settings.view.col_format_width = width_f32,
-                11 => app_settings.view.col_flags_width = width_f32,
+                1 => app_settings.view.col_path_width = width_f32,
+                2 => app_settings.view.col_modified_date_width = width_f32,
+                3 => app_settings.view.col_created_date_width = width_f32,
+                4 => app_settings.view.col_size_width = width_f32,
+                5 => app_settings.view.col_rating_width = width_f32,
+                6 => app_settings.view.col_tags_width = width_f32,
+                7 => app_settings.view.col_width_width = width_f32,
+                8 => app_settings.view.col_height_width = width_f32,
+                9 => app_settings.view.col_ar_width = width_f32,
+                10 => app_settings.view.col_duration_width = width_f32,
+                11 => app_settings.view.col_format_width = width_f32,
+                12 => app_settings.view.col_flags_width = width_f32,
                 _ => {}
             }
 
             set_res.save_quiet(&app_settings);
         });
 
-        // 8. View Mode Switcher Callback (Grid <-> Table)
+        // 9. View Mode Switcher Callback (Grid <-> Table)
         let set_mode = settings;
         let win_mode = window.clone_strong();
         let lib_mode = library;
@@ -316,6 +327,172 @@ impl BridgeMedia {
                 &st_mode,
             );
         });
+    }
+
+    /// Evaluates and updates whether the Virtual Folder toggle button should be enabled or disabled in the UI.
+    /// Disabled when in Global Query mode, or when any query filter is active, or when the active folder has no subfolders.
+    pub fn update_virtual_folder_button_state(
+        window: &MainWindow,
+        library: &Library,
+        state: &RwLock<UiState>,
+    ) {
+        let st = state.read();
+
+        let (is_enabled, tooltip) = if st.is_query_active && st.filter.scope_mode == ScopeMode::Global {
+            (false, "Recursive folder view is disabled during global query".to_string())
+        } else if st.is_query_active {
+            (false, "Recursive folder view is disabled while query filter is active".to_string())
+        } else if let Some(folder_id) = st.current_folder_id {
+            let has_subfolders = library
+                .folders()
+                .get_descendant_folder_ids(folder_id)
+                .map(|ids| ids.len() > 1)
+                .unwrap_or(false);
+
+            if !has_subfolders {
+                (false, "No subfolders available in current folder".to_string())
+            } else if st.is_virtual_folder_mode {
+                (true, "Disable recursive folder view (show current folder only)".to_string())
+            } else {
+                (true, "Recursive folder view: Show media from current folder and all subfolders".to_string())
+            }
+        } else {
+            (false, "No folder selected".to_string())
+        };
+
+        drop(st);
+
+        tracing::debug!(
+            is_enabled = is_enabled,
+            tooltip = %tooltip,
+            "[BridgeMedia: VirtualFolderBtn] Updated Virtual Folder button enablement and tooltip"
+        );
+
+        window.set_is_virtual_folder_btn_enabled(is_enabled);
+        window.set_virtual_folder_tooltip(tooltip.into());
+    }
+
+    /// Toggles virtual recursive folder view mode for the currently active folder and subfolders.
+    /// Strictly adheres to the Zero-FS Load Rule: loads purely from LMDB cache with 0ms disk scan and no automatic background pipeline.
+    pub fn toggle_virtual_folder_mode(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let t0 = Instant::now();
+
+        // 1. Teardown any running thumbnail pipeline and background media scanner
+        thumbnails.cancel_pipeline();
+
+        let (current_f_id, current_p_opt, new_mode) = {
+            let mut st = state.write();
+
+            if let Some(prev_flag) = st.active_folder_cancel_flag.take() {
+                prev_flag.store(true, Ordering::Release);
+            }
+            let new_flag = Arc::new(AtomicBool::new(false));
+            st.active_folder_cancel_flag = Some(new_flag);
+
+            st.active_folder_token = st.active_folder_token.wrapping_add(1);
+            st.is_virtual_folder_mode = !st.is_virtual_folder_mode;
+            st.active_indices.clear();
+            st.file_selection.clear();
+            st.folder_thumbnails.clear();
+            st.invalidate_loaded_slice();
+
+            (st.current_folder_id, st.current_folder_path.clone(), st.is_virtual_folder_mode)
+        };
+
+        tracing::info!(
+            is_virtual_folder_mode = new_mode,
+            "[BridgeMedia: VirtualFolder] Toggled Virtual Folder / Recursive Subfolders View (Zero-FS Pure LMDB Load)"
+        );
+
+        window.set_is_virtual_folder(new_mode);
+
+        if let (Some(folder_id), Some(path)) = (current_f_id, current_p_opt) {
+            if state.read().is_query_active {
+                BridgeTags::execute_query_flow(window, library, thumbnails, settings, state);
+            } else {
+                let target_folder_ids = if new_mode {
+                    library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
+                } else {
+                    vec![folder_id]
+                };
+
+                let virtual_count = target_folder_ids.len();
+                {
+                    let mut st = state.write();
+                    st.virtual_folder_count = virtual_count;
+                }
+                window.set_virtual_folder_count(virtual_count as i32);
+
+                let mut media_ids = Vec::new();
+                if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                    for fid in &target_folder_ids {
+                        if let Ok(Some(ids)) = library.raw_db().media_by_folder.get(&rtxn, fid) {
+                            media_ids.extend(ids);
+                        }
+                    }
+                }
+
+                let mut known_media = Vec::with_capacity(media_ids.len());
+                let mut seen_ids = HashSet::new();
+                if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                    for id in media_ids {
+                        if seen_ids.insert(id)
+                            && let Ok(Some(rec)) = library.raw_db().media.get(&rtxn, &id)
+                        {
+                            known_media.push(rec);
+                        }
+                    }
+                }
+
+                let indexed_media = if new_mode {
+                    BridgeMedia::preindex_records(library, known_media)
+                } else {
+                    BridgeMedia::preindex(library, known_media, &path)
+                };
+
+                {
+                    let mut st = state.write();
+                    st.all_folder_media = indexed_media;
+                    st.file_selection.clear();
+                }
+
+                window.invoke_scroll_media_to_top();
+                // Zero-FS load: start_pipeline = false
+                Self::reload(window, library, thumbnails, settings, state, false, false);
+                BridgeInspector::update(window, state);
+                BridgeTags::sync_tag_selection(window, library, state);
+                Self::update_virtual_folder_button_state(window, library, state);
+
+                let folder_name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+
+                if new_mode {
+                    window.set_status_text(
+                        format!(
+                            "Recursive view enabled: Showing {} folder(s) under '{}' ({}ms)",
+                            virtual_count, folder_name, t0.elapsed().as_millis()
+                        )
+                        .into(),
+                    );
+                } else {
+                    window.set_status_text(
+                        format!(
+                            "Recursive view disabled: Showing '{}' only ({}ms)",
+                            folder_name, t0.elapsed().as_millis()
+                        )
+                        .into(),
+                    );
+                }
+            }
+        }
     }
 
     pub fn is_system_busy(
@@ -439,6 +616,7 @@ impl BridgeMedia {
                     (
                         item.record.id,
                         item.filename_slint.clone(),
+                        item.folder_path_str.clone(),
                         item.modified_date_str.clone(),
                         item.created_date_str.clone(),
                         item.filesize_mb_str.clone(),
@@ -462,6 +640,7 @@ impl BridgeMedia {
                 if let Some((
                     media_id,
                     filename_slint,
+                    folder_path_str,
                     modified_date_str,
                     created_date_str,
                     filesize_str,
@@ -496,6 +675,7 @@ impl BridgeMedia {
                     slice_views.push(MediaItemView {
                         id: media_id as i32,
                         filename: filename_slint,
+                        path_str: folder_path_str,
                         modified_date_str,
                         created_date_str,
                         filesize_str,
@@ -796,7 +976,6 @@ impl BridgeMedia {
                             }
                         }
 
-                        // Mark any missing files in-memory as is_deleted = true
                         for missing in &missing_files {
                             if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path) {
                                 target_indexed.record.is_deleted = true;
@@ -868,6 +1047,7 @@ impl BridgeMedia {
 
                     BridgeInspector::update(&w, &st_arc);
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
+                    Self::update_virtual_folder_button_state(&w, &lib_arc, &st_arc);
                 });
             })
             .expect("Failed to spawn parallel media metadata refresher thread");
@@ -1307,7 +1487,6 @@ impl BridgeMedia {
                             }
                         }
 
-                        // Mark any missing files in-memory as is_deleted = true
                         for missing in &missing_files {
                             if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path) {
                                 target_indexed.record.is_deleted = true;
@@ -1388,6 +1567,7 @@ impl BridgeMedia {
 
                     BridgeInspector::update(&w, &st_arc);
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
+                    Self::update_virtual_folder_button_state(&w, &lib_arc, &st_arc);
                 });
             })
             .expect("Failed to spawn parallel media item refresher thread");
@@ -1399,6 +1579,8 @@ impl BridgeMedia {
         folder_path: &Path,
     ) -> Vec<IndexedMediaRecord> {
         let folder_path_buf = folder_path.to_path_buf();
+        let folder_path_str: slint::SharedString = folder_path_buf.to_string_lossy().to_string().into();
+        let folder_path_lower = folder_path_buf.to_string_lossy().to_lowercase();
 
         let mut seen_ids = HashSet::new();
         let mut unique_records = Vec::with_capacity(raw_records.len());
@@ -1461,6 +1643,8 @@ impl BridgeMedia {
                     index,
                     record: r.clone(),
                     full_path,
+                    folder_path_str: folder_path_str.clone(),
+                    folder_path_lower: folder_path_lower.clone(),
                     filename_lower,
                     filename_slint,
                     modified_date_str,
@@ -1556,12 +1740,16 @@ impl BridgeMedia {
                         .unwrap_or_default()
                 });
 
+                let folder_path_str: slint::SharedString = folder_p.to_string_lossy().to_string().into();
+                let folder_path_lower = folder_p.to_string_lossy().to_lowercase();
                 let full_path = folder_p.join(&r.filename);
 
                 IndexedMediaRecord {
                     index,
                     record: r.clone(),
                     full_path,
+                    folder_path_str,
+                    folder_path_lower,
                     filename_lower,
                     filename_slint,
                     modified_date_str,
@@ -1612,7 +1800,7 @@ impl BridgeMedia {
         state: &Arc<RwLock<UiState>>,
         options: MediaReloadOptions,
     ) {
-        let (folder_id, filter, sort_col, sort_ord, last_query, is_query_active, bench_opt) = {
+        let (folder_id, filter, sort_col, sort_ord, last_query, is_query_active, bench_opt, is_virtual_folder) = {
             let s = state.read();
             (
                 s.current_folder_id,
@@ -1622,6 +1810,7 @@ impl BridgeMedia {
                 s.last_executed_query.clone(),
                 s.is_query_active,
                 s.active_folder_bench.clone(),
+                s.is_virtual_folder_mode,
             )
         };
 
@@ -1631,9 +1820,34 @@ impl BridgeMedia {
             && let Some(f_id) = folder_id
             && let Some(ref p) = path_opt
         {
-            let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
-            let indexed = Self::preindex(library, raw_media, p);
-            state.write().all_folder_media = indexed;
+            if is_virtual_folder {
+                let descendant_ids = library.folders().get_descendant_folder_ids(f_id).unwrap_or_else(|_| vec![f_id]);
+                let mut media_ids = Vec::new();
+                if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                    for fid in descendant_ids {
+                        if let Ok(Some(ids)) = library.raw_db().media_by_folder.get(&rtxn, &fid) {
+                            media_ids.extend(ids);
+                        }
+                    }
+                }
+                let mut known = Vec::new();
+                let mut seen = HashSet::new();
+                if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                    for mid in media_ids {
+                        if seen.insert(mid)
+                            && let Ok(Some(rec)) = library.raw_db().media.get(&rtxn, &mid)
+                        {
+                            known.push(rec);
+                        }
+                    }
+                }
+                let indexed = Self::preindex_records(library, known);
+                state.write().all_folder_media = indexed;
+            } else {
+                let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
+                let indexed = Self::preindex(library, raw_media, p);
+                state.write().all_folder_media = indexed;
+            }
         }
 
         let current_query = filter.search_query.trim().to_string();
@@ -1693,7 +1907,7 @@ impl BridgeMedia {
         for &item in &sorted_refs[start_window..end_window] {
             let is_selected = st.file_selection.is_selected(item.record.id);
 
-            let thumbnail_img = if is_table {
+            let thumb_img = if is_table {
                 Image::default()
             } else if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
                 Image::from_rgb8(buf.clone())
@@ -1706,6 +1920,7 @@ impl BridgeMedia {
             slice_views.push(MediaItemView {
                 id: item.record.id as i32,
                 filename: item.filename_slint.clone(),
+                path_str: item.folder_path_str.clone(),
                 modified_date_str: item.modified_date_str.clone(),
                 created_date_str: item.created_date_str.clone(),
                 filesize_str: item.filesize_mb_str.clone(),
@@ -1720,7 +1935,7 @@ impl BridgeMedia {
                 format_str: item.format_str.clone(),
                 flags_str: item.flags_str.clone(),
                 has_tags: item.has_tags,
-                thumbnail: thumbnail_img,
+                thumbnail: thumb_img,
                 is_selected,
                 is_video: matches!(item.record.media_type, MediaType::Video),
                 is_corrupted: item.is_corrupted,
@@ -1739,7 +1954,6 @@ impl BridgeMedia {
         {
             let mut st_write = state.write();
 
-            // Automatic Deselection of Hidden/Filtered-out Items
             let prev_sel_count = st_write.file_selection.count();
             if prev_sel_count > 0 {
                 let valid_ids: HashSet<MediaId> = row_map.keys().copied().collect();
@@ -1775,12 +1989,13 @@ impl BridgeMedia {
             } else {
                 format!("Query Filter: {} / {}", matched_len, total_active_dataset_count)
             }
+        } else if is_virtual_folder {
+            format!("Recursive Items: {} / {}", matched_len, total_active_dataset_count)
         } else {
             format!("Items: {} / {}", matched_len, total_active_dataset_count)
         };
         window.set_items_metric_text(metric_text.into());
 
-        // Context-Sensitive Fallback Empty State Decision Engine Evaluation
         let app_settings = settings.get();
         let has_root = app_settings.general.root_folder.is_some();
         let root_exists = app_settings.general.root_folder.as_ref().map(|p| p.is_dir()).unwrap_or(false);
@@ -1806,11 +2021,13 @@ impl BridgeMedia {
             bench.slint_commit_time_us.store(commit_us, Ordering::Relaxed);
         }
 
-        // If selection was altered due to filter pruning, synchronize Inspector and TagTree
         if selection_pruned {
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);
         }
+
+        // Always synchronize Virtual Folder button enablement on every view reload
+        Self::update_virtual_folder_button_state(window, library, state);
 
         if options.start_pipeline {
             let st_read = state.read();

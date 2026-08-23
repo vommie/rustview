@@ -175,7 +175,6 @@ impl FileRenameDialogController {
         updated_record: &MediaRecord,
     ) {
         let mut st = state.write();
-        let folder_path_opt = st.current_folder_path.clone();
 
         if let Some(item) = st
             .all_folder_media
@@ -196,8 +195,10 @@ impl FileRenameDialogController {
             } else {
                 "OK".into()
             };
-            if let Some(ref folder_path) = folder_path_opt {
-                item.full_path = folder_path.join(&updated_record.filename);
+            if let Some(parent) = item.full_path.parent().map(|p| p.to_path_buf()) {
+                item.full_path = parent.join(&updated_record.filename);
+                item.folder_path_str = parent.to_string_lossy().to_string().into();
+                item.folder_path_lower = parent.to_string_lossy().to_lowercase();
             }
             item.record = updated_record.clone();
         }

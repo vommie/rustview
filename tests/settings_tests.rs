@@ -1,29 +1,30 @@
-use rustview::query::MediaTypeFilter;
+use rustview::query::{MediaTypeFilter, SortColumn};
 use rustview::settings::{
     AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager, SettingsStore,
     DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA, DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER,
     DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_AR_WIDTH, DEFAULT_COL_CREATED_DATE_WIDTH,
     DEFAULT_COL_DURATION_WIDTH, DEFAULT_COL_FILENAME_WIDTH, DEFAULT_COL_FLAGS_WIDTH,
     DEFAULT_COL_FORMAT_WIDTH, DEFAULT_COL_HEIGHT_WIDTH, DEFAULT_COL_MODIFIED_DATE_WIDTH,
-    DEFAULT_COL_RATING_WIDTH, DEFAULT_COL_SIZE_WIDTH, DEFAULT_COL_TAGS_WIDTH,
-    DEFAULT_COL_WIDTH_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE, DEFAULT_CUSTOM_PREVIEW_SETTINGS,
-    DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE, DEFAULT_ENABLE_HOVER_PREVIEWS,
-    DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS, DEFAULT_GRID_ITEM_BORDER_WIDTH,
-    DEFAULT_GRID_ITEM_CORNER_RADIUS, DEFAULT_GRID_ITEM_PADDING_H, DEFAULT_GRID_ITEM_PADDING_V,
-    DEFAULT_GRID_PADDING, DEFAULT_GRID_SPACING, DEFAULT_IS_TABLE_VIEW, DEFAULT_L1_CACHE_SLOTS,
-    DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_OBFUSCATE_LOGS, DEFAULT_PERSIST_FOLDER_TREE_STATE,
-    DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT, DEFAULT_PREVIEW_QUALITY,
-    DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM, DEFAULT_SHORT_VIDEO_THRESHOLD_SECS,
-    DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES, DEFAULT_SHOW_FOLDER_METRICS,
-    DEFAULT_SHOW_MEDIA_TYPE_BADGES, DEFAULT_SHOW_RATINGS_OVERLAY, DEFAULT_SHOW_TAGS_OVERLAY,
-    DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH, DEFAULT_SORT_COLUMN,
-    DEFAULT_SORT_ORDER, DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS,
-    DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO,
-    DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY,
-    DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE,
-    DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED,
-    DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_CORNER_RADIUS,
-    MAX_GRID_ITEM_PADDING_H, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
+    DEFAULT_COL_PATH_WIDTH, DEFAULT_COL_RATING_WIDTH, DEFAULT_COL_SIZE_WIDTH,
+    DEFAULT_COL_TAGS_WIDTH, DEFAULT_COL_WIDTH_WIDTH, DEFAULT_CONFIRM_ON_FILE_DELETE,
+    DEFAULT_CUSTOM_PREVIEW_SETTINGS, DEFAULT_DARK_THEME, DEFAULT_DELETION_MODE,
+    DEFAULT_ENABLE_HOVER_PREVIEWS, DEFAULT_ENABLE_TOOLTIPS, DEFAULT_GENERATE_VIDEO_PREVIEWS,
+    DEFAULT_GRID_ITEM_BORDER_WIDTH, DEFAULT_GRID_ITEM_CORNER_RADIUS, DEFAULT_GRID_ITEM_PADDING_H,
+    DEFAULT_GRID_ITEM_PADDING_V, DEFAULT_GRID_PADDING, DEFAULT_GRID_SPACING, DEFAULT_IS_TABLE_VIEW,
+    DEFAULT_L1_CACHE_SLOTS, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_OBFUSCATE_LOGS,
+    DEFAULT_PERSIST_FOLDER_TREE_STATE, DEFAULT_PREVIEW_FORMAT, DEFAULT_PREVIEW_FRAME_COUNT,
+    DEFAULT_PREVIEW_QUALITY, DEFAULT_REMEMBER_LAST_FOLDER, DEFAULT_SCALING_ALGORITHM,
+    DEFAULT_SHORT_VIDEO_THRESHOLD_SECS, DEFAULT_SHOW_DELETED_FOLDERS, DEFAULT_SHOW_FILENAMES,
+    DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_MEDIA_TYPE_BADGES, DEFAULT_SHOW_RATINGS_OVERLAY,
+    DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH,
+    DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_SUPPORTED_IMAGE_FORMATS,
+    DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
+    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
+    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
+    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT,
+    DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
+    MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_SHORT_VIDEO_THRESHOLD_SECS,
+    MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -198,13 +199,14 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("mpeg"));
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("flv"));
 
-    // View Defaults - All 12 Columns & Persistent Media Type Filter
+    // View Defaults - All 13 Columns & Persistent Media Type Filter
     assert_eq!(initial.view.is_table_view, DEFAULT_IS_TABLE_VIEW);
     assert_eq!(initial.view.sort_column, DEFAULT_SORT_COLUMN);
     assert_eq!(initial.view.sort_order, DEFAULT_SORT_ORDER);
     assert_eq!(initial.view.media_type_filter, DEFAULT_MEDIA_TYPE_FILTER);
     assert_eq!(DEFAULT_MEDIA_TYPE_FILTER, "Videos & Images");
     assert_eq!(initial.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
+    assert_eq!(initial.view.col_path_width, DEFAULT_COL_PATH_WIDTH);
     assert_eq!(initial.view.col_modified_date_width, DEFAULT_COL_MODIFIED_DATE_WIDTH);
     assert_eq!(initial.view.col_created_date_width, DEFAULT_COL_CREATED_DATE_WIDTH);
     assert_eq!(initial.view.col_size_width, DEFAULT_COL_SIZE_WIDTH);
@@ -264,6 +266,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.performance.short_video_threshold_secs = 20;
     initial.formats.auto_detect_extensionless_media = false;
     initial.debug.obfuscate_logs = false;
+    initial.view.col_path_width = 220.0;
     initial.view.col_flags_width = 110.0;
     initial.view.media_type_filter = "Images".to_string();
     manager.update(initial);
@@ -289,6 +292,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(loaded.performance.short_video_threshold_secs, 20);
     assert!(!loaded.formats.auto_detect_extensionless_media);
     assert!(!loaded.debug.obfuscate_logs);
+    assert_eq!(loaded.view.col_path_width, 220.0);
     assert_eq!(loaded.view.col_flags_width, 110.0);
     assert_eq!(loaded.view.media_type_filter, "Images");
 
@@ -301,6 +305,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     invalid_settings.appearance.grid_item_corner_radius = 100;
     invalid_settings.performance.short_video_threshold_secs = 500;
     invalid_settings.view.col_filename_width = 10.0;
+    invalid_settings.view.col_path_width = 5.0;
     invalid_settings.view.col_size_width = 5000.0;
     invalid_settings.view.col_flags_width = 1.0;
     invalid_settings.view.media_type_filter = "unrecognized_filter".to_string();
@@ -332,9 +337,19 @@ fn test_settings_persistence_sanitization_and_hooks() {
         MAX_SHORT_VIDEO_THRESHOLD_SECS
     );
     assert_eq!(sanitized.view.col_filename_width, MIN_COL_WIDTH);
+    assert_eq!(sanitized.view.col_path_width, MIN_COL_WIDTH);
     assert_eq!(sanitized.view.col_size_width, MAX_COL_WIDTH);
     assert_eq!(sanitized.view.col_flags_width, MIN_COL_WIDTH);
     assert_eq!(sanitized.view.media_type_filter, DEFAULT_MEDIA_TYPE_FILTER);
+}
+
+#[test]
+fn test_sort_column_path_enumeration() {
+    let col = SortColumn::from_name("Path");
+    assert_eq!(col, SortColumn::Path);
+    assert_eq!(col.to_index(), 1);
+    assert_eq!(SortColumn::from_index(1), SortColumn::Path);
+    assert_eq!(SortColumn::from_index(2), SortColumn::ModifiedDate);
 }
 
 #[test]
@@ -472,6 +487,7 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
     assert_eq!(loaded.performance.video_engine, DEFAULT_VIDEO_ENGINE);
     assert_eq!(loaded.view.media_type_filter, DEFAULT_MEDIA_TYPE_FILTER);
     assert_eq!(loaded.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
+    assert_eq!(loaded.view.col_path_width, DEFAULT_COL_PATH_WIDTH);
     assert_eq!(loaded.view.col_modified_date_width, DEFAULT_COL_MODIFIED_DATE_WIDTH);
     assert_eq!(loaded.view.col_created_date_width, DEFAULT_COL_CREATED_DATE_WIDTH);
     assert_eq!(loaded.view.col_size_width, DEFAULT_COL_SIZE_WIDTH);

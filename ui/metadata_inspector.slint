@@ -1,5 +1,45 @@
 import { Theme } from "styles.slint";
 
+/// Standalone text component that dynamically clips overflowing text on the left side with an ellipsis badge "…".
+export component LeftElidedText inherits Rectangle {
+    in property <string> text: "";
+    in property <color> text-color: Theme.text-muted;
+    in property <length> font-size: 11px;
+    in property <color> bg-color: Theme.background;
+
+    clip: true;
+    horizontal-stretch: 1;
+
+    property <bool> is-overflowing: txt.preferred-width > self.width;
+
+    txt := Text {
+        x: root.is-overflowing ? (parent.width - self.preferred-width) : 0px;
+        y: 0px;
+        height: 100%;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        vertical-alignment: center;
+    }
+
+    if root.is-overflowing : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 14px;
+        height: 100%;
+        background: root.bg-color;
+
+        Text {
+            x: 0px;
+            text: "…";
+            color: root.text-color;
+            font-size: root.font-size;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+}
+
 export component MetadataRow inherits HorizontalLayout {
     in property <string> label: "";
     in property <string> value: "-";
@@ -24,6 +64,29 @@ export component MetadataRow inherits HorizontalLayout {
     }
 }
 
+export component MetadataPathRow inherits HorizontalLayout {
+    in property <string> label: "Path:";
+    in property <string> path-value: "-";
+    in property <color> value-color: Theme.text;
+    in property <length> value-font-size: 11px;
+
+    spacing: 4px;
+
+    Text {
+        text: root.label;
+        color: Theme.text-muted;
+        font-size: root.value-font-size;
+        min-width: 72px;
+    }
+
+    LeftElidedText {
+        text: root.path-value;
+        text-color: root.value-color;
+        font-size: root.value-font-size;
+        bg-color: Theme.background;
+    }
+}
+
 export component MetadataInspector inherits Rectangle {
     height: 160px;
     background: Theme.background;
@@ -32,12 +95,12 @@ export component MetadataInspector inherits Rectangle {
     border-color: Theme.border;
 
     in property <string> filename: "-";
+    in property <string> path-label: "Path:";
+    in property <string> path-value: "-";
     in property <string> filesize: "-";
     in property <string> dimensions: "-";
     in property <string> format-name: "-";
     in property <string> hash-or-rating: "-";
-    in property <string> info-status: "OK";
-    in property <color> info-status-color: Theme.status-ok;
     in property <int> selection-count: 0;
 
     VerticalLayout {
@@ -59,10 +122,10 @@ export component MetadataInspector inherits Rectangle {
             value-color: Theme.text;
         }
 
-        MetadataRow {
-            label: "Status:";
-            value: root.info-status;
-            value-color: root.info-status-color;
+        MetadataPathRow {
+            label: root.path-label;
+            path-value: root.path-value;
+            value-color: Theme.text-muted;
         }
 
         MetadataRow {

@@ -24,12 +24,12 @@ export component SidebarRight inherits Rectangle {
     in property <[TagColumnView]> tag-columns: [];
 
     in property <string> info-filename: "-";
+    in property <string> info-path-label: "Path:";
+    in property <string> info-path: "-";
     in property <string> info-size: "-";
     in property <string> info-dimensions: "-";
     in property <string> info-format: "-";
     in property <string> info-hash: "-";
-    in property <string> info-status: "OK";
-    in property <color> info-status-color: Theme.status-ok;
     in property <int> info-selection-count: 0;
 
     callback mode-toggled(bool);
@@ -79,12 +79,12 @@ export component SidebarRight inherits Rectangle {
         // Media Metadata Inspector Subsystem
         MetadataInspector {
             filename: root.info-filename;
+            path-label: root.info-path-label;
+            path-value: root.info-path;
             filesize: root.info-size;
             dimensions: root.info-dimensions;
             format-name: root.info-format;
             hash-or-rating: root.info-hash;
-            info-status: root.info-status;
-            info-status-color: root.info-status-color;
             selection-count: root.info-selection-count;
         }
     }

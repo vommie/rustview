@@ -162,12 +162,14 @@ impl QueryFilter {
 }
 
 /// Fully pre-indexed and pre-formatted media record holding zero-allocation Slint strings,
-/// precalculated filesystem paths, original folder index, and tag cache for instant mapping and filtering.
+/// precalculated filesystem paths, directory path string, original folder index, and tag cache.
 #[derive(Debug, Clone)]
 pub struct IndexedMediaRecord {
     pub index: usize,
     pub record: MediaRecord,
     pub full_path: PathBuf,
+    pub folder_path_str: SharedString,
+    pub folder_path_lower: String,
     pub filename_lower: String,
     pub filename_slint: SharedString,
     pub modified_date_str: SharedString,

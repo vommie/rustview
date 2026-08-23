@@ -6,6 +6,7 @@ use super::{FolderNodeView, MainWindow};
 use crate::library::dot_hidden::DotHiddenCache;
 use crate::library::folders::normalize_path;
 use crate::library::models::{FolderId, FolderRecord, MediaId, MediaRecord};
+use crate::library::refresh::RefreshReport;
 use crate::library::Library;
 use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::telemetry::FolderLoadBenchmark;
@@ -219,7 +220,8 @@ impl BridgeFolders {
                 tracing::info!(
                     folder_id = id,
                     path = %LogObscurer::path(&path),
-                    "[FolderRefresh: Toolbar] User clicked Toolbar Refresh button (Rule A). Executing explicit full refresh & thumbnail generation."
+                    is_virtual_folder = st.read().is_virtual_folder_mode,
+                    "[FolderRefresh: Toolbar] User clicked Toolbar Refresh button. Executing explicit full refresh & thumbnail generation."
                 );
                 Self::refresh_folder_explicit(id, path, &win, &lib, &thumb, &set, &st);
             }
@@ -531,6 +533,7 @@ impl BridgeFolders {
                             w.set_status_text(status_msg.into());
                             Self::reload_tree(&w, &lib, &set, &st);
                             Self::scroll_to_selected(&w);
+                            BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
                         }
                         Err(e) => {
                             tracing::error!(error = %e, "[FolderTreeRefreshError] Failed to refresh folder tree");
@@ -651,7 +654,7 @@ impl BridgeFolders {
             normalized_path.to_string_lossy().to_string(),
         ));
 
-        let (request_token, cancel_flag) = {
+        let (request_token, cancel_flag, is_virtual_folder) = {
             let mut st = ctx.state.write();
 
             if let Some(prev_flag) = st.active_folder_cancel_flag.take() {
@@ -677,7 +680,13 @@ impl BridgeFolders {
             st.filter.tag_ids.clear();
             st.tag_filter_query.clear();
 
-            (st.active_folder_token, new_flag)
+            // Deactivate and reset virtual folder mode when switching folders (preserve only during explicit refresh of current folder)
+            if !is_explicit_refresh {
+                st.is_virtual_folder_mode = false;
+                st.virtual_folder_count = 0;
+            }
+
+            (st.active_folder_token, new_flag, st.is_virtual_folder_mode)
         };
 
         {
@@ -695,16 +704,31 @@ impl BridgeFolders {
         Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
-        // Immediate Zero-Delay Database Fetch (loads all records including soft-deleted/missing ones)
-        let t_id_start = Instant::now();
-        let media_ids = {
-            let rtxn = ctx.library.raw_db().env.read_txn().ok();
-            if let Some(ref txn) = rtxn {
-                ctx.library.raw_db().media_by_folder.get(txn, &folder_id).ok().flatten().unwrap_or_default()
-            } else {
-                Vec::new()
-            }
+        // Collect target folder IDs (either single active folder or recursive subtree if virtual folder mode is active)
+        let target_folder_ids = if is_virtual_folder {
+            ctx.library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
+        } else {
+            vec![folder_id]
         };
+
+        let virtual_count = target_folder_ids.len();
+        {
+            let mut st = ctx.state.write();
+            st.virtual_folder_count = virtual_count;
+        }
+        ctx.window.set_is_virtual_folder(is_virtual_folder);
+        ctx.window.set_virtual_folder_count(virtual_count as i32);
+
+        // Immediate Zero-Delay Database Fetch
+        let t_id_start = Instant::now();
+        let mut media_ids = Vec::new();
+        if let Ok(rtxn) = ctx.library.raw_db().env.read_txn() {
+            for fid in &target_folder_ids {
+                if let Ok(Some(ids)) = ctx.library.raw_db().media_by_folder.get(&rtxn, fid) {
+                    media_ids.extend(ids);
+                }
+            }
+        }
         bench.lmdb_id_fetch_time_us.store(t_id_start.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         let t_rec_start = Instant::now();
@@ -727,7 +751,11 @@ impl BridgeFolders {
         let should_scan_and_generate = is_explicit_refresh || is_empty_in_db;
 
         let t_pre = Instant::now();
-        let indexed_media = BridgeMedia::preindex(ctx.library, known_media, &normalized_path);
+        let indexed_media = if is_virtual_folder {
+            BridgeMedia::preindex_records(ctx.library, known_media)
+        } else {
+            BridgeMedia::preindex(ctx.library, known_media, &normalized_path)
+        };
         bench.preindex_time_us.store(t_pre.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         {
@@ -738,14 +766,16 @@ impl BridgeFolders {
         BridgeMedia::reload(ctx.window, ctx.library, ctx.thumbnails, ctx.settings, ctx.state, false, false);
         BridgeInspector::update(ctx.window, ctx.state);
         BridgeTags::sync_tag_selection(ctx.window, ctx.library, ctx.state);
+        BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
         if !should_scan_and_generate {
             tracing::info!(
                 folder_id = folder_id,
                 folder_name = %folder_name,
+                is_virtual_folder = is_virtual_folder,
                 known_items = ctx.state.read().all_folder_media.len(),
-                "[FolderNavigation: Zero-FS Load] Folder opened from LMDB cache with 0ms disk scan. Refresh/Generation awaiting user action."
+                "[FolderNavigation: Zero-FS Load] Folder opened from LMDB cache with 0ms disk scan."
             );
             ctx.window.set_is_indexing_media(false);
             ctx.window.set_status_text("Ready.".into());
@@ -755,15 +785,22 @@ impl BridgeFolders {
         tracing::info!(
             folder_id = folder_id,
             folder_name = %folder_name,
+            is_virtual_folder = is_virtual_folder,
             is_explicit_refresh = is_explicit_refresh,
             is_empty_in_db = is_empty_in_db,
-            "[FolderRefresh: Execute] Executing filesystem scan and dedicated full-folder thumbnail generation..."
+            "[FolderRefresh: Execute] Executing filesystem scan and dedicated thumbnail generation..."
         );
 
         ctx.window.set_is_indexing_media(true);
         ctx.window.set_media_index_current(0);
         ctx.window.set_media_index_total(0);
-        ctx.window.set_status_text(format!("Scanning media files in '{}'...", folder_name).into());
+        ctx.window.set_status_text(
+            if is_virtual_folder {
+                format!("Scanning media files in '{}' (Recursive: {} folders)...", folder_name, virtual_count).into()
+            } else {
+                format!("Scanning media files in '{}'...", folder_name).into()
+            }
+        );
 
         let w_weak_scanner = ctx.window.as_weak();
         let lib_scanner = ctx.library.clone();
@@ -782,21 +819,55 @@ impl BridgeFolders {
 
                 let t_scan = Instant::now();
                 let auto_detect = set_scanner.get().formats.auto_detect_extensionless_media;
-                let refresh_result = lib_scanner.refresher().refresh_folder_with_options(
-                    folder_id,
-                    auto_detect,
-                    Some(cancel_ref.clone()),
-                    Some(move |cur, tot| {
-                        let mut last = last_progress_report.lock();
-                        if last.elapsed().as_millis() >= 35 || cur == tot {
-                            *last = Instant::now();
-                            let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
-                                w.set_media_index_current(cur as i32);
-                                w.set_media_index_total(tot as i32);
-                            });
-                        }
-                    }),
-                );
+
+                // If in virtual folder mode during explicit refresh, synchronize the directory tree first
+                if is_virtual_folder {
+                    let _ = lib_scanner.folder_tree_refresher().refresh_tree(&target_p_scanner, None::<fn(usize)>);
+                }
+
+                // Collect up-to-date folder IDs to scan
+                let scan_folder_ids = if is_virtual_folder {
+                    lib_scanner.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
+                } else {
+                    vec![folder_id]
+                };
+
+                let mut combined_report = RefreshReport::default();
+
+                for fid in &scan_folder_ids {
+                    if cancel_ref.load(Ordering::Acquire) {
+                        break;
+                    }
+
+                    let w_weak_p = w_weak_progress.clone();
+                    let last_rep = last_progress_report.clone();
+
+                    let rep_res = lib_scanner.refresher().refresh_folder_with_options(
+                        *fid,
+                        auto_detect,
+                        Some(cancel_ref.clone()),
+                        Some(move |cur, tot| {
+                            let mut last = last_rep.lock();
+                            if last.elapsed().as_millis() >= 35 || cur == tot {
+                                *last = Instant::now();
+                                let _ = w_weak_p.upgrade_in_event_loop(move |w| {
+                                    w.set_media_index_current(cur as i32);
+                                    w.set_media_index_total(tot as i32);
+                                });
+                            }
+                        }),
+                    );
+
+                    if let Ok(rep) = rep_res {
+                        combined_report.total_scanned += rep.total_scanned;
+                        combined_report.new_media += rep.new_media;
+                        combined_report.updated_media += rep.updated_media;
+                        combined_report.unchanged_media += rep.unchanged_media;
+                        combined_report.deleted_media += rep.deleted_media;
+                        combined_report.restored_media += rep.restored_media;
+                        combined_report.corrupted_media += rep.corrupted_media;
+                    }
+                }
 
                 let scan_elapsed = t_scan.elapsed().as_micros() as u64;
                 bench_scanner.scan_executed.store(true, Ordering::Relaxed);
@@ -806,78 +877,85 @@ impl BridgeFolders {
                     return;
                 }
 
-                match refresh_result {
-                    Ok(report) => {
-                        bench_scanner.files_scanned.store(report.total_scanned, Ordering::Relaxed);
-                        bench_scanner.new_files.store(report.new_media, Ordering::Relaxed);
-                        bench_scanner.updated_files.store(report.updated_media, Ordering::Relaxed);
-                        bench_scanner.unchanged_files.store(report.unchanged_media, Ordering::Relaxed);
-                        bench_scanner.deleted_files.store(report.deleted_media, Ordering::Relaxed);
-                        bench_scanner.restored_files.store(report.restored_media, Ordering::Relaxed);
+                bench_scanner.files_scanned.store(combined_report.total_scanned, Ordering::Relaxed);
+                bench_scanner.new_files.store(combined_report.new_media, Ordering::Relaxed);
+                bench_scanner.updated_files.store(combined_report.updated_media, Ordering::Relaxed);
+                bench_scanner.unchanged_files.store(combined_report.unchanged_media, Ordering::Relaxed);
+                bench_scanner.deleted_files.store(combined_report.deleted_media, Ordering::Relaxed);
+                bench_scanner.restored_files.store(combined_report.restored_media, Ordering::Relaxed);
 
-                        // Load ALL media including soft-deleted/orphaned to display them correctly
-                        let raw_media = lib_scanner.media().get_all_by_folder(folder_id).unwrap_or_default();
-                        let active_count = raw_media.iter().filter(|m| !m.is_deleted).count();
-                        let indexed_media = BridgeMedia::preindex(&lib_scanner, raw_media, &target_p_scanner);
-
-                        let all_targets: Vec<PreparedTarget> = indexed_media
-                            .iter()
-                            .filter(|item| !item.is_deleted)
-                            .map(|item| PreparedTarget {
-                                pipeline_id: 0,
-                                folder_id: item.record.folder_id,
-                                media_id: item.record.id,
-                                file_path: item.full_path.clone(),
-                            })
-                            .collect();
-
-                        let _ = w_weak_scanner.upgrade_in_event_loop(move |w| {
-                            let is_still_current = {
-                                let s = st_scanner.read();
-                                s.current_folder_id == Some(folder_id) && s.active_folder_token == request_token
-                            };
-
-                            if is_still_current {
-                                {
-                                    let mut s = st_scanner.write();
-                                    s.all_folder_media = indexed_media;
-                                    s.update_folder_media_count_in_cache(folder_id, active_count);
-                                }
-
-                                BridgeMedia::reload(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, false, false);
-                                BridgeInspector::update(&w, &st_scanner);
-                                BridgeTags::sync_tag_selection(&w, &lib_scanner, &st_scanner);
-                                Self::reload_tree(&w, &lib_scanner, &set_scanner, &st_scanner);
-
-                                w.set_is_indexing_media(false);
-                                w.set_status_text("Ready.".into());
-
-                                if !all_targets.is_empty() {
-                                    let config = ThumbnailConfig::from_performance_settings(&set_scanner.get().performance);
-                                    tracing::info!(
-                                        folder_id = folder_id,
-                                        total_targets = all_targets.len(),
-                                        "[ThumbnailPipeline: Dedicated Launch] Launching full-folder thumbnail pipeline for ALL items"
-                                    );
-                                    thumb_scanner.start_pipeline(folder_id, all_targets, config);
-                                }
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        tracing::error!(folder_id = folder_id, error = %e, "[FolderNavigation] Background media scan failed");
-                        let _ = w_weak_scanner.upgrade_in_event_loop(move |w| {
-                            let is_still_current = {
-                                let s = st_scanner.read();
-                                s.current_folder_id == Some(folder_id) && s.active_folder_token == request_token
-                            };
-                            if is_still_current {
-                                w.set_is_indexing_media(false);
-                                w.set_status_text(format!("Media scan error: {}", e).into());
-                            }
-                        });
+                let mut media_ids = Vec::new();
+                if let Ok(rtxn) = lib_scanner.raw_db().env.read_txn() {
+                    for fid in &scan_folder_ids {
+                        if let Ok(Some(ids)) = lib_scanner.raw_db().media_by_folder.get(&rtxn, fid) {
+                            media_ids.extend(ids);
+                        }
                     }
                 }
+
+                let mut known = Vec::with_capacity(media_ids.len());
+                let mut seen = HashSet::new();
+                if let Ok(rtxn) = lib_scanner.raw_db().env.read_txn() {
+                    for id in media_ids {
+                        if seen.insert(id)
+                            && let Ok(Some(rec)) = lib_scanner.raw_db().media.get(&rtxn, &id)
+                        {
+                            known.push(rec);
+                        }
+                    }
+                }
+
+                let active_count = known.iter().filter(|m| !m.is_deleted).count();
+                let indexed_media = if is_virtual_folder {
+                    BridgeMedia::preindex_records(&lib_scanner, known)
+                } else {
+                    BridgeMedia::preindex(&lib_scanner, known, &target_p_scanner)
+                };
+
+                let all_targets: Vec<PreparedTarget> = indexed_media
+                    .iter()
+                    .filter(|item| !item.is_deleted)
+                    .map(|item| PreparedTarget {
+                        pipeline_id: 0,
+                        folder_id: item.record.folder_id,
+                        media_id: item.record.id,
+                        file_path: item.full_path.clone(),
+                    })
+                    .collect();
+
+                let _ = w_weak_scanner.upgrade_in_event_loop(move |w| {
+                    let is_still_current = {
+                        let s = st_scanner.read();
+                        s.current_folder_id == Some(folder_id) && s.active_folder_token == request_token
+                    };
+
+                    if is_still_current {
+                        {
+                            let mut s = st_scanner.write();
+                            s.all_folder_media = indexed_media;
+                            s.update_folder_media_count_in_cache(folder_id, active_count);
+                        }
+
+                        BridgeMedia::reload(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, false, false);
+                        BridgeInspector::update(&w, &st_scanner);
+                        BridgeTags::sync_tag_selection(&w, &lib_scanner, &st_scanner);
+                        BridgeMedia::update_virtual_folder_button_state(&w, &lib_scanner, &st_scanner);
+                        Self::reload_tree(&w, &lib_scanner, &set_scanner, &st_scanner);
+
+                        w.set_is_indexing_media(false);
+                        w.set_status_text("Ready.".into());
+
+                        if !all_targets.is_empty() {
+                            let config = ThumbnailConfig::from_performance_settings(&set_scanner.get().performance);
+                            tracing::info!(
+                                folder_id = folder_id,
+                                total_targets = all_targets.len(),
+                                "[ThumbnailPipeline: Launch] Launching thumbnail pipeline for refreshed items"
+                            );
+                            thumb_scanner.start_pipeline(folder_id, all_targets, config);
+                        }
+                    }
+                });
             })
             .expect("Failed to spawn media scanner thread");
     }
@@ -996,12 +1074,18 @@ impl BridgeFolders {
             st.filter.rating = None;
             st.filter.tag_ids.clear();
             st.tag_filter_query.clear();
+            st.is_virtual_folder_mode = false;
+            st.virtual_folder_count = 0;
         }
         window.set_folders(ModelRc::new(VecModel::from(vec![])));
         window.set_media_items(ModelRc::new(VecModel::from(vec![])));
         window.set_items_metric_text("Items: 0".into());
         window.set_status_text(status_msg.into());
         window.set_tag_filter_text("".into());
+        window.set_is_virtual_folder(false);
+        window.set_is_virtual_folder_btn_enabled(false);
+        window.set_virtual_folder_tooltip("No root directory selected".into());
+        window.set_virtual_folder_count(0);
 
         window.set_empty_state_active(true);
         window.set_empty_state_title("No Root Directory".into());
@@ -1024,8 +1108,6 @@ impl BridgeFolders {
         Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
     }
 
-    /// Recursively locates the immediate parent node in the hierarchy containing the specified target ID.
-    /// Operates in clean linear O(N) traversal with zero redundant branch visits.
     fn find_parent_in_tree<'a>(
         nodes: &'a [FolderTreeNode],
         target_id: FolderId,
@@ -1046,14 +1128,6 @@ impl BridgeFolders {
         None
     }
 
-    /// Determines the optimal successor folder to navigate to when a folder node is deleted.
-    /// Strictly adheres to Node-Scoped Sibling & Parent Resolution and the Zero-Expansion Invariant:
-    ///
-    /// Resolution Order:
-    /// 1. Next visible sibling within the same parent node.
-    /// 2. Preceding visible sibling ("nachrückender Ordner") within the same parent node.
-    /// 3. Parent node itself if no siblings remain in the current node.
-    /// 4. Root folder fallback.
     pub fn find_visible_successor_folder(
         deleted_id: FolderId,
         affected_subtree_ids: &[FolderId],
@@ -1107,9 +1181,7 @@ impl BridgeFolders {
             true
         };
 
-        // 1. Locate the parent node containing the deleted folder among its direct children
         if let Some(parent_info) = Self::find_parent_in_tree(&tree, deleted_id) {
-            // (a) Search for NEXT visible sibling in the parent node
             for child in parent_info.parent.children.iter().skip(parent_info.deleted_child_idx + 1) {
                 if is_valid_sibling(child, dot_hidden_cache) {
                     let succ_id = child.record.id;
@@ -1126,7 +1198,6 @@ impl BridgeFolders {
                 }
             }
 
-            // (b) Search for PRECEDING visible sibling ("nachrückender Ordner") in the parent node
             for child in parent_info.parent.children[..parent_info.deleted_child_idx].iter().rev() {
                 if is_valid_sibling(child, dot_hidden_cache) {
                     let succ_id = child.record.id;
@@ -1143,7 +1214,6 @@ impl BridgeFolders {
                 }
             }
 
-            // (c) No siblings remain in the parent node -> Select parent node itself (or Root if parent is Root)
             let parent_id = parent_info.parent.record.id;
             let parent_path = PathBuf::from(&parent_info.parent.record.path);
             tracing::info!(
@@ -1157,7 +1227,6 @@ impl BridgeFolders {
             return Some((parent_id, parent_path));
         }
 
-        // 2. Fallback to Root folder (e.g. if root itself was deleted or top-level lookup failed)
         let root_fallback = library
             .folders()
             .get_folder_by_path(&normalized_root)
@@ -1175,8 +1244,6 @@ impl BridgeFolders {
         root_fallback
     }
 
-    /// Selects and navigates to the successor folder if the currently active folder was inside the deleted subtree.
-    /// If the active folder was outside the deleted subtree, it remains selected and the tree view is refreshed.
     pub fn navigate_to_successor_if_affected(
         successor_target: Option<(FolderId, PathBuf)>,
         affected_folder_ids: &[FolderId],

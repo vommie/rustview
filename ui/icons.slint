@@ -30,6 +30,8 @@ export global Icons {
     out property <image> media-filter-videos: @image-url("icons/media_filter_videos.svg");
     out property <image> media-filter-images: @image-url("icons/media_filter_images.svg");
     out property <image> media-filter-videos-images: @image-url("icons/media_filter_videos_images.svg");
+    out property <image> virtual-folder-enable: @image-url("icons/virtual_folder_enable.svg");
+    out property <image> virtual-folder-disable: @image-url("icons/virtual_folder_disable.svg");
 
     /// Returns the rating icon for a rating value (0..5). Never colorized.
     pure public function rating-icon(rating: int) -> image {
@@ -65,6 +67,8 @@ export global Icons {
         if name == "media_filter_videos" || name == "filter_videos" { return @image-url("icons/media_filter_videos.svg"); }
         if name == "media_filter_images" || name == "filter_images" { return @image-url("icons/media_filter_images.svg"); }
         if name == "media_filter_videos_images" || name == "filter_videos_images" { return @image-url("icons/media_filter_videos_images.svg"); }
+        if name == "virtual_folder_enable" || name == "virtual_enable" { return @image-url("icons/virtual_folder_enable.svg"); }
+        if name == "virtual_folder_disable" || name == "virtual_disable" { return @image-url("icons/virtual_folder_disable.svg"); }
         return @image-url("icons/settings.svg");
     }
 }

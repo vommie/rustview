@@ -249,7 +249,6 @@ impl MediaContextMenu {
                 }
                 sub_builder
             })
-            // Context-sensitive deletion / database purge action (directly below Copy without separator)
             .action(
                 delete_action_id,
                 delete_action_text,

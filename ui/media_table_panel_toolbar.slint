@@ -4,15 +4,19 @@ import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer, ToolbarSe
 import { ToolbarSearchField } from "toolbar_search_field.slint";
 
 /// Dedicated modular toolbar for the Media Table View.
-/// Integrates Expander, Media Type Selector, Filter Search (with embedded Regex & Clear), Refresh, and ViewMode Switcher.
+/// Integrates Expander, Virtual Folder Toggle, Media Type Selector, Filter Search, Refresh, and ViewMode Switcher.
 export component MediaTablePanelToolbar inherits PanelToolbar {
     in-out property <string> search-text: "";
     in-out property <bool> regex-mode: false;
-    in-out property <bool> is-table-view: true;
+    in property <bool> is-table-view: true;
+    in-out property <bool> is-virtual-folder: false;
+    in property <bool> is-virtual-folder-enabled: true;
+    in property <string> virtual-folder-tooltip: "";
     in-out property <int> media-type-filter-idx: 2;
 
     callback search-changed(string);
     callback regex-toggled(bool);
+    callback virtual-folder-toggled(bool);
     callback media-type-filter-changed(int);
     callback refresh-clicked();
     callback view-mode-toggled(bool);
@@ -22,7 +26,27 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
     // 1. Expander / Spacer (Pushes search & view actions to the right)
     ToolbarSpacer {}
 
-    // 2. Media Type Select Button (Videos, Images, Videos & Images)
+    // 2. Virtual Folder Toggle Button
+    ToolbarButton {
+        icon: root.is-virtual-folder ? Icons.virtual-folder-disable : Icons.virtual-folder-enable;
+        tooltip: root.virtual-folder-tooltip != "" ? root.virtual-folder-tooltip : (
+            !root.is-virtual-folder-enabled
+                ? "No subfolders available in current folder"
+                : (root.is-virtual-folder
+                    ? "Disable recursive folder view (show current folder only)"
+                    : "Recursive folder view: Show media from current folder and all subfolders")
+        );
+        is-active: root.is-virtual-folder;
+        is-enabled: root.is-virtual-folder-enabled;
+        clicked => {
+            root.is-virtual-folder = !root.is-virtual-folder;
+            root.virtual-folder-toggled(root.is-virtual-folder);
+        }
+    }
+
+    ToolbarSeparator {}
+
+    // 3. Media Type Select Button (Videos, Images, Videos & Images)
     ToolbarSelectButton {
         current-index <=> root.media-type-filter-idx;
         button-display-mode: 0; // Icon only on main button
@@ -54,7 +78,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
 
     ToolbarSeparator {}
 
-    // 3. Filter Search Field (with inline Regex Toggle and Clear button)
+    // 4. Filter Search Field (with inline Regex Toggle and Clear button)
     search-field := ToolbarSearchField {
         placeholder-text: "Filter...";
         field-width: 160px;
@@ -64,20 +88,20 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
         regex-toggled(r) => { root.regex-toggled(r); }
     }
 
-    // 4. Separator
+    // 5. Separator
     ToolbarSeparator {}
 
-    // 5. Refresh Media Button
+    // 6. Refresh Media Button
     ToolbarButton {
         icon: Icons.refresh;
         tooltip: "Scan and refresh media in current folder";
         clicked => { root.refresh-clicked(); }
     }
 
-    // 6. Separator
+    // 7. Separator
     ToolbarSeparator {}
 
-    // 7. View Mode Switcher Button
+    // 8. View Mode Switcher Button
     ToolbarButton {
         icon: root.is-table-view ? Icons.grid-view : Icons.list-view;
         tooltip: root.is-table-view ? "Switch to Grid View" : "Switch to Table View";

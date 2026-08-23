@@ -95,6 +95,28 @@ impl<'a> FolderManager<'a> {
         }
     }
 
+    /// Recursively collects `folder_id` and all active descendant subfolder IDs starting with the folder's path.
+    pub fn get_descendant_folder_ids(&self, folder_id: FolderId) -> Result<Vec<FolderId>, LibraryError> {
+        let rtxn = self.db.env.read_txn()?;
+        let folder = self
+            .db
+            .folders
+            .get(&rtxn, &folder_id)?
+            .ok_or(LibraryError::FolderNotFound(folder_id))?;
+
+        let root_path = PathBuf::from(&folder.path);
+        let mut ids = vec![folder_id];
+
+        for entry in self.db.folders.iter(&rtxn)? {
+            let (id, rec) = entry?;
+            if id != folder_id && !rec.is_deleted && Path::new(&rec.path).starts_with(&root_path) {
+                ids.push(id);
+            }
+        }
+
+        Ok(ids)
+    }
+
     /// Ultra-fast sequential streaming of all folder records from LMDB.
     pub fn list_folders(&self) -> Result<Vec<FolderRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;

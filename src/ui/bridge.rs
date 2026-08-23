@@ -103,13 +103,14 @@ impl UiBridge {
         window.set_sort_column_idx(initial_sort_col.to_index());
         window.set_sort_order_idx(initial_sort_ord.to_index());
 
-        // Restore Persistent Media Type Filter (Default: Videos)
+        // Restore Persistent Media Type Filter
         let initial_media_type_filter = MediaTypeFilter::from_str_name(&v_settings.media_type_filter);
         initial_state.filter.media_type_filter = initial_media_type_filter;
         window.set_media_type_filter_idx(initial_media_type_filter.to_index());
 
-        // Restore All 12 Table Column Widths
+        // Restore All 13 Table Column Widths
         window.set_col_filename_width(v_settings.col_filename_width);
+        window.set_col_path_width(v_settings.col_path_width);
         window.set_col_modified_date_width(v_settings.col_modified_date_width);
         window.set_col_created_date_width(v_settings.col_created_date_width);
         window.set_col_size_width(v_settings.col_size_width);
@@ -137,6 +138,11 @@ impl UiBridge {
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
         window.set_status_text("Initializing RustView...".into());
+
+        // Virtual folder view is strictly non-persistent (disabled on startup)
+        window.set_is_virtual_folder(false);
+        window.set_is_virtual_folder_btn_enabled(false);
+        window.set_virtual_folder_count(0);
 
         window.set_selected_rating(0);
         window.set_tag_is_assign_mode(false);
@@ -202,6 +208,7 @@ impl UiBridge {
                     "[UiBridge: PostMount] Slint UI event loop ready. Mounting root folder..."
                 );
                 BridgeFolders::sync_root(&win, &lib, &thumb, &set, &st);
+                BridgeMedia::update_virtual_folder_button_state(&win, &lib, &st);
             }
         });
 

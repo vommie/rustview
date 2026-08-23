@@ -6,23 +6,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortColumn {
     Filename = 0,
-    ModifiedDate = 1,
-    CreatedDate = 2,
-    FileSize = 3,
-    Rating = 4,
-    Tags = 5,
-    Width = 6,
-    Height = 7,
-    AspectRatio = 8,
-    Duration = 9,
-    Format = 10,
-    Flags = 11,
+    Path = 1,
+    ModifiedDate = 2,
+    CreatedDate = 3,
+    FileSize = 4,
+    Rating = 5,
+    Tags = 6,
+    Width = 7,
+    Height = 8,
+    AspectRatio = 9,
+    Duration = 10,
+    Format = 11,
+    Flags = 12,
 }
 
 impl SortColumn {
     pub fn as_str(&self) -> &'static str {
         match self {
             SortColumn::Filename => "Filename",
+            SortColumn::Path => "Path",
             SortColumn::ModifiedDate => "Modified Date",
             SortColumn::CreatedDate => "Created Date",
             SortColumn::FileSize => "Filesize (MB)",
@@ -39,6 +41,7 @@ impl SortColumn {
 
     pub fn from_name(name: &str) -> Self {
         match name.trim() {
+            "Path" | "Folder" | "FolderPath" | "Directory" => SortColumn::Path,
             "Modified Date" | "ModifiedDate" | "ModificationTime" | "Date" => SortColumn::ModifiedDate,
             "Created Date" | "CreatedDate" | "CreationDate" => SortColumn::CreatedDate,
             "Filesize (MB)" | "Filesize" | "FileSize" | "Size" => SortColumn::FileSize,
@@ -60,17 +63,18 @@ impl SortColumn {
 
     pub fn from_index(idx: i32) -> Self {
         match idx {
-            1 => SortColumn::ModifiedDate,
-            2 => SortColumn::CreatedDate,
-            3 => SortColumn::FileSize,
-            4 => SortColumn::Rating,
-            5 => SortColumn::Tags,
-            6 => SortColumn::Width,
-            7 => SortColumn::Height,
-            8 => SortColumn::AspectRatio,
-            9 => SortColumn::Duration,
-            10 => SortColumn::Format,
-            11 => SortColumn::Flags,
+            1 => SortColumn::Path,
+            2 => SortColumn::ModifiedDate,
+            3 => SortColumn::CreatedDate,
+            4 => SortColumn::FileSize,
+            5 => SortColumn::Rating,
+            6 => SortColumn::Tags,
+            7 => SortColumn::Width,
+            8 => SortColumn::Height,
+            9 => SortColumn::AspectRatio,
+            10 => SortColumn::Duration,
+            11 => SortColumn::Format,
+            12 => SortColumn::Flags,
             _ => SortColumn::Filename,
         }
     }
@@ -124,6 +128,10 @@ impl MediaSorter {
         records.par_sort_unstable_by(|a, b| {
             let cmp = match column {
                 SortColumn::Filename => a.filename.to_lowercase().cmp(&b.filename.to_lowercase()),
+                SortColumn::Path => a
+                    .folder_id
+                    .cmp(&b.folder_id)
+                    .then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase())),
                 SortColumn::ModifiedDate => a
                     .modification_time
                     .cmp(&b.modification_time)
@@ -182,6 +190,10 @@ impl MediaSorter {
         records.par_sort_unstable_by(|a, b| {
             let cmp = match column {
                 SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
+                SortColumn::Path => a
+                    .folder_path_lower
+                    .cmp(&b.folder_path_lower)
+                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
                 SortColumn::ModifiedDate => a
                     .record
                     .modification_time
@@ -251,6 +263,10 @@ impl MediaSorter {
         records.par_sort_unstable_by(|a, b| {
             let cmp = match column {
                 SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
+                SortColumn::Path => a
+                    .folder_path_lower
+                    .cmp(&b.folder_path_lower)
+                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
                 SortColumn::ModifiedDate => a
                     .record
                     .modification_time

@@ -13,8 +13,9 @@ export component MediaHeaderBar inherits Rectangle {
     in property <bool> enable-resize: true;
     in property <bool> auto-width: false;
 
-    // All 12 Table Columns Widths
+    // All 13 Table Columns Widths
     in-out property <length> col-filename-width: 260px;
+    in-out property <length> col-path-width: 180px;
     in-out property <length> col-modified-date-width: 145px;
     in-out property <length> col-created-date-width: 145px;
     in-out property <length> col-size-width: 95px;
@@ -30,16 +31,17 @@ export component MediaHeaderBar inherits Rectangle {
     // Calculated Cumulative X Offsets for TableView 1:1 Alignments
     property <length> col-pos-0: 0px;
     property <length> col-pos-1: root.col-filename-width;
-    property <length> col-pos-2: root.col-pos-1 + root.col-modified-date-width;
-    property <length> col-pos-3: root.col-pos-2 + root.col-created-date-width;
-    property <length> col-pos-4: root.col-pos-3 + root.col-size-width;
-    property <length> col-pos-5: root.col-pos-4 + root.col-rating-width;
-    property <length> col-pos-6: root.col-pos-5 + root.col-tags-width;
-    property <length> col-pos-7: root.col-pos-6 + root.col-width-width;
-    property <length> col-pos-8: root.col-pos-7 + root.col-height-width;
-    property <length> col-pos-9: root.col-pos-8 + root.col-ar-width;
-    property <length> col-pos-10: root.col-pos-9 + root.col-duration-width;
-    property <length> col-pos-11: root.col-pos-10 + root.col-format-width;
+    property <length> col-pos-2: root.col-pos-1 + root.col-path-width;
+    property <length> col-pos-3: root.col-pos-2 + root.col-modified-date-width;
+    property <length> col-pos-4: root.col-pos-3 + root.col-created-date-width;
+    property <length> col-pos-5: root.col-pos-4 + root.col-size-width;
+    property <length> col-pos-6: root.col-pos-5 + root.col-rating-width;
+    property <length> col-pos-7: root.col-pos-6 + root.col-tags-width;
+    property <length> col-pos-8: root.col-pos-7 + root.col-width-width;
+    property <length> col-pos-9: root.col-pos-8 + root.col-height-width;
+    property <length> col-pos-10: root.col-pos-9 + root.col-ar-width;
+    property <length> col-pos-11: root.col-pos-10 + root.col-duration-width;
+    property <length> col-pos-12: root.col-pos-11 + root.col-format-width;
 
     callback sort-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
@@ -70,7 +72,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Modified Date";
+            title: "Path";
             column-index: 1;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -80,7 +82,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Created Date";
+            title: "Modified Date";
             column-index: 2;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -90,7 +92,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Filesize (MB)";
+            title: "Created Date";
             column-index: 3;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -100,7 +102,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Rating";
+            title: "Filesize (MB)";
             column-index: 4;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -110,7 +112,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Tags";
+            title: "Rating";
             column-index: 5;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -120,7 +122,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Width";
+            title: "Tags";
             column-index: 6;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -130,7 +132,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Height";
+            title: "Width";
             column-index: 7;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -140,7 +142,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "AR";
+            title: "Height";
             column-index: 8;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -150,7 +152,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Duration";
+            title: "AR";
             column-index: 9;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -160,7 +162,7 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Format";
+            title: "Duration";
             column-index: 10;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
@@ -170,8 +172,18 @@ export component MediaHeaderBar inherits Rectangle {
         }
 
         MediaHeaderColumn {
-            title: "Flags";
+            title: "Format";
             column-index: 11;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: false;
+            auto-width: true;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+        }
+
+        MediaHeaderColumn {
+            title: "Flags";
+            column-index: 12;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: false;
@@ -201,11 +213,27 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 1: Modified Date
+        // Col 1: Path
         MediaHeaderColumn {
             x: root.col-pos-1;
-            title: "Modified Date";
+            title: "Path";
             column-index: 1;
+            active-sort-column: root.sort-column;
+            active-sort-order: root.sort-order;
+            enable-resize: root.enable-resize;
+            auto-width: false;
+            column-width <=> root.col-path-width;
+            column-min-width: 80px;
+            sort-clicked(idx) => { root.sort-clicked(idx); }
+            column-resized(idx, w) => { root.column-resized(idx, w); }
+            column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
+        }
+
+        // Col 2: Modified Date
+        MediaHeaderColumn {
+            x: root.col-pos-2;
+            title: "Modified Date";
+            column-index: 2;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -217,11 +245,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 2: Created Date
+        // Col 3: Created Date
         MediaHeaderColumn {
-            x: root.col-pos-2;
+            x: root.col-pos-3;
             title: "Created Date";
-            column-index: 2;
+            column-index: 3;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -233,11 +261,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 3: Filesize (MB)
+        // Col 4: Filesize (MB)
         MediaHeaderColumn {
-            x: root.col-pos-3;
+            x: root.col-pos-4;
             title: "Filesize (MB)";
-            column-index: 3;
+            column-index: 4;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -249,11 +277,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 4: Rating
+        // Col 5: Rating
         MediaHeaderColumn {
-            x: root.col-pos-4;
+            x: root.col-pos-5;
             title: "Rating";
-            column-index: 4;
+            column-index: 5;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -265,11 +293,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 5: Tags
+        // Col 6: Tags
         MediaHeaderColumn {
-            x: root.col-pos-5;
+            x: root.col-pos-6;
             title: "Tags";
-            column-index: 5;
+            column-index: 6;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -281,11 +309,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 6: Width
+        // Col 7: Width
         MediaHeaderColumn {
-            x: root.col-pos-6;
+            x: root.col-pos-7;
             title: "Width";
-            column-index: 6;
+            column-index: 7;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -297,11 +325,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 7: Height
+        // Col 8: Height
         MediaHeaderColumn {
-            x: root.col-pos-7;
+            x: root.col-pos-8;
             title: "Height";
-            column-index: 7;
+            column-index: 8;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -313,11 +341,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 8: AR
+        // Col 9: AR
         MediaHeaderColumn {
-            x: root.col-pos-8;
+            x: root.col-pos-9;
             title: "AR";
-            column-index: 8;
+            column-index: 9;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -329,11 +357,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 9: Duration
+        // Col 10: Duration
         MediaHeaderColumn {
-            x: root.col-pos-9;
+            x: root.col-pos-10;
             title: "Duration";
-            column-index: 9;
+            column-index: 10;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -345,11 +373,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 10: Format
+        // Col 11: Format
         MediaHeaderColumn {
-            x: root.col-pos-10;
+            x: root.col-pos-11;
             title: "Format";
-            column-index: 10;
+            column-index: 11;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;
@@ -361,11 +389,11 @@ export component MediaHeaderBar inherits Rectangle {
             column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
         }
 
-        // Col 11: Flags
+        // Col 12: Flags
         MediaHeaderColumn {
-            x: root.col-pos-11;
+            x: root.col-pos-12;
             title: "Flags";
-            column-index: 11;
+            column-index: 12;
             active-sort-column: root.sort-column;
             active-sort-order: root.sort-order;
             enable-resize: root.enable-resize;

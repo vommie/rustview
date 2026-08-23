@@ -69,8 +69,9 @@ pub const DEFAULT_SORT_COLUMN: &str = "Filename";
 pub const DEFAULT_SORT_ORDER: &str = "Ascending";
 pub const DEFAULT_MEDIA_TYPE_FILTER: &str = "Videos & Images";
 
-// All 12 Table Columns Defaults
+// All 13 Table Columns Defaults
 pub const DEFAULT_COL_FILENAME_WIDTH: f32 = 260.0;
+pub const DEFAULT_COL_PATH_WIDTH: f32 = 180.0;
 pub const DEFAULT_COL_MODIFIED_DATE_WIDTH: f32 = 145.0;
 pub const DEFAULT_COL_CREATED_DATE_WIDTH: f32 = 145.0;
 pub const DEFAULT_COL_SIZE_WIDTH: f32 = 95.0;
@@ -345,8 +346,9 @@ pub struct ViewSettings {
     pub sort_order: String,
     pub media_type_filter: String,
 
-    // All 12 Column Widths
+    // All 13 Column Widths
     pub col_filename_width: f32,
+    pub col_path_width: f32,
     pub col_modified_date_width: f32,
     pub col_created_date_width: f32,
     pub col_size_width: f32,
@@ -372,6 +374,7 @@ impl Default for ViewSettings {
             media_type_filter: DEFAULT_MEDIA_TYPE_FILTER.to_string(),
 
             col_filename_width: DEFAULT_COL_FILENAME_WIDTH,
+            col_path_width: DEFAULT_COL_PATH_WIDTH,
             col_modified_date_width: DEFAULT_COL_MODIFIED_DATE_WIDTH,
             col_created_date_width: DEFAULT_COL_CREATED_DATE_WIDTH,
             col_size_width: DEFAULT_COL_SIZE_WIDTH,

@@ -26,6 +26,8 @@ pub enum IconAsset {
     MediaFilterVideos,
     MediaFilterImages,
     MediaFilterVideosImages,
+    VirtualFolderEnable,
+    VirtualFolderDisable,
 }
 
 /// Metadata describing visual capabilities, path locations, and theme-tinting permissions.
@@ -275,6 +277,22 @@ impl IconAsset {
                 allow_tint: true,
                 description: "Filter display to show both video and image media items",
             },
+            Self::VirtualFolderEnable => IconMetadata {
+                asset: *self,
+                name: "virtual_folder_enable",
+                file_name: "virtual_folder_enable.svg",
+                relative_path: "ui/icons/virtual_folder_enable.svg",
+                allow_tint: true,
+                description: "Enable recursive virtual folder view (include all subfolders)",
+            },
+            Self::VirtualFolderDisable => IconMetadata {
+                asset: *self,
+                name: "virtual_folder_disable",
+                file_name: "virtual_folder_disable.svg",
+                relative_path: "ui/icons/virtual_folder_disable.svg",
+                allow_tint: true,
+                description: "Disable recursive virtual folder view (show current folder only)",
+            },
         }
     }
 
@@ -330,6 +348,12 @@ impl IconAsset {
             "media_filter_videos_images" | "filter_videos_images" | "videos_images" | "both" => {
                 Some(Self::MediaFilterVideosImages)
             }
+            "virtual_folder_enable" | "virtual_folder" | "virtual_enable" | "recursive_enable" => {
+                Some(Self::VirtualFolderEnable)
+            }
+            "virtual_folder_disable" | "virtual_disable" | "recursive_disable" => {
+                Some(Self::VirtualFolderDisable)
+            }
             _ => None,
         }
     }
@@ -365,6 +389,8 @@ impl IconAsset {
             Self::MediaFilterVideos,
             Self::MediaFilterImages,
             Self::MediaFilterVideosImages,
+            Self::VirtualFolderEnable,
+            Self::VirtualFolderDisable,
         ]
     }
 }

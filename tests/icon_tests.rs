@@ -20,10 +20,14 @@ fn test_icon_asset_metadata_and_spot_tint_rules() {
     assert!(IconAsset::QueryFolderAndSubfolders.is_tintable());
     assert!(IconAsset::QueryGlobal.is_tintable());
 
-    // Verify the 3 new media filter icons are tintable (supporting dark & light themes)
+    // Verify media filter icons are tintable
     assert!(IconAsset::MediaFilterVideos.is_tintable());
     assert!(IconAsset::MediaFilterImages.is_tintable());
     assert!(IconAsset::MediaFilterVideosImages.is_tintable());
+
+    // Verify virtual folder recursive view icons are tintable (supporting dark & light themes)
+    assert!(IconAsset::VirtualFolderEnable.is_tintable());
+    assert!(IconAsset::VirtualFolderDisable.is_tintable());
 
     // 2. Verify multi-color semantic icons MUST NEVER be tinted
     assert!(!IconAsset::Tag.is_tintable());
@@ -78,6 +82,14 @@ fn test_icon_manager_resolution_by_name() {
         IconAsset::from_name("media_filter_videos_images"),
         Some(IconAsset::MediaFilterVideosImages)
     );
+    assert_eq!(
+        IconAsset::from_name("virtual_folder_enable"),
+        Some(IconAsset::VirtualFolderEnable)
+    );
+    assert_eq!(
+        IconAsset::from_name("virtual_folder_disable"),
+        Some(IconAsset::VirtualFolderDisable)
+    );
     assert_eq!(IconAsset::from_name("unknown_icon"), None);
 
     assert!(IconManager::is_tintable("settings"));
@@ -85,6 +97,8 @@ fn test_icon_manager_resolution_by_name() {
     assert!(IconManager::is_tintable("media_filter_videos"));
     assert!(IconManager::is_tintable("media_filter_images"));
     assert!(IconManager::is_tintable("media_filter_videos_images"));
+    assert!(IconManager::is_tintable("virtual_folder_enable"));
+    assert!(IconManager::is_tintable("virtual_folder_disable"));
     assert!(!IconManager::is_tintable("tag"));
     assert!(!IconManager::is_tintable("rating_4"));
     assert!(!IconManager::is_tintable("media_file_corrupted"));

@@ -653,9 +653,14 @@ impl TagActionHandler {
             st.filter.search_query.clear();
             st.last_executed_query.clear();
             st.is_query_active = false;
+            // Deactivate and reset virtual folder mode on query reset
+            st.is_virtual_folder_mode = false;
+            st.virtual_folder_count = 0;
             (st.current_folder_id, st.current_folder_path.clone())
         };
 
+        window.set_is_virtual_folder(false);
+        window.set_virtual_folder_count(0);
         window.set_selected_rating(0);
         window.set_search_query("".into());
         window.invoke_scroll_media_to_top();
@@ -673,8 +678,9 @@ impl TagActionHandler {
         }
 
         TagTreeSync::sync_in_place(window, library, state);
-        BridgeMedia::reload(window, library, thumbnails, settings, state, true, false);
+        BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
         BridgeInspector::update(window, state);
+        BridgeMedia::update_virtual_folder_button_state(window, library, state);
         window.set_status_text("Query reset to default folder view.".into());
     }
 
@@ -705,6 +711,12 @@ impl TagActionHandler {
             let is_query = is_rating_active || !st.filter.tag_ids.is_empty();
             st.is_query_active = is_query;
 
+            // When executing a global query, reset virtual folder mode
+            if st.filter.scope_mode == ScopeMode::Global && is_query {
+                st.is_virtual_folder_mode = false;
+                st.virtual_folder_count = 0;
+            }
+
             let params = MediaSearchParams {
                 rating: st.filter.rating,
                 tag_ids: st.filter.tag_ids.clone(),
@@ -717,17 +729,47 @@ impl TagActionHandler {
             (params, st.current_folder_path.clone())
         };
 
+        if params.scope_mode == ScopeMode::Global {
+            window.set_is_virtual_folder(false);
+            window.set_virtual_folder_count(0);
+        }
+
         let is_query_active =
             params.rating.map(|r| r > 0).unwrap_or(false) || !params.tag_ids.is_empty();
 
         if !is_query_active {
             let t_restore = Instant::now();
+            let is_virt = state.read().is_virtual_folder_mode;
             {
                 let mut st = state.write();
                 st.is_query_active = false;
                 if let (Some(f_id), Some(path)) = (st.current_folder_id, current_folder_p.as_ref()) {
-                    let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
-                    st.all_folder_media = BridgeMedia::preindex(library, raw_media, path);
+                    if is_virt {
+                        let descendant_ids = library.folders().get_descendant_folder_ids(f_id).unwrap_or_else(|_| vec![f_id]);
+                        let mut media_ids = Vec::new();
+                        if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                            for fid in descendant_ids {
+                                if let Ok(Some(ids)) = library.raw_db().media_by_folder.get(&rtxn, &fid) {
+                                    media_ids.extend(ids);
+                                }
+                            }
+                        }
+                        let mut known = Vec::new();
+                        let mut seen = HashSet::new();
+                        if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                            for mid in media_ids {
+                                if seen.insert(mid)
+                                    && let Ok(Some(rec)) = library.raw_db().media.get(&rtxn, &mid)
+                                {
+                                    known.push(rec);
+                                }
+                            }
+                        }
+                        st.all_folder_media = BridgeMedia::preindex_records(library, known);
+                    } else {
+                        let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
+                        st.all_folder_media = BridgeMedia::preindex(library, raw_media, path);
+                    }
                     let valid_ids: HashSet<MediaId> =
                         st.all_folder_media.iter().map(|m| m.record.id).collect();
                     st.file_selection.prune_missing(&valid_ids);
@@ -735,8 +777,9 @@ impl TagActionHandler {
             }
 
             TagTreeSync::sync_in_place(window, library, state);
-            BridgeMedia::reload(window, library, thumbnails, settings, state, true, false);
+            BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
             BridgeInspector::update(window, state);
+            BridgeMedia::update_virtual_folder_button_state(window, library, state);
             window.set_status_text("Query cleared. Regular folder view active.".into());
 
             tracing::info!(
@@ -766,8 +809,9 @@ impl TagActionHandler {
 
         let t_reload = Instant::now();
         TagTreeSync::sync_in_place(window, library, state);
-        BridgeMedia::reload(window, library, thumbnails, settings, state, true, false);
+        BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
         BridgeInspector::update(window, state);
+        BridgeMedia::update_virtual_folder_button_state(window, library, state);
         let reload_us = t_reload.elapsed().as_micros();
 
         let total_flow_us = t_flow_start.elapsed().as_micros();
@@ -913,6 +957,13 @@ impl BridgeTags {
             let should_execute = {
                 let mut s = st.write();
                 s.filter.scope_mode = scope;
+                // Deactivate virtual folder mode when selecting Global scope
+                if scope == ScopeMode::Global {
+                    s.is_virtual_folder_mode = false;
+                    s.virtual_folder_count = 0;
+                    win.set_is_virtual_folder(false);
+                    win.set_virtual_folder_count(0);
+                }
                 s.is_query_active || s.selected_rating > 0 || !s.filter.tag_ids.is_empty()
             };
 
@@ -928,6 +979,7 @@ impl BridgeTags {
                 Self::execute_query_flow(&win, &lib, &thumb, &set, &st);
             } else {
                 TagTreeSync::sync_in_place(&win, &lib, &st);
+                BridgeMedia::update_virtual_folder_button_state(&win, &lib, &st);
             }
         });
 

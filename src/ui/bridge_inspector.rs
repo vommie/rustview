@@ -5,6 +5,8 @@ use super::models::format_filesize;
 use crate::media::MediaHasher;
 use crate::query::filters::IndexedMediaRecord;
 use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// Dedicated subsystem responsible for formatting and updating the Metadata Inspector.
 pub struct BridgeInspector;
@@ -42,19 +44,25 @@ impl BridgeInspector {
         }
 
         // Multi-selection path: Zero-copy iterator aggregation
-        let selected_records_iter = st
+        let selected_items: Vec<&IndexedMediaRecord> = st
             .all_folder_media
             .iter()
-            .filter(|m| selected_ids.contains(&m.record.id));
+            .filter(|m| selected_ids.contains(&m.record.id))
+            .collect();
 
-        let summary = FileSelectionSummary::from_indexed_records(selected_records_iter);
-        Self::render_multiple(window, &summary);
+        let summary = FileSelectionSummary::from_indexed_records(selected_items.iter().copied());
+        Self::render_multiple(
+            window,
+            &summary,
+            &selected_items,
+            st.current_folder_path.as_deref(),
+        );
     }
 
     fn render_empty(window: &MainWindow) {
         window.set_info_filename("- (No selection)".into());
-        window.set_info_status("-".into());
-        window.set_info_status_color(slint::Color::from_rgb_u8(166, 173, 200)); // #a6adc8 (Theme.text-muted)
+        window.set_info_path_label("Path:".into());
+        window.set_info_path("-".into());
         window.set_info_size("-".into());
         window.set_info_dimensions("-".into());
         window.set_info_format("-".into());
@@ -64,17 +72,13 @@ impl BridgeInspector {
 
     fn render_single(window: &MainWindow, item: &IndexedMediaRecord) {
         window.set_info_filename(item.filename_slint.clone());
-
-        if item.record.is_deleted {
-            window.set_info_status("Deleted / Missing".into());
-            window.set_info_status_color(slint::Color::from_rgb_u8(108, 112, 134)); // #6c7086 (Theme.status-deleted)
-        } else if item.record.is_corrupted {
-            window.set_info_status("Corrupted / Unreadable".into());
-            window.set_info_status_color(slint::Color::from_rgb_u8(243, 139, 168)); // #f38ba8 (Theme.status-corrupt)
-        } else {
-            window.set_info_status("OK (Healthy)".into());
-            window.set_info_status_color(slint::Color::from_rgb_u8(166, 227, 161)); // #a6e3a1 (Theme.status-ok)
-        }
+        window.set_info_path_label("Path:".into());
+        let parent_path_str = item
+            .full_path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "-".to_string());
+        window.set_info_path(parent_path_str.into());
 
         window.set_info_size(format_filesize(item.record.file_size).into());
         let dim_str = if item.record.width > 0 && item.record.height > 0 {
@@ -88,13 +92,54 @@ impl BridgeInspector {
         window.set_info_selection_count(1);
     }
 
-    fn render_multiple(window: &MainWindow, summary: &FileSelectionSummary) {
+    fn render_multiple(
+        window: &MainWindow,
+        summary: &FileSelectionSummary,
+        selected_items: &[&IndexedMediaRecord],
+        root_folder_opt: Option<&Path>,
+    ) {
         window.set_info_selection_count(summary.count as i32);
         window.set_info_filename(format!("{} multiple files selected", summary.count).into());
-        window.set_info_status(format!("{} files selected", summary.count).into());
-        window.set_info_status_color(slint::Color::from_rgb_u8(137, 180, 250)); // #89b4fa (Theme.primary)
-        window
-            .set_info_size(format!("{} (total)", format_filesize(summary.total_size_bytes)).into());
+        window.set_info_path_label("Subfolders:".into());
+
+        // Group counts by folder path
+        let mut folder_counts: HashMap<PathBuf, (String, usize, bool)> = HashMap::new();
+        for item in selected_items {
+            if let Some(parent) = item.full_path.parent() {
+                let is_root = root_folder_opt.map(|r| r == parent).unwrap_or(false);
+                let folder_name = parent
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| parent.to_string_lossy().to_string());
+
+                let entry = folder_counts.entry(parent.to_path_buf()).or_insert((folder_name, 0, is_root));
+                entry.1 += 1;
+            }
+        }
+
+        let mut sorted_folders: Vec<(String, usize, bool)> = folder_counts.into_values().collect();
+        // Sort: Root folder on the far left (is_root == true), then remaining subfolders in ascending alphabetical order
+        sorted_folders.sort_by(|a, b| {
+            match (a.2, b.2) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.0.to_lowercase().cmp(&b.0.to_lowercase()),
+            }
+        });
+
+        let subfolders_str = if sorted_folders.is_empty() {
+            "-".to_string()
+        } else {
+            sorted_folders
+                .into_iter()
+                .map(|(name, count, _)| format!("{} ({})", name, count))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        window.set_info_path(subfolders_str.into());
+
+        window.set_info_size(format!("{} (total)", format_filesize(summary.total_size_bytes)).into());
 
         let dim_str = if summary.is_uniform_dimensions {
             if let Some((w, h)) = summary.min_dimensions {
