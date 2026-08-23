@@ -1002,6 +1002,12 @@ impl BridgeFolders {
         window.set_items_metric_text("Items: 0".into());
         window.set_status_text(status_msg.into());
         window.set_tag_filter_text("".into());
+
+        window.set_empty_state_active(true);
+        window.set_empty_state_title("No Root Directory".into());
+        window.set_empty_state_description(status_msg.into());
+        window.set_empty_state_icon("settings".into());
+
         BridgeInspector::update(window, state);
     }
 

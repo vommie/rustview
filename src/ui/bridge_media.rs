@@ -2,6 +2,7 @@ use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFile
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
 use super::bridge_tags::BridgeTags;
+use super::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::video_preview_animator::VideoPreviewAnimator;
 use super::{MainWindow, MediaItemView};
@@ -1778,6 +1779,27 @@ impl BridgeMedia {
             format!("Items: {} / {}", matched_len, total_active_dataset_count)
         };
         window.set_items_metric_text(metric_text.into());
+
+        // Context-Sensitive Fallback Empty State Decision Engine Evaluation
+        let app_settings = settings.get();
+        let has_root = app_settings.general.root_folder.is_some();
+        let root_exists = app_settings.general.root_folder.as_ref().map(|p| p.is_dir()).unwrap_or(false);
+        let current_folder_name = path_opt.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str());
+
+        let fallback_state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
+            total_in_dataset: total_active_dataset_count,
+            matched_count: matched_len,
+            is_query_active,
+            filter: &filter,
+            has_root,
+            root_exists,
+            current_folder_name,
+        });
+
+        window.set_empty_state_active(fallback_state.is_active);
+        window.set_empty_state_title(fallback_state.title.into());
+        window.set_empty_state_description(fallback_state.description.into());
+        window.set_empty_state_icon(fallback_state.icon_name.into());
 
         let commit_us = t_slint_start.elapsed().as_micros() as u64;
         if let Some(ref bench) = bench_opt {

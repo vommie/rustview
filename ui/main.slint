@@ -12,6 +12,7 @@ import { ContextMenuPopup } from "context_menu.slint";
 import { ResizerBar } from "resizer_bar.slint";
 import { FloatingChoicePopup } from "floating_choice_popup.slint";
 import { MediaPanelToolbar } from "media_panel_toolbar.slint";
+import { EmptyStateView } from "empty_state_view.slint";
 
 export { SettingsWindow } from "settings_window.slint";
 export { FileRenameDialog } from "file_rename_dialog.slint";
@@ -49,6 +50,12 @@ export component MainWindow inherits Window {
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
     in-out property <int> media-type-filter-idx: 2;
+
+    // Fallback Empty State Properties
+    in-out property <bool> empty-state-active: false;
+    in-out property <string> empty-state-title: "";
+    in-out property <string> empty-state-description: "";
+    in-out property <string> empty-state-icon: "";
 
     // Grid Items Layout properties
     in-out property <int> grid-item-padding-h: 8;
@@ -384,6 +391,14 @@ export component MainWindow inherits Window {
                         item-drag-started(id, x, y) => { root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-ended => { root.media-drag-ended(); }
+                    }
+
+                    // Centered Context-Sensitive Fallback Empty State Overlay
+                    empty-state := EmptyStateView {
+                        is-active: root.empty-state-active;
+                        title: root.empty-state-title;
+                        description: root.empty-state-description;
+                        icon-name: root.empty-state-icon;
                     }
                 }
             }
