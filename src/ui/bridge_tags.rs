@@ -3,6 +3,7 @@ use super::bridge_ctx_menu_tag::TagContextMenu;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
+use super::bridge_status_bar::StatusBarBridge;
 use super::{MainWindow, TagColumnView, TagNodeView};
 use crate::ctx_menu::CtxMenuActionId;
 use crate::library::models::{MediaId, MediaSearchParams, TagId, TagRecord};
@@ -418,7 +419,7 @@ impl TagActionHandler {
                 tag_id = tag_id,
                 "[TagAction: Assign] No media files selected to assign/unassign tag"
             );
-            window.set_status_text("Select one or more files to assign/unassign tags.".into());
+            StatusBarBridge::info(window, "Select one or more files to assign/unassign tags.");
             return;
         }
 
@@ -434,8 +435,9 @@ impl TagActionHandler {
             for &id in selected_ids {
                 let _ = library.tags().remove_tag_from_media(id, tag_id);
             }
-            window.set_status_text(
-                format!("Removed tag '{}' from {} file(s)", tag_name, total_selected).into(),
+            StatusBarBridge::success(
+                window,
+                format!("Removed tag '{}' from {} file(s)", tag_name, total_selected),
             );
         } else {
             tracing::info!(
@@ -447,14 +449,16 @@ impl TagActionHandler {
             for &id in selected_ids {
                 let _ = library.tags().assign_tag(id, tag_id);
             }
-            window.set_status_text(
-                format!("Assigned tag '{}' to {} file(s)", tag_name, total_selected).into(),
+            StatusBarBridge::success(
+                window,
+                format!("Assigned tag '{}' to {} file(s)", tag_name, total_selected),
             );
         }
 
         Self::update_grid_tag_badges(selected_ids, window, library, state);
         TagTreeSync::sync_in_place(window, library, state);
         BridgeInspector::update(window, state);
+        StatusBarBridge::update_metrics(window, state);
     }
 
     fn handle_query_mode_toggle(
@@ -544,7 +548,7 @@ impl TagActionHandler {
 
         if is_assign {
             if selected_ids.is_empty() {
-                window.set_status_text("Select one or more files to apply rating.".into());
+                StatusBarBridge::info(window, "Select one or more files to apply rating.");
                 return;
             }
             Self::apply_rating_to_ids(
@@ -628,12 +632,14 @@ impl TagActionHandler {
 
         TagTreeSync::sync_in_place(window, library, state);
         BridgeInspector::update(window, state);
+        StatusBarBridge::update_metrics(window, state);
 
-        window.set_status_text(
+        StatusBarBridge::success(
+            window,
             if rating == 0 {
-                format!("Cleared rating for {} file(s)", ids.len()).into()
+                format!("Cleared rating for {} file(s)", ids.len())
             } else {
-                format!("Set rating to {} for {} file(s)", rating, ids.len()).into()
+                format!("Set rating to {} for {} file(s)", rating, ids.len())
             },
         );
     }
@@ -653,7 +659,6 @@ impl TagActionHandler {
             st.filter.search_query.clear();
             st.last_executed_query.clear();
             st.is_query_active = false;
-            // Deactivate and reset virtual folder mode on query reset
             st.is_virtual_folder_mode = false;
             st.virtual_folder_count = 0;
             (st.current_folder_id, st.current_folder_path.clone())
@@ -681,7 +686,8 @@ impl TagActionHandler {
         BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
         BridgeInspector::update(window, state);
         BridgeMedia::update_virtual_folder_button_state(window, library, state);
-        window.set_status_text("Query reset to default folder view.".into());
+        StatusBarBridge::update_metrics(window, state);
+        StatusBarBridge::info(window, "Query reset to default folder view.");
     }
 
     pub fn execute_query_flow(
@@ -711,7 +717,6 @@ impl TagActionHandler {
             let is_query = is_rating_active || !st.filter.tag_ids.is_empty();
             st.is_query_active = is_query;
 
-            // When executing a global query, reset virtual folder mode
             if st.filter.scope_mode == ScopeMode::Global && is_query {
                 st.is_virtual_folder_mode = false;
                 st.virtual_folder_count = 0;
@@ -780,7 +785,8 @@ impl TagActionHandler {
             BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
             BridgeInspector::update(window, state);
             BridgeMedia::update_virtual_folder_button_state(window, library, state);
-            window.set_status_text("Query cleared. Regular folder view active.".into());
+            StatusBarBridge::update_metrics(window, state);
+            StatusBarBridge::info(window, "Query cleared. Regular folder view active.");
 
             tracing::info!(
                 restore_us = t_restore.elapsed().as_micros(),
@@ -812,22 +818,26 @@ impl TagActionHandler {
         BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
         BridgeInspector::update(window, state);
         BridgeMedia::update_virtual_folder_button_state(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
         let reload_us = t_reload.elapsed().as_micros();
 
         let total_flow_us = t_flow_start.elapsed().as_micros();
 
         let scope_str = params.scope_mode.as_str();
         if result_count == 0 {
-            window.set_status_text(format!("Query ({}) returned no results.", scope_str).into());
+            StatusBarBridge::info(
+                window,
+                format!("Query ({}) returned no results.", scope_str),
+            );
         } else {
-            window.set_status_text(
+            StatusBarBridge::info(
+                window,
                 format!(
                     "Query ({}) returned {} result{}.",
                     scope_str,
                     result_count,
                     if result_count == 1 { "" } else { "s" }
-                )
-                .into(),
+                ),
             );
         }
 
@@ -957,7 +967,6 @@ impl BridgeTags {
             let should_execute = {
                 let mut s = st.write();
                 s.filter.scope_mode = scope;
-                // Deactivate virtual folder mode when selecting Global scope
                 if scope == ScopeMode::Global {
                     s.is_virtual_folder_mode = false;
                     s.virtual_folder_count = 0;

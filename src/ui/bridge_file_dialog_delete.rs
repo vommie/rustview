@@ -1,6 +1,7 @@
 use super::bridge_file_dialogs::FileDialogContext;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
+use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::models::format_filesize;
 use super::{DeleteFileDialog, MainWindow};
@@ -132,17 +133,17 @@ impl DeleteFileDialogController {
         self.close(window);
 
         let verb = if to_trash { "Moved to Trash" } else { "Permanently deleted" };
-        window.set_status_text(
-            if count == 1 {
-                format!("{} 1 file.", verb).into()
-            } else {
-                format!("{} {} files.", verb, count).into()
-            },
-        );
+        let msg = if count == 1 {
+            format!("{} 1 file.", verb)
+        } else {
+            format!("{} {} files.", verb, count)
+        };
+        StatusBarBridge::success(window, msg);
 
         BridgeMedia::reload(window, &ctx.library, &ctx.thumbnails, &ctx.settings, &ctx.state, false, false);
         BridgeInspector::update(window, &ctx.state);
         BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
+        StatusBarBridge::update_metrics(window, &ctx.state);
     }
 
     fn ensure_dialog_instantiated(&self) {

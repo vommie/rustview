@@ -2,6 +2,7 @@ use super::bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
 use super::bridge_folder_dialogs::FolderDialogContext;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
+use super::bridge_status_bar::StatusBarBridge;
 use super::{MainWindow, MissingFolderDeleteDialog};
 use crate::library::folder_operations::FolderSubtreeMetrics;
 use crate::library::models::FolderId;
@@ -70,7 +71,6 @@ impl MissingFolderDeleteDialogController {
         ctx: &FolderDialogContext,
         window: &MainWindow,
     ) {
-        // Safety verification: Check if the folder physically reappeared before purging
         match ctx
             .library
             .folder_operations()
@@ -94,7 +94,7 @@ impl MissingFolderDeleteDialogController {
                     .unwrap_or_else(|| ("Folder".to_string(), "".to_string()));
 
                 BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
-                window.set_status_text("Folder re-detected on disk and restored.".into());
+                StatusBarBridge::info(window, "Folder re-detected on disk and restored.");
 
                 let reborn_ctrl = RebornFolderWarnDialogController::new();
                 reborn_ctrl.show(window, &f_name, &path_str);
@@ -117,7 +117,6 @@ impl MissingFolderDeleteDialogController {
             .map(|m| m.affected_folder_ids.as_slice())
             .unwrap_or(&fallback);
 
-        // Determine successor target BEFORE purging database
         let successor_target = BridgeFolders::find_visible_successor_folder(
             folder_id,
             affected_ids,
@@ -140,14 +139,12 @@ impl MissingFolderDeleteDialogController {
 
                 self.close(window);
 
-                window.set_status_text(
-                    format!(
-                        "Cleaned {} missing folder(s) and {} cached media file(s) from database",
-                        report.deleted_folder_ids.len(),
-                        report.deleted_media_count
-                    )
-                    .into(),
+                let msg = format!(
+                    "Cleaned {} missing folder(s) and {} cached media file(s) from database",
+                    report.deleted_folder_ids.len(),
+                    report.deleted_media_count
                 );
+                StatusBarBridge::success(window, msg);
 
                 BridgeFolders::navigate_to_successor_if_affected(
                     successor_target,
@@ -160,6 +157,7 @@ impl MissingFolderDeleteDialogController {
                 );
 
                 BridgeInspector::update(window, &ctx.state);
+                StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {
                 tracing::error!(error = %e, "Failed to purge missing folder from database");

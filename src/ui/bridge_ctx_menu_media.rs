@@ -6,6 +6,7 @@ use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
+use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
 use super::{FileRenameDialog, MainWindow};
@@ -63,6 +64,7 @@ impl MediaContextMenu {
             BridgeFileSelection::sync_selection_diff(window, state, &changed_ids);
         }
         BridgeInspector::update(window, state);
+        StatusBarBridge::update_metrics(window, state);
 
         let is_single = selected_count == 1;
         let single_id = state
@@ -493,9 +495,9 @@ impl MediaContextMenu {
 
         if let Err(e) = DesktopIntegration::launch_app(&app, &paths) {
             tracing::error!(error = %e, app = %app.name, "[MediaContextMenu] Failed to launch desktop app");
-            window.set_status_text(format!("Failed to launch '{}': {}", app.name, e).into());
+            StatusBarBridge::error(window, format!("Failed to launch '{}': {}", app.name, e));
         } else {
-            window.set_status_text(format!("Launched '{}' with {} file(s).", app.name, paths.len()).into());
+            StatusBarBridge::success(window, format!("Launched '{}' with {} file(s).", app.name, paths.len()));
         }
     }
 
@@ -516,9 +518,9 @@ impl MediaContextMenu {
 
         if let Err(e) = DesktopIntegration::open_with_dialog(first_path) {
             tracing::error!(error = %e, "[MediaContextMenu] Failed to open native app chooser");
-            window.set_status_text(format!("Failed to open application chooser: {}", e).into());
+            StatusBarBridge::error(window, format!("Failed to open application chooser: {}", e));
         } else {
-            window.set_status_text("Opened native application chooser dialog.".into());
+            StatusBarBridge::info(window, "Opened native application chooser dialog.");
         }
     }
 
@@ -559,12 +561,14 @@ impl MediaContextMenu {
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
-                    window.set_status_text(
-                        format!("Opened file '{}' in File Manager.", name).into(),
+                    StatusBarBridge::success(
+                        window,
+                        format!("Opened file '{}' in File Manager.", name),
                     );
                 } else {
-                    window.set_status_text(
-                        format!("Opened {} files in File Manager.", count).into(),
+                    StatusBarBridge::success(
+                        window,
+                        format!("Opened {} files in File Manager.", count),
                     );
                 }
             }
@@ -573,7 +577,7 @@ impl MediaContextMenu {
                     error = %e,
                     "[MediaContextMenu] Failed to open file(s) in File Manager"
                 );
-                window.set_status_text(format!("Failed to open File Manager: {}", e).into());
+                StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
             }
         }
     }
@@ -598,13 +602,13 @@ impl MediaContextMenu {
         let count = names.len();
         if let Err(e) = SystemClipboard::copy_file_names(&names) {
             tracing::error!(error = %e, "[MediaContextMenu] Failed to copy file names to clipboard");
-            window.set_status_text(format!("Failed to copy to clipboard: {}", e).into());
+            StatusBarBridge::error(window, format!("Failed to copy to clipboard: {}", e));
         } else if count == 1 {
             tracing::info!(name = %LogObscurer::filename(&names[0]), "[MediaContextMenu] Copied single file name to clipboard");
-            window.set_status_text(format!("Copied file name to clipboard: '{}'", names[0]).into());
+            StatusBarBridge::success(window, format!("Copied file name to clipboard: '{}'", names[0]));
         } else {
             tracing::info!(count = count, "[MediaContextMenu] Copied multiple file names to clipboard in visual sorted order");
-            window.set_status_text(format!("Copied {} file names to clipboard.", count).into());
+            StatusBarBridge::success(window, format!("Copied {} file names to clipboard.", count));
         }
     }
 
@@ -621,14 +625,14 @@ impl MediaContextMenu {
         let count = paths.len();
         if let Err(e) = SystemClipboard::copy_file_paths(&paths) {
             tracing::error!(error = %e, "[MediaContextMenu] Failed to copy file paths to clipboard");
-            window.set_status_text(format!("Failed to copy to clipboard: {}", e).into());
+            StatusBarBridge::error(window, format!("Failed to copy to clipboard: {}", e));
         } else if count == 1 {
             let path_str = paths[0].display().to_string();
             tracing::info!(path = %LogObscurer::path(&paths[0]), "[MediaContextMenu] Copied single file path to clipboard");
-            window.set_status_text(format!("Copied file path to clipboard: '{}'", path_str).into());
+            StatusBarBridge::success(window, format!("Copied file path to clipboard: '{}'", path_str));
         } else {
             tracing::info!(count = count, "[MediaContextMenu] Copied multiple file paths to clipboard in visual sorted order");
-            window.set_status_text(format!("Copied {} file paths to clipboard.", count).into());
+            StatusBarBridge::success(window, format!("Copied {} file paths to clipboard.", count));
         }
     }
 
@@ -669,8 +673,9 @@ impl MediaContextMenu {
             return;
         }
 
-        window.set_status_text(
-            format!("Copying image content '{}' to clipboard...", filename).into(),
+        StatusBarBridge::info(
+            window,
+            format!("Copying image content '{}' to clipboard...", filename),
         );
 
         let w_weak = window.as_weak();
@@ -680,12 +685,12 @@ impl MediaContextMenu {
             let _ = w_weak.upgrade_in_event_loop(move |w| match res {
                 Ok((width, height, metrics)) => {
                     let total_ms = metrics.total_us / 1000;
-                    w.set_status_text(
+                    StatusBarBridge::success(
+                        &w,
                         format!(
                             "Copied image content ({} × {}) to clipboard in {}ms: '{}'",
                             width, height, total_ms, fname_clone
-                        )
-                        .into(),
+                        ),
                     );
                 }
                 Err(e) => {
@@ -693,7 +698,7 @@ impl MediaContextMenu {
                         error = %e,
                         "[MediaContextMenu] Failed to copy image content to clipboard in worker"
                     );
-                    w.set_status_text(format!("Failed to copy image to clipboard: {}", e).into());
+                    StatusBarBridge::error(&w, format!("Failed to copy image to clipboard: {}", e));
                 }
             });
         });

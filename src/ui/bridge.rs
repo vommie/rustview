@@ -12,6 +12,7 @@ use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
 use super::bridge_state::*;
+use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tag_dialogs::TagDialogController;
 use super::bridge_tags::BridgeTags;
 use super::bridge_thumbnails::BridgeThumbnails;
@@ -141,7 +142,8 @@ impl UiBridge {
         window.set_enable_tooltips(app_settings.appearance.enable_tooltips);
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
-        window.set_status_text("Initializing RustView...".into());
+
+        StatusBarBridge::info(&window, "Initializing RustView...");
 
         // Virtual folder view is strictly non-persistent (disabled on startup)
         window.set_is_virtual_folder(false);
@@ -214,6 +216,7 @@ impl UiBridge {
                 );
                 BridgeFolders::sync_root(&win, &lib, &thumb, &set, &st);
                 BridgeMedia::update_virtual_folder_button_state(&win, &lib, &st);
+                StatusBarBridge::update_metrics(&win, &st);
             }
         });
 
@@ -286,6 +289,8 @@ impl UiBridge {
                     state.write().invalidate_folder_tree_cache();
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
                 }
+
+                StatusBarBridge::update_metrics(&window, &state);
             });
         });
     }

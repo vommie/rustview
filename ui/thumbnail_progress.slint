@@ -1,10 +1,10 @@
 import { Theme } from "styles.slint";
 import { TaskProgressBar } from "progress_bar.slint";
 
-/// Domain-specific composed indicator component for 2-Phase Thumbnail Processing.
+/// Domain-specific composed indicator component for 2-Phase Thumbnail Processing with sharp rectangular geometry.
 export component ThumbnailPipelineProgress inherits HorizontalLayout {
     spacing: root.item-spacing;
-    alignment: center;
+    alignment: end;
 
     // Phase 1: Preload Cached Thumbnails API
     in property <bool> is-preloading: false;
@@ -31,7 +31,7 @@ export component ThumbnailPipelineProgress inherits HorizontalLayout {
     callback preload-bar-clicked();
     callback generate-bar-clicked();
 
-    // Phase 1 Component Instance
+    // Phase 1 Component Instance (Teal / Sky Fill with High-Contrast White Text)
     if root.is-preloading : TaskProgressBar {
         is-active: root.is-preloading;
         progress-min: 0;
@@ -39,12 +39,15 @@ export component ThumbnailPipelineProgress inherits HorizontalLayout {
         progress-val: root.preload-current;
         bar-width: root.preload-bar-width;
         bar-height: root.bar-height;
+        bar-radius: 0px;
         fill-color: root.preload-fill-color;
+        bar-border-color: #89dcebaa;
         overlay-text: root.preload-label-prefix + root.preload-current + "/" + root.preload-total;
+        overlay-text-color: #ffffff;
         clicked => { root.preload-bar-clicked(); }
     }
 
-    // Phase 2 Component Instance
+    // Phase 2 Component Instance (Peach / Gold Fill with High-Contrast White Text)
     if root.is-generating : TaskProgressBar {
         is-active: root.is-generating;
         progress-min: 0;
@@ -52,8 +55,11 @@ export component ThumbnailPipelineProgress inherits HorizontalLayout {
         progress-val: root.generate-current;
         bar-width: root.generate-bar-width;
         bar-height: root.bar-height;
+        bar-radius: 0px;
         fill-color: root.generate-fill-color;
+        bar-border-color: #f9e2afaa;
         overlay-text: root.generate-label-prefix + root.generate-current + "/" + root.generate-total + (root.active-workers > 0 ? (" (" + root.active-workers + " th)") : "");
+        overlay-text-color: #ffffff;
         clicked => { root.generate-bar-clicked(); }
     }
 }

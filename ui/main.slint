@@ -46,7 +46,13 @@ export component MainWindow inherits Window {
     in-out property <int> thumb-aspect-idx: 1;
     in-out property <bool> show-media-type-badges: true;
     in-out property <string> status-text: "Ready.";
+    in-out property <int> status-level: 0; // 0 = Info, 1 = Success, 2 = Warning, 3 = Error
     in-out property <string> items-metric-text: "Items: 0";
+    in-out property <int> status-total-items: 0;
+    in-out property <int> status-visible-items: 0;
+    in-out property <string> status-total-size: "";
+    in-out property <int> status-selection-count: 0;
+    in-out property <string> status-selection-size: "";
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
     in-out property <bool> is-virtual-folder: false;
@@ -483,7 +489,7 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-right-width;
                 }
                 dragged(delta) => {
-                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w - delta));
+                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w + delta));
                     root.sidebar-right-resized(root.sidebar-right-width);
                 }
                 drag-finished => {
@@ -529,7 +535,13 @@ export component MainWindow inherits Window {
 
         StatusBar {
             status-message: root.status-text;
+            status-level: root.status-level;
             item-count-str: root.items-metric-text;
+            total-items: root.status-total-items;
+            visible-items: root.status-visible-items;
+            total-size-str: root.status-total-size;
+            selection-count: root.status-selection-count;
+            selection-size-str: root.status-selection-size;
             is-virtual-folder: root.is-virtual-folder;
             virtual-folder-count: root.virtual-folder-count;
             is-refreshing-folders: root.is-refreshing-folders;

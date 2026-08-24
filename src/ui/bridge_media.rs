@@ -1,6 +1,7 @@
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
+use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
@@ -330,7 +331,6 @@ impl BridgeMedia {
     }
 
     /// Evaluates and updates whether the Virtual Folder toggle button should be enabled or disabled in the UI.
-    /// Disabled when in Global Query mode, or when any query filter is active, or when the active folder has no subfolders.
     pub fn update_virtual_folder_button_state(
         window: &MainWindow,
         library: &Library,
@@ -373,7 +373,6 @@ impl BridgeMedia {
     }
 
     /// Toggles virtual recursive folder view mode for the currently active folder and subfolders.
-    /// Strictly adheres to the Zero-FS Load Rule: loads purely from LMDB cache with 0ms disk scan and no automatic background pipeline.
     pub fn toggle_virtual_folder_mode(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -382,8 +381,6 @@ impl BridgeMedia {
         state: &Arc<RwLock<UiState>>,
     ) {
         let t0 = Instant::now();
-
-        // 1. Teardown any running thumbnail pipeline and background media scanner
         thumbnails.cancel_pipeline();
 
         let (current_f_id, current_p_opt, new_mode) = {
@@ -427,7 +424,7 @@ impl BridgeMedia {
                     let mut st = state.write();
                     st.virtual_folder_count = virtual_count;
                 }
-                window.set_virtual_folder_count(virtual_count as i32);
+                StatusBarBridge::update_virtual_folder(window, new_mode, virtual_count);
 
                 let mut media_ids = Vec::new();
                 if let Ok(rtxn) = library.raw_db().env.read_txn() {
@@ -463,11 +460,11 @@ impl BridgeMedia {
                 }
 
                 window.invoke_scroll_media_to_top();
-                // Zero-FS load: start_pipeline = false
                 Self::reload(window, library, thumbnails, settings, state, false, false);
                 BridgeInspector::update(window, state);
                 BridgeTags::sync_tag_selection(window, library, state);
                 Self::update_virtual_folder_button_state(window, library, state);
+                StatusBarBridge::update_metrics(window, state);
 
                 let folder_name = path
                     .file_name()
@@ -475,20 +472,20 @@ impl BridgeMedia {
                     .unwrap_or_else(|| path.to_string_lossy().to_string());
 
                 if new_mode {
-                    window.set_status_text(
+                    StatusBarBridge::info(
+                        window,
                         format!(
                             "Recursive view enabled: Showing {} folder(s) under '{}' ({}ms)",
                             virtual_count, folder_name, t0.elapsed().as_millis()
-                        )
-                        .into(),
+                        ),
                     );
                 } else {
-                    window.set_status_text(
+                    StatusBarBridge::info(
+                        window,
                         format!(
                             "Recursive view disabled: Showing '{}' only ({}ms)",
                             folder_name, t0.elapsed().as_millis()
-                        )
-                        .into(),
+                        ),
                     );
                 }
             }
@@ -738,15 +735,10 @@ impl BridgeMedia {
             st.is_refreshing_media = true;
         }
 
-        window.set_is_indexing_media(true);
-        window.set_media_index_current(0);
-        window.set_media_index_total(total_items as i32);
-        window.set_status_text(
-            format!(
-                "Refreshing metadata for {}...",
-                operation_desc
-            )
-            .into(),
+        StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
+        StatusBarBridge::info(
+            window,
+            format!("Refreshing metadata for {}...", operation_desc),
         );
 
         let w_weak = window.as_weak();
@@ -767,8 +759,7 @@ impl BridgeMedia {
                     if last.elapsed().as_millis() >= 35 || cur == tot {
                         *last = Instant::now();
                         let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
-                            w.set_media_index_current(cur as i32);
-                            w.set_media_index_total(tot as i32);
+                            StatusBarBridge::update_media_index_progress(&w, true, cur, tot);
                         });
                     }
                 });
@@ -1021,33 +1012,34 @@ impl BridgeMedia {
                         }
                     }
 
-                    w.set_is_indexing_media(false);
+                    StatusBarBridge::update_media_index_progress(&w, false, 0, 0);
 
                     if missing_count > 0 && total_items == 1 {
                         let missing_dialog = MissingFileDialogController::new();
                         missing_dialog.show(&w, "Refresh Metadata", missing_files);
                     } else if missing_count > 0 {
-                        w.set_status_text(
+                        StatusBarBridge::warn(
+                            &w,
                             format!(
                                 "Refreshed metadata for {} file(s). ({} missing)",
                                 refreshed_count, missing_count
-                            )
-                            .into(),
+                            ),
                         );
                     } else {
-                        w.set_status_text(
+                        StatusBarBridge::success(
+                            &w,
                             format!(
                                 "Refreshed metadata for {} in {}ms.",
                                 op_desc_owned,
                                 t_start.elapsed().as_millis()
-                            )
-                            .into(),
+                            ),
                         );
                     }
 
                     BridgeInspector::update(&w, &st_arc);
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
                     Self::update_virtual_folder_button_state(&w, &lib_arc, &st_arc);
+                    StatusBarBridge::update_metrics(&w, &st_arc);
                 });
             })
             .expect("Failed to spawn parallel media metadata refresher thread");
@@ -1145,16 +1137,14 @@ impl BridgeMedia {
             st.is_refreshing_media = true;
         }
 
-        window.set_is_indexing_media(true);
-        window.set_media_index_current(0);
-        window.set_media_index_total(total_items as i32);
-        window.set_status_text(
+        StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
+        StatusBarBridge::info(
+            window,
             format!(
                 "Refreshing {} selected file{} (Full)...",
                 total_items,
                 if total_items == 1 { "" } else { "s" }
-            )
-            .into(),
+            ),
         );
 
         let config = ThumbnailConfig::from_performance_settings(&settings.get().performance);
@@ -1180,8 +1170,7 @@ impl BridgeMedia {
                     if last.elapsed().as_millis() >= 35 || cur == tot {
                         *last = Instant::now();
                         let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
-                            w.set_media_index_current(cur as i32);
-                            w.set_media_index_total(tot as i32);
+                            StatusBarBridge::update_media_index_progress(&w, true, cur, tot);
                         });
                     }
                 });
@@ -1539,35 +1528,36 @@ impl BridgeMedia {
                         }
                     }
 
-                    w.set_is_indexing_media(false);
+                    StatusBarBridge::update_media_index_progress(&w, false, 0, 0);
 
                     if missing_count > 0 && total_items == 1 {
                         let missing_dialog = MissingFileDialogController::new();
                         missing_dialog.show(&w, "Refresh File", missing_files);
                     } else if missing_count > 0 {
-                        w.set_status_text(
+                        StatusBarBridge::warn(
+                            &w,
                             format!(
                                 "Refreshed {} file(s). ({} missing)",
                                 refreshed_count, missing_count
-                            )
-                            .into(),
+                            ),
                         );
                     } else {
-                        w.set_status_text(
+                        StatusBarBridge::success(
+                            &w,
                             format!(
                                 "Refreshed {} of {} selected file{} in {}ms.",
                                 refreshed_count,
                                 total_items,
                                 if total_items == 1 { "" } else { "s" },
                                 t_start.elapsed().as_millis()
-                            )
-                            .into(),
+                            ),
                         );
                     }
 
                     BridgeInspector::update(&w, &st_arc);
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
                     Self::update_virtual_folder_button_state(&w, &lib_arc, &st_arc);
+                    StatusBarBridge::update_metrics(&w, &st_arc);
                 });
             })
             .expect("Failed to spawn parallel media item refresher thread");
@@ -1983,19 +1973,6 @@ impl BridgeMedia {
         window.set_visible_start_index(start_window as i32);
         window.set_media_items(ModelRc::new(VecModel::from(slice_views)));
 
-        let metric_text = if is_query_active {
-            if matched_len == total_active_dataset_count {
-                format!("Query Items: {}", matched_len)
-            } else {
-                format!("Query Filter: {} / {}", matched_len, total_active_dataset_count)
-            }
-        } else if is_virtual_folder {
-            format!("Recursive Items: {} / {}", matched_len, total_active_dataset_count)
-        } else {
-            format!("Items: {} / {}", matched_len, total_active_dataset_count)
-        };
-        window.set_items_metric_text(metric_text.into());
-
         let app_settings = settings.get();
         let has_root = app_settings.general.root_folder.is_some();
         let root_exists = app_settings.general.root_folder.as_ref().map(|p| p.is_dir()).unwrap_or(false);
@@ -2026,8 +2003,9 @@ impl BridgeMedia {
             BridgeTags::sync_tag_selection(window, library, state);
         }
 
-        // Always synchronize Virtual Folder button enablement on every view reload
+        // Always synchronize Virtual Folder button enablement and Status Bar metrics on every view reload
         Self::update_virtual_folder_button_state(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
 
         if options.start_pipeline {
             let st_read = state.read();

@@ -1,6 +1,6 @@
 import { Theme } from "styles.slint";
 
-/// Generic, fully decoupled pure API Progress Bar component.
+/// Generic, fully decoupled pure API Progress Bar component with sharp rectangular geometry.
 export component TaskProgressBar inherits Rectangle {
     // Value Range & State Properties
     in property <float> progress-val: 0.0;
@@ -9,16 +9,16 @@ export component TaskProgressBar inherits Rectangle {
     in property <bool> is-active: true;
     in property <bool> is-indeterminate: false;
 
-    // Visual Customization Properties
+    // Visual Customization Properties (Sharp 0px corners)
     in property <length> bar-width: 150px;
     in property <length> bar-height: 18px;
-    in property <length> bar-radius: 4px;
+    in property <length> bar-radius: 0px;
     in property <length> bar-border-width: 1px;
     in property <color> bar-border-color: Theme.border;
     in property <color> track-color: Theme.surface-variant;
     in property <color> fill-color: Theme.primary;
 
-    // Label & Typography Customization Properties
+    // Label & Typography Customization Properties (High-contrast bright white for dark theme)
     in property <bool> show-overlay-text: true;
     in property <string> overlay-text: "";
     in property <color> overlay-text-color: #ffffff;
@@ -36,7 +36,7 @@ export component TaskProgressBar inherits Rectangle {
     border-color: root.bar-border-color;
     clip: true;
 
-    // Fill Bar
+    // Fill Bar (Sharp rectangular progress fill)
     if root.is-active : Rectangle {
         x: 0px;
         y: 0px;
@@ -46,7 +46,7 @@ export component TaskProgressBar inherits Rectangle {
         border-radius: root.bar-radius;
     }
 
-    // Centered Embedded Text Overlay
+    // Centered Embedded Text Overlay with High-Contrast Dark-Theme Styling
     if root.show-overlay-text && root.is-active : Text {
         width: 100%;
         height: 100%;

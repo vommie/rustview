@@ -8,6 +8,8 @@ export component MediaIndexProgress inherits HorizontalLayout {
     in property <int> total-val: 0;
     in property <length> bar-width: 175px;
 
+    alignment: end;
+
     if root.is-indexing : TaskProgressBar {
         is-active: root.is-indexing;
         progress-min: 0;
@@ -15,7 +17,10 @@ export component MediaIndexProgress inherits HorizontalLayout {
         progress-val: root.current-val;
         bar-width: root.bar-width;
         bar-height: 18px;
+        bar-radius: 0px;
         fill-color: #cba6f788;
+        bar-border-color: #cba6f7aa;
         overlay-text: "Scanning Media: " + root.current-val + "/" + root.total-val;
+        overlay-text-color: #ffffff;
     }
 }

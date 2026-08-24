@@ -2,6 +2,7 @@ use super::bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
 use super::bridge_folder_dialogs::FolderDialogContext;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
+use super::bridge_status_bar::StatusBarBridge;
 use super::{MainWindow, RemoveOrphanedFolderDialog};
 use crate::library::folder_operations::FolderSubtreeMetrics;
 use crate::library::models::FolderId;
@@ -32,7 +33,6 @@ impl RemoveOrphanedFolderDialogController {
     ) {
         window.set_is_context_menu_open(false);
 
-        // Pre-check: Does the directory physically exist right now?
         match ctx
             .library
             .folder_operations()
@@ -49,7 +49,7 @@ impl RemoveOrphanedFolderDialogController {
                     .unwrap_or_default();
 
                 BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
-                window.set_status_text("Folder re-detected on disk and restored.".into());
+                StatusBarBridge::info(window, "Folder re-detected on disk and restored.");
                 reborn_warn.show(window, folder_name, &path_str);
                 return;
             }
@@ -103,7 +103,6 @@ impl RemoveOrphanedFolderDialogController {
         window: &MainWindow,
         reborn_warn: &RebornFolderWarnDialogController,
     ) {
-        // Final Safety Check: Verify folder has not been re-created in the background
         match ctx
             .library
             .folder_operations()
@@ -127,7 +126,7 @@ impl RemoveOrphanedFolderDialogController {
                     .unwrap_or_else(|| ("Folder".to_string(), "".to_string()));
 
                 BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
-                window.set_status_text("Folder re-detected on disk and restored.".into());
+                StatusBarBridge::info(window, "Folder re-detected on disk and restored.");
                 reborn_warn.show(window, &f_name, &path_str);
                 return;
             }
@@ -148,7 +147,6 @@ impl RemoveOrphanedFolderDialogController {
             .map(|m| m.affected_folder_ids.as_slice())
             .unwrap_or(&fallback);
 
-        // Determine successor target BEFORE purging database
         let successor_target = BridgeFolders::find_visible_successor_folder(
             folder_id,
             affected_ids,
@@ -171,14 +169,12 @@ impl RemoveOrphanedFolderDialogController {
 
                 self.close(window);
 
-                window.set_status_text(
-                    format!(
-                        "Removed {} missing folder(s) and {} cached media file(s) from database",
-                        report.deleted_folder_ids.len(),
-                        report.deleted_media_count
-                    )
-                    .into(),
+                let msg = format!(
+                    "Removed {} missing folder(s) and {} cached media file(s) from database",
+                    report.deleted_folder_ids.len(),
+                    report.deleted_media_count
                 );
+                StatusBarBridge::success(window, msg);
 
                 BridgeFolders::navigate_to_successor_if_affected(
                     successor_target,
@@ -191,6 +187,7 @@ impl RemoveOrphanedFolderDialogController {
                 );
 
                 BridgeInspector::update(window, &ctx.state);
+                StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {
                 tracing::error!(error = %e, "Failed to purge orphaned folder from database");

@@ -2,6 +2,7 @@ use super::bridge_folder_dialog_missing_delete::MissingFolderDeleteDialogControl
 use super::bridge_folder_dialogs::FolderDialogContext;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
+use super::bridge_status_bar::StatusBarBridge;
 use super::{DeleteFolderDialog, MainWindow};
 use crate::library::folder_operations::FolderSubtreeMetrics;
 use crate::library::models::FolderId;
@@ -23,7 +24,6 @@ impl DeleteFolderDialogController {
     }
 
     /// Displays the Delete Folder modal dialog with computed subtree metrics.
-    /// If the folder does not exist on disk, it redirects immediately to the MissingFolderDeleteDialog.
     pub fn show(
         &self,
         window: &MainWindow,
@@ -40,7 +40,6 @@ impl DeleteFolderDialogController {
 
         let folder_path = PathBuf::from(&folder_rec.path);
 
-        // Pre-check: Does the directory physically exist on disk?
         if !folder_path.exists() {
             tracing::warn!(
                 folder_id = folder_id,
@@ -48,7 +47,6 @@ impl DeleteFolderDialogController {
                 "[FolderDialog: Delete] Folder path does not exist on disk. Redirecting to MissingFolderDeleteDialog."
             );
 
-            // Mark as deleted in DB to reflect physical absence
             let _ = ctx.library.folders().set_deleted(folder_id, true);
             BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
 
@@ -98,7 +96,6 @@ impl DeleteFolderDialogController {
             .map(|m| m.affected_folder_ids.as_slice())
             .unwrap_or(&fallback);
 
-        // Determine successor target BEFORE modifying database or tree state
         let successor_target = BridgeFolders::find_visible_successor_folder(
             folder_id,
             affected_ids,
@@ -126,15 +123,13 @@ impl DeleteFolderDialogController {
                 } else {
                     "Permanently deleted"
                 };
-                window.set_status_text(
-                    format!(
-                        "{} {} folder(s) and {} media file(s)",
-                        action_str,
-                        report.deleted_folder_ids.len(),
-                        report.deleted_media_count
-                    )
-                    .into(),
+                let msg = format!(
+                    "{} {} folder(s) and {} media file(s)",
+                    action_str,
+                    report.deleted_folder_ids.len(),
+                    report.deleted_media_count
                 );
+                StatusBarBridge::success(window, msg);
 
                 BridgeFolders::navigate_to_successor_if_affected(
                     successor_target,
@@ -147,6 +142,7 @@ impl DeleteFolderDialogController {
                 );
 
                 BridgeInspector::update(window, &ctx.state);
+                StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {
                 tracing::error!(folder_id = folder_id, error = %e, "Failed to delete folder");

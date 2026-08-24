@@ -1,6 +1,7 @@
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
+use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::{FolderNodeView, MainWindow};
 use crate::library::dot_hidden::DotHiddenCache;
@@ -467,13 +468,13 @@ impl BridgeFolders {
     ) {
         let root_setting = settings.get().general.root_folder;
         let Some(ref root_dir) = root_setting else {
-            window.set_status_text("Cannot refresh folders: No root directory configured.".into());
+            StatusBarBridge::warn(window, "Cannot refresh folders: No root directory configured.");
             return;
         };
 
         let normalized_root = normalize_path(root_dir);
         if !normalized_root.is_dir() {
-            window.set_status_text("Configured root directory not found on filesystem.".into());
+            StatusBarBridge::error(window, "Configured root directory not found on filesystem.");
             return;
         }
 
@@ -482,9 +483,8 @@ impl BridgeFolders {
             st.is_refreshing_folders = true;
             st.folder_scan_count = 0;
         }
-        window.set_is_refreshing_folders(true);
-        window.set_folder_scan_count(0);
-        window.set_status_text("Scanning directory tree on filesystem...".into());
+        StatusBarBridge::update_folder_scan_progress(window, true, 0);
+        StatusBarBridge::info(window, "Scanning directory tree on filesystem...");
 
         let t_start = Instant::now();
         let w_weak = window.as_weak();
@@ -506,7 +506,7 @@ impl BridgeFolders {
                         if last.elapsed().as_millis() >= 40 {
                             *last = Instant::now();
                             let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
-                                w.set_folder_scan_count(count as i32);
+                                StatusBarBridge::update_folder_scan_progress(&w, true, count);
                             });
                         }
                     }),
@@ -518,7 +518,7 @@ impl BridgeFolders {
                         s.is_refreshing_folders = false;
                         s.invalidate_folder_tree_cache();
                     }
-                    w.set_is_refreshing_folders(false);
+                    StatusBarBridge::update_folder_scan_progress(&w, false, 0);
 
                     match report_res {
                         Ok(report) => {
@@ -530,14 +530,15 @@ impl BridgeFolders {
                                 report.folders_marked_deleted,
                                 report.folders_restored
                             );
-                            w.set_status_text(status_msg.into());
+                            StatusBarBridge::success(&w, status_msg);
                             Self::reload_tree(&w, &lib, &set, &st);
                             Self::scroll_to_selected(&w);
                             BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
+                            StatusBarBridge::update_metrics(&w, &st);
                         }
                         Err(e) => {
                             tracing::error!(error = %e, "[FolderTreeRefreshError] Failed to refresh folder tree");
-                            w.set_status_text(format!("Folder scan failed: {}", e).into());
+                            StatusBarBridge::error(&w, format!("Folder scan failed: {}", e));
                         }
                     }
                 });
@@ -606,7 +607,10 @@ impl BridgeFolders {
 
         let raw_media = library.media().get_all_by_folder(folder_id).unwrap_or_default();
         if raw_media.is_empty() {
-            window.set_status_text(format!("No media files in folder '{}' to refresh metadata.", folder_name).into());
+            StatusBarBridge::info(
+                window,
+                format!("No media files in folder '{}' to refresh metadata.", folder_name),
+            );
             return;
         }
 
@@ -680,7 +684,7 @@ impl BridgeFolders {
             st.filter.tag_ids.clear();
             st.tag_filter_query.clear();
 
-            // Deactivate and reset virtual folder mode when switching folders (preserve only during explicit refresh of current folder)
+            // Deactivate and reset virtual folder mode when switching folders
             if !is_explicit_refresh {
                 st.is_virtual_folder_mode = false;
                 st.virtual_folder_count = 0;
@@ -704,7 +708,7 @@ impl BridgeFolders {
         Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
-        // Collect target folder IDs (either single active folder or recursive subtree if virtual folder mode is active)
+        // Collect target folder IDs (either single active folder or recursive subtree)
         let target_folder_ids = if is_virtual_folder {
             ctx.library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
         } else {
@@ -716,8 +720,7 @@ impl BridgeFolders {
             let mut st = ctx.state.write();
             st.virtual_folder_count = virtual_count;
         }
-        ctx.window.set_is_virtual_folder(is_virtual_folder);
-        ctx.window.set_virtual_folder_count(virtual_count as i32);
+        StatusBarBridge::update_virtual_folder(ctx.window, is_virtual_folder, virtual_count);
 
         // Immediate Zero-Delay Database Fetch
         let t_id_start = Instant::now();
@@ -767,6 +770,7 @@ impl BridgeFolders {
         BridgeInspector::update(ctx.window, ctx.state);
         BridgeTags::sync_tag_selection(ctx.window, ctx.library, ctx.state);
         BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
+        StatusBarBridge::update_metrics(ctx.window, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
         if !should_scan_and_generate {
@@ -777,8 +781,8 @@ impl BridgeFolders {
                 known_items = ctx.state.read().all_folder_media.len(),
                 "[FolderNavigation: Zero-FS Load] Folder opened from LMDB cache with 0ms disk scan."
             );
-            ctx.window.set_is_indexing_media(false);
-            ctx.window.set_status_text("Ready.".into());
+            StatusBarBridge::update_media_index_progress(ctx.window, false, 0, 0);
+            StatusBarBridge::info(ctx.window, "Ready.");
             return;
         }
 
@@ -791,15 +795,14 @@ impl BridgeFolders {
             "[FolderRefresh: Execute] Executing filesystem scan and dedicated thumbnail generation..."
         );
 
-        ctx.window.set_is_indexing_media(true);
-        ctx.window.set_media_index_current(0);
-        ctx.window.set_media_index_total(0);
-        ctx.window.set_status_text(
+        StatusBarBridge::update_media_index_progress(ctx.window, true, 0, 0);
+        StatusBarBridge::info(
+            ctx.window,
             if is_virtual_folder {
-                format!("Scanning media files in '{}' (Recursive: {} folders)...", folder_name, virtual_count).into()
+                format!("Scanning media files in '{}' (Recursive: {} folders)...", folder_name, virtual_count)
             } else {
-                format!("Scanning media files in '{}'...", folder_name).into()
-            }
+                format!("Scanning media files in '{}'...", folder_name)
+            },
         );
 
         let w_weak_scanner = ctx.window.as_weak();
@@ -820,12 +823,10 @@ impl BridgeFolders {
                 let t_scan = Instant::now();
                 let auto_detect = set_scanner.get().formats.auto_detect_extensionless_media;
 
-                // If in virtual folder mode during explicit refresh, synchronize the directory tree first
                 if is_virtual_folder {
                     let _ = lib_scanner.folder_tree_refresher().refresh_tree(&target_p_scanner, None::<fn(usize)>);
                 }
 
-                // Collect up-to-date folder IDs to scan
                 let scan_folder_ids = if is_virtual_folder {
                     lib_scanner.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
                 } else {
@@ -851,8 +852,7 @@ impl BridgeFolders {
                             if last.elapsed().as_millis() >= 35 || cur == tot {
                                 *last = Instant::now();
                                 let _ = w_weak_p.upgrade_in_event_loop(move |w| {
-                                    w.set_media_index_current(cur as i32);
-                                    w.set_media_index_total(tot as i32);
+                                    StatusBarBridge::update_media_index_progress(&w, true, cur, tot);
                                 });
                             }
                         }),
@@ -942,8 +942,9 @@ impl BridgeFolders {
                         BridgeMedia::update_virtual_folder_button_state(&w, &lib_scanner, &st_scanner);
                         Self::reload_tree(&w, &lib_scanner, &set_scanner, &st_scanner);
 
-                        w.set_is_indexing_media(false);
-                        w.set_status_text("Ready.".into());
+                        StatusBarBridge::update_media_index_progress(&w, false, 0, 0);
+                        StatusBarBridge::info(&w, "Ready.");
+                        StatusBarBridge::update_metrics(&w, &st_scanner);
 
                         if !all_targets.is_empty() {
                             let config = ThumbnailConfig::from_performance_settings(&set_scanner.get().performance);
@@ -1079,8 +1080,6 @@ impl BridgeFolders {
         }
         window.set_folders(ModelRc::new(VecModel::from(vec![])));
         window.set_media_items(ModelRc::new(VecModel::from(vec![])));
-        window.set_items_metric_text("Items: 0".into());
-        window.set_status_text(status_msg.into());
         window.set_tag_filter_text("".into());
         window.set_is_virtual_folder(false);
         window.set_is_virtual_folder_btn_enabled(false);
@@ -1092,6 +1091,8 @@ impl BridgeFolders {
         window.set_empty_state_description(status_msg.into());
         window.set_empty_state_icon("settings".into());
 
+        StatusBarBridge::info(window, status_msg);
+        StatusBarBridge::update_metrics(window, state);
         BridgeInspector::update(window, state);
     }
 
@@ -1291,6 +1292,7 @@ impl BridgeFolders {
             );
             Self::reload_tree(window, library, settings, state);
             Self::scroll_to_selected(window);
+            StatusBarBridge::update_metrics(window, state);
         }
     }
 

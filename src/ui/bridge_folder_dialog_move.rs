@@ -1,6 +1,7 @@
 use super::bridge_folder_dialogs::FolderDialogContext;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_media::BridgeMedia;
+use super::bridge_status_bar::StatusBarBridge;
 use super::{MainWindow, MoveFolderToDialog};
 use crate::library::models::FolderId;
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -96,7 +97,7 @@ impl MoveFolderDialogController {
                 }
 
                 self.close(window);
-                window.set_status_text("Folder moved successfully.".into());
+                StatusBarBridge::success(window, "Folder moved successfully.");
 
                 BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
                 BridgeMedia::reload(
@@ -108,6 +109,7 @@ impl MoveFolderDialogController {
                     false,
                     true,
                 );
+                StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {
                 tracing::error!(error = %e, "Failed to move folder");

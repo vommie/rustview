@@ -1,6 +1,7 @@
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
+use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
 use super::MainWindow;
@@ -86,10 +87,11 @@ impl BridgeFileSelection {
         Self::sync_selection_diff(window, state, &changed_ids);
         let t_sync = t_sync_start.elapsed();
 
-        // 4. Update Inspector Fields & Synchronize TagTree Highlight/Counts In-Place
+        // 4. Update Inspector Fields, Synchronize TagTree Highlight/Counts, and Update Status Bar
         let t_insp_start = Instant::now();
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
         let t_insp = t_insp_start.elapsed();
 
         tracing::debug!(
@@ -102,7 +104,7 @@ impl BridgeFileSelection {
             model_sync_us = t_sync.as_micros(),
             inspector_and_tags_us = t_insp.as_micros(),
             total_click_us = t_start.elapsed().as_micros(),
-            "[FileSelection: FastInPlace] Instant selection updated with tag synchronization"
+            "[FileSelection: FastInPlace] Instant selection updated with tag synchronization and status bar"
         );
     }
 
@@ -208,6 +210,7 @@ impl BridgeFileSelection {
         Self::sync_selection_diff(window, state, &changed_ids);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
 
         tracing::debug!(
             changed_rows = changed_ids.len(),
@@ -233,6 +236,7 @@ impl BridgeFileSelection {
         Self::sync_selection_diff(window, state, &changed_ids);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
 
         tracing::debug!(
             cleared_rows = changed_ids.len(),
@@ -281,8 +285,9 @@ impl BridgeFileSelection {
                         error = %e,
                         "Failed to resolve media path from database"
                     );
-                    window.set_status_text(
-                        format!("Media record not found in database: #{}", media_id).into(),
+                    StatusBarBridge::error(
+                        window,
+                        format!("Media record not found in database: #{}", media_id),
                     );
                     return;
                 }
@@ -328,14 +333,14 @@ impl BridgeFileSelection {
                 error = %e,
                 "Failed to launch system default application for media file"
             );
-            window.set_status_text(format!("Failed to open file: {}", e).into());
+            StatusBarBridge::error(window, format!("Failed to open file: {}", e));
         } else {
             let status_msg = if is_corrupted {
                 format!("Opened file '{}' (Flagged: Corrupted) with system application.", filename)
             } else {
                 format!("Opened '{}' with system default application.", filename)
             };
-            window.set_status_text(status_msg.into());
+            StatusBarBridge::success(window, status_msg);
         }
     }
 }

@@ -3,12 +3,37 @@ import { ThumbnailPipelineProgress } from "thumbnail_progress.slint";
 import { FolderRefreshProgress } from "progressbar_folders.slint";
 import { MediaIndexProgress } from "progressbar_media.slint";
 
+/// Clean vertical divider separator for status bar sections
+export component StatusBarSeparator inherits VerticalLayout {
+    alignment: center;
+    horizontal-stretch: 0;
+
+    Rectangle {
+        width: 1px;
+        height: 14px;
+        background: Theme.border;
+    }
+}
+
+/// Comprehensive, multi-zoned Status Bar component.
+/// Zone 1 (Left): Status messages & severity indicators (strictly left-aligned).
+/// Spacer: Expands to push all progress bars and status metrics flush to the right.
+/// Zone 2 (Right): Dynamic progress bars + structured info badges (all right-aligned).
 export component StatusBar inherits Rectangle {
     height: 28px;
     background: Theme.surface;
 
+    // Message & Severity Properties (Zone 1: Left)
     in property <string> status-message: "Ready.";
+    in property <int> status-level: 0; // 0 = Info, 1 = Success, 2 = Warning, 3 = Error
+
+    // Metrics Properties (Zone 2: Right)
     in property <string> item-count-str: "Items: 0";
+    in property <int> total-items: 0;
+    in property <int> visible-items: 0;
+    in property <string> total-size-str: "";
+    in property <int> selection-count: 0;
+    in property <string> selection-size-str: "";
 
     // Virtual Folder / Recursive Subfolders View Indicator Properties
     in property <bool> is-virtual-folder: false;
@@ -33,7 +58,7 @@ export component StatusBar inherits Rectangle {
     in property <int> generate-max: 100;
     in property <int> active-workers: 0;
 
-    // Top border separator line
+    // Top border separator line running full width
     Rectangle {
         y: 0px;
         height: 1px;
@@ -41,76 +66,212 @@ export component StatusBar inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 12px;
+        padding-left: 10px;
         padding-right: 12px;
-        spacing: 12px;
-        alignment: center;
+        spacing: 8px;
 
-        // General Status Text
-        Text {
-            text: root.status-message;
-            color: Theme.text;
-            font-size: 11px;
-            vertical-alignment: center;
-            horizontal-stretch: 1;
-            overflow: elide;
-        }
+        // =========================================================================
+        // ZONE 1: LEFT - Messages & Notifications (Strictly left-aligned)
+        // =========================================================================
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 6px;
+            alignment: start;
 
-        // Virtual Recursive Folder Indicator Badge
-        if root.is-virtual-folder : Rectangle {
-            height: 18px;
-            background: #89b4fa22;
-            border-radius: 4px;
-            border-width: 1px;
-            border-color: #89b4fa66;
-
-            HorizontalLayout {
-                padding-left: 6px;
-                padding-right: 6px;
-                spacing: 4px;
+            // Status Level Indicator Icon / Dot
+            VerticalLayout {
                 alignment: center;
+                horizontal-stretch: 0;
 
-                Text {
-                    text: "Recursive: " + root.virtual-folder-count + " folder" + (root.virtual-folder-count == 1 ? "" : "s");
-                    font-size: 10px;
-                    font-weight: 700;
-                    color: Theme.primary;
-                    vertical-alignment: center;
+                Rectangle {
+                    width: 14px;
+                    height: 14px;
+
+                    if root.status-level == 1 : Text {
+                        text: "✓";
+                        font-size: 11px;
+                        font-weight: 700;
+                        color: Theme.status-ok;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    if root.status-level == 2 : Text {
+                        text: "⚠";
+                        font-size: 11px;
+                        font-weight: 700;
+                        color: Theme.accent;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    if root.status-level == 3 : Text {
+                        text: "✖";
+                        font-size: 11px;
+                        font-weight: 700;
+                        color: Theme.status-corrupt;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    if root.status-level == 0 : Rectangle {
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: Theme.primary;
+                        opacity: 0.6;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
                 }
+            }
+
+            // Status Message Text
+            Text {
+                text: root.status-message;
+                color: root.status-level == 3 ? Theme.status-corrupt : (
+                    root.status-level == 2 ? Theme.accent : (
+                        root.status-level == 1 ? Theme.status-ok : Theme.text
+                    )
+                );
+                font-size: 11px;
+                vertical-alignment: center;
+                horizontal-alignment: left;
+                overflow: elide;
             }
         }
 
-        // Dedicated Folder Structure Refresh Progress Indicator
-        if root.is-refreshing-folders : FolderRefreshProgress {
-            is-refreshing: root.is-refreshing-folders;
-            scanned-count: root.folder-scan-count;
+        // =========================================================================
+        // EXPANDER / SPACER (Pushes progress bars & metrics flush to the right)
+        // =========================================================================
+        Rectangle {
+            horizontal-stretch: 1;
+            background: transparent;
         }
 
-        // Dedicated Media Files Discovery & Extraction Progress Indicator
-        if root.is-indexing-media : MediaIndexProgress {
-            is-indexing: root.is-indexing-media;
-            current-val: root.media-index-current;
-            total-val: root.media-index-total;
-        }
+        // =========================================================================
+        // ZONE 2: RIGHT CLUSTER - Dynamic Progress Bars & Status Metrics (Right-aligned)
+        // =========================================================================
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 8px;
+            alignment: end;
 
-        // Modular Thumbnail Pipeline Progress Indicator
-        ThumbnailPipelineProgress {
-            is-preloading: root.is-preloading;
-            preload-current: root.preload-val;
-            preload-total: root.preload-max;
-            is-generating: root.is-generating;
-            generate-current: root.generate-val;
-            generate-total: root.generate-max;
-            active-workers: root.active-workers;
-        }
+            // 1. Dynamic Progress Bars (Right-aligned next to metrics)
+            if root.is-refreshing-folders : VerticalLayout {
+                alignment: center;
+                FolderRefreshProgress {
+                    is-refreshing: root.is-refreshing-folders;
+                    scanned-count: root.folder-scan-count;
+                }
+            }
 
-        // Total Folder Items Metric
-        Text {
-            text: root.item-count-str;
-            color: Theme.primary;
-            font-size: 11px;
-            font-weight: 700;
-            vertical-alignment: center;
+            if root.is-indexing-media : VerticalLayout {
+                alignment: center;
+                MediaIndexProgress {
+                    is-indexing: root.is-indexing-media;
+                    current-val: root.media-index-current;
+                    total-val: root.media-index-total;
+                }
+            }
+
+            if root.is-preloading || root.is-generating : VerticalLayout {
+                alignment: center;
+                ThumbnailPipelineProgress {
+                    is-preloading: root.is-preloading;
+                    preload-current: root.preload-val;
+                    preload-total: root.preload-max;
+                    is-generating: root.is-generating;
+                    generate-current: root.generate-val;
+                    generate-total: root.generate-max;
+                    active-workers: root.active-workers;
+                }
+            }
+
+            // Separator between Progress Bars and Status Metrics
+            if root.is-refreshing-folders || root.is-indexing-media || root.is-preloading || root.is-generating : StatusBarSeparator {}
+
+            // 2. Virtual Recursive Folder Indicator Badge
+            if root.is-virtual-folder : VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    height: 18px;
+                    background: #89b4fa1a;
+                    border-radius: 0px;
+                    border-width: 1px;
+                    border-color: #89b4fa55;
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        spacing: 4px;
+                        alignment: center;
+
+                        Text {
+                            text: "Recursive: " + root.virtual-folder-count + " dir" + (root.virtual-folder-count == 1 ? "" : "s");
+                            font-size: 10px;
+                            font-weight: 700;
+                            color: Theme.primary;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            if root.is-virtual-folder : StatusBarSeparator {}
+
+            // 3. Selection Metric Badge (Only visible when >= 1 files are selected)
+            if root.selection-count > 0 : VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    height: 18px;
+                    background: #cba6f71a;
+                    border-radius: 0px;
+                    border-width: 1px;
+                    border-color: #cba6f766;
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        spacing: 4px;
+                        alignment: center;
+
+                        Text {
+                            text: "Selected: " + root.selection-count + (root.total-items > 0 ? (" of " + root.total-items) : "") + (root.selection-size-str != "" ? (" (" + root.selection-size-str + ")") : "");
+                            font-size: 10.5px;
+                            font-weight: 700;
+                            color: #cba6f7;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            if root.selection-count > 0 : StatusBarSeparator {}
+
+            // 4. Total / Filtered View Items Metric Badge (Far Right)
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    height: 18px;
+                    background: transparent;
+
+                    HorizontalLayout {
+                        padding-left: 2px;
+                        padding-right: 2px;
+                        spacing: 4px;
+                        alignment: center;
+
+                        Text {
+                            text: root.item-count-str + (root.total-size-str != "" && root.selection-count == 0 ? (" (" + root.total-size-str + ")") : "");
+                            color: Theme.primary;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
         }
     }
 }

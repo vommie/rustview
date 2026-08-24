@@ -2,6 +2,7 @@ use super::MainWindow;
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::bridge_folders::{BridgeFolders, FolderTreeNode};
 use super::bridge_state::*;
+use super::bridge_status_bar::StatusBarBridge;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
 use crate::library::dot_hidden::DotHiddenCache;
 use crate::library::models::{FolderId, FolderRecord};
@@ -98,7 +99,6 @@ impl FolderContextMenu {
 
         if !is_root {
             if target_folder.is_deleted {
-                // Orphaned folder: Show "Remove from Database..."
                 builder = builder.action(
                     CTX_FOLDER_PURGE_DB,
                     "Remove from Database...",
@@ -107,7 +107,6 @@ impl FolderContextMenu {
                     true,
                 );
             } else {
-                // Active folder: Show standard "Delete Folder..."
                 builder = builder.action(
                     CTX_FOLDER_DELETE,
                     "Delete Folder...",
@@ -225,12 +224,10 @@ impl FolderContextMenu {
         output: &mut Vec<CtxMenuItem>,
     ) {
         for node in nodes {
-            // Prune: Cannot move folder into itself or into any of its descendants
             if node.record.id == ctx.target_folder_id {
                 continue;
             }
 
-            // Prune: Deleted/missing folders cannot be valid drop/move targets
             if node.record.is_deleted {
                 continue;
             }
@@ -241,7 +238,6 @@ impl FolderContextMenu {
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| node.record.path.clone());
 
-            // Hidden Folder Exclusion (Evaluated purely in-memory via cache)
             if !ctx.show_hidden_folders
                 && ctx
                     .dot_hidden_cache
@@ -299,7 +295,7 @@ impl FolderContextMenu {
             return;
         }
 
-        // 2. Standard Folder Actions (Open in File Manager / Rename / Delete / Purge Orphaned / Refresh Full / Refresh Metadata)
+        // 2. Standard Folder Actions
         if let Some(fid) = target_folder_id
             && let Ok(Some(rec)) = ctx.library.folders().get_folder(fid)
         {
@@ -318,10 +314,11 @@ impl FolderContextMenu {
                         error = %e,
                         "[FolderContextMenu] Failed to open folder in File Manager"
                     );
-                    window.set_status_text(format!("Failed to open File Manager: {}", e).into());
+                    StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
                 } else {
-                    window.set_status_text(
-                        format!("Opened folder '{}' in File Manager.", name).into(),
+                    StatusBarBridge::success(
+                        window,
+                        format!("Opened folder '{}' in File Manager.", name),
                     );
                 }
             } else if action_id == CTX_FOLDER_REFRESH {

@@ -2,6 +2,7 @@ use super::bridge_folder_dialogs::FolderDialogContext;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
+use super::bridge_status_bar::StatusBarBridge;
 use super::{MainWindow, RenameFolderDialog};
 use crate::library::models::FolderId;
 use parking_lot::RwLock;
@@ -66,7 +67,7 @@ impl RenameFolderDialogController {
                 let is_active = self.update_in_memory_state(folder_id, &updated.path, &ctx.state);
 
                 self.close(window);
-                window.set_status_text(format!("Renamed folder to '{}'", new_name).into());
+                StatusBarBridge::success(window, format!("Renamed folder to '{}'", new_name));
 
                 BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
                 if is_active {
@@ -80,6 +81,7 @@ impl RenameFolderDialogController {
                         true,
                     );
                 }
+                StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {
                 tracing::warn!(folder_id = folder_id, error = %e, "Failed to rename folder");

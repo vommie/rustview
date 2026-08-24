@@ -1,6 +1,7 @@
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
+use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
 use super::rubberband_selection::{
@@ -238,6 +239,7 @@ impl BridgeRubberband {
             BridgeFileSelection::sync_selection_diff(window, state, &changed_ids);
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);
+            StatusBarBridge::update_metrics(window, state);
         }
     }
 
@@ -262,6 +264,7 @@ impl BridgeRubberband {
 
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
 
         tracing::info!(
             selected_count = final_count,

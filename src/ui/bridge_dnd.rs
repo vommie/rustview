@@ -5,6 +5,7 @@ use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
+use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::dnd_foldertree_autoscroller::{
     DndFolderTreeAutoScroller, FOLDER_TREE_ROW_HEIGHT_PX, FOLDER_TREE_TOP_OFFSET_PX,
@@ -80,6 +81,7 @@ impl BridgeDnd {
             BridgeFileSelection::sync_selection_diff(params.window, params.state, &changed_selection);
             BridgeInspector::update(params.window, params.state);
             BridgeTags::sync_tag_selection(params.window, params.library, params.state);
+            StatusBarBridge::update_metrics(params.window, params.state);
         }
 
         // Collect all selected items in exact visual sorted order with instant zero-cost thumbnail lookup
@@ -97,7 +99,6 @@ impl BridgeDnd {
                 .map(|m| m.record.filename.clone())
                 .unwrap_or_else(|| format!("Media #{}", params.media_id));
 
-            // Instant zero-cost thumbnail resolution without blocking the main UI thread with PNG compression
             let thumb_path_opt = first_item.and_then(|item| {
                 if matches!(item.record.media_type, MediaType::Image) && item.full_path.exists() {
                     Some(item.full_path.clone())
@@ -145,7 +146,6 @@ impl BridgeDnd {
         params.window.set_drag_y(params.start_y);
         params.window.set_drop_target_folder_id(-1);
 
-        // Start OS-wide click-through floating ghost overlay tracking mouse everywhere with real thumbnail and Catppuccin theme
         let thumb_opt = thumb_path_opt
             .as_deref()
             .or_else(|| ordered_file_paths.first().map(|p| p.as_path()));
@@ -167,7 +167,6 @@ impl BridgeDnd {
         // Update auto-scroll physics and hotzone evaluation
         autoscroller.update_cursor(window, current_x, current_y);
 
-        // If auto-scrolling is not actively shifting content, perform stationary hit-testing
         if !autoscroller.is_active() {
             let sidebar_w = window.get_sidebar_left_width();
             let scroll_y = window.get_folder_tree_scroll_y();
@@ -244,7 +243,7 @@ impl BridgeDnd {
     }
 
     /// Handles drag release: if dropped on an internal folder, opens Choice Popup.
-    /// If dropped outside internal folders (e.g. over VLC, MPV, Chrome, Dolphin, Discord, etc.), executes direct XDND drop transaction.
+    /// If dropped outside internal folders, executes direct XDND drop transaction.
     pub fn handle_drag_ended(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -260,7 +259,6 @@ impl BridgeDnd {
         window.set_is_dragging_media(false);
         window.set_drop_target_folder_id(-1);
 
-        // Immediately dismiss the OS ghost overlay window (0ms latency)
         SystemDndHandler::cancel_ghost_overlay();
 
         if !is_dragging {
@@ -278,7 +276,6 @@ impl BridgeDnd {
                 let selected_count = state.read().file_selection.count();
                 let sidebar_w = window.get_sidebar_left_width();
 
-                // Compute anchor position near the sidebar edge / release point
                 let popup_x = (sidebar_w + 4.0).min(release_x.max(8.0));
                 let popup_y = release_y.max(48.0);
 
@@ -299,7 +296,6 @@ impl BridgeDnd {
                 window.set_is_choice_popup_open(true);
             }
         } else {
-            // Drag released outside internal folder targets -> Execute external Drop into 3rd-party application
             let ordered_paths = state.read().get_selected_paths_ordered();
             if !ordered_paths.is_empty() {
                 tracing::info!(
@@ -311,7 +307,7 @@ impl BridgeDnd {
         }
     }
 
-    /// Orchestrates the batch transfer operation (Copy or Move), sequentially checking conflicts, displaying split-view comparison dialogs, and atomically committing changes.
+    /// Orchestrates the batch transfer operation (Copy or Move).
     pub fn start_batch_transfer(params: BatchTransferParams<'_>) {
         let t_start = Instant::now();
 
@@ -326,7 +322,7 @@ impl BridgeDnd {
                 target_folder = %LogObscurer::folder(Some(params.target_folder_id), &target_folder_path),
                 "[BatchTransfer] Target folder no longer exists on physical storage"
             );
-            params.window.set_status_text("Target folder no longer exists on physical disk.".into());
+            StatusBarBridge::warn(params.window, "Target folder no longer exists on physical disk.");
             return;
         }
 
@@ -335,14 +331,11 @@ impl BridgeDnd {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| target_folder_rec.path.clone());
 
-        // Extract selected IDs in exact visual sorted order
         let ordered_selected_ids = params.state.read().get_selected_ids_ordered();
         if ordered_selected_ids.is_empty() {
             return;
         }
 
-        // For Move: Filter out items already in the target folder
-        // For Copy: Allow copying into target folder even if source is the same folder
         let mut items_to_transfer = Vec::with_capacity(ordered_selected_ids.len());
         {
             let st = params.state.read();
@@ -366,8 +359,9 @@ impl BridgeDnd {
                 total_selected = ordered_selected_ids.len(),
                 "[BatchTransfer] All selected media files already reside in the target directory. No-op."
             );
-            params.window.set_status_text(
-                format!("All selected files are already in '{}'", target_folder_name).into(),
+            StatusBarBridge::info(
+                params.window,
+                format!("All selected files are already in '{}'", target_folder_name),
             );
             return;
         }
@@ -445,7 +439,6 @@ impl BatchTransferRunner {
 
         let media_id = self.items[self.current_index];
 
-        // Check if the record still exists in the library (might have been overwritten by an earlier item in the same batch)
         if self.library.media().get(media_id).ok().flatten().is_none() {
             tracing::info!(
                 media_id = media_id,
@@ -460,7 +453,6 @@ impl BatchTransferRunner {
         self.summary.total_requested += 1;
         let t_step = Instant::now();
 
-        // Check if collision exists in destination folder
         match self.library.file_operations().check_transfer_conflict(
             media_id,
             self.target_folder_id,
@@ -523,7 +515,6 @@ impl BatchTransferRunner {
                 }
             }
             Ok(None) => {
-                // No conflict -> execute direct transfer
                 let exec_res = match self.transfer_kind {
                     FileTransferKind::Move => self.library.file_operations().move_single_media(
                         media_id,
@@ -723,8 +714,6 @@ impl BatchTransferRunner {
     fn finish(self) {
         let elapsed_ms = self.start_time.elapsed().as_millis();
 
-        // For Move: Remove only successfully moved IDs from active file selection
-        // For Copy: Retain selection of source files
         {
             let mut st = self.state.write();
             st.invalidate_folder_tree_cache();
@@ -786,6 +775,7 @@ impl BatchTransferRunner {
             "[Benchmark: BatchTransfer] Complete batch operation finished and committed to LMDB storage"
         );
 
-        self.window.set_status_text(msg.into());
+        StatusBarBridge::success(&self.window, msg);
+        StatusBarBridge::update_metrics(&self.window, &self.state);
     }
 }

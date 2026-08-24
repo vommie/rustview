@@ -5,6 +5,7 @@ pub use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogContr
 pub use super::bridge_inspector::BridgeInspector;
 pub use super::bridge_media::BridgeMedia;
 pub use super::bridge_state::UiState;
+pub use super::bridge_status_bar::StatusBarBridge;
 pub use super::models::format_timestamp;
 pub use super::{FileRenameDialog, MainWindow};
 use crate::library::error::LibraryError;
@@ -133,7 +134,7 @@ impl FileRenameDialogController {
                 Self::update_in_memory_record(&ctx.state, media_id, &updated_record);
                 Self::close(dialog_ref, &ctx.state, window);
 
-                window.set_status_text(format!("Renamed file to '{}'", new_name).into());
+                StatusBarBridge::success(window, format!("Renamed file to '{}'", new_name));
                 BridgeInspector::update(window, &ctx.state);
                 BridgeMedia::reload(
                     window,
@@ -144,6 +145,7 @@ impl FileRenameDialogController {
                     false,
                     false,
                 );
+                StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(LibraryError::Io(io_err)) if io_err.kind() == std::io::ErrorKind::NotFound => {
                 Self::close(dialog_ref, &ctx.state, window);

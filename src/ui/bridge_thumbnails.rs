@@ -1,5 +1,6 @@
 use super::MainWindow;
 use super::bridge_state::UiState;
+use super::bridge_status_bar::StatusBarBridge;
 use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms};
 use crate::media::MediaType;
 use crate::telemetry::BenchmarkReportFormatter;
@@ -46,7 +47,6 @@ impl BridgeThumbnails {
                     let visible_count = media_model.row_count();
 
                     for item_data in batch {
-                        // Accept items if query is active, virtual recursive view is active, or folder matches exactly
                         let is_folder_match = st.is_query_active
                             || st.is_virtual_folder_mode
                             || st.current_folder_id == Some(item_data.folder_id);
@@ -145,14 +145,7 @@ impl BridgeThumbnails {
                 }
 
                 let progress = thumb_ref.progress();
-                window.set_is_preloading(progress.is_preloading);
-                window.set_preload_current(progress.preload_current as i32);
-                window.set_preload_total(progress.preload_total as i32);
-
-                window.set_is_generating(progress.is_generating);
-                window.set_generate_current(progress.generate_current as i32);
-                window.set_generate_total(progress.generate_total as i32);
-                window.set_active_workers(progress.active_workers as i32);
+                StatusBarBridge::update_thumbnail_progress(&window, &progress);
 
                 if let Some(bench) = thumb_ref.active_benchmark() {
                     let total_targets = bench.total_targets.load(Ordering::Acquire);
