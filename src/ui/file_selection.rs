@@ -123,6 +123,11 @@ impl FileSelectionModel {
         self.selected_ids = new_set;
     }
 
+    /// Sets the selection to an exact set of media IDs.
+    pub fn set_selection(&mut self, ids: HashSet<MediaId>) {
+        self.selected_ids = ids;
+    }
+
     /// Clears the entire file selection state.
     pub fn clear(&mut self) {
         self.selected_ids.clear();

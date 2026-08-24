@@ -24,6 +24,7 @@ pub mod bridge_folder_dialogs;
 pub mod bridge_folders;
 pub mod bridge_inspector;
 pub mod bridge_media;
+pub mod bridge_rubberband;
 pub mod bridge_state;
 pub mod bridge_tag_dialogs;
 pub mod bridge_tags;
@@ -34,6 +35,7 @@ pub mod favorites;
 pub mod file_selection;
 pub mod icons;
 pub mod models;
+pub mod rubberband_selection;
 pub mod video_preview_animator;
 
 pub use bridge::UiBridge;
@@ -54,6 +56,7 @@ pub use bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
 pub use bridge_folder_dialog_remove_orphaned::RemoveOrphanedFolderDialogController;
 pub use bridge_folder_dialog_rename::RenameFolderDialogController;
 pub use bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
+pub use bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
 pub use bridge_state::*;
 pub use bridge_tag_dialogs::TagDialogController;
 pub use dnd_foldertree_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
@@ -61,4 +64,8 @@ pub use fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, Fallbac
 pub use favorites::FavoriteManager;
 pub use file_selection::{FileSelectionModel, FileSelectionSummary};
 pub use icons::{IconAsset, IconManager, IconMetadata};
+pub use rubberband_selection::{
+    GridLayoutConfig, RectF32, RubberbandAutoScroller, RubberbandGeometry, RubberbandSession,
+    RubberbandStartParams, TableLayoutConfig,
+};
 pub use video_preview_animator::{VideoPreviewAnimator, DEFAULT_PREVIEW_INTERVAL_MS};

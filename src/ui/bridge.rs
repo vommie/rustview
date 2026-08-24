@@ -10,12 +10,14 @@ use super::bridge_folder_dialogs::FolderDialogController;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
+use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
 use super::bridge_state::*;
 use super::bridge_tag_dialogs::TagDialogController;
 use super::bridge_tags::BridgeTags;
 use super::bridge_thumbnails::BridgeThumbnails;
 use super::dnd_foldertree_autoscroller::DndFolderTreeAutoScroller;
 use super::favorites::FavoriteManager;
+use super::rubberband_selection::RubberbandAutoScroller;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
 use crate::library::models::{FileTransferKind, FolderId, MediaId, TagId};
@@ -47,6 +49,7 @@ pub struct UiBridge {
     remove_orphaned_dialog: RemoveOrphanedFileDialogController,
     conflict_dialog: FileOpsConflictDialogController,
     dnd_foldertree_autoscroller: DndFolderTreeAutoScroller,
+    rubberband_autoscroller: RubberbandAutoScroller,
     tag_dialogs: TagDialogController,
     folder_dialogs: FolderDialogController,
     favorites: Arc<RwLock<FavoriteManager>>,
@@ -75,6 +78,7 @@ impl UiBridge {
         let remove_orphaned_dialog = RemoveOrphanedFileDialogController::new();
         let conflict_dialog = FileOpsConflictDialogController::new();
         let dnd_foldertree_autoscroller = DndFolderTreeAutoScroller::new();
+        let rubberband_autoscroller = RubberbandAutoScroller::new();
         let tag_dialogs = TagDialogController::new();
         let folder_dialogs = FolderDialogController::new();
 
@@ -175,6 +179,7 @@ impl UiBridge {
             remove_orphaned_dialog,
             conflict_dialog,
             dnd_foldertree_autoscroller,
+            rubberband_autoscroller,
             tag_dialogs,
             folder_dialogs,
             favorites,
@@ -336,7 +341,52 @@ impl UiBridge {
         );
 
         self.register_dnd_callbacks();
+        self.register_rubberband_callbacks();
         self.register_sidebar_resize_callbacks();
+    }
+
+    fn register_rubberband_callbacks(&self) {
+        let win_start = self.window.clone_strong();
+        let st_start = self.state.clone();
+        let scroller_start = self.rubberband_autoscroller.clone();
+        self.window.on_rubberband_started(move |cx, cy, vx, vy, ctrl, shift| {
+            BridgeRubberband::handle_started(RubberbandDragStartParams {
+                start_content_x: cx,
+                start_content_y: cy,
+                view_x: vx,
+                view_y: vy,
+                is_ctrl: ctrl,
+                is_shift: shift,
+                window: &win_start,
+                state: &st_start,
+                autoscroller: &scroller_start,
+            });
+        });
+
+        let win_move = self.window.clone_strong();
+        let lib_move = self.library.clone();
+        let st_move = self.state.clone();
+        let scroller_move = self.rubberband_autoscroller.clone();
+        self.window.on_rubberband_moved(move |cx, cy, vx, vy| {
+            BridgeRubberband::handle_moved(RubberbandDragMoveParams {
+                content_x: cx,
+                content_y: cy,
+                view_x: vx,
+                view_y: vy,
+                window: &win_move,
+                library: &lib_move,
+                state: &st_move,
+                autoscroller: &scroller_move,
+            });
+        });
+
+        let win_end = self.window.clone_strong();
+        let lib_end = self.library.clone();
+        let st_end = self.state.clone();
+        let scroller_end = self.rubberband_autoscroller.clone();
+        self.window.on_rubberband_ended(move || {
+            BridgeRubberband::handle_ended(&win_end, &lib_end, &st_end, &scroller_end);
+        });
     }
 
     fn register_dnd_callbacks(&self) {

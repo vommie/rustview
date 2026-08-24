@@ -8,6 +8,7 @@ use crate::system::DesktopApp;
 use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
 use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
+use crate::ui::rubberband_selection::RubberbandSession;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -133,6 +134,7 @@ pub struct UiState {
     pub folder_thumbnails: LruThumbnailStore,
     pub active_indices: Vec<usize>,
     pub file_selection: FileSelectionModel,
+    pub rubberband_session: RubberbandSession,
     pub media_row_map: HashMap<MediaId, usize>,
     pub filter: QueryFilter,
     pub last_executed_query: String,
@@ -184,6 +186,7 @@ impl Default for UiState {
             folder_thumbnails: LruThumbnailStore::default(),
             active_indices: Vec::new(),
             file_selection: FileSelectionModel::new(),
+            rubberband_session: RubberbandSession::default(),
             media_row_map: HashMap::new(),
             filter: QueryFilter::default(),
             last_executed_query: String::new(),
@@ -218,27 +221,20 @@ impl Default for UiState {
 
 impl UiState {
     /// Returns selected media items in the exact visual sorted order of the active view (top-to-bottom).
+    /// Strictly filters out non-visible items: if no items are displayed, returns an empty vector.
     pub fn get_selected_media_ordered(&self) -> Vec<&IndexedMediaRecord> {
         let selected_ids = self.file_selection.selected_ids();
-        if selected_ids.is_empty() {
+        if selected_ids.is_empty() || self.active_indices.is_empty() {
             return Vec::new();
         }
 
         let mut ordered = Vec::with_capacity(selected_ids.len());
 
-        if !self.active_indices.is_empty() {
-            for &idx in &self.active_indices {
-                if let Some(item) = self.all_folder_media.get(idx)
-                    && selected_ids.contains(&item.record.id)
-                {
-                    ordered.push(item);
-                }
-            }
-        } else {
-            for item in &self.all_folder_media {
-                if selected_ids.contains(&item.record.id) {
-                    ordered.push(item);
-                }
+        for &idx in &self.active_indices {
+            if let Some(item) = self.all_folder_media.get(idx)
+                && selected_ids.contains(&item.record.id)
+            {
+                ordered.push(item);
             }
         }
 

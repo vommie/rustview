@@ -18,7 +18,7 @@ impl BridgeInspector {
         let selected_ids = st.file_selection.selected_ids();
         let sel_count = selected_ids.len();
 
-        if sel_count == 0 {
+        if sel_count == 0 || st.active_indices.is_empty() {
             Self::render_empty(window);
             return;
         }
@@ -30,25 +30,28 @@ impl BridgeInspector {
                 .media_row_map
                 .get(&single_id)
                 .and_then(|&row_idx| st.active_indices.get(row_idx))
-                .and_then(|&orig_idx| st.all_folder_media.get(orig_idx))
-                .or_else(|| {
-                    st.all_folder_media
-                        .iter()
-                        .find(|m| m.record.id == single_id)
-                });
+                .and_then(|&orig_idx| st.all_folder_media.get(orig_idx));
 
             if let Some(item) = item_opt {
                 Self::render_single(window, item);
+            } else {
+                Self::render_empty(window);
             }
             return;
         }
 
-        // Multi-selection path: Zero-copy iterator aggregation
+        // Multi-selection path: Zero-copy iterator aggregation over visible items only
         let selected_items: Vec<&IndexedMediaRecord> = st
-            .all_folder_media
+            .active_indices
             .iter()
+            .filter_map(|&idx| st.all_folder_media.get(idx))
             .filter(|m| selected_ids.contains(&m.record.id))
             .collect();
+
+        if selected_items.is_empty() {
+            Self::render_empty(window);
+            return;
+        }
 
         let summary = FileSelectionSummary::from_indexed_records(selected_items.iter().copied());
         Self::render_multiple(

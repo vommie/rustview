@@ -72,6 +72,7 @@ export component MainWindow inherits Window {
     // Viewport windowing properties
     in-out property <int> visible-start-index: 0;
     in-out property <int> total-items-count: 0;
+    out property <int> grid-columns: grid-view.columns;
 
     // Drag and Drop State Properties
     in-out property <bool> is-dragging-media: false;
@@ -82,6 +83,13 @@ export component MainWindow inherits Window {
     in-out property <length> drag-y: 0px;
     in-out property <int> drop-target-folder-id: -1;
     out property <length> folder-tree-scroll-y: sidebar_left.folder-tree-scroll-y;
+
+    // Rubberband Area Selection State Properties
+    in-out property <bool> rubberband-active: false;
+    in-out property <length> rubberband-x: 0px;
+    in-out property <length> rubberband-y: 0px;
+    in-out property <length> rubberband-width: 0px;
+    in-out property <length> rubberband-height: 0px;
 
     // Floating Choice Popup State Properties
     in-out property <bool> is-choice-popup-open: false;
@@ -197,6 +205,11 @@ export component MainWindow inherits Window {
     callback folder-row-unhovered(int /* folder_id */);
     callback media-dropped-on-folder(int /* target_folder_id */);
 
+    // Rubberband selection callbacks
+    callback rubberband-started(length /* start_content_x */, length /* start_content_y */, length /* view_x */, length /* view_y */, bool /* ctrl */, bool /* shift */);
+    callback rubberband-moved(length /* content_x */, length /* content_y */, length /* view_x */, length /* view_y */);
+    callback rubberband-ended();
+
     callback choice-popup-copy(int /* target_folder_id */);
     callback choice-popup-move(int /* target_folder_id */);
     callback choice-popup-cancel();
@@ -239,6 +252,22 @@ export component MainWindow inherits Window {
 
     public function scroll-folder-to-row(row-idx: int) {
         sidebar_left.scroll-folder-to-row(row-idx);
+    }
+
+    public function scroll-media-by(dy: length) {
+        if !root.is-table-view {
+            grid-view.scroll-by(dy);
+        } else {
+            table-view.scroll-by(dy);
+        }
+    }
+
+    pure public function get-media-viewport-y() -> length {
+        if !root.is-table-view {
+            return grid-view.get-viewport-y();
+        } else {
+            return table-view.get-viewport-y();
+        }
     }
 
     public function scroll-media-to-top() {
@@ -355,6 +384,13 @@ export component MainWindow inherits Window {
                         grid-item-corner-radius: root.grid-item-corner-radius;
                         sort-column: root.sort-column-idx;
                         sort-order: root.sort-order-idx;
+
+                        rubberband-active: root.rubberband-active && !root.is-table-view;
+                        rubberband-x: root.rubberband-x;
+                        rubberband-y: root.rubberband-y;
+                        rubberband-width: root.rubberband-width;
+                        rubberband-height: root.rubberband-height;
+
                         visible-chunk-changed(first, last, tot) => {
                             root.visible-chunk-changed(first, last, tot);
                         }
@@ -366,6 +402,16 @@ export component MainWindow inherits Window {
                         item-drag-started(id, x, y) => { root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-ended => { root.media-drag-ended(); }
+
+                        rubberband-started(cx, cy, vx, vy, ctrl, shift) => {
+                            root.rubberband-started(cx, cy, vx, vy, ctrl, shift);
+                        }
+                        rubberband-moved(cx, cy, vx, vy) => {
+                            root.rubberband-moved(cx, cy, vx, vy);
+                        }
+                        rubberband-ended => {
+                            root.rubberband-ended();
+                        }
                     }
 
                     table-view := MediaTableView {
@@ -375,6 +421,12 @@ export component MainWindow inherits Window {
                         total-items-count: root.total-items-count;
                         sort-column: root.sort-column-idx;
                         sort-order: root.sort-order-idx;
+
+                        rubberband-active: root.rubberband-active && root.is-table-view;
+                        rubberband-x: root.rubberband-x;
+                        rubberband-y: root.rubberband-y;
+                        rubberband-width: root.rubberband-width;
+                        rubberband-height: root.rubberband-height;
 
                         col-filename-width <=> root.col-filename-width;
                         col-path-width <=> root.col-path-width;
@@ -402,6 +454,16 @@ export component MainWindow inherits Window {
                         item-drag-started(id, x, y) => { root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-ended => { root.media-drag-ended(); }
+
+                        rubberband-started(cx, cy, vx, vy, ctrl, shift) => {
+                            root.rubberband-started(cx, cy, vx, vy, ctrl, shift);
+                        }
+                        rubberband-moved(cx, cy, vx, vy) => {
+                            root.rubberband-moved(cx, cy, vx, vy);
+                        }
+                        rubberband-ended => {
+                            root.rubberband-ended();
+                        }
                     }
 
                     // Centered Context-Sensitive Fallback Empty State Overlay

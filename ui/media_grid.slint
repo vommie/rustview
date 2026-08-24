@@ -3,6 +3,7 @@ import { Icons, AppIcon } from "icons.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
+import { RubberbandOverlay } from "rubberband_selection.slint";
 
 export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
@@ -258,6 +259,13 @@ export component VirtualizedMediaGrid inherits Rectangle {
     in property <int> grid-item-border-width: 1;
     in property <int> grid-item-corner-radius: 4;
 
+    // Rubberband selection state properties
+    in property <bool> rubberband-active: false;
+    in property <length> rubberband-x: 0px;
+    in property <length> rubberband-y: 0px;
+    in property <length> rubberband-width: 0px;
+    in property <length> rubberband-height: 0px;
+
     property <length> grid-padding: root.grid-padding-val * 1px;
     property <length> grid-spacing: root.grid-spacing-val * 1px;
     property <length> item-padding-h: root.grid-item-padding-h * 1px;
@@ -295,6 +303,11 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-drag-moved(length /* x */, length /* y */);
     callback item-drag-ended();
 
+    // Rubberband selection callbacks
+    callback rubberband-started(length /* start_content_x */, length /* start_content_y */, length /* view_x */, length /* view_y */, bool /* ctrl */, bool /* shift */);
+    callback rubberband-moved(length /* content_x */, length /* content_y */, length /* view_x */, length /* view_y */);
+    callback rubberband-ended();
+
     public function scroll-to-top() {
         scroll-area.scroll-to-top();
     }
@@ -305,6 +318,14 @@ export component VirtualizedMediaGrid inherits Rectangle {
             let target-y = -(target-row * root.row-stride);
             scroll-area.viewport-y = target-y;
         }
+    }
+
+    public function scroll-by(dy: length) {
+        scroll-area.handle-scroll(0px, dy);
+    }
+
+    pure public function get-viewport-y() -> length {
+        return scroll-area.clamped-y;
     }
 
     pure public function get-top-visible-index() -> int {
@@ -351,13 +372,65 @@ export component VirtualizedMediaGrid inherits Rectangle {
             bg-touch := TouchArea {
                 width: 100%;
                 height: 100%;
+
+                property <length> press-x: 0px;
+                property <length> press-y: 0px;
+                property <bool> is-rubberband-active: false;
+                property <bool> press-ctrl: false;
+                property <bool> press-shift: false;
+
                 scroll-event(event) => {
                     scroll-area.handle-scroll(event.delta-x, event.delta-y);
                     return accept;
                 }
+
                 pointer-event(event) => {
                     if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                        root.background-clicked();
+                        self.press-x = self.mouse-x;
+                        self.press-y = self.mouse-y;
+                        self.is-rubberband-active = false;
+                        self.press-ctrl = event.modifiers.control || event.modifiers.meta;
+                        self.press-shift = event.modifiers.shift;
+                    }
+                    if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                        if self.is-rubberband-active {
+                            self.is-rubberband-active = false;
+                            root.rubberband-ended();
+                        } else {
+                            root.background-clicked();
+                        }
+                    }
+                }
+
+                moved => {
+                    if self.pressed {
+                        let dx = self.mouse-x - self.press-x;
+                        let dy = self.mouse-y - self.press-y;
+                        let dist-sq = (dx * dx) + (dy * dy);
+
+                        if !self.is-rubberband-active && dist-sq > 16px * 1px {
+                            self.is-rubberband-active = true;
+                            let start-content-x = self.press-x;
+                            let start-content-y = self.press-y;
+                            let start-view-x = self.press-x;
+                            let start-view-y = self.press-y + scroll-area.clamped-y;
+                            root.rubberband-started(
+                                start-content-x,
+                                start-content-y,
+                                start-view-x,
+                                start-view-y,
+                                self.press-ctrl,
+                                self.press-shift
+                            );
+                        }
+
+                        if self.is-rubberband-active {
+                            let cur-content-x = self.mouse-x;
+                            let cur-content-y = self.mouse-y;
+                            let cur-view-x = self.mouse-x;
+                            let cur-view-y = self.mouse-y + scroll-area.clamped-y;
+                            root.rubberband-moved(cur-content-x, cur-content-y, cur-view-x, cur-view-y);
+                        }
                     }
                 }
             }
@@ -412,6 +485,15 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     drag-ended => {
                         root.item-drag-ended();
                     }
+                }
+
+                // Visual Rubberband Selection Rectangle (in Content Space)
+                RubberbandOverlay {
+                    is-active: root.rubberband-active;
+                    rect-x: root.rubberband-x;
+                    rect-y: root.rubberband-y;
+                    rect-width: root.rubberband-width;
+                    rect-height: root.rubberband-height;
                 }
             }
         }

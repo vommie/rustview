@@ -77,7 +77,7 @@ impl BridgeFileSelection {
             return;
         }
 
-        // 2. Selection Mutation Math (Lazy visible_ids computation)
+        // 2. Selection Mutation Math (Strictly scoped to active visible items)
         let (changed_ids, sel_count) = Self::mutate_selection(event, state);
         let t_math = t_start.elapsed();
 
@@ -133,18 +133,12 @@ impl BridgeFileSelection {
         let prev_selected = st.file_selection.selected_ids().clone();
 
         if event.is_shift {
-            let visible_ids: Vec<MediaId> = if !st.active_indices.is_empty() {
-                st.active_indices
-                    .iter()
-                    .filter_map(|&idx| st.all_folder_media.get(idx))
-                    .map(|item| item.record.id)
-                    .collect()
-            } else {
-                st.all_folder_media
-                    .iter()
-                    .map(|item| item.record.id)
-                    .collect()
-            };
+            let visible_ids: Vec<MediaId> = st
+                .active_indices
+                .iter()
+                .filter_map(|&idx| st.all_folder_media.get(idx))
+                .map(|item| item.record.id)
+                .collect();
 
             let additive = event.is_ctrl;
             st.file_selection
@@ -200,15 +194,12 @@ impl BridgeFileSelection {
         let changed_ids = {
             let mut st = state.write();
             let prev_selected = st.file_selection.selected_ids().clone();
-            let visible_ids: Vec<MediaId> = if !st.active_indices.is_empty() {
-                st.active_indices
-                    .iter()
-                    .filter_map(|&idx| st.all_folder_media.get(idx))
-                    .map(|m| m.record.id)
-                    .collect()
-            } else {
-                st.all_folder_media.iter().map(|m| m.record.id).collect()
-            };
+            let visible_ids: Vec<MediaId> = st
+                .active_indices
+                .iter()
+                .filter_map(|&idx| st.all_folder_media.get(idx))
+                .map(|m| m.record.id)
+                .collect();
             st.file_selection.select_all(&visible_ids);
             let newly_selected = st.file_selection.selected_ids();
             FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected)

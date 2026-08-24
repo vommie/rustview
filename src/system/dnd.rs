@@ -89,7 +89,7 @@ impl SystemDndHandler {
             .join("\n")
     }
 
-    /// Starts the standalone, click-through OS-wide floating ghost window styled with RustView's theme palette and real thumbnail image support.
+    /// Starts the standalone, click-through OS-wide floating ghost window styled with RustView's theme palette and instant cursor tracking.
     pub fn start_ghost_overlay(title: &str, count: usize, thumb_path: Option<&Path>) {
         Self::cancel_ghost_overlay();
 
@@ -124,6 +124,7 @@ try:
             self.set_keep_above(True)
             self.set_skip_taskbar_hint(True)
             self.set_skip_pager_hint(True)
+            self.set_type_hint(Gdk.WindowTypeHint.DND)
 
             # Enable 32-bit RGBA visual for true anti-aliased rounded transparency
             screen = self.get_screen()
@@ -198,6 +199,9 @@ try:
             self.add(box)
             self.connect("draw", self.on_draw)
             self.connect("realize", self.on_realize)
+
+            # CRUCIAL: Position window at exact cursor position BEFORE mapping/showing to avoid (0, 0) flash
+            self.track_pointer()
             self.show_all()
 
             # 60 FPS smooth cursor tracking
@@ -238,6 +242,7 @@ try:
                 # Make window 100% click-through so it never intercepts drops underneath it
                 empty_region = cairo.Region()
                 window.input_shape_combine_region(empty_region, 0, 0)
+            self.track_pointer()
 
         def track_pointer(self):
             display = Gdk.Display.get_default()
@@ -265,9 +270,10 @@ try:
 
     app = QApplication.instance() or QApplication(['rustview-ghost'])
     w = QWidget()
-    w.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool | Qt.WindowType.SubWindow)
+    w.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowTransparentForInput | Qt.WindowType.WindowDoesNotAcceptFocus)
     w.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    w.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
     w.setStyleSheet("""
         QWidget#GhostBox {
             background-color: rgba(30, 30, 46, 245);
@@ -320,11 +326,13 @@ try:
         pos = QCursor.pos()
         w.move(pos.x() + 12, pos.y() + 12)
 
+    # Move to initial position BEFORE showing
+    update_pos()
+    w.show()
+
     timer = QTimer()
     timer.timeout.connect(update_pos)
     timer.start(16)
-    update_pos()
-    w.show()
 
     QTimer.single_shot(60000, app.quit)
     app.exec()

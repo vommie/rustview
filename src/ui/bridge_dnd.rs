@@ -9,7 +9,6 @@ use super::bridge_tags::BridgeTags;
 use super::dnd_foldertree_autoscroller::{
     DndFolderTreeAutoScroller, FOLDER_TREE_ROW_HEIGHT_PX, FOLDER_TREE_TOP_OFFSET_PX,
 };
-use super::models::rgb8_to_slint_image;
 use super::MainWindow;
 use crate::library::error::LibraryError;
 use crate::library::file_operations::FileOperations;
@@ -18,9 +17,10 @@ use crate::library::models::{
     MediaId,
 };
 use crate::library::Library;
+use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::system::SystemDndHandler;
-use crate::thumbnails::{ThumbnailConfig, ThumbnailManager};
+use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, Model, Timer};
 use std::cell::RefCell;
@@ -82,8 +82,8 @@ impl BridgeDnd {
             BridgeTags::sync_tag_selection(params.window, params.library, params.state);
         }
 
-        // Collect all selected items in exact visual sorted order (top-to-bottom)
-        let (drag_count, title, thumbnail_img, ordered_file_paths, temp_thumb_path) = {
+        // Collect all selected items in exact visual sorted order with instant zero-cost thumbnail lookup
+        let (drag_count, title, thumbnail_img, ordered_file_paths, thumb_path_opt) = {
             let st = params.state.read();
             let ordered_selected = st.get_selected_media_ordered();
             let count = ordered_selected.len();
@@ -97,32 +97,19 @@ impl BridgeDnd {
                 .map(|m| m.record.filename.clone())
                 .unwrap_or_else(|| format!("Media #{}", params.media_id));
 
-            let (thumb, temp_thumb) = if let Some(buf) = st.folder_thumbnails.get(&params.media_id) {
-                let w = buf.width();
-                let h = buf.height();
-                let bytes = buf.as_bytes();
-                let tmp_p = std::env::temp_dir().join("rustview_dnd_ghost_thumb.png");
-                if let Ok(mut f) = std::fs::File::create(&tmp_p) {
-                    let encoder = image::codecs::png::PngEncoder::new_with_quality(
-                        &mut f,
-                        image::codecs::png::CompressionType::Fast,
-                        image::codecs::png::FilterType::NoFilter,
-                    );
-                    let _ = image::ImageEncoder::write_image(
-                        encoder,
-                        bytes,
-                        w,
-                        h,
-                        image::ExtendedColorType::Rgb8,
-                    );
+            // Instant zero-cost thumbnail resolution without blocking the main UI thread with PNG compression
+            let thumb_path_opt = first_item.and_then(|item| {
+                if matches!(item.record.media_type, MediaType::Image) && item.full_path.exists() {
+                    Some(item.full_path.clone())
+                } else {
+                    None
                 }
-                (Image::from_rgb8(buf.clone()), Some(tmp_p))
-            } else if let Some(item) = first_item
-                && let Ok(cached) = params.thumbnails.get_or_load_sync(params.media_id, &item.full_path, ThumbnailConfig::default())
-            {
-                (rgb8_to_slint_image(&cached.pixels, cached.width, cached.height), None)
+            });
+
+            let thumb = if let Some(buf) = st.folder_thumbnails.get(&params.media_id) {
+                Image::from_rgb8(buf.clone())
             } else {
-                (Image::default(), None)
+                Image::default()
             };
 
             let title_text = if count > 1 {
@@ -138,7 +125,7 @@ impl BridgeDnd {
                 paths.push(p);
             }
 
-            (count, title_text, thumb, paths, temp_thumb)
+            (count, title_text, thumb, paths, thumb_path_opt)
         };
 
         tracing::info!(
@@ -159,7 +146,7 @@ impl BridgeDnd {
         params.window.set_drop_target_folder_id(-1);
 
         // Start OS-wide click-through floating ghost overlay tracking mouse everywhere with real thumbnail and Catppuccin theme
-        let thumb_opt = temp_thumb_path
+        let thumb_opt = thumb_path_opt
             .as_deref()
             .or_else(|| ordered_file_paths.first().map(|p| p.as_path()));
         SystemDndHandler::start_ghost_overlay(&title, drag_count, thumb_opt);
