@@ -25,10 +25,14 @@ use slint::{ComponentHandle, Image, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+
+thread_local! {
+    static ACTIVE_PREVIEW_TIMER: RefCell<Option<Timer>> = const { RefCell::new(None) };
+    static ACTIVE_HOVER_MEDIA_ID: RefCell<Option<u64>> = const { RefCell::new(None) };
+}
 
 /// Parameter configuration for reloading and slicing the media dataset.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -185,30 +189,106 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 6. Hover Video Preview Animation Callback
+        // 6. Hover Video & Animated GIF Preview Animation Callback
         let win = window.clone_strong();
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
-        let preview_anim_timer = Rc::new(RefCell::new(Option::<Timer>::None));
 
         let win_hover = win.clone_strong();
-        let timer_clone = preview_anim_timer;
         window.on_media_hover_changed(move |id, is_hover| {
             let media_id = id as u64;
             if !set.get().appearance.enable_hover_previews {
                 return;
             }
 
-            let mut timer_guard = timer_clone.borrow_mut();
-            *timer_guard = None;
-
             if is_hover {
-                if let Some(images) = VideoPreviewAnimator::load_preview_images(&thumb, media_id) {
-                    let win_w = win_hover.as_weak();
-                    let st_c = st.clone();
+                ACTIVE_HOVER_MEDIA_ID.with(|active_id| *active_id.borrow_mut() = Some(media_id));
+                ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
 
-                    *timer_guard = VideoPreviewAnimator::start_animation(images, move |img| {
+                let (format, full_path_opt) = {
+                    let st_r = st.read();
+                    if let Some(item) = st_r.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                        (item.record.format, Some(item.full_path.clone()))
+                    } else {
+                        (MediaFormat::Unknown, None)
+                    }
+                };
+
+                let win_w = win_hover.as_weak();
+                let st_c = st.clone();
+
+                // Mode A: Animated GIF Hover Playback with faithful frame delays
+                if format == MediaFormat::Gif && let Some(file_path) = full_path_opt {
+                    if let Some(preview) = thumb.try_get_animated_preview(media_id) {
+                        let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
+                        let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                            if let Some(w) = win_w.upgrade() {
+                                let media_model = w.get_media_items();
+                                let start_window = w.get_visible_start_index() as usize;
+                                let visible_count = media_model.row_count();
+                                let st_r = st_c.read();
+
+                                if let Some(&global_row_idx) = st_r.media_row_map.get(&media_id)
+                                    && global_row_idx >= start_window
+                                    && global_row_idx < start_window + visible_count
+                                {
+                                    let local_idx = global_row_idx - start_window;
+                                    if let Some(mut item) = media_model.row_data(local_idx)
+                                        && item.id == media_id as i32
+                                    {
+                                        item.thumbnail = img;
+                                        media_model.set_row_data(local_idx, item);
+                                    }
+                                }
+                            }
+                        });
+                        ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
+                    } else {
+                        let config = ThumbnailConfig::from_performance_settings(&set.get().performance);
+                        let win_w_async = win_hover.as_weak();
+                        let st_async = st.clone();
+
+                        thumb.get_or_load_animated_preview_async(
+                            media_id,
+                            file_path,
+                            config,
+                            move |res| {
+                                if let Ok(preview) = res {
+                                    let _ = win_w_async.upgrade_in_event_loop(move |w| {
+                                        let is_still_hovered = ACTIVE_HOVER_MEDIA_ID.with(|id| *id.borrow() == Some(media_id));
+                                        if is_still_hovered {
+                                            let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
+                                            let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                                                let media_model = w.get_media_items();
+                                                let start_window = w.get_visible_start_index() as usize;
+                                                let visible_count = media_model.row_count();
+                                                let st_r = st_async.read();
+
+                                                if let Some(&global_row_idx) = st_r.media_row_map.get(&media_id)
+                                                    && global_row_idx >= start_window
+                                                    && global_row_idx < start_window + visible_count
+                                                {
+                                                    let local_idx = global_row_idx - start_window;
+                                                    if let Some(mut item) = media_model.row_data(local_idx)
+                                                        && item.id == media_id as i32
+                                                    {
+                                                        item.thumbnail = img;
+                                                        media_model.set_row_data(local_idx, item);
+                                                    }
+                                                }
+                                            });
+                                            ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
+                                        }
+                                    });
+                                }
+                            },
+                        );
+                    }
+                }
+                // Mode B: Video Hover Keyframe Animation
+                else if let Some(images) = VideoPreviewAnimator::load_preview_images(&thumb, media_id) {
+                    let timer = VideoPreviewAnimator::start_animation(images, move |img| {
                         if let Some(w) = win_w.upgrade() {
                             let media_model = w.get_media_items();
                             let start_window = w.get_visible_start_index() as usize;
@@ -229,8 +309,13 @@ impl BridgeMedia {
                             }
                         }
                     });
+                    ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                 }
             } else {
+                ACTIVE_HOVER_MEDIA_ID.with(|active_id| *active_id.borrow_mut() = None);
+                ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
+
+                // Restore static thumbnail immediately on mouse leave
                 let media_model = win_hover.get_media_items();
                 let start_window = win_hover.get_visible_start_index() as usize;
                 let visible_count = media_model.row_count();
@@ -1893,6 +1978,7 @@ impl BridgeMedia {
         let slice_len = end_window.saturating_sub(start_window);
 
         let mut slice_views = Vec::with_capacity(slice_len);
+        let mut newly_discovered_thumbnails = Vec::new();
 
         for &item in &sorted_refs[start_window..end_window] {
             let is_selected = st.file_selection.is_selected(item.record.id);
@@ -1902,6 +1988,7 @@ impl BridgeMedia {
             } else if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
                 Image::from_rgb8(buf.clone())
             } else if let Some(buf) = thumbnails.try_load_existing(item.record.id) {
+                newly_discovered_thumbnails.push((item.record.id, buf.clone()));
                 Image::from_rgb8(buf)
             } else {
                 Image::default()
@@ -1943,6 +2030,10 @@ impl BridgeMedia {
         let mut selection_pruned = false;
         {
             let mut st_write = state.write();
+
+            for (id, buf) in newly_discovered_thumbnails {
+                st_write.folder_thumbnails.insert(id, buf);
+            }
 
             let prev_sel_count = st_write.file_selection.count();
             if prev_sel_count > 0 {

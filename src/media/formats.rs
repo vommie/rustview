@@ -84,6 +84,12 @@ impl MediaFormat {
         }
     }
 
+    /// Returns true if this format supports multi-frame animations (e.g. animated GIFs).
+    #[inline]
+    pub fn is_animated(&self) -> bool {
+        matches!(self, Self::Gif)
+    }
+
     /// Returns the recommended default file extension for this format in lowercase.
     pub fn default_extension(&self) -> &'static str {
         match self {

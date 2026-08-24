@@ -1,9 +1,16 @@
+use image::codecs::gif::GifEncoder;
+use image::{Delay, Frame, Rgba, RgbaImage};
 use rustview::library::Library;
 use rustview::settings::PerformanceSettings;
 use rustview::thumbnails::{
-    calculate_aspect_dimensions, PreparedTarget, ScalingAlgorithm, ThumbnailConfig,
-    ThumbnailFormat, ThumbnailGenerator, ThumbnailManager, VideoThumbnailEngine,
+    calculate_aspect_dimensions, GifThumbnailer, L1AnimatedPreviewCache, PreparedTarget,
+    ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailGenerator, ThumbnailManager,
+    VideoThumbnailEngine,
 };
+use rustview::ui::video_preview_animator::{TimedFrame, VideoPreviewAnimator};
+use slint::Image;
+use std::fs::File;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tempfile::tempdir;
 
@@ -267,4 +274,94 @@ fn test_thumbnail_config_from_settings_and_auto_preview_count() {
     assert!(config.custom_preview_settings);
     assert_eq!(config.preview_format, ThumbnailFormat::Webp);
     assert_eq!(config.preview_quality, 55);
+}
+
+#[test]
+fn test_animated_gif_frame_extraction_and_variable_delays() {
+    let tmp_dir = tempdir().unwrap();
+    let gif_path = tmp_dir.path().join("animated_test.gif");
+
+    // 1. Synthesize a multi-frame animated GIF with individual delays (Frame 0: 50ms, Frame 1: 250ms, Frame 2: 0ms -> clamped to 100ms)
+    {
+        let file = File::create(&gif_path).unwrap();
+        let mut encoder = GifEncoder::new(file);
+
+        let mut img1 = RgbaImage::new(100, 100);
+        for pixel in img1.pixels_mut() {
+            *pixel = Rgba([255, 0, 0, 255]); // Red
+        }
+        let frame1 = Frame::from_parts(img1, 0, 0, Delay::from_numer_denom_ms(50, 1));
+        encoder.encode_frame(frame1).unwrap();
+
+        let mut img2 = RgbaImage::new(100, 100);
+        for pixel in img2.pixels_mut() {
+            *pixel = Rgba([0, 255, 0, 255]); // Green
+        }
+        let frame2 = Frame::from_parts(img2, 0, 0, Delay::from_numer_denom_ms(250, 1));
+        encoder.encode_frame(frame2).unwrap();
+
+        let mut img3 = RgbaImage::new(100, 100);
+        for pixel in img3.pixels_mut() {
+            *pixel = Rgba([0, 0, 255, 255]); // Blue
+        }
+        // Delay 0ms: according to spec, must be clamped to 100ms (10 FPS)
+        let frame3 = Frame::from_parts(img3, 0, 0, Delay::from_numer_denom_ms(0, 1));
+        encoder.encode_frame(frame3).unwrap();
+    }
+
+    assert!(gif_path.exists());
+
+    // 2. Extract frames via GifThumbnailer
+    let preview = GifThumbnailer::extract_frames(&gif_path, 256, ScalingAlgorithm::CatmullRom)
+        .expect("Failed to extract GIF frames");
+
+    assert_eq!(preview.frames.len(), 3);
+    assert_eq!(preview.orig_width, 100);
+    assert_eq!(preview.orig_height, 100);
+    assert_eq!(preview.frames[0].width, 256);
+    assert_eq!(preview.frames[0].height, 256);
+
+    // Verify individual frame delays
+    assert_eq!(preview.frames[0].delay_ms, 50);
+    assert_eq!(preview.frames[1].delay_ms, 250);
+    assert_eq!(preview.frames[2].delay_ms, 100, "0ms delay must be clamped to standard 100ms");
+    assert_eq!(preview.total_duration_ms, 50 + 250 + 100);
+
+    // 3. Test L1 Animated Preview Cache
+    let animated_cache = L1AnimatedPreviewCache::new(4);
+    assert!(animated_cache.is_empty());
+
+    let media_id = 999;
+    animated_cache.insert(media_id, Arc::new(preview.clone()));
+    assert_eq!(animated_cache.len(), 1);
+
+    let retrieved = animated_cache.get(media_id).expect("Preview must be found in L1 animated cache");
+    assert_eq!(retrieved.frames.len(), 3);
+    assert_eq!(retrieved.total_duration_ms, 400);
+
+    // 4. Test VideoPreviewAnimator conversion to TimedFrames
+    let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&retrieved);
+    assert_eq!(timed_frames.len(), 3);
+    assert_eq!(timed_frames[0].delay_ms, 50);
+    assert_eq!(timed_frames[1].delay_ms, 250);
+    assert_eq!(timed_frames[2].delay_ms, 100);
+}
+
+#[test]
+fn test_animated_gif_single_frame_safely_noops() {
+    let dummy_frames = vec![TimedFrame {
+        image: Image::default(),
+        delay_ms: 100,
+    }];
+
+    let fired_count = Arc::new(AtomicUsize::new(0));
+    let f_clone = fired_count.clone();
+
+    let timer_opt = VideoPreviewAnimator::start_variable_delay_animation(dummy_frames, move |_img| {
+        f_clone.fetch_add(1, Ordering::SeqCst);
+    });
+
+    // Single-frame animated images emit frame 0 once and do not spin an active timer
+    assert!(timer_opt.is_none());
+    assert_eq!(fired_count.load(Ordering::SeqCst), 1);
 }

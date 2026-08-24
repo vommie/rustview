@@ -6,7 +6,7 @@ use super::{ConflictFileView, FileOpsConflictDialog, MainWindow};
 use crate::library::models::{
     FileConflictItemDetails, FileConflictReport, FileConflictResolution, FileTransferKind, MediaId,
 };
-use crate::media::MediaHasher;
+use crate::media::{MediaFormat, MediaHasher};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::system::SystemFileHandler;
 use crate::thumbnails::{ScalingAlgorithm, ThumbnailConfig, ThumbnailGenerator, ThumbnailManager};
@@ -17,6 +17,11 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
+thread_local! {
+    static CONFLICT_PREVIEW_TIMER: RefCell<Option<Timer>> = const { RefCell::new(None) };
+    static CONFLICT_HOVER_TARGET: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+}
+
 type ConflictResolutionCallback = Box<dyn Fn(FileConflictResolution, bool)>;
 
 /// Encapsulated metadata and cover thumbnail container for conflict cards.
@@ -24,6 +29,8 @@ type ConflictResolutionCallback = Box<dyn Fn(FileConflictResolution, bool)>;
 pub struct ConflictThumbInfo {
     pub media_id: Option<MediaId>,
     pub thumbnail: Image,
+    pub format: MediaFormat,
+    pub full_path: PathBuf,
 }
 
 /// Structured parameter bundle for presenting the file conflict modal dialog.
@@ -37,7 +44,7 @@ pub struct ConflictDialogParams<'a> {
     pub transfer_kind: FileTransferKind,
 }
 
-/// Specialized controller managing the File Name Conflict split-view comparison dialog with interactive hover video previews.
+/// Specialized controller managing the File Name Conflict split-view comparison dialog with interactive hover video/GIF previews.
 #[derive(Default, Clone)]
 pub struct FileOpsConflictDialogController {
     dialog: Rc<RefCell<Option<FileOpsConflictDialog>>>,
@@ -45,7 +52,6 @@ pub struct FileOpsConflictDialogController {
     active_paths: Rc<RefCell<Option<(PathBuf, PathBuf)>>>,
     active_source_info: Rc<RefCell<Option<ConflictThumbInfo>>>,
     active_dest_info: Rc<RefCell<Option<ConflictThumbInfo>>>,
-    preview_timer: Rc<RefCell<Option<Timer>>>,
     thumbnails: Rc<RefCell<Option<Arc<ThumbnailManager>>>>,
     settings: Rc<RefCell<Option<Arc<SettingsManager>>>>,
 }
@@ -55,7 +61,7 @@ impl FileOpsConflictDialogController {
         Self::default()
     }
 
-    /// Displays the File Conflict modal dialog with rich visual comparison, video hover previews, and resolution buttons.
+    /// Displays the File Conflict modal dialog with rich visual comparison, animated GIF/video hover previews, and resolution buttons.
     pub fn show<F>(
         &self,
         params: ConflictDialogParams<'_>,
@@ -108,10 +114,14 @@ impl FileOpsConflictDialogController {
             *self.active_source_info.borrow_mut() = Some(ConflictThumbInfo {
                 media_id: params.report.source.media_id,
                 thumbnail: src_thumb,
+                format: params.report.source.format,
+                full_path: params.report.source.full_path.clone(),
             });
             *self.active_dest_info.borrow_mut() = Some(ConflictThumbInfo {
                 media_id: params.report.destination.media_id,
                 thumbnail: dst_thumb,
+                format: params.report.destination.format,
+                full_path: params.report.destination.full_path.clone(),
             });
 
             params.window.set_is_modal_locked(true);
@@ -121,7 +131,9 @@ impl FileOpsConflictDialogController {
 
     /// Hides the dialog and releases the modal lock on the main application window.
     pub fn close(&self, window: &MainWindow) {
-        *self.preview_timer.borrow_mut() = None;
+        CONFLICT_HOVER_TARGET.with(|t| *t.borrow_mut() = None);
+        CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
+
         if let Some(ref win) = *self.dialog.borrow() {
             let _ = win.hide();
         }
@@ -247,24 +259,19 @@ impl FileOpsConflictDialogController {
                 }
             });
 
-            // Hover Video Previews for Source File Thumbnail (Encapsulated via VideoPreviewAnimator)
+            // Hover Video & GIF Previews for Source File Thumbnail
             let win_weak_src = win.as_weak();
             let src_info_slot = self.active_source_info.clone();
             let thumb_slot = self.thumbnails.clone();
             let set_slot = self.settings.clone();
-            let timer_slot = self.preview_timer.clone();
 
             win.on_source_hover_changed(move |is_hover| {
-                let mut timer_guard = timer_slot.borrow_mut();
-                *timer_guard = None;
-
-                let enable_previews = set_slot
+                if !set_slot
                     .borrow()
                     .as_ref()
                     .map(|s| s.get().appearance.enable_hover_previews)
-                    .unwrap_or(true);
-
-                if !enable_previews {
+                    .unwrap_or(true)
+                {
                     return;
                 }
 
@@ -274,44 +281,92 @@ impl FileOpsConflictDialogController {
                 };
 
                 if is_hover {
+                    CONFLICT_HOVER_TARGET.with(|t| *t.borrow_mut() = Some("source"));
+                    CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
+
                     let thumb_guard = thumb_slot.borrow();
-                    if let (Some(media_id), Some(thumb_mgr)) = (info.media_id, thumb_guard.as_ref())
+                    let Some(thumb_mgr) = thumb_guard.as_ref() else {
+                        return;
+                    };
+
+                    let win_w = win_weak_src.clone();
+
+                    if info.format == MediaFormat::Gif {
+                        if let Some(media_id) = info.media_id
+                            && let Some(preview) = thumb_mgr.try_get_animated_preview(media_id)
+                        {
+                            let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
+                            let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                                if let Some(w) = win_w.upgrade() {
+                                    let mut src_file = w.get_source_file();
+                                    src_file.thumbnail = img;
+                                    w.set_source_file(src_file);
+                                }
+                            });
+                            CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
+                        } else {
+                            let config = ThumbnailConfig::default();
+                            let win_w_async = win_weak_src.clone();
+
+                            thumb_mgr.get_or_load_animated_preview_async(
+                                info.media_id.unwrap_or(0),
+                                info.full_path.clone(),
+                                config,
+                                move |res| {
+                                    if let Ok(preview) = res {
+                                        let _ = win_w_async.upgrade_in_event_loop(move |w| {
+                                            let is_still_hovered = CONFLICT_HOVER_TARGET.with(|t| *t.borrow() == Some("source"));
+                                            if is_still_hovered {
+                                                let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
+                                                let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                                                    let mut src_file = w.get_source_file();
+                                                    src_file.thumbnail = img;
+                                                    w.set_source_file(src_file);
+                                                });
+                                                CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
+                                            }
+                                        });
+                                    }
+                                },
+                            );
+                        }
+                    } else if let Some(media_id) = info.media_id
                         && let Some(images) = VideoPreviewAnimator::load_preview_images(thumb_mgr, media_id)
                     {
-                        let win_w = win_weak_src.clone();
-                        *timer_guard = VideoPreviewAnimator::start_animation(images, move |img| {
+                        let timer = VideoPreviewAnimator::start_animation(images, move |img| {
                             if let Some(w) = win_w.upgrade() {
                                 let mut src_file = w.get_source_file();
                                 src_file.thumbnail = img;
                                 w.set_source_file(src_file);
                             }
                         });
+                        CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                     }
-                } else if let Some(w) = win_weak_src.upgrade() {
-                    let mut src_file = w.get_source_file();
-                    src_file.thumbnail = info.thumbnail.clone();
-                    w.set_source_file(src_file);
+                } else {
+                    CONFLICT_HOVER_TARGET.with(|t| *t.borrow_mut() = None);
+                    CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
+
+                    if let Some(w) = win_weak_src.upgrade() {
+                        let mut src_file = w.get_source_file();
+                        src_file.thumbnail = info.thumbnail.clone();
+                        w.set_source_file(src_file);
+                    }
                 }
             });
 
-            // Hover Video Previews for Destination File Thumbnail (Encapsulated via VideoPreviewAnimator)
+            // Hover Video & GIF Previews for Destination File Thumbnail
             let win_weak_dst = win.as_weak();
             let dst_info_slot = self.active_dest_info.clone();
             let thumb_slot_dst = self.thumbnails.clone();
             let set_slot_dst = self.settings.clone();
-            let timer_slot_dst = self.preview_timer.clone();
 
             win.on_destination_hover_changed(move |is_hover| {
-                let mut timer_guard = timer_slot_dst.borrow_mut();
-                *timer_guard = None;
-
-                let enable_previews = set_slot_dst
+                if !set_slot_dst
                     .borrow()
                     .as_ref()
                     .map(|s| s.get().appearance.enable_hover_previews)
-                    .unwrap_or(true);
-
-                if !enable_previews {
+                    .unwrap_or(true)
+                {
                     return;
                 }
 
@@ -321,23 +376,76 @@ impl FileOpsConflictDialogController {
                 };
 
                 if is_hover {
+                    CONFLICT_HOVER_TARGET.with(|t| *t.borrow_mut() = Some("dest"));
+                    CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
+
                     let thumb_guard = thumb_slot_dst.borrow();
-                    if let (Some(media_id), Some(thumb_mgr)) = (info.media_id, thumb_guard.as_ref())
+                    let Some(thumb_mgr) = thumb_guard.as_ref() else {
+                        return;
+                    };
+
+                    let win_w = win_weak_dst.clone();
+
+                    if info.format == MediaFormat::Gif {
+                        if let Some(media_id) = info.media_id
+                            && let Some(preview) = thumb_mgr.try_get_animated_preview(media_id)
+                        {
+                            let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
+                            let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                                if let Some(w) = win_w.upgrade() {
+                                    let mut dst_file = w.get_destination_file();
+                                    dst_file.thumbnail = img;
+                                    w.set_destination_file(dst_file);
+                                }
+                            });
+                            CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
+                        } else {
+                            let config = ThumbnailConfig::default();
+                            let win_w_async = win_weak_dst.clone();
+
+                            thumb_mgr.get_or_load_animated_preview_async(
+                                info.media_id.unwrap_or(0),
+                                info.full_path.clone(),
+                                config,
+                                move |res| {
+                                    if let Ok(preview) = res {
+                                        let _ = win_w_async.upgrade_in_event_loop(move |w| {
+                                            let is_still_hovered = CONFLICT_HOVER_TARGET.with(|t| *t.borrow() == Some("dest"));
+                                            if is_still_hovered {
+                                                let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
+                                                let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                                                    let mut dst_file = w.get_destination_file();
+                                                    dst_file.thumbnail = img;
+                                                    w.set_destination_file(dst_file);
+                                                });
+                                                CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
+                                            }
+                                        });
+                                    }
+                                },
+                            );
+                        }
+                    } else if let Some(media_id) = info.media_id
                         && let Some(images) = VideoPreviewAnimator::load_preview_images(thumb_mgr, media_id)
                     {
-                        let win_w = win_weak_dst.clone();
-                        *timer_guard = VideoPreviewAnimator::start_animation(images, move |img| {
+                        let timer = VideoPreviewAnimator::start_animation(images, move |img| {
                             if let Some(w) = win_w.upgrade() {
                                 let mut dst_file = w.get_destination_file();
                                 dst_file.thumbnail = img;
                                 w.set_destination_file(dst_file);
                             }
                         });
+                        CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                     }
-                } else if let Some(w) = win_weak_dst.upgrade() {
-                    let mut dst_file = w.get_destination_file();
-                    dst_file.thumbnail = info.thumbnail.clone();
-                    w.set_destination_file(dst_file);
+                } else {
+                    CONFLICT_HOVER_TARGET.with(|t| *t.borrow_mut() = None);
+                    CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
+
+                    if let Some(w) = win_weak_dst.upgrade() {
+                        let mut dst_file = w.get_destination_file();
+                        dst_file.thumbnail = info.thumbnail.clone();
+                        w.set_destination_file(dst_file);
+                    }
                 }
             });
 

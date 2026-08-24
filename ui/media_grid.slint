@@ -55,7 +55,8 @@ export component MediaTile inherits Rectangle {
 
     property <bool> is-hovered: tile-touch.has-hover;
     changed is-hovered => {
-        if item.is-video {
+        // Trigger hover animation for both videos and animated GIFs
+        if item.is-video || item.format-str == "gif" {
             root.hover-changed(self.is-hovered);
         }
     }
@@ -201,7 +202,7 @@ export component MediaTile inherits Rectangle {
             if root.show-media-type-badges : Rectangle {
                 x: 4px;
                 y: parent.height - 18px;
-                width: (item.is-deleted || item.is-corrupted) ? 48px : 32px;
+                width: (item.is-deleted || item.is-corrupted) ? 48px : ((item.format-str == "gif") ? 28px : 32px);
                 height: 14px;
                 background: item.is-deleted ? #6c7086cc : (item.is-corrupted ? #f38ba8cc : #000000aa);
                 border-radius: 2px;
@@ -209,7 +210,9 @@ export component MediaTile inherits Rectangle {
                 Text {
                     text: item.is-deleted ? "DELETED" : (
                         item.is-corrupted ? "CORRUPT" : (
-                            item.is-video ? "VIDEO" : "IMAGE"
+                            item.is-video ? "VIDEO" : (
+                                item.format-str == "gif" ? "GIF" : "IMAGE"
+                            )
                         )
                     );
                     font-size: 8px;

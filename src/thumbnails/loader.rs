@@ -1,6 +1,7 @@
-use super::cache::L1ThumbnailCache;
+use super::cache::{L1AnimatedPreviewCache, L1ThumbnailCache};
 use super::error::ThumbnailError;
 use super::generator::ThumbnailGenerator;
+use super::gif::{AnimatedPreview, GifThumbnailer};
 use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 use super::store::PackStore;
 use super::types::{
@@ -60,6 +61,7 @@ pub struct ReadyThumbnailItem {
 pub struct ThumbnailScheduler {
     pub library: Arc<Library>,
     cache: Arc<L1ThumbnailCache>,
+    animated_cache: Arc<L1AnimatedPreviewCache>,
     store: Arc<PackStore>,
     generator: Arc<ThumbnailGenerator>,
     pool: Arc<ThreadPool>,
@@ -77,6 +79,7 @@ impl ThumbnailScheduler {
     pub fn new(
         library: Arc<Library>,
         cache: Arc<L1ThumbnailCache>,
+        animated_cache: Arc<L1AnimatedPreviewCache>,
         store: Arc<PackStore>,
         threads: usize,
     ) -> Self {
@@ -91,6 +94,7 @@ impl ThumbnailScheduler {
         Self {
             library,
             cache,
+            animated_cache,
             store,
             generator: Arc::new(ThumbnailGenerator::new()),
             pool,
@@ -216,6 +220,43 @@ impl ThumbnailScheduler {
         } else {
             Some(frames)
         }
+    }
+
+    /// Fast non-blocking lookup for cached animated preview in RAM (e.g. GIF).
+    pub fn try_get_animated_preview(&self, media_id: MediaId) -> Option<Arc<AnimatedPreview>> {
+        self.animated_cache.get(media_id)
+    }
+
+    /// Asynchronously extracts, scales, and caches animated GIF frames in a background worker thread.
+    pub fn get_or_load_animated_preview_async<F>(
+        &self,
+        media_id: MediaId,
+        path: PathBuf,
+        config: ThumbnailConfig,
+        on_loaded: F,
+    ) where
+        F: FnOnce(Result<Arc<AnimatedPreview>, ThumbnailError>) + Send + 'static,
+    {
+        if let Some(cached) = self.animated_cache.get(media_id) {
+            on_loaded(Ok(cached));
+            return;
+        }
+
+        let cache = self.animated_cache.clone();
+        self.pool.spawn(move || {
+            let res = GifThumbnailer::extract_frames(
+                &path,
+                config.max_bound,
+                config.scaling_algorithm,
+            )
+            .map(Arc::new);
+
+            if let Ok(ref preview) = res {
+                cache.insert(media_id, preview.clone());
+            }
+
+            on_loaded(res);
+        });
     }
 
     /// Launches dedicated full-folder thumbnail pipeline processing ALL items in the folder.
@@ -843,6 +884,7 @@ impl ThumbnailScheduler {
         Self {
             library: self.library.clone(),
             cache: self.cache.clone(),
+            animated_cache: self.animated_cache.clone(),
             store: self.store.clone(),
             generator: self.generator.clone(),
             pool: self.pool.clone(),

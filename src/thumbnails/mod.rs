@@ -3,6 +3,7 @@ pub mod cache;
 pub mod error;
 pub mod gc;
 pub mod generator;
+pub mod gif;
 pub mod image;
 pub mod loader;
 pub mod progress;
@@ -11,10 +12,11 @@ pub mod types;
 pub mod video;
 
 pub use arena::ThumbnailArena;
-pub use cache::{CachedThumbnail, L1ThumbnailCache};
+pub use cache::{CachedThumbnail, L1AnimatedPreviewCache, L1ThumbnailCache};
 pub use error::ThumbnailError;
 pub use gc::ThumbnailGarbageCollector;
 pub use generator::ThumbnailGenerator;
+pub use gif::{AnimatedFrame, AnimatedPreview, GifThumbnailer};
 pub use loader::{PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
 pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 pub use store::PackStore;
@@ -29,12 +31,13 @@ use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Unified high-performance Thumbnail Subsystem facade.
 pub struct ThumbnailManager {
     cache: Arc<L1ThumbnailCache>,
+    animated_cache: Arc<L1AnimatedPreviewCache>,
     store: Arc<PackStore>,
     scheduler: Arc<ThumbnailScheduler>,
 }
@@ -48,15 +51,18 @@ impl ThumbnailManager {
     ) -> Result<Self, ThumbnailError> {
         let store = Arc::new(PackStore::open(cache_dir)?);
         let cache = Arc::new(L1ThumbnailCache::new(l1_slots));
+        let animated_cache = Arc::new(L1AnimatedPreviewCache::new(64));
         let scheduler = Arc::new(ThumbnailScheduler::new(
             library,
             cache.clone(),
+            animated_cache.clone(),
             store.clone(),
             worker_threads,
         ));
 
         Ok(Self {
             cache,
+            animated_cache,
             store,
             scheduler,
         })
@@ -94,6 +100,26 @@ impl ThumbnailManager {
         media_id: MediaId,
     ) -> Option<Vec<(u32, u32, Vec<u8>)>> {
         self.scheduler.try_load_preview_frames(media_id)
+    }
+
+    /// Fast non-blocking lookup for cached animated GIF frames in L1 RAM cache.
+    #[inline]
+    pub fn try_get_animated_preview(&self, media_id: MediaId) -> Option<Arc<AnimatedPreview>> {
+        self.scheduler.try_get_animated_preview(media_id)
+    }
+
+    /// Asynchronously extracts, scales, and caches animated GIF frames in a background worker thread.
+    pub fn get_or_load_animated_preview_async<F>(
+        &self,
+        media_id: MediaId,
+        path: PathBuf,
+        config: ThumbnailConfig,
+        on_loaded: F,
+    ) where
+        F: FnOnce(Result<Arc<AnimatedPreview>, ThumbnailError>) + Send + 'static,
+    {
+        self.scheduler
+            .get_or_load_animated_preview_async(media_id, path, config, on_loaded);
     }
 
     pub fn cancel_pipeline(&self) {
@@ -144,6 +170,10 @@ impl ThumbnailManager {
 
     pub fn cache(&self) -> &L1ThumbnailCache {
         &self.cache
+    }
+
+    pub fn animated_cache(&self) -> &L1AnimatedPreviewCache {
+        &self.animated_cache
     }
 
     pub fn store(&self) -> &PackStore {
