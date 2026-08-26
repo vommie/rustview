@@ -31,6 +31,7 @@ export { RemoveOrphanedFolderDialog } from "remove_orphaned_folder_dialog.slint"
 export { RebornFolderDeleteWarnDialog } from "reborn_folder_delete_warn_dialog.slint";
 export { MissingFolderDeleteDialog } from "missing_folder_delete_dialog.slint";
 export { MissingFileDialog } from "missing_file_dialog.slint";
+export { ImageFullscreenWindow } from "image_fullscreen_window.slint";
 export { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 
 export component MainWindow inherits Window {
@@ -216,6 +217,9 @@ export component MainWindow inherits Window {
     callback viewer-refresh();
     callback viewer-previous();
     callback viewer-next();
+    callback viewer-image-clicked();
+
+    callback modal-dismiss-requested();
 
     callback folder-selected(int, string);
     callback folder-toggle-expand(int);
@@ -330,6 +334,15 @@ export component MainWindow inherits Window {
     forward-focus: main-window-focus;
     main-window-focus := FocusScope {
         key-pressed(event) => {
+            // When Main UI is modal locked, intercept ESC to close fullscreen/modals and consume all other keys
+            if root.is-modal-locked {
+                if event.text == Key.Escape {
+                    root.modal-dismiss-requested();
+                    return accept;
+                }
+                return accept;
+            }
+
             if root.active-view-mode == 1 {
                 if event.text == Key.Escape {
                     root.viewer-close-tab();
@@ -449,9 +462,9 @@ export component MainWindow inherits Window {
                         resolution: root.viewer-resolution;
                         has-previous: root.viewer-has-previous;
                         has-next: root.viewer-has-next;
-                        previous_clicked => { root.viewer-previous(); }
-                        next_clicked => { root.viewer-next(); }
-                        refresh_clicked => { root.viewer-refresh(); }
+                        previous-clicked => { root.viewer-previous(); }
+                        next-clicked => { root.viewer-next(); }
+                        refresh-clicked => { root.viewer-refresh(); }
                     }
                 }
 
@@ -575,6 +588,7 @@ export component MainWindow inherits Window {
                         background-mode: root.viewer-background-mode;
                         next-image => { root.viewer-next(); }
                         previous-image => { root.viewer-previous(); }
+                        image-clicked => { root.viewer-image-clicked(); }
                     }
                 }
             }
@@ -761,10 +775,14 @@ export component MainWindow inherits Window {
         }
     }
 
+    // Modal UI Blocking Overlay: Shields the entire window from mouse/touch input while modal dialogs or fullscreen view are active
     if root.is-modal-locked : Rectangle {
         background: #00000066;
 
-        TouchArea {
+        modal-touch := TouchArea {
+            clicked => {
+                root.modal-dismiss-requested();
+            }
         }
     }
 }

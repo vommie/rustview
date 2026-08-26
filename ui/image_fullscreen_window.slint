@@ -1,0 +1,84 @@
+import { Theme } from "styles.slint";
+
+/// Standalone, ultra-minimalistic, frameless fullscreen image viewer window.
+/// Displays high-resolution images fitted to the full display area with maximum sampling quality.
+export component ImageFullscreenWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+
+    in property <image> source-image;
+    in property <bool> is-loading: false;
+    in property <string> error-message: "";
+    in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
+
+    callback request-close();
+    callback next-image();
+    callback previous-image();
+    callback canvas-double-clicked();
+
+    background: root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b);
+
+    // Keyboard navigation and instant ESC dismissal
+    forward-focus: fs-focus;
+    fs-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.request-close();
+                return accept;
+            }
+            if event.text == Key.RightArrow || event.text == Key.Space {
+                root.next-image();
+                return accept;
+            }
+            if event.text == Key.LeftArrow {
+                root.previous-image();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    // Interactive canvas supporting double-click to close, mouse wheel navigation, and right-click dismissal
+    fs-touch := TouchArea {
+        width: 100%;
+        height: 100%;
+
+        scroll-event(event) => {
+            if event.delta-y < 0px {
+                root.next-image();
+                return accept;
+            }
+            if event.delta-y > 0px {
+                root.previous-image();
+                return accept;
+            }
+            return reject;
+        }
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                if event.button == PointerEventButton.left {
+                    root.canvas-double-clicked();
+                } else if event.button == PointerEventButton.right {
+                    root.request-close();
+                }
+            }
+        }
+    }
+
+    // Optional Checkerboard Pattern Background for transparency inspection
+    if root.background-mode == 2 : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #181825;
+        opacity: 0.5;
+    }
+
+    // High-Resolution Image Canvas: Fitted with aspect-ratio preservation and pristine scaling
+    if root.source-image.width > 0 && !root.is-loading : Image {
+        source: root.source-image;
+        width: 100%;
+        height: 100%;
+        image-fit: contain;
+    }
+}

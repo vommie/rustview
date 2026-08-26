@@ -8,6 +8,7 @@ use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogControlle
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folder_dialogs::FolderDialogController;
 use super::bridge_folders::BridgeFolders;
+use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
@@ -47,6 +48,7 @@ pub struct UiBridge {
     tab_manager: Arc<ViewerTabManager>,
     settings: Arc<SettingsManager>,
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
+    fullscreen_controller: ImageFullscreenDialogController,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
     missing_file_dialog: MissingFileDialogController,
     delete_file_dialog: DeleteFileDialogController,
@@ -77,6 +79,7 @@ impl UiBridge {
         let mut controller = SettingsDialogController::new(settings.clone());
         controller.set_main_window(window.as_weak());
         let settings_dialog = Rc::new(RefCell::new(controller));
+        let fullscreen_controller = ImageFullscreenDialogController::new();
         let rename_dialog = Rc::new(RefCell::new(None));
         let missing_file_dialog = MissingFileDialogController::new();
         let delete_file_dialog = DeleteFileDialogController::new();
@@ -186,6 +189,7 @@ impl UiBridge {
             tab_manager,
             settings,
             settings_dialog,
+            fullscreen_controller,
             rename_dialog,
             missing_file_dialog,
             delete_file_dialog,
@@ -328,6 +332,7 @@ impl UiBridge {
             self.thumbnails.clone(),
             self.settings.clone(),
             self.state.clone(),
+            self.fullscreen_controller.clone(),
         );
 
         BridgeFolders::register_callbacks(

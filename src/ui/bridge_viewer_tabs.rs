@@ -1,3 +1,4 @@
+use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
@@ -14,7 +15,7 @@ use slint::{ComponentHandle, Image, ModelRc, VecModel};
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Central coordinator for Viewer Tab interactions, asynchronous image loading, and UI synchronization.
+/// Central coordinator for Viewer Tab interactions, asynchronous image loading, fullscreen display, and UI synchronization.
 pub struct BridgeViewerTabs;
 
 impl BridgeViewerTabs {
@@ -26,6 +27,7 @@ impl BridgeViewerTabs {
         thumbnails: Arc<ThumbnailManager>,
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
+        fullscreen_controller: ImageFullscreenDialogController,
     ) {
         // 1. Browse Button Clicked (Switch to Media Browser view)
         let win_browse = window.clone_strong();
@@ -57,10 +59,12 @@ impl BridgeViewerTabs {
         let lib_close = library.clone();
         let st_close = state.clone();
         let set_close = settings.clone();
+        let fs_close = fullscreen_controller.clone();
         window.on_tab_closed(move |tab_id| {
             tracing::info!(tab_id, "[BridgeViewerTabs: Close] Tab closed by user");
             tm_close.close_tab(tab_id as TabId);
             Self::sync_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
+            fs_close.sync_active_tab(&tm_close, &set_close);
         });
 
         // 4. Viewer Toolbar Close Tab Button (triggered via Escape hotkey)
@@ -69,6 +73,7 @@ impl BridgeViewerTabs {
         let lib_v_close = library.clone();
         let st_v_close = state.clone();
         let set_v_close = settings.clone();
+        let fs_v_close = fullscreen_controller.clone();
         window.on_viewer_close_tab(move || {
             if let Some(active_id) = tm_v_close.active_tab_id() {
                 tracing::info!(
@@ -77,6 +82,7 @@ impl BridgeViewerTabs {
                 );
                 tm_v_close.close_tab(active_id);
                 Self::sync_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
+                fs_v_close.sync_active_tab(&tm_v_close, &set_v_close);
             }
         });
 
@@ -87,6 +93,7 @@ impl BridgeViewerTabs {
         let thumb_v_refresh = thumbnails;
         let set_v_refresh = settings.clone();
         let st_v_refresh = state.clone();
+        let fs_v_refresh = fullscreen_controller.clone();
         window.on_viewer_refresh(move || {
             tracing::info!("[BridgeViewerTabs: Refresh] Refresh requested from viewer toolbar");
             Self::refresh_active_tab(
@@ -97,6 +104,7 @@ impl BridgeViewerTabs {
                 &set_v_refresh,
                 &st_v_refresh,
             );
+            fs_v_refresh.sync_active_tab(&tm_v_refresh, &set_v_refresh);
         });
 
         // 6. Previous / Next Image Navigation in active list (In-place within current tab)
@@ -105,17 +113,38 @@ impl BridgeViewerTabs {
         let lib_prev = library.clone();
         let st_prev = state.clone();
         let set_prev = settings.clone();
+        let fs_prev = fullscreen_controller.clone();
         window.on_viewer_previous(move || {
-            Self::navigate_adjacent(&win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, false);
+            Self::navigate_adjacent(&win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, &fs_prev, false);
         });
 
         let win_next = window.clone_strong();
-        let tm_next = tab_manager;
+        let tm_next = tab_manager.clone();
         let lib_next = library;
         let st_next = state;
-        let set_next = settings;
+        let set_next = settings.clone();
+        let fs_next = fullscreen_controller.clone();
         window.on_viewer_next(move || {
-            Self::navigate_adjacent(&win_next, &tm_next, &lib_next, &set_next, &st_next, true);
+            Self::navigate_adjacent(&win_next, &tm_next, &lib_next, &set_next, &st_next, &fs_next, true);
+        });
+
+        // 7. Double-click on Tab Image Viewer -> Toggle Fullscreen (with strict Main UI lock)
+        let win_fs = window.clone_strong();
+        let tm_fs = tab_manager;
+        let set_fs = settings;
+        let fs_ctrl = fullscreen_controller.clone();
+        window.on_viewer_image_clicked(move || {
+            if fs_ctrl.check_double_click() {
+                tracing::info!("[BridgeViewerTabs: DoubleClick] Double-click detected on tab image. Launching fullscreen viewer window...");
+                fs_ctrl.show(&tm_fs, &set_fs, win_fs.as_weak());
+            }
+        });
+
+        // 8. Dismiss Fullscreen from Main UI if Escape or backdrop is clicked while locked
+        let fs_modal = fullscreen_controller;
+        window.on_modal_dismiss_requested(move || {
+            tracing::info!("[BridgeViewerTabs: ModalDismiss] Main UI modal dismiss triggered. Closing active fullscreen window if present.");
+            fs_modal.close();
         });
     }
 
@@ -155,6 +184,7 @@ impl BridgeViewerTabs {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
+        fullscreen_controller: &ImageFullscreenDialogController,
         is_next: bool,
     ) {
         let active_media_id = match tab_manager.get_active_media_id() {
@@ -202,12 +232,14 @@ impl BridgeViewerTabs {
             match tab_manager.navigate_active_tab_to_media(target_id) {
                 Ok(tab_id) => {
                     Self::sync_ui(window, tab_manager, library, settings, state);
+                    fullscreen_controller.sync_active_tab(tab_manager, settings);
 
                     let tm_async = tab_manager.clone();
                     let w_weak = window.as_weak();
                     let lib_async = library.clone();
                     let st_async = state.clone();
                     let set_async = settings.clone();
+                    let fs_async = fullscreen_controller.clone();
 
                     if let Ok(file_path) = library.resolve_media_path(target_id) {
                         rayon::spawn(move || {
@@ -216,13 +248,26 @@ impl BridgeViewerTabs {
                             let _ = w_weak.upgrade_in_event_loop(move |w| {
                                 match load_res {
                                     Ok((w_px, h_px, pixel_buffer)) => {
+                                        tracing::info!(
+                                            media_id = target_id,
+                                            tab_id = tab_id,
+                                            dimensions = format!("{}x{}", w_px, h_px),
+                                            "[BridgeViewerTabs: Navigate] High-res buffer loaded for adjacent image"
+                                        );
                                         tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
                                     }
                                     Err(err) => {
+                                        tracing::warn!(
+                                            media_id = target_id,
+                                            tab_id = tab_id,
+                                            error = %err,
+                                            "[BridgeViewerTabs: Navigate] Failed to load buffer for adjacent image"
+                                        );
                                         tm_async.set_tab_error(tab_id, err.to_string());
                                     }
                                 }
                                 Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                                fs_async.sync_active_tab(&tm_async, &set_async);
                             });
                         });
                     }
