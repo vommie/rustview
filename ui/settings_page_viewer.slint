@@ -6,6 +6,7 @@ export component SettingsPageViewer inherits VerticalLayout {
     spacing: 12px;
 
     in-out property <bool> open-images-in-tab: true;
+    in-out property <bool> open-videos-in-tab: true;
     in-out property <bool> show-tab-rating-badge: false;
     in-out property <int> background-mode-idx: 0; // 0 = Dark, 1 = Deep Black, 2 = Checkerboard
 
@@ -22,6 +23,25 @@ export component SettingsPageViewer inherits VerticalLayout {
             text: root.open-images-in-tab
                 ? "Double-clicking an image tile opens it in a dedicated tab inside RustView."
                 : "Double-clicking an image tile delegates opening to the operating system default application.";
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+
+    SettingsCard {
+        title: "Videos";
+        description: "Configure how videos are opened upon double-clicking media tiles in the browser.";
+
+        CheckBox {
+            text: "Open videos in internal viewer tabs (Default)";
+            checked <=> root.open-videos-in-tab;
+        }
+
+        Text {
+            text: root.open-videos-in-tab
+                ? "Double-clicking a video tile opens it in a dedicated tab with embedded native MPV playback."
+                : "Double-clicking a video tile delegates opening to the operating system default application.";
             font-size: 11px;
             color: Theme.text-muted;
             wrap: word-wrap;

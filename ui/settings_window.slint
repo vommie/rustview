@@ -91,6 +91,7 @@ export component SettingsWindow inherits Window {
 
     // Viewer options
     in-out property <bool> open-images-in-tab: true;
+    in-out property <bool> open-videos-in-tab: true;
     in-out property <bool> viewer-show-tab-rating-badge: false;
     in-out property <int> viewer-background-mode-idx: 0;
 
@@ -190,6 +191,7 @@ export component SettingsWindow inherits Window {
 
                     if root.active-category == 5 : SettingsPageViewer {
                         open-images-in-tab <=> root.open-images-in-tab;
+                        open-videos-in-tab <=> root.open-videos-in-tab;
                         show-tab-rating-badge <=> root.viewer-show-tab-rating-badge;
                         background-mode-idx <=> root.viewer-background-mode-idx;
                     }

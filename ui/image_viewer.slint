@@ -6,18 +6,34 @@ export component ImageViewer inherits Rectangle {
     in property <bool> is-loading: false;
     in property <string> error-message: "";
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
+    in property <bool> is-video: false;
 
     callback next-image();
     callback previous-image();
     callback image-clicked();
+    callback viewport-geometry-changed(length /* x */, length /* y */, length /* width */, length /* height */);
 
     background: root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b);
     clip: true;
+
+    // Track geometry of the viewport for X11 video subwindow resizing
+    changed width => {
+        if root.is-video {
+            root.viewport-geometry-changed(root.x, root.y, root.width, root.height);
+        }
+    }
+
+    changed height => {
+        if root.is-video {
+            root.viewport-geometry-changed(root.x, root.y, root.width, root.height);
+        }
+    }
 
     // Mouse Wheel Scroll & Double-Click Listener over the entire ImageViewer canvas
     viewer-touch := TouchArea {
         width: 100%;
         height: 100%;
+        enabled: !root.is-video; // When video is playing, native MPV subwindow receives direct mouse events
 
         scroll-event(event) => {
             if event.delta-y < 0px {
@@ -46,12 +62,19 @@ export component ImageViewer inherits Rectangle {
         opacity: 0.5;
     }
 
-    // Centered image preserving aspect ratio
-    if root.source-image.width > 0 && !root.is-loading : Image {
+    // Centered image preserving aspect ratio (Images only)
+    if !root.is-video && root.source-image.width > 0 && !root.is-loading : Image {
         source: root.source-image;
         width: 100%;
         height: 100%;
         image-fit: contain;
+    }
+
+    // Video Viewport Area (Transparent placeholder aligned with native X11 Subwindow)
+    if root.is-video : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: transparent;
     }
 
     // Loading indicator
@@ -69,7 +92,7 @@ export component ImageViewer inherits Rectangle {
         }
 
         Text {
-            text: "Loading high-resolution image...";
+            text: root.is-video ? "Initializing video player..." : "Loading high-resolution image...";
             font-size: 12px;
             color: Theme.text-muted;
             horizontal-alignment: center;

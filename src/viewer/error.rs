@@ -23,4 +23,10 @@ pub enum ViewerError {
 
     #[error("Failed to decode media frame: {0}")]
     DecodeFailed(String),
+
+    #[error("MPV player error: {0}")]
+    Mpv(String),
+
+    #[error("X11 subwindow error: {0}")]
+    X11(String),
 }

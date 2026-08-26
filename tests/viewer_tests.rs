@@ -1,11 +1,42 @@
 use rustview::library::Library;
+use rustview::media::formats::MediaFormat;
 use rustview::viewer::{
-    HighResImageLoader, TabPayload, ViewerAction, ViewerError, ViewerTabManager,
-    MAX_CACHED_HIGH_RES_BUFFERS,
+    find_window_by_pid_and_title, HighResImageLoader, MpvPlayer, TabPayload, ViewerAction,
+    ViewerError, ViewerTabManager, MAX_CACHED_HIGH_RES_BUFFERS,
 };
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::sync::Arc;
 use tempfile::tempdir;
+
+#[test]
+fn test_mpv_player_initialization_and_control_api() {
+    let player_res = MpvPlayer::new();
+    assert!(
+        player_res.is_ok(),
+        "MpvPlayer must initialize cleanly with libmpv2 on Linux"
+    );
+
+    let player = player_res.unwrap();
+    let state = player.get_playback_state();
+    assert!(state.is_idle);
+    assert!(!state.is_playing);
+
+    // Test Volume API
+    let _ = player.set_volume(85.0);
+    assert_eq!(player.get_volume().round() as i32, 85);
+
+    // Test Pause / Play API
+    assert!(player.pause().is_ok());
+    assert!(player.play().is_ok());
+
+    // Test Seek API (No crash when idle)
+    assert!(player.seek_relative(5.0).is_ok());
+    assert!(player.seek_absolute(10.0).is_ok());
+
+    player.stop();
+    let after_stop = player.get_playback_state();
+    assert!(!after_stop.is_playing);
+}
 
 #[test]
 fn test_viewer_tab_manager_lifecycle_and_focus_reuse() {
@@ -68,6 +99,41 @@ fn test_viewer_tab_manager_lifecycle_and_focus_reuse() {
     // 6. Switch directly to Tab 2
     assert!(tab_mgr.set_active_tab(tab2_id));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab2_id));
+}
+
+#[test]
+fn test_viewer_tab_manager_video_playback_and_subwindow_management() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let vid_path = tmp_media.path().join("sample_clip.mp4");
+    std::fs::write(&vid_path, b"test mp4 container bytes").unwrap();
+
+    let _ = lib.refresher().refresh_folder(folder.id).unwrap();
+    let media = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(media.len(), 1);
+
+    let vid_record = &media[0];
+    assert_eq!(vid_record.format, MediaFormat::Mp4);
+
+    let tab_mgr = ViewerTabManager::new(lib.clone());
+
+    // Open video tab
+    let (tab_id, is_new) = tab_mgr.open_or_focus_media(vid_record.id).unwrap();
+    assert!(is_new);
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_id));
+
+    let active_tab = tab_mgr.get_active_tab().unwrap();
+    assert!(matches!(active_tab.payload, TabPayload::Video(_)));
+    assert_eq!(active_tab.filename, "sample_clip.mp4");
+
+    // Browse mode stops video and hides subwindow
+    tab_mgr.activate_browse();
+    assert_eq!(tab_mgr.active_tab_id(), None);
+    assert!(!tab_mgr.player().get_playback_state().is_playing);
 }
 
 #[test]
@@ -232,7 +298,7 @@ fn test_viewer_tab_refresh_updates_image_buffer_and_metadata() {
         assert!(img.high_res_pixels.is_some());
     }
 
-    // Now overwrite the file on disk with a 400x300 image (simulating external edit/update)
+    // Overwrite file on disk
     let new_img = image::RgbImage::new(400, 300);
     new_img.save(&img_path).unwrap();
 
@@ -319,7 +385,6 @@ fn test_viewer_tab_manager_high_res_buffer_eviction() {
 
     assert_eq!(tab_mgr.list_tabs().len(), count);
 
-    // Verify that total tabs with in-memory buffers is capped at MAX_CACHED_HIGH_RES_BUFFERS
     let tabs = tab_mgr.list_tabs();
     let cached_count = tabs
         .iter()
@@ -339,4 +404,13 @@ fn test_viewer_action_enum_variants() {
 
     let action_next = ViewerAction::NextItem;
     assert_eq!(action_next, ViewerAction::NextItem);
+
+    let action_fs = ViewerAction::ToggleFullscreen;
+    assert_eq!(action_fs, ViewerAction::ToggleFullscreen);
+}
+
+#[test]
+fn test_x11_window_finder_smoke() {
+    let pid = std::process::id();
+    let _ = find_window_by_pid_and_title(pid, "NonExistentDummyTitle");
 }

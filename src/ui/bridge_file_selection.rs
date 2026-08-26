@@ -263,7 +263,7 @@ impl BridgeFileSelection {
         );
     }
 
-    /// Handles double-click on a media tile: opens images internally in Viewer Tabs if enabled, or delegates to external app.
+    /// Handles double-click on a media tile: opens images and videos internally in Viewer Tabs if enabled in Settings.
     pub fn handle_double_click(
         media_id: MediaId,
         state: &Arc<RwLock<UiState>>,
@@ -272,29 +272,34 @@ impl BridgeFileSelection {
         tab_manager: &Arc<ViewerTabManager>,
         window: &MainWindow,
     ) {
-        let is_image = {
+        let (is_image, is_video) = {
             let st = state.read();
-            st.all_folder_media
-                .iter()
-                .find(|m| m.record.id == media_id)
-                .map(|m| matches!(m.record.media_type, MediaType::Image))
-                .or_else(|| {
-                    library
-                        .media()
-                        .get(media_id)
-                        .ok()
-                        .flatten()
-                        .map(|m| matches!(m.media_type, MediaType::Image))
-                })
-                .unwrap_or(false)
+            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                (
+                    matches!(item.record.media_type, MediaType::Image),
+                    matches!(item.record.media_type, MediaType::Video),
+                )
+            } else if let Ok(Some(record)) = library.media().get(media_id) {
+                (
+                    matches!(record.media_type, MediaType::Image),
+                    matches!(record.media_type, MediaType::Video),
+                )
+            } else {
+                (false, false)
+            }
         };
 
-        let open_in_tab = settings.get().viewer.images.open_in_tab;
+        let open_images_in_tab = settings.get().viewer.images.open_in_tab;
+        let open_videos_in_tab = settings.get().viewer.videos.open_in_tab;
 
-        if is_image && open_in_tab {
+        let should_open_in_tab = (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
+
+        if should_open_in_tab {
             tracing::info!(
                 media_id,
-                "[FileSelection: DoubleClick] Opening image in internal viewer tab"
+                is_image,
+                is_video,
+                "[FileSelection: DoubleClick] Opening media in internal viewer tab"
             );
             BridgeViewerTabs::open_media_tab(
                 media_id,
@@ -308,7 +313,9 @@ impl BridgeFileSelection {
             tracing::info!(
                 media_id,
                 is_image,
-                open_in_tab,
+                is_video,
+                open_images_in_tab,
+                open_videos_in_tab,
                 "[FileSelection: DoubleClick] Delegating media opening to OS default application"
             );
             Self::open_media(media_id, state, library, window);

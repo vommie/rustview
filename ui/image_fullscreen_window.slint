@@ -1,8 +1,9 @@
 import { Theme } from "styles.slint";
 
-/// Standalone, ultra-minimalistic, frameless fullscreen image viewer window.
-/// Displays high-resolution images fitted to the full display area with maximum sampling quality.
+/// Standalone, ultra-minimalistic, frameless fullscreen media viewer window.
+/// Displays high-resolution images or seamlessly embedded MPV videos fitted to the display.
 export component ImageFullscreenWindow inherits Window {
+    title: "RustView - Fullscreen";
     no-frame: true;
     always-on-top: true;
 
@@ -10,6 +11,7 @@ export component ImageFullscreenWindow inherits Window {
     in property <bool> is-loading: false;
     in property <string> error-message: "";
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
+    in property <bool> is-video: false;
 
     callback request-close();
     callback next-image();
@@ -42,6 +44,7 @@ export component ImageFullscreenWindow inherits Window {
     fs-touch := TouchArea {
         width: 100%;
         height: 100%;
+        enabled: !root.is-video; // Native MPV handles its own controls when playing video
 
         scroll-event(event) => {
             if event.delta-y < 0px {
@@ -74,8 +77,8 @@ export component ImageFullscreenWindow inherits Window {
         opacity: 0.5;
     }
 
-    // High-Resolution Image Canvas: Fitted with aspect-ratio preservation and pristine scaling
-    if root.source-image.width > 0 && !root.is-loading : Image {
+    // High-Resolution Image Canvas: Fitted with aspect-ratio preservation (Images only)
+    if !root.is-video && root.source-image.width > 0 && !root.is-loading : Image {
         source: root.source-image;
         width: 100%;
         height: 100%;

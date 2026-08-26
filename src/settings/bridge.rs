@@ -152,6 +152,7 @@ impl SettingsDialogController {
 
         // Viewer properties
         window.set_open_images_in_tab(settings.viewer.images.open_in_tab);
+        window.set_open_videos_in_tab(settings.viewer.videos.open_in_tab);
         window.set_viewer_show_tab_rating_badge(settings.viewer.tabs.show_rating_badge);
         window.set_viewer_background_mode_idx(match settings.viewer.background_mode.to_lowercase().as_str() {
             "deep black" | "black" => 1,
@@ -277,6 +278,7 @@ impl SettingsDialogController {
 
                 // Save Viewer Parameters
                 current.viewer.images.open_in_tab = w.get_open_images_in_tab();
+                current.viewer.videos.open_in_tab = w.get_open_videos_in_tab();
                 current.viewer.tabs.show_rating_badge = w.get_viewer_show_tab_rating_badge();
                 current.viewer.background_mode = match w.get_viewer_background_mode_idx() {
                     1 => "Deep Black".to_string(),

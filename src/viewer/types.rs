@@ -1,5 +1,6 @@
 use crate::library::models::{MediaId, MediaRecord};
 use crate::media::MediaFormat;
+use serde::{Deserialize, Serialize};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -10,6 +11,19 @@ pub type TabId = u64;
 pub enum TabContentType {
     Image,
     Video,
+}
+
+/// Live real-time snapshot of the embedded MPV player playback state.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct MpvPlaybackState {
+    pub position_secs: f64,
+    pub duration_secs: f64,
+    pub is_playing: bool,
+    pub is_paused: bool,
+    pub volume: f64,
+    pub is_eof: bool,
+    pub is_idle: bool,
+    pub filename: String,
 }
 
 #[derive(Clone)]
@@ -33,12 +47,14 @@ impl Default for ImageTabPayload {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct VideoTabPayload {
     pub position_ms: u64,
     pub is_playing: bool,
     pub volume: f32,
     pub duration_ms: u64,
+    pub is_loading: bool,
+    pub error_message: String,
 }
 
 impl Default for VideoTabPayload {
@@ -48,6 +64,8 @@ impl Default for VideoTabPayload {
             is_playing: false,
             volume: 1.0,
             duration_ms: 0,
+            is_loading: false,
+            error_message: String::new(),
         }
     }
 }
@@ -77,4 +95,5 @@ pub enum ViewerAction {
     PreviousItem,
     CloseActiveTab,
     RefreshActiveTab,
+    ToggleFullscreen,
 }

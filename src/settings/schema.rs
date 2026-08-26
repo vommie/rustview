@@ -185,7 +185,7 @@ pub const DEFAULT_OBFUSCATE_LOGS: bool = true;
 // SECTION 10: Viewer Settings - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB: bool = true;
-pub const DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB: bool = false;
+pub const DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB: bool = true;
 pub const DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE: bool = false;
 pub const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "Dark";
 
@@ -473,6 +473,20 @@ impl Default for ViewerImageSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct ViewerVideoSettings {
+    pub open_in_tab: bool,
+}
+
+impl Default for ViewerVideoSettings {
+    fn default() -> Self {
+        Self {
+            open_in_tab: DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ViewerTabSettings {
     pub show_rating_badge: bool,
 }
@@ -489,6 +503,7 @@ impl Default for ViewerTabSettings {
 #[serde(default)]
 pub struct ViewerSettings {
     pub images: ViewerImageSettings,
+    pub videos: ViewerVideoSettings,
     pub tabs: ViewerTabSettings,
     pub background_mode: String,
 }
@@ -497,6 +512,7 @@ impl Default for ViewerSettings {
     fn default() -> Self {
         Self {
             images: ViewerImageSettings::default(),
+            videos: ViewerVideoSettings::default(),
             tabs: ViewerTabSettings::default(),
             background_mode: DEFAULT_VIEWER_BACKGROUND_MODE.to_string(),
         }

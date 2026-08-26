@@ -15,7 +15,7 @@ use crate::media::metadata::MetadataExtractor;
 use crate::media::{MediaFormat, MediaHasher, MediaType};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
-use crate::settings::SettingsManager;
+use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
     PreparedTarget, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager,
     VideoPreviewRecord,
@@ -1118,7 +1118,7 @@ impl BridgeMedia {
                                 }
                             }
                         }
-                    } // st_read explicitly dropped here
+                    }
 
                     StatusBarBridge::update_media_index_progress(&w, false, 0, 0);
 
@@ -1213,7 +1213,15 @@ impl BridgeMedia {
     ) {
         let selected_ids = {
             let st = state.read();
-            st.file_selection.selected_ids().clone()
+            if window.get_active_view_mode() == 1 {
+                if let Some(tab_m_id) = st.active_tab_media_id {
+                    HashSet::from([tab_m_id])
+                } else {
+                    st.file_selection.selected_ids().clone()
+                }
+            } else {
+                st.file_selection.selected_ids().clone()
+            }
         };
 
         if selected_ids.is_empty() {
@@ -1512,8 +1520,8 @@ impl BridgeMedia {
                 let refreshed_count = successful_items.len();
                 let missing_count = missing_files.len();
 
-                // Extract list of open tabs that need image re-decoding before moving successful_items
-                let tabs_to_reload: Vec<(MediaId, u64, PathBuf)> = successful_items
+                // Extract list of open image tabs that need re-decoding
+                let image_tabs_to_reload: Vec<(MediaId, u64, PathBuf)> = successful_items
                     .iter()
                     .filter_map(|item| {
                         if matches!(item.updated_record.media_type, MediaType::Image)
@@ -1528,6 +1536,19 @@ impl BridgeMedia {
                         }
                     })
                     .collect();
+
+                // Check if active tab is video and has hash change -> reload MPV file
+                let active_video_reload_path = successful_items
+                    .iter()
+                    .find_map(|item| {
+                        if matches!(item.updated_record.media_type, MediaType::Video)
+                            && tab_mgr_arc.get_active_media_id() == Some(item.media_id)
+                        {
+                            lib_arc.resolve_media_path(item.media_id).ok()
+                        } else {
+                            None
+                        }
+                    });
 
                 let _ = w_weak.upgrade_in_event_loop(move |w| {
                     {
@@ -1619,8 +1640,17 @@ impl BridgeMedia {
                         }
                     }
 
+                    // Reload video in MPV if currently active tab video was refreshed
+                    if let Some(ref v_path) = active_video_reload_path {
+                        tracing::info!(
+                            path = %LogObscurer::path(v_path),
+                            "[BridgeMedia: VideoReload] Re-loading modified video file in MPV"
+                        );
+                        let _ = tab_mgr_arc.player().load_file(v_path);
+                    }
+
                     // Reload full resolution image buffers for open viewer tabs
-                    for (media_id, tab_id, full_file_path) in tabs_to_reload {
+                    for (media_id, tab_id, full_file_path) in image_tabs_to_reload {
                         let tm_async = tab_mgr_arc.clone();
                         let w_weak_tab = w.as_weak();
                         let lib_tab = lib_arc.clone();
@@ -1699,7 +1729,7 @@ impl BridgeMedia {
                                 }
                             }
                         }
-                    } // st_read is explicitly dropped here before calling sync_ui and update_metrics
+                    }
 
                     StatusBarBridge::update_media_index_progress(&w, false, 0, 0);
 

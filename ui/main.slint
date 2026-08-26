@@ -74,7 +74,8 @@ export component MainWindow inherits Window {
     in-out property <string> empty-state-description: "";
     in-out property <string> empty-state-icon: "";
 
-    // Image Viewer properties
+    // Image / Video Viewer properties
+    in-out property <bool> viewer-is-video: false;
     in-out property <string> viewer-filename: "";
     in-out property <string> viewer-resolution: "";
     in-out property <bool> viewer-is-loading: false;
@@ -218,6 +219,7 @@ export component MainWindow inherits Window {
     callback viewer-previous();
     callback viewer-next();
     callback viewer-image-clicked();
+    callback viewer-viewport-geometry-changed(length /* x */, length /* y */, length /* width */, length /* height */);
 
     callback modal-dismiss-requested();
 
@@ -579,9 +581,10 @@ export component MainWindow inherits Window {
                         icon-name: root.empty-state-icon;
                     }
 
-                    // Image Viewer View (Active Tab)
+                    // Media Viewer View (Active Tab: Image Canvas or Video Viewport)
                     image-viewer := ImageViewer {
                         visible: root.active-view-mode == 1;
+                        is-video: root.viewer-is-video;
                         source-image: root.viewer-image;
                         is-loading: root.viewer-is-loading;
                         error-message: root.viewer-error;
@@ -589,6 +592,9 @@ export component MainWindow inherits Window {
                         next-image => { root.viewer-next(); }
                         previous-image => { root.viewer-previous(); }
                         image-clicked => { root.viewer-image-clicked(); }
+                        viewport-geometry-changed(vx, vy, vw, vh) => {
+                            root.viewer-viewport-geometry-changed(vx, vy, vw, vh);
+                        }
                     }
                 }
             }
@@ -600,7 +606,7 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-right-width;
                 }
                 dragged(delta) => {
-                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w + delta));
+                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w - delta));
                     root.sidebar-right-resized(root.sidebar-right-width);
                 }
                 drag-finished => {
