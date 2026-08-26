@@ -150,6 +150,15 @@ impl SettingsDialogController {
         window.set_supported_video_formats(DEFAULT_SUPPORTED_VIDEO_FORMATS.into());
         window.set_auto_detect_extensionless(settings.formats.auto_detect_extensionless_media);
 
+        // Viewer properties
+        window.set_open_images_in_tab(settings.viewer.images.open_in_tab);
+        window.set_viewer_show_tab_rating_badge(settings.viewer.tabs.show_rating_badge);
+        window.set_viewer_background_mode_idx(match settings.viewer.background_mode.to_lowercase().as_str() {
+            "deep black" | "black" => 1,
+            "transparent checkerboard" | "checkerboard" => 2,
+            _ => 0,
+        });
+
         // Debug properties
         window.set_obfuscate_logs(settings.debug.obfuscate_logs);
     }
@@ -265,6 +274,15 @@ impl SettingsDialogController {
 
                 // Save Formats Parameters
                 current.formats.auto_detect_extensionless_media = w.get_auto_detect_extensionless();
+
+                // Save Viewer Parameters
+                current.viewer.images.open_in_tab = w.get_open_images_in_tab();
+                current.viewer.tabs.show_rating_badge = w.get_viewer_show_tab_rating_badge();
+                current.viewer.background_mode = match w.get_viewer_background_mode_idx() {
+                    1 => "Deep Black".to_string(),
+                    2 => "Transparent Checkerboard".to_string(),
+                    _ => "Dark".to_string(),
+                };
 
                 // Save Debug Parameters
                 current.debug.obfuscate_logs = w.get_obfuscate_logs();

@@ -10,6 +10,7 @@ export component TagPanelToolbar inherits PanelToolbar {
     in-out property <int> match-mode-idx: 0; // 0 = ALL, 1 = ANY
     in-out property <int> scope-mode-idx: 2; // 0 = Folder, 1 = Folder & Subfolders, 2 = Global (Default)
     in property <bool> has-active-query: false;
+    in property <bool> is-tab-view: false;
 
     callback mode-toggled(bool);
     callback match-mode-changed(int);
@@ -18,13 +19,15 @@ export component TagPanelToolbar inherits PanelToolbar {
 
     toolbar-height: 26px;
 
-    // 1. Mode Toggle Button: QUERY vs ASSIGN
+    // 1. Mode Toggle Button: QUERY vs ASSIGN (Locked in Tab View)
     ToolbarToggleButton {
         text-active: "ASSIGN";
         text-inactive: "QUERY";
-        is-active: root.is-assign-mode;
-        is-enabled: true;
-        tooltip: "Mode: Toggle between Tag Query Filter and Tag Assignment mode";
+        is-active: root.is-tab-view ? true : root.is-assign-mode;
+        is-enabled: !root.is-tab-view;
+        tooltip: root.is-tab-view
+            ? "Tag query is disabled in viewer tabs (Locked to Tag Assignment)"
+            : "Mode: Toggle between Tag Query Filter and Tag Assignment mode";
         toggled(active) => {
             root.is-assign-mode = active;
             root.mode-toggled(active);
@@ -33,13 +36,15 @@ export component TagPanelToolbar inherits PanelToolbar {
 
     ToolbarSeparator {}
 
-    // 2. Match Mode Toggle Button: ALL vs ANY (Disabled in Assign Mode)
+    // 2. Match Mode Toggle Button: ALL vs ANY (Disabled in Assign Mode or Tab View)
     ToolbarToggleButton {
         text-active: "ANY";
         text-inactive: "ALL";
         is-active: root.match-mode-idx == 1;
-        is-enabled: !root.is-assign-mode;
-        tooltip: root.is-assign-mode ? "Match criteria is inactive during tag assignment" : "Match: Match ALL selected tags vs ANY tag";
+        is-enabled: !root.is-assign-mode && !root.is-tab-view;
+        tooltip: root.is-tab-view
+            ? "Match criteria is inactive in viewer tabs"
+            : (root.is-assign-mode ? "Match criteria is inactive during tag assignment" : "Match: Match ALL selected tags vs ANY tag");
         toggled(active) => {
             root.match-mode-idx = active ? 1 : 0;
             root.match-mode-changed(root.match-mode-idx);
@@ -48,15 +53,17 @@ export component TagPanelToolbar inherits PanelToolbar {
 
     ToolbarSeparator {}
 
-    // 3. Scope Select Button: Folder, Folder & Subfolders, Global (Disabled in Assign Mode)
+    // 3. Scope Select Button: Folder, Folder & Subfolders, Global (Disabled in Assign Mode or Tab View)
     ToolbarSelectButton {
         current-index <=> root.scope-mode-idx;
-        is-enabled: !root.is-assign-mode;
+        is-enabled: !root.is-assign-mode && !root.is-tab-view;
         button-display-mode: 0; // Icon only on main button
         popup-display-mode: 2;  // Icon + Text in dropdown options
-        tooltip: root.is-assign-mode
-            ? "Search scope is inactive during tag assignment"
-            : "Scope: Choose query search target (Folder, Folder & Subfolders, Global)";
+        tooltip: root.is-tab-view
+            ? "Search scope is inactive in viewer tabs"
+            : (root.is-assign-mode
+                ? "Search scope is inactive during tag assignment"
+                : "Scope: Choose query search target (Folder, Folder & Subfolders, Global)");
 
         model: [
             {
@@ -84,10 +91,10 @@ export component TagPanelToolbar inherits PanelToolbar {
     // 4. Expander Spacer
     ToolbarSpacer {}
 
-    // 5. Sensitive Query Reset Button (SPoT-controlled via ToolbarTagResetButton)
+    // 5. Sensitive Query Reset Button (Disabled in Tab View)
     ToolbarTagResetButton {
-        is-assign-mode: root.is-assign-mode;
-        has-active-query: root.has-active-query;
+        is-assign-mode: root.is-tab-view ? true : root.is-assign-mode;
+        has-active-query: !root.is-tab-view && root.has-active-query;
         clicked => {
             root.reset-clicked();
         }

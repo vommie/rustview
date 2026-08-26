@@ -1,0 +1,61 @@
+import { Theme } from "styles.slint";
+import { Icons } from "icons.slint";
+import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
+
+/// Dedicated modular panel toolbar for active Image Viewer tabs.
+export component ImageTabPanelToolbar inherits PanelToolbar {
+    in property <string> filename: "";
+    in property <string> resolution: "";
+    in property <bool> has-previous: false;
+    in property <bool> has-next: false;
+
+    callback previous-clicked();
+    callback next-clicked();
+    callback refresh-clicked();
+
+    toolbar-height: 26px;
+
+    // 1. Navigation Buttons (Previous / Next image in dataset)
+    ToolbarButton {
+        text: "◀ Prev";
+        tooltip: "Previous image in list (Left Arrow)";
+        is-enabled: root.has-previous;
+        clicked => { root.previous-clicked(); }
+    }
+
+    ToolbarButton {
+        text: "Next ▶";
+        tooltip: "Next image in list (Right Arrow)";
+        is-enabled: root.has-next;
+        clicked => { root.next-clicked(); }
+    }
+
+    ToolbarSeparator {}
+
+    // 2. Info Badges
+    Text {
+        text: root.filename;
+        font-size: 11px;
+        font-weight: 700;
+        color: Theme.text;
+        vertical-alignment: center;
+        overflow: elide;
+        max-width: 280px;
+    }
+
+    if root.resolution != "" : Text {
+        text: "(" + root.resolution + ")";
+        font-size: 10px;
+        color: Theme.text-muted;
+        vertical-alignment: center;
+    }
+
+    ToolbarSpacer {}
+
+    // 3. Refresh Image Action Button (using standardized Icons.refresh)
+    ToolbarButton {
+        icon: Icons.refresh;
+        tooltip: "Refresh image and reload from disk (F5)";
+        clicked => { root.refresh-clicked(); }
+    }
+}

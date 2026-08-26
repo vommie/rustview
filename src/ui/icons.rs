@@ -28,6 +28,8 @@ pub enum IconAsset {
     MediaFilterVideosImages,
     VirtualFolderEnable,
     VirtualFolderDisable,
+    Image,
+    Video,
 }
 
 /// Metadata describing visual capabilities, path locations, and theme-tinting permissions.
@@ -293,6 +295,22 @@ impl IconAsset {
                 allow_tint: true,
                 description: "Disable recursive virtual folder view (show current folder only)",
             },
+            Self::Image => IconMetadata {
+                asset: *self,
+                name: "image",
+                file_name: "image.svg",
+                relative_path: "ui/icons/image.svg",
+                allow_tint: true,
+                description: "Generic media image file icon",
+            },
+            Self::Video => IconMetadata {
+                asset: *self,
+                name: "video",
+                file_name: "video.svg",
+                relative_path: "ui/icons/video.svg",
+                allow_tint: true,
+                description: "Generic media video file icon",
+            },
         }
     }
 
@@ -354,6 +372,8 @@ impl IconAsset {
             "virtual_folder_disable" | "virtual_disable" | "recursive_disable" => {
                 Some(Self::VirtualFolderDisable)
             }
+            "image" | "picture" | "photo" => Some(Self::Image),
+            "video" | "movie" | "film" | "clip" => Some(Self::Video),
             _ => None,
         }
     }
@@ -391,6 +411,8 @@ impl IconAsset {
             Self::MediaFilterVideosImages,
             Self::VirtualFolderEnable,
             Self::VirtualFolderDisable,
+            Self::Image,
+            Self::Video,
         ]
     }
 }

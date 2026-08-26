@@ -1,4 +1,6 @@
-pub use super::bridge_file_dialog_conflict::{ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController};
+pub use super::bridge_file_dialog_conflict::{
+    ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController,
+};
 pub use super::bridge_file_dialog_delete::DeleteFileDialogController;
 pub use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 pub use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
@@ -6,6 +8,7 @@ pub use super::bridge_inspector::BridgeInspector;
 pub use super::bridge_media::BridgeMedia;
 pub use super::bridge_state::UiState;
 pub use super::bridge_status_bar::StatusBarBridge;
+pub use super::bridge_viewer_tabs::BridgeViewerTabs;
 pub use super::models::format_timestamp;
 pub use super::{FileRenameDialog, MainWindow};
 use crate::library::error::LibraryError;
@@ -13,6 +16,7 @@ use crate::library::models::{MediaId, MediaRecord};
 use crate::library::Library;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
+use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
@@ -20,11 +24,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Unified, decoupled context bundle grouping storage, settings, and UI state dependencies for file dialogs.
+/// Unified context bundle grouping storage, thumbnails, tabs, settings, and UI state dependencies for file dialogs.
 #[derive(Clone)]
 pub struct FileDialogContext {
     pub library: Arc<Library>,
     pub thumbnails: Arc<ThumbnailManager>,
+    pub tab_manager: Arc<ViewerTabManager>,
     pub settings: Arc<SettingsManager>,
     pub state: Arc<RwLock<UiState>>,
 }
@@ -132,10 +137,19 @@ impl FileRenameDialogController {
                 );
 
                 Self::update_in_memory_record(&ctx.state, media_id, &updated_record);
+                ctx.tab_manager.notify_media_renamed(media_id, new_name);
+
                 Self::close(dialog_ref, &ctx.state, window);
 
                 StatusBarBridge::success(window, format!("Renamed file to '{}'", new_name));
                 BridgeInspector::update(window, &ctx.state);
+                BridgeViewerTabs::sync_ui(
+                    window,
+                    &ctx.tab_manager,
+                    &ctx.library,
+                    &ctx.settings,
+                    &ctx.state,
+                );
                 BridgeMedia::reload(
                     window,
                     &ctx.library,
@@ -187,7 +201,11 @@ impl FileRenameDialogController {
             item.filename_lower = updated_record.filename.to_lowercase();
             item.modified_date_str = format_timestamp(updated_record.modification_time).into();
             item.created_date_str = format_timestamp(updated_record.creation_time).into();
-            item.format_str = updated_record.format.default_extension().to_ascii_lowercase().into();
+            item.format_str = updated_record
+                .format
+                .default_extension()
+                .to_ascii_lowercase()
+                .into();
             item.is_corrupted = updated_record.is_corrupted;
             item.is_deleted = updated_record.is_deleted;
             item.flags_str = if updated_record.is_deleted {

@@ -1,12 +1,22 @@
 import { Theme } from "styles.slint";
 import { Icons } from "icons.slint";
 import { ToolbarButton } from "toolbar_button.slint";
+import { ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
+import { MediaTabBar } from "tab_bar.slint";
+import { TabItemModel } from "types.slint";
 
 export component TopToolbar inherits Rectangle {
     height: 38px;
     background: Theme.surface;
 
+    in property <bool> is-browse-active: true;
+    in property <[TabItemModel]> tabs: [];
+    in property <bool> show-tab-rating-badge: false;
+
+    callback browse-clicked();
     callback settings-clicked();
+    callback tab-selected(int /* tab_id */);
+    callback tab-closed(int /* tab_id */);
 
     // Bottom border separator line
     Rectangle {
@@ -16,11 +26,37 @@ export component TopToolbar inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        spacing: 8px;
-        alignment: start;
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 6px;
 
+        // 1. Permanent Browse button strictly on the far left
+        ToolbarButton {
+            text: "Browse";
+            icon: Icons.grid-view;
+            tooltip: "Switch to Library Media Browser";
+            is-active: root.is-browse-active;
+            height: 28px;
+            y: (parent.height - self.height) / 2;
+            clicked => { root.browse-clicked(); }
+        }
+
+        ToolbarSeparator {}
+
+        // 2. Embedded MediaTabBar stretching horizontally between Browse and Settings
+        MediaTabBar {
+            horizontal-stretch: 1;
+            height: 28px;
+            y: (parent.height - self.height) / 2;
+            tabs: root.tabs;
+            show-rating-badge: root.show-tab-rating-badge;
+            tab-selected(id) => { root.tab-selected(id); }
+            tab-closed(id) => { root.tab-closed(id); }
+        }
+
+        ToolbarSeparator {}
+
+        // 3. Settings Button strictly on the far right
         ToolbarButton {
             text: "Settings";
             icon: Icons.settings;

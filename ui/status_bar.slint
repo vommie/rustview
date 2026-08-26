@@ -23,6 +23,9 @@ export component StatusBar inherits Rectangle {
     height: 28px;
     background: Theme.surface;
 
+    // View Mode Context Property (Browse View vs. Tab Viewer View)
+    in property <bool> is-tab-view: false;
+
     // Message & Severity Properties (Zone 1: Left)
     in property <string> status-message: "Ready.";
     in property <int> status-level: 0; // 0 = Info, 1 = Success, 2 = Warning, 3 = Error
@@ -150,14 +153,14 @@ export component StatusBar inherits Rectangle {
         }
 
         // =========================================================================
-        // ZONE 2: RIGHT CLUSTER - Dynamic Progress Bars & Status Metrics (Right-aligned)
+        // ZONE 2: RIGHT CLUSTER - Dynamic Progress Bars & Contextual Status Metrics
         // =========================================================================
         HorizontalLayout {
             horizontal-stretch: 0;
             spacing: 8px;
             alignment: end;
 
-            // 1. Dynamic Progress Bars (Right-aligned next to metrics)
+            // 1. Dynamic Progress Bars (Always visible when active, across all modes)
             if root.is-refreshing-folders : VerticalLayout {
                 alignment: center;
                 FolderRefreshProgress {
@@ -188,11 +191,11 @@ export component StatusBar inherits Rectangle {
                 }
             }
 
-            // Separator between Progress Bars and Status Metrics
-            if root.is-refreshing-folders || root.is-indexing-media || root.is-preloading || root.is-generating : StatusBarSeparator {}
+            // Separator between Progress Bars and Browse Metrics (only in Browse Mode)
+            if !root.is-tab-view && (root.is-refreshing-folders || root.is-indexing-media || root.is-preloading || root.is-generating) : StatusBarSeparator {}
 
-            // 2. Virtual Recursive Folder Indicator Badge
-            if root.is-virtual-folder : VerticalLayout {
+            // 2. Virtual Recursive Folder Indicator Badge (Browse Mode Only)
+            if !root.is-tab-view && root.is-virtual-folder : VerticalLayout {
                 alignment: center;
                 Rectangle {
                     height: 18px;
@@ -218,10 +221,10 @@ export component StatusBar inherits Rectangle {
                 }
             }
 
-            if root.is-virtual-folder : StatusBarSeparator {}
+            if !root.is-tab-view && root.is-virtual-folder : StatusBarSeparator {}
 
-            // 3. Selection Metric Badge (Only visible when >= 1 files are selected)
-            if root.selection-count > 0 : VerticalLayout {
+            // 3. Selection Metric Badge (Browse Mode Only, visible when >= 1 files are selected)
+            if !root.is-tab-view && root.selection-count > 0 : VerticalLayout {
                 alignment: center;
                 Rectangle {
                     height: 18px;
@@ -247,10 +250,10 @@ export component StatusBar inherits Rectangle {
                 }
             }
 
-            if root.selection-count > 0 : StatusBarSeparator {}
+            if !root.is-tab-view && root.selection-count > 0 : StatusBarSeparator {}
 
-            // 4. Total / Filtered View Items Metric Badge (Far Right)
-            VerticalLayout {
+            // 4. Total / Filtered View Items Metric Badge (Browse Mode Only)
+            if !root.is-tab-view : VerticalLayout {
                 alignment: center;
                 Rectangle {
                     height: 18px;

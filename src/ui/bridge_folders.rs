@@ -651,7 +651,9 @@ impl BridgeFolders {
             .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
 
         ctx.thumbnails.cancel_pipeline();
-        ctx.window.invoke_scroll_media_to_top();
+        if !is_explicit_refresh {
+            ctx.window.invoke_scroll_media_to_top();
+        }
 
         let bench = Arc::new(FolderLoadBenchmark::new(
             folder_id,
@@ -672,20 +674,18 @@ impl BridgeFolders {
             st.current_folder_id = Some(folder_id);
             st.current_folder_path = Some(normalized_path.clone());
             st.active_indices.clear();
-            st.file_selection.clear();
-            st.last_executed_query.clear();
             st.folder_thumbnails.clear();
             st.all_folder_media.clear();
 
-            st.is_query_active = false;
-            st.selected_rating = 0;
-            st.filter.rating = None;
-            st.filter.search_query.clear();
-            st.filter.tag_ids.clear();
-            st.tag_filter_query.clear();
-
-            // Deactivate and reset virtual folder mode when switching folders
             if !is_explicit_refresh {
+                st.file_selection.clear();
+                st.last_executed_query.clear();
+                st.is_query_active = false;
+                st.selected_rating = 0;
+                st.filter.rating = None;
+                st.filter.search_query.clear();
+                st.filter.tag_ids.clear();
+                st.tag_filter_query.clear();
                 st.is_virtual_folder_mode = false;
                 st.virtual_folder_count = 0;
             }
@@ -701,9 +701,11 @@ impl BridgeFolders {
             }
         }
 
-        ctx.window.set_search_query("".into());
-        ctx.window.set_selected_rating(0);
-        ctx.window.set_tag_filter_text("".into());
+        if !is_explicit_refresh {
+            ctx.window.set_search_query("".into());
+            ctx.window.set_selected_rating(0);
+            ctx.window.set_tag_filter_text("".into());
+        }
 
         Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
         Self::scroll_to_selected(ctx.window);

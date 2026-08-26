@@ -9,4 +9,5 @@ pub mod system;
 pub mod telemetry;
 pub mod thumbnails;
 pub mod ui;
+pub mod viewer;
 pub mod xnviewdb_migrate;

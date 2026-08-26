@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
-import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView } from "types.slint";
+import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView, TabItemModel } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
 import { SidebarRight } from "sidebar_right.slint";
@@ -12,6 +12,8 @@ import { ContextMenuPopup } from "context_menu.slint";
 import { ResizerBar } from "resizer_bar.slint";
 import { FloatingChoicePopup } from "floating_choice_popup.slint";
 import { MediaPanelToolbar } from "media_panel_toolbar.slint";
+import { ImageTabPanelToolbar } from "image_tab_panel_toolbar.slint";
+import { ImageViewer } from "image_viewer.slint";
 import { EmptyStateView } from "empty_state_view.slint";
 
 export { SettingsWindow } from "settings_window.slint";
@@ -39,14 +41,18 @@ export component MainWindow inherits Window {
     min-height: 600px;
     background: Theme.background;
 
-    // View state properties
+    // View state & Mode properties (0 = Browse Library, 1 = Tab Viewer)
+    in-out property <int> active-view-mode: 0;
+    in-out property <bool> is-browse-active: true;
+    in property <[TabItemModel]> tabs: [];
+
     in-out property <bool> is-table-view: false;
     in-out property <bool> is-modal-locked: false;
     in-out property <int> thumb-size: 190;
     in-out property <int> thumb-aspect-idx: 1;
     in-out property <bool> show-media-type-badges: true;
     in-out property <string> status-text: "Ready.";
-    in-out property <int> status-level: 0; // 0 = Info, 1 = Success, 2 = Warning, 3 = Error
+    in-out property <int> status-level: 0;
     in-out property <string> items-metric-text: "Items: 0";
     in-out property <int> status-total-items: 0;
     in-out property <int> status-visible-items: 0;
@@ -66,6 +72,17 @@ export component MainWindow inherits Window {
     in-out property <string> empty-state-title: "";
     in-out property <string> empty-state-description: "";
     in-out property <string> empty-state-icon: "";
+
+    // Image Viewer properties
+    in-out property <string> viewer-filename: "";
+    in-out property <string> viewer-resolution: "";
+    in-out property <bool> viewer-is-loading: false;
+    in-out property <string> viewer-error: "";
+    in-out property <image> viewer-image;
+    in-out property <int> viewer-background-mode: 0;
+    in-out property <bool> viewer-show-tab-rating-badge: false;
+    in-out property <bool> viewer-has-previous: false;
+    in-out property <bool> viewer-has-next: false;
 
     // Grid Items Layout properties
     in-out property <int> grid-item-padding-h: 8;
@@ -191,6 +208,15 @@ export component MainWindow inherits Window {
 
     callback refresh-folder();
     callback open-settings();
+    callback browse-clicked();
+    callback tab-selected(int /* tab_id */);
+    callback tab-closed(int /* tab_id */);
+
+    callback viewer-close-tab();
+    callback viewer-refresh();
+    callback viewer-previous();
+    callback viewer-next();
+
     callback folder-selected(int, string);
     callback folder-toggle-expand(int);
     callback folder-context-menu(int /* id */, length /* x */, length /* y */);
@@ -292,7 +318,7 @@ export component MainWindow inherits Window {
         }
     }
 
-    pure public function get-current-top-item-index() -> int {
+    pure public function get-top-visible-index() -> int {
         if root.is-table-view {
             return table-view.get-top-visible-index();
         } else {
@@ -300,10 +326,48 @@ export component MainWindow inherits Window {
         }
     }
 
+    // Keyboard Shortcuts & Navigation Handling
+    forward-focus: main-window-focus;
+    main-window-focus := FocusScope {
+        key-pressed(event) => {
+            if root.active-view-mode == 1 {
+                if event.text == Key.Escape {
+                    root.viewer-close-tab();
+                    return accept;
+                }
+                if event.text == Key.F5 {
+                    root.viewer-refresh();
+                    return accept;
+                }
+                if event.text == Key.LeftArrow {
+                    root.viewer-previous();
+                    return accept;
+                }
+                if event.text == Key.RightArrow {
+                    root.viewer-next();
+                    return accept;
+                }
+                if event.text == "0" { root.rating-applied(0); return accept; }
+                if event.text == "1" { root.rating-applied(1); return accept; }
+                if event.text == "2" { root.rating-applied(2); return accept; }
+                if event.text == "3" { root.rating-applied(3); return accept; }
+                if event.text == "4" { root.rating-applied(4); return accept; }
+                if event.text == "5" { root.rating-applied(5); return accept; }
+            }
+            return reject;
+        }
+    }
+
     VerticalLayout {
         spacing: 0px;
 
         TopToolbar {
+            is-browse-active: root.is-browse-active;
+            tabs: root.tabs;
+            show-tab-rating-badge: root.viewer-show-tab-rating-badge;
+            browse-clicked => { root.browse-clicked(); }
+            tab-selected(id) => { root.tab-selected(id); }
+            tab-closed(id) => { root.tab-closed(id); }
             settings-clicked => { root.open-settings(); }
         }
 
@@ -312,7 +376,8 @@ export component MainWindow inherits Window {
             spacing: 0px;
 
             sidebar_left := SidebarLeft {
-                sidebar-width: root.sidebar-left-width;
+                sidebar-width: (root.active-view-mode == 0) ? root.sidebar-left-width : 0px;
+                visible: root.active-view-mode == 0;
                 folders: root.folders;
                 favorites: root.favorites;
                 drop-target-folder-id: root.drop-target-folder-id;
@@ -331,6 +396,8 @@ export component MainWindow inherits Window {
 
             resizer_left := ResizerBar {
                 is-horizontal: true;
+                width: (root.active-view-mode == 0) ? self.thickness : 0px;
+                visible: root.active-view-mode == 0;
                 property <length> start-w: 260px;
                 drag-started => {
                     self.start-w = root.sidebar-left-width;
@@ -348,34 +415,53 @@ export component MainWindow inherits Window {
                 horizontal-stretch: 1;
                 spacing: 0px;
 
-                MediaPanelToolbar {
-                    thumb-width <=> root.thumb-size;
-                    search-text <=> root.search-query;
-                    regex-mode <=> root.regex-mode;
-                    is-table-view: root.is-table-view;
-                    is-virtual-folder <=> root.is-virtual-folder;
-                    is-virtual-folder-enabled: root.is-virtual-folder-btn-enabled;
-                    virtual-folder-tooltip: root.virtual-folder-tooltip;
-                    media-type-filter-idx <=> root.media-type-filter-idx;
-                    thumb-width-changed(w) => { }
-                    search-changed(t) => { root.search-query-changed(t); }
-                    regex-toggled(r) => { root.regex-mode-toggled(r); }
-                    virtual-folder-toggled(v) => { root.virtual-folder-toggled(v); }
-                    media-type-filter-changed(m) => { root.media-type-filter-changed(m); }
-                    refresh-clicked => { root.refresh-folder(); }
-                    view-mode-toggled(new-is-table) => {
-                        let anchor-top-idx = new-is-table ? grid-view.get-top-visible-index() : table-view.get-top-visible-index();
-                        root.is-table-view = new-is-table;
-                        root.view-mode-toggled-with-index(new-is-table, anchor-top-idx);
+                // Toolbars Container with zero layout shift
+                Rectangle {
+                    height: 26px;
+                    vertical-stretch: 0;
+
+                    MediaPanelToolbar {
+                        visible: root.active-view-mode == 0;
+                        thumb-width <=> root.thumb-size;
+                        search-text <=> root.search-query;
+                        regex-mode <=> root.regex-mode;
+                        is-table-view: root.is-table-view;
+                        is-virtual-folder <=> root.is-virtual-folder;
+                        is-virtual-folder-enabled: root.is-virtual-folder-btn-enabled;
+                        virtual-folder-tooltip: root.virtual-folder-tooltip;
+                        media-type-filter-idx <=> root.media-type-filter-idx;
+                        thumb-width-changed(w) => { }
+                        search-changed(t) => { root.search-query-changed(t); }
+                        regex-toggled(r) => { root.regex-mode-toggled(r); }
+                        virtual-folder-toggled(v) => { root.virtual-folder-toggled(v); }
+                        media-type-filter-changed(m) => { root.media-type-filter-changed(m); }
+                        refresh-clicked => { root.refresh-folder(); }
+                        view-mode-toggled(new-is-table) => {
+                            let anchor-top-idx = new-is-table ? grid-view.get-top-visible-index() : table-view.get-top-visible-index();
+                            root.is-table-view = new-is-table;
+                            root.view-mode-toggled-with-index(new-is-table, anchor-top-idx);
+                        }
+                    }
+
+                    ImageTabPanelToolbar {
+                        visible: root.active-view-mode == 1;
+                        filename: root.viewer-filename;
+                        resolution: root.viewer-resolution;
+                        has-previous: root.viewer-has-previous;
+                        has-next: root.viewer-has-next;
+                        previous_clicked => { root.viewer-previous(); }
+                        next_clicked => { root.viewer-next(); }
+                        refresh_clicked => { root.viewer-refresh(); }
                     }
                 }
 
+                // Center Viewport Area (Stacked & Zero-Teardown)
                 Rectangle {
                     vertical-stretch: 1;
                     background: Theme.background;
 
                     grid-view := VirtualizedMediaGrid {
-                        visible: !root.is-table-view;
+                        visible: root.active-view-mode == 0 && !root.is-table-view;
                         media-items: root.media-items;
                         visible-start-index: root.visible-start-index;
                         total-items-count: root.total-items-count;
@@ -391,7 +477,7 @@ export component MainWindow inherits Window {
                         sort-column: root.sort-column-idx;
                         sort-order: root.sort-order-idx;
 
-                        rubberband-active: root.rubberband-active && !root.is-table-view;
+                        rubberband-active: root.rubberband-active && !root.is-table-view && root.active-view-mode == 0;
                         rubberband-x: root.rubberband-x;
                         rubberband-y: root.rubberband-y;
                         rubberband-width: root.rubberband-width;
@@ -421,14 +507,14 @@ export component MainWindow inherits Window {
                     }
 
                     table-view := MediaTableView {
-                        visible: root.is-table-view;
+                        visible: root.active-view-mode == 0 && root.is-table-view;
                         items: root.media-items;
                         visible-start-index: root.visible-start-index;
                         total-items-count: root.total-items-count;
                         sort-column: root.sort-column-idx;
                         sort-order: root.sort-order-idx;
 
-                        rubberband-active: root.rubberband-active && root.is-table-view;
+                        rubberband-active: root.rubberband-active && root.is-table-view && root.active-view-mode == 0;
                         rubberband-x: root.rubberband-x;
                         rubberband-y: root.rubberband-y;
                         rubberband-width: root.rubberband-width;
@@ -474,10 +560,21 @@ export component MainWindow inherits Window {
 
                     // Centered Context-Sensitive Fallback Empty State Overlay
                     empty-state := EmptyStateView {
-                        is-active: root.empty-state-active;
+                        is-active: root.active-view-mode == 0 && root.empty-state-active;
                         title: root.empty-state-title;
                         description: root.empty-state-description;
                         icon-name: root.empty-state-icon;
+                    }
+
+                    // Image Viewer View (Active Tab)
+                    image-viewer := ImageViewer {
+                        visible: root.active-view-mode == 1;
+                        source-image: root.viewer-image;
+                        is-loading: root.viewer-is-loading;
+                        error-message: root.viewer-error;
+                        background-mode: root.viewer-background-mode;
+                        next-image => { root.viewer-next(); }
+                        previous-image => { root.viewer-previous(); }
                     }
                 }
             }
@@ -507,6 +604,7 @@ export component MainWindow inherits Window {
                 has-selection: root.has-file-selection;
                 partial-ratings: root.partial-ratings;
                 has-active-query: root.has-active-query;
+                is-tab-view: root.active-view-mode == 1;
                 tag-filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
                 info-filename: root.info-filename;
@@ -534,6 +632,7 @@ export component MainWindow inherits Window {
         }
 
         StatusBar {
+            is-tab-view: root.active-view-mode == 1;
             status-message: root.status-text;
             status-level: root.status-level;
             item-count-str: root.items-metric-text;

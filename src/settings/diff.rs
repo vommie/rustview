@@ -30,6 +30,9 @@ pub struct SettingsDiff {
     // Formats & Tools Subsystem
     pub formats_settings_changed: bool,
 
+    // Viewer Subsystem
+    pub viewer_settings_changed: bool,
+
     // Tags Subsystem
     pub tags_settings_changed: bool,
     pub tag_expansion_changed: bool,
@@ -98,6 +101,7 @@ impl SettingsDiff {
 
         let view_settings_changed = old.view != new.view;
         let formats_settings_changed = old.formats != new.formats;
+        let viewer_settings_changed = old.viewer != new.viewer;
         let tags_settings_changed = old.tags.default_match_mode != new.tags.default_match_mode
             || old.tags.default_scope_mode != new.tags.default_scope_mode;
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
@@ -116,6 +120,7 @@ impl SettingsDiff {
             || performance_pipeline_changed
             || view_settings_changed
             || formats_settings_changed
+            || viewer_settings_changed
             || tags_settings_changed
             || tag_expansion_changed
             || debug_settings_changed
@@ -135,6 +140,7 @@ impl SettingsDiff {
             performance_pipeline_changed,
             view_settings_changed,
             formats_settings_changed,
+            viewer_settings_changed,
             tags_settings_changed,
             tag_expansion_changed,
             debug_settings_changed,
@@ -392,6 +398,27 @@ impl SettingsDiff {
             changes.push(format!(
                 "Formats: auto_detect_extensionless_media ({} -> {})",
                 old.formats.auto_detect_extensionless_media, new.formats.auto_detect_extensionless_media
+            ));
+        }
+
+        if old.viewer.images.open_in_tab != new.viewer.images.open_in_tab {
+            changes.push(format!(
+                "Viewer: open_images_in_tab ({} -> {})",
+                old.viewer.images.open_in_tab, new.viewer.images.open_in_tab
+            ));
+        }
+
+        if old.viewer.tabs.show_rating_badge != new.viewer.tabs.show_rating_badge {
+            changes.push(format!(
+                "Viewer: tabs.show_rating_badge ({} -> {})",
+                old.viewer.tabs.show_rating_badge, new.viewer.tabs.show_rating_badge
+            ));
+        }
+
+        if old.viewer.background_mode != new.viewer.background_mode {
+            changes.push(format!(
+                "Viewer: background_mode ({} -> {})",
+                old.viewer.background_mode, new.viewer.background_mode
             ));
         }
 

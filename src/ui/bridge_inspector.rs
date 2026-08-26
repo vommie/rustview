@@ -12,25 +12,32 @@ use std::path::{Path, PathBuf};
 pub struct BridgeInspector;
 
 impl BridgeInspector {
-    /// Updates inspector fields on MainWindow according to current selection.
+    /// Updates inspector fields on MainWindow according to current selection or active viewer tab.
     pub fn update(window: &MainWindow, state: &RwLock<UiState>) {
+        let is_tab_mode = window.get_active_view_mode() == 1;
         let st = state.read();
+
+        // When in Tab Mode, inspect the active tab's media item directly without overwriting browse selection
+        if is_tab_mode
+            && let Some(media_id) = st.active_tab_media_id
+            && let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id)
+        {
+            Self::render_single(window, item);
+            return;
+        }
+
         let selected_ids = st.file_selection.selected_ids();
         let sel_count = selected_ids.len();
 
-        if sel_count == 0 || st.active_indices.is_empty() {
+        if sel_count == 0 {
             Self::render_empty(window);
             return;
         }
 
-        // Fast O(1) single-item path (zero string allocations, zero scans)
+        // Fast O(1) single-item path (zero string allocations, direct lookup in in-memory dataset)
         if sel_count == 1 {
             let single_id = *selected_ids.iter().next().unwrap();
-            let item_opt = st
-                .media_row_map
-                .get(&single_id)
-                .and_then(|&row_idx| st.active_indices.get(row_idx))
-                .and_then(|&orig_idx| st.all_folder_media.get(orig_idx));
+            let item_opt = st.all_folder_media.iter().find(|m| m.record.id == single_id);
 
             if let Some(item) = item_opt {
                 Self::render_single(window, item);
@@ -40,11 +47,10 @@ impl BridgeInspector {
             return;
         }
 
-        // Multi-selection path: Zero-copy iterator aggregation over visible items only
+        // Multi-selection path: Zero-copy iterator aggregation over all matching records
         let selected_items: Vec<&IndexedMediaRecord> = st
-            .active_indices
+            .all_folder_media
             .iter()
-            .filter_map(|&idx| st.all_folder_media.get(idx))
             .filter(|m| selected_ids.contains(&m.record.id))
             .collect();
 
@@ -121,7 +127,6 @@ impl BridgeInspector {
         }
 
         let mut sorted_folders: Vec<(String, usize, bool)> = folder_counts.into_values().collect();
-        // Sort: Root folder on the far left (is_root == true), then remaining subfolders in ascending alphabetical order
         sorted_folders.sort_by(|a, b| {
             match (a.2, b.2) {
                 (true, false) => std::cmp::Ordering::Less,
@@ -141,7 +146,6 @@ impl BridgeInspector {
         };
 
         window.set_info_path(subfolders_str.into());
-
         window.set_info_size(format!("{} (total)", format_filesize(summary.total_size_bytes)).into());
 
         let dim_str = if summary.is_uniform_dimensions {

@@ -7,7 +7,7 @@ use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
-use super::bridge_tags::BridgeTags;
+use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::file_selection::FileSelectionModel;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{
@@ -19,6 +19,7 @@ use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::system::{DesktopApp, DesktopIntegration, SystemClipboard, SystemFileHandler};
 use crate::thumbnails::ThumbnailManager;
+use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::cell::RefCell;
@@ -30,6 +31,7 @@ use std::sync::Arc;
 pub struct MediaActionContext<'a> {
     pub library: &'a Arc<Library>,
     pub thumbnails: &'a Arc<ThumbnailManager>,
+    pub tab_manager: &'a Arc<ViewerTabManager>,
     pub settings: &'a Arc<SettingsManager>,
     pub state: &'a Arc<RwLock<UiState>>,
     pub dispatcher: &'a Arc<CtxMenuDispatcher>,
@@ -80,12 +82,21 @@ impl MediaContextMenu {
             let st = state.read();
             let selected_ids = st.file_selection.selected_ids();
 
-            let all_deleted = !selected_ids.is_empty() && selected_ids.iter().all(|&id| {
-                st.all_folder_media.iter().find(|m| m.record.id == id).map(|m| m.record.is_deleted).unwrap_or(false)
-            });
+            let all_deleted = !selected_ids.is_empty()
+                && selected_ids.iter().all(|&id| {
+                    st.all_folder_media
+                        .iter()
+                        .find(|m| m.record.id == id)
+                        .map(|m| m.record.is_deleted)
+                        .unwrap_or(false)
+                });
 
             if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
-                (matches!(item.record.media_type, MediaType::Image), all_deleted, Some(item.full_path.clone()))
+                (
+                    matches!(item.record.media_type, MediaType::Image),
+                    all_deleted,
+                    Some(item.full_path.clone()),
+                )
             } else {
                 let is_img = library
                     .media()
@@ -107,7 +118,12 @@ impl MediaContextMenu {
 
         state.write().active_associated_apps = associated_apps.clone();
 
-        (all_selected_deleted, selected_count, is_single && is_single_image, associated_apps)
+        (
+            all_selected_deleted,
+            selected_count,
+            is_single && is_single_image,
+            associated_apps,
+        )
     }
 
     pub fn build_menu(
@@ -326,6 +342,15 @@ impl MediaContextMenu {
             return;
         }
 
+        let tag_action_ctx = TagActionContext {
+            window,
+            library: ctx.library,
+            thumbnails: ctx.thumbnails,
+            tab_manager: ctx.tab_manager,
+            settings: ctx.settings,
+            state: ctx.state,
+        };
+
         match action_id {
             CTX_ACTION_OPEN => {
                 Self::handle_open_action(window, ctx, &selected_ids);
@@ -350,6 +375,7 @@ impl MediaContextMenu {
                 let dialog_ctx = FileDialogContext {
                     library: ctx.library.clone(),
                     thumbnails: ctx.thumbnails.clone(),
+                    tab_manager: ctx.tab_manager.clone(),
                     settings: ctx.settings.clone(),
                     state: ctx.state.clone(),
                 };
@@ -360,6 +386,7 @@ impl MediaContextMenu {
                 let dialog_ctx = FileDialogContext {
                     library: ctx.library.clone(),
                     thumbnails: ctx.thumbnails.clone(),
+                    tab_manager: ctx.tab_manager.clone(),
                     settings: ctx.settings.clone(),
                     state: ctx.state.clone(),
                 };
@@ -377,6 +404,7 @@ impl MediaContextMenu {
                     window,
                     ctx.library,
                     ctx.thumbnails,
+                    ctx.tab_manager,
                     ctx.settings,
                     ctx.state,
                 );
@@ -393,56 +421,32 @@ impl MediaContextMenu {
             CTX_ACTION_RATE_5 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 5,
-                window,
-                ctx.library,
-                ctx.thumbnails,
-                ctx.settings,
-                ctx.state,
+                &tag_action_ctx,
             ),
             CTX_ACTION_RATE_4 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 4,
-                window,
-                ctx.library,
-                ctx.thumbnails,
-                ctx.settings,
-                ctx.state,
+                &tag_action_ctx,
             ),
             CTX_ACTION_RATE_3 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 3,
-                window,
-                ctx.library,
-                ctx.thumbnails,
-                ctx.settings,
-                ctx.state,
+                &tag_action_ctx,
             ),
             CTX_ACTION_RATE_2 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 2,
-                window,
-                ctx.library,
-                ctx.thumbnails,
-                ctx.settings,
-                ctx.state,
+                &tag_action_ctx,
             ),
             CTX_ACTION_RATE_1 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 1,
-                window,
-                ctx.library,
-                ctx.thumbnails,
-                ctx.settings,
-                ctx.state,
+                &tag_action_ctx,
             ),
             CTX_ACTION_RATE_0 => BridgeTags::apply_rating_to_ids(
                 &selected_ids,
                 0,
-                window,
-                ctx.library,
-                ctx.thumbnails,
-                ctx.settings,
-                ctx.state,
+                &tag_action_ctx,
             ),
             _ => {
                 ctx.dispatcher.dispatch(action_id, &context);
@@ -462,7 +466,7 @@ impl MediaContextMenu {
 
         tracing::info!(
             selected_count = ordered_ids.len(),
-            "[MediaContextMenu] 'Open' action triggered from context menu in visual sorted order"
+            "[MediaContextMenu] 'Open' action triggered from context menu"
         );
 
         for id in ordered_ids {
@@ -490,14 +494,17 @@ impl MediaContextMenu {
         tracing::info!(
             app = %app.name,
             paths_count = paths.len(),
-            "[MediaContextMenu] Launching selected file(s) with specific desktop app in visual sorted order"
+            "[MediaContextMenu] Launching selected file(s) with specific desktop app"
         );
 
         if let Err(e) = DesktopIntegration::launch_app(&app, &paths) {
             tracing::error!(error = %e, app = %app.name, "[MediaContextMenu] Failed to launch desktop app");
             StatusBarBridge::error(window, format!("Failed to launch '{}': {}", app.name, e));
         } else {
-            StatusBarBridge::success(window, format!("Launched '{}' with {} file(s).", app.name, paths.len()));
+            StatusBarBridge::success(
+                window,
+                format!("Launched '{}' with {} file(s).", app.name, paths.len()),
+            );
         }
     }
 
@@ -607,7 +614,7 @@ impl MediaContextMenu {
             tracing::info!(name = %LogObscurer::filename(&names[0]), "[MediaContextMenu] Copied single file name to clipboard");
             StatusBarBridge::success(window, format!("Copied file name to clipboard: '{}'", names[0]));
         } else {
-            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file names to clipboard in visual sorted order");
+            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file names to clipboard");
             StatusBarBridge::success(window, format!("Copied {} file names to clipboard.", count));
         }
     }
@@ -631,7 +638,7 @@ impl MediaContextMenu {
             tracing::info!(path = %LogObscurer::path(&paths[0]), "[MediaContextMenu] Copied single file path to clipboard");
             StatusBarBridge::success(window, format!("Copied file path to clipboard: '{}'", path_str));
         } else {
-            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file paths to clipboard in visual sorted order");
+            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file paths to clipboard");
             StatusBarBridge::success(window, format!("Copied {} file paths to clipboard.", count));
         }
     }
@@ -654,7 +661,10 @@ impl MediaContextMenu {
             if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
                 (item.record.filename.clone(), item.full_path.clone())
             } else if let Ok(p) = ctx.library.resolve_media_path(single_id) {
-                let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let name = p
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
                 (name, p)
             } else {
                 return;
@@ -718,6 +728,7 @@ impl MediaContextMenu {
             let dialog_ctx = FileDialogContext {
                 library: ctx.library.clone(),
                 thumbnails: ctx.thumbnails.clone(),
+                tab_manager: ctx.tab_manager.clone(),
                 settings: ctx.settings.clone(),
                 state: ctx.state.clone(),
             };

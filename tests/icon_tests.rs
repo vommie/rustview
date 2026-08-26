@@ -29,6 +29,10 @@ fn test_icon_asset_metadata_and_spot_tint_rules() {
     assert!(IconAsset::VirtualFolderEnable.is_tintable());
     assert!(IconAsset::VirtualFolderDisable.is_tintable());
 
+    // Verify image & video tab vector icons are tintable
+    assert!(IconAsset::Image.is_tintable());
+    assert!(IconAsset::Video.is_tintable());
+
     // 2. Verify multi-color semantic icons MUST NEVER be tinted
     assert!(!IconAsset::Tag.is_tintable());
     assert!(!IconAsset::Rating(0).is_tintable());
@@ -90,6 +94,10 @@ fn test_icon_manager_resolution_by_name() {
         IconAsset::from_name("virtual_folder_disable"),
         Some(IconAsset::VirtualFolderDisable)
     );
+    assert_eq!(IconAsset::from_name("image"), Some(IconAsset::Image));
+    assert_eq!(IconAsset::from_name("picture"), Some(IconAsset::Image));
+    assert_eq!(IconAsset::from_name("video"), Some(IconAsset::Video));
+    assert_eq!(IconAsset::from_name("movie"), Some(IconAsset::Video));
     assert_eq!(IconAsset::from_name("unknown_icon"), None);
 
     assert!(IconManager::is_tintable("settings"));
@@ -99,6 +107,8 @@ fn test_icon_manager_resolution_by_name() {
     assert!(IconManager::is_tintable("media_filter_videos_images"));
     assert!(IconManager::is_tintable("virtual_folder_enable"));
     assert!(IconManager::is_tintable("virtual_folder_disable"));
+    assert!(IconManager::is_tintable("image"));
+    assert!(IconManager::is_tintable("video"));
     assert!(!IconManager::is_tintable("tag"));
     assert!(!IconManager::is_tintable("rating_4"));
     assert!(!IconManager::is_tintable("media_file_corrupted"));

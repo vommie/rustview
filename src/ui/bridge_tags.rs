@@ -4,6 +4,7 @@ use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::{MainWindow, TagColumnView, TagNodeView};
 use crate::ctx_menu::CtxMenuActionId;
 use crate::library::models::{MediaId, MediaSearchParams, TagId, TagRecord};
@@ -11,6 +12,7 @@ use crate::library::Library;
 use crate::query::{MatchMode, ScopeMode};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
+use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use regex::{Regex, RegexBuilder};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
@@ -25,6 +27,16 @@ pub const TAG_ROW_SPACING: f32 = 2.0;
 pub const TAG_COLUMN_SPACING: f32 = 6.0;
 pub const TAG_PADDING_H: f32 = 4.0;
 pub const TAG_PADDING_V: f32 = 4.0;
+
+/// Grouped dependencies bundle for tag and rating actions.
+pub struct TagActionContext<'a> {
+    pub window: &'a MainWindow,
+    pub library: &'a Arc<Library>,
+    pub thumbnails: &'a Arc<ThumbnailManager>,
+    pub tab_manager: &'a Arc<ViewerTabManager>,
+    pub settings: &'a Arc<SettingsManager>,
+    pub state: &'a Arc<RwLock<UiState>>,
+}
 
 #[derive(Debug, Clone)]
 pub struct TagTreeNode {
@@ -253,9 +265,10 @@ impl TagTreeSync {
         let t0 = Instant::now();
         let current_columns = window.get_tag_columns();
         let col_count = current_columns.row_count();
+        let is_tab_mode = window.get_active_view_mode() == 1;
 
         let (
-            is_assign,
+            is_assign_raw,
             selected_query_tags,
             selected_file_ids,
             query_rating,
@@ -264,10 +277,20 @@ impl TagTreeSync {
             is_resettable,
         ) = {
             let s = state.read();
+            let file_ids = if is_tab_mode {
+                if let Some(tab_media_id) = s.active_tab_media_id {
+                    HashSet::from([tab_media_id])
+                } else {
+                    HashSet::new()
+                }
+            } else {
+                s.file_selection.selected_ids().clone()
+            };
+
             (
                 s.is_assign_mode,
                 s.filter.tag_ids.clone(),
-                s.file_selection.selected_ids().clone(),
+                file_ids,
                 s.selected_rating,
                 s.filter.match_mode,
                 s.filter.scope_mode,
@@ -275,6 +298,7 @@ impl TagTreeSync {
             )
         };
 
+        let is_assign = is_assign_raw || is_tab_mode;
         let stats = TagSelectionStats::compute(&selected_file_ids, library);
         let has_selection = stats.selected_files_count > 0;
 
@@ -282,7 +306,7 @@ impl TagTreeSync {
         window.set_tag_match_mode_idx(if match_mode == MatchMode::All { 0 } else { 1 });
         window.set_tag_scope_mode_idx(scope_mode.to_index());
         window.set_has_file_selection(if is_assign { has_selection } else { true });
-        window.set_has_active_query(is_resettable);
+        window.set_has_active_query(!is_tab_mode && is_resettable);
 
         if is_assign {
             let mut partial_arr = [false; 6];
@@ -355,11 +379,11 @@ impl TagTreeSync {
 
         tracing::debug!(
             mode = if is_assign { "ASSIGN" } else { "QUERY" },
+            is_tab_mode = is_tab_mode,
             total_columns = col_count,
             total_rows = total_rows,
             modified_rows = modified_rows,
             selected_files = stats.selected_files_count,
-            is_resettable = is_resettable,
             elapsed_us = t0.elapsed().as_micros(),
             "[TagTree: InPlace Selection Sync] Tag & Rating panel state synchronized in-place with native column layouts"
         );
@@ -371,18 +395,30 @@ pub struct TagActionHandler;
 impl TagActionHandler {
     pub fn toggle_tag(
         tag_id: TagId,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
-        let (selected_ids, is_assign) = {
-            let s = state.read();
-            (s.file_selection.selected_ids().clone(), s.is_assign_mode)
+        let is_tab_active = ctx.window.get_active_view_mode() == 1 || ctx.tab_manager.active_tab_id().is_some();
+
+        let (selected_ids, is_assign_raw) = {
+            let s = ctx.state.read();
+            let ids = if is_tab_active {
+                if let Some(tab_id) = s.active_tab_media_id {
+                    HashSet::from([tab_id])
+                } else if let Some(m_id) = ctx.tab_manager.get_active_media_id() {
+                    HashSet::from([m_id])
+                } else {
+                    s.file_selection.selected_ids().clone()
+                }
+            } else {
+                s.file_selection.selected_ids().clone()
+            };
+            (ids, s.is_assign_mode)
         };
 
-        let tag_name = library
+        let is_assign = is_assign_raw || is_tab_active;
+
+        let tag_name = ctx
+            .library
             .tags()
             .get_tag(tag_id)
             .ok()
@@ -395,13 +431,12 @@ impl TagActionHandler {
                 tag_id,
                 &tag_name,
                 &selected_ids,
-                window,
-                library,
-                state,
+                ctx,
             );
         } else {
             Self::handle_query_mode_toggle(
-                tag_id, window, library, thumbnails, settings, state,
+                tag_id,
+                ctx,
             );
         }
     }
@@ -410,20 +445,18 @@ impl TagActionHandler {
         tag_id: TagId,
         tag_name: &str,
         selected_ids: &HashSet<MediaId>,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
         if selected_ids.is_empty() {
             tracing::warn!(
                 tag_id = tag_id,
                 "[TagAction: Assign] No media files selected to assign/unassign tag"
             );
-            StatusBarBridge::info(window, "Select one or more files to assign/unassign tags.");
+            StatusBarBridge::info(ctx.window, "Select one or more files to assign/unassign tags.");
             return;
         }
 
-        let stats = TagSelectionStats::compute(selected_ids, library);
+        let stats = TagSelectionStats::compute(selected_ids, ctx.library);
         let total_selected = selected_ids.len();
 
         if stats.is_fully_assigned(tag_id) {
@@ -433,10 +466,10 @@ impl TagActionHandler {
                 "[TagAction: Unassign] Removing tag from all selected files"
             );
             for &id in selected_ids {
-                let _ = library.tags().remove_tag_from_media(id, tag_id);
+                let _ = ctx.library.tags().remove_tag_from_media(id, tag_id);
             }
             StatusBarBridge::success(
-                window,
+                ctx.window,
                 format!("Removed tag '{}' from {} file(s)", tag_name, total_selected),
             );
         } else {
@@ -447,30 +480,33 @@ impl TagActionHandler {
                 "[TagAction: Assign] Assigning tag to all selected files"
             );
             for &id in selected_ids {
-                let _ = library.tags().assign_tag(id, tag_id);
+                let _ = ctx.library.tags().assign_tag(id, tag_id);
             }
             StatusBarBridge::success(
-                window,
+                ctx.window,
                 format!("Assigned tag '{}' to {} file(s)", tag_name, total_selected),
             );
         }
 
-        Self::update_grid_tag_badges(selected_ids, window, library, state);
-        TagTreeSync::sync_in_place(window, library, state);
-        BridgeInspector::update(window, state);
-        StatusBarBridge::update_metrics(window, state);
+        Self::update_grid_tag_badges(selected_ids, ctx.window, ctx.library, ctx.state);
+        TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
+        BridgeInspector::update(ctx.window, ctx.state);
+        BridgeViewerTabs::sync_ui(
+            ctx.window,
+            ctx.tab_manager,
+            ctx.library,
+            ctx.settings,
+            ctx.state,
+        );
+        StatusBarBridge::update_metrics(ctx.window, ctx.state);
     }
 
     fn handle_query_mode_toggle(
         tag_id: TagId,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
         {
-            let mut st = state.write();
+            let mut st = ctx.state.write();
             if st.filter.tag_ids.contains(&tag_id) {
                 st.filter.tag_ids.remove(&tag_id);
             } else {
@@ -478,7 +514,7 @@ impl TagActionHandler {
             }
         }
 
-        Self::execute_query_flow(window, library, thumbnails, settings, state);
+        Self::execute_query_flow(ctx);
     }
 
     fn update_grid_tag_badges(
@@ -533,36 +569,42 @@ impl TagActionHandler {
 
     pub fn apply_rating(
         rating: Option<u8>,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
-        let (selected_ids, is_assign) = {
-            let s = state.read();
-            (s.file_selection.selected_ids().clone(), s.is_assign_mode)
+        let is_tab_active = ctx.window.get_active_view_mode() == 1 || ctx.tab_manager.active_tab_id().is_some();
+
+        let (selected_ids, is_assign_raw) = {
+            let s = ctx.state.read();
+            let ids = if is_tab_active {
+                if let Some(tab_id) = s.active_tab_media_id {
+                    HashSet::from([tab_id])
+                } else if let Some(m_id) = ctx.tab_manager.get_active_media_id() {
+                    HashSet::from([m_id])
+                } else {
+                    s.file_selection.selected_ids().clone()
+                }
+            } else {
+                s.file_selection.selected_ids().clone()
+            };
+            (ids, s.is_assign_mode)
         };
 
+        let is_assign = is_assign_raw || is_tab_active;
         let rating_val = rating.unwrap_or(0);
 
         if is_assign {
             if selected_ids.is_empty() {
-                StatusBarBridge::info(window, "Select one or more files to apply rating.");
+                StatusBarBridge::info(ctx.window, "Select one or more files to apply rating.");
                 return;
             }
             Self::apply_rating_to_ids(
                 &selected_ids,
                 rating_val,
-                window,
-                library,
-                thumbnails,
-                settings,
-                state,
+                ctx,
             );
         } else {
             let (prev_rating, is_query) = {
-                let s = state.read();
+                let s = ctx.state.read();
                 (s.selected_rating, s.is_query_active)
             };
 
@@ -571,35 +613,34 @@ impl TagActionHandler {
             }
 
             {
-                let mut st = state.write();
+                let mut st = ctx.state.write();
                 st.selected_rating = rating_val;
                 st.filter.rating = if rating_val > 0 { Some(rating_val) } else { None };
             }
 
-            Self::execute_query_flow(window, library, thumbnails, settings, state);
+            Self::execute_query_flow(ctx);
         }
     }
 
     pub fn apply_rating_to_ids(
         ids: &HashSet<MediaId>,
         rating: u8,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        _thumbnails: &Arc<ThumbnailManager>,
-        _settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
         for &id in ids {
-            let _ = library.media().set_rating(id, rating);
+            let _ = ctx.library.media().set_rating(id, rating);
+            if let Ok(Some(updated)) = ctx.library.media().get(id) {
+                ctx.tab_manager.notify_media_refreshed(id, &updated);
+            }
         }
 
-        let media_model = window.get_media_items();
-        let start_window = window.get_visible_start_index() as usize;
+        let media_model = ctx.window.get_media_items();
+        let start_window = ctx.window.get_visible_start_index() as usize;
         let visible_count = media_model.row_count();
         let mut row_updates = Vec::new();
 
         {
-            let mut st = state.write();
+            let mut st = ctx.state.write();
             let UiState {
                 ref mut all_folder_media,
                 ref media_row_map,
@@ -630,12 +671,19 @@ impl TagActionHandler {
             }
         }
 
-        TagTreeSync::sync_in_place(window, library, state);
-        BridgeInspector::update(window, state);
-        StatusBarBridge::update_metrics(window, state);
+        TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
+        BridgeInspector::update(ctx.window, ctx.state);
+        BridgeViewerTabs::sync_ui(
+            ctx.window,
+            ctx.tab_manager,
+            ctx.library,
+            ctx.settings,
+            ctx.state,
+        );
+        StatusBarBridge::update_metrics(ctx.window, ctx.state);
 
         StatusBarBridge::success(
-            window,
+            ctx.window,
             if rating == 0 {
                 format!("Cleared rating for {} file(s)", ids.len())
             } else {
@@ -645,14 +693,10 @@ impl TagActionHandler {
     }
 
     pub fn reset_query(
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
         let (current_f_id, current_f_path) = {
-            let mut st = state.write();
+            let mut st = ctx.state.write();
             st.selected_rating = 0;
             st.filter.rating = None;
             st.filter.tag_ids.clear();
@@ -664,46 +708,50 @@ impl TagActionHandler {
             (st.current_folder_id, st.current_folder_path.clone())
         };
 
-        window.set_is_virtual_folder(false);
-        window.set_virtual_folder_count(0);
-        window.set_selected_rating(0);
-        window.set_search_query("".into());
-        window.invoke_scroll_media_to_top();
+        ctx.window.set_is_virtual_folder(false);
+        ctx.window.set_virtual_folder_count(0);
+        ctx.window.set_selected_rating(0);
+        ctx.window.set_search_query("".into());
+        ctx.window.invoke_scroll_media_to_top();
 
         if let (Some(f_id), Some(path)) = (current_f_id, current_f_path.as_ref()) {
-            let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
-            let indexed = BridgeMedia::preindex(library, raw_media, path);
+            let raw_media = ctx.library.media().get_all_by_folder(f_id).unwrap_or_default();
+            let indexed = BridgeMedia::preindex(ctx.library, raw_media, path);
             let valid_ids: HashSet<MediaId> = indexed.iter().map(|m| m.record.id).collect();
 
             {
-                let mut st = state.write();
+                let mut st = ctx.state.write();
                 st.all_folder_media = indexed;
                 st.file_selection.prune_missing(&valid_ids);
             }
         }
 
-        TagTreeSync::sync_in_place(window, library, state);
-        BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
-        BridgeInspector::update(window, state);
-        BridgeMedia::update_virtual_folder_button_state(window, library, state);
-        StatusBarBridge::update_metrics(window, state);
-        StatusBarBridge::info(window, "Query reset to default folder view.");
+        TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
+        BridgeMedia::reload(
+            ctx.window,
+            ctx.library,
+            ctx.thumbnails,
+            ctx.settings,
+            ctx.state,
+            false,
+            false,
+        );
+        BridgeInspector::update(ctx.window, ctx.state);
+        BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
+        StatusBarBridge::update_metrics(ctx.window, ctx.state);
+        StatusBarBridge::info(ctx.window, "Query reset to default folder view.");
     }
 
     pub fn execute_query_flow(
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
         let t_flow_start = Instant::now();
 
-        window.set_search_query("".into());
-        window.invoke_scroll_media_to_top();
+        ctx.window.set_search_query("".into());
+        ctx.window.invoke_scroll_media_to_top();
 
         let (params, current_folder_p) = {
-            let mut st = state.write();
+            let mut st = ctx.state.write();
             st.filter.search_query.clear();
             st.last_executed_query.clear();
 
@@ -735,8 +783,8 @@ impl TagActionHandler {
         };
 
         if params.scope_mode == ScopeMode::Global {
-            window.set_is_virtual_folder(false);
-            window.set_virtual_folder_count(0);
+            ctx.window.set_is_virtual_folder(false);
+            ctx.window.set_virtual_folder_count(0);
         }
 
         let is_query_active =
@@ -744,36 +792,36 @@ impl TagActionHandler {
 
         if !is_query_active {
             let t_restore = Instant::now();
-            let is_virt = state.read().is_virtual_folder_mode;
+            let is_virt = ctx.state.read().is_virtual_folder_mode;
             {
-                let mut st = state.write();
+                let mut st = ctx.state.write();
                 st.is_query_active = false;
                 if let (Some(f_id), Some(path)) = (st.current_folder_id, current_folder_p.as_ref()) {
                     if is_virt {
-                        let descendant_ids = library.folders().get_descendant_folder_ids(f_id).unwrap_or_else(|_| vec![f_id]);
+                        let descendant_ids = ctx.library.folders().get_descendant_folder_ids(f_id).unwrap_or_else(|_| vec![f_id]);
                         let mut media_ids = Vec::new();
-                        if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                        if let Ok(rtxn) = ctx.library.raw_db().env.read_txn() {
                             for fid in descendant_ids {
-                                if let Ok(Some(ids)) = library.raw_db().media_by_folder.get(&rtxn, &fid) {
+                                if let Ok(Some(ids)) = ctx.library.raw_db().media_by_folder.get(&rtxn, &fid) {
                                     media_ids.extend(ids);
                                 }
                             }
                         }
                         let mut known = Vec::new();
                         let mut seen = HashSet::new();
-                        if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                        if let Ok(rtxn) = ctx.library.raw_db().env.read_txn() {
                             for mid in media_ids {
                                 if seen.insert(mid)
-                                    && let Ok(Some(rec)) = library.raw_db().media.get(&rtxn, &mid)
+                                    && let Ok(Some(rec)) = ctx.library.raw_db().media.get(&rtxn, &mid)
                                 {
                                     known.push(rec);
                                 }
                             }
                         }
-                        st.all_folder_media = BridgeMedia::preindex_records(library, known);
+                        st.all_folder_media = BridgeMedia::preindex_records(ctx.library, known);
                     } else {
-                        let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
-                        st.all_folder_media = BridgeMedia::preindex(library, raw_media, path);
+                        let raw_media = ctx.library.media().get_all_by_folder(f_id).unwrap_or_default();
+                        st.all_folder_media = BridgeMedia::preindex(ctx.library, raw_media, path);
                     }
                     let valid_ids: HashSet<MediaId> =
                         st.all_folder_media.iter().map(|m| m.record.id).collect();
@@ -781,12 +829,20 @@ impl TagActionHandler {
                 }
             }
 
-            TagTreeSync::sync_in_place(window, library, state);
-            BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
-            BridgeInspector::update(window, state);
-            BridgeMedia::update_virtual_folder_button_state(window, library, state);
-            StatusBarBridge::update_metrics(window, state);
-            StatusBarBridge::info(window, "Query cleared. Regular folder view active.");
+            TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
+            BridgeMedia::reload(
+                ctx.window,
+                ctx.library,
+                ctx.thumbnails,
+                ctx.settings,
+                ctx.state,
+                false,
+                false,
+            );
+            BridgeInspector::update(ctx.window, ctx.state);
+            BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
+            StatusBarBridge::update_metrics(ctx.window, ctx.state);
+            StatusBarBridge::info(ctx.window, "Query cleared. Regular folder view active.");
 
             tracing::info!(
                 restore_us = t_restore.elapsed().as_micros(),
@@ -797,28 +853,36 @@ impl TagActionHandler {
         }
 
         let t_db = Instant::now();
-        let search_results = library.media().search(&params).unwrap_or_default();
+        let search_results = ctx.library.media().search(&params).unwrap_or_default();
         let db_search_us = t_db.elapsed().as_micros();
         let result_count = search_results.len();
 
         let t_preindex = Instant::now();
-        let indexed_results = BridgeMedia::preindex_records(library, search_results);
+        let indexed_results = BridgeMedia::preindex_records(ctx.library, search_results);
         let preindex_us = t_preindex.elapsed().as_micros();
 
         let valid_ids: HashSet<MediaId> = indexed_results.iter().map(|m| m.record.id).collect();
 
         {
-            let mut st = state.write();
+            let mut st = ctx.state.write();
             st.all_folder_media = indexed_results;
             st.file_selection.prune_missing(&valid_ids);
         }
 
         let t_reload = Instant::now();
-        TagTreeSync::sync_in_place(window, library, state);
-        BridgeMedia::reload(window, library, thumbnails, settings, state, false, false);
-        BridgeInspector::update(window, state);
-        BridgeMedia::update_virtual_folder_button_state(window, library, state);
-        StatusBarBridge::update_metrics(window, state);
+        TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
+        BridgeMedia::reload(
+            ctx.window,
+            ctx.library,
+            ctx.thumbnails,
+            ctx.settings,
+            ctx.state,
+            false,
+            false,
+        );
+        BridgeInspector::update(ctx.window, ctx.state);
+        BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
+        StatusBarBridge::update_metrics(ctx.window, ctx.state);
         let reload_us = t_reload.elapsed().as_micros();
 
         let total_flow_us = t_flow_start.elapsed().as_micros();
@@ -826,12 +890,12 @@ impl TagActionHandler {
         let scope_str = params.scope_mode.as_str();
         if result_count == 0 {
             StatusBarBridge::info(
-                window,
+                ctx.window,
                 format!("Query ({}) returned no results.", scope_str),
             );
         } else {
             StatusBarBridge::info(
-                window,
+                ctx.window,
                 format!(
                     "Query ({}) returned {} result{}.",
                     scope_str,
@@ -864,32 +928,48 @@ impl BridgeTags {
         window: &MainWindow,
         library: Arc<Library>,
         thumbnails: Arc<ThumbnailManager>,
+        tab_manager: Arc<ViewerTabManager>,
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
         window.on_rating_applied(move |rating| {
             Self::apply_rating(
                 if rating < 0 { None } else { Some(rating as u8) },
-                &win,
-                &lib,
-                &thumb,
-                &set,
-                &st,
+                &TagActionContext {
+                    window: &win,
+                    library: &lib,
+                    thumbnails: &thumb,
+                    tab_manager: &tm,
+                    settings: &set,
+                    state: &st,
+                },
             );
         });
 
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
         window.on_tag_toggled(move |tag_id| {
-            Self::toggle_tag(tag_id as u32, &win, &lib, &thumb, &set, &st);
+            Self::toggle_tag(
+                tag_id as u32,
+                &TagActionContext {
+                    window: &win,
+                    library: &lib,
+                    thumbnails: &thumb,
+                    tab_manager: &tm,
+                    settings: &set,
+                    state: &st,
+                },
+            );
         });
 
         let win = window.clone_strong();
@@ -924,6 +1004,7 @@ impl BridgeTags {
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
         window.on_match_mode_changed(move |idx| {
@@ -945,11 +1026,18 @@ impl BridgeTags {
                 ?mode,
                 should_execute,
                 elapsed_us = elapsed_us,
-                "[TagRatePanel: MatchMode] Match mode toggled (Fast-Path active if inactive)"
+                "[TagRatePanel: MatchMode] Match mode toggled"
             );
 
             if should_execute {
-                Self::execute_query_flow(&win, &lib, &thumb, &set, &st);
+                Self::execute_query_flow(&TagActionContext {
+                    window: &win,
+                    library: &lib,
+                    thumbnails: &thumb,
+                    tab_manager: &tm,
+                    settings: &set,
+                    state: &st,
+                });
             } else {
                 TagTreeSync::sync_in_place(&win, &lib, &st);
             }
@@ -958,6 +1046,7 @@ impl BridgeTags {
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
+        let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
         window.on_scope_mode_changed(move |idx| {
@@ -981,11 +1070,18 @@ impl BridgeTags {
                 ?scope,
                 should_execute,
                 elapsed_us = elapsed_us,
-                "[TagRatePanel: ScopeMode] Scope mode toggled (Fast-Path active if inactive)"
+                "[TagRatePanel: ScopeMode] Scope mode toggled"
             );
 
             if should_execute {
-                Self::execute_query_flow(&win, &lib, &thumb, &set, &st);
+                Self::execute_query_flow(&TagActionContext {
+                    window: &win,
+                    library: &lib,
+                    thumbnails: &thumb,
+                    tab_manager: &tm,
+                    settings: &set,
+                    state: &st,
+                });
             } else {
                 TagTreeSync::sync_in_place(&win, &lib, &st);
                 BridgeMedia::update_virtual_folder_button_state(&win, &lib, &st);
@@ -1009,11 +1105,19 @@ impl BridgeTags {
 
         let win = window.clone_strong();
         let lib = library.clone();
-        let thumb = thumbnails;
-        let set = settings;
+        let thumb = thumbnails.clone();
+        let tm = tab_manager.clone();
+        let set = settings.clone();
         let st = state.clone();
         window.on_tag_reset_clicked(move || {
-            Self::reset_query(&win, &lib, &thumb, &set, &st);
+            Self::reset_query(&TagActionContext {
+                window: &win,
+                library: &lib,
+                thumbnails: &thumb,
+                tab_manager: &tm,
+                settings: &set,
+                state: &st,
+            });
         });
 
         let lib_geom = library;
@@ -1051,19 +1155,32 @@ impl BridgeTags {
             st.expanded_tag_ids.retain(|id| valid_ids.contains(id));
         }
 
-        let (is_assign, expanded_set, selected_query_tags, filter_text, is_regex, selected_file_ids, available_h) = {
+        let is_tab_mode = window.get_active_view_mode() == 1;
+
+        let (is_assign_raw, expanded_set, selected_query_tags, filter_text, is_regex, selected_file_ids, available_h) = {
             let s = state.read();
+            let file_ids = if is_tab_mode {
+                if let Some(tab_media_id) = s.active_tab_media_id {
+                    HashSet::from([tab_media_id])
+                } else {
+                    HashSet::new()
+                }
+            } else {
+                s.file_selection.selected_ids().clone()
+            };
+
             (
                 s.is_assign_mode,
                 s.expanded_tag_ids.clone(),
                 s.filter.tag_ids.clone(),
                 s.tag_filter_query.clone(),
                 s.tag_filter_is_regex,
-                s.file_selection.selected_ids().clone(),
+                file_ids,
                 s.tag_tree_available_height,
             )
         };
 
+        let is_assign = is_assign_raw || is_tab_mode;
         let filter_trimmed = filter_text.trim().to_string();
         let filter_lower = filter_trimmed.to_lowercase();
 
@@ -1251,61 +1368,39 @@ impl BridgeTags {
     #[inline]
     pub fn toggle_tag(
         tag_id: TagId,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
-        TagActionHandler::toggle_tag(tag_id, window, library, thumbnails, settings, state);
+        TagActionHandler::toggle_tag(tag_id, ctx);
     }
 
     #[inline]
     pub fn apply_rating(
         rating: Option<u8>,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
-        TagActionHandler::apply_rating(rating, window, library, thumbnails, settings, state);
+        TagActionHandler::apply_rating(rating, ctx);
     }
 
     #[inline]
     pub fn apply_rating_to_ids(
         ids: &HashSet<MediaId>,
         rating: u8,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
-        TagActionHandler::apply_rating_to_ids(
-            ids, rating, window, library, thumbnails, settings, state,
-        );
+        TagActionHandler::apply_rating_to_ids(ids, rating, ctx);
     }
 
     #[inline]
     pub fn reset_query(
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
-        TagActionHandler::reset_query(window, library, thumbnails, settings, state);
+        TagActionHandler::reset_query(ctx);
     }
 
     #[inline]
     pub fn execute_query_flow(
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
+        ctx: &TagActionContext<'_>,
     ) {
-        TagActionHandler::execute_query_flow(window, library, thumbnails, settings, state);
+        TagActionHandler::execute_query_flow(ctx);
     }
 }

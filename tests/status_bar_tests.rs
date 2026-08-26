@@ -142,3 +142,33 @@ fn test_status_bar_virtual_folder_state() {
     assert!(!state.is_virtual_folder_mode);
     assert_eq!(state.virtual_folder_count, 0);
 }
+
+#[test]
+fn test_selection_preservation_across_tab_view_mode_switch() {
+    let mut state = UiState {
+        all_folder_media: vec![
+            create_indexed_record(1, "img1.jpg", 10 * 1024 * 1024),
+            create_indexed_record(2, "img2.jpg", 20 * 1024 * 1024),
+            create_indexed_record(3, "img3.jpg", 30 * 1024 * 1024),
+        ],
+        active_indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+
+    // 1. Select 2 files in Browse Mode
+    state.file_selection.select_single(1);
+    state.file_selection.toggle(3);
+    assert_eq!(state.file_selection.count(), 2);
+
+    // 2. Open Tab for File 2 -> Sets active_tab_media_id, leaves file_selection intact
+    state.active_tab_media_id = Some(2);
+    assert_eq!(state.file_selection.count(), 2);
+    assert!(state.file_selection.is_selected(1));
+    assert!(state.file_selection.is_selected(3));
+
+    // 3. Return to Browse Mode -> Clears active_tab_media_id, selection is still intact
+    state.active_tab_media_id = None;
+    assert_eq!(state.file_selection.count(), 2);
+    assert!(state.file_selection.is_selected(1));
+    assert!(state.file_selection.is_selected(3));
+}

@@ -5,6 +5,7 @@ import { SettingsPageFolders } from "settings_page_folders.slint";
 import { SettingsPageAppearance } from "settings_page_appearance.slint";
 import { SettingsPagePerformance } from "settings_page_performance.slint";
 import { SettingsPageFormats } from "settings_page_formats.slint";
+import { SettingsPageViewer } from "settings_page_viewer.slint";
 import { SettingsPageTags } from "settings_page_tags.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
 import { ButtonBar } from "button_bar.slint";
@@ -16,6 +17,7 @@ export { SettingsPageFolders } from "settings_page_folders.slint";
 export { SettingsPageAppearance } from "settings_page_appearance.slint";
 export { SettingsPagePerformance } from "settings_page_performance.slint";
 export { SettingsPageFormats } from "settings_page_formats.slint";
+export { SettingsPageViewer } from "settings_page_viewer.slint";
 export { SettingsPageTags } from "settings_page_tags.slint";
 export { SettingsPageDebug } from "settings_page_debug.slint";
 export { SettingsCard } from "settings_card.slint";
@@ -86,6 +88,11 @@ export component SettingsWindow inherits Window {
     in property <string> supported-image-formats: "jpg, jpeg, jfif, jpe, png, webp, avif, gif, bmp, tiff, tif, psd";
     in property <string> supported-video-formats: "mp4, m4v, mkv, webm, mov, avi, mpg, mpeg, flv";
     in-out property <bool> auto-detect-extensionless: true;
+
+    // Viewer options
+    in-out property <bool> open-images-in-tab: true;
+    in-out property <bool> viewer-show-tab-rating-badge: false;
+    in-out property <int> viewer-background-mode-idx: 0;
 
     // Debug options
     in-out property <bool> obfuscate-logs: true;
@@ -181,9 +188,15 @@ export component SettingsWindow inherits Window {
                         auto-detect-extensionless <=> root.auto-detect-extensionless;
                     }
 
-                    if root.active-category == 5 : SettingsPageTags {}
+                    if root.active-category == 5 : SettingsPageViewer {
+                        open-images-in-tab <=> root.open-images-in-tab;
+                        show-tab-rating-badge <=> root.viewer-show-tab-rating-badge;
+                        background-mode-idx <=> root.viewer-background-mode-idx;
+                    }
 
-                    if root.active-category == 6 : SettingsPageDebug {
+                    if root.active-category == 6 : SettingsPageTags {}
+
+                    if root.active-category == 7 : SettingsPageDebug {
                         obfuscate-logs <=> root.obfuscate-logs;
                     }
                 }

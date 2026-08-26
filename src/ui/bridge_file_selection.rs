@@ -3,12 +3,15 @@ use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
+use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::file_selection::FileSelectionModel;
 use super::MainWindow;
 use crate::library::models::MediaId;
 use crate::library::Library;
-use crate::settings::LogObscurer;
+use crate::media::MediaType;
+use crate::settings::{LogObscurer, SettingsManager};
 use crate::system::SystemFileHandler;
+use crate::viewer::ViewerTabManager;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, Model};
 use std::sync::Arc;
@@ -30,11 +33,15 @@ impl BridgeFileSelection {
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
+        settings: Arc<SettingsManager>,
+        tab_manager: Arc<ViewerTabManager>,
         state: Arc<RwLock<UiState>>,
         last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
+        let set = settings;
+        let tm = tab_manager;
         let st = state.clone();
         let lc = last_click;
         window.on_media_clicked(move |id, is_ctrl, is_shift| {
@@ -46,6 +53,8 @@ impl BridgeFileSelection {
                 },
                 &win,
                 &lib,
+                &set,
+                &tm,
                 &st,
                 &lc,
             );
@@ -67,6 +76,8 @@ impl BridgeFileSelection {
         event: FileClickEvent,
         window: &MainWindow,
         library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        tab_manager: &Arc<ViewerTabManager>,
         state: &Arc<RwLock<UiState>>,
         last_click: &Arc<Mutex<Option<(MediaId, Instant)>>>,
     ) {
@@ -74,7 +85,14 @@ impl BridgeFileSelection {
 
         // 1. Double Click Detection (< 400ms delta on same ID without modifiers)
         if Self::check_double_click(event, last_click) {
-            Self::handle_double_click(event.media_id, state, library, window);
+            Self::handle_double_click(
+                event.media_id,
+                state,
+                library,
+                settings,
+                tab_manager,
+                window,
+            );
             return;
         }
 
@@ -245,13 +263,56 @@ impl BridgeFileSelection {
         );
     }
 
+    /// Handles double-click on a media tile: opens images internally in Viewer Tabs if enabled, or delegates to external app.
     pub fn handle_double_click(
         media_id: MediaId,
         state: &Arc<RwLock<UiState>>,
         library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        tab_manager: &Arc<ViewerTabManager>,
         window: &MainWindow,
     ) {
-        Self::open_media(media_id, state, library, window);
+        let is_image = {
+            let st = state.read();
+            st.all_folder_media
+                .iter()
+                .find(|m| m.record.id == media_id)
+                .map(|m| matches!(m.record.media_type, MediaType::Image))
+                .or_else(|| {
+                    library
+                        .media()
+                        .get(media_id)
+                        .ok()
+                        .flatten()
+                        .map(|m| matches!(m.media_type, MediaType::Image))
+                })
+                .unwrap_or(false)
+        };
+
+        let open_in_tab = settings.get().viewer.images.open_in_tab;
+
+        if is_image && open_in_tab {
+            tracing::info!(
+                media_id,
+                "[FileSelection: DoubleClick] Opening image in internal viewer tab"
+            );
+            BridgeViewerTabs::open_media_tab(
+                media_id,
+                window,
+                tab_manager,
+                library,
+                settings,
+                state,
+            );
+        } else {
+            tracing::info!(
+                media_id,
+                is_image,
+                open_in_tab,
+                "[FileSelection: DoubleClick] Delegating media opening to OS default application"
+            );
+            Self::open_media(media_id, state, library, window);
+        }
     }
 
     pub fn open_media(
@@ -276,7 +337,13 @@ impl BridgeFileSelection {
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
-                    let corrupt = library.media().get(media_id).ok().flatten().map(|m| m.is_corrupted).unwrap_or(false);
+                    let corrupt = library
+                        .media()
+                        .get(media_id)
+                        .ok()
+                        .flatten()
+                        .map(|m| m.is_corrupted)
+                        .unwrap_or(false);
                     (name, p, corrupt)
                 }
                 Err(e) => {
@@ -294,7 +361,6 @@ impl BridgeFileSelection {
             },
         };
 
-        // Strict Check: Missing Files Dialog ONLY shown if the file physically does not exist on disk
         if !full_path.exists() {
             tracing::warn!(
                 media_id = media_id,
@@ -336,7 +402,10 @@ impl BridgeFileSelection {
             StatusBarBridge::error(window, format!("Failed to open file: {}", e));
         } else {
             let status_msg = if is_corrupted {
-                format!("Opened file '{}' (Flagged: Corrupted) with system application.", filename)
+                format!(
+                    "Opened file '{}' (Flagged: Corrupted) with system application.",
+                    filename
+                )
             } else {
                 format!("Opened '{}' with system default application.", filename)
             };

@@ -14,8 +14,9 @@ use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, Rubbe
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tag_dialogs::TagDialogController;
-use super::bridge_tags::BridgeTags;
+use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_thumbnails::BridgeThumbnails;
+use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::dnd_foldertree_autoscroller::DndFolderTreeAutoScroller;
 use super::favorites::FavoriteManager;
 use super::rubberband_selection::RubberbandAutoScroller;
@@ -29,6 +30,7 @@ use crate::settings::{
     SettingsManager,
 };
 use crate::thumbnails::{ThumbnailConfig, ThumbnailManager};
+use crate::viewer::ViewerTabManager;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
@@ -42,6 +44,7 @@ pub struct UiBridge {
     window: MainWindow,
     library: Arc<Library>,
     thumbnails: Arc<ThumbnailManager>,
+    tab_manager: Arc<ViewerTabManager>,
     settings: Arc<SettingsManager>,
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
@@ -69,6 +72,7 @@ impl UiBridge {
         config_dir: &Path,
     ) -> Self {
         let favorites = Arc::new(RwLock::new(FavoriteManager::new(config_dir)));
+        let tab_manager = Arc::new(ViewerTabManager::new(library.clone()));
 
         let mut controller = SettingsDialogController::new(settings.clone());
         controller.set_main_window(window.as_weak());
@@ -145,6 +149,12 @@ impl UiBridge {
 
         StatusBarBridge::info(&window, "Initializing RustView...");
 
+        // Initialize Tab Bar, View Mode and Viewer Settings
+        window.set_is_browse_active(true);
+        window.set_active_view_mode(0);
+        window.set_tabs(ModelRc::new(VecModel::from(vec![])));
+        window.set_viewer_show_tab_rating_badge(app_settings.viewer.tabs.show_rating_badge);
+
         // Virtual folder view is strictly non-persistent (disabled on startup)
         window.set_is_virtual_folder(false);
         window.set_is_virtual_folder_btn_enabled(false);
@@ -173,6 +183,7 @@ impl UiBridge {
             window,
             library,
             thumbnails,
+            tab_manager,
             settings,
             settings_dialog,
             rename_dialog,
@@ -227,6 +238,10 @@ impl UiBridge {
         &self.window
     }
 
+    pub fn tab_manager(&self) -> &Arc<ViewerTabManager> {
+        &self.tab_manager
+    }
+
     fn register_settings_subscriber(&self) {
         let w_weak = self.window.as_weak();
         let library = self.library.clone();
@@ -276,6 +291,16 @@ impl UiBridge {
                     window.set_grid_item_corner_radius(new_clone.appearance.grid_item_corner_radius as i32);
                 }
 
+                if diff_clone.viewer_settings_changed {
+                    let bg_mode_idx = match new_clone.viewer.background_mode.to_lowercase().as_str() {
+                        "deep black" | "black" => 1,
+                        "transparent checkerboard" | "checkerboard" => 2,
+                        _ => 0,
+                    };
+                    window.set_viewer_background_mode(bg_mode_idx);
+                    window.set_viewer_show_tab_rating_badge(new_clone.viewer.tabs.show_rating_badge);
+                }
+
                 if diff_clone.debug_settings_changed {
                     LogObscurer::set_obfuscate(new_clone.debug.obfuscate_logs);
                 }
@@ -296,6 +321,15 @@ impl UiBridge {
     }
 
     fn register_subsystem_callbacks(&self) {
+        BridgeViewerTabs::register_callbacks(
+            &self.window,
+            self.tab_manager.clone(),
+            self.library.clone(),
+            self.thumbnails.clone(),
+            self.settings.clone(),
+            self.state.clone(),
+        );
+
         BridgeFolders::register_callbacks(
             &self.window,
             self.library.clone(),
@@ -308,6 +342,8 @@ impl UiBridge {
         BridgeFileSelection::register_callbacks(
             &self.window,
             self.library.clone(),
+            self.settings.clone(),
+            self.tab_manager.clone(),
             self.state.clone(),
             self.last_click.clone(),
         );
@@ -317,6 +353,7 @@ impl UiBridge {
             ContextMenuRegistration {
                 library: self.library.clone(),
                 thumbnails: self.thumbnails.clone(),
+                tab_manager: self.tab_manager.clone(),
                 state: self.state.clone(),
                 dispatcher: self.ctx_menu_dispatcher.clone(),
                 rename_dialog: self.rename_dialog.clone(),
@@ -333,6 +370,7 @@ impl UiBridge {
             &self.window,
             self.library.clone(),
             self.thumbnails.clone(),
+            self.tab_manager.clone(),
             self.settings.clone(),
             self.state.clone(),
         );
@@ -341,6 +379,7 @@ impl UiBridge {
             &self.window,
             self.library.clone(),
             self.thumbnails.clone(),
+            self.tab_manager.clone(),
             self.settings.clone(),
             self.state.clone(),
         );
@@ -665,6 +704,8 @@ impl UiBridge {
             },
             &self.window,
             &self.library,
+            &self.settings,
+            &self.tab_manager,
             &self.state,
             &self.last_click,
         );
@@ -710,22 +751,28 @@ impl UiBridge {
     pub fn toggle_tag(&self, tag_id: TagId) {
         BridgeTags::toggle_tag(
             tag_id,
-            &self.window,
-            &self.library,
-            &self.thumbnails,
-            &self.settings,
-            &self.state,
+            &TagActionContext {
+                window: &self.window,
+                library: &self.library,
+                thumbnails: &self.thumbnails,
+                tab_manager: &self.tab_manager,
+                settings: &self.settings,
+                state: &self.state,
+            },
         );
     }
 
     pub fn apply_rating(&self, rating: Option<u8>) {
         BridgeTags::apply_rating(
             rating,
-            &self.window,
-            &self.library,
-            &self.thumbnails,
-            &self.settings,
-            &self.state,
+            &TagActionContext {
+                window: &self.window,
+                library: &self.library,
+                thumbnails: &self.thumbnails,
+                tab_manager: &self.tab_manager,
+                settings: &self.settings,
+                state: &self.state,
+            },
         );
     }
 
@@ -733,11 +780,14 @@ impl UiBridge {
         BridgeTags::apply_rating_to_ids(
             ids,
             rating,
-            &self.window,
-            &self.library,
-            &self.thumbnails,
-            &self.settings,
-            &self.state,
+            &TagActionContext {
+                window: &self.window,
+                library: &self.library,
+                thumbnails: &self.thumbnails,
+                tab_manager: &self.tab_manager,
+                settings: &self.settings,
+                state: &self.state,
+            },
         );
     }
 }

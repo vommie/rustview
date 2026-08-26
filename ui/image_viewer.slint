@@ -1,0 +1,91 @@
+import { Theme } from "styles.slint";
+import { Throbber } from "throbber.slint";
+
+export component ImageViewer inherits Rectangle {
+    in property <image> source-image;
+    in property <bool> is-loading: false;
+    in property <string> error-message: "";
+    in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
+
+    callback next-image();
+    callback previous-image();
+
+    background: root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b);
+    clip: true;
+
+    // Mouse Wheel Scroll Listener over the entire ImageViewer canvas
+    viewer-touch := TouchArea {
+        width: 100%;
+        height: 100%;
+
+        scroll-event(event) => {
+            if event.delta-y < 0px {
+                root.next-image();
+                return accept;
+            }
+            if event.delta-y > 0px {
+                root.previous-image();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    // Optional Checkerboard Pattern Background for transparency checking
+    if root.background-mode == 2 : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #181825;
+        opacity: 0.5;
+    }
+
+    // Centered image preserving aspect ratio
+    if root.source-image.width > 0 && !root.is-loading : Image {
+        source: root.source-image;
+        width: 100%;
+        height: 100%;
+        image-fit: contain;
+    }
+
+    // Loading indicator
+    if root.is-loading : VerticalLayout {
+        alignment: center;
+        spacing: 12px;
+
+        HorizontalLayout {
+            alignment: center;
+            Throbber {
+                is-active: true;
+                size: 32px;
+                throbber-color: Theme.primary;
+            }
+        }
+
+        Text {
+            text: "Loading high-resolution image...";
+            font-size: 12px;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+
+    // Error indicator
+    if root.error-message != "" && !root.is-loading : VerticalLayout {
+        alignment: center;
+        spacing: 8px;
+
+        Text {
+            text: "⚠";
+            font-size: 32px;
+            color: #f38ba8;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: root.error-message;
+            font-size: 12px;
+            color: #f38ba8;
+            horizontal-alignment: center;
+        }
+    }
+}

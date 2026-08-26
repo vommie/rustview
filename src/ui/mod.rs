@@ -30,6 +30,7 @@ pub mod bridge_status_bar;
 pub mod bridge_tag_dialogs;
 pub mod bridge_tags;
 pub mod bridge_thumbnails;
+pub mod bridge_viewer_tabs;
 pub mod dnd_foldertree_autoscroller;
 pub mod fallback_view;
 pub mod favorites;
@@ -45,7 +46,9 @@ pub use bridge_ctx_menu_media::MediaContextMenu;
 pub use bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use bridge_ctx_menu_tag::TagContextMenu;
 pub use bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
-pub use bridge_file_dialog_conflict::{ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController};
+pub use bridge_file_dialog_conflict::{
+    ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController,
+};
 pub use bridge_file_dialog_delete::DeleteFileDialogController;
 pub use bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 pub use bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
@@ -57,10 +60,14 @@ pub use bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
 pub use bridge_folder_dialog_remove_orphaned::RemoveOrphanedFolderDialogController;
 pub use bridge_folder_dialog_rename::RenameFolderDialogController;
 pub use bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
-pub use bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
+pub use bridge_rubberband::{
+    BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams,
+};
 pub use bridge_state::*;
 pub use bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
 pub use bridge_tag_dialogs::TagDialogController;
+pub use bridge_tags::{BridgeTags, TagActionContext};
+pub use bridge_viewer_tabs::BridgeViewerTabs;
 pub use dnd_foldertree_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
 pub use fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, FallbackViewState};
 pub use favorites::FavoriteManager;

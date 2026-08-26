@@ -182,6 +182,14 @@ pub const DEFAULT_WINDOW_MAXIMIZED: bool = false;
 pub const DEFAULT_OBFUSCATE_LOGS: bool = true;
 
 // =============================================================================
+// SECTION 10: Viewer Settings - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB: bool = true;
+pub const DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB: bool = false;
+pub const DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE: bool = false;
+pub const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "Dark";
+
+// =============================================================================
 // Enums & Domain Data Models
 // =============================================================================
 
@@ -451,6 +459,52 @@ impl Default for FormatsSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct ViewerImageSettings {
+    pub open_in_tab: bool,
+}
+
+impl Default for ViewerImageSettings {
+    fn default() -> Self {
+        Self {
+            open_in_tab: DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ViewerTabSettings {
+    pub show_rating_badge: bool,
+}
+
+impl Default for ViewerTabSettings {
+    fn default() -> Self {
+        Self {
+            show_rating_badge: DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ViewerSettings {
+    pub images: ViewerImageSettings,
+    pub tabs: ViewerTabSettings,
+    pub background_mode: String,
+}
+
+impl Default for ViewerSettings {
+    fn default() -> Self {
+        Self {
+            images: ViewerImageSettings::default(),
+            tabs: ViewerTabSettings::default(),
+            background_mode: DEFAULT_VIEWER_BACKGROUND_MODE.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TagSettings {
     pub default_match_mode: String,
     pub default_scope_mode: String,
@@ -518,6 +572,8 @@ pub struct AppSettings {
     pub performance: PerformanceSettings,
     #[serde(default)]
     pub formats: FormatsSettings,
+    #[serde(default)]
+    pub viewer: ViewerSettings,
     #[serde(default)]
     pub tags: TagSettings,
     #[serde(default)]

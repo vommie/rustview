@@ -1,0 +1,152 @@
+import { Theme } from "styles.slint";
+import { TabItemModel } from "types.slint";
+import { AppIcon, Icons } from "icons.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { TooltipHost } from "tooltips.slint";
+
+export component TabItemView inherits Rectangle {
+    in property <TabItemModel> tab;
+    in property <bool> show-rating-badge: false;
+
+    callback clicked();
+    callback close-clicked();
+    callback middle-clicked();
+
+    width: content-layout.preferred-width;
+    height: 26px;
+    border-radius: 4px;
+
+    // Theme-adaptive background supporting both inactive and active hover states
+    background: tab.is-active
+        ? (tab-touch.has-hover ? Theme.surface-selected-hover : Theme.surface-selected)
+        : (tab-touch.has-hover ? Theme.surface-hover : Theme.surface-variant);
+
+    border-width: 1px;
+    border-color: tab.is-active
+        ? (tab-touch.has-hover ? Theme.accent : Theme.primary)
+        : (tab-touch.has-hover ? Theme.primary : Theme.border);
+
+    tooltip-host := TooltipHost {
+        text: tab.title;
+        shortcut: tab.is-active ? "Active Tab" : "Click to view (Middle-click to close)";
+        is-enabled: true;
+    }
+
+    tab-touch := TouchArea {
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                tooltip-host.on-hover-leave();
+                if event.button == PointerEventButton.left {
+                    root.clicked();
+                } else if event.button == PointerEventButton.middle {
+                    root.middle-clicked();
+                }
+            }
+        }
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: tab-touch.has-hover;
+    changed is-hovered => {
+        if self.is-hovered {
+            tooltip-host.on-hover-enter(tab-touch.mouse-x, tab-touch.mouse-y);
+        } else {
+            tooltip-host.on-hover-leave();
+        }
+    }
+
+    content-layout := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 6px;
+        spacing: 6px;
+        alignment: center;
+
+        // 1. Media Type Vector Icon (SVG: image.svg / video.svg, theme adaptive, perfectly vertically centered)
+        AppIcon {
+            icon: tab.is-video ? Icons.video : Icons.image;
+            size: 13px;
+            allow-tint: true;
+            color: tab.is-active ? Theme.primary : (tab-touch.has-hover ? Theme.text : Theme.text-muted);
+            y: (parent.height - self.height) / 2;
+        }
+
+        // 2. Title: Uniform regular weight (400) preventing tab width jitter on selection
+        Text {
+            text: tab.title;
+            font-size: 11px;
+            font-weight: 400;
+            color: tab.is-active ? Theme.primary : Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+            max-width: 180px;
+        }
+
+        // 3. Dedicated Rating SVG Icon Badge (Icons API, untinted)
+        if root.show-rating-badge && tab.rating > 0 : AppIcon {
+            icon: Icons.rating-icon(tab.rating);
+            size: 14px;
+            allow-tint: false;
+            y: (parent.height - self.height) / 2;
+        }
+
+        // 4. Vertically Centered Close Button (✕) with larger hit target
+        Rectangle {
+            width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            y: (parent.height - self.height) / 2;
+            background: close-touch.has-hover ? #f38ba833 : transparent;
+
+            close-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.close-clicked(); }
+            }
+
+            Text {
+                text: "✕";
+                font-size: 11px;
+                font-weight: 700;
+                color: close-touch.has-hover ? #f38ba8 : Theme.text-muted;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component MediaTabBar inherits Rectangle {
+    in property <[TabItemModel]> tabs: [];
+    in property <bool> show-rating-badge: false;
+
+    callback tab-selected(int /* tab_id */);
+    callback tab-closed(int /* tab_id */);
+
+    background: transparent;
+    clip: true;
+
+    SmoothScrollArea {
+        width: 100%;
+        height: 100%;
+        enable-horizontal: true;
+        enable-vertical: false;
+        content-width: tab-layout.preferred-width;
+        content-height: self.height;
+
+        tab-layout := HorizontalLayout {
+            padding-left: 2px;
+            padding-right: 2px;
+            spacing: 4px;
+            alignment: start;
+
+            for tab in root.tabs : TabItemView {
+                tab: tab;
+                show-rating-badge: root.show-rating-badge;
+                clicked => { root.tab-selected(tab.id); }
+                middle-clicked => { root.tab-closed(tab.id); }
+                close-clicked => { root.tab-closed(tab.id); }
+            }
+        }
+    }
+}

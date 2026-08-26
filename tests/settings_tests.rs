@@ -21,10 +21,11 @@ use rustview::settings::{
     DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
     DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
     DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
-    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_WINDOW_HEIGHT,
-    DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
-    MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_SHORT_VIDEO_THRESHOLD_SECS,
-    MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
+    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIEWER_BACKGROUND_MODE,
+    DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB, DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE,
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED, DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH,
+    MAX_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H,
+    MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_TOOLTIP_DELAY_MS, MIN_COL_WIDTH,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -199,6 +200,22 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("mpeg"));
     assert!(DEFAULT_SUPPORTED_VIDEO_FORMATS.contains("flv"));
 
+    // Viewer Defaults
+    assert_eq!(
+        initial.viewer.images.open_in_tab,
+        DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB
+    );
+    assert!(initial.viewer.images.open_in_tab);
+    assert_eq!(
+        initial.viewer.tabs.show_rating_badge,
+        DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE
+    );
+    assert!(!initial.viewer.tabs.show_rating_badge);
+    assert_eq!(
+        initial.viewer.background_mode,
+        DEFAULT_VIEWER_BACKGROUND_MODE
+    );
+
     // View Defaults - All 13 Columns & Persistent Media Type Filter
     assert_eq!(initial.view.is_table_view, DEFAULT_IS_TABLE_VIEW);
     assert_eq!(initial.view.sort_column, DEFAULT_SORT_COLUMN);
@@ -265,6 +282,9 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.appearance.tooltip_delay_ms = 450;
     initial.performance.short_video_threshold_secs = 20;
     initial.formats.auto_detect_extensionless_media = false;
+    initial.viewer.images.open_in_tab = false;
+    initial.viewer.tabs.show_rating_badge = true;
+    initial.viewer.background_mode = "Deep Black".to_string();
     initial.debug.obfuscate_logs = false;
     initial.view.col_path_width = 220.0;
     initial.view.col_flags_width = 110.0;
@@ -291,6 +311,9 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(loaded.appearance.tooltip_delay_ms, 450);
     assert_eq!(loaded.performance.short_video_threshold_secs, 20);
     assert!(!loaded.formats.auto_detect_extensionless_media);
+    assert!(!loaded.viewer.images.open_in_tab);
+    assert!(loaded.viewer.tabs.show_rating_badge);
+    assert_eq!(loaded.viewer.background_mode, "Deep Black");
     assert!(!loaded.debug.obfuscate_logs);
     assert_eq!(loaded.view.col_path_width, 220.0);
     assert_eq!(loaded.view.col_flags_width, 110.0);
@@ -309,6 +332,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     invalid_settings.view.col_size_width = 5000.0;
     invalid_settings.view.col_flags_width = 1.0;
     invalid_settings.view.media_type_filter = "unrecognized_filter".to_string();
+    invalid_settings.viewer.background_mode = "invalid_canvas".to_string();
     reloaded_store.save(&invalid_settings).unwrap();
 
     let sanitized = reloaded_store.load();
@@ -341,6 +365,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(sanitized.view.col_size_width, MAX_COL_WIDTH);
     assert_eq!(sanitized.view.col_flags_width, MIN_COL_WIDTH);
     assert_eq!(sanitized.view.media_type_filter, DEFAULT_MEDIA_TYPE_FILTER);
+    assert_eq!(sanitized.viewer.background_mode, DEFAULT_VIEWER_BACKGROUND_MODE);
 }
 
 #[test]
@@ -362,6 +387,7 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_identical.appearance_grid_changed);
     assert!(!diff_identical.tooltip_settings_changed);
     assert!(!diff_identical.formats_settings_changed);
+    assert!(!diff_identical.viewer_settings_changed);
     assert!(!diff_identical.debug_settings_changed);
 
     let mut modified_formats = base.clone();
@@ -372,6 +398,13 @@ fn test_settings_diff_granularity_and_noop_bypass() {
     assert!(!diff_formats.root_folder_changed);
     assert!(!diff_formats.appearance_grid_changed);
     assert!(!diff_formats.debug_settings_changed);
+
+    let mut modified_viewer = base.clone();
+    modified_viewer.viewer.images.open_in_tab = false;
+    let diff_viewer = SettingsDiff::compute(&base, &modified_viewer);
+    assert!(diff_viewer.has_changes);
+    assert!(diff_viewer.viewer_settings_changed);
+    assert!(!diff_viewer.formats_settings_changed);
 
     let mut modified_root = base.clone();
     modified_root.general.root_folder = Some(PathBuf::from("/media/photos"));
@@ -460,6 +493,19 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
         DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA
     );
     assert!(loaded.formats.auto_detect_extensionless_media);
+    assert_eq!(
+        loaded.viewer.images.open_in_tab,
+        DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB
+    );
+    assert_eq!(
+        loaded.viewer.tabs.show_rating_badge,
+        DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE
+    );
+    assert!(!loaded.viewer.tabs.show_rating_badge);
+    assert_eq!(
+        loaded.viewer.background_mode,
+        DEFAULT_VIEWER_BACKGROUND_MODE
+    );
     assert_eq!(
         loaded.performance.thumbnail_format,
         DEFAULT_THUMBNAIL_FORMAT

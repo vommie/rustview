@@ -3,6 +3,7 @@ use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
+use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::{MainWindow, RemoveOrphanedFileDialog};
 use crate::library::models::MediaId;
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -40,7 +41,12 @@ impl RemoveOrphanedFileDialogController {
             let st = ctx.state.read();
             media_ids
                 .first()
-                .and_then(|&id| st.all_folder_media.iter().find(|m| m.record.id == id).map(|m| m.record.filename.clone()))
+                .and_then(|&id| {
+                    st.all_folder_media
+                        .iter()
+                        .find(|m| m.record.id == id)
+                        .map(|m| m.record.filename.clone())
+                })
                 .unwrap_or_else(|| "Selected file".to_string())
         };
 
@@ -74,6 +80,10 @@ impl RemoveOrphanedFileDialogController {
         let count = media_ids.len();
         let _ = ctx.library.file_operations().purge_media_from_db(media_ids);
 
+        for &id in media_ids {
+            ctx.tab_manager.notify_media_deleted(id);
+        }
+
         let id_set: HashSet<MediaId> = media_ids.iter().copied().collect();
         {
             let mut st = ctx.state.write();
@@ -90,7 +100,22 @@ impl RemoveOrphanedFileDialogController {
         };
         StatusBarBridge::success(window, msg);
 
-        BridgeMedia::reload(window, &ctx.library, &ctx.thumbnails, &ctx.settings, &ctx.state, false, false);
+        BridgeViewerTabs::sync_ui(
+            window,
+            &ctx.tab_manager,
+            &ctx.library,
+            &ctx.settings,
+            &ctx.state,
+        );
+        BridgeMedia::reload(
+            window,
+            &ctx.library,
+            &ctx.thumbnails,
+            &ctx.settings,
+            &ctx.state,
+            false,
+            false,
+        );
         BridgeInspector::update(window, &ctx.state);
         BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
         StatusBarBridge::update_metrics(window, &ctx.state);

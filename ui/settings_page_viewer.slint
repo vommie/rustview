@@ -1,0 +1,61 @@
+import { CheckBox, ComboBox } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPageViewer inherits VerticalLayout {
+    spacing: 12px;
+
+    in-out property <bool> open-images-in-tab: true;
+    in-out property <bool> show-tab-rating-badge: false;
+    in-out property <int> background-mode-idx: 0; // 0 = Dark, 1 = Deep Black, 2 = Checkerboard
+
+    SettingsCard {
+        title: "Images";
+        description: "Configure how images are opened upon double-clicking media tiles in the browser.";
+
+        CheckBox {
+            text: "Open images in internal viewer tabs (Default)";
+            checked <=> root.open-images-in-tab;
+        }
+
+        Text {
+            text: root.open-images-in-tab
+                ? "Double-clicking an image tile opens it in a dedicated tab inside RustView."
+                : "Double-clicking an image tile delegates opening to the operating system default application.";
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+
+    SettingsCard {
+        title: "Tabs";
+        description: "Visual indicators and badge overlays for open viewer tabs in the top toolbar.";
+
+        CheckBox {
+            text: "Show rating badge in tabs";
+            checked <=> root.show-tab-rating-badge;
+        }
+    }
+
+    SettingsCard {
+        title: "Viewer Presentation";
+        description: "Background canvas and appearance for internal media tabs.";
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Viewer Canvas Background:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            ComboBox {
+                width: 190px;
+                model: ["Dark Theme (#11111b)", "Deep Black (#000000)", "Transparent Checkerboard"];
+                current-index <=> root.background-mode-idx;
+            }
+        }
+    }
+}

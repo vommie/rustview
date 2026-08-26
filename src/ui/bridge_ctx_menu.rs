@@ -23,6 +23,7 @@ use crate::library::Library;
 use crate::library::models::{FolderId, FolderRecord, MediaId};
 use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
+use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::cell::RefCell;
@@ -33,6 +34,7 @@ use std::sync::Arc;
 pub struct ContextMenuRegistration {
     pub library: Arc<Library>,
     pub thumbnails: Arc<ThumbnailManager>,
+    pub tab_manager: Arc<ViewerTabManager>,
     pub state: Arc<RwLock<UiState>>,
     pub dispatcher: Arc<CtxMenuDispatcher>,
     pub rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
@@ -102,6 +104,7 @@ impl BridgeContextMenu {
         let win = window.clone_strong();
         let lib = reg.library;
         let thumb = reg.thumbnails;
+        let tab_mgr = reg.tab_manager;
         let st = reg.state;
         let set = reg.settings;
         let disp = reg.dispatcher;
@@ -143,6 +146,7 @@ impl BridgeContextMenu {
                 &MediaActionContext {
                     library: &lib,
                     thumbnails: &thumb,
+                    tab_manager: &tab_mgr,
                     settings: &set,
                     state: &st,
                     dispatcher: &disp,
@@ -167,7 +171,13 @@ impl BridgeContextMenu {
         let (all_selected_deleted, selected_count, is_single_image, associated_apps) =
             MediaContextMenu::prepare_selection(window, library, state, media_id);
         let is_busy = BridgeMedia::is_system_busy(window, thumbnails, state);
-        let menu = MediaContextMenu::build_menu(selected_count, is_single_image, all_selected_deleted, is_busy, &associated_apps);
+        let menu = MediaContextMenu::build_menu(
+            selected_count,
+            is_single_image,
+            all_selected_deleted,
+            is_busy,
+            &associated_apps,
+        );
         Self::open_custom_menu(window, state, menu, x, y);
     }
 
