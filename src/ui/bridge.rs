@@ -158,9 +158,9 @@ impl UiBridge {
         window.set_tabs(ModelRc::new(VecModel::from(vec![])));
         window.set_viewer_show_tab_rating_badge(app_settings.viewer.tabs.show_rating_badge);
 
-        // Initialize Embedded X11 Video Subwindow for MPV
+        // Initialize Main Window Info for Video Subwindows
         if let Some(main_xid) = crate::viewer::get_slint_window_xid(window.window()) {
-            let _ = tab_manager.init_video_subwindow(main_xid, 0, 64, 800, 600);
+            tab_manager.set_main_viewport_info(main_xid, 0, 64, 800, 600);
             fullscreen_controller.set_main_viewport_info(main_xid, 0, 64, 800, 600);
         }
 
@@ -602,6 +602,7 @@ impl UiBridge {
 
         let tm_right = self.tab_manager.clone();
         let fs_right = self.fullscreen_controller.clone();
+        let set_right = self.settings.clone();
         let win_right = self.window.clone_strong();
 
         self.window.on_sidebar_right_resized(move |new_width| {
@@ -609,7 +610,7 @@ impl UiBridge {
             let count = right_count_clone.fetch_add(1, Ordering::Relaxed) + 1;
 
             if win_right.get_active_view_mode() == 1 {
-                BridgeViewerTabs::sync_video_embedding(&win_right, &tm_right, &fs_right);
+                BridgeViewerTabs::sync_video_embedding(&win_right, &tm_right, &fs_right, &set_right);
             }
 
             let mut last_log = last_right_clone.lock();
@@ -634,19 +635,19 @@ impl UiBridge {
             }
         });
 
-        let set_right = self.settings.clone();
+        let set_right_fin = self.settings.clone();
         let tm_right_fin = self.tab_manager.clone();
         let fs_right_fin = self.fullscreen_controller.clone();
         let win_right_fin = self.window.clone_strong();
 
         self.window.on_sidebar_right_resize_finished(move |final_width| {
             let width_f32 = final_width;
-            let mut app_settings = set_right.get();
+            let mut app_settings = set_right_fin.get();
             app_settings.view.sidebar_right_width = width_f32;
-            set_right.save_quiet(&app_settings);
+            set_right_fin.save_quiet(&app_settings);
 
             if win_right_fin.get_active_view_mode() == 1 {
-                BridgeViewerTabs::sync_video_embedding(&win_right_fin, &tm_right_fin, &fs_right_fin);
+                BridgeViewerTabs::sync_video_embedding(&win_right_fin, &tm_right_fin, &fs_right_fin, &set_right_fin);
             }
         });
     }

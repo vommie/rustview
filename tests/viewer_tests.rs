@@ -1,8 +1,7 @@
 use rustview::library::Library;
-use rustview::media::formats::MediaFormat;
 use rustview::viewer::{
-    find_window_by_pid_and_title, HighResImageLoader, MpvPlayer, TabPayload, ViewerAction,
-    ViewerError, ViewerTabManager, MAX_CACHED_HIGH_RES_BUFFERS,
+    find_window_by_pid_and_title, find_window_by_title, HighResImageLoader, MpvPlayer, TabPayload,
+    ViewerAction, ViewerError, ViewerTabManager, MAX_CACHED_HIGH_RES_BUFFERS,
 };
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::sync::Arc;
@@ -36,6 +35,47 @@ fn test_mpv_player_initialization_and_control_api() {
     player.stop();
     let after_stop = player.get_playback_state();
     assert!(!after_stop.is_playing);
+}
+
+#[test]
+fn test_mpv_player_user_pause_vs_auto_pause_semantics() {
+    let player = MpvPlayer::new().unwrap();
+
+    // 1. Initial state: active view, not user paused
+    assert!(player.is_view_active());
+    assert!(!player.is_user_paused());
+
+    // 2. User explicitly pauses the active video
+    player.pause().unwrap();
+    assert!(player.is_user_paused());
+    assert!(player.is_paused());
+
+    // 3. Deactivate view (simulate user switching away to Browse mode)
+    player.set_view_active(false);
+    assert!(!player.is_view_active());
+    assert!(player.is_user_paused());
+    assert!(player.is_paused());
+
+    // 4. Reactivate view (simulate user returning to this tab) -> MUST STAY PAUSED because user paused it!
+    player.set_view_active(true);
+    assert!(player.is_view_active());
+    assert!(player.is_user_paused());
+    assert!(player.is_paused());
+
+    // 5. User explicitly resumes (plays) the video
+    player.play().unwrap();
+    assert!(!player.is_user_paused());
+
+    // 6. Deactivate view while playing -> auto-pause takes effect
+    player.set_view_active(false);
+    assert!(!player.is_view_active());
+    assert!(!player.is_user_paused(), "Auto-pause must not flag is_user_paused");
+    assert!(player.is_paused(), "Background video must be auto-paused");
+
+    // 7. Reactivate view -> MUST AUTO-RESUME because user had not paused it!
+    player.set_view_active(true);
+    assert!(player.is_view_active());
+    assert!(!player.is_user_paused());
 }
 
 #[test]
@@ -102,38 +142,64 @@ fn test_viewer_tab_manager_lifecycle_and_focus_reuse() {
 }
 
 #[test]
-fn test_viewer_tab_manager_video_playback_and_subwindow_management() {
+fn test_viewer_tab_manager_isolated_video_tabs_and_state_preservation() {
     let tmp_db = tempdir().unwrap();
     let tmp_media = tempdir().unwrap();
 
     let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
     let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
 
-    let vid_path = tmp_media.path().join("sample_clip.mp4");
-    std::fs::write(&vid_path, b"test mp4 container bytes").unwrap();
+    let vid1_path = tmp_media.path().join("clip_a.mp4");
+    let vid2_path = tmp_media.path().join("clip_b.mp4");
+    std::fs::write(&vid1_path, b"test video a bytes").unwrap();
+    std::fs::write(&vid2_path, b"test video b bytes").unwrap();
 
     let _ = lib.refresher().refresh_folder(folder.id).unwrap();
     let media = lib.media().get_by_folder(folder.id).unwrap();
-    assert_eq!(media.len(), 1);
-
-    let vid_record = &media[0];
-    assert_eq!(vid_record.format, MediaFormat::Mp4);
+    assert_eq!(media.len(), 2);
 
     let tab_mgr = ViewerTabManager::new(lib.clone());
 
-    // Open video tab
-    let (tab_id, is_new) = tab_mgr.open_or_focus_media(vid_record.id).unwrap();
-    assert!(is_new);
-    assert_eq!(tab_mgr.active_tab_id(), Some(tab_id));
+    // 1. Open Video Tab 1
+    let (tab1_id, is_new1) = tab_mgr.open_or_focus_media(media[0].id).unwrap();
+    assert!(is_new1);
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab1_id));
 
-    let active_tab = tab_mgr.get_active_tab().unwrap();
-    assert!(matches!(active_tab.payload, TabPayload::Video(_)));
-    assert_eq!(active_tab.filename, "sample_clip.mp4");
+    let tab1_player = tab_mgr.get_active_player().expect("Tab 1 must have active MpvPlayer");
 
-    // Browse mode stops video and hides subwindow
+    // Set custom playback state in Tab 1
+    let _ = tab1_player.set_volume(42.0);
+    assert_eq!(tab1_player.get_volume().round() as i32, 42);
+
+    // 2. Open Video Tab 2 (Tab 1 is auto-paused, Tab 2 gets its own isolated player)
+    let (tab2_id, is_new2) = tab_mgr.open_or_focus_media(media[1].id).unwrap();
+    assert!(is_new2);
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab2_id));
+
+    let tab2_player = tab_mgr.get_active_player().expect("Tab 2 must have active MpvPlayer");
+    let _ = tab2_player.set_volume(90.0);
+    assert_eq!(tab2_player.get_volume().round() as i32, 90);
+
+    // Verify Tab 1's state is preserved independently
+    assert_eq!(tab1_player.get_volume().round() as i32, 42);
+
+    // 3. Switch to Browse view (all tabs preserved in RAM)
     tab_mgr.activate_browse();
     assert_eq!(tab_mgr.active_tab_id(), None);
-    assert!(!tab_mgr.player().get_playback_state().is_playing);
+    assert_eq!(tab_mgr.list_tabs().len(), 2);
+    assert_eq!(tab1_player.get_volume().round() as i32, 42);
+    assert_eq!(tab2_player.get_volume().round() as i32, 90);
+
+    // 4. Switch back to Tab 1
+    assert!(tab_mgr.set_active_tab(tab1_id));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab1_id));
+    assert_eq!(tab_mgr.get_active_player().unwrap().get_volume().round() as i32, 42);
+
+    // 5. Close Tab 1 (only Tab 1 is destroyed; Tab 2 becomes active and stays in RAM)
+    let after_close = tab_mgr.close_tab(tab1_id);
+    assert_eq!(after_close, Some(tab2_id));
+    assert_eq!(tab_mgr.list_tabs().len(), 1);
+    assert_eq!(tab_mgr.get_active_player().unwrap().get_volume().round() as i32, 90);
 }
 
 #[test]
@@ -413,4 +479,5 @@ fn test_viewer_action_enum_variants() {
 fn test_x11_window_finder_smoke() {
     let pid = std::process::id();
     let _ = find_window_by_pid_and_title(pid, "NonExistentDummyTitle");
+    let _ = find_window_by_title("NonExistentDummyTitle");
 }

@@ -1,8 +1,12 @@
+use super::mpv_engine::MpvPlayer;
+use super::x11_embed::X11VideoSubwindow;
 use crate::library::models::{MediaId, MediaRecord};
 use crate::media::MediaFormat;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub type TabId = u64;
@@ -13,13 +17,14 @@ pub enum TabContentType {
     Video,
 }
 
-/// Live real-time snapshot of the embedded MPV player playback state.
+/// Live real-time snapshot of the embedded MPV player playback state with user-pause tracking.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MpvPlaybackState {
     pub position_secs: f64,
     pub duration_secs: f64,
     pub is_playing: bool,
     pub is_paused: bool,
+    pub is_user_paused: bool,
     pub volume: f64,
     pub is_eof: bool,
     pub is_idle: bool,
@@ -47,8 +52,11 @@ impl Default for ImageTabPayload {
     }
 }
 
-#[derive(Debug, Clone)]
+/// Dedicated, isolated video tab payload retaining its own independent MPV player and X11 subwindow instance.
+#[derive(Clone)]
 pub struct VideoTabPayload {
+    pub player: Arc<MpvPlayer>,
+    pub subwindow: Arc<Mutex<Option<X11VideoSubwindow>>>,
     pub position_ms: u64,
     pub is_playing: bool,
     pub volume: f32,
@@ -57,16 +65,16 @@ pub struct VideoTabPayload {
     pub error_message: String,
 }
 
-impl Default for VideoTabPayload {
-    fn default() -> Self {
-        Self {
-            position_ms: 0,
-            is_playing: false,
-            volume: 1.0,
-            duration_ms: 0,
-            is_loading: false,
-            error_message: String::new(),
-        }
+impl std::fmt::Debug for VideoTabPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VideoTabPayload")
+            .field("position_ms", &self.position_ms)
+            .field("is_playing", &self.is_playing)
+            .field("volume", &self.volume)
+            .field("duration_ms", &self.duration_ms)
+            .field("is_loading", &self.is_loading)
+            .field("error_message", &self.error_message)
+            .finish()
     }
 }
 

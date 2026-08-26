@@ -197,8 +197,9 @@ impl ImageFullscreenDialogController {
         let screen_w = fs_size.width.max(640);
         let screen_h = fs_size.height.max(480);
 
-        let mut sub_guard = tab_manager.video_subwindow().lock();
-        if let Some(ref mut sub) = *sub_guard {
+        if let Some(sub_slot) = tab_manager.get_active_subwindow()
+            && let Some(ref mut sub) = *sub_slot.lock()
+        {
             let _ = sub.reparent(fs_xid, 0, 0, screen_w, screen_h);
             sub.show();
         }
@@ -210,8 +211,8 @@ impl ImageFullscreenDialogController {
         Timer::single_shot(std::time::Duration::from_millis(35), move || {
             if let Some(w) = win_weak_sync.upgrade() {
                 let size = w.window().size();
-                let mut sub_guard = tm_sync.video_subwindow().lock();
-                if let Some(ref mut sub) = *sub_guard
+                if let Some(sub_slot) = tm_sync.get_active_subwindow()
+                    && let Some(ref mut sub) = *sub_slot.lock()
                     && sub.parent_xid() == fs_xid_sync
                 {
                     sub.move_resize(0, 0, size.width.max(640), size.height.max(480));
@@ -240,7 +241,9 @@ impl ImageFullscreenDialogController {
 
             if is_video {
                 self.reparent_to_fullscreen(tab_manager, &win);
-            } else if let Some(ref mut sub) = *tab_manager.video_subwindow().lock() {
+            } else if let Some(sub_slot) = tab_manager.get_active_subwindow()
+                && let Some(ref mut sub) = *sub_slot.lock()
+            {
                 sub.hide();
             }
         } else {
@@ -262,8 +265,9 @@ impl ImageFullscreenDialogController {
             && let Some(main_xid) = *self.cached_main_xid.lock()
         {
             let (x, y, w, h) = *self.cached_viewport_rect.lock();
-            let mut sub_guard = tm.video_subwindow().lock();
-            if let Some(ref mut sub) = *sub_guard {
+            if let Some(sub_slot) = tm.get_active_subwindow()
+                && let Some(ref mut sub) = *sub_slot.lock()
+            {
                 let _ = sub.reparent(main_xid, x, y, w, h);
                 sub.show();
             }

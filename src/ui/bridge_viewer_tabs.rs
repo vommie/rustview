@@ -55,7 +55,7 @@ impl BridgeViewerTabs {
             tracing::info!(tab_id, "[BridgeViewerTabs: Select] Tab selected by user");
             tm_select.set_active_tab(tab_id as TabId);
             Self::sync_ui(&win_select, &tm_select, &lib_select, &set_select, &st_select);
-            Self::sync_video_embedding(&win_select, &tm_select, &fs_select);
+            Self::sync_video_embedding(&win_select, &tm_select, &fs_select, &set_select);
         });
 
         // 3. Tab Closed (Close button or middle click)
@@ -69,7 +69,7 @@ impl BridgeViewerTabs {
             tracing::info!(tab_id, "[BridgeViewerTabs: Close] Tab closed by user");
             tm_close.close_tab(tab_id as TabId);
             Self::sync_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
-            Self::sync_video_embedding(&win_close, &tm_close, &fs_close);
+            Self::sync_video_embedding(&win_close, &tm_close, &fs_close, &set_close);
             fs_close.sync_active_tab(&tm_close, &set_close);
         });
 
@@ -88,7 +88,7 @@ impl BridgeViewerTabs {
                 );
                 tm_v_close.close_tab(active_id);
                 Self::sync_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
-                Self::sync_video_embedding(&win_v_close, &tm_v_close, &fs_v_close);
+                Self::sync_video_embedding(&win_v_close, &tm_v_close, &fs_v_close, &set_v_close);
                 fs_v_close.sync_active_tab(&tm_v_close, &set_v_close);
             }
         });
@@ -123,7 +123,7 @@ impl BridgeViewerTabs {
         let fs_prev = fullscreen_controller.clone();
         window.on_viewer_previous(move || {
             Self::navigate_adjacent(&win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, &fs_prev, false);
-            Self::sync_video_embedding(&win_prev, &tm_prev, &fs_prev);
+            Self::sync_video_embedding(&win_prev, &tm_prev, &fs_prev, &set_prev);
         });
 
         let win_next = window.clone_strong();
@@ -134,7 +134,7 @@ impl BridgeViewerTabs {
         let fs_next = fullscreen_controller.clone();
         window.on_viewer_next(move || {
             Self::navigate_adjacent(&win_next, &tm_next, &lib_next, &set_next, &st_next, &fs_next, true);
-            Self::sync_video_embedding(&win_next, &tm_next, &fs_next);
+            Self::sync_video_embedding(&win_next, &tm_next, &fs_next, &set_next);
         });
 
         // 7. Double-click on Tab Media Viewer -> Toggle Fullscreen (with strict Main UI lock and seamless video reparenting)
@@ -149,47 +149,29 @@ impl BridgeViewerTabs {
             }
         });
 
-        // 8. Intercept Double-Click / 'f' Fullscreen Toggle directly from native MPV player
-        let fs_toggle = fullscreen_controller.clone();
-        let tm_toggle = tab_manager.clone();
-        let set_toggle = settings;
-        let win_toggle = window.as_weak();
-        tab_manager.player().on_toggle_fullscreen(move || {
-            let fs = fs_toggle.clone();
-            let tm = tm_toggle.clone();
-            let set = set_toggle.clone();
-            let _ = win_toggle.upgrade_in_event_loop(move |w| {
-                if fs.is_open() {
-                    tracing::info!("[BridgeViewerTabs: MpvDblClick] Fullscreen exit requested via MPV double-click");
-                    fs.close();
-                } else {
-                    tracing::info!("[BridgeViewerTabs: MpvDblClick] Fullscreen enter requested via MPV double-click");
-                    fs.show(&tm, &set, w.as_weak());
-                }
-            });
-        });
-
-        // 9. Dismiss Fullscreen from Main UI if Escape or backdrop is clicked while locked
+        // 8. Dismiss Fullscreen from Main UI if Escape or backdrop is clicked while locked
         let fs_modal = fullscreen_controller.clone();
         window.on_modal_dismiss_requested(move || {
             tracing::info!("[BridgeViewerTabs: ModalDismiss] Main UI modal dismiss triggered. Closing active fullscreen window if present.");
             fs_modal.close();
         });
 
-        // 10. Viewport Geometry Changed Callback (Tracks Slint Layout and resizes X11 Subwindow)
+        // 9. Viewport Geometry Changed Callback (Tracks Slint Layout and resizes X11 Subwindow)
         let win_geom = window.clone_strong();
         let tm_geom = tab_manager;
+        let set_geom = settings;
         let fs_geom = fullscreen_controller;
         window.on_viewer_viewport_geometry_changed(move |_vx, _vy, _vw, _vh| {
-            Self::sync_video_embedding(&win_geom, &tm_geom, &fs_geom);
+            Self::sync_video_embedding(&win_geom, &tm_geom, &fs_geom, &set_geom);
         });
     }
 
-    /// Synchronizes native video subwindow visibility, exact X/Y positioning and DPI-aware dimensioning with Slint viewport.
+    /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and fullscreen double-click hooks.
     pub fn sync_video_embedding(
         window: &MainWindow,
-        tab_manager: &ViewerTabManager,
+        tab_manager: &Arc<ViewerTabManager>,
         fullscreen_controller: &ImageFullscreenDialogController,
+        settings: &Arc<SettingsManager>,
     ) {
         if fullscreen_controller.is_open() {
             return;
@@ -202,7 +184,9 @@ impl BridgeViewerTabs {
             .unwrap_or(false);
 
         if !is_video {
-            if let Some(ref mut sub) = *tab_manager.video_subwindow().lock() {
+            if let Some(sub_slot) = tab_manager.get_active_subwindow()
+                && let Some(ref mut sub) = *sub_slot.lock()
+            {
                 sub.hide();
             }
             return;
@@ -235,22 +219,48 @@ impl BridgeViewerTabs {
         let phys_w = (logical_w * scale).round() as u32;
         let phys_h = (logical_h * scale).round() as u32;
 
+        tab_manager.set_main_viewport_info(main_xid, phys_x, phys_y, phys_w, phys_h);
         fullscreen_controller.set_main_viewport_info(main_xid, phys_x, phys_y, phys_w, phys_h);
 
-        let mut sub_guard = tab_manager.video_subwindow().lock();
-        if let Some(ref mut sub) = *sub_guard {
-            if sub.parent_xid() == main_xid {
-                sub.move_resize(phys_x, phys_y, phys_w, phys_h);
+        if let Some(active_session) = tab_manager.get_active_tab()
+            && let TabPayload::Video(ref vid) = active_session.payload
+        {
+            // Subscribe player fullscreen toggle handler for this active video tab (supporting both enter and exit)
+            let fs_toggle = fullscreen_controller.clone();
+            let tm_toggle = tab_manager.clone();
+            let set_toggle = settings.clone();
+            let win_toggle = window.as_weak();
+
+            vid.player.on_toggle_fullscreen(move || {
+                let fs = fs_toggle.clone();
+                let tm = tm_toggle.clone();
+                let set = set_toggle.clone();
+                let _ = win_toggle.upgrade_in_event_loop(move |w| {
+                    if fs.is_open() {
+                        tracing::info!("[BridgeViewerTabs: MpvDblClick] Fullscreen exit requested via MPV double-click");
+                        fs.close();
+                    } else {
+                        tracing::info!("[BridgeViewerTabs: MpvDblClick] Fullscreen enter requested via MPV double-click");
+                        fs.show(&tm, &set, w.as_weak());
+                    }
+                });
+            });
+
+            let mut sub_guard = vid.subwindow.lock();
+            if let Some(ref mut sub) = *sub_guard {
+                if sub.parent_xid() == main_xid {
+                    sub.move_resize(phys_x, phys_y, phys_w, phys_h);
+                    sub.show();
+                } else {
+                    let _ = sub.reparent(main_xid, phys_x, phys_y, phys_w, phys_h);
+                    sub.show();
+                }
+            } else if let Ok(mut sub) = X11VideoSubwindow::new(main_xid, phys_x, phys_y, phys_w, phys_h) {
+                let wid = sub.xid();
+                let _ = vid.player.attach_to_window(wid);
                 sub.show();
-            } else {
-                let _ = sub.reparent(main_xid, phys_x, phys_y, phys_w, phys_h);
-                sub.show();
+                *sub_guard = Some(sub);
             }
-        } else if let Ok(mut sub) = X11VideoSubwindow::new(main_xid, phys_x, phys_y, phys_w, phys_h) {
-            let wid = sub.xid();
-            let _ = tab_manager.player().attach_to_window(wid);
-            sub.show();
-            *sub_guard = Some(sub);
         }
     }
 
@@ -411,7 +421,7 @@ impl BridgeViewerTabs {
 
                 if is_video {
                     let fs_dummy = ImageFullscreenDialogController::new();
-                    Self::sync_video_embedding(window, tab_manager, &fs_dummy);
+                    Self::sync_video_embedding(window, tab_manager, &fs_dummy, settings);
                 } else if is_new && let Ok(file_path) = library.resolve_media_path(media_id) {
                     let tm_async = tab_manager.clone();
                     let w_weak = window.as_weak();

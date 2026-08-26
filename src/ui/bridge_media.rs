@@ -1646,7 +1646,9 @@ impl BridgeMedia {
                             path = %LogObscurer::path(v_path),
                             "[BridgeMedia: VideoReload] Re-loading modified video file in MPV"
                         );
-                        let _ = tab_mgr_arc.player().load_file(v_path);
+                        if let Some(player) = tab_mgr_arc.get_active_player() {
+                            let _ = player.load_file(v_path);
+                        }
                     }
 
                     // Reload full resolution image buffers for open viewer tabs

@@ -17,6 +17,8 @@ pub struct MpvPlayer {
     state: Arc<RwLock<MpvPlaybackState>>,
     current_file_path: Arc<RwLock<Option<PathBuf>>>,
     attached_wid: Arc<RwLock<Option<u64>>>,
+    is_view_active: Arc<AtomicBool>,
+    is_user_paused: Arc<AtomicBool>,
     observer_running: Arc<AtomicBool>,
     callbacks: Arc<RwLock<Vec<MpvEventCallback>>>,
     fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>>,
@@ -82,12 +84,12 @@ impl MpvPlayer {
         // Ensure OSC deadzone is completely zeroed out
         let _ = mpv_instance.set_property("script-opts", "osc-deadzonesize=0,osc-minmousemove=0");
 
-        // Bind double-click and 'f' in MPV to cycle fullscreen (intercepted by RustView observer)
+        // Bind double-click and 'f' / 'F' in MPV to cycle fullscreen (intercepted by RustView observer)
         let _ = mpv_instance.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["f", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["F", "cycle fullscreen"]);
 
-        // Ignore ESC and quit keys in MPV so Slint handles navigation and window closures
+        // Ignore ESC and quit keys in MPV so Slint handles navigation, fullscreen toggles and modal dismissals
         let _ = mpv_instance.command("keybind", &["ESC", "ignore"]);
         let _ = mpv_instance.command("keybind", &["q", "ignore"]);
         let _ = mpv_instance.command("keybind", &["Q", "ignore"]);
@@ -96,6 +98,8 @@ impl MpvPlayer {
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
         let current_file_path = Arc::new(RwLock::new(None));
         let attached_wid = Arc::new(RwLock::new(None));
+        let is_view_active = Arc::new(AtomicBool::new(true));
+        let is_user_paused = Arc::new(AtomicBool::new(false));
         let observer_running = Arc::new(AtomicBool::new(true));
         let callbacks: Arc<RwLock<Vec<MpvEventCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>> =
@@ -106,6 +110,8 @@ impl MpvPlayer {
             state: state.clone(),
             current_file_path: current_file_path.clone(),
             attached_wid: attached_wid.clone(),
+            is_view_active: is_view_active.clone(),
+            is_user_paused: is_user_paused.clone(),
             observer_running: observer_running.clone(),
             callbacks: callbacks.clone(),
             fullscreen_callbacks: fullscreen_callbacks.clone(),
@@ -115,7 +121,7 @@ impl MpvPlayer {
 
         tracing::info!(
             elapsed_us = t0.elapsed().as_micros(),
-            "[MpvPlayer: Init] Native libmpv2 player engine initialized with full config, plugins and double-click fullscreen trapping"
+            "[MpvPlayer: Init] Native libmpv2 player engine initialized with full config, plugins and auto/user pause tracking"
         );
 
         Ok(player)
@@ -139,7 +145,52 @@ impl MpvPlayer {
         Ok(())
     }
 
-    /// Loads a video file from disk and starts immediate playback.
+    /// Controls active visibility of this video tab. Automatically manages auto-pause and auto-resume based on user intent.
+    pub fn set_view_active(&self, active: bool) {
+        if !active {
+            // Tab is being backgrounded: if video was already paused by the user, record user_pause = true
+            let currently_paused = self.is_paused();
+            if currently_paused {
+                self.is_user_paused.store(true, Ordering::SeqCst);
+            }
+            self.is_view_active.store(false, Ordering::SeqCst);
+
+            // Execute auto-pause so video does not decode or play audio in the background
+            let _ = self.mpv.set_property("pause", true);
+            tracing::debug!(
+                was_user_paused = currently_paused,
+                "[MpvPlayer: AutoPause] Backgrounded video tab auto-paused"
+            );
+        } else {
+            // Tab is brought to foreground: mark active first
+            self.is_view_active.store(true, Ordering::SeqCst);
+            let user_paused = self.is_user_paused.load(Ordering::SeqCst);
+
+            if !user_paused {
+                // Auto-resume since the video was only auto-paused when switching away
+                let _ = self.mpv.set_property("pause", false);
+                tracing::debug!("[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed");
+            } else {
+                tracing::debug!("[MpvPlayer: StayPaused] Foregrounded video tab kept paused (respecting user pause)");
+            }
+        }
+
+        self.notify_subscribers();
+    }
+
+    /// Returns whether this video tab is currently active and in the foreground.
+    #[inline]
+    pub fn is_view_active(&self) -> bool {
+        self.is_view_active.load(Ordering::SeqCst)
+    }
+
+    /// Returns whether this video was manually paused by the user.
+    #[inline]
+    pub fn is_user_paused(&self) -> bool {
+        self.is_user_paused.load(Ordering::SeqCst)
+    }
+
+    /// Loads a video file from disk and starts immediate playback (resets user pause state).
     pub fn load_file(&self, path: &Path) -> Result<(), ViewerError> {
         if !path.exists() {
             return Err(ViewerError::FileNotFound(path.to_path_buf()));
@@ -152,7 +203,8 @@ impl MpvPlayer {
             .command("loadfile", &[&path_str, "replace"])
             .map_err(|e| ViewerError::Mpv(format!("Failed to execute 'loadfile' command: {:?}", e)))?;
 
-        // Ensure playback starts immediately
+        // Reset user pause state for freshly loaded media
+        self.is_user_paused.store(false, Ordering::SeqCst);
         let _ = self.mpv.set_property("pause", false);
 
         let filename = path
@@ -167,6 +219,7 @@ impl MpvPlayer {
             st.filename = filename.clone();
             st.is_playing = true;
             st.is_paused = false;
+            st.is_user_paused = false;
             st.is_eof = false;
             st.is_idle = false;
             st.position_secs = 0.0;
@@ -197,25 +250,37 @@ impl MpvPlayer {
         }
     }
 
-    /// Resumes playback.
+    /// Resumes playback explicitly (marks user pause as false).
     pub fn play(&self) -> Result<(), ViewerError> {
+        self.is_user_paused.store(false, Ordering::SeqCst);
         self.mpv
             .set_property("pause", false)
             .map_err(|e| ViewerError::Mpv(format!("Failed to unpause MPV: {:?}", e)))?;
 
-        self.state.write().is_paused = false;
-        self.state.write().is_playing = true;
+        {
+            let mut st = self.state.write();
+            st.is_paused = false;
+            st.is_user_paused = false;
+            st.is_playing = true;
+        }
         self.notify_subscribers();
         Ok(())
     }
 
-    /// Pauses playback.
+    /// Pauses playback explicitly (marks user pause as true if active).
     pub fn pause(&self) -> Result<(), ViewerError> {
+        if self.is_view_active.load(Ordering::SeqCst) {
+            self.is_user_paused.store(true, Ordering::SeqCst);
+        }
         self.mpv
             .set_property("pause", true)
             .map_err(|e| ViewerError::Mpv(format!("Failed to pause MPV: {:?}", e)))?;
 
-        self.state.write().is_paused = true;
+        {
+            let mut st = self.state.write();
+            st.is_paused = true;
+            st.is_user_paused = self.is_user_paused.load(Ordering::SeqCst);
+        }
         self.notify_subscribers();
         Ok(())
     }
@@ -295,6 +360,7 @@ impl MpvPlayer {
             let mut st = self.state.write();
             st.is_playing = false;
             st.is_paused = false;
+            st.is_user_paused = false;
             st.is_idle = true;
             st.position_secs = 0.0;
             st.filename.clear();
@@ -316,12 +382,14 @@ impl MpvPlayer {
         self.callbacks.write().push(Arc::new(callback));
     }
 
-    /// Registers a listener callback triggered when double-click or 'f' requests fullscreen in MPV.
+    /// Registers/replaces the listener callback triggered when double-click or 'f' requests fullscreen in MPV.
     pub fn on_toggle_fullscreen<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
     {
-        self.fullscreen_callbacks.write().push(Arc::new(callback));
+        let mut cbs = self.fullscreen_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
     }
 
     fn notify_subscribers(&self) {
@@ -337,6 +405,8 @@ impl MpvPlayer {
         let mpv = self.mpv.clone();
         let state = self.state.clone();
         let running = self.observer_running.clone();
+        let is_view_active = self.is_view_active.clone();
+        let is_user_paused = self.is_user_paused.clone();
         let callbacks = self.callbacks.clone();
         let fs_callbacks = self.fullscreen_callbacks.clone();
 
@@ -369,11 +439,19 @@ impl MpvPlayer {
                     let eof = mpv.get_property::<bool>("eof-reached").unwrap_or(false);
                     let idle = mpv.get_property::<bool>("idle-active").unwrap_or(true);
 
+                    // If tab is currently active and user triggers pause via HUD/keys, record user pause state
+                    if is_view_active.load(Ordering::Relaxed) {
+                        is_user_paused.store(paused, Ordering::Relaxed);
+                    }
+
+                    let user_paused_val = is_user_paused.load(Ordering::Relaxed);
+
                     let has_changed = {
                         let mut st = state.write();
                         let changed = (st.position_secs - pos).abs() > 0.1
                             || (st.duration_secs - dur).abs() > 0.1
                             || st.is_paused != paused
+                            || st.is_user_paused != user_paused_val
                             || (st.volume - vol).abs() > 0.5
                             || st.is_eof != eof
                             || st.is_idle != idle;
@@ -382,6 +460,7 @@ impl MpvPlayer {
                             st.position_secs = pos;
                             st.duration_secs = dur;
                             st.is_paused = paused;
+                            st.is_user_paused = user_paused_val;
                             st.is_playing = !idle && !paused;
                             st.volume = vol;
                             st.is_eof = eof;
