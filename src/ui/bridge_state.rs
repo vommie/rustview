@@ -9,6 +9,7 @@ use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
 use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use crate::ui::rubberband_selection::RubberbandSession;
+use crate::viewer::TabId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -57,6 +58,14 @@ pub const CTX_FOLDER_PURGE_DB: CtxMenuActionId = 3003;
 pub const CTX_FOLDER_REFRESH: CtxMenuActionId = 3004;
 pub const CTX_FOLDER_REFRESH_METADATA: CtxMenuActionId = 3005;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
+
+// Tab Context Menu Action IDs
+pub const CTX_TAB_DUPLICATE: CtxMenuActionId = 4001;
+pub const CTX_TAB_MOVE_TO_START: CtxMenuActionId = 4002;
+pub const CTX_TAB_MOVE_LEFT: CtxMenuActionId = 4003;
+pub const CTX_TAB_MOVE_RIGHT: CtxMenuActionId = 4004;
+pub const CTX_TAB_MOVE_TO_END: CtxMenuActionId = 4005;
+pub const CTX_TAB_CLOSE: CtxMenuActionId = 4006;
 
 /// High-performance LRU-managed bounded in-memory thumbnail store preventing RAM bloat on 100k+ datasets.
 #[derive(Debug, Clone)]
@@ -147,6 +156,7 @@ pub struct UiState {
     pub is_refreshing_media: bool,
     pub active_file_rename_target: Option<MediaId>,
     pub active_associated_apps: Vec<DesktopApp>,
+    pub active_tab_dialog_target: Option<TabId>,
 
     // Viewport Windowing & Hysteresis Paging State
     pub loaded_slice_start: usize,
@@ -200,6 +210,7 @@ impl Default for UiState {
             is_refreshing_media: false,
             active_file_rename_target: None,
             active_associated_apps: Vec::new(),
+            active_tab_dialog_target: None,
             loaded_slice_start: 0,
             loaded_slice_len: 0,
             loaded_slice_valid: false,

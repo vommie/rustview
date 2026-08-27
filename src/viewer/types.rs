@@ -52,6 +52,18 @@ impl Default for ImageTabPayload {
     }
 }
 
+impl std::fmt::Debug for ImageTabPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImageTabPayload")
+            .field("has_high_res_pixels", &self.high_res_pixels.is_some())
+            .field("is_loading", &self.is_loading)
+            .field("error_message", &self.error_message)
+            .field("orig_width", &self.orig_width)
+            .field("orig_height", &self.orig_height)
+            .finish()
+    }
+}
+
 /// Dedicated, isolated video tab payload retaining its own independent MPV player and X11 subwindow instance.
 #[derive(Clone)]
 pub struct VideoTabPayload {
@@ -84,17 +96,43 @@ pub enum TabPayload {
     Video(VideoTabPayload),
 }
 
+impl std::fmt::Debug for TabPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Image(img) => f.debug_tuple("Image").field(img).finish(),
+            Self::Video(vid) => f.debug_tuple("Video").field(vid).finish(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct MediaTabSession {
     pub id: TabId,
     pub media_id: MediaId,
     pub file_path: PathBuf,
     pub filename: String,
+    pub title: String,
     pub format: MediaFormat,
     pub record: MediaRecord,
     pub payload: TabPayload,
     pub created_at: Instant,
     pub last_accessed: Instant,
+}
+
+impl std::fmt::Debug for MediaTabSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MediaTabSession")
+            .field("id", &self.id)
+            .field("media_id", &self.media_id)
+            .field("filename", &self.filename)
+            .field("title", &self.title)
+            .field("format", &self.format)
+            .field("file_path", &self.file_path)
+            .field("payload", &self.payload)
+            .field("created_at", &self.created_at)
+            .field("last_accessed", &self.last_accessed)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -213,6 +213,7 @@ export component MainWindow inherits Window {
     callback browse-clicked();
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
+    callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
 
     callback viewer-close-tab();
     callback viewer-refresh();
@@ -383,6 +384,7 @@ export component MainWindow inherits Window {
             browse-clicked => { root.browse-clicked(); }
             tab-selected(id) => { root.tab-selected(id); }
             tab-closed(id) => { root.tab-closed(id); }
+            tab-context-menu(id, x, y) => { root.tab-context-menu(id, x, y); }
             settings-clicked => { root.open-settings(); }
         }
 
@@ -606,7 +608,7 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-right-width;
                 }
                 dragged(delta) => {
-                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w - delta));
+                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w + delta));
                     root.sidebar-right-resized(root.sidebar-right-width);
                 }
                 drag-finished => {

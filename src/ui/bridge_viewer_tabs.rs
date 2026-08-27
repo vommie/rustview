@@ -16,7 +16,6 @@ use crate::viewer::{
 };
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, ModelRc, VecModel};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -199,18 +198,17 @@ impl BridgeViewerTabs {
         };
 
         let scale = window.window().scale_factor();
-        let win_size = window.window().size(); // Physical pixel dimensions
+        let win_size = window.window().size();
 
         let logical_win_w = win_size.width as f32 / scale;
         let logical_win_h = win_size.height as f32 / scale;
 
-        let sidebar_r = window.get_sidebar_right_width(); // Logical pixels
-        let resizer_r = 6.0f32; // Resizer bar thickness
-        let toolbar_top = 38.0f32; // TopToolbar height
-        let toolbar_tab = 26.0f32; // ImageTabPanelToolbar height
-        let status_bar_h = 28.0f32; // StatusBar height
+        let sidebar_r = window.get_sidebar_right_width();
+        let resizer_r = 6.0f32;
+        let toolbar_top = 38.0f32;
+        let toolbar_tab = 26.0f32;
+        let status_bar_h = 28.0f32;
 
-        // In Tab View (Mode 1), left sidebar and left resizer are 0px
         let logical_x = 0.0f32;
         let logical_y = toolbar_top + toolbar_tab;
         let logical_w = (logical_win_w - (sidebar_r + resizer_r)).max(16.0);
@@ -227,7 +225,6 @@ impl BridgeViewerTabs {
         if let Some(active_session) = tab_manager.get_active_tab()
             && let TabPayload::Video(ref vid) = active_session.payload
         {
-            // Subscribe player fullscreen toggle handler for this active video tab (supporting both enter and exit)
             let fs_toggle = fullscreen_controller.clone();
             let tm_toggle = tab_manager.clone();
             let set_toggle = settings.clone();
@@ -509,6 +506,7 @@ impl BridgeViewerTabs {
     }
 
     /// Synchronizes open tabs, active view modes, viewer image buffers, and right sidebar locking to Slint UI.
+    /// Directly utilizes the immutable, permanent `t.title` stored in each tab session.
     pub fn sync_ui(
         window: &MainWindow,
         tab_manager: &ViewerTabManager,
@@ -520,29 +518,14 @@ impl BridgeViewerTabs {
         let active_id_opt = tab_manager.active_tab_id();
         let is_browse = active_id_opt.is_none();
 
-        // 1. Prepare Tab Models for the Top Toolbar with dynamic iteration suffixes for duplicate open instances
-        let mut media_id_occurrences: HashMap<MediaId, usize> = HashMap::new();
-        let mut media_id_totals: HashMap<MediaId, usize> = HashMap::new();
-        for t in &tabs {
-            *media_id_totals.entry(t.media_id).or_insert(0) += 1;
-        }
-
+        // 1. Prepare Tab Models for the Top Toolbar using the permanent tab titles
         let tab_models: Vec<TabItemModel> = tabs
             .iter()
             .map(|t| {
-                let total = media_id_totals.get(&t.media_id).copied().unwrap_or(1);
-                let current_occurrence = media_id_occurrences.entry(t.media_id).or_insert(0);
-                let title = if total > 1 && *current_occurrence > 0 {
-                    format!("{} ({})", t.filename, *current_occurrence)
-                } else {
-                    t.filename.clone()
-                };
-                *current_occurrence += 1;
-
                 TabItemModel {
                     id: t.id as i32,
                     media_id: t.media_id as i32,
-                    title: title.into(),
+                    title: t.title.clone().into(),
                     format_str: t.format.default_extension().into(),
                     is_active: Some(t.id) == active_id_opt,
                     is_video: matches!(t.payload, TabPayload::Video(_)),
@@ -568,9 +551,7 @@ impl BridgeViewerTabs {
         if let Some(active_tab) = tab_manager.get_active_tab() {
             let is_video = matches!(active_tab.payload, TabPayload::Video(_));
             window.set_viewer_is_video(is_video);
-
-            let active_display_title = ViewerTabManager::compute_tab_title(&tabs, active_tab.id);
-            window.set_viewer_filename(active_display_title.into());
+            window.set_viewer_filename(active_tab.title.clone().into());
 
             let res_str = if active_tab.record.width > 0 && active_tab.record.height > 0 {
                 format!("{} × {}", active_tab.record.width, active_tab.record.height)

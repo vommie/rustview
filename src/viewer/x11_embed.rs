@@ -16,8 +16,18 @@ unsafe extern "C" {
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct XRectangle {
+    pub x: i16,
+    pub y: i16,
+    pub width: u16,
+    pub height: u16,
+}
+
 struct X11Symbols {
-    _lib: *mut c_void,
+    _lib_x11: *mut c_void,
+    _lib_xext: *mut c_void,
     x_open_display: unsafe extern "C" fn(*const c_char) -> DisplayPtr,
     x_close_display: unsafe extern "C" fn(DisplayPtr) -> c_int,
     x_default_root_window: unsafe extern "C" fn(DisplayPtr) -> WindowId,
@@ -66,6 +76,21 @@ struct X11Symbols {
         *mut c_uint,
     ) -> c_int,
     x_free: unsafe extern "C" fn(*mut c_void) -> c_int,
+    x_shape_combine_rectangles: Option<
+        unsafe extern "C" fn(
+            DisplayPtr,
+            WindowId,
+            c_int,
+            c_int,
+            c_int,
+            *const XRectangle,
+            c_int,
+            c_int,
+            c_int,
+        ),
+    >,
+    x_shape_combine_mask:
+        Option<unsafe extern "C" fn(DisplayPtr, WindowId, c_int, c_int, c_int, c_ulong, c_int)>,
 }
 
 unsafe impl Send for X11Symbols {}
@@ -84,9 +109,9 @@ fn get_x11_api() -> Result<Arc<X11Symbols>, ViewerError> {
     }
 
     unsafe {
-        let lib = dlopen(c"libX11.so.6".as_ptr(), RTLD_LAZY);
-        let handle = if !lib.is_null() {
-            lib
+        let lib_x11 = dlopen(c"libX11.so.6".as_ptr(), RTLD_LAZY);
+        let handle_x11 = if !lib_x11.is_null() {
+            lib_x11
         } else {
             let lib_fallback = dlopen(c"libX11.so".as_ptr(), RTLD_LAZY);
             if lib_fallback.is_null() {
@@ -94,41 +119,67 @@ fn get_x11_api() -> Result<Arc<X11Symbols>, ViewerError> {
             }
             lib_fallback
         };
-        load_symbols_from_handle(handle)
+
+        let lib_xext = dlopen(c"libXext.so.6".as_ptr(), RTLD_LAZY);
+        let handle_xext = if !lib_xext.is_null() {
+            lib_xext
+        } else {
+            dlopen(c"libXext.so".as_ptr(), RTLD_LAZY)
+        };
+
+        load_symbols_from_handles(handle_x11, handle_xext)
     }
 }
 
-unsafe fn load_symbols_from_handle(lib: *mut c_void) -> Result<Arc<X11Symbols>, ViewerError> {
+unsafe fn load_symbols_from_handles(
+    lib_x11: *mut c_void,
+    lib_xext: *mut c_void,
+) -> Result<Arc<X11Symbols>, ViewerError> {
     unsafe fn load_sym<T>(handle: *mut c_void, name: &str) -> Result<T, ViewerError> {
         let c_name = CString::new(name).map_err(|e| ViewerError::X11(e.to_string()))?;
         let sym = unsafe { dlsym(handle, c_name.as_ptr()) };
         if sym.is_null() {
             return Err(ViewerError::X11(format!(
-                "Symbol '{}' not found in libX11",
+                "Symbol '{}' not found in library",
                 name
             )));
         }
         Ok(unsafe { std::mem::transmute_copy(&sym) })
     }
 
+    let x_shape_combine_rectangles = if !lib_xext.is_null() {
+        unsafe { load_sym(lib_xext, "XShapeCombineRectangles").ok() }
+    } else {
+        None
+    };
+
+    let x_shape_combine_mask = if !lib_xext.is_null() {
+        unsafe { load_sym(lib_xext, "XShapeCombineMask").ok() }
+    } else {
+        None
+    };
+
     let symbols = Arc::new(X11Symbols {
-        _lib: lib,
-        x_open_display: unsafe { load_sym(lib, "XOpenDisplay")? },
-        x_close_display: unsafe { load_sym(lib, "XCloseDisplay")? },
-        x_default_root_window: unsafe { load_sym(lib, "XDefaultRootWindow")? },
-        x_create_simple_window: unsafe { load_sym(lib, "XCreateSimpleWindow")? },
-        x_destroy_window: unsafe { load_sym(lib, "XDestroyWindow")? },
-        x_move_resize_window: unsafe { load_sym(lib, "XMoveResizeWindow")? },
-        x_reparent_window: unsafe { load_sym(lib, "XReparentWindow")? },
-        x_map_window: unsafe { load_sym(lib, "XMapWindow")? },
-        x_unmap_window: unsafe { load_sym(lib, "XUnmapWindow")? },
-        x_select_input: unsafe { load_sym(lib, "XSelectInput")? },
-        x_flush: unsafe { load_sym(lib, "XFlush")? },
-        x_sync: unsafe { load_sym(lib, "XSync")? },
-        x_intern_atom: unsafe { load_sym(lib, "XInternAtom")? },
-        x_get_window_property: unsafe { load_sym(lib, "XGetWindowProperty")? },
-        x_query_tree: unsafe { load_sym(lib, "XQueryTree")? },
-        x_free: unsafe { load_sym(lib, "XFree")? },
+        _lib_x11: lib_x11,
+        _lib_xext: lib_xext,
+        x_open_display: unsafe { load_sym(lib_x11, "XOpenDisplay")? },
+        x_close_display: unsafe { load_sym(lib_x11, "XCloseDisplay")? },
+        x_default_root_window: unsafe { load_sym(lib_x11, "XDefaultRootWindow")? },
+        x_create_simple_window: unsafe { load_sym(lib_x11, "XCreateSimpleWindow")? },
+        x_destroy_window: unsafe { load_sym(lib_x11, "XDestroyWindow")? },
+        x_move_resize_window: unsafe { load_sym(lib_x11, "XMoveResizeWindow")? },
+        x_reparent_window: unsafe { load_sym(lib_x11, "XReparentWindow")? },
+        x_map_window: unsafe { load_sym(lib_x11, "XMapWindow")? },
+        x_unmap_window: unsafe { load_sym(lib_x11, "XUnmapWindow")? },
+        x_select_input: unsafe { load_sym(lib_x11, "XSelectInput")? },
+        x_flush: unsafe { load_sym(lib_x11, "XFlush")? },
+        x_sync: unsafe { load_sym(lib_x11, "XSync")? },
+        x_intern_atom: unsafe { load_sym(lib_x11, "XInternAtom")? },
+        x_get_window_property: unsafe { load_sym(lib_x11, "XGetWindowProperty")? },
+        x_query_tree: unsafe { load_sym(lib_x11, "XQueryTree")? },
+        x_free: unsafe { load_sym(lib_x11, "XFree")? },
+        x_shape_combine_rectangles,
+        x_shape_combine_mask,
     });
 
     unsafe {
@@ -243,7 +294,6 @@ unsafe fn search_tree_by_title(
             }
         }
 
-        // Query children
         let mut root_ret = 0;
         let mut parent_ret = 0;
         let mut children_ptr: *mut WindowId = std::ptr::null_mut();
@@ -322,7 +372,7 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
                     0,
                     1,
                     0,
-                    6, // XA_CARDINAL = 6
+                    6,
                     &mut actual_type,
                     &mut actual_format,
                     &mut nitems,
@@ -359,6 +409,7 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
 }
 
 /// Managed X11 Video Subwindow container embedded directly into Slint's central media viewport.
+/// Supports dynamic nonrectangular XShape clipping to render Slint context menus and popups on top.
 pub struct X11VideoSubwindow {
     api: Arc<X11Symbols>,
     display: DisplayPtr,
@@ -400,8 +451,8 @@ impl X11VideoSubwindow {
                 width.max(16) as c_uint,
                 height.max(16) as c_uint,
                 0,
-                0, // border: black
-                0, // background: black
+                0,
+                0,
             );
 
             if subwindow_xid == 0 {
@@ -411,11 +462,10 @@ impl X11VideoSubwindow {
                 ));
             }
 
-            // Select structure events for MPV
             (api.x_select_input)(
                 display,
                 subwindow_xid,
-                (1 << 17) | (1 << 15) | (1 << 0), // StructureNotifyMask | ExposureMask | KeyPressMask
+                (1 << 17) | (1 << 15) | (1 << 0),
             );
 
             (api.x_sync)(display, 0);
@@ -445,13 +495,11 @@ impl X11VideoSubwindow {
         }
     }
 
-    /// Returns the native X11 Window ID (`wid`) of this subwindow.
     #[inline]
     pub fn xid(&self) -> u64 {
         self.subwindow_xid
     }
 
-    /// Returns the current parent window ID.
     #[inline]
     pub fn parent_xid(&self) -> u64 {
         self.parent_xid
@@ -543,10 +591,80 @@ impl X11VideoSubwindow {
                 width = w_clamped,
                 height = h_clamped,
                 elapsed_us = t0.elapsed().as_micros(),
-                "[X11VideoSubwindow: Reparent] Subwindow reparented seamlessly (0ms playback interruption)"
+                "[X11VideoSubwindow: Reparent] Subwindow reparented seamlessly"
             );
 
             Ok(())
+        }
+    }
+
+    /// Clips out specified cutout rectangles from the video subwindow using X11 Nonrectangular Shape extension.
+    /// The video continues playing and remains visible everywhere else while Slint context menus display on top!
+    pub fn clip_cutout_rectangles(&mut self, main_win_rects: &[XRectangle]) {
+        let Some(ref shape_rects_fn) = self.api.x_shape_combine_rectangles else {
+            return;
+        };
+        let Some(ref shape_mask_fn) = self.api.x_shape_combine_mask else {
+            return;
+        };
+
+        unsafe {
+            // 1. Reset shape to full bounding rectangle first
+            shape_mask_fn(self.display, self.subwindow_xid, 0, 0, 0, 0, 0);
+
+            // 2. Convert coordinates from main window space to subwindow space
+            let mut local_rects: Vec<XRectangle> = Vec::with_capacity(main_win_rects.len());
+            for r in main_win_rects {
+                let local_x = (r.x as i32) - self.current_x;
+                let local_y = (r.y as i32) - self.current_y;
+                let local_right = local_x + (r.width as i32);
+                let local_bottom = local_y + (r.height as i32);
+
+                if local_right > 0
+                    && local_bottom > 0
+                    && local_x < (self.current_w as i32)
+                    && local_y < (self.current_h as i32)
+                {
+                    let clamped_x = local_x.max(0) as i16;
+                    let clamped_y = local_y.max(0) as i16;
+                    let clamped_w = ((local_right.min(self.current_w as i32)) - (clamped_x as i32)).max(1) as u16;
+                    let clamped_h = ((local_bottom.min(self.current_h as i32)) - (clamped_y as i32)).max(1) as u16;
+
+                    local_rects.push(XRectangle {
+                        x: clamped_x,
+                        y: clamped_y,
+                        width: clamped_w,
+                        height: clamped_h,
+                    });
+                }
+            }
+
+            // 3. Subtract all intersecting cutout rectangles
+            if !local_rects.is_empty() {
+                shape_rects_fn(
+                    self.display,
+                    self.subwindow_xid,
+                    0, // ShapeBounding
+                    0,
+                    0,
+                    local_rects.as_ptr(),
+                    local_rects.len() as c_int,
+                    3, // ShapeSubtract
+                    0, // Unsorted
+                );
+            }
+
+            (self.api.x_flush)(self.display);
+        }
+    }
+
+    /// Resets the window shape to the full standard rectangle.
+    pub fn reset_clip_shape(&mut self) {
+        if let Some(ref shape_mask_fn) = self.api.x_shape_combine_mask {
+            unsafe {
+                shape_mask_fn(self.display, self.subwindow_xid, 0, 0, 0, 0, 0);
+                (self.api.x_flush)(self.display);
+            }
         }
     }
 
@@ -561,7 +679,7 @@ impl X11VideoSubwindow {
         }
     }
 
-    /// Unmaps and hides the video subwindow (e.g. when in Browse mode or viewing an Image tab).
+    /// Unmaps and hides the video subwindow.
     pub fn hide(&mut self) {
         if self.is_visible {
             unsafe {
@@ -572,7 +690,6 @@ impl X11VideoSubwindow {
         }
     }
 
-    /// Returns whether the subwindow is currently mapped and visible.
     #[inline]
     pub fn is_visible(&self) -> bool {
         self.is_visible

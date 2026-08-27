@@ -11,6 +11,7 @@ export component TabItemView inherits Rectangle {
     callback clicked();
     callback close-clicked();
     callback middle-clicked();
+    callback context-menu-requested(length /* x */, length /* y */);
 
     width: content-layout.preferred-width;
     height: 26px;
@@ -28,7 +29,7 @@ export component TabItemView inherits Rectangle {
 
     tooltip-host := TooltipHost {
         text: tab.title;
-        shortcut: tab.is-active ? "Active Tab" : "Click to view (Middle-click to close)";
+        shortcut: tab.is-active ? "Active Tab (Right-click for menu)" : "Click to view (Middle-click to close)";
         is-enabled: true;
     }
 
@@ -40,6 +41,8 @@ export component TabItemView inherits Rectangle {
                     root.clicked();
                 } else if event.button == PointerEventButton.middle {
                     root.middle-clicked();
+                } else if event.button == PointerEventButton.right {
+                    root.context-menu-requested(self.mouse-x, self.mouse-y);
                 }
             }
         }
@@ -122,11 +125,12 @@ export component MediaTabBar inherits Rectangle {
 
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
+    callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
 
     background: transparent;
     clip: true;
 
-    SmoothScrollArea {
+    scroll-area := SmoothScrollArea {
         width: 100%;
         height: 100%;
         enable-horizontal: true;
@@ -146,6 +150,9 @@ export component MediaTabBar inherits Rectangle {
                 clicked => { root.tab-selected(tab.id); }
                 middle-clicked => { root.tab-closed(tab.id); }
                 close-clicked => { root.tab-closed(tab.id); }
+                context-menu-requested(mx, my) => {
+                    root.tab-context-menu(tab.id, self.x + mx + scroll-area.clamped-x, self.y + my);
+                }
             }
         }
     }

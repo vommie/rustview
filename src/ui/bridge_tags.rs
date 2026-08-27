@@ -982,15 +982,17 @@ impl BridgeTags {
 
         let win = window.clone_strong();
         let lib = library.clone();
+        let tm = tab_manager.clone();
         let st = state.clone();
         window.on_tag_context_menu(move |tag_id, x, y| {
-            Self::show_tag_context_menu(tag_id as u32, &win, &lib, &st, x, y);
+            Self::show_tag_context_menu(tag_id as u32, &win, &lib, &st, &tm, x, y);
         });
 
         let win = window.clone_strong();
+        let tm = tab_manager.clone();
         let st = state.clone();
         window.on_tag_root_context_menu(move |x, y| {
-            Self::show_root_context_menu(&win, &st, x, y);
+            Self::show_root_context_menu(&win, &st, &tm, x, y);
         });
 
         let win = window.clone_strong();
@@ -1317,12 +1319,13 @@ impl BridgeTags {
     pub fn show_root_context_menu(
         window: &MainWindow,
         state: &Arc<RwLock<UiState>>,
+        tab_manager: &ViewerTabManager,
         x: f32,
         y: f32,
     ) {
         state.write().active_tag_dialog_target = None;
         let menu = TagContextMenu::build_root_menu();
-        BridgeContextMenu::open_custom_menu(window, state, menu, x, y);
+        BridgeContextMenu::open_custom_menu(window, state, tab_manager, menu, x, y);
     }
 
     pub fn show_tag_context_menu(
@@ -1330,6 +1333,7 @@ impl BridgeTags {
         window: &MainWindow,
         library: &Library,
         state: &Arc<RwLock<UiState>>,
+        tab_manager: &ViewerTabManager,
         x: f32,
         y: f32,
     ) {
@@ -1350,7 +1354,7 @@ impl BridgeTags {
             .collect();
 
         let menu = TagContextMenu::build_tag_menu(&record, &all_tags, &descendants);
-        BridgeContextMenu::open_custom_menu(window, state, menu, x, y);
+        BridgeContextMenu::open_custom_menu(window, state, tab_manager, menu, x, y);
     }
 
     #[inline]

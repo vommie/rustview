@@ -5,6 +5,7 @@ pub mod bridge_ctx_menu;
 pub mod bridge_ctx_menu_folder;
 pub mod bridge_ctx_menu_media;
 pub mod bridge_ctx_menu_presenter;
+pub mod bridge_ctx_menu_tab;
 pub mod bridge_ctx_menu_tag;
 pub mod bridge_dnd;
 pub mod bridge_favorites;
@@ -42,9 +43,11 @@ pub mod rubberband_selection;
 pub mod video_preview_animator;
 
 pub use bridge::UiBridge;
+pub use bridge_ctx_menu::{FolderMenuContext, MediaMenuContext};
 pub use bridge_ctx_menu_folder::FolderContextMenu;
 pub use bridge_ctx_menu_media::MediaContextMenu;
 pub use bridge_ctx_menu_presenter::CtxMenuPresenter;
+pub use bridge_ctx_menu_tab::{TabActionContext, TabContextMenu};
 pub use bridge_ctx_menu_tag::TagContextMenu;
 pub use bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
 pub use bridge_file_dialog_conflict::{

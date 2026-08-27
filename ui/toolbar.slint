@@ -17,6 +17,7 @@ export component TopToolbar inherits Rectangle {
     callback settings-clicked();
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
+    callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
 
     // Bottom border separator line
     Rectangle {
@@ -52,6 +53,7 @@ export component TopToolbar inherits Rectangle {
             show-rating-badge: root.show-tab-rating-badge;
             tab-selected(id) => { root.tab-selected(id); }
             tab-closed(id) => { root.tab-closed(id); }
+            tab-context-menu(id, x, y) => { root.tab-context-menu(id, self.x + x, self.y + y); }
         }
 
         ToolbarSeparator {}

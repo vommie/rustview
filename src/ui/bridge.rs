@@ -1,4 +1,6 @@
-use super::bridge_ctx_menu::{BridgeContextMenu, ContextMenuRegistration};
+use super::bridge_ctx_menu::{
+    BridgeContextMenu, ContextMenuRegistration, MediaMenuContext,
+};
 use super::bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
@@ -373,6 +375,7 @@ impl UiBridge {
                 remove_orphaned_dialog: self.remove_orphaned_dialog.clone(),
                 tag_dialogs: self.tag_dialogs.clone(),
                 folder_dialogs: self.folder_dialogs.clone(),
+                fullscreen_controller: self.fullscreen_controller.clone(),
                 settings: self.settings.clone(),
             },
         );
@@ -758,10 +761,13 @@ impl UiBridge {
 
     pub fn show_media_context_menu(&self, media_id: MediaId, x: f32, y: f32) {
         BridgeContextMenu::show_media_menu(
-            &self.window,
-            &self.library,
-            &self.thumbnails,
-            &self.state,
+            MediaMenuContext {
+                window: &self.window,
+                library: &self.library,
+                thumbnails: &self.thumbnails,
+                tab_manager: &self.tab_manager,
+                state: &self.state,
+            },
             media_id,
             x,
             y,
