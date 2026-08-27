@@ -170,6 +170,34 @@ impl TabCollection {
         evicted
     }
 
+    /// Removes all tabs positioned to the left of `tab_id` and returns the evicted sessions.
+    pub fn remove_to_left(&mut self, tab_id: TabId) -> Vec<MediaTabSession> {
+        let pos = match self.index_of(tab_id) {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+
+        if pos == 0 {
+            return Vec::new();
+        }
+
+        self.sessions.drain(0..pos).collect()
+    }
+
+    /// Removes all tabs positioned to the right of `tab_id` and returns the evicted sessions.
+    pub fn remove_to_right(&mut self, tab_id: TabId) -> Vec<MediaTabSession> {
+        let pos = match self.index_of(tab_id) {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+
+        if pos + 1 >= self.sessions.len() {
+            return Vec::new();
+        }
+
+        self.sessions.drain((pos + 1)..).collect()
+    }
+
     // =========================================================================
     // Reordering & Movement Algorithms (Retains Permanent Tab Titles)
     // =========================================================================

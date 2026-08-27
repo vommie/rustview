@@ -9,6 +9,7 @@ use crate::media::MediaType;
 use crate::settings::LogObscurer;
 use parking_lot::{Mutex, RwLock};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -203,7 +204,7 @@ impl ViewerTabManager {
         }
     }
 
-    pub fn move_tab_to_end(&self, tab_id: TabId) -> bool {
+    pub fn move_to_end(&self, tab_id: TabId) -> bool {
         let count = self.tab_count();
         if count > 0 {
             self.move_tab(tab_id, count - 1)
@@ -479,6 +480,127 @@ impl ViewerTabManager {
         *active
     }
 
+    /// Closes all tabs located to the left of the specified `tab_id`.
+    pub fn close_tabs_to_left(&self, tab_id: TabId) -> (usize, Option<TabId>) {
+        let mut tabs = self.tabs.write();
+        let mut active = self.active_tab_id.write();
+
+        let current_active = *active;
+        let evicted = tabs.remove_to_left(tab_id);
+        let closed_count = evicted.len();
+
+        if closed_count == 0 {
+            return (0, current_active);
+        }
+
+        let evicted_ids: HashSet<TabId> = evicted.iter().map(|t| t.id).collect();
+        for session in evicted {
+            Self::cleanup_session_resources(&session);
+        }
+
+        tracing::info!(
+            target_tab_id = tab_id,
+            closed_count,
+            remaining_tabs = tabs.len(),
+            "[ViewerTabManager: CloseToLeft] Closed all tabs to the left of target"
+        );
+
+        // If the active tab was closed, switch active to the target tab
+        if let Some(active_id) = current_active
+            && evicted_ids.contains(&active_id)
+        {
+            *active = Some(tab_id);
+            if let Some(target_tab) = tabs.get_mut(tab_id) {
+                target_tab.last_accessed = Instant::now();
+                Self::resume_session_playback(
+                    target_tab,
+                    *self.main_window_xid.read(),
+                    *self.cached_viewport_rect.read(),
+                );
+            }
+        }
+
+        (closed_count, *active)
+    }
+
+    /// Closes all tabs located to the right of the specified `tab_id`.
+    pub fn close_tabs_to_right(&self, tab_id: TabId) -> (usize, Option<TabId>) {
+        let mut tabs = self.tabs.write();
+        let mut active = self.active_tab_id.write();
+
+        let current_active = *active;
+        let evicted = tabs.remove_to_right(tab_id);
+        let closed_count = evicted.len();
+
+        if closed_count == 0 {
+            return (0, current_active);
+        }
+
+        let evicted_ids: HashSet<TabId> = evicted.iter().map(|t| t.id).collect();
+        for session in evicted {
+            Self::cleanup_session_resources(&session);
+        }
+
+        tracing::info!(
+            target_tab_id = tab_id,
+            closed_count,
+            remaining_tabs = tabs.len(),
+            "[ViewerTabManager: CloseToRight] Closed all tabs to the right of target"
+        );
+
+        // If the active tab was closed, switch active to the target tab
+        if let Some(active_id) = current_active
+            && evicted_ids.contains(&active_id)
+        {
+            *active = Some(tab_id);
+            if let Some(target_tab) = tabs.get_mut(tab_id) {
+                target_tab.last_accessed = Instant::now();
+                Self::resume_session_playback(
+                    target_tab,
+                    *self.main_window_xid.read(),
+                    *self.cached_viewport_rect.read(),
+                );
+            }
+        }
+
+        (closed_count, *active)
+    }
+
+    /// Closes all open tabs except `keep_tab_id`, ensuring `keep_tab_id` is foregrounded and active.
+    pub fn close_other_tabs(&self, keep_tab_id: TabId) -> (usize, Option<TabId>) {
+        let mut tabs = self.tabs.write();
+        let mut active = self.active_tab_id.write();
+
+        let evicted = tabs.retain_only(keep_tab_id);
+        let closed_count = evicted.len();
+
+        for session in evicted {
+            Self::cleanup_session_resources(&session);
+        }
+
+        if tabs.is_empty() {
+            *active = None;
+        } else {
+            *active = Some(keep_tab_id);
+            if let Some(target_tab) = tabs.get_mut(keep_tab_id) {
+                target_tab.last_accessed = Instant::now();
+                Self::resume_session_playback(
+                    target_tab,
+                    *self.main_window_xid.read(),
+                    *self.cached_viewport_rect.read(),
+                );
+            }
+        }
+
+        tracing::info!(
+            keep_tab_id,
+            closed_count,
+            "[ViewerTabManager: CloseOthers] Closed all other tabs, keeping single active tab"
+        );
+
+        (closed_count, *active)
+    }
+
     pub fn close_all_tabs(&self) {
         let mut tabs = self.tabs.write();
         let mut active = self.active_tab_id.write();
@@ -490,22 +612,6 @@ impl ViewerTabManager {
 
         *active = None;
         tracing::info!("[ViewerTabManager: CloseAll] Closed all open viewer tabs");
-    }
-
-    pub fn close_other_tabs(&self, keep_tab_id: TabId) {
-        let mut tabs = self.tabs.write();
-        let mut active = self.active_tab_id.write();
-
-        let evicted = tabs.retain_only(keep_tab_id);
-        for session in evicted {
-            Self::cleanup_session_resources(&session);
-        }
-
-        if tabs.is_empty() {
-            *active = None;
-        } else {
-            *active = Some(keep_tab_id);
-        }
     }
 
     // =========================================================================

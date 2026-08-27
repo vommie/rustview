@@ -67,6 +67,9 @@ pub const CTX_TAB_MOVE_LEFT: CtxMenuActionId = 4003;
 pub const CTX_TAB_MOVE_RIGHT: CtxMenuActionId = 4004;
 pub const CTX_TAB_MOVE_TO_END: CtxMenuActionId = 4005;
 pub const CTX_TAB_CLOSE: CtxMenuActionId = 4006;
+pub const CTX_TAB_CLOSE_TO_LEFT: CtxMenuActionId = 4007;
+pub const CTX_TAB_CLOSE_TO_RIGHT: CtxMenuActionId = 4008;
+pub const CTX_TAB_CLOSE_OTHERS: CtxMenuActionId = 4009;
 
 /// High-performance LRU-managed bounded in-memory thumbnail store preventing RAM bloat on 100k+ datasets.
 #[derive(Debug, Clone)]

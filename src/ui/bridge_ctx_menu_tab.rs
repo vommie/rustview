@@ -25,8 +25,8 @@ pub struct TabActionContext<'a> {
 pub struct TabContextMenu;
 
 impl TabContextMenu {
-    /// Builds the declarative context menu for a viewer tab item.
-    /// Uses pure text-only action entries (no icons) for a clean look.
+    /// Builds the declarative context menu for a viewer tab item with Move and Close Tabs submenus.
+    /// Uses pure text-only action entries (no icons) for a clean, consistent look.
     pub fn build_menu(
         tab: &MediaTabSession,
         tab_idx: usize,
@@ -39,6 +39,10 @@ impl TabContextMenu {
         let can_move_left = tab_idx > 0;
         let can_move_right = tab_idx + 1 < total_tabs;
         let has_multiple_tabs = total_tabs > 1;
+
+        let has_tabs_to_left = tab_idx > 0;
+        let has_tabs_to_right = tab_idx + 1 < total_tabs;
+        let has_other_tabs = total_tabs > 1;
 
         CtxMenuBuilder::new()
             .header(header_text)
@@ -81,6 +85,29 @@ impl TabContextMenu {
                 )
             })
             .separator()
+            .submenu("Close Tabs...", None, has_other_tabs, move |sub| {
+                sub.action(
+                    CTX_TAB_CLOSE_TO_LEFT,
+                    "Left of selected tab",
+                    None,
+                    None,
+                    has_tabs_to_left,
+                )
+                .action(
+                    CTX_TAB_CLOSE_TO_RIGHT,
+                    "Right of selected tab",
+                    None,
+                    None,
+                    has_tabs_to_right,
+                )
+                .action(
+                    CTX_TAB_CLOSE_OTHERS,
+                    "All other tabs",
+                    None,
+                    None,
+                    has_other_tabs,
+                )
+            })
             .action(
                 CTX_TAB_CLOSE,
                 "Close Tab",
@@ -197,8 +224,77 @@ impl TabContextMenu {
             }
             CTX_TAB_MOVE_TO_END => {
                 tracing::info!(tab_id, "[TabContextMenu: Move] Move tab to end requested");
-                if ctx.tab_manager.move_tab_to_end(tab_id) {
+                if ctx.tab_manager.move_to_end(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                }
+            }
+            CTX_TAB_CLOSE_TO_LEFT => {
+                let all_tabs_before = ctx.tab_manager.list_tabs();
+                let tab_title = ViewerTabManager::compute_tab_title(&all_tabs_before, tab_id);
+                let (closed_count, _) = ctx.tab_manager.close_tabs_to_left(tab_id);
+
+                tracing::info!(
+                    tab_id,
+                    target_title = %tab_title,
+                    closed_count,
+                    "[TabContextMenu: CloseLeft] User closed tabs to the left"
+                );
+
+                BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
+                ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+
+                if closed_count > 0 {
+                    StatusBarBridge::success(
+                        ctx.window,
+                        format!("Closed {} tab(s) to the left of '{}'", closed_count, tab_title),
+                    );
+                }
+            }
+            CTX_TAB_CLOSE_TO_RIGHT => {
+                let all_tabs_before = ctx.tab_manager.list_tabs();
+                let tab_title = ViewerTabManager::compute_tab_title(&all_tabs_before, tab_id);
+                let (closed_count, _) = ctx.tab_manager.close_tabs_to_right(tab_id);
+
+                tracing::info!(
+                    tab_id,
+                    target_title = %tab_title,
+                    closed_count,
+                    "[TabContextMenu: CloseRight] User closed tabs to the right"
+                );
+
+                BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
+                ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+
+                if closed_count > 0 {
+                    StatusBarBridge::success(
+                        ctx.window,
+                        format!("Closed {} tab(s) to the right of '{}'", closed_count, tab_title),
+                    );
+                }
+            }
+            CTX_TAB_CLOSE_OTHERS => {
+                let all_tabs_before = ctx.tab_manager.list_tabs();
+                let tab_title = ViewerTabManager::compute_tab_title(&all_tabs_before, tab_id);
+                let (closed_count, _) = ctx.tab_manager.close_other_tabs(tab_id);
+
+                tracing::info!(
+                    tab_id,
+                    target_title = %tab_title,
+                    closed_count,
+                    "[TabContextMenu: CloseOthers] User closed all other tabs"
+                );
+
+                BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
+                ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+
+                if closed_count > 0 {
+                    StatusBarBridge::success(
+                        ctx.window,
+                        format!("Closed {} other tab(s), keeping '{}'", closed_count, tab_title),
+                    );
                 }
             }
             CTX_TAB_CLOSE => {
