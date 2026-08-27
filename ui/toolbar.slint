@@ -13,11 +13,29 @@ export component TopToolbar inherits Rectangle {
     in property <[TabItemModel]> tabs: [];
     in property <bool> show-tab-rating-badge: false;
 
+    // Tab Drag & Drop State
+    in property <bool> is-dragging-tab: false;
+    in property <length> drag-ghost-x: 0px;
+    in property <string> drag-ghost-title: "";
+    in property <string> drag-ghost-format: "";
+    in property <bool> drag-ghost-is-video: false;
+    in property <int> drag-ghost-rating: 0;
+    in property <bool> drag-ghost-is-active: false;
+
     callback browse-clicked();
     callback settings-clicked();
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
+
+    callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
+    callback tab-drag-moved(length /* mouse_x */, length /* view_width */);
+    callback tab-drag-ended(int /* tab_id */, int /* target_index */);
+    callback tab-drag-cancelled(int /* tab_id */);
+
+    public function scroll-tab-bar-by(dx: length) {
+        tab-bar.scroll-by(dx);
+    }
 
     // Bottom border separator line
     Rectangle {
@@ -44,16 +62,38 @@ export component TopToolbar inherits Rectangle {
 
         ToolbarSeparator {}
 
-        // 2. Embedded MediaTabBar stretching horizontally between Browse and Settings
-        MediaTabBar {
+        // 2. Embedded MediaTabBar with integrated Drag & Drop Reordering
+        tab-bar := MediaTabBar {
             horizontal-stretch: 1;
             height: 28px;
             y: (parent.height - self.height) / 2;
             tabs: root.tabs;
             show-rating-badge: root.show-tab-rating-badge;
+
+            is-dragging-tab: root.is-dragging-tab;
+            drag-ghost-x: root.drag-ghost-x;
+            drag-ghost-title: root.drag-ghost-title;
+            drag-ghost-format: root.drag-ghost-format;
+            drag-ghost-is-video: root.drag-ghost-is-video;
+            drag-ghost-rating: root.drag-ghost-rating;
+            drag-ghost-is-active: root.drag-ghost-is-active;
+
             tab-selected(id) => { root.tab-selected(id); }
             tab-closed(id) => { root.tab-closed(id); }
             tab-context-menu(id, x, y) => { root.tab-context-menu(id, self.x + x, self.y + y); }
+
+            tab-drag-started(id, s-idx, mx, tw) => {
+                root.tab-drag-started(id, s-idx, mx, tw);
+            }
+            tab-drag-moved(mx, vw) => {
+                root.tab-drag-moved(mx, vw);
+            }
+            tab-drag-ended(id, t-idx) => {
+                root.tab-drag-ended(id, t-idx);
+            }
+            tab-drag-cancelled(id) => {
+                root.tab-drag-cancelled(id);
+            }
         }
 
         ToolbarSeparator {}

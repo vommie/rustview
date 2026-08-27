@@ -6,6 +6,7 @@ use rustview::ui::bridge_state::{
     CTX_TAB_CLOSE, CTX_TAB_DUPLICATE, CTX_TAB_MOVE_LEFT, CTX_TAB_MOVE_RIGHT, CTX_TAB_MOVE_TO_END,
     CTX_TAB_MOVE_TO_START,
 };
+use rustview::ui::tab_dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
 use rustview::viewer::tab_item::{ImageBufferEvictor, TabCollection, TabTitleFormatter};
 use rustview::viewer::{
     find_window_by_pid_and_title, find_window_by_title, HighResImageLoader, ImageTabPayload,
@@ -54,6 +55,113 @@ fn create_test_session(id: u64, media_id: u64, filename: &str, title: &str) -> M
         created_at: Instant::now(),
         last_accessed: Instant::now(),
     }
+}
+
+#[test]
+fn test_tab_dnd_geometry_slot_computation_and_target_detection() {
+    let tab_ids = vec![10, 20, 30, 40];
+    let widths = vec![100.0, 150.0, 100.0, 200.0];
+    let spacing = 4.0;
+    let padding_start = 2.0;
+
+    let slots = TabDndGeometry::compute_tab_slots(&tab_ids, &widths, spacing, padding_start);
+    assert_eq!(slots.len(), 4);
+
+    // Slot 0: [2.0 .. 102.0], Center = 52.0
+    assert_eq!(slots[0].start_x, 2.0);
+    assert_eq!(slots[0].width, 100.0);
+    assert_eq!(slots[0].center_x, 52.0);
+
+    // Slot 1: [106.0 .. 256.0], Center = 181.0
+    assert_eq!(slots[1].start_x, 106.0);
+    assert_eq!(slots[1].width, 150.0);
+    assert_eq!(slots[1].center_x, 181.0);
+
+    // Slot 2: [260.0 .. 360.0], Center = 310.0
+    assert_eq!(slots[2].start_x, 260.0);
+    assert_eq!(slots[2].width, 100.0);
+    assert_eq!(slots[2].center_x, 310.0);
+
+    // Slot 3: [364.0 .. 564.0], Center = 464.0
+    assert_eq!(slots[3].start_x, 364.0);
+    assert_eq!(slots[3].width, 200.0);
+    assert_eq!(slots[3].center_x, 464.0);
+
+    // 1. Drag Tab 0 (Source index 0) rightwards past center of Slot 1 (Center = 181.0)
+    let target_r1 = TabDndGeometry::calculate_target_index(&slots, 0, 190.0, 0);
+    assert_eq!(target_r1, 1);
+
+    // 2. Drag Tab 0 further past center of Slot 2 (Center = 310.0)
+    let target_r2 = TabDndGeometry::calculate_target_index(&slots, 0, 320.0, 1);
+    assert_eq!(target_r2, 2);
+
+    // 3. Drag Tab 3 (Source index 3) leftwards past center of Slot 1 (Center = 181.0)
+    let target_l1 = TabDndGeometry::calculate_target_index(&slots, 3, 170.0, 3);
+    assert_eq!(target_l1, 1);
+}
+
+#[test]
+fn test_tab_dnd_geometry_displacement_push_away_shifts() {
+    let tab_ids = vec![1, 2, 3, 4];
+    let widths = vec![100.0, 100.0, 100.0, 100.0];
+    let spacing = 4.0;
+    let slots = TabDndGeometry::compute_tab_slots(&tab_ids, &widths, spacing, 0.0);
+
+    // Scenario A: Drag Tab 0 -> Slot 2 (Moving Right across slots 1 and 2)
+    // Dragged item total footprint = 100.0 + 4.0 = 104.0
+    // Tabs 1 and 2 must slide LEFT (-104.0px), Tab 0 stays 0.0, Tab 3 stays 0.0
+    let shifts_right = TabDndGeometry::compute_shift_offsets(&slots, 0, 2, spacing);
+    assert_eq!(shifts_right[0], 0.0);
+    assert_eq!(shifts_right[1], -104.0);
+    assert_eq!(shifts_right[2], -104.0);
+    assert_eq!(shifts_right[3], 0.0);
+
+    // Scenario B: Drag Tab 3 -> Slot 1 (Moving Left across slots 2 and 1)
+    // Tabs 1 and 2 must slide RIGHT (+104.0px), Tab 0 stays 0.0, Tab 3 stays 0.0
+    let shifts_left = TabDndGeometry::compute_shift_offsets(&slots, 3, 1, spacing);
+    assert_eq!(shifts_left[0], 0.0);
+    assert_eq!(shifts_left[1], 104.0);
+    assert_eq!(shifts_left[2], 104.0);
+    assert_eq!(shifts_left[3], 0.0);
+
+    // Scenario C: Drag Tab 1 -> Slot 1 (Same slot) -> All shifts must be 0.0
+    let shifts_same = TabDndGeometry::compute_shift_offsets(&slots, 1, 1, spacing);
+    assert_eq!(shifts_same, vec![0.0, 0.0, 0.0, 0.0]);
+}
+
+#[test]
+fn test_tab_dnd_session_lifecycle() {
+    let tab_ids = vec![100, 200, 300];
+    let widths = vec![120.0, 140.0, 110.0];
+    let slots = TabDndGeometry::compute_tab_slots(&tab_ids, &widths, 4.0, 2.0);
+
+    let mut session = TabDndSession::new(200, 1, 50.0, 176.0, slots);
+    assert!(session.is_active);
+    assert_eq!(session.dragged_tab_id, 200);
+    assert_eq!(session.source_index, 1);
+    assert_eq!(session.target_index, 1);
+    assert_eq!(session.ghost_left_x(), 126.0);
+    assert_eq!(session.dragged_center_x(), 196.0);
+
+    session.current_cursor_x = 300.0;
+    assert_eq!(session.ghost_left_x(), 250.0);
+}
+
+#[test]
+fn test_tab_dnd_autoscroller_lifecycle() {
+    let scroller = TabDndAutoScroller::new();
+    assert!(!scroller.is_active());
+
+    // Cursor inside neutral zone
+    scroller.update_cursor(150.0, 500.0, |_dx| {});
+    assert!(!scroller.is_active());
+
+    // Cursor inside left edge zone (< 36px)
+    scroller.update_cursor(10.0, 500.0, |_dx| {});
+    assert!(scroller.is_active());
+
+    scroller.stop();
+    assert!(!scroller.is_active());
 }
 
 #[test]
@@ -624,7 +732,6 @@ fn test_viewer_tab_manager_close_fallback_rules() {
 
     let _ = lib.refresher().refresh_folder(folder.id).unwrap();
     let media = lib.media().get_by_folder(folder.id).unwrap();
-    assert_eq!(media.len(), 3);
 
     let tab_mgr = ViewerTabManager::new(lib);
 

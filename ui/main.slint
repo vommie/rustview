@@ -47,6 +47,15 @@ export component MainWindow inherits Window {
     in-out property <bool> is-browse-active: true;
     in property <[TabItemModel]> tabs: [];
 
+    // Tab Drag & Drop State Properties
+    in-out property <bool> is-dragging-tab: false;
+    in-out property <length> drag-ghost-x: 0px;
+    in-out property <string> drag-ghost-title: "";
+    in-out property <string> drag-ghost-format: "";
+    in-out property <bool> drag-ghost-is-video: false;
+    in-out property <int> drag-ghost-rating: 0;
+    in-out property <bool> drag-ghost-is-active: false;
+
     in-out property <bool> is-table-view: false;
     in-out property <bool> is-modal-locked: false;
     in-out property <int> thumb-size: 190;
@@ -99,7 +108,7 @@ export component MainWindow inherits Window {
     in-out property <int> total-items-count: 0;
     out property <int> grid-columns: grid-view.columns;
 
-    // Drag and Drop State Properties
+    // Media Drag and Drop State Properties
     in-out property <bool> is-dragging-media: false;
     in-out property <int> drag-count: 0;
     in-out property <string> drag-title: "";
@@ -215,6 +224,12 @@ export component MainWindow inherits Window {
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
 
+    // Tab Drag & Drop Callbacks
+    callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
+    callback tab-drag-moved(length /* mouse_x */, length /* view_width */);
+    callback tab-drag-ended(int /* tab_id */, int /* target_index */);
+    callback tab-drag-cancelled(int /* tab_id */);
+
     callback viewer-close-tab();
     callback viewer-refresh();
     callback viewer-previous();
@@ -284,6 +299,10 @@ export component MainWindow inherits Window {
     callback sidebar-left-resize-finished(length /* final_width */);
     callback sidebar-right-resized(length /* new_width */);
     callback sidebar-right-resize-finished(length /* final_width */);
+
+    public function scroll-tab-bar-by(dx: length) {
+        top-toolbar.scroll-tab-bar-by(dx);
+    }
 
     public function scroll-folder-tree-by(dy: length) {
         sidebar_left.scroll-folder-tree-by(dy);
@@ -377,15 +396,37 @@ export component MainWindow inherits Window {
     VerticalLayout {
         spacing: 0px;
 
-        TopToolbar {
+        top-toolbar := TopToolbar {
             is-browse-active: root.is-browse-active;
             tabs: root.tabs;
             show-tab-rating-badge: root.viewer-show-tab-rating-badge;
+
+            is-dragging-tab: root.is-dragging-tab;
+            drag-ghost-x: root.drag-ghost-x;
+            drag-ghost-title: root.drag-ghost-title;
+            drag-ghost-format: root.drag-ghost-format;
+            drag-ghost-is-video: root.drag-ghost-is-video;
+            drag-ghost-rating: root.drag-ghost-rating;
+            drag-ghost-is-active: root.drag-ghost-is-active;
+
             browse-clicked => { root.browse-clicked(); }
             tab-selected(id) => { root.tab-selected(id); }
             tab-closed(id) => { root.tab-closed(id); }
             tab-context-menu(id, x, y) => { root.tab-context-menu(id, x, y); }
             settings-clicked => { root.open-settings(); }
+
+            tab-drag-started(id, s-idx, mx, tw) => {
+                root.tab-drag-started(id, s-idx, mx, tw);
+            }
+            tab-drag-moved(mx, vw) => {
+                root.tab-drag-moved(mx, vw);
+            }
+            tab-drag-ended(id, t-idx) => {
+                root.tab-drag-ended(id, t-idx);
+            }
+            tab-drag-cancelled(id) => {
+                root.tab-drag-cancelled(id);
+            }
         }
 
         HorizontalLayout {
@@ -783,7 +824,7 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Modal UI Blocking Overlay: Shields the entire window from mouse/touch input while modal dialogs or fullscreen view are active
+    // Modal UI Blocking Overlay
     if root.is-modal-locked : Rectangle {
         background: #00000066;
 

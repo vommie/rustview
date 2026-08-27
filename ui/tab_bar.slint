@@ -7,114 +7,223 @@ import { TooltipHost } from "tooltips.slint";
 export component TabItemView inherits Rectangle {
     in property <TabItemModel> tab;
     in property <bool> show-rating-badge: false;
+    in-out property <length> shift-x: 0px;
+    in property <bool> is-placeholder: false;
 
     callback clicked();
     callback close-clicked();
     callback middle-clicked();
     callback context-menu-requested(length /* x */, length /* y */);
+    callback drag-started(length /* press_x */, length /* press_y */, length /* item_width */);
+    callback drag-moved(length /* mouse_x */, length /* mouse_y */);
+    callback drag-ended();
+    callback drag-cancelled();
 
     width: content-layout.preferred-width;
     height: 26px;
-    border-radius: 4px;
+    background: transparent;
 
-    // Theme-adaptive background supporting both inactive and active hover states
-    background: tab.is-active
-        ? (tab-touch.has-hover ? Theme.surface-selected-hover : Theme.surface-selected)
-        : (tab-touch.has-hover ? Theme.surface-hover : Theme.surface-variant);
+    inner-card := Rectangle {
+        x: root.shift-x;
+        width: 100%;
+        height: 100%;
+        border-radius: 4px;
 
-    border-width: 1px;
-    border-color: tab.is-active
-        ? (tab-touch.has-hover ? Theme.accent : Theme.primary)
-        : (tab-touch.has-hover ? Theme.primary : Theme.border);
+        // Smooth horizontal push-away animation for reordering
+        animate x { duration: 180ms; easing: ease-out; }
 
-    tooltip-host := TooltipHost {
-        text: tab.title;
-        shortcut: tab.is-active ? "Active Tab (Right-click for menu)" : "Click to view (Middle-click to close)";
-        is-enabled: true;
-    }
+        // Placeholder dimming during active drag
+        opacity: root.is-placeholder ? 0.22 : 1.0;
+        animate opacity { duration: 120ms; }
 
-    tab-touch := TouchArea {
-        pointer-event(event) => {
-            if event.kind == PointerEventKind.down {
-                tooltip-host.on-hover-leave();
-                if event.button == PointerEventButton.left {
-                    root.clicked();
-                } else if event.button == PointerEventButton.middle {
-                    root.middle-clicked();
-                } else if event.button == PointerEventButton.right {
-                    root.context-menu-requested(self.mouse-x, self.mouse-y);
+        // Theme-adaptive background supporting both inactive and active hover states
+        background: root.tab.is-active
+            ? (tab-touch.has-hover ? Theme.surface-selected-hover : Theme.surface-selected)
+            : (tab-touch.has-hover ? Theme.surface-hover : Theme.surface-variant);
+
+        border-width: 1px;
+        border-color: root.tab.is-active
+            ? (tab-touch.has-hover ? Theme.accent : Theme.primary)
+            : (tab-touch.has-hover ? Theme.primary : Theme.border);
+
+        tooltip-host := TooltipHost {
+            text: root.tab.title;
+            shortcut: root.tab.is-active ? "Active Tab (Drag to reorder, Right-click for menu)" : "Click to view (Drag to reorder, Middle-click to close)";
+            is-enabled: !root.is-placeholder;
+        }
+
+        tab-touch := TouchArea {
+            property <length> press-x: 0px;
+            property <length> press-y: 0px;
+            property <bool> is-drag-active: false;
+            property <bool> close-clicked-recently: false;
+
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down {
+                    tooltip-host.on-hover-leave();
+                    if event.button == PointerEventButton.left {
+                        self.press-x = self.mouse-x;
+                        self.press-y = self.mouse-y;
+                        self.is-drag-active = false;
+                    } else if event.button == PointerEventButton.middle {
+                        root.middle-clicked();
+                    } else if event.button == PointerEventButton.right {
+                        root.context-menu-requested(self.mouse-x, self.mouse-y);
+                    }
+                }
+                if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                    if self.is-drag-active {
+                        self.is-drag-active = false;
+                        root.drag-ended();
+                    } else if !self.close-clicked-recently {
+                        root.clicked();
+                    }
+                    self.close-clicked-recently = false;
+                }
+            }
+
+            moved => {
+                if self.pressed && !self.close-clicked-recently {
+                    if !self.is-drag-active {
+                        let dx = self.mouse-x - self.press-x;
+                        let dy = self.mouse-y - self.press-y;
+                        if (dx * dx + dy * dy) > 25px * 1px {
+                            self.is-drag-active = true;
+                            root.drag-started(self.press-x, self.press-y, root.width);
+                        }
+                    }
+                    if self.is-drag-active {
+                        root.drag-moved(self.mouse-x, self.mouse-y);
+                    }
                 }
             }
         }
-        moved => {
-            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+
+        property <bool> is-hovered: tab-touch.has-hover && !root.is-placeholder;
+        changed is-hovered => {
+            if self.is-hovered {
+                tooltip-host.on-hover-enter(tab-touch.mouse-x, tab-touch.mouse-y);
+            } else {
+                tooltip-host.on-hover-leave();
+            }
+        }
+
+        content-layout := HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 6px;
+            spacing: 6px;
+            alignment: center;
+
+            // 1. Media Type Vector Icon (SVG: image.svg / video.svg)
+            AppIcon {
+                icon: root.tab.is-video ? Icons.video : Icons.image;
+                size: 13px;
+                allow-tint: true;
+                color: root.tab.is-active ? Theme.primary : (tab-touch.has-hover ? Theme.text : Theme.text-muted);
+                y: (parent.height - self.height) / 2;
+            }
+
+            // 2. Title: Uniform regular weight (400) preventing tab width jitter
+            Text {
+                text: root.tab.title;
+                font-size: 11px;
+                font-weight: 400;
+                color: root.tab.is-active ? Theme.primary : Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+                max-width: 180px;
+            }
+
+            // 3. Dedicated Rating SVG Icon Badge (Icons API)
+            if root.show-rating-badge && root.tab.rating > 0 : AppIcon {
+                icon: Icons.rating-icon(root.tab.rating);
+                size: 14px;
+                allow-tint: false;
+                y: (parent.height - self.height) / 2;
+            }
+
+            // 4. Vertically Centered Close Button (✕)
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                y: (parent.height - self.height) / 2;
+                background: close-touch.has-hover ? #f38ba833 : transparent;
+
+                close-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                            tab-touch.close-clicked-recently = true;
+                        }
+                    }
+                    clicked => {
+                        tab-touch.close-clicked-recently = true;
+                        root.close-clicked();
+                    }
+                }
+
+                Text {
+                    text: "✕";
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: close-touch.has-hover ? #f38ba8 : Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
+}
 
-    property <bool> is-hovered: tab-touch.has-hover;
-    changed is-hovered => {
-        if self.is-hovered {
-            tooltip-host.on-hover-enter(tab-touch.mouse-x, tab-touch.mouse-y);
-        } else {
-            tooltip-host.on-hover-leave();
-        }
-    }
+/// Floating visual ghost tab item following cursor during drag operations.
+export component GhostTabPreview inherits Rectangle {
+    in property <string> title: "";
+    in property <string> format-str: "";
+    in property <bool> is-video: false;
+    in property <int> rating: 0;
+    in property <bool> is-active: false;
+    in property <bool> show-rating-badge: false;
 
-    content-layout := HorizontalLayout {
+    width: ghost-layout.preferred-width;
+    height: 26px;
+    border-radius: 4px;
+    background: Theme.surface-selected-hover;
+    border-width: 1.5px;
+    border-color: Theme.accent;
+    drop-shadow-blur: 14px;
+    drop-shadow-color: #000000cc;
+    drop-shadow-offset-y: 3px;
+
+    ghost-layout := HorizontalLayout {
         padding-left: 8px;
-        padding-right: 6px;
+        padding-right: 8px;
         spacing: 6px;
         alignment: center;
 
-        // 1. Media Type Vector Icon (SVG: image.svg / video.svg, theme adaptive, perfectly vertically centered)
         AppIcon {
-            icon: tab.is-video ? Icons.video : Icons.image;
+            icon: root.is-video ? Icons.video : Icons.image;
             size: 13px;
             allow-tint: true;
-            color: tab.is-active ? Theme.primary : (tab-touch.has-hover ? Theme.text : Theme.text-muted);
+            color: Theme.primary;
             y: (parent.height - self.height) / 2;
         }
 
-        // 2. Title: Uniform regular weight (400) preventing tab width jitter on selection
         Text {
-            text: tab.title;
+            text: root.title;
             font-size: 11px;
-            font-weight: 400;
-            color: tab.is-active ? Theme.primary : Theme.text;
+            font-weight: 700;
+            color: Theme.accent;
             vertical-alignment: center;
             overflow: elide;
             max-width: 180px;
         }
 
-        // 3. Dedicated Rating SVG Icon Badge (Icons API, untinted)
-        if root.show-rating-badge && tab.rating > 0 : AppIcon {
-            icon: Icons.rating-icon(tab.rating);
+        if root.show-rating-badge && root.rating > 0 : AppIcon {
+            icon: Icons.rating-icon(root.rating);
             size: 14px;
             allow-tint: false;
             y: (parent.height - self.height) / 2;
-        }
-
-        // 4. Vertically Centered Close Button (✕) with larger hit target
-        Rectangle {
-            width: 18px;
-            height: 18px;
-            border-radius: 9px;
-            y: (parent.height - self.height) / 2;
-            background: close-touch.has-hover ? #f38ba833 : transparent;
-
-            close-touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => { root.close-clicked(); }
-            }
-
-            Text {
-                text: "✕";
-                font-size: 11px;
-                font-weight: 700;
-                color: close-touch.has-hover ? #f38ba8 : Theme.text-muted;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
         }
     }
 }
@@ -123,12 +232,30 @@ export component MediaTabBar inherits Rectangle {
     in property <[TabItemModel]> tabs: [];
     in property <bool> show-rating-badge: false;
 
+    // Tab Drag & Drop State
+    in property <bool> is-dragging-tab: false;
+    in property <length> drag-ghost-x: 0px;
+    in property <string> drag-ghost-title: "";
+    in property <string> drag-ghost-format: "";
+    in property <bool> drag-ghost-is-video: false;
+    in property <int> drag-ghost-rating: 0;
+    in property <bool> drag-ghost-is-active: false;
+
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
 
+    callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
+    callback tab-drag-moved(length /* mouse_x */, length /* view_width */);
+    callback tab-drag-ended(int /* tab_id */, int /* target_index */);
+    callback tab-drag-cancelled(int /* tab_id */);
+
     background: transparent;
     clip: true;
+
+    public function scroll-by(dx: length) {
+        scroll-area.handle-scroll(dx, 0px);
+    }
 
     scroll-area := SmoothScrollArea {
         width: 100%;
@@ -144,16 +271,47 @@ export component MediaTabBar inherits Rectangle {
             spacing: 4px;
             alignment: start;
 
-            for tab in root.tabs : TabItemView {
+            for tab[idx] in root.tabs : TabItemView {
                 tab: tab;
                 show-rating-badge: root.show-rating-badge;
+                shift-x: tab.shift_x;
+                is-placeholder: tab.is_placeholder;
+
                 clicked => { root.tab-selected(tab.id); }
                 middle-clicked => { root.tab-closed(tab.id); }
                 close-clicked => { root.tab-closed(tab.id); }
                 context-menu-requested(mx, my) => {
                     root.tab-context-menu(tab.id, self.x + mx + scroll-area.clamped-x, self.y + my);
                 }
+
+                drag-started(press-x, press-y, item-w) => {
+                    let global-x = self.x + press-x + scroll-area.clamped-x;
+                    root.tab-drag-started(tab.id, idx, global-x, item-w);
+                }
+                drag-moved(mx, my) => {
+                    let global-x = self.x + mx + scroll-area.clamped-x;
+                    root.tab-drag-moved(global-x, root.width);
+                }
+                drag-ended => {
+                    root.tab-drag-ended(tab.id, -1);
+                }
+                drag-cancelled => {
+                    root.tab-drag-cancelled(tab.id);
+                }
             }
         }
+    }
+
+    // Floating Ghost Tab Preview Overlay
+    if root.is-dragging-tab : GhostTabPreview {
+        x: Math.max(2px, Math.min(parent.width - self.width - 2px, root.drag-ghost-x));
+        y: (parent.height - self.height) / 2;
+        title: root.drag-ghost-title;
+        format-str: root.drag-ghost-format;
+        is-video: root.drag-ghost-is-video;
+        rating: root.drag-ghost-rating;
+        is-active: root.drag-ghost-is-active;
+        show-rating-badge: root.show-rating-badge;
+        z: 100;
     }
 }

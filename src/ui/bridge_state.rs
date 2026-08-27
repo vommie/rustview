@@ -9,6 +9,7 @@ use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
 use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use crate::ui::rubberband_selection::RubberbandSession;
+use crate::ui::tab_dnd::TabDndSession;
 use crate::viewer::TabId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -145,6 +146,7 @@ pub struct UiState {
     pub file_selection: FileSelectionModel,
     pub active_tab_media_id: Option<MediaId>,
     pub rubberband_session: RubberbandSession,
+    pub active_tab_dnd_session: Option<TabDndSession>,
     pub media_row_map: HashMap<MediaId, usize>,
     pub filter: QueryFilter,
     pub last_executed_query: String,
@@ -199,6 +201,7 @@ impl Default for UiState {
             file_selection: FileSelectionModel::new(),
             active_tab_media_id: None,
             rubberband_session: RubberbandSession::default(),
+            active_tab_dnd_session: None,
             media_row_map: HashMap::new(),
             filter: QueryFilter::default(),
             last_executed_query: String::new(),
@@ -234,7 +237,6 @@ impl Default for UiState {
 
 impl UiState {
     /// Returns selected media items in the exact visual sorted order of the active view (top-to-bottom).
-    /// Strictly filters out non-visible items: if no items are displayed, returns an empty vector.
     pub fn get_selected_media_ordered(&self) -> Vec<&IndexedMediaRecord> {
         let selected_ids = self.file_selection.selected_ids();
         if selected_ids.is_empty() || self.active_indices.is_empty() {

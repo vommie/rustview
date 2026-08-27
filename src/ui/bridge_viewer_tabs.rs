@@ -4,6 +4,7 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
+use super::tab_dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
 use super::{MainWindow, TabItemModel};
 use crate::library::models::MediaId;
 use crate::library::Library;
@@ -15,11 +16,23 @@ use crate::viewer::{
     X11VideoSubwindow,
 };
 use parking_lot::RwLock;
-use slint::{ComponentHandle, Image, ModelRc, VecModel};
+use slint::{ComponentHandle, Image, Model, ModelRc, VecModel};
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Central coordinator for Viewer Tab interactions, asynchronous image loading, MPV video playback, fullscreen display, and UI synchronization.
+/// Parameter bundle for concluding a tab drag & drop session.
+pub struct TabDragEndParams<'a> {
+    pub tab_id: TabId,
+    pub window: &'a MainWindow,
+    pub tab_manager: &'a Arc<ViewerTabManager>,
+    pub library: &'a Arc<Library>,
+    pub settings: &'a Arc<SettingsManager>,
+    pub state: &'a Arc<RwLock<UiState>>,
+    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub autoscroller: &'a TabDndAutoScroller,
+}
+
+/// Central coordinator for Viewer Tab interactions, asynchronous image loading, MPV video playback, fullscreen display, Tab DND reordering, and UI synchronization.
 pub struct BridgeViewerTabs;
 
 impl BridgeViewerTabs {
@@ -33,6 +46,8 @@ impl BridgeViewerTabs {
         state: Arc<RwLock<UiState>>,
         fullscreen_controller: ImageFullscreenDialogController,
     ) {
+        let tab_autoscroller = TabDndAutoScroller::new();
+
         // 1. Browse Button Clicked (Switch to Media Browser view)
         let win_browse = window.clone_strong();
         let tm_browse = tab_manager.clone();
@@ -74,7 +89,69 @@ impl BridgeViewerTabs {
             fs_close.sync_active_tab(&tm_close, &set_close);
         });
 
-        // 4. Viewer Toolbar Close Tab Button (triggered via Escape hotkey)
+        // 4. Tab Drag & Drop Reordering Callbacks
+        let win_dstart = window.clone_strong();
+        let tm_dstart = tab_manager.clone();
+        let st_dstart = state.clone();
+        window.on_tab_drag_started(move |tab_id, s_idx, mouse_x, tab_w| {
+            Self::handle_tab_drag_started(
+                tab_id as TabId,
+                s_idx as usize,
+                mouse_x,
+                tab_w,
+                &win_dstart,
+                &tm_dstart,
+                &st_dstart,
+            );
+        });
+
+        let win_dmove = window.clone_strong();
+        let st_dmove = state.clone();
+        let scroller_dmove = tab_autoscroller.clone();
+        window.on_tab_drag_moved(move |mouse_x, view_w| {
+            Self::handle_tab_drag_moved(
+                mouse_x,
+                view_w,
+                &win_dmove,
+                &st_dmove,
+                &scroller_dmove,
+            );
+        });
+
+        let win_dend = window.clone_strong();
+        let tm_dend = tab_manager.clone();
+        let lib_dend = library.clone();
+        let set_dend = settings.clone();
+        let st_dend = state.clone();
+        let fs_dend = fullscreen_controller.clone();
+        let scroller_dend = tab_autoscroller.clone();
+        window.on_tab_drag_ended(move |tab_id, _target_idx| {
+            Self::handle_tab_drag_ended(TabDragEndParams {
+                tab_id: tab_id as TabId,
+                window: &win_dend,
+                tab_manager: &tm_dend,
+                library: &lib_dend,
+                settings: &set_dend,
+                state: &st_dend,
+                fullscreen_controller: &fs_dend,
+                autoscroller: &scroller_dend,
+            });
+        });
+
+        let win_dcancel = window.clone_strong();
+        let tm_dcancel = tab_manager.clone();
+        let lib_dcancel = library.clone();
+        let set_dcancel = settings.clone();
+        let st_dcancel = state.clone();
+        let scroller_dcancel = tab_autoscroller;
+        window.on_tab_drag_cancelled(move |_tab_id| {
+            scroller_dcancel.stop();
+            st_dcancel.write().active_tab_dnd_session = None;
+            win_dcancel.set_is_dragging_tab(false);
+            Self::sync_ui(&win_dcancel, &tm_dcancel, &lib_dcancel, &set_dcancel, &st_dcancel);
+        });
+
+        // 5. Viewer Toolbar Close Tab Button
         let win_v_close = window.clone_strong();
         let tm_v_close = tab_manager.clone();
         let lib_v_close = library.clone();
@@ -94,7 +171,7 @@ impl BridgeViewerTabs {
             }
         });
 
-        // 5. Viewer Toolbar Refresh Button (Reuses the exact same Full Refresh Flow as Context Menu)
+        // 6. Viewer Toolbar Refresh Button
         let win_v_refresh = window.clone_strong();
         let tm_v_refresh = tab_manager.clone();
         let lib_v_refresh = library.clone();
@@ -115,7 +192,7 @@ impl BridgeViewerTabs {
             fs_v_refresh.sync_active_tab(&tm_v_refresh, &set_v_refresh);
         });
 
-        // 6. Previous / Next Navigation in active list (In-place within current tab)
+        // 7. Previous / Next Navigation in active list
         let win_prev = window.clone_strong();
         let tm_prev = tab_manager.clone();
         let lib_prev = library.clone();
@@ -138,7 +215,7 @@ impl BridgeViewerTabs {
             Self::sync_video_embedding(&win_next, &tm_next, &fs_next, &set_next);
         });
 
-        // 7. Double-click on Tab Media Viewer -> Toggle Fullscreen (with strict Main UI lock and seamless video reparenting)
+        // 8. Double-click on Tab Media Viewer -> Toggle Fullscreen
         let win_fs = window.clone_strong();
         let tm_fs = tab_manager.clone();
         let set_fs = settings.clone();
@@ -150,14 +227,14 @@ impl BridgeViewerTabs {
             }
         });
 
-        // 8. Dismiss Fullscreen from Main UI if Escape or backdrop is clicked while locked
+        // 9. Dismiss Fullscreen from Main UI
         let fs_modal = fullscreen_controller.clone();
         window.on_modal_dismiss_requested(move || {
             tracing::info!("[BridgeViewerTabs: ModalDismiss] Main UI modal dismiss triggered. Closing active fullscreen window if present.");
             fs_modal.close();
         });
 
-        // 9. Viewport Geometry Changed Callback (Tracks Slint Layout and resizes X11 Subwindow)
+        // 10. Viewport Geometry Changed Callback
         let win_geom = window.clone_strong();
         let tm_geom = tab_manager;
         let set_geom = settings;
@@ -165,6 +242,221 @@ impl BridgeViewerTabs {
         window.on_viewer_viewport_geometry_changed(move |_vx, _vy, _vw, _vh| {
             Self::sync_video_embedding(&win_geom, &tm_geom, &fs_geom, &set_geom);
         });
+    }
+
+    /// Handles tab drag initiation: computes tab widths, creates ghost item preview, and starts DND session.
+    pub fn handle_tab_drag_started(
+        tab_id: TabId,
+        source_index: usize,
+        mouse_x: f32,
+        tab_width: f32,
+        window: &MainWindow,
+        tab_manager: &ViewerTabManager,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let tabs = tab_manager.list_tabs();
+        let total_tabs = tabs.len();
+        if total_tabs <= 1 {
+            return;
+        }
+
+        let Some(source_tab) = tabs.iter().find(|t| t.id == tab_id) else {
+            return;
+        };
+
+        let tab_ids: Vec<TabId> = tabs.iter().map(|t| t.id).collect();
+
+        // Collect approximate or rendered widths for all tabs in bar
+        let tab_models = window.get_tabs();
+        let mut widths = Vec::with_capacity(total_tabs);
+        for i in 0..total_tabs {
+            let w = if i == source_index && tab_width > 20.0 {
+                tab_width
+            } else if let Some(t_session) = tabs.get(i) {
+                // Character-based estimate (8px per char + 48px padding & icon badges)
+                let char_len = t_session.title.chars().count() as f32;
+                (char_len * 7.5 + 52.0).clamp(70.0, 240.0)
+            } else {
+                120.0
+            };
+            widths.push(w);
+        }
+
+        let slots = TabDndGeometry::compute_tab_slots(&tab_ids, &widths, 4.0, 2.0);
+        let grab_offset = if let Some(s) = slots.get(source_index) {
+            (mouse_x - s.start_x).clamp(0.0, s.width)
+        } else {
+            tab_width / 2.0
+        };
+
+        let session = TabDndSession::new(tab_id, source_index, grab_offset, mouse_x, slots);
+
+        window.set_is_dragging_tab(true);
+        window.set_drag_ghost_x(session.ghost_left_x());
+        window.set_drag_ghost_title(source_tab.title.clone().into());
+        window.set_drag_ghost_format(source_tab.format.default_extension().into());
+        window.set_drag_ghost_is_video(matches!(source_tab.payload, TabPayload::Video(_)));
+        window.set_drag_ghost_rating(source_tab.record.rating as i32);
+        window.set_drag_ghost_is_active(Some(tab_id) == tab_manager.active_tab_id());
+
+        // Update placeholder state in Slint model
+        for i in 0..tab_models.row_count() {
+            if let Some(mut m) = tab_models.row_data(i) {
+                let is_ph = m.id == tab_id as i32;
+                if m.is_placeholder != is_ph {
+                    m.is_placeholder = is_ph;
+                    tab_models.set_row_data(i, m);
+                }
+            }
+        }
+
+        state.write().active_tab_dnd_session = Some(session);
+
+        tracing::info!(
+            tab_id,
+            source_index,
+            title = %LogObscurer::filename(&source_tab.title),
+            mouse_x,
+            "[TabDnd: Start] Tab drag gesture initiated with ghost preview"
+        );
+    }
+
+    /// Handles pointer movement during tab drag: calculates target slot and applies smooth displacement to neighbor tabs.
+    pub fn handle_tab_drag_moved(
+        mouse_x: f32,
+        view_width: f32,
+        window: &MainWindow,
+        state: &Arc<RwLock<UiState>>,
+        autoscroller: &TabDndAutoScroller,
+    ) {
+        let (drag_tab_id, source_idx, cur_target_idx, ghost_x, shifts) = {
+            let mut st = state.write();
+            let Some(ref mut session) = st.active_tab_dnd_session else {
+                return;
+            };
+
+            session.current_cursor_x = mouse_x;
+            let center_x = session.dragged_center_x();
+            let new_target_idx = TabDndGeometry::calculate_target_index(
+                &session.slots,
+                session.source_index,
+                center_x,
+                session.target_index,
+            );
+
+            session.target_index = new_target_idx;
+            let shifts = TabDndGeometry::compute_shift_offsets(
+                &session.slots,
+                session.source_index,
+                new_target_idx,
+                4.0,
+            );
+
+            (
+                session.dragged_tab_id,
+                session.source_index,
+                new_target_idx,
+                session.ghost_left_x(),
+                shifts,
+            )
+        };
+
+        window.set_drag_ghost_x(ghost_x);
+
+        // Update shift offsets in Slint model to trigger native smooth push-away animations
+        let tab_models = window.get_tabs();
+        let total_rows = tab_models.row_count();
+
+        for i in 0..total_rows {
+            if let Some(mut item) = tab_models.row_data(i) {
+                let target_shift = shifts.get(i).copied().unwrap_or(0.0);
+                let is_ph = item.id == drag_tab_id as i32;
+
+                if (item.shift_x - target_shift).abs() > 0.1 || item.is_placeholder != is_ph {
+                    item.shift_x = target_shift;
+                    item.is_placeholder = is_ph;
+                    tab_models.set_row_data(i, item);
+                }
+            }
+        }
+
+        // Trigger horizontal edge auto-scrolling
+        let win_weak = window.as_weak();
+        autoscroller.update_cursor(mouse_x, view_width, move |dx| {
+            if let Some(w) = win_weak.upgrade() {
+                w.invoke_scroll_tab_bar_by(dx);
+            }
+        });
+
+        tracing::trace!(
+            tab_id = drag_tab_id,
+            source_index = source_idx,
+            target_index = cur_target_idx,
+            ghost_x = ghost_x,
+            "[TabDnd: Move] Drag moved and neighbor shift offsets updated"
+        );
+    }
+
+    /// Handles drop release: executes tab reordering in `ViewerTabManager` if target index changed and resyncs UI.
+    pub fn handle_tab_drag_ended(params: TabDragEndParams<'_>) {
+        params.autoscroller.stop();
+
+        let session_opt = params.state.write().active_tab_dnd_session.take();
+        params.window.set_is_dragging_tab(false);
+
+        let Some(session) = session_opt else {
+            Self::sync_ui(
+                params.window,
+                params.tab_manager,
+                params.library,
+                params.settings,
+                params.state,
+            );
+            return;
+        };
+
+        let t_elapsed = session.start_time.elapsed().as_millis();
+        let source_idx = session.source_index;
+        let target_idx = session.target_index;
+
+        if source_idx != target_idx {
+            tracing::info!(
+                tab_id = params.tab_id,
+                source_index = source_idx,
+                target_index = target_idx,
+                reorder_time_ms = t_elapsed,
+                "[TabDnd: Commit] Committed drag & drop tab reorder"
+            );
+
+            params.tab_manager.move_tab(params.tab_id, target_idx);
+
+            let all_tabs = params.tab_manager.list_tabs();
+            let title = ViewerTabManager::compute_tab_title(&all_tabs, params.tab_id);
+            StatusBarBridge::success(
+                params.window,
+                format!("Reordered tab '{}' to position {}", title, target_idx + 1),
+            );
+        } else {
+            tracing::debug!(
+                tab_id = params.tab_id,
+                source_index = source_idx,
+                "[TabDnd: NoOp] Tab dropped in original slot"
+            );
+        }
+
+        Self::sync_ui(
+            params.window,
+            params.tab_manager,
+            params.library,
+            params.settings,
+            params.state,
+        );
+        Self::sync_video_embedding(
+            params.window,
+            params.tab_manager,
+            params.fullscreen_controller,
+            params.settings,
+        );
     }
 
     /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and fullscreen double-click hooks.
@@ -506,7 +798,6 @@ impl BridgeViewerTabs {
     }
 
     /// Synchronizes open tabs, active view modes, viewer image buffers, and right sidebar locking to Slint UI.
-    /// Directly utilizes the immutable, permanent `t.title` stored in each tab session.
     pub fn sync_ui(
         window: &MainWindow,
         tab_manager: &ViewerTabManager,
@@ -531,6 +822,8 @@ impl BridgeViewerTabs {
                     is_video: matches!(t.payload, TabPayload::Video(_)),
                     rating: t.record.rating as i32,
                     has_tags: false,
+                    shift_x: 0.0,
+                    is_placeholder: false,
                 }
             })
             .collect();

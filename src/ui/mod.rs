@@ -40,6 +40,7 @@ pub mod file_selection;
 pub mod icons;
 pub mod models;
 pub mod rubberband_selection;
+pub mod tab_dnd;
 pub mod video_preview_animator;
 
 pub use bridge::UiBridge;
@@ -72,7 +73,7 @@ pub use bridge_state::*;
 pub use bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
 pub use bridge_tag_dialogs::TagDialogController;
 pub use bridge_tags::{BridgeTags, TagActionContext};
-pub use bridge_viewer_tabs::BridgeViewerTabs;
+pub use bridge_viewer_tabs::{BridgeViewerTabs, TabDragEndParams};
 pub use dnd_foldertree_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
 pub use fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, FallbackViewState};
 pub use favorites::FavoriteManager;
@@ -81,5 +82,8 @@ pub use icons::{IconAsset, IconManager, IconMetadata};
 pub use rubberband_selection::{
     GridLayoutConfig, RectF32, RubberbandAutoScroller, RubberbandGeometry, RubberbandSession,
     RubberbandStartParams, TableLayoutConfig,
+};
+pub use tab_dnd::{
+    TabAutoScrollDirection, TabDndAutoScroller, TabDndGeometry, TabDndSession, TabSlotInfo,
 };
 pub use video_preview_animator::{VideoPreviewAnimator, DEFAULT_PREVIEW_INTERVAL_MS};
