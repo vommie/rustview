@@ -53,7 +53,7 @@ fn test_fullscreen_viewer_tab_sync() {
     let settings = SettingsManager::new(tmp_config.path());
     let tab_mgr = ViewerTabManager::new(lib);
 
-    let (tab_id, is_new) = tab_mgr.open_or_focus_media(media.id).unwrap();
+    let (tab_id, is_new) = tab_mgr.open_or_focus_media(media.id, false).unwrap();
     assert!(is_new);
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_id));
 

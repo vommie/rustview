@@ -104,14 +104,51 @@ impl ViewerTabManager {
         self.tabs.read().iter().find(|t| t.media_id == media_id).cloned()
     }
 
-    /// Opens a media item in a viewer tab. If a tab for this `media_id` already exists,
-    /// it focuses that tab without reloading. Returns `(TabId, is_new_tab)`.
-    pub fn open_or_focus_media(&self, media_id: MediaId) -> Result<(TabId, bool), ViewerError> {
+    /// Retrieves all tab sessions referencing the given `MediaId`.
+    pub fn get_tabs_by_media_id(&self, media_id: MediaId) -> Vec<MediaTabSession> {
+        self.tabs
+            .read()
+            .iter()
+            .filter(|t| t.media_id == media_id)
+            .cloned()
+            .collect()
+    }
+
+    /// Computes the formatted display title for a tab, adding an iteration suffix `(1)`, `(2)`, etc. if multiple tabs exist for the same media item.
+    pub fn compute_tab_title(tabs: &[MediaTabSession], tab_id: TabId) -> String {
+        let Some(current_tab) = tabs.iter().find(|t| t.id == tab_id) else {
+            return String::new();
+        };
+
+        let duplicate_index = tabs
+            .iter()
+            .filter(|t| t.media_id == current_tab.media_id)
+            .position(|t| t.id == tab_id)
+            .unwrap_or(0);
+
+        if duplicate_index > 0 {
+            format!("{} ({})", current_tab.filename, duplicate_index)
+        } else {
+            current_tab.filename.clone()
+        }
+    }
+
+    /// Opens a media item in a viewer tab.
+    /// If `allow_multiple` is false and a tab for this `media_id` already exists, focuses it without reloading.
+    /// If `allow_multiple` is true, creates a completely new independent tab session with separate MPV/image instances.
+    /// Returns `(TabId, is_new_tab)`.
+    pub fn open_or_focus_media(
+        &self,
+        media_id: MediaId,
+        allow_multiple: bool,
+    ) -> Result<(TabId, bool), ViewerError> {
         let now = Instant::now();
         let mut tabs = self.tabs.write();
 
-        // 1. Focus existing tab if already open (pure in-memory switch without reload)
-        if let Some(existing) = tabs.iter_mut().find(|t| t.media_id == media_id) {
+        // 1. Focus existing tab if already open and multiple tabs are NOT allowed
+        if !allow_multiple
+            && let Some(existing) = tabs.iter_mut().find(|t| t.media_id == media_id)
+        {
             let id = existing.id;
             existing.last_accessed = now;
             let is_video = matches!(existing.payload, TabPayload::Video(_));
@@ -210,10 +247,11 @@ impl ViewerTabManager {
             tab_id = new_id,
             media_id = media_id,
             is_video,
+            allow_multiple,
             filename = %LogObscurer::filename(&filename),
             file_path = %LogObscurer::path(&file_path),
             total_open_tabs = tabs.len(),
-            "[ViewerTabManager: Open] Created and activated new viewer tab"
+            "[ViewerTabManager: Open] Created and activated new viewer tab session"
         );
 
         Ok((new_id, true))
@@ -224,7 +262,7 @@ impl ViewerTabManager {
         let active_id = match *self.active_tab_id.read() {
             Some(id) => id,
             None => {
-                let (id, _) = self.open_or_focus_media(media_id)?;
+                let (id, _) = self.open_or_focus_media(media_id, false)?;
                 return Ok(id);
             }
         };

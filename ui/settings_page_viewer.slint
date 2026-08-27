@@ -6,7 +6,9 @@ export component SettingsPageViewer inherits VerticalLayout {
     spacing: 12px;
 
     in-out property <bool> open-images-in-tab: true;
+    in-out property <bool> allow-multiple-image-tabs: false;
     in-out property <bool> open-videos-in-tab: true;
+    in-out property <bool> allow-multiple-video-tabs: true;
     in-out property <bool> show-tab-rating-badge: false;
     in-out property <int> background-mode-idx: 0; // 0 = Dark, 1 = Deep Black, 2 = Checkerboard
 
@@ -15,13 +17,20 @@ export component SettingsPageViewer inherits VerticalLayout {
         description: "Configure how images are opened upon double-clicking media tiles in the browser.";
 
         CheckBox {
-            text: "Open images in internal viewer tabs (Default)";
+            text: "Open images in internal viewer tabs";
             checked <=> root.open-images-in-tab;
+        }
+
+        if root.open-images-in-tab : CheckBox {
+            text: "Allow multiple tabs for the same image";
+            checked <=> root.allow-multiple-image-tabs;
         }
 
         Text {
             text: root.open-images-in-tab
-                ? "Double-clicking an image tile opens it in a dedicated tab inside RustView."
+                ? (root.allow-multiple-image-tabs
+                    ? "Double-clicking an image opens a new tab every time with an iteration suffix like (1), (2)."
+                    : "Double-clicking an image tile focuses the existing tab if already open.")
                 : "Double-clicking an image tile delegates opening to the operating system default application.";
             font-size: 11px;
             color: Theme.text-muted;
@@ -34,13 +43,20 @@ export component SettingsPageViewer inherits VerticalLayout {
         description: "Configure how videos are opened upon double-clicking media tiles in the browser.";
 
         CheckBox {
-            text: "Open videos in internal viewer tabs (Default)";
+            text: "Open videos in internal viewer tabs";
             checked <=> root.open-videos-in-tab;
+        }
+
+        if root.open-videos-in-tab : CheckBox {
+            text: "Allow multiple tabs for the same video";
+            checked <=> root.allow-multiple-video-tabs;
         }
 
         Text {
             text: root.open-videos-in-tab
-                ? "Double-clicking a video tile opens it in a dedicated tab with embedded native MPV playback."
+                ? (root.allow-multiple-video-tabs
+                    ? "Double-clicking a video opens a new tab with an independent MPV player instance and iteration suffix like (1), (2)."
+                    : "Double-clicking a video tile focuses the existing tab if already open.")
                 : "Double-clicking a video tile delegates opening to the operating system default application.";
             font-size: 11px;
             color: Theme.text-muted;

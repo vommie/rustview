@@ -21,7 +21,8 @@ use rustview::settings::{
     DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
     DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
     DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
-    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIEWER_BACKGROUND_MODE,
+    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS,
+    DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS, DEFAULT_VIEWER_BACKGROUND_MODE,
     DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB, DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB,
     DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED,
     DEFAULT_WINDOW_WIDTH, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_CORNER_RADIUS,
@@ -207,10 +208,22 @@ fn test_settings_persistence_sanitization_and_hooks() {
     );
     assert!(initial.viewer.images.open_in_tab);
     assert_eq!(
+        initial.viewer.images.allow_multiple_tabs,
+        DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS
+    );
+    assert!(!initial.viewer.images.allow_multiple_tabs);
+
+    assert_eq!(
         initial.viewer.videos.open_in_tab,
         DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB
     );
     assert!(initial.viewer.videos.open_in_tab);
+    assert_eq!(
+        initial.viewer.videos.allow_multiple_tabs,
+        DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS
+    );
+    assert!(initial.viewer.videos.allow_multiple_tabs);
+
     assert_eq!(
         initial.viewer.tabs.show_rating_badge,
         DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE
@@ -288,7 +301,9 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.performance.short_video_threshold_secs = 20;
     initial.formats.auto_detect_extensionless_media = false;
     initial.viewer.images.open_in_tab = false;
+    initial.viewer.images.allow_multiple_tabs = true;
     initial.viewer.videos.open_in_tab = false;
+    initial.viewer.videos.allow_multiple_tabs = false;
     initial.viewer.tabs.show_rating_badge = true;
     initial.viewer.background_mode = "Deep Black".to_string();
     initial.debug.obfuscate_logs = false;
@@ -318,7 +333,9 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert_eq!(loaded.performance.short_video_threshold_secs, 20);
     assert!(!loaded.formats.auto_detect_extensionless_media);
     assert!(!loaded.viewer.images.open_in_tab);
+    assert!(loaded.viewer.images.allow_multiple_tabs);
     assert!(!loaded.viewer.videos.open_in_tab);
+    assert!(!loaded.viewer.videos.allow_multiple_tabs);
     assert!(loaded.viewer.tabs.show_rating_badge);
     assert_eq!(loaded.viewer.background_mode, "Deep Black");
     assert!(!loaded.debug.obfuscate_logs);
@@ -505,8 +522,16 @@ fn test_tolerant_deserialization_with_missing_legacy_fields() {
         DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB
     );
     assert_eq!(
+        loaded.viewer.images.allow_multiple_tabs,
+        DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS
+    );
+    assert_eq!(
         loaded.viewer.videos.open_in_tab,
         DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB
+    );
+    assert_eq!(
+        loaded.viewer.videos.allow_multiple_tabs,
+        DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS
     );
     assert_eq!(
         loaded.viewer.tabs.show_rating_badge,

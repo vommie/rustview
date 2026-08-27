@@ -7,6 +7,7 @@ use super::bridge_tags::BridgeTags;
 use super::{MainWindow, TabItemModel};
 use crate::library::models::MediaId;
 use crate::library::Library;
+use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use crate::viewer::{
@@ -15,6 +16,7 @@ use crate::viewer::{
 };
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, ModelRc, VecModel};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -410,16 +412,35 @@ impl BridgeViewerTabs {
         state: &Arc<RwLock<UiState>>,
     ) {
         let t0 = Instant::now();
-        match tab_manager.open_or_focus_media(media_id) {
+
+        let is_video = {
+            let st = state.read();
+            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                matches!(item.record.media_type, MediaType::Video)
+            } else if let Ok(Some(record)) = library.media().get(media_id) {
+                matches!(record.media_type, MediaType::Video)
+            } else {
+                false
+            }
+        };
+
+        let app_settings = settings.get();
+        let allow_multiple = if is_video {
+            app_settings.viewer.videos.allow_multiple_tabs
+        } else {
+            app_settings.viewer.images.allow_multiple_tabs
+        };
+
+        match tab_manager.open_or_focus_media(media_id, allow_multiple) {
             Ok((tab_id, is_new)) => {
                 Self::sync_ui(window, tab_manager, library, settings, state);
 
-                let is_video = tab_manager
+                let is_video_session = tab_manager
                     .get_tab(tab_id)
                     .map(|t| matches!(t.payload, TabPayload::Video(_)))
                     .unwrap_or(false);
 
-                if is_video {
+                if is_video_session {
                     let fs_dummy = ImageFullscreenDialogController::new();
                     Self::sync_video_embedding(window, tab_manager, &fs_dummy, settings);
                 } else if is_new && let Ok(file_path) = library.resolve_media_path(media_id) {
@@ -471,7 +492,8 @@ impl BridgeViewerTabs {
                     media_id,
                     tab_id,
                     is_new,
-                    is_video,
+                    is_video = is_video_session,
+                    allow_multiple,
                     open_time_us = t0.elapsed().as_micros(),
                     "[BridgeViewerTabs: Open] Tab opened and UI synchronized"
                 );
@@ -498,18 +520,35 @@ impl BridgeViewerTabs {
         let active_id_opt = tab_manager.active_tab_id();
         let is_browse = active_id_opt.is_none();
 
-        // 1. Prepare Tab Models for the Top Toolbar
+        // 1. Prepare Tab Models for the Top Toolbar with dynamic iteration suffixes for duplicate open instances
+        let mut media_id_occurrences: HashMap<MediaId, usize> = HashMap::new();
+        let mut media_id_totals: HashMap<MediaId, usize> = HashMap::new();
+        for t in &tabs {
+            *media_id_totals.entry(t.media_id).or_insert(0) += 1;
+        }
+
         let tab_models: Vec<TabItemModel> = tabs
             .iter()
-            .map(|t| TabItemModel {
-                id: t.id as i32,
-                media_id: t.media_id as i32,
-                title: t.filename.clone().into(),
-                format_str: t.format.default_extension().into(),
-                is_active: Some(t.id) == active_id_opt,
-                is_video: matches!(t.payload, TabPayload::Video(_)),
-                rating: t.record.rating as i32,
-                has_tags: false,
+            .map(|t| {
+                let total = media_id_totals.get(&t.media_id).copied().unwrap_or(1);
+                let current_occurrence = media_id_occurrences.entry(t.media_id).or_insert(0);
+                let title = if total > 1 && *current_occurrence > 0 {
+                    format!("{} ({})", t.filename, *current_occurrence)
+                } else {
+                    t.filename.clone()
+                };
+                *current_occurrence += 1;
+
+                TabItemModel {
+                    id: t.id as i32,
+                    media_id: t.media_id as i32,
+                    title: title.into(),
+                    format_str: t.format.default_extension().into(),
+                    is_active: Some(t.id) == active_id_opt,
+                    is_video: matches!(t.payload, TabPayload::Video(_)),
+                    rating: t.record.rating as i32,
+                    has_tags: false,
+                }
             })
             .collect();
 
@@ -529,7 +568,9 @@ impl BridgeViewerTabs {
         if let Some(active_tab) = tab_manager.get_active_tab() {
             let is_video = matches!(active_tab.payload, TabPayload::Video(_));
             window.set_viewer_is_video(is_video);
-            window.set_viewer_filename(active_tab.filename.clone().into());
+
+            let active_display_title = ViewerTabManager::compute_tab_title(&tabs, active_tab.id);
+            window.set_viewer_filename(active_display_title.into());
 
             let res_str = if active_tab.record.width > 0 && active_tab.record.height > 0 {
                 format!("{} × {}", active_tab.record.width, active_tab.record.height)

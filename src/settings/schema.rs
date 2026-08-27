@@ -158,7 +158,8 @@ pub fn default_worker_threads() -> usize {
 // SECTION 6: File Formats & Tools - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA: bool = true;
-pub const DEFAULT_SUPPORTED_IMAGE_FORMATS: &str = "jpg, jpeg, jfif, jpe, png, webp, avif, gif, bmp, tiff, tif, psd";
+pub const DEFAULT_SUPPORTED_IMAGE_FORMATS: &str =
+    "jpg, jpeg, jfif, jpe, png, webp, avif, gif, bmp, tiff, tif, psd";
 pub const DEFAULT_SUPPORTED_VIDEO_FORMATS: &str = "mp4, m4v, mkv, webm, mov, avi, mpg, mpeg, flv";
 
 // =============================================================================
@@ -185,7 +186,9 @@ pub const DEFAULT_OBFUSCATE_LOGS: bool = true;
 // SECTION 10: Viewer Settings - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB: bool = true;
+pub const DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS: bool = false;
 pub const DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB: bool = true;
+pub const DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS: bool = true;
 pub const DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE: bool = false;
 pub const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "Dark";
 
@@ -461,12 +464,14 @@ impl Default for FormatsSettings {
 #[serde(default)]
 pub struct ViewerImageSettings {
     pub open_in_tab: bool,
+    pub allow_multiple_tabs: bool,
 }
 
 impl Default for ViewerImageSettings {
     fn default() -> Self {
         Self {
             open_in_tab: DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB,
+            allow_multiple_tabs: DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS,
         }
     }
 }
@@ -475,12 +480,14 @@ impl Default for ViewerImageSettings {
 #[serde(default)]
 pub struct ViewerVideoSettings {
     pub open_in_tab: bool,
+    pub allow_multiple_tabs: bool,
 }
 
 impl Default for ViewerVideoSettings {
     fn default() -> Self {
         Self {
             open_in_tab: DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB,
+            allow_multiple_tabs: DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS,
         }
     }
 }

@@ -403,8 +403,29 @@ impl SettingsDiff {
 
         if old.viewer.images.open_in_tab != new.viewer.images.open_in_tab {
             changes.push(format!(
-                "Viewer: open_images_in_tab ({} -> {})",
+                "Viewer: images.open_in_tab ({} -> {})",
                 old.viewer.images.open_in_tab, new.viewer.images.open_in_tab
+            ));
+        }
+
+        if old.viewer.images.allow_multiple_tabs != new.viewer.images.allow_multiple_tabs {
+            changes.push(format!(
+                "Viewer: images.allow_multiple_tabs ({} -> {})",
+                old.viewer.images.allow_multiple_tabs, new.viewer.images.allow_multiple_tabs
+            ));
+        }
+
+        if old.viewer.videos.open_in_tab != new.viewer.videos.open_in_tab {
+            changes.push(format!(
+                "Viewer: videos.open_in_tab ({} -> {})",
+                old.viewer.videos.open_in_tab, new.viewer.videos.open_in_tab
+            ));
+        }
+
+        if old.viewer.videos.allow_multiple_tabs != new.viewer.videos.allow_multiple_tabs {
+            changes.push(format!(
+                "Viewer: videos.allow_multiple_tabs ({} -> {})",
+                old.viewer.videos.allow_multiple_tabs, new.viewer.videos.allow_multiple_tabs
             ));
         }
 

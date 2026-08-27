@@ -1520,22 +1520,19 @@ impl BridgeMedia {
                 let refreshed_count = successful_items.len();
                 let missing_count = missing_files.len();
 
-                // Extract list of open image tabs that need re-decoding
-                let image_tabs_to_reload: Vec<(MediaId, u64, PathBuf)> = successful_items
-                    .iter()
-                    .filter_map(|item| {
-                        if matches!(item.updated_record.media_type, MediaType::Image)
-                            && let Some(tab) = tab_mgr_arc.get_tab_by_media_id(item.media_id)
-                        {
+                // Extract list of all open image tabs that need re-decoding
+                let mut image_tabs_to_reload: Vec<(MediaId, u64, PathBuf)> = Vec::new();
+                for item in &successful_items {
+                    if matches!(item.updated_record.media_type, MediaType::Image) {
+                        let open_tabs = tab_mgr_arc.get_tabs_by_media_id(item.media_id);
+                        for tab in open_tabs {
                             let full_file_path = lib_arc
                                 .resolve_media_path(item.media_id)
                                 .unwrap_or_else(|_| PathBuf::from(&item.updated_record.filename));
-                            Some((item.media_id, tab.id, full_file_path))
-                        } else {
-                            None
+                            image_tabs_to_reload.push((item.media_id, tab.id, full_file_path));
                         }
-                    })
-                    .collect();
+                    }
+                }
 
                 // Check if active tab is video and has hash change -> reload MPV file
                 let active_video_reload_path = successful_items

@@ -91,7 +91,9 @@ export component SettingsWindow inherits Window {
 
     // Viewer options
     in-out property <bool> open-images-in-tab: true;
+    in-out property <bool> allow-multiple-image-tabs: false;
     in-out property <bool> open-videos-in-tab: true;
+    in-out property <bool> allow-multiple-video-tabs: true;
     in-out property <bool> viewer-show-tab-rating-badge: false;
     in-out property <int> viewer-background-mode-idx: 0;
 
@@ -191,7 +193,9 @@ export component SettingsWindow inherits Window {
 
                     if root.active-category == 5 : SettingsPageViewer {
                         open-images-in-tab <=> root.open-images-in-tab;
+                        allow-multiple-image-tabs <=> root.allow-multiple-image-tabs;
                         open-videos-in-tab <=> root.open-videos-in-tab;
+                        allow-multiple-video-tabs <=> root.allow-multiple-video-tabs;
                         show-tab-rating-badge <=> root.viewer-show-tab-rating-badge;
                         background-mode-idx <=> root.viewer-background-mode-idx;
                     }

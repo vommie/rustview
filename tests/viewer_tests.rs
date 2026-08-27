@@ -104,21 +104,21 @@ fn test_viewer_tab_manager_lifecycle_and_focus_reuse() {
     assert_eq!(tab_mgr.active_tab_id(), None);
     assert_eq!(tab_mgr.list_tabs().len(), 0);
 
-    // 1. Open first media tab
-    let (tab1_id, is_new1) = tab_mgr.open_or_focus_media(m1.id).unwrap();
+    // 1. Open first media tab (allow_multiple = false)
+    let (tab1_id, is_new1) = tab_mgr.open_or_focus_media(m1.id, false).unwrap();
     assert!(is_new1);
     assert_eq!(tab_mgr.active_tab_id(), Some(tab1_id));
     assert_eq!(tab_mgr.list_tabs().len(), 1);
 
-    // 2. Open second media tab
-    let (tab2_id, is_new2) = tab_mgr.open_or_focus_media(m2.id).unwrap();
+    // 2. Open second media tab (allow_multiple = false)
+    let (tab2_id, is_new2) = tab_mgr.open_or_focus_media(m2.id, false).unwrap();
     assert!(is_new2);
     assert_ne!(tab1_id, tab2_id);
     assert_eq!(tab_mgr.active_tab_id(), Some(tab2_id));
     assert_eq!(tab_mgr.list_tabs().len(), 2);
 
-    // 3. Re-open first media -> MUST focus existing tab without creating duplicate
-    let (focused_id, is_new_reopen) = tab_mgr.open_or_focus_media(m1.id).unwrap();
+    // 3. Re-open first media with allow_multiple = false -> MUST focus existing tab without creating duplicate
+    let (focused_id, is_new_reopen) = tab_mgr.open_or_focus_media(m1.id, false).unwrap();
     assert!(!is_new_reopen);
     assert_eq!(focused_id, tab1_id);
     assert_eq!(tab_mgr.active_tab_id(), Some(tab1_id));
@@ -142,6 +142,80 @@ fn test_viewer_tab_manager_lifecycle_and_focus_reuse() {
 }
 
 #[test]
+fn test_viewer_tab_manager_allow_multiple_tabs_option_and_iteration_suffixes() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let vid_path = tmp_media.path().join("clip_sample.mp4");
+    std::fs::write(&vid_path, b"video clip payload").unwrap();
+
+    let img_path = tmp_media.path().join("single_image.png");
+    image::RgbImage::new(100, 100).save(&img_path).unwrap();
+
+    let _ = lib.refresher().refresh_folder(folder.id).unwrap();
+    let media = lib.media().get_by_folder(folder.id).unwrap();
+
+    let vid_media = media.iter().find(|m| m.filename == "clip_sample.mp4").unwrap();
+    let img_media = media.iter().find(|m| m.filename == "single_image.png").unwrap();
+
+    let tab_mgr = ViewerTabManager::new(lib.clone());
+
+    // 1. Open first video tab with allow_multiple = true -> Tab 1 created
+    let (tab1_id, is_new1) = tab_mgr.open_or_focus_media(vid_media.id, true).unwrap();
+    assert!(is_new1);
+    assert_eq!(tab_mgr.list_tabs().len(), 1);
+
+    // 2. Open second video tab with allow_multiple = true -> Tab 2 created for SAME media_id!
+    let (tab2_id, is_new2) = tab_mgr.open_or_focus_media(vid_media.id, true).unwrap();
+    assert!(is_new2);
+    assert_ne!(tab1_id, tab2_id);
+    assert_eq!(tab_mgr.list_tabs().len(), 2);
+
+    // 3. Open third video tab with allow_multiple = true -> Tab 3 created
+    let (tab3_id, is_new3) = tab_mgr.open_or_focus_media(vid_media.id, true).unwrap();
+    assert!(is_new3);
+    assert_ne!(tab2_id, tab3_id);
+    assert_eq!(tab_mgr.list_tabs().len(), 3);
+
+    // Verify Title Computation with Compact Iteration Suffixes
+    let tabs = tab_mgr.list_tabs();
+    let title1 = ViewerTabManager::compute_tab_title(&tabs, tab1_id);
+    let title2 = ViewerTabManager::compute_tab_title(&tabs, tab2_id);
+    let title3 = ViewerTabManager::compute_tab_title(&tabs, tab3_id);
+
+    assert_eq!(title1, "clip_sample.mp4");
+    assert_eq!(title2, "clip_sample.mp4 (1)");
+    assert_eq!(title3, "clip_sample.mp4 (2)");
+
+    // 4. Open Image tab with allow_multiple = false
+    let (img_tab1_id, img_is_new1) = tab_mgr.open_or_focus_media(img_media.id, false).unwrap();
+    assert!(img_is_new1);
+
+    // Re-opening image with allow_multiple = false must reuse the tab without suffix
+    let (img_tab_reuse_id, img_is_new2) = tab_mgr.open_or_focus_media(img_media.id, false).unwrap();
+    assert!(!img_is_new2);
+    assert_eq!(img_tab_reuse_id, img_tab1_id);
+
+    let tabs_after_img = tab_mgr.list_tabs();
+    let img_title = ViewerTabManager::compute_tab_title(&tabs_after_img, img_tab1_id);
+    assert_eq!(img_title, "single_image.png");
+
+    // 5. Close Tab 2 and verify remaining tabs update their iteration suffixes dynamically
+    tab_mgr.close_tab(tab2_id);
+    let tabs_remaining = tab_mgr.list_tabs();
+    assert_eq!(tabs_remaining.len(), 3); // 2 video tabs + 1 image tab
+
+    let title1_rem = ViewerTabManager::compute_tab_title(&tabs_remaining, tab1_id);
+    let title3_rem = ViewerTabManager::compute_tab_title(&tabs_remaining, tab3_id);
+
+    assert_eq!(title1_rem, "clip_sample.mp4");
+    assert_eq!(title3_rem, "clip_sample.mp4 (1)");
+}
+
+#[test]
 fn test_viewer_tab_manager_isolated_video_tabs_and_state_preservation() {
     let tmp_db = tempdir().unwrap();
     let tmp_media = tempdir().unwrap();
@@ -161,7 +235,7 @@ fn test_viewer_tab_manager_isolated_video_tabs_and_state_preservation() {
     let tab_mgr = ViewerTabManager::new(lib.clone());
 
     // 1. Open Video Tab 1
-    let (tab1_id, is_new1) = tab_mgr.open_or_focus_media(media[0].id).unwrap();
+    let (tab1_id, is_new1) = tab_mgr.open_or_focus_media(media[0].id, false).unwrap();
     assert!(is_new1);
     assert_eq!(tab_mgr.active_tab_id(), Some(tab1_id));
 
@@ -172,7 +246,7 @@ fn test_viewer_tab_manager_isolated_video_tabs_and_state_preservation() {
     assert_eq!(tab1_player.get_volume().round() as i32, 42);
 
     // 2. Open Video Tab 2 (Tab 1 is auto-paused, Tab 2 gets its own isolated player)
-    let (tab2_id, is_new2) = tab_mgr.open_or_focus_media(media[1].id).unwrap();
+    let (tab2_id, is_new2) = tab_mgr.open_or_focus_media(media[1].id, false).unwrap();
     assert!(is_new2);
     assert_eq!(tab_mgr.active_tab_id(), Some(tab2_id));
 
@@ -225,7 +299,7 @@ fn test_viewer_tab_manager_navigate_active_tab_in_place() {
     let tab_mgr = ViewerTabManager::new(lib);
 
     // 1. Open tab for image 1 -> tab count = 1
-    let (tab_id, _) = tab_mgr.open_or_focus_media(m1.id).unwrap();
+    let (tab_id, _) = tab_mgr.open_or_focus_media(m1.id, false).unwrap();
     assert_eq!(tab_mgr.list_tabs().len(), 1);
     assert_eq!(tab_mgr.get_active_media_id(), Some(m1.id));
 
@@ -267,9 +341,9 @@ fn test_viewer_tab_manager_close_fallback_rules() {
 
     let tab_mgr = ViewerTabManager::new(lib);
 
-    let (t1, _) = tab_mgr.open_or_focus_media(media[0].id).unwrap();
-    let (t2, _) = tab_mgr.open_or_focus_media(media[1].id).unwrap();
-    let (t3, _) = tab_mgr.open_or_focus_media(media[2].id).unwrap();
+    let (t1, _) = tab_mgr.open_or_focus_media(media[0].id, false).unwrap();
+    let (t2, _) = tab_mgr.open_or_focus_media(media[1].id, false).unwrap();
+    let (t3, _) = tab_mgr.open_or_focus_media(media[2].id, false).unwrap();
     assert_eq!(tab_mgr.active_tab_id(), Some(t3));
 
     // Close active tab 3 -> Should fall back to adjacent tab 2
@@ -306,7 +380,7 @@ fn test_viewer_tab_manager_reactive_notifications() {
     let media = lib.media().get_by_folder(folder.id).unwrap()[0].clone();
 
     let tab_mgr = ViewerTabManager::new(lib);
-    let (tab_id, _) = tab_mgr.open_or_focus_media(media.id).unwrap();
+    let (tab_id, _) = tab_mgr.open_or_focus_media(media.id, false).unwrap();
 
     // 1. Test rename notification
     tab_mgr.notify_media_renamed(media.id, "renamed.png");
@@ -351,7 +425,7 @@ fn test_viewer_tab_refresh_updates_image_buffer_and_metadata() {
     let media = lib.media().get_by_folder(folder.id).unwrap()[0].clone();
 
     let tab_mgr = ViewerTabManager::new(lib.clone());
-    let (tab_id, _) = tab_mgr.open_or_focus_media(media.id).unwrap();
+    let (tab_id, _) = tab_mgr.open_or_focus_media(media.id, false).unwrap();
 
     // Initial load of 100x100 buffer
     let initial_res = HighResImageLoader::load_full_resolution(&img_path).unwrap();
@@ -443,7 +517,7 @@ fn test_viewer_tab_manager_high_res_buffer_eviction() {
     let mut tab_ids = Vec::new();
 
     for &mid in &media_ids {
-        let (tid, _) = tab_mgr.open_or_focus_media(mid).unwrap();
+        let (tid, _) = tab_mgr.open_or_focus_media(mid, false).unwrap();
         let pixel_buf = SharedPixelBuffer::<Rgb8Pixel>::new(10, 10);
         tab_mgr.update_tab_image_buffer(tid, 10, 10, pixel_buf);
         tab_ids.push(tid);
