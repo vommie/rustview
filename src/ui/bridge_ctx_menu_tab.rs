@@ -111,7 +111,7 @@ impl TabContextMenu {
             .action(
                 CTX_TAB_CLOSE,
                 "Close Tab",
-                Some("Esc"),
+                Some("Ctrl+W"),
                 None,
                 true,
             )

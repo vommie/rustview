@@ -733,6 +733,7 @@ fn test_tab_context_menu_builder_items_and_states() {
     // Close Tab Action
     assert_eq!(menu_middle.items[6].id, CTX_TAB_CLOSE);
     assert_eq!(menu_middle.items[6].text, "Close Tab");
+    assert_eq!(menu_middle.items[6].shortcut, Some("Ctrl+W".to_string()));
     assert!(menu_middle.items[6].is_enabled);
 
     // 2. First Tab (index 0 of 3): Close Left disabled, Close Right enabled
@@ -753,7 +754,6 @@ fn test_tab_context_menu_builder_items_and_states() {
     let menu_single = TabContextMenu::build_menu(&tabs[0], 0, 1, &tabs[0..1]);
     let close_sub_single = &menu_single.items[5];
     assert!(!close_sub_single.is_enabled);
-    assert!(!close_sub_single.children[0].is_enabled);
     assert!(!close_sub_single.children[0].is_enabled);
     assert!(!close_sub_single.children[1].is_enabled);
     assert!(!close_sub_single.children[2].is_enabled);

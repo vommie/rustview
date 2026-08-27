@@ -151,7 +151,7 @@ impl BridgeViewerTabs {
             Self::sync_ui(&win_dcancel, &tm_dcancel, &lib_dcancel, &set_dcancel, &st_dcancel);
         });
 
-        // 5. Viewer Toolbar Close Tab Button
+        // 5. Viewer Toolbar Close Tab Button / Keyboard Shortcut
         let win_v_close = window.clone_strong();
         let tm_v_close = tab_manager.clone();
         let lib_v_close = library.clone();
@@ -162,7 +162,7 @@ impl BridgeViewerTabs {
             if let Some(active_id) = tm_v_close.active_tab_id() {
                 tracing::info!(
                     tab_id = active_id,
-                    "[BridgeViewerTabs: ViewerClose] Closed active tab from viewer toolbar"
+                    "[BridgeViewerTabs: ViewerClose] Closed active tab from viewer toolbar / shortcut"
                 );
                 tm_v_close.close_tab(active_id);
                 Self::sync_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
@@ -206,8 +206,8 @@ impl BridgeViewerTabs {
 
         let win_next = window.clone_strong();
         let tm_next = tab_manager.clone();
-        let lib_next = library;
-        let st_next = state;
+        let lib_next = library.clone();
+        let st_next = state.clone();
         let set_next = settings.clone();
         let fs_next = fullscreen_controller.clone();
         window.on_viewer_next(move || {
@@ -459,7 +459,7 @@ impl BridgeViewerTabs {
         );
     }
 
-    /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and fullscreen double-click hooks.
+    /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and MPV input hooks (Fullscreen and Ctrl+W Close Tab).
     pub fn sync_video_embedding(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -534,6 +534,17 @@ impl BridgeViewerTabs {
                         tracing::info!("[BridgeViewerTabs: MpvDblClick] Fullscreen enter requested via MPV double-click");
                         fs.show(&tm, &set, w.as_weak());
                     }
+                });
+            });
+
+            // Intercept Ctrl+W key event from MPV video player and invoke the window's close tab action
+            let win_close = window.as_weak();
+            vid.player.on_close_tab(move || {
+                let _ = win_close.upgrade_in_event_loop(move |w| {
+                    tracing::info!(
+                        "[BridgeViewerTabs: MpvCloseTab] Ctrl+W intercepted from MPV video player. Invoking viewer_close_tab..."
+                    );
+                    w.invoke_viewer_close_tab();
                 });
             });
 

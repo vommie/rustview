@@ -365,11 +365,15 @@ export component MainWindow inherits Window {
                 return accept;
             }
 
-            if root.active-view-mode == 1 {
-                if event.text == Key.Escape {
+            // Close active viewer tab with Ctrl+W shortcut
+            if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
+                if root.active-view-mode == 1 {
                     root.viewer-close-tab();
                     return accept;
                 }
+            }
+
+            if root.active-view-mode == 1 {
                 if event.text == Key.F5 {
                     root.viewer-refresh();
                     return accept;

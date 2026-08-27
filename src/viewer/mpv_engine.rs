@@ -10,6 +10,7 @@ use std::time::Instant;
 
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
 pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;
+pub type MpvCloseTabCallback = Arc<dyn Fn() + Send + Sync>;
 
 /// Central thread-safe MPV player engine wrapping `libmpv2` with native OSC, plugins, custom config files, and property observation.
 pub struct MpvPlayer {
@@ -22,6 +23,7 @@ pub struct MpvPlayer {
     observer_running: Arc<AtomicBool>,
     callbacks: Arc<RwLock<Vec<MpvEventCallback>>>,
     fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>>,
+    close_tab_callbacks: Arc<RwLock<Vec<MpvCloseTabCallback>>>,
 }
 
 impl MpvPlayer {
@@ -84,10 +86,23 @@ impl MpvPlayer {
         // Ensure OSC deadzone is completely zeroed out
         let _ = mpv_instance.set_property("script-opts", "osc-deadzonesize=0,osc-minmousemove=0");
 
+        // Ensure window-minimized state is clean
+        let _ = mpv_instance.set_property("window-minimized", false);
+
         // Bind double-click and 'f' / 'F' in MPV to cycle fullscreen (intercepted by RustView observer)
         let _ = mpv_instance.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["f", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["F", "cycle fullscreen"]);
+
+        // Bind Ctrl+W variations in MPV without OSD to toggle window-minimized (intercepted by RustView observer)
+        let close_keys = [
+            "ctrl+w", "Ctrl+w", "ctrl+W", "Ctrl+W",
+            "meta+w", "Meta+w", "cmd+w", "Command+w",
+            "ctrl+F4", "Ctrl+F4",
+        ];
+        for k in close_keys {
+            let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-minimized"]);
+        }
 
         // Ignore ESC and quit keys in MPV so Slint handles navigation, fullscreen toggles and modal dismissals
         let _ = mpv_instance.command("keybind", &["ESC", "ignore"]);
@@ -104,6 +119,8 @@ impl MpvPlayer {
         let callbacks: Arc<RwLock<Vec<MpvEventCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>> =
             Arc::new(RwLock::new(Vec::new()));
+        let close_tab_callbacks: Arc<RwLock<Vec<MpvCloseTabCallback>>> =
+            Arc::new(RwLock::new(Vec::new()));
 
         let player = Self {
             mpv: mpv_arc.clone(),
@@ -115,6 +132,7 @@ impl MpvPlayer {
             observer_running: observer_running.clone(),
             callbacks: callbacks.clone(),
             fullscreen_callbacks: fullscreen_callbacks.clone(),
+            close_tab_callbacks: close_tab_callbacks.clone(),
         };
 
         player.spawn_event_observer_thread();
@@ -392,6 +410,16 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
+    /// Registers/replaces the listener callback triggered when Ctrl+W requests closing active tab from MPV.
+    pub fn on_close_tab<F>(&self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut cbs = self.close_tab_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
     fn notify_subscribers(&self) {
         let snapshot = self.state.read().clone();
         let callbacks = self.callbacks.read().clone();
@@ -409,6 +437,7 @@ impl MpvPlayer {
         let is_user_paused = self.is_user_paused.clone();
         let callbacks = self.callbacks.clone();
         let fs_callbacks = self.fullscreen_callbacks.clone();
+        let close_callbacks = self.close_tab_callbacks.clone();
 
         std::thread::Builder::new()
             .name("mpv-event-observer".into())
@@ -431,7 +460,18 @@ impl MpvPlayer {
                         }
                     }
 
-                    // 2. Sync live playback properties
+                    // 2. Intercept Ctrl+W Close Tab triggers from MPV via window-minimized toggle
+                    let close_requested = mpv.get_property::<bool>("window-minimized").unwrap_or(false);
+                    if close_requested {
+                        let _ = mpv.set_property("window-minimized", false);
+
+                        let close_cbs = close_callbacks.read().clone();
+                        for cb in close_cbs {
+                            cb();
+                        }
+                    }
+
+                    // 3. Sync live playback properties
                     let pos = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
                     let dur = mpv.get_property::<f64>("duration").unwrap_or(0.0);
                     let paused = mpv.get_property::<bool>("pause").unwrap_or(false);
