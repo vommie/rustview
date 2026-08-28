@@ -1,9 +1,11 @@
+use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::ImageFullscreenWindow;
 use super::MainWindow;
 use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
+use crate::ui::bridge_file_selection::{DoubleClickKind, LastClickRecord};
 use crate::ui::bridge_state::UiState;
 use crate::viewer::{
     force_x11_fullscreen, get_slint_window_xid_with_title_fallback, HighResImageLoader,
@@ -32,7 +34,7 @@ pub struct ImageFullscreenDialogController {
     library_weak: Arc<Mutex<Option<Arc<Library>>>>,
     state_weak: Arc<Mutex<Option<Arc<RwLock<UiState>>>>>,
     settings_weak: Arc<Mutex<Option<Arc<SettingsManager>>>>,
-    last_click_instant: Arc<Mutex<Option<Instant>>>,
+    last_click_record: Arc<Mutex<Option<LastClickRecord>>>,
     is_active: Arc<AtomicBool>,
     is_fullscreen_video: Arc<AtomicBool>,
     active_fullscreen_tab_id: Arc<Mutex<Option<TabId>>>,
@@ -55,7 +57,7 @@ impl ImageFullscreenDialogController {
             library_weak: Arc::new(Mutex::new(None)),
             state_weak: Arc::new(Mutex::new(None)),
             settings_weak: Arc::new(Mutex::new(None)),
-            last_click_instant: Arc::new(Mutex::new(None)),
+            last_click_record: Arc::new(Mutex::new(None)),
             is_active: Arc::new(AtomicBool::new(false)),
             is_fullscreen_video: Arc::new(AtomicBool::new(false)),
             active_fullscreen_tab_id: Arc::new(Mutex::new(None)),
@@ -84,18 +86,26 @@ impl ImageFullscreenDialogController {
         *self.cached_viewport_rect.lock() = (x, y, w, h);
     }
 
-    /// Evaluates if a click qualifies as a double-click (< 400ms interval).
-    pub fn check_double_click(&self) -> bool {
+    /// Evaluates if successive clicks qualify as a double-click (< 400ms interval), distinguishing between normal and Ctrl-modified double clicks.
+    pub fn check_double_click(&self, is_ctrl: bool) -> DoubleClickKind {
         let now = Instant::now();
-        let mut guard = self.last_click_instant.lock();
-        if let Some(prev) = *guard
-            && now.duration_since(prev) < Duration::from_millis(400)
+        let mut guard = self.last_click_record.lock();
+        if let Some(last) = *guard
+            && now.duration_since(last.instant) < Duration::from_millis(400)
         {
             *guard = None;
-            return true;
+            if is_ctrl && last.is_ctrl {
+                return DoubleClickKind::Ctrl;
+            } else if !is_ctrl && !last.is_ctrl {
+                return DoubleClickKind::Normal;
+            }
         }
-        *guard = Some(now);
-        false
+        *guard = Some(LastClickRecord {
+            media_id: 0,
+            instant: now,
+            is_ctrl,
+        });
+        DoubleClickKind::None
     }
 
     /// Returns the cached fullscreen XID or resolves it once directly from the Slint window.
@@ -132,10 +142,16 @@ impl ImageFullscreenDialogController {
                     ctrl_close.close();
                 });
 
-                let ctrl_double = ctrl.clone();
-                win.on_canvas_double_clicked(move || {
-                    if ctrl_double.check_double_click() {
-                        ctrl_double.close();
+                let ctrl_click = ctrl.clone();
+                win.on_canvas_clicked(move |is_ctrl| {
+                    match ctrl_click.check_double_click(is_ctrl) {
+                        DoubleClickKind::Normal => {
+                            ctrl_click.close();
+                        }
+                        DoubleClickKind::Ctrl => {
+                            ctrl_click.handle_ctrl_double_click();
+                        }
+                        DoubleClickKind::None => {}
                     }
                 });
 
@@ -270,6 +286,7 @@ impl ImageFullscreenDialogController {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
+        tab_manager: &Arc<ViewerTabManager>,
         main_window_weak: slint::Weak<MainWindow>,
     ) {
         let t0 = Instant::now();
@@ -288,6 +305,7 @@ impl ImageFullscreenDialogController {
         *self.library_weak.lock() = Some(library.clone());
         *self.settings_weak.lock() = Some(settings.clone());
         *self.state_weak.lock() = Some(state.clone());
+        *self.tab_manager_weak.lock() = Some(tab_manager.clone());
         *self.active_fullscreen_tab_id.lock() = None;
         *self.active_standalone_media_id.lock() = Some(media_id);
 
@@ -398,6 +416,77 @@ impl ImageFullscreenDialogController {
         );
     }
 
+    /// Handles Ctrl + Double-Click in Fullscreen: Converts the current media item into a background tab
+    /// ONLY if it was opened standalone from the Browse View, preserving video playback and closing fullscreen.
+    pub fn handle_ctrl_double_click(&self) {
+        let origin_mode = *self.origin_view_mode.lock();
+        let standalone_id_opt = *self.active_standalone_media_id.lock();
+
+        // ONLY convert if opened directly from Browse view (origin_mode == 0) in standalone mode!
+        if origin_mode != 0 || standalone_id_opt.is_none() {
+            tracing::debug!(
+                origin_mode,
+                standalone = standalone_id_opt.is_some(),
+                "[FullscreenViewer: CtrlDblClick] Ignored Ctrl+DoubleClick: Fullscreen was not opened standalone from Browse view"
+            );
+            return;
+        }
+
+        let media_id = standalone_id_opt.unwrap();
+        let is_video = self.is_fullscreen_video.load(Ordering::SeqCst);
+
+        let tab_mgr_opt = self.tab_manager_weak.lock().clone();
+        let lib_opt = self.library_weak.lock().clone();
+        let set_opt = self.settings_weak.lock().clone();
+        let st_opt = self.state_weak.lock().clone();
+        let mw_opt = self.main_window_weak.lock().clone();
+
+        let (Some(tab_mgr), Some(library), Some(settings), Some(state), Some(mw_weak)) =
+            (tab_mgr_opt, lib_opt, set_opt, st_opt, mw_opt) else {
+                tracing::warn!("[FullscreenViewer: CtrlDblClick] Missing subsystem reference for background tab conversion");
+                self.close();
+                return;
+            };
+
+        tracing::info!(
+            media_id,
+            is_video,
+            "[FullscreenViewer: CtrlDblClick] Converting standalone fullscreen media to background tab and closing fullscreen..."
+        );
+
+        if is_video {
+            let player = self.standalone_video_player.lock().take();
+            let subwindow = self.standalone_subwindow.lock().take();
+            let allow_multiple = settings.get().viewer.videos.allow_multiple_tabs;
+
+            if let Some(player_arc) = player
+                && let Ok(new_tab_id) = tab_mgr.adopt_video_session_in_background(
+                    media_id,
+                    player_arc,
+                    subwindow,
+                    allow_multiple,
+                )
+            {
+                tracing::info!(
+                    media_id,
+                    tab_id = new_tab_id,
+                    "[FullscreenViewer: CtrlDblClick] Standalone video successfully adopted into background tab session"
+                );
+            }
+        } else if let Some(mw) = mw_weak.upgrade() {
+            BridgeViewerTabs::open_media_tab_background(
+                media_id,
+                &mw,
+                &tab_mgr,
+                &library,
+                &settings,
+                &state,
+            );
+        }
+
+        self.close();
+    }
+
     /// Initializes or reuses MPV and X11 subwindow directly on the fullscreen window before video load to guarantee 0ms flicker.
     fn init_or_play_standalone_video(
         &self,
@@ -470,6 +559,14 @@ impl ImageFullscreenDialogController {
                 let close_fs = self.clone();
                 p.on_close_tab(move || {
                     close_fs.close();
+                });
+
+                let fs_convert = self.clone();
+                p.on_convert_to_background_tab(move || {
+                    if fs_convert.check_double_click(true) == DoubleClickKind::Ctrl {
+                        tracing::info!("[FullscreenViewer: MpvCtrlDblClick] Ctrl+DoubleClick intercepted from MPV video player in fullscreen");
+                        fs_convert.handle_ctrl_double_click();
+                    }
                 });
 
                 // Attach WID BEFORE loading video to prevent mid-playback VO reload!

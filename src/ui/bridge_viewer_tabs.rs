@@ -1,3 +1,4 @@
+use super::bridge_file_selection::DoubleClickKind;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
@@ -256,7 +257,7 @@ impl BridgeViewerTabs {
         let set_fs = settings.clone();
         let fs_ctrl = fullscreen_controller.clone();
         window.on_viewer_image_clicked(move || {
-            if fs_ctrl.check_double_click() {
+            if fs_ctrl.check_double_click(false) == DoubleClickKind::Normal {
                 tracing::info!("[BridgeViewerTabs: DoubleClick] Double-click detected on viewer canvas. Launching fullscreen viewer window (auto-play)...");
                 fs_ctrl.show(&tm_fs, &set_fs, win_fs.as_weak());
             }
@@ -978,6 +979,138 @@ impl BridgeViewerTabs {
                 StatusBarBridge::error(
                     window,
                     format!("Failed to open tab for media #{}: {}", media_id, e),
+                );
+            }
+        }
+    }
+
+    /// Opens a media file (Image or Video) in a background viewer tab without stealing focus or switching active view mode.
+    pub fn open_media_tab_background(
+        media_id: MediaId,
+        window: &MainWindow,
+        tab_manager: &Arc<ViewerTabManager>,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let t0 = Instant::now();
+
+        let (is_video, filename_hint) = {
+            let st = state.read();
+            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                (
+                    matches!(item.record.media_type, MediaType::Video),
+                    item.record.filename.clone(),
+                )
+            } else if let Ok(Some(record)) = library.media().get(media_id) {
+                (
+                    matches!(record.media_type, MediaType::Video),
+                    record.filename,
+                )
+            } else {
+                (false, format!("Media #{}", media_id))
+            }
+        };
+
+        let app_settings = settings.get();
+        let allow_multiple = if is_video {
+            app_settings.viewer.videos.allow_multiple_tabs
+        } else {
+            app_settings.viewer.images.allow_multiple_tabs
+        };
+
+        match tab_manager.open_media_in_background(media_id, allow_multiple) {
+            Ok((tab_id, is_new)) => {
+                Self::sync_ui(window, tab_manager, library, settings, state);
+
+                if window.get_active_view_mode() == 2 {
+                    BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, library, settings, state);
+                }
+
+                let is_video_session = tab_manager
+                    .get_tab(tab_id)
+                    .map(|t| matches!(t.payload, TabPayload::Video(_)))
+                    .unwrap_or(false);
+
+                if !is_video_session && is_new && let Ok(file_path) = library.resolve_media_path(media_id) {
+                    let tm_async = tab_manager.clone();
+                    let w_weak = window.as_weak();
+                    let lib_async = library.clone();
+                    let st_async = state.clone();
+                    let set_async = settings.clone();
+
+                    tracing::info!(
+                        media_id,
+                        tab_id,
+                        path = %LogObscurer::path(&file_path),
+                        "[BridgeViewerTabs: AsyncLoadBackground] Spawning high-resolution background decode task for background tab..."
+                    );
+
+                    rayon::spawn(move || {
+                        let t_decode = Instant::now();
+                        let load_res = HighResImageLoader::load_full_resolution(&file_path);
+
+                        let _ = w_weak.upgrade_in_event_loop(move |w| {
+                            if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
+                                tracing::debug!(
+                                    media_id,
+                                    tab_id,
+                                    "[BridgeViewerTabs: DiscardStale] Discarding stale decoded image buffer because tab changed"
+                                );
+                                return;
+                            }
+
+                            match load_res {
+                                Ok((w_px, h_px, pixel_buffer)) => {
+                                    tracing::info!(
+                                        media_id,
+                                        tab_id,
+                                        dimensions = format!("{}x{}", w_px, h_px),
+                                        decode_time_ms = t_decode.elapsed().as_millis(),
+                                        "[BridgeViewerTabs: AsyncLoadBackground] High-res image decoded successfully for background tab"
+                                    );
+                                    tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
+                                }
+                                Err(err) => {
+                                    tracing::error!(
+                                        media_id,
+                                        tab_id,
+                                        error = %err,
+                                        "[BridgeViewerTabs: AsyncLoadBackground] Failed to decode full-resolution image for background tab"
+                                    );
+                                    tm_async.set_tab_error(tab_id, err.to_string());
+                                }
+                            }
+                            Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                            if w.get_active_view_mode() == 2 {
+                                BridgeTabGrid::sync_tab_grid_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                            }
+                        });
+                    });
+                }
+
+                let all_tabs = tab_manager.list_tabs();
+                let tab_title = ViewerTabManager::compute_tab_title(&all_tabs, tab_id);
+                StatusBarBridge::success(
+                    window,
+                    format!("Opened '{}' in background tab", if tab_title.is_empty() { filename_hint } else { tab_title }),
+                );
+
+                tracing::info!(
+                    media_id,
+                    tab_id,
+                    is_new,
+                    is_video = is_video_session,
+                    allow_multiple,
+                    open_time_us = t0.elapsed().as_micros(),
+                    "[BridgeViewerTabs: OpenBackground] Tab opened in background and UI synchronized"
+                );
+            }
+            Err(e) => {
+                tracing::error!(media_id, error = %e, "[BridgeViewerTabs: OpenBackgroundError] Failed to open background media tab");
+                StatusBarBridge::error(
+                    window,
+                    format!("Failed to open background tab for media #{}: {}", media_id, e),
                 );
             }
         }

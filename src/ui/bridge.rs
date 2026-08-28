@@ -7,7 +7,7 @@ use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
 use super::bridge_file_dialog_delete::DeleteFileDialogController;
 use super::bridge_file_dialog_missing::MissingFileDialogController;
 use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
-use super::bridge_file_selection::BridgeFileSelection;
+use super::bridge_file_selection::{BridgeFileSelection, LastClickRecord};
 use super::bridge_folder_dialogs::FolderDialogController;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
@@ -64,7 +64,7 @@ pub struct UiBridge {
     favorites: Arc<RwLock<FavoriteManager>>,
     ctx_menu_dispatcher: Arc<CtxMenuDispatcher>,
     state: Arc<RwLock<UiState>>,
-    last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
+    last_click: Arc<Mutex<Option<LastClickRecord>>>,
     _thumbnail_timer: Timer,
 }
 
@@ -287,9 +287,15 @@ impl UiBridge {
         let thumb = bridge.thumbnails.clone();
         let set = bridge.settings.clone();
         let st = bridge.state.clone();
+        let tm_post = bridge.tab_manager.clone();
+        let fs_post = bridge.fullscreen_controller.clone();
 
         Timer::single_shot(std::time::Duration::from_millis(50), move || {
             if let Some(win) = w_weak.upgrade() {
+                if let Some(main_xid) = crate::viewer::get_slint_window_xid(win.window()) {
+                    tm_post.set_main_viewport_info(main_xid, 0, 64, 800, 600);
+                    fs_post.set_main_viewport_info(main_xid, 0, 64, 800, 600);
+                }
                 tracing::info!(
                     "[UiBridge: PostMount] Slint UI event loop ready. Mounting root folder..."
                 );

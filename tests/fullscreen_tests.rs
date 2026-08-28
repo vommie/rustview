@@ -17,14 +17,29 @@ fn test_fullscreen_controller_is_send_and_sync() {
 fn test_fullscreen_controller_double_click_detection() {
     let controller = ImageFullscreenDialogController::new();
 
-    // First click -> False (no prior click)
-    assert!(!controller.check_double_click());
+    // First click without Ctrl -> False / None
+    assert_eq!(
+        controller.check_double_click(false),
+        rustview::ui::bridge_file_selection::DoubleClickKind::None
+    );
 
-    // Immediate second click (< 400ms) -> True (Double Click registered)
-    assert!(controller.check_double_click());
+    // Immediate second click without Ctrl (< 400ms) -> Normal Double Click
+    assert_eq!(
+        controller.check_double_click(false),
+        rustview::ui::bridge_file_selection::DoubleClickKind::Normal
+    );
 
-    // Next immediate click -> False (reset after confirmed double click)
-    assert!(!controller.check_double_click());
+    // First click with Ctrl -> None
+    assert_eq!(
+        controller.check_double_click(true),
+        rustview::ui::bridge_file_selection::DoubleClickKind::None
+    );
+
+    // Immediate second click with Ctrl (< 400ms) -> Ctrl Double Click
+    assert_eq!(
+        controller.check_double_click(true),
+        rustview::ui::bridge_file_selection::DoubleClickKind::Ctrl
+    );
 }
 
 #[test]
@@ -53,7 +68,7 @@ fn test_fullscreen_viewer_tab_sync() {
     let media = lib.media().get_by_folder(folder.id).unwrap()[0].clone();
 
     let settings = SettingsManager::new(tmp_config.path());
-    let tab_mgr = ViewerTabManager::new(lib);
+    let tab_mgr = Arc::new(ViewerTabManager::new(lib));
 
     let (tab_id, is_new) = tab_mgr.open_or_focus_media(media.id, false).unwrap();
     assert!(is_new);
@@ -108,10 +123,11 @@ fn test_fullscreen_standalone_media_mode_bypasses_tabs() {
         &lib,
         &settings,
         &state,
+        &tab_mgr,
         dummy_window_weak.clone(),
     );
 
-    // Requirement 3: Verify tabs are NOT opened or created
+    // Quick-Fullscreen must bypass tab creation
     assert_eq!(tab_mgr.tab_count(), 0, "Quick-Fullscreen must bypass tab creation");
     assert_eq!(tab_mgr.active_tab_id(), None);
 
@@ -126,16 +142,62 @@ fn test_fullscreen_standalone_media_mode_bypasses_tabs() {
         &lib,
         &settings,
         &state,
+        &tab_mgr,
         dummy_window_weak,
     );
 
-    // Requirement 3: Verify tabs are still NOT opened or created for videos
+    // Quick-Fullscreen must bypass tab creation for videos
     assert_eq!(tab_mgr.tab_count(), 0, "Quick-Fullscreen must bypass tab creation for videos");
     assert_eq!(tab_mgr.active_tab_id(), None);
 
     controller.close();
     assert!(!controller.is_open());
     assert_eq!(tab_mgr.tab_count(), 0);
+}
+
+#[test]
+fn test_fullscreen_ctrl_double_click_converts_standalone_to_background_tab() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+    let tmp_config = tempdir().unwrap();
+
+    let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let img_path = tmp_media.path().join("convert_image.png");
+    image::RgbImage::new(800, 600).save(&img_path).unwrap();
+
+    let _ = lib.refresher().refresh_folder(folder.id).unwrap();
+    let media = lib.media().get_by_folder(folder.id).unwrap()[0].clone();
+
+    let settings = Arc::new(SettingsManager::new(tmp_config.path()));
+    let tab_mgr = Arc::new(ViewerTabManager::new(lib.clone()));
+    let state = Arc::new(parking_lot::RwLock::new(UiState::default()));
+
+    let controller = ImageFullscreenDialogController::new();
+
+    // Open Quick-Fullscreen from Browse view (origin_mode = 0)
+    controller.show_for_media(
+        media.id,
+        &lib,
+        &settings,
+        &state,
+        &tab_mgr,
+        slint::Weak::default(),
+    );
+
+    assert_eq!(tab_mgr.tab_count(), 0);
+
+    // Simulate Ctrl + DoubleClick in Fullscreen -> converts to background tab and closes fullscreen!
+    controller.handle_ctrl_double_click();
+
+    // Verify background tab exists and active_tab_id is None (Browse view preserved)
+    assert_eq!(tab_mgr.tab_count(), 1);
+    assert_eq!(tab_mgr.active_tab_id(), None);
+    assert!(!controller.is_open());
+
+    let tab = tab_mgr.list_tabs()[0].clone();
+    assert_eq!(tab.media_id, media.id);
 }
 
 #[test]

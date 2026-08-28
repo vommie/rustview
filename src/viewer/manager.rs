@@ -276,7 +276,7 @@ impl ViewerTabManager {
     }
 
     // =========================================================================
-    // Tab Duplication, Opening & In-Place Navigation
+    // Tab Duplication, Opening, Background Opening & In-Place Navigation
     // =========================================================================
 
     /// Duplicates an existing tab, placing the clone immediately adjacent to the source tab.
@@ -341,7 +341,7 @@ impl ViewerTabManager {
         }
     }
 
-    /// Opens a media item in a viewer tab. Reuses existing tab if `allow_multiple` is false.
+    /// Opens a media item in a viewer tab and activates it in the foreground. Reuses existing tab if `allow_multiple` is false.
     pub fn open_or_focus_media(
         &self,
         media_id: MediaId,
@@ -414,6 +414,169 @@ impl ViewerTabManager {
         );
 
         Ok((new_id, true))
+    }
+
+    /// Opens a media item in a background viewer tab without activating it or interrupting current foreground playback.
+    pub fn open_media_in_background(
+        &self,
+        media_id: MediaId,
+        allow_multiple: bool,
+    ) -> Result<(TabId, bool), ViewerError> {
+        let mut tabs = self.tabs.write();
+
+        // 1. If duplicates are disabled and a tab already exists for this media_id, leave it in background
+        if !allow_multiple
+            && let Some(existing) = tabs.get_by_media_id_mut(media_id)
+        {
+            let id = existing.id;
+            tracing::info!(
+                tab_id = id,
+                media_id,
+                "[ViewerTabManager: OpenBackground] Tab already exists for media; leaving in background"
+            );
+            return Ok((id, false));
+        }
+
+        // 2. Resolve media record and path
+        let record = self
+            .library
+            .media()
+            .get(media_id)?
+            .ok_or(ViewerError::MediaNotFound(media_id))?;
+
+        let file_path = self.library.resolve_media_path(media_id)?;
+        let new_id = self.tab_counter.fetch_add(1, Ordering::Relaxed);
+        let main_xid_opt = *self.main_window_xid.read();
+        let viewport_rect = *self.cached_viewport_rect.read();
+
+        // 3. Allocate a permanent unique display title for the new tab session
+        let title = TabTitleFormatter::allocate_tab_title(
+            tabs.all(),
+            media_id,
+            &record.filename,
+        );
+
+        // 4. Construct session via TabSessionFactory (OCP)
+        let session = TabSessionFactory::create_session(
+            new_id,
+            record,
+            file_path.clone(),
+            title,
+            main_xid_opt,
+            viewport_rect,
+        )?;
+
+        // 5. Ensure background session does not play or show video subwindow
+        if let TabPayload::Video(ref vid) = session.payload {
+            vid.player.set_tab_grid_mode(false);
+            vid.player.set_view_active(false);
+            let mut sub_guard = vid.subwindow.lock();
+            if let Some(ref mut sub) = *sub_guard {
+                sub.hide();
+            }
+        }
+
+        tabs.push(session);
+        // Note: active_tab_id remains UNCHANGED!
+
+        tracing::info!(
+            tab_id = new_id,
+            media_id,
+            total_open_tabs = tabs.len(),
+            file_path = %LogObscurer::path(&file_path),
+            "[ViewerTabManager: OpenBackground] Created new background viewer tab session"
+        );
+
+        Ok((new_id, true))
+    }
+
+    /// Adopts an existing live `MpvPlayer` and `X11VideoSubwindow` into a new background tab session without restarting or destroying playback.
+    pub fn adopt_video_session_in_background(
+        &self,
+        media_id: MediaId,
+        player: Arc<MpvPlayer>,
+        mut subwindow: Option<X11VideoSubwindow>,
+        allow_multiple: bool,
+    ) -> Result<TabId, ViewerError> {
+        let mut tabs = self.tabs.write();
+
+        if !allow_multiple
+            && let Some(existing) = tabs.get_by_media_id(media_id)
+        {
+            let id = existing.id;
+            tracing::info!(
+                tab_id = id,
+                media_id,
+                "[ViewerTabManager: AdoptBackground] Tab already exists for media; leaving in background"
+            );
+            return Ok(id);
+        }
+
+        let record = self
+            .library
+            .media()
+            .get(media_id)?
+            .ok_or(ViewerError::MediaNotFound(media_id))?;
+
+        let file_path = self.library.resolve_media_path(media_id)?;
+        let new_id = self.tab_counter.fetch_add(1, Ordering::Relaxed);
+        let main_xid_opt = *self.main_window_xid.read();
+        let viewport_rect = *self.cached_viewport_rect.read();
+
+        let title = TabTitleFormatter::allocate_tab_title(
+            tabs.all(),
+            media_id,
+            &record.filename,
+        );
+
+        // Reparent subwindow back to main window container if main_xid is known, and hide it
+        if let Some(ref mut sub) = subwindow {
+            sub.hide();
+            if let Some(main_xid) = main_xid_opt
+                && main_xid > 0
+            {
+                let (x, y, w, h) = viewport_rect;
+                let _ = sub.reparent(main_xid, x, y, w, h);
+                sub.hide();
+            }
+        }
+
+        player.set_tab_grid_mode(false);
+        player.set_view_active(false); // auto-pause background video
+
+        let session = MediaTabSession {
+            id: new_id,
+            media_id: record.id,
+            filename: record.filename.clone(),
+            title,
+            format: record.format,
+            file_path: file_path.clone(),
+            record: record.clone(),
+            payload: TabPayload::Video(VideoTabPayload {
+                player,
+                subwindow: Arc::new(Mutex::new(subwindow)),
+                position_ms: 0,
+                is_playing: true,
+                volume: 1.0,
+                duration_ms: record.duration_ms,
+                is_loading: false,
+                error_message: String::new(),
+            }),
+            created_at: Instant::now(),
+            last_accessed: Instant::now(),
+        };
+
+        tabs.push(session);
+
+        tracing::info!(
+            tab_id = new_id,
+            media_id,
+            total_open_tabs = tabs.len(),
+            file_path = %LogObscurer::path(&file_path),
+            "[ViewerTabManager: AdoptBackground] Adopted live MPV instance into background tab session"
+        );
+
+        Ok(new_id)
     }
 
     /// Replaces the media content of the active tab in-place (used for Prev/Next navigation).

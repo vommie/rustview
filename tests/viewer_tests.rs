@@ -474,66 +474,141 @@ fn test_viewer_tab_manager_lifecycle_and_focus_reuse() {
 }
 
 #[test]
-fn test_viewer_tab_manager_batch_close_methods() {
+fn test_viewer_tab_manager_open_in_background() {
     let tmp_db = tempdir().unwrap();
     let tmp_media = tempdir().unwrap();
 
     let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
     let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
 
-    let mut media_ids = Vec::new();
-    for i in 1..=5 {
-        let p = tmp_media.path().join(format!("test_img_{}.png", i));
-        image::RgbImage::new(10, 10).save(&p).unwrap();
-    }
+    let img1_path = tmp_media.path().join("bg_photo1.png");
+    let img2_path = tmp_media.path().join("bg_photo2.png");
+    image::RgbImage::new(100, 100).save(&img1_path).unwrap();
+    image::RgbImage::new(200, 200).save(&img2_path).unwrap();
 
     let _ = lib.refresher().refresh_folder(folder.id).unwrap();
     let media = lib.media().get_by_folder(folder.id).unwrap();
-    for m in &media {
-        media_ids.push(m.id);
-    }
-    assert_eq!(media_ids.len(), 5);
+    assert_eq!(media.len(), 2);
 
-    let tab_mgr = ViewerTabManager::new(lib.clone());
-    let mut tab_ids = Vec::new();
+    let tab_mgr = ViewerTabManager::new(lib);
 
-    for &mid in &media_ids {
-        let (tid, _) = tab_mgr.open_or_focus_media(mid, true).unwrap();
-        tab_ids.push(tid);
-    }
-    assert_eq!(tab_mgr.tab_count(), 5);
+    // Initial state: Browse mode, active_tab_id is None
+    assert_eq!(tab_mgr.active_tab_id(), None);
+    assert_eq!(tab_mgr.tab_count(), 0);
 
-    // 1. Close tabs to the left of Tab 3 (index 2) -> Should close Tab 1 & Tab 2
-    let (closed_left, active_after_left) = tab_mgr.close_tabs_to_left(tab_ids[2]);
-    assert_eq!(closed_left, 2);
-    assert_eq!(tab_mgr.tab_count(), 3);
-    assert_eq!(active_after_left, Some(tab_ids[4])); // Active tab was Tab 5 (not closed), so Tab 5 remains active
-    assert!(tab_mgr.get_tab(tab_ids[0]).is_none());
-    assert!(tab_mgr.get_tab(tab_ids[1]).is_none());
-
-    // 2. Close tabs to the right of Tab 3 -> Should close Tab 4 and Tab 5
-    let (closed_right, active_after_right) = tab_mgr.close_tabs_to_right(tab_ids[2]);
-    assert_eq!(closed_right, 2);
+    // Open first image in background
+    let (tab1_id, is_new1) = tab_mgr.open_media_in_background(media[0].id, false).unwrap();
+    assert!(is_new1);
     assert_eq!(tab_mgr.tab_count(), 1);
-    // Active tab was Tab 5 (which was closed) -> Target Tab 3 becomes the new active tab!
-    assert_eq!(active_after_right, Some(tab_ids[2]));
-    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[2]));
-    assert!(tab_mgr.get_tab(tab_ids[3]).is_none());
-    assert!(tab_mgr.get_tab(tab_ids[4]).is_none());
+    // Active tab must remain None (Browse mode preserved!)
+    assert_eq!(tab_mgr.active_tab_id(), None, "Active tab must remain None when opened in background");
 
-    // Reopen additional tabs
-    let (t_new1, _) = tab_mgr.open_or_focus_media(media_ids[0], true).unwrap();
-    let (t_new2, _) = tab_mgr.open_or_focus_media(media_ids[1], true).unwrap();
-    assert_eq!(tab_mgr.tab_count(), 3); // [Tab 3, t_new1, t_new2]
+    // Open second image in background
+    let (tab2_id, is_new2) = tab_mgr.open_media_in_background(media[1].id, false).unwrap();
+    assert!(is_new2);
+    assert_eq!(tab_mgr.tab_count(), 2);
+    assert_eq!(tab_mgr.active_tab_id(), None);
 
-    // 3. Close other tabs keeping t_new1 -> Should close Tab 3 and t_new2
-    let (closed_others, active_others) = tab_mgr.close_other_tabs(t_new1);
-    assert_eq!(closed_others, 2);
+    // Verify session details
+    let tab1 = tab_mgr.get_tab(tab1_id).unwrap();
+    let tab2 = tab_mgr.get_tab(tab2_id).unwrap();
+    assert_eq!(tab1.media_id, media[0].id);
+    assert_eq!(tab2.media_id, media[1].id);
+
+    // Reopening existing image with allow_multiple = false returns existing tab without changing active_tab_id
+    let (tab1_reopen, is_new_reopen) = tab_mgr.open_media_in_background(media[0].id, false).unwrap();
+    assert!(!is_new_reopen);
+    assert_eq!(tab1_reopen, tab1_id);
+    assert_eq!(tab_mgr.active_tab_id(), None);
+    assert_eq!(tab_mgr.tab_count(), 2);
+}
+
+#[test]
+fn test_viewer_tab_manager_adopt_video_session_in_background() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let vid_path = tmp_media.path().join("adopt_test.mp4");
+    std::fs::write(&vid_path, b"video bytes").unwrap();
+
+    let _ = lib.refresher().refresh_folder(folder.id).unwrap();
+    let media = lib.media().get_by_folder(folder.id).unwrap()[0].clone();
+
+    let tab_mgr = ViewerTabManager::new(lib);
+    let player = Arc::new(MpvPlayer::new().unwrap());
+    let _ = player.set_volume(77.0);
+
+    // Adopt into background tab session
+    let tab_id = tab_mgr.adopt_video_session_in_background(media.id, player.clone(), None, false).unwrap();
+
     assert_eq!(tab_mgr.tab_count(), 1);
-    assert_eq!(active_others, Some(t_new1));
-    assert_eq!(tab_mgr.active_tab_id(), Some(t_new1));
-    assert!(tab_mgr.get_tab(tab_ids[2]).is_none());
-    assert!(tab_mgr.get_tab(t_new2).is_none());
+    assert_eq!(tab_mgr.active_tab_id(), None, "Active tab must remain None after adopting into background");
+
+    let tab = tab_mgr.get_tab(tab_id).unwrap();
+    assert_eq!(tab.media_id, media.id);
+
+    if let TabPayload::Video(ref vid) = tab.payload {
+        assert_eq!(vid.player.get_volume().round() as i32, 77);
+        assert!(!vid.player.is_view_active(), "Background video player must be auto-paused (view inactive)");
+    } else {
+        panic!("Expected video payload in adopted session");
+    }
+}
+
+#[test]
+fn test_viewer_tab_manager_batch_close_methods() {
+    let mut collection = TabCollection::new();
+
+    let t1 = create_test_session(1, 10, "1.png", "1.png");
+    let t2 = create_test_session(2, 20, "2.png", "2.png");
+    let t3 = create_test_session(3, 30, "3.png", "3.png");
+    let t4 = create_test_session(4, 40, "4.png", "4.png");
+    let t5 = create_test_session(5, 50, "5.png", "5.png");
+
+    collection.push(t1);
+    collection.push(t2);
+    collection.push(t3);
+    collection.push(t4);
+    collection.push(t5);
+    assert_eq!(collection.len(), 5);
+
+    // 1. Remove to left of Tab 3 -> Should remove Tab 1 and Tab 2
+    let left_evicted = collection.remove_to_left(3);
+    assert_eq!(left_evicted.len(), 2);
+    assert_eq!(left_evicted[0].id, 1);
+    assert_eq!(left_evicted[1].id, 2);
+    assert_eq!(collection.len(), 3); // [3, 4, 5]
+    assert_eq!(collection.get_at(0).unwrap().id, 3);
+    assert_eq!(collection.get_at(1).unwrap().id, 4);
+    assert_eq!(collection.get_at(2).unwrap().id, 5);
+
+    // Remove to left of first tab -> Should return empty
+    let empty_left = collection.remove_to_left(3);
+    assert!(empty_left.is_empty());
+    assert_eq!(collection.len(), 3);
+
+    // 2. Remove to right of Tab 4 -> Should remove Tab 5
+    let right_evicted = collection.remove_to_right(4);
+    assert_eq!(right_evicted.len(), 1);
+    assert_eq!(right_evicted[0].id, 5);
+    assert_eq!(collection.len(), 2); // [3, 4]
+    assert_eq!(collection.get_at(0).unwrap().id, 3);
+    assert_eq!(collection.get_at(1).unwrap().id, 4);
+
+    // Remove to right of last tab -> Should return empty
+    let empty_right = collection.remove_to_right(4);
+    assert!(empty_right.is_empty());
+    assert_eq!(collection.len(), 2);
+
+    // 3. Remove other tabs keeping Tab 4 -> Should remove Tab 3
+    let other_evicted = collection.retain_only(4);
+    assert_eq!(other_evicted.len(), 1);
+    assert_eq!(other_evicted[0].id, 3);
+    assert_eq!(collection.len(), 1);
+    assert_eq!(collection.get_at(0).unwrap().id, 4);
 }
 
 #[test]
@@ -556,7 +631,7 @@ fn test_viewer_tab_manager_allow_multiple_tabs_option_and_iteration_suffixes() {
     let vid_media = media.iter().find(|m| m.filename == "clip_sample.mp4").unwrap();
     let img_media = media.iter().find(|m| m.filename == "single_image.png").unwrap();
 
-    let tab_mgr = ViewerTabManager::new(lib.clone());
+    let tab_mgr = ViewerTabManager::new(lib);
 
     let (tab1_id, is_new1) = tab_mgr.open_or_focus_media(vid_media.id, true).unwrap();
     assert!(is_new1);
@@ -854,16 +929,16 @@ fn test_tab_context_menu_builder_items_and_states() {
     // 2. First Tab (index 0 of 3): Close Left disabled, Close Right enabled
     let menu_first = TabContextMenu::build_menu(&tabs[0], 0, 3, &tabs);
     let close_sub_first = &menu_first.items[5];
-    assert!(!close_sub_first.children[0].is_enabled); // Left disabled
-    assert!(close_sub_first.children[1].is_enabled);  // Right enabled
-    assert!(close_sub_first.children[2].is_enabled);  // Others enabled
+    assert!(!close_sub_first.children[0].is_enabled);
+    assert!(close_sub_first.children[1].is_enabled);
+    assert!(close_sub_first.children[2].is_enabled);
 
     // 3. Last Tab (index 2 of 3): Close Left enabled, Close Right disabled
     let menu_last = TabContextMenu::build_menu(&tabs[2], 2, 3, &tabs);
     let close_sub_last = &menu_last.items[5];
-    assert!(close_sub_last.children[0].is_enabled);  // Left enabled
-    assert!(!close_sub_last.children[1].is_enabled); // Right disabled
-    assert!(close_sub_last.children[2].is_enabled);  // Others enabled
+    assert!(close_sub_last.children[0].is_enabled);
+    assert!(!close_sub_last.children[1].is_enabled);
+    assert!(close_sub_last.children[2].is_enabled);
 
     // 4. Single Tab (index 0 of 1): Entire "Close Tabs..." submenu must be DISABLED
     let menu_single = TabContextMenu::build_menu(&tabs[0], 0, 1, &tabs[0..1]);

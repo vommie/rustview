@@ -26,6 +26,22 @@ pub struct FileClickEvent {
     pub is_shift: bool,
 }
 
+/// Discriminant representing the detected double click type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoubleClickKind {
+    None,
+    Normal,
+    Ctrl,
+}
+
+/// Record capturing timestamp and modifier state of the previous click for double-click evaluation.
+#[derive(Debug, Clone, Copy)]
+pub struct LastClickRecord {
+    pub media_id: MediaId,
+    pub instant: Instant,
+    pub is_ctrl: bool,
+}
+
 /// Subsystem managing media file selection calculations, fast in-place model mutations, clicks, and quick fullscreen triggers.
 pub struct BridgeFileSelection;
 
@@ -37,13 +53,13 @@ impl BridgeFileSelection {
         settings: Arc<SettingsManager>,
         tab_manager: Arc<ViewerTabManager>,
         state: Arc<RwLock<UiState>>,
-        last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
+        last_click: Arc<Mutex<Option<LastClickRecord>>>,
         fullscreen_controller: ImageFullscreenDialogController,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
         let set = settings.clone();
-        let tm = tab_manager;
+        let tm = tab_manager.clone();
         let st = state.clone();
         let lc = last_click;
         window.on_media_clicked(move |id, is_ctrl, is_shift| {
@@ -66,6 +82,7 @@ impl BridgeFileSelection {
         let lib_mid = library.clone();
         let set_mid = settings;
         let st_mid = state.clone();
+        let tm_mid = tab_manager;
         let fs_mid = fullscreen_controller;
         window.on_media_middle_clicked(move |id| {
             Self::handle_middle_click(
@@ -74,6 +91,7 @@ impl BridgeFileSelection {
                 &lib_mid,
                 &set_mid,
                 &st_mid,
+                &tm_mid,
                 &fs_mid,
             );
         });
@@ -97,6 +115,7 @@ impl BridgeFileSelection {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
+        tab_manager: &Arc<ViewerTabManager>,
         fullscreen_controller: &ImageFullscreenDialogController,
     ) {
         tracing::info!(
@@ -109,6 +128,7 @@ impl BridgeFileSelection {
             library,
             settings,
             state,
+            tab_manager,
             window.as_weak(),
         );
     }
@@ -121,21 +141,35 @@ impl BridgeFileSelection {
         settings: &Arc<SettingsManager>,
         tab_manager: &Arc<ViewerTabManager>,
         state: &Arc<RwLock<UiState>>,
-        last_click: &Arc<Mutex<Option<(MediaId, Instant)>>>,
+        last_click: &Arc<Mutex<Option<LastClickRecord>>>,
     ) {
         let t_start = Instant::now();
 
-        // 1. Double Click Detection (< 400ms delta on same ID without modifiers)
-        if Self::check_double_click(event, last_click) {
-            Self::handle_double_click(
-                event.media_id,
-                state,
-                library,
-                settings,
-                tab_manager,
-                window,
-            );
-            return;
+        // 1. Double Click Detection (< 400ms delta on same ID)
+        match Self::check_double_click(event, last_click) {
+            DoubleClickKind::Normal => {
+                Self::handle_double_click(
+                    event.media_id,
+                    state,
+                    library,
+                    settings,
+                    tab_manager,
+                    window,
+                );
+                return;
+            }
+            DoubleClickKind::Ctrl => {
+                Self::handle_ctrl_double_click(
+                    event.media_id,
+                    state,
+                    library,
+                    settings,
+                    tab_manager,
+                    window,
+                );
+                return;
+            }
+            DoubleClickKind::None => {}
         }
 
         // 2. Selection Mutation Math (Strictly scoped to active visible items)
@@ -168,23 +202,33 @@ impl BridgeFileSelection {
         );
     }
 
-    fn check_double_click(
+    /// Evaluates if successive clicks qualify as a double-click (< 400ms delta), distinguishing between normal and Ctrl-modified double clicks.
+    pub fn check_double_click(
         event: FileClickEvent,
-        last_click: &Arc<Mutex<Option<(MediaId, Instant)>>>,
-    ) -> bool {
+        last_click: &Arc<Mutex<Option<LastClickRecord>>>,
+    ) -> DoubleClickKind {
         let now = Instant::now();
         let mut click_guard = last_click.lock();
-        if let Some((last_id, last_time)) = *click_guard
-            && last_id == event.media_id
-            && now.duration_since(last_time) < Duration::from_millis(400)
-            && !event.is_ctrl
+        if let Some(last) = *click_guard
+            && last.media_id == event.media_id
             && !event.is_shift
         {
-            *click_guard = None;
-            return true;
+            let elapsed = now.duration_since(last.instant);
+            if elapsed < Duration::from_millis(400) {
+                *click_guard = None;
+                if event.is_ctrl && last.is_ctrl {
+                    return DoubleClickKind::Ctrl;
+                } else if !event.is_ctrl && !last.is_ctrl {
+                    return DoubleClickKind::Normal;
+                }
+            }
         }
-        *click_guard = Some((event.media_id, now));
-        false
+        *click_guard = Some(LastClickRecord {
+            media_id: event.media_id,
+            instant: now,
+            is_ctrl: event.is_ctrl,
+        });
+        DoubleClickKind::None
     }
 
     fn mutate_selection(
@@ -305,7 +349,7 @@ impl BridgeFileSelection {
         );
     }
 
-    /// Handles double-click on a media tile: opens images and videos internally in Viewer Tabs if enabled in Settings.
+    /// Handles standard double-click on a media tile: opens images and videos in foreground Viewer Tabs if enabled in Settings.
     pub fn handle_double_click(
         media_id: MediaId,
         state: &Arc<RwLock<UiState>>,
@@ -341,7 +385,7 @@ impl BridgeFileSelection {
                 media_id,
                 is_image,
                 is_video,
-                "[FileSelection: DoubleClick] Opening media in internal viewer tab"
+                "[FileSelection: DoubleClick] Opening media in foreground viewer tab"
             );
             BridgeViewerTabs::open_media_tab(
                 media_id,
@@ -359,6 +403,76 @@ impl BridgeFileSelection {
                 open_images_in_tab,
                 open_videos_in_tab,
                 "[FileSelection: DoubleClick] Delegating media opening to OS default application"
+            );
+            Self::open_media(media_id, state, library, window);
+        }
+    }
+
+    /// Handles Ctrl + double-click on a media tile: restores original selection state (compensating rollback)
+    /// and opens images/videos in a background viewer tab without stealing focus or altering the selection.
+    pub fn handle_ctrl_double_click(
+        media_id: MediaId,
+        state: &Arc<RwLock<UiState>>,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        tab_manager: &Arc<ViewerTabManager>,
+        window: &MainWindow,
+    ) {
+        let (is_image, is_video) = {
+            let st = state.read();
+            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                (
+                    matches!(item.record.media_type, MediaType::Image),
+                    matches!(item.record.media_type, MediaType::Video),
+                )
+            } else if let Ok(Some(record)) = library.media().get(media_id) {
+                (
+                    matches!(record.media_type, MediaType::Image),
+                    matches!(record.media_type, MediaType::Video),
+                )
+            } else {
+                (false, false)
+            }
+        };
+
+        // 1. Revert/rollback the selection toggle done by the first click of the double-click sequence
+        {
+            let mut st = state.write();
+            st.file_selection.toggle(media_id);
+        }
+        Self::sync_selection_diff(window, state, &[media_id]);
+        BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
+
+        let open_images_in_tab = settings.get().viewer.images.open_in_tab;
+        let open_videos_in_tab = settings.get().viewer.videos.open_in_tab;
+
+        let should_open_in_tab = (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
+
+        if should_open_in_tab {
+            tracing::info!(
+                media_id,
+                is_image,
+                is_video,
+                "[FileSelection: CtrlDoubleClick] Opening media in background viewer tab (Ctrl+DoubleClick, selection reverted)"
+            );
+            BridgeViewerTabs::open_media_tab_background(
+                media_id,
+                window,
+                tab_manager,
+                library,
+                settings,
+                state,
+            );
+        } else {
+            tracing::info!(
+                media_id,
+                is_image,
+                is_video,
+                open_images_in_tab,
+                open_videos_in_tab,
+                "[FileSelection: CtrlDoubleClick] Settings delegate to OS default application"
             );
             Self::open_media(media_id, state, library, window);
         }

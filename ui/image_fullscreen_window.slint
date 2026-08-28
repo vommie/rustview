@@ -16,15 +16,19 @@ export component ImageFullscreenWindow inherits Window {
     callback request-close();
     callback next-image();
     callback previous-image();
-    callback canvas-double-clicked();
+    callback canvas-clicked(bool /* is_ctrl */);
 
     background: root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b);
 
-    // Keyboard navigation and instant ESC dismissal
+    // Keyboard navigation and instant ESC / Ctrl+W dismissal
     forward-focus: fs-focus;
     fs-focus := FocusScope {
         key-pressed(event) => {
             if event.text == Key.Escape {
+                root.request-close();
+                return accept;
+            }
+            if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
                 root.request-close();
                 return accept;
             }
@@ -61,7 +65,7 @@ export component ImageFullscreenWindow inherits Window {
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 if event.button == PointerEventButton.left {
-                    root.canvas-double-clicked();
+                    root.canvas-clicked(event.modifiers.control || event.modifiers.meta);
                 } else if event.button == PointerEventButton.middle {
                     root.request-close();
                 } else if event.button == PointerEventButton.right {

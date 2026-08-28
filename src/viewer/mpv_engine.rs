@@ -12,6 +12,7 @@ pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
 pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvCloseTabCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvGridClickCallback = Arc<dyn Fn() + Send + Sync>;
+pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
 
 /// Central thread-safe MPV player engine wrapping `libmpv2` with native OSC, plugins, custom config files, and property observation.
 pub struct MpvPlayer {
@@ -30,6 +31,7 @@ pub struct MpvPlayer {
     grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
+    convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
 }
 
 impl MpvPlayer {
@@ -39,7 +41,9 @@ impl MpvPlayer {
 
         let mpv_instance = Mpv::with_initializer(|init| {
             // 1. Hardware acceleration & rendering
-            let _ = init.set_property("vo", "gpu");
+            // Start with vo=null and force-window=no so background tabs NEVER open standalone desktop windows
+            let _ = init.set_property("vo", "null");
+            let _ = init.set_property("force-window", "no");
             let _ = init.set_property("hwdec", "auto-safe");
 
             // 2. Audio & playback lifecycle
@@ -92,8 +96,9 @@ impl MpvPlayer {
         // Ensure OSC deadzone is completely zeroed out
         let _ = mpv_instance.set_property("script-opts", "osc-deadzonesize=0,osc-minmousemove=0");
 
-        // Ensure window-minimized state is clean
+        // Ensure window-minimized and window-maximized state are clean
         let _ = mpv_instance.set_property("window-minimized", false);
+        let _ = mpv_instance.set_property("window-maximized", false);
         let _ = mpv_instance.set_property("ontop", false);
         let _ = mpv_instance.set_property("border", true);
 
@@ -103,6 +108,16 @@ impl MpvPlayer {
         let _ = mpv_instance.command("keybind", &["f", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["F", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["ESC", "cycle fullscreen"]);
+
+        // Bind Ctrl+Click and Ctrl+DoubleClick in MPV to toggle window-maximized (intercepted by RustView observer)
+        let convert_keys = [
+            "Ctrl+MBTN_LEFT", "ctrl+MBTN_LEFT", "Ctrl+mbtn_left", "ctrl+mbtn_left",
+            "Ctrl+MBTN_LEFT_DBL", "ctrl+MBTN_LEFT_DBL", "Ctrl+mbtn_left_dbl", "ctrl+mbtn_left_dbl",
+            "Ctrl+MBTN_LEFT_HOLD", "ctrl+MBTN_LEFT_HOLD",
+        ];
+        for k in convert_keys {
+            let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-maximized"]);
+        }
 
         // Bind Ctrl+W variations in MPV without OSD to toggle window-minimized (intercepted by RustView observer)
         let close_keys = [
@@ -139,6 +154,8 @@ impl MpvPlayer {
             Arc::new(RwLock::new(Vec::new()));
         let grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
             Arc::new(RwLock::new(Vec::new()));
+        let convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>> =
+            Arc::new(RwLock::new(Vec::new()));
 
         let player = Self {
             mpv: mpv_arc.clone(),
@@ -156,6 +173,7 @@ impl MpvPlayer {
             grid_middle_click_callbacks: grid_middle_click_callbacks.clone(),
             grid_wheel_up_callbacks: grid_wheel_up_callbacks.clone(),
             grid_wheel_down_callbacks: grid_wheel_down_callbacks.clone(),
+            convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
         };
 
         player.spawn_event_observer_thread();
@@ -168,19 +186,20 @@ impl MpvPlayer {
         Ok(player)
     }
 
-    /// Attaches the MPV video render output to the specified X11 window ID (`wid`).
+    /// Attaches the MPV video render output to the specified X11 window ID (`wid`) and activates GPU video output.
     pub fn attach_to_window(&self, wid: u64) -> Result<(), ViewerError> {
         let t0 = Instant::now();
         self.mpv
             .set_property("wid", wid as i64)
             .map_err(|e| ViewerError::Mpv(format!("Failed to set MPV 'wid' property: {:?}", e)))?;
 
+        let _ = self.mpv.set_property("vo", "gpu");
         *self.attached_wid.write() = Some(wid);
 
         tracing::info!(
             wid,
             elapsed_us = t0.elapsed().as_micros(),
-            "[MpvPlayer: Attach] Attached MPV video output to X11 subwindow"
+            "[MpvPlayer: Attach] Attached MPV video output to X11 subwindow and enabled GPU rendering"
         );
 
         Ok(())
@@ -213,13 +232,22 @@ impl MpvPlayer {
             let _ = self.mpv.set_property("input-vo-keyboard", "yes");
             let _ = self.mpv.set_property("input-cursor", "yes");
 
-            // Restore standard bindings with Middle-Click Fullscreen toggle
+            // Restore standard bindings with Middle-Click Fullscreen toggle and Ctrl+DoubleClick
             let _ = self.mpv.command("keybind", &["MBTN_LEFT", "ignore"]);
             let _ = self.mpv.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
             let _ = self.mpv.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
             let _ = self.mpv.command("keybind", &["ESC", "cycle fullscreen"]);
             let _ = self.mpv.command("keybind", &["WHEEL_UP", "ignore"]);
             let _ = self.mpv.command("keybind", &["WHEEL_DOWN", "ignore"]);
+
+            let convert_keys = [
+                "Ctrl+MBTN_LEFT", "ctrl+MBTN_LEFT", "Ctrl+mbtn_left", "ctrl+mbtn_left",
+                "Ctrl+MBTN_LEFT_DBL", "ctrl+MBTN_LEFT_DBL", "Ctrl+mbtn_left_dbl", "ctrl+mbtn_left_dbl",
+                "Ctrl+MBTN_LEFT_HOLD", "ctrl+MBTN_LEFT_HOLD",
+            ];
+            for k in convert_keys {
+                let _ = self.mpv.command("keybind", &[k, "no-osd cycle window-maximized"]);
+            }
         }
     }
 
@@ -524,6 +552,16 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
+    /// Registers the callback triggered when Ctrl+DoubleClick is detected on MPV in fullscreen.
+    pub fn on_convert_to_background_tab<F>(&self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut cbs = self.convert_to_tab_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
     fn notify_subscribers(&self) {
         let snapshot = self.state.read().clone();
         let callbacks = self.callbacks.read().clone();
@@ -547,6 +585,7 @@ impl MpvPlayer {
         let grid_middle_callbacks = self.grid_middle_click_callbacks.clone();
         let grid_wheel_up_callbacks = self.grid_wheel_up_callbacks.clone();
         let grid_wheel_down_callbacks = self.grid_wheel_down_callbacks.clone();
+        let convert_callbacks = self.convert_to_tab_callbacks.clone();
 
         std::thread::Builder::new()
             .name("mpv-event-observer".into())
@@ -624,7 +663,17 @@ impl MpvPlayer {
                         }
                     }
 
-                    // 4. Sync live playback properties
+                    // 4. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert standalone video to background tab
+                    let convert_requested = mpv.get_property::<bool>("window-maximized").unwrap_or(false);
+                    if convert_requested {
+                        let _ = mpv.set_property("window-maximized", false);
+                        let convert_cbs = convert_callbacks.read().clone();
+                        for cb in convert_cbs {
+                            cb();
+                        }
+                    }
+
+                    // 5. Sync live playback properties
                     let pos = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
                     let dur = mpv.get_property::<f64>("duration").unwrap_or(0.0);
                     let paused = mpv.get_property::<bool>("pause").unwrap_or(false);

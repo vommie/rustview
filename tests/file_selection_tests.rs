@@ -3,10 +3,12 @@ use rustview::library::Library;
 use rustview::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
 use rustview::media::{MediaFormat, MediaType};
 use rustview::query::filters::{IndexedMediaRecord, MediaTypeFilter, QueryFilter};
+use rustview::ui::bridge_file_selection::{BridgeFileSelection, DoubleClickKind, FileClickEvent};
 use rustview::ui::bridge_state::UiState;
 use rustview::ui::file_selection::{FileSelectionModel, FileSelectionSummary};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tempfile::tempdir;
 
 fn create_dummy_record(
@@ -167,6 +169,97 @@ fn test_file_selection_ctrl_shift_additive_range() {
 }
 
 #[test]
+fn test_double_click_detection_normal_vs_ctrl() {
+    let last_click = Arc::new(parking_lot::Mutex::new(None));
+
+    // 1. First click without Ctrl -> DoubleClickKind::None
+    let event1 = FileClickEvent {
+        media_id: 100,
+        is_ctrl: false,
+        is_shift: false,
+    };
+    assert_eq!(
+        BridgeFileSelection::check_double_click(event1, &last_click),
+        DoubleClickKind::None
+    );
+
+    // 2. Second click without Ctrl (< 400ms) -> DoubleClickKind::Normal
+    let event2 = FileClickEvent {
+        media_id: 100,
+        is_ctrl: false,
+        is_shift: false,
+    };
+    assert_eq!(
+        BridgeFileSelection::check_double_click(event2, &last_click),
+        DoubleClickKind::Normal
+    );
+
+    // 3. First click with Ctrl -> DoubleClickKind::None
+    let event3 = FileClickEvent {
+        media_id: 200,
+        is_ctrl: true,
+        is_shift: false,
+    };
+    assert_eq!(
+        BridgeFileSelection::check_double_click(event3, &last_click),
+        DoubleClickKind::None
+    );
+
+    // 4. Second click with Ctrl (< 400ms) -> DoubleClickKind::Ctrl
+    let event4 = FileClickEvent {
+        media_id: 200,
+        is_ctrl: true,
+        is_shift: false,
+    };
+    assert_eq!(
+        BridgeFileSelection::check_double_click(event4, &last_click),
+        DoubleClickKind::Ctrl
+    );
+
+    // 5. Shift modifier suppresses double click
+    let event_shift1 = FileClickEvent {
+        media_id: 300,
+        is_ctrl: false,
+        is_shift: false,
+    };
+    BridgeFileSelection::check_double_click(event_shift1, &last_click);
+
+    let event_shift2 = FileClickEvent {
+        media_id: 300,
+        is_ctrl: false,
+        is_shift: true,
+    };
+    assert_eq!(
+        BridgeFileSelection::check_double_click(event_shift2, &last_click),
+        DoubleClickKind::None
+    );
+}
+
+#[test]
+fn test_file_selection_ctrl_double_click_rollback_leaves_selection_unchanged() {
+    let mut sel = FileSelectionModel::new();
+    sel.select_single(10);
+    sel.toggle(20);
+    assert_eq!(sel.count(), 2);
+    assert!(sel.is_selected(10));
+    assert!(sel.is_selected(20));
+
+    // Simulate Ctrl + Click 1 on item 30 (unselected):
+    // Click 1 toggles item 30 -> item 30 becomes selected (count = 3)
+    sel.toggle(30);
+    assert_eq!(sel.count(), 3);
+    assert!(sel.is_selected(30));
+
+    // Simulate Ctrl + Click 2 on item 30 (Ctrl+DoubleClick confirmed):
+    // handle_ctrl_double_click rolls back the toggle -> item 30 becomes unselected again!
+    sel.toggle(30);
+    assert_eq!(sel.count(), 2);
+    assert!(sel.is_selected(10));
+    assert!(sel.is_selected(20));
+    assert!(!sel.is_selected(30), "Selection state must be completely preserved as prior to the double click");
+}
+
+#[test]
 fn test_file_selection_filter_pruning_lifecycle() {
     let tmp_db = tempdir().unwrap();
     let lib = Library::open(tmp_db.path()).unwrap();
@@ -212,9 +305,9 @@ fn test_file_selection_filter_pruning_lifecycle() {
         .collect();
 
     let mut sel = FileSelectionModel::new();
-    sel.select_single(1); // clip_alpha.mp4 (Video)
-    sel.toggle(2);        // clip_beta.mp4 (Video)
-    sel.toggle(3);        // photo_gamma.jpg (Image)
+    sel.select_single(1);
+    sel.toggle(2);
+    sel.toggle(3);
     assert_eq!(sel.count(), 3);
 
     // 1. Filter: "Images" only -> Items 3 & 4 match. Item 1 & 2 must be pruned. Item 3 must stay selected!

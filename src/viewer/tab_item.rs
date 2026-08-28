@@ -354,11 +354,12 @@ impl TabSessionFactory {
         let subwindow_slot = Arc::new(Mutex::new(None));
 
         if let Some(main_xid) = main_xid_opt
+            && main_xid > 0
             && let Ok(mut sub) = X11VideoSubwindow::new(main_xid, x, y, w, h)
         {
             let wid = sub.xid();
             let _ = player.attach_to_window(wid);
-            sub.show();
+            sub.hide(); // Keep initially hidden to eliminate visual flicker on background creation
             *subwindow_slot.lock() = Some(sub);
         }
 
