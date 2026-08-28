@@ -37,8 +37,10 @@ impl BridgeTabGrid {
 
         let win_size = window.window().size();
         let scale = window.window().scale_factor();
-        let sidebar_r = window.get_sidebar_right_width();
-        let viewport_w = (win_size.width as f32 / scale) - sidebar_r - 6.0;
+
+        // In Tab-Grid mode (mode 2), both sidebars and resizers are hidden.
+        // The available viewport width is therefore the full window width in logical pixels.
+        let viewport_w = (win_size.width as f32 / scale).max(100.0);
 
         let effective_cols = if is_auto_cols {
             ResponsiveBreakpoints::compute_auto_columns(viewport_w)
@@ -199,11 +201,12 @@ impl BridgeTabGrid {
 
         tracing::info!(
             total_tabs,
+            viewport_width = viewport_w,
             columns = effective_cols,
             auto_columns = is_auto_cols,
             total_content_height_px = total_h,
             elapsed_us = t0.elapsed().as_micros(),
-            "[TabGrid: Sync] Masonry Tab Grid layout computed and synchronized to UI"
+            "[TabGrid: Sync] Masonry Tab Grid layout computed and synchronized across full viewport width"
         );
     }
 
@@ -240,8 +243,8 @@ impl BridgeTabGrid {
         let content_top_y = toolbar_h + tab_grid_toolbar_h; // 64px
         let status_bar_h = 28.0f32;
 
-        let sidebar_r = window.get_sidebar_right_width();
-        let viewport_w = (win_size.width as f32 / scale) - sidebar_r - 6.0;
+        // In Tab-Grid mode (mode 2), both sidebars are hidden -> full viewport width is available
+        let viewport_w = (win_size.width as f32 / scale).max(100.0);
 
         let viewport = ViewportBounds {
             x: 0,
@@ -448,8 +451,9 @@ impl BridgeTabGrid {
             let manual_cols = state.read().tab_grid_columns;
             let win_size = window.window().size();
             let scale = window.window().scale_factor();
-            let sidebar_r = window.get_sidebar_right_width();
-            let viewport_w = (win_size.width as f32 / scale) - sidebar_r - 6.0;
+
+            // In Tab-Grid mode (mode 2), both sidebars are hidden -> full viewport width is available
+            let viewport_w = (win_size.width as f32 / scale).max(100.0);
 
             let effective_cols = if is_auto_cols {
                 ResponsiveBreakpoints::compute_auto_columns(viewport_w)

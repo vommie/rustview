@@ -702,6 +702,8 @@ export component MainWindow inherits Window {
 
             resizer_right := ResizerBar {
                 is-horizontal: true;
+                width: (root.active-view-mode != 2) ? self.thickness : 0px;
+                visible: root.active-view-mode != 2;
                 property <length> start-w: 280px;
                 drag-started => {
                     self.start-w = root.sidebar-right-width;
@@ -716,7 +718,8 @@ export component MainWindow inherits Window {
             }
 
             sidebar_right := SidebarRight {
-                sidebar-width: root.sidebar-right-width;
+                sidebar-width: (root.active-view-mode != 2) ? root.sidebar-right-width : 0px;
+                visible: root.active-view-mode != 2;
                 tag-columns: root.tag-columns;
                 is-assign-mode <=> root.tag-is-assign-mode;
                 match-mode-idx <=> root.tag-match-mode-idx;
@@ -725,7 +728,7 @@ export component MainWindow inherits Window {
                 has-selection: root.has-file-selection;
                 partial-ratings: root.partial-ratings;
                 has-active-query: root.has-active-query;
-                is-tab-view: root.active-view-mode == 1 || root.active-view-mode == 2;
+                is-tab-view: root.active-view-mode == 1;
                 tag-filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
                 info-filename: root.info-filename;
