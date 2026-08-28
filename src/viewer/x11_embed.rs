@@ -92,6 +92,18 @@ struct X11Symbols {
         *mut c_uint,
     ) -> c_int,
     x_free: unsafe extern "C" fn(*mut c_void) -> c_int,
+    x_send_event:
+        unsafe extern "C" fn(DisplayPtr, WindowId, c_int, c_long, *mut c_void) -> c_int,
+    x_change_property: unsafe extern "C" fn(
+        DisplayPtr,
+        WindowId,
+        AtomId,
+        AtomId,
+        c_int,
+        c_int,
+        *const u8,
+        c_int,
+    ) -> c_int,
     x_shape_combine_rectangles: Option<
         unsafe extern "C" fn(
             DisplayPtr,
@@ -194,6 +206,8 @@ unsafe fn load_symbols_from_handles(
         x_get_window_property: unsafe { load_sym(lib_x11, "XGetWindowProperty")? },
         x_query_tree: unsafe { load_sym(lib_x11, "XQueryTree")? },
         x_free: unsafe { load_sym(lib_x11, "XFree")? },
+        x_send_event: unsafe { load_sym(lib_x11, "XSendEvent")? },
+        x_change_property: unsafe { load_sym(lib_x11, "XChangeProperty")? },
         x_shape_combine_rectangles,
         x_shape_combine_mask,
     });
@@ -429,6 +443,126 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
         );
 
         found_xid
+    }
+}
+
+/// Enforces true EWMH fullscreen state (`_NET_WM_STATE_FULLSCREEN` + `_NET_WM_STATE_ABOVE` + stripped decorations) directly via X11.
+pub fn force_x11_fullscreen(window_xid: u64) {
+    if window_xid == 0 {
+        return;
+    }
+
+    let Ok(api) = get_x11_api() else {
+        return;
+    };
+
+    unsafe {
+        let display = (api.x_open_display)(std::ptr::null());
+        if display.is_null() {
+            return;
+        }
+
+        let root = (api.x_default_root_window)(display);
+        let atom_net_wm_state = (api.x_intern_atom)(display, c"_NET_WM_STATE".as_ptr(), 0);
+        let atom_net_wm_fullscreen =
+            (api.x_intern_atom)(display, c"_NET_WM_STATE_FULLSCREEN".as_ptr(), 0);
+        let atom_net_wm_above = (api.x_intern_atom)(display, c"_NET_WM_STATE_ABOVE".as_ptr(), 0);
+        let atom_atom = (api.x_intern_atom)(display, c"ATOM".as_ptr(), 0);
+        let atom_motif = (api.x_intern_atom)(display, c"_MOTIF_WM_HINTS".as_ptr(), 0);
+
+        // 1. Set _MOTIF_WM_HINTS to remove all borders and title bars (decorations = 0)
+        #[repr(C)]
+        struct MotifHints {
+            flags: c_ulong,
+            functions: c_ulong,
+            decorations: c_ulong,
+            input_mode: c_long,
+            status: c_ulong,
+        }
+        let hints = MotifHints {
+            flags: 2, // MWM_HINTS_DECORATIONS
+            functions: 0,
+            decorations: 0, // 0 = no decorations
+            input_mode: 0,
+            status: 0,
+        };
+        (api.x_change_property)(
+            display,
+            window_xid,
+            atom_motif,
+            atom_motif,
+            32,
+            0, // PropModeReplace
+            &hints as *const _ as *const u8,
+            5,
+        );
+
+        // 2. Set _NET_WM_STATE property directly on the window
+        let states = [atom_net_wm_fullscreen, atom_net_wm_above];
+        (api.x_change_property)(
+            display,
+            window_xid,
+            atom_net_wm_state,
+            atom_atom,
+            32,
+            0, // PropModeReplace
+            states.as_ptr() as *const u8,
+            2,
+        );
+
+        // 3. Send EWMH ClientMessage event to Root Window to notify Window Manager (KWin, Mutter, etc.)
+        #[repr(C)]
+        struct ClientMessageData {
+            data: [c_long; 5],
+        }
+
+        #[repr(C)]
+        struct ClientMessageEv {
+            type_: c_int,
+            serial: c_ulong,
+            send_event: c_int,
+            display: DisplayPtr,
+            window: WindowId,
+            message_type: AtomId,
+            format: c_int,
+            data: ClientMessageData,
+        }
+
+        let mut ev = ClientMessageEv {
+            type_: 33, // ClientMessage
+            serial: 0,
+            send_event: 1,
+            display,
+            window: window_xid,
+            message_type: atom_net_wm_state,
+            format: 32,
+            data: ClientMessageData {
+                data: [
+                    1, // _NET_WM_STATE_ADD
+                    atom_net_wm_fullscreen as c_long,
+                    atom_net_wm_above as c_long,
+                    1, // normal application source indication
+                    0,
+                ],
+            },
+        };
+
+        let mask = (1 << 19) | (1 << 20); // SubstructureRedirectMask | SubstructureNotifyMask
+        (api.x_send_event)(
+            display,
+            root,
+            0,
+            mask,
+            &mut ev as *mut _ as *mut c_void,
+        );
+
+        (api.x_flush)(display);
+        (api.x_close_display)(display);
+
+        tracing::debug!(
+            window_xid,
+            "[X11Fullscreen: Enforce] Enforced true EWMH fullscreen state and stripped decorations via X11"
+        );
     }
 }
 

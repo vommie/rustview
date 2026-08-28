@@ -16,7 +16,7 @@ pub use types::{
     VideoTabPayload, ViewerAction,
 };
 pub use x11_embed::{
-    find_window_by_pid_and_title, find_window_by_title, get_slint_window_xid,
-    get_slint_window_xid_with_title_fallback, SubwindowGeometry, ViewportBounds,
-    X11VideoSubwindow, XRectangle,
+    find_window_by_pid_and_title, find_window_by_title, force_x11_fullscreen,
+    get_slint_window_xid, get_slint_window_xid_with_title_fallback, SubwindowGeometry,
+    ViewportBounds, X11VideoSubwindow, XRectangle,
 };

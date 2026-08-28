@@ -1,4 +1,5 @@
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
+use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
@@ -25,11 +26,11 @@ pub struct FileClickEvent {
     pub is_shift: bool,
 }
 
-/// Subsystem managing media file selection calculations, fast in-place model mutations, and clicks.
+/// Subsystem managing media file selection calculations, fast in-place model mutations, clicks, and quick fullscreen triggers.
 pub struct BridgeFileSelection;
 
 impl BridgeFileSelection {
-    /// Registers media click, background click, and selection callbacks onto MainWindow.
+    /// Registers media click, middle click, background click, and selection callbacks onto MainWindow.
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
@@ -37,10 +38,11 @@ impl BridgeFileSelection {
         tab_manager: Arc<ViewerTabManager>,
         state: Arc<RwLock<UiState>>,
         last_click: Arc<Mutex<Option<(MediaId, Instant)>>>,
+        fullscreen_controller: ImageFullscreenDialogController,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
-        let set = settings;
+        let set = settings.clone();
         let tm = tab_manager;
         let st = state.clone();
         let lc = last_click;
@@ -60,6 +62,22 @@ impl BridgeFileSelection {
             );
         });
 
+        let win_mid = window.clone_strong();
+        let lib_mid = library.clone();
+        let set_mid = settings;
+        let st_mid = state.clone();
+        let fs_mid = fullscreen_controller;
+        window.on_media_middle_clicked(move |id| {
+            Self::handle_middle_click(
+                id as u64,
+                &win_mid,
+                &lib_mid,
+                &set_mid,
+                &st_mid,
+                &fs_mid,
+            );
+        });
+
         let win_bg = window.clone_strong();
         let lib_bg = library;
         let st_bg = state;
@@ -69,6 +87,30 @@ impl BridgeFileSelection {
             );
             Self::clear_selection(&win_bg, &lib_bg, &st_bg);
         });
+    }
+
+    /// Handles middle-click on a media tile or table row in the browse view:
+    /// directly opens the media item in Quick-Fullscreen Mode (bypassing tabs) without modifying tab sessions.
+    pub fn handle_middle_click(
+        media_id: MediaId,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        fullscreen_controller: &ImageFullscreenDialogController,
+    ) {
+        tracing::info!(
+            media_id,
+            "[FileSelection: MiddleClick] Quick-Fullscreen mode triggered directly on media item (bypassing tabs)"
+        );
+
+        fullscreen_controller.show_for_media(
+            media_id,
+            library,
+            settings,
+            state,
+            window.as_weak(),
+        );
     }
 
     /// Handles media tile clicks with modifier keys, double-click timing, and surgical UI updates.

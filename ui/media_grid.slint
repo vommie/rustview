@@ -47,6 +47,7 @@ export component MediaTile inherits Rectangle {
     clip: true;
 
     callback clicked(bool /* is_ctrl */, bool /* is_shift */);
+    callback middle-clicked();
     callback context-menu-requested(length /* x */, length /* y */);
     callback hover-changed(bool /* is_hover */);
     callback drag-started(int /* id */, length /* local_x */, length /* local_y */);
@@ -80,6 +81,8 @@ export component MediaTile inherits Rectangle {
                     }
                 } else if event.button == PointerEventButton.right {
                     root.context-menu-requested(self.mouse-x, self.mouse-y);
+                } else if event.button == PointerEventButton.middle {
+                    root.middle-clicked();
                 }
             }
             if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
@@ -296,6 +299,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
     property <int> scroll-block: Math.floor(-scroll-area.clamped-y / Math.max(1px, root.row-stride * 2));
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
+    callback item-middle-clicked(int /* id */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
     callback sort-clicked(int /* column_index */);
     callback background-clicked();
@@ -464,6 +468,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     corner-radius-val: root.corner-r;
 
                     clicked(ctrl, shift) => { root.item-clicked(self.item.id, ctrl, shift); }
+                    middle-clicked => { root.item-middle-clicked(self.item.id); }
                     hover-changed(hover) => { root.item-hover-changed(self.item.id, hover); }
                     context-menu-requested(mx, my) => {
                         root.item-context-menu(

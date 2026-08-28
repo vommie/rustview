@@ -230,7 +230,7 @@ impl UiBridge {
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                 } else {
-                    // Restoring to Browse view
+                    // Restoring to Browse view (origin_mode == 0, including Quick-Fullscreen)
                     tm.activate_browse();
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
@@ -421,6 +421,7 @@ impl UiBridge {
             self.tab_manager.clone(),
             self.state.clone(),
             self.last_click.clone(),
+            self.fullscreen_controller.clone(),
         );
 
         BridgeContextMenu::register_callbacks(

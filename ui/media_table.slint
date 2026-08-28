@@ -24,6 +24,7 @@ export component MediaTableRow inherits Rectangle {
     in property <length> scroll-offset-x: 0px;
 
     callback clicked(bool /* ctrl */, bool /* shift */);
+    callback middle-clicked();
     callback context-menu-requested(length /* x */, length /* y */);
     callback drag-started(int /* id */, length /* x */, length /* y */);
     callback drag-moved(length /* x */, length /* y */);
@@ -70,6 +71,8 @@ export component MediaTableRow inherits Rectangle {
                         row-touch.mouse-x + root.scroll-offset-x,
                         row-touch.mouse-y
                     );
+                } else if event.button == PointerEventButton.middle {
+                    root.middle-clicked();
                 }
             }
             if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
@@ -407,6 +410,7 @@ export component MediaTableView inherits Rectangle {
     in-out property <length> col-flags-width: 85px;
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
+    callback item-middle-clicked(int /* id */);
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
     callback sort-clicked(int /* column_index */);
     callback column-resized(int /* column_index */, length /* new_width */);
@@ -572,7 +576,7 @@ export component MediaTableView inherits Rectangle {
                             self.is-rubberband-active = true;
                             let start-content-x = self.press-x;
                             let start-content-y = self.press-y;
-                            let start-view-x = self.press-x + scroll-area.clamped-x;
+                            let start-view-x = self.press-x;
                             let start-view-y = self.press-y + scroll-area.clamped-y;
                             root.rubberband-started(
                                 start-content-x,
@@ -587,7 +591,7 @@ export component MediaTableView inherits Rectangle {
                         if self.is-rubberband-active {
                             let cur-content-x = self.mouse-x;
                             let cur-content-y = self.mouse-y;
-                            let cur-view-x = self.mouse-x + scroll-area.clamped-x;
+                            let cur-view-x = self.mouse-x;
                             let cur-view-y = self.mouse-y + scroll-area.clamped-y;
                             root.rubberband-moved(cur-content-x, cur-content-y, cur-view-x, cur-view-y);
                         }
@@ -628,6 +632,9 @@ export component MediaTableView inherits Rectangle {
 
                     clicked(ctrl, shift) => {
                         root.item-clicked(item.id, ctrl, shift);
+                    }
+                    middle-clicked => {
+                        root.item-middle-clicked(item.id);
                     }
                     context-menu-requested(mx, my) => {
                         root.item-context-menu(

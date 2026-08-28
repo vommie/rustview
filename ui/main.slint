@@ -269,6 +269,7 @@ export component MainWindow inherits Window {
     callback favorite-selected(string);
     callback toggle-hidden-folders(bool /* show_hidden */);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
+    callback media-middle-clicked(int /* id */);
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
     callback media-hover-changed(int /* id */, bool /* is_hover */);
     callback background-clicked();
@@ -577,6 +578,7 @@ export component MainWindow inherits Window {
                             root.visible-chunk-changed(first, last, tot);
                         }
                         item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
+                        item-middle-clicked(id) => { root.media-middle-clicked(id); }
                         item-context-menu(id, x, y) => { root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
@@ -628,6 +630,7 @@ export component MainWindow inherits Window {
                             root.visible-chunk-changed(first, last, tot);
                         }
                         item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
+                        item-middle-clicked(id) => { root.media-middle-clicked(id); }
                         item-context-menu(id, x, y) => { root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
                         column-resized(idx, w) => { root.column-resized(idx, w); }
