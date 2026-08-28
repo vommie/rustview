@@ -90,8 +90,65 @@ impl ViewerTabManager {
         }
     }
 
+    /// Returns the subwindow container for any specific `tab_id`.
+    pub fn get_subwindow_for_tab(&self, tab_id: TabId) -> Option<Arc<Mutex<Option<X11VideoSubwindow>>>> {
+        let tabs = self.tabs.read();
+        let tab = tabs.get(tab_id)?;
+        if let TabPayload::Video(ref vid) = tab.payload {
+            Some(vid.subwindow.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Hides native X11 video subwindows across all video tabs and auto-pauses playback without modifying user pause state.
+    pub fn hide_all_video_subwindows(&self) {
+        let tabs = self.tabs.read();
+        for tab in tabs.all() {
+            if let TabPayload::Video(ref vid) = tab.payload {
+                vid.player.set_view_active(false);
+                let mut sub_guard = vid.subwindow.lock();
+                if let Some(ref mut sub) = *sub_guard {
+                    sub.hide();
+                }
+            }
+        }
+    }
+
+    /// Hides all video subwindows except for the specified `except_tab_id`.
+    pub fn hide_video_subwindows_except(&self, except_tab_id: Option<TabId>) {
+        let tabs = self.tabs.read();
+        for tab in tabs.all() {
+            if Some(tab.id) != except_tab_id
+                && let TabPayload::Video(ref vid) = tab.payload
+            {
+                vid.player.set_view_active(false);
+                let mut sub_guard = vid.subwindow.lock();
+                if let Some(ref mut sub) = *sub_guard {
+                    sub.hide();
+                }
+            }
+        }
+    }
+
+    /// Sets view-active and interactivity state across all video tabs (used when entering/leaving TabGrid mode).
+    pub fn set_all_videos_view_active(&self, active: bool) {
+        let tabs = self.tabs.read();
+        for tab in tabs.all() {
+            if let TabPayload::Video(ref vid) = tab.payload {
+                vid.player.set_tab_grid_mode(!active);
+                vid.player.set_view_active(active);
+                if !active {
+                    let mut sub_guard = vid.subwindow.lock();
+                    if let Some(ref mut sub) = *sub_guard {
+                        sub.hide();
+                    }
+                }
+            }
+        }
+    }
+
     /// Clips out a cutout shape from the active video subwindow so context menus display seamlessly on top.
-    /// The video continues playing and is visible everywhere outside the cutout!
     pub fn clip_video_subwindow(&self, rects: &[XRectangle]) {
         if let Some(sub_slot) = self.get_active_subwindow()
             && let Some(ref mut sub) = *sub_slot.lock()
@@ -146,6 +203,11 @@ impl ViewerTabManager {
 
     pub fn get_tab_by_media_id(&self, media_id: MediaId) -> Option<MediaTabSession> {
         self.tabs.read().get_by_media_id(media_id).cloned()
+    }
+
+    #[inline]
+    pub fn get_by_media_id(&self, media_id: MediaId) -> Option<MediaTabSession> {
+        self.get_tab_by_media_id(media_id)
     }
 
     pub fn get_tabs_by_media_id(&self, media_id: MediaId) -> Vec<MediaTabSession> {
@@ -228,7 +290,7 @@ impl ViewerTabManager {
         if let Some(source_index) = self.get_tab_index(source_tab_id) {
             self.move_tab(new_tab_id, source_index + 1);
         }
-        self.set_active_tab_internal(new_tab_id);
+        self.set_active_tab_internal(new_tab_id, true);
 
         tracing::info!(
             source_tab_id,
@@ -241,7 +303,6 @@ impl ViewerTabManager {
     }
 
     /// Cycles the active tab forward (`is_next = true`) or backward (`is_next = false`) with cyclic wrapping.
-    /// Returns the newly activated `TabId` if switched. If there is 1 or fewer tabs, returns `None`.
     pub fn cycle_tab(&self, is_next: bool) -> Option<TabId> {
         let tabs = self.tabs.read();
         let total = tabs.len();
@@ -273,7 +334,7 @@ impl ViewerTabManager {
         let target_id = target_tab.id;
         drop(tabs);
 
-        if self.set_active_tab_internal(target_id) {
+        if self.set_active_tab_internal(target_id, false) {
             Some(target_id)
         } else {
             None
@@ -296,7 +357,7 @@ impl ViewerTabManager {
             existing.last_accessed = Instant::now();
             drop(tabs);
 
-            self.set_active_tab_internal(id);
+            self.set_active_tab_internal(id, true);
             tracing::info!(
                 tab_id = id,
                 media_id,
@@ -377,7 +438,6 @@ impl ViewerTabManager {
 
         let mut tabs = self.tabs.write();
 
-        // Allocate a new permanent title excluding the active tab being updated
         let remaining_tabs: Vec<MediaTabSession> = tabs
             .all()
             .iter()
@@ -456,28 +516,33 @@ impl ViewerTabManager {
     // =========================================================================
 
     pub fn set_active_tab(&self, tab_id: TabId) -> bool {
-        self.set_active_tab_internal(tab_id)
+        self.set_active_tab_internal(tab_id, false)
     }
 
-    fn set_active_tab_internal(&self, tab_id: TabId) -> bool {
+    /// Internal activation logic ensuring playback and interactivity are reliably resumed even when returning to the same active tab.
+    pub fn set_active_tab_internal(&self, tab_id: TabId, force_resume: bool) -> bool {
         let current_active = *self.active_tab_id.read();
-        if current_active == Some(tab_id) {
-            return true;
-        }
-
         let main_xid_opt = *self.main_window_xid.read();
         let viewport_rect = *self.cached_viewport_rect.read();
 
         let mut tabs = self.tabs.write();
 
-        // 1. Auto-pause previous video tab
+        if current_active == Some(tab_id) && !force_resume {
+            if let Some(current_tab) = tabs.get_mut(tab_id) {
+                Self::resume_session_playback(current_tab, main_xid_opt, viewport_rect);
+            }
+            return true;
+        }
+
+        // 1. Auto-pause previous video tab when switching away
         if let Some(prev_id) = current_active
+            && prev_id != tab_id
             && let Some(prev_tab) = tabs.get_mut(prev_id)
         {
             Self::pause_session_playback(prev_tab);
         }
 
-        // 2. Activate target tab
+        // 2. Activate target tab and resume playback according to user pause state
         if let Some(new_tab) = tabs.get_mut(tab_id) {
             new_tab.last_accessed = Instant::now();
             *self.active_tab_id.write() = Some(tab_id);
@@ -545,7 +610,6 @@ impl ViewerTabManager {
             "[ViewerTabManager: CloseToLeft] Closed all tabs to the left of target"
         );
 
-        // If the active tab was closed, switch active to the target tab
         if let Some(active_id) = current_active
             && evicted_ids.contains(&active_id)
         {
@@ -588,7 +652,6 @@ impl ViewerTabManager {
             "[ViewerTabManager: CloseToRight] Closed all tabs to the right of target"
         );
 
-        // If the active tab was closed, switch active to the target tab
         if let Some(active_id) = current_active
             && evicted_ids.contains(&active_id)
         {
@@ -677,7 +740,8 @@ impl ViewerTabManager {
     fn pause_session_playback(tab: &mut MediaTabSession) {
         if let TabPayload::Video(ref vid) = tab.payload {
             vid.player.set_view_active(false);
-            if let Some(ref mut sub) = *vid.subwindow.lock() {
+            let mut sub_guard = vid.subwindow.lock();
+            if let Some(ref mut sub) = *sub_guard {
                 sub.hide();
             }
         }
@@ -692,15 +756,18 @@ impl ViewerTabManager {
             let mut sub_guard = vid.subwindow.lock();
             if let Some(ref mut sub) = *sub_guard {
                 sub.move_resize(x, y, w, h);
+                sub.reset_clip_shape();
                 sub.show();
             } else if let Some(main_xid) = main_xid_opt
                 && let Ok(mut sub) = X11VideoSubwindow::new(main_xid, x, y, w, h)
             {
                 let wid = sub.xid();
                 let _ = vid.player.attach_to_window(wid);
+                sub.reset_clip_shape();
                 sub.show();
                 *sub_guard = Some(sub);
             }
+            vid.player.set_tab_grid_mode(false);
             vid.player.set_view_active(true);
         }
     }
@@ -708,7 +775,8 @@ impl ViewerTabManager {
     fn cleanup_session_resources(session: &MediaTabSession) {
         if let TabPayload::Video(ref vid) = session.payload {
             vid.player.stop();
-            if let Some(ref mut sub) = *vid.subwindow.lock() {
+            let mut sub_guard = vid.subwindow.lock();
+            if let Some(ref mut sub) = *sub_guard {
                 sub.hide();
             }
         }
@@ -763,8 +831,12 @@ impl ViewerTabManager {
         if is_video {
             if let TabPayload::Video(ref mut vid) = tab.payload {
                 let _ = vid.player.load_file(&file_path);
+                vid.player.set_tab_grid_mode(false);
                 vid.player.set_view_active(true);
-                if let Some(ref mut sub) = *vid.subwindow.lock() {
+                let mut sub_guard = vid.subwindow.lock();
+                if let Some(ref mut sub) = *sub_guard {
+                    sub.move_resize(x, y, w, h);
+                    sub.reset_clip_shape();
                     sub.show();
                 }
             } else {
@@ -776,6 +848,7 @@ impl ViewerTabManager {
                 {
                     let wid = sub.xid();
                     let _ = player.attach_to_window(wid);
+                    sub.reset_clip_shape();
                     sub.show();
                     *subwindow_slot.lock() = Some(sub);
                 }
@@ -796,7 +869,8 @@ impl ViewerTabManager {
         } else {
             if let TabPayload::Video(ref vid) = tab.payload {
                 vid.player.stop();
-                if let Some(ref mut sub) = *vid.subwindow.lock() {
+                let mut sub_guard = vid.subwindow.lock();
+                if let Some(ref mut sub) = *sub_guard {
                     sub.hide();
                 }
             }

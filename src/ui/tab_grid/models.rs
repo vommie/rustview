@@ -1,0 +1,39 @@
+use crate::library::models::MediaId;
+use crate::viewer::TabId;
+use slint::{Rgb8Pixel, SharedPixelBuffer};
+
+/// High-level layout item for an individual tab inside the TabGridView.
+#[derive(Debug, Clone)]
+pub struct TabGridTile {
+    pub tab_id: TabId,
+    pub media_id: MediaId,
+    pub title: String,
+    pub format_str: String,
+    pub is_video: bool,
+    pub rating: u8,
+    pub has_tags: bool,
+    pub orig_width: u32,
+    pub orig_height: u32,
+    pub aspect_ratio: f32,
+    pub high_res_image: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    pub is_loading: bool,
+    pub error_message: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl TabGridTile {
+    /// Computes safe aspect ratio (width / height) clamped to prevent extreme geometric distortion.
+    pub fn compute_aspect_ratio(orig_w: u32, orig_h: u32, is_video: bool) -> f32 {
+        if orig_w > 0 && orig_h > 0 {
+            let ar = orig_w as f32 / orig_h as f32;
+            ar.clamp(0.28, 3.5)
+        } else if is_video {
+            16.0 / 9.0
+        } else {
+            4.0 / 3.0
+        }
+    }
+}

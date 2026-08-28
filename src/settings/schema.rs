@@ -69,6 +69,12 @@ pub const DEFAULT_SORT_COLUMN: &str = "Filename";
 pub const DEFAULT_SORT_ORDER: &str = "Ascending";
 pub const DEFAULT_MEDIA_TYPE_FILTER: &str = "Videos & Images";
 
+// Tab Grid View Defaults
+pub const DEFAULT_TAB_GRID_COLUMNS: usize = 3;
+pub const MIN_TAB_GRID_COLUMNS: usize = 1;
+pub const MAX_TAB_GRID_COLUMNS: usize = 10;
+pub const DEFAULT_TAB_GRID_AUTO_COLUMNS: bool = true;
+
 // All 13 Table Columns Defaults
 pub const DEFAULT_COL_FILENAME_WIDTH: f32 = 260.0;
 pub const DEFAULT_COL_PATH_WIDTH: f32 = 180.0;
@@ -357,6 +363,10 @@ pub struct ViewSettings {
     pub sort_order: String,
     pub media_type_filter: String,
 
+    // Tab Grid Settings
+    pub tab_grid_columns: usize,
+    pub tab_grid_auto_columns: bool,
+
     // All 13 Column Widths
     pub col_filename_width: f32,
     pub col_path_width: f32,
@@ -383,6 +393,9 @@ impl Default for ViewSettings {
             sort_column: DEFAULT_SORT_COLUMN.to_string(),
             sort_order: DEFAULT_SORT_ORDER.to_string(),
             media_type_filter: DEFAULT_MEDIA_TYPE_FILTER.to_string(),
+
+            tab_grid_columns: DEFAULT_TAB_GRID_COLUMNS,
+            tab_grid_auto_columns: DEFAULT_TAB_GRID_AUTO_COLUMNS,
 
             col_filename_width: DEFAULT_COL_FILENAME_WIDTH,
             col_path_width: DEFAULT_COL_PATH_WIDTH,

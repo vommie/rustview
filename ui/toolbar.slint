@@ -10,6 +10,7 @@ export component TopToolbar inherits Rectangle {
     background: Theme.surface;
 
     in property <bool> is-browse-active: true;
+    in property <bool> is-tab-grid-active: false;
     in property <[TabItemModel]> tabs: [];
     in property <bool> show-tab-rating-badge: false;
 
@@ -23,6 +24,7 @@ export component TopToolbar inherits Rectangle {
     in property <bool> drag-ghost-is-active: false;
 
     callback browse-clicked();
+    callback tab-grid-clicked();
     callback settings-clicked();
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
@@ -67,7 +69,20 @@ export component TopToolbar inherits Rectangle {
 
         ToolbarSeparator {}
 
-        // 2. Embedded MediaTabBar with integrated Drag & Drop Reordering and Mouse Wheel Tab Cycling
+        // 2. Permanent Tab-Grid button to the right of Browse
+        ToolbarButton {
+            text: "Tab-Grid";
+            icon: Icons.list-view;
+            tooltip: "Masonry overview of all open tabs (Left-click: Open tab, Middle-click: Fullscreen)";
+            is-active: root.is-tab-grid-active;
+            height: 28px;
+            y: (parent.height - self.height) / 2;
+            clicked => { root.tab-grid-clicked(); }
+        }
+
+        ToolbarSeparator {}
+
+        // 3. Embedded MediaTabBar with integrated Drag & Drop Reordering and Mouse Wheel Tab Cycling
         tab-bar := MediaTabBar {
             horizontal-stretch: 1;
             height: 28px;
@@ -104,7 +119,7 @@ export component TopToolbar inherits Rectangle {
 
         ToolbarSeparator {}
 
-        // 3. Settings Button strictly on the far right
+        // 4. Settings Button strictly on the far right
         ToolbarButton {
             text: "Settings";
             icon: Icons.settings;

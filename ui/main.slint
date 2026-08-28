@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
-import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView, TabItemModel } from "types.slint";
+import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView, TabItemModel, TabGridItemModel } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
 import { SidebarRight } from "sidebar_right.slint";
@@ -15,6 +15,7 @@ import { MediaPanelToolbar } from "media_panel_toolbar.slint";
 import { ImageTabPanelToolbar } from "image_tab_panel_toolbar.slint";
 import { ImageViewer } from "image_viewer.slint";
 import { EmptyStateView } from "empty_state_view.slint";
+import { TabGridView } from "tab_grid_view.slint";
 
 export { SettingsWindow } from "settings_window.slint";
 export { FileRenameDialog } from "file_rename_dialog.slint";
@@ -42,10 +43,18 @@ export component MainWindow inherits Window {
     min-height: 600px;
     background: Theme.background;
 
-    // View state & Mode properties (0 = Browse Library, 1 = Tab Viewer)
+    // View state & Mode properties (0 = Browse Library, 1 = Tab Viewer, 2 = Tab Grid)
     in-out property <int> active-view-mode: 0;
     in-out property <bool> is-browse-active: true;
+    in-out property <bool> is-tab-grid-active: false;
     in property <[TabItemModel]> tabs: [];
+
+    // Tab Grid Masonry View State Properties
+    in property <[TabGridItemModel]> tab-grid-items: [];
+    in property <length> tab-grid-content-height: 0px;
+    in-out property <int> tab-grid-columns: 3;
+    in-out property <bool> tab-grid-auto-columns: true;
+    out property <length> tab-grid-scroll-y: tab-grid-view.scroll-offset-y;
 
     // Tab Drag & Drop State Properties
     in-out property <bool> is-dragging-tab: false;
@@ -220,10 +229,21 @@ export component MainWindow inherits Window {
     callback refresh-folder();
     callback open-settings();
     callback browse-clicked();
+    callback tab-grid-clicked();
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
     callback tab-wheel-scrolled(bool /* is_next */);
+
+    // Tab Grid View Callbacks
+    callback tab-grid-item-left-clicked(int /* tab_id */);
+    callback tab-grid-item-middle-clicked(int /* tab_id */);
+    callback tab-grid-item-close-clicked(int /* tab_id */);
+    callback tab-grid-columns-changed(int /* new_columns */);
+    callback tab-grid-auto-columns-toggled(bool /* is_auto */);
+    callback tab-grid-close-all-clicked();
+    callback tab-grid-viewport-geometry-changed(length /* width */, length /* height */);
+    callback tab-grid-scrolled(length /* dx */, length /* dy */);
 
     // Tab Drag & Drop Callbacks
     callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
@@ -236,6 +256,7 @@ export component MainWindow inherits Window {
     callback viewer-previous();
     callback viewer-next();
     callback viewer-image-clicked();
+    callback viewer-image-middle-clicked();
     callback viewer-viewport-geometry-changed(length /* x */, length /* y */, length /* width */, length /* height */);
 
     callback modal-dismiss-requested();
@@ -318,7 +339,9 @@ export component MainWindow inherits Window {
     }
 
     public function scroll-media-by(dy: length) {
-        if !root.is-table-view {
+        if root.active-view-mode == 2 {
+            tab-grid-view.scroll-by(dy);
+        } else if !root.is-table-view {
             grid-view.scroll-by(dy);
         } else {
             table-view.scroll-by(dy);
@@ -361,7 +384,6 @@ export component MainWindow inherits Window {
     forward-focus: main-window-focus;
     main-window-focus := FocusScope {
         key-pressed(event) => {
-            // When Main UI is modal locked, intercept ESC to close fullscreen/modals and consume all other keys
             if root.is-modal-locked {
                 if event.text == Key.Escape {
                     root.modal-dismiss-requested();
@@ -370,7 +392,6 @@ export component MainWindow inherits Window {
                 return accept;
             }
 
-            // Close active viewer tab with Ctrl+W shortcut
             if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
                 if root.active-view-mode == 1 {
                     root.viewer-close-tab();
@@ -407,6 +428,7 @@ export component MainWindow inherits Window {
 
         top-toolbar := TopToolbar {
             is-browse-active: root.is-browse-active;
+            is-tab-grid-active: root.is-tab-grid-active;
             tabs: root.tabs;
             show-tab-rating-badge: root.viewer-show-tab-rating-badge;
 
@@ -419,6 +441,7 @@ export component MainWindow inherits Window {
             drag-ghost-is-active: root.drag-ghost-is-active;
 
             browse-clicked => { root.browse-clicked(); }
+            tab-grid-clicked => { root.tab-grid-clicked(); }
             tab-selected(id) => { root.tab-selected(id); }
             tab-closed(id) => { root.tab-closed(id); }
             tab-context-menu(id, x, y) => { root.tab-context-menu(id, x, y); }
@@ -483,9 +506,9 @@ export component MainWindow inherits Window {
                 horizontal-stretch: 1;
                 spacing: 0px;
 
-                // Toolbars Container with zero layout shift
                 Rectangle {
-                    height: 26px;
+                    height: (root.active-view-mode == 0 || root.active-view-mode == 1) ? 26px : 0px;
+                    visible: root.active-view-mode == 0 || root.active-view-mode == 1;
                     vertical-stretch: 0;
 
                     MediaPanelToolbar {
@@ -523,7 +546,6 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Center Viewport Area (Stacked & Zero-Teardown)
                 Rectangle {
                     vertical-stretch: 1;
                     background: Theme.background;
@@ -626,7 +648,6 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Centered Context-Sensitive Fallback Empty State Overlay
                     empty-state := EmptyStateView {
                         is-active: root.active-view-mode == 0 && root.empty-state-active;
                         title: root.empty-state-title;
@@ -634,7 +655,6 @@ export component MainWindow inherits Window {
                         icon-name: root.empty-state-icon;
                     }
 
-                    // Media Viewer View (Active Tab: Image Canvas or Video Viewport)
                     image-viewer := ImageViewer {
                         visible: root.active-view-mode == 1;
                         is-video: root.viewer-is-video;
@@ -645,9 +665,34 @@ export component MainWindow inherits Window {
                         next-image => { root.viewer-next(); }
                         previous-image => { root.viewer-previous(); }
                         image-clicked => { root.viewer-image-clicked(); }
+                        image-middle-clicked => { root.viewer-image-middle-clicked(); }
                         viewport-geometry-changed(vx, vy, vw, vh) => {
                             root.viewer-viewport-geometry-changed(vx, vy, vw, vh);
                         }
+                    }
+
+                    tab-grid-view := TabGridView {
+                        visible: root.active-view-mode == 2;
+                        items: root.tab-grid-items;
+                        total-content-height: root.tab-grid-content-height;
+                        columns <=> root.tab-grid-columns;
+                        auto-columns <=> root.tab-grid-auto-columns;
+                        grid-item-padding-h: root.grid-item-padding-h;
+                        grid-item-padding-v: root.grid-item-padding-v;
+                        grid-spacing-val: root.grid-spacing;
+                        grid-padding-val: root.grid-padding;
+                        grid-item-border-width: root.grid-item-border-width;
+                        grid-item-corner-radius: root.grid-item-corner-radius;
+
+                        item-left-clicked(id) => { root.tab-grid-item-left-clicked(id); }
+                        item-middle-clicked(id) => { root.tab-grid-item-middle-clicked(id); }
+                        item-close-clicked(id) => { root.tab-grid-item-close-clicked(id); }
+                        item-context-menu(id, x, y) => { root.tab-context-menu(id, x, y + 38px); }
+                        columns-changed(c) => { root.tab-grid-columns-changed(c); }
+                        auto-columns-toggled(a) => { root.tab-grid-auto-columns-toggled(a); }
+                        close-all-clicked => { root.tab-grid-close-all-clicked(); }
+                        viewport-geometry-changed(vw, vh) => { root.tab-grid-viewport-geometry-changed(vw, vh); }
+                        scrolled(dx, dy) => { root.tab-grid-scrolled(dx, dy); }
                     }
                 }
             }
@@ -677,7 +722,7 @@ export component MainWindow inherits Window {
                 has-selection: root.has-file-selection;
                 partial-ratings: root.partial-ratings;
                 has-active-query: root.has-active-query;
-                is-tab-view: root.active-view-mode == 1;
+                is-tab-view: root.active-view-mode == 1 || root.active-view-mode == 2;
                 tag-filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
                 info-filename: root.info-filename;
@@ -705,7 +750,7 @@ export component MainWindow inherits Window {
         }
 
         StatusBar {
-            is-tab-view: root.active-view-mode == 1;
+            is-tab-view: root.active-view-mode == 1 || root.active-view-mode == 2;
             status-message: root.status-text;
             status-level: root.status-level;
             item-count-str: root.items-metric-text;

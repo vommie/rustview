@@ -2,7 +2,8 @@ use super::ImageFullscreenWindow;
 use super::MainWindow;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::viewer::{
-    find_window_by_title, get_slint_window_xid, MediaTabSession, TabPayload, ViewerTabManager,
+    find_window_by_title, get_slint_window_xid_with_title_fallback, MediaTabSession, TabId,
+    TabPayload, ViewerTabManager,
 };
 use parking_lot::Mutex;
 use slint::{CloseRequestResponse, ComponentHandle, Image, Timer};
@@ -15,6 +16,8 @@ thread_local! {
     static FULLSCREEN_WINDOW: RefCell<Option<ImageFullscreenWindow>> = const { RefCell::new(None) };
 }
 
+pub type FullscreenCloseCallback = Arc<dyn Fn(i32 /* origin_mode */, Option<TabId>) + Send + Sync>;
+
 /// Specialized controller managing the frameless Fullscreen Media Viewer window lifecycle with seamless subwindow reparenting.
 #[derive(Clone, Default)]
 pub struct ImageFullscreenDialogController {
@@ -24,9 +27,12 @@ pub struct ImageFullscreenDialogController {
     last_click_instant: Arc<Mutex<Option<Instant>>>,
     is_active: Arc<AtomicBool>,
     is_fullscreen_video: Arc<AtomicBool>,
+    active_fullscreen_tab_id: Arc<Mutex<Option<TabId>>>,
+    origin_view_mode: Arc<Mutex<i32>>,
     cached_main_xid: Arc<Mutex<Option<u64>>>,
     cached_fs_xid: Arc<Mutex<Option<u64>>>,
     cached_viewport_rect: Arc<Mutex<(i32, i32, u32, u32)>>,
+    close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>,
 }
 
 impl ImageFullscreenDialogController {
@@ -38,10 +44,21 @@ impl ImageFullscreenDialogController {
             last_click_instant: Arc::new(Mutex::new(None)),
             is_active: Arc::new(AtomicBool::new(false)),
             is_fullscreen_video: Arc::new(AtomicBool::new(false)),
+            active_fullscreen_tab_id: Arc::new(Mutex::new(None)),
+            origin_view_mode: Arc::new(Mutex::new(1)),
             cached_main_xid: Arc::new(Mutex::new(None)),
             cached_fs_xid: Arc::new(Mutex::new(None)),
             cached_viewport_rect: Arc::new(Mutex::new((0, 0, 800, 600))),
+            close_handler: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Registers a closure executed when the fullscreen window closes, passing the originating view mode.
+    pub fn set_close_handler<F>(&self, handler: F)
+    where
+        F: Fn(i32, Option<TabId>) + Send + Sync + 'static,
+    {
+        *self.close_handler.lock() = Some(Arc::new(handler));
     }
 
     /// Stores the main window XID and latest tab viewport rectangle for restoring on fullscreen exit.
@@ -64,7 +81,7 @@ impl ImageFullscreenDialogController {
         false
     }
 
-    /// Displays the frameless fullscreen media window with seamless subwindow reparenting for videos and Main UI input locking.
+    /// Displays the frameless fullscreen media window for the active tab.
     pub fn show(
         &self,
         tab_manager: &Arc<ViewerTabManager>,
@@ -76,11 +93,34 @@ impl ImageFullscreenDialogController {
             return;
         };
 
+        self.show_for_tab(active_tab.id, tab_manager, settings, main_window_weak);
+    }
+
+    /// Displays the frameless fullscreen media window for any specific tab without changing active tab state (Requirement 3: auto-plays).
+    pub fn show_for_tab(
+        &self,
+        tab_id: TabId,
+        tab_manager: &Arc<ViewerTabManager>,
+        settings: &SettingsManager,
+        main_window_weak: slint::Weak<MainWindow>,
+    ) {
+        let Some(target_tab) = tab_manager.get_tab(tab_id) else {
+            tracing::warn!(tab_id, "[FullscreenViewer: ShowForTab] Tab session not found");
+            return;
+        };
+
         let t0 = Instant::now();
         *self.main_window_weak.lock() = Some(main_window_weak.clone());
         *self.tab_manager_weak.lock() = Some(tab_manager.clone());
+        *self.active_fullscreen_tab_id.lock() = Some(tab_id);
 
-        let is_video = matches!(active_tab.payload, TabPayload::Video(_));
+        let origin_mode = main_window_weak
+            .upgrade()
+            .map(|mw| mw.get_active_view_mode())
+            .unwrap_or(1);
+        *self.origin_view_mode.lock() = origin_mode;
+
+        let is_video = matches!(target_tab.payload, TabPayload::Video(_));
         self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
 
         // Lock the entire Main UI to prevent user interaction while in fullscreen
@@ -94,21 +134,11 @@ impl ImageFullscreenDialogController {
         FULLSCREEN_WINDOW.with(|win_cell| {
             let mut cell = win_cell.borrow_mut();
 
-            // Strict Singleton: If a fullscreen window is already open, sync and raise it
-            if let Some(ref win) = *cell {
-                ctrl_clone.sync_tab_content(win, &active_tab, settings);
-                win.set_is_video(is_video);
-                win.window().set_fullscreen(true);
-                let _ = win.show();
-                ctrl_clone.is_active.store(true, Ordering::SeqCst);
-
-                if is_video {
-                    ctrl_clone.reparent_to_fullscreen(&tm_clone, win);
-                }
-                return;
+            // Always discard any previous window instance so X11 maps a 100% fresh, real fullscreen window every single time
+            if let Some(old_win) = cell.take() {
+                let _ = old_win.hide();
             }
 
-            // Instantiate single clean fullscreen window
             let win = ImageFullscreenWindow::new()
                 .expect("Failed to create ImageFullscreenWindow Slint component");
 
@@ -144,7 +174,7 @@ impl ImageFullscreenDialogController {
                 CloseRequestResponse::HideWindow
             });
 
-            ctrl_clone.sync_tab_content(&win, &active_tab, settings);
+            ctrl_clone.sync_tab_content(&win, &target_tab, settings);
             win.set_is_video(is_video);
             win.window().set_fullscreen(true);
             let _ = win.show();
@@ -156,36 +186,46 @@ impl ImageFullscreenDialogController {
             if is_video
                 && let Some(ref fs_win) = *cell
             {
-                ctrl_clone.reparent_to_fullscreen(&tm_clone, fs_win);
+                ctrl_clone.reparent_to_fullscreen(&tm_clone, fs_win, tab_id);
             }
 
             tracing::info!(
-                media_id = active_tab.media_id,
+                tab_id = target_tab.id,
+                media_id = target_tab.media_id,
                 is_video,
-                filename = %LogObscurer::filename(&active_tab.filename),
+                origin_mode,
+                filename = %LogObscurer::filename(&target_tab.filename),
                 elapsed_us = t0.elapsed().as_micros(),
-                "[FullscreenViewer: Show] Fullscreen media viewer activated with Main UI locking"
+                "[FullscreenViewer: ShowForTab] Fullscreen media viewer activated with true X11 fullscreen mapping"
             );
         });
     }
 
-    /// Reparents the running X11 video subwindow into the fullscreen window without interrupting playback.
-    fn reparent_to_fullscreen(&self, tab_manager: &Arc<ViewerTabManager>, fs_win: &ImageFullscreenWindow) {
+    /// Reparents the running X11 video subwindow into the fullscreen window without interrupting playback and starts playback (Requirement 3).
+    fn reparent_to_fullscreen(
+        &self,
+        tab_manager: &Arc<ViewerTabManager>,
+        fs_win: &ImageFullscreenWindow,
+        tab_id: TabId,
+    ) {
         let main_xid = *self.cached_main_xid.lock();
 
-        let fs_xid = match get_slint_window_xid(fs_win.window()) {
+        let fs_xid = match get_slint_window_xid_with_title_fallback(fs_win.window(), "RustView - Fullscreen") {
             Some(xid) if Some(xid) != main_xid => xid,
             _ => find_window_by_title("RustView - Fullscreen").unwrap_or_default(),
         };
 
         if fs_xid == 0 {
-            tracing::warn!("[FullscreenViewer: Reparent] Fullscreen XID not ready yet. Scheduling fast retry...");
+            tracing::debug!(
+                tab_id,
+                "[FullscreenViewer: Reparent] Fullscreen XID not ready yet. Scheduling fast retry..."
+            );
             let ctrl = self.clone();
             let tm = tab_manager.clone();
             let win_weak = fs_win.as_weak();
             Timer::single_shot(std::time::Duration::from_millis(20), move || {
                 if let Some(w) = win_weak.upgrade() {
-                    ctrl.reparent_to_fullscreen(&tm, &w);
+                    ctrl.reparent_to_fullscreen(&tm, &w, tab_id);
                 }
             });
             return;
@@ -197,22 +237,51 @@ impl ImageFullscreenDialogController {
         let screen_w = fs_size.width.max(640);
         let screen_h = fs_size.height.max(480);
 
-        if let Some(sub_slot) = tab_manager.get_active_subwindow()
-            && let Some(ref mut sub) = *sub_slot.lock()
+        if let Some(session) = tab_manager.get_tab(tab_id)
+            && let TabPayload::Video(ref vid) = session.payload
         {
-            let _ = sub.reparent(fs_xid, 0, 0, screen_w, screen_h);
-            sub.show();
+            // Wire player callbacks immediately to guarantee double-click, 'f', and ESC exit fullscreen from MPV
+            let fs_toggle = self.clone();
+            vid.player.on_toggle_fullscreen(move || {
+                let fs = fs_toggle.clone();
+                tracing::info!("[BridgeViewerTabs: MpvDblClick] Fullscreen exit requested via MPV event in fullscreen");
+                fs.close();
+            });
+
+            if let Some(mw_weak) = self.main_window_weak.lock().as_ref() {
+                let win_close = mw_weak.clone();
+                vid.player.on_close_tab(move || {
+                    let _ = win_close.upgrade_in_event_loop(move |w| {
+                        tracing::info!(
+                            "[BridgeViewerTabs: MpvCloseTab] Ctrl+W intercepted from MPV video player in fullscreen. Invoking viewer_close_tab..."
+                        );
+                        w.invoke_viewer_close_tab();
+                    });
+                });
+            }
+
+            // Requirement 3: Always enable controls, set active, and start playback in fullscreen
+            vid.player.set_tab_grid_mode(false);
+            vid.player.set_view_active(true);
+            vid.player.set_user_paused(false);
+            let _ = vid.player.play();
+
+            let mut sub_guard = vid.subwindow.lock();
+            if let Some(ref mut sub) = *sub_guard {
+                let _ = sub.reparent(fs_xid, 0, 0, screen_w, screen_h);
+                sub.show();
+            }
         }
 
-        // Schedule synchronization tick once the window manager finishes full-display mapping
         let tm_sync = tab_manager.clone();
         let win_weak_sync = fs_win.as_weak();
         let fs_xid_sync = fs_xid;
         Timer::single_shot(std::time::Duration::from_millis(35), move || {
             if let Some(w) = win_weak_sync.upgrade() {
                 let size = w.window().size();
-                if let Some(sub_slot) = tm_sync.get_active_subwindow()
-                    && let Some(ref mut sub) = *sub_slot.lock()
+                if let Some(session) = tm_sync.get_tab(tab_id)
+                    && let TabPayload::Video(ref vid) = session.payload
+                    && let Some(ref mut sub) = *vid.subwindow.lock()
                     && sub.parent_xid() == fs_xid_sync
                 {
                     sub.move_resize(0, 0, size.width.max(640), size.height.max(480));
@@ -233,15 +302,18 @@ impl ImageFullscreenDialogController {
             return;
         };
 
-        if let Some(active_tab) = tab_manager.get_active_tab() {
-            let is_video = matches!(active_tab.payload, TabPayload::Video(_));
+        let fs_tab_id = *self.active_fullscreen_tab_id.lock();
+        let target_tab = fs_tab_id.and_then(|id| tab_manager.get_tab(id)).or_else(|| tab_manager.get_active_tab());
+
+        if let Some(tab) = target_tab {
+            let is_video = matches!(tab.payload, TabPayload::Video(_));
             self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
             win.set_is_video(is_video);
-            self.sync_tab_content(&win, &active_tab, settings);
+            self.sync_tab_content(&win, &tab, settings);
 
             if is_video {
-                self.reparent_to_fullscreen(tab_manager, &win);
-            } else if let Some(sub_slot) = tab_manager.get_active_subwindow()
+                self.reparent_to_fullscreen(tab_manager, &win, tab.id);
+            } else if let Some(sub_slot) = tab_manager.get_subwindow_for_tab(tab.id)
                 && let Some(ref mut sub) = *sub_slot.lock()
             {
                 sub.hide();
@@ -251,45 +323,72 @@ impl ImageFullscreenDialogController {
         }
     }
 
-    /// Hides and dismisses the fullscreen media window, restores video subwindow to tab viewport, and safely unlocks the Main UI.
+    /// Hides and dismisses the fullscreen media window, restores video subwindow to originating layout, and safely unlocks the Main UI.
+    /// Thread-safe: can be invoked from any thread (including mpv-event-observer).
     pub fn close(&self) {
         if !self.is_active.swap(false, Ordering::SeqCst) {
             return;
         }
 
         let was_video = self.is_fullscreen_video.load(Ordering::SeqCst);
+        let fs_tab_id = *self.active_fullscreen_tab_id.lock();
+        let origin_mode = *self.origin_view_mode.lock();
+        let tm_weak = self.tab_manager_weak.lock().clone();
+        let main_xid_opt = *self.cached_main_xid.lock();
+        let viewport_rect = *self.cached_viewport_rect.lock();
+        let fs_win_weak_opt = self.window_weak.lock().clone();
+        let mw_weak_opt = self.main_window_weak.lock().clone();
+        let handler_opt = self.close_handler.lock().clone();
 
-        // Reparent video subwindow back to the Main UI viewport
+        *self.window_weak.lock() = None;
+        *self.cached_fs_xid.lock() = None;
+        *self.active_fullscreen_tab_id.lock() = None;
+
+        // Reparent video subwindow back to the Main UI window if it was a video
         if was_video
-            && let Some(tm) = self.tab_manager_weak.lock().as_ref()
-            && let Some(main_xid) = *self.cached_main_xid.lock()
+            && let Some(ref tm) = tm_weak
+            && let Some(main_xid) = main_xid_opt
+            && let Some(target_id) = fs_tab_id
         {
-            let (x, y, w, h) = *self.cached_viewport_rect.lock();
-            if let Some(sub_slot) = tm.get_active_subwindow()
-                && let Some(ref mut sub) = *sub_slot.lock()
+            let (x, y, w, h) = viewport_rect;
+            if let Some(session) = tm.get_tab(target_id)
+                && let TabPayload::Video(ref vid) = session.payload
+                && let Some(ref mut sub) = *vid.subwindow.lock()
             {
                 let _ = sub.reparent(main_xid, x, y, w, h);
-                sub.show();
             }
         }
 
+        // Hide Fullscreen Slint Window on the Main UI thread
+        if let Some(fs_weak) = fs_win_weak_opt {
+            let _ = fs_weak.upgrade_in_event_loop(move |fs_win| {
+                let _ = fs_win.hide();
+                tracing::info!(origin_mode, "[FullscreenViewer: Close] Fullscreen media viewer window dismissed");
+            });
+        }
+
+        // Clean up thread-local instance on the main thread
         FULLSCREEN_WINDOW.with(|win_cell| {
             let mut cell = win_cell.borrow_mut();
             if let Some(win) = cell.take() {
                 let _ = win.hide();
-                tracing::info!("[FullscreenViewer: Close] Fullscreen media viewer window dismissed");
             }
         });
 
-        *self.window_weak.lock() = None;
-        *self.cached_fs_xid.lock() = None;
-
-        // Safely unlock the Main UI
-        if let Some(mw_weak) = self.main_window_weak.lock().as_ref()
-            && let Some(mw) = mw_weak.upgrade()
-        {
-            mw.set_is_modal_locked(false);
-            tracing::info!("[FullscreenViewer: Close] Main UI modal lock released");
+        // Safely unlock the Main UI and invoke the restore handler on the Main UI thread
+        if let Some(mw_weak) = mw_weak_opt {
+            let _ = mw_weak.upgrade_in_event_loop(move |mw| {
+                mw.set_is_modal_locked(false);
+                FULLSCREEN_WINDOW.with(|win_cell| {
+                    if let Some(win) = win_cell.borrow_mut().take() {
+                        let _ = win.hide();
+                    }
+                });
+                tracing::info!("[FullscreenViewer: Close] Main UI modal lock released");
+                if let Some(handler) = handler_opt {
+                    handler(origin_mode, fs_tab_id);
+                }
+            });
         }
     }
 

@@ -95,3 +95,23 @@ export struct TabItemModel {
     shift_x: length,
     is_placeholder: bool,
 }
+
+/// Dynamic Model for a single tile item positioned within the TabGridView Masonry layout.
+export struct TabGridItemModel {
+    id: int, // TabId
+    media_id: int,
+    title: string,
+    format_str: string,
+    is_video: bool,
+    rating: int,
+    has_tags: bool,
+    image: image,
+    is_loading: bool,
+    error_message: string,
+    orig_width: int,
+    orig_height: int,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+}

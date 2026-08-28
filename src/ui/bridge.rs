@@ -16,6 +16,7 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tag_dialogs::TagDialogController;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_thumbnails::BridgeThumbnails;
@@ -117,10 +118,15 @@ impl UiBridge {
         window.set_sort_column_idx(initial_sort_col.to_index());
         window.set_sort_order_idx(initial_sort_ord.to_index());
 
-        // Restore Persistent Media Type Filter
+        // Restore Persistent Media Type Filter & Tab Grid View Settings
         let initial_media_type_filter = MediaTypeFilter::from_str_name(&v_settings.media_type_filter);
         initial_state.filter.media_type_filter = initial_media_type_filter;
         window.set_media_type_filter_idx(initial_media_type_filter.to_index());
+
+        initial_state.tab_grid_columns = v_settings.tab_grid_columns;
+        initial_state.tab_grid_auto_columns = v_settings.tab_grid_auto_columns;
+        window.set_tab_grid_columns(v_settings.tab_grid_columns as i32);
+        window.set_tab_grid_auto_columns(v_settings.tab_grid_auto_columns);
 
         // Restore All 13 Table Column Widths
         window.set_col_filename_width(v_settings.col_filename_width);
@@ -156,17 +162,16 @@ impl UiBridge {
 
         // Initialize Tab Bar, View Mode and Viewer Settings
         window.set_is_browse_active(true);
+        window.set_is_tab_grid_active(false);
         window.set_active_view_mode(0);
         window.set_tabs(ModelRc::new(VecModel::from(vec![])));
         window.set_viewer_show_tab_rating_badge(app_settings.viewer.tabs.show_rating_badge);
 
-        // Initialize Main Window Info for Video Subwindows
         if let Some(main_xid) = crate::viewer::get_slint_window_xid(window.window()) {
             tab_manager.set_main_viewport_info(main_xid, 0, 64, 800, 600);
             fullscreen_controller.set_main_viewport_info(main_xid, 0, 64, 800, 600);
         }
 
-        // Virtual folder view is strictly non-persistent (disabled on startup)
         window.set_is_virtual_folder(false);
         window.set_is_virtual_folder_btn_enabled(false);
         window.set_virtual_folder_count(0);
@@ -183,6 +188,57 @@ impl UiBridge {
         let state = Arc::new(RwLock::new(initial_state));
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let last_click = Arc::new(Mutex::new(None));
+
+        // Wire Fullscreen on_close restore handler across originating view modes
+        let win_fs_close = window.as_weak();
+        let tm_fs_close = tab_manager.clone();
+        let lib_fs_close = library.clone();
+        let set_fs_close = settings.clone();
+        let st_fs_close = state.clone();
+        let fs_controller_close = fullscreen_controller.clone();
+
+        fullscreen_controller.set_close_handler(move |origin_mode, tab_id_opt| {
+            let win_w = win_fs_close.clone();
+            let tm = tm_fs_close.clone();
+            let lib = lib_fs_close.clone();
+            let set = set_fs_close.clone();
+            let st = st_fs_close.clone();
+            let fs_ctrl = fs_controller_close.clone();
+
+            let _ = win_w.upgrade_in_event_loop(move |w| {
+                w.set_is_modal_locked(false);
+                w.set_active_view_mode(origin_mode);
+                w.set_is_browse_active(origin_mode == 0);
+                w.set_is_tab_grid_active(origin_mode == 2);
+
+                tracing::info!(
+                    origin_mode,
+                    target_tab_id = ?tab_id_opt,
+                    "[FullscreenViewer: RestoreOrigin] Restoring UI and video subwindows to originating view mode"
+                );
+
+                if origin_mode == 2 {
+                    // Restoring to Tab-Grid (Masonry view)
+                    tm.set_all_videos_view_active(false);
+                    BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
+                    BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &lib, &set, &st);
+                } else if origin_mode == 1 {
+                    // Restoring to Single Tab Viewer
+                    if let Some(tab_id) = tab_id_opt {
+                        tm.set_active_tab_internal(tab_id, true);
+                    }
+                    BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
+                    BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
+                } else {
+                    // Restoring to Browse view
+                    tm.activate_browse();
+                    BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
+                    BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
+                }
+
+                StatusBarBridge::update_metrics(&w, &st);
+            });
+        });
 
         let thumbnail_timer = BridgeThumbnails::start_drain_timer(
             thumbnails.clone(),
@@ -258,6 +314,7 @@ impl UiBridge {
         let w_weak = self.window.as_weak();
         let library = self.library.clone();
         let thumbnails = self.thumbnails.clone();
+        let tab_manager = self.tab_manager.clone();
         let settings = self.settings.clone();
         let state = self.state.clone();
 
@@ -268,6 +325,7 @@ impl UiBridge {
 
             let library = library.clone();
             let thumbnails = thumbnails.clone();
+            let tab_manager = tab_manager.clone();
             let settings = settings.clone();
             let state = state.clone();
             let diff_clone = diff.clone();
@@ -301,6 +359,10 @@ impl UiBridge {
                     window.set_grid_padding(new_clone.appearance.grid_padding as i32);
                     window.set_grid_item_border_width(new_clone.appearance.grid_item_border_width as i32);
                     window.set_grid_item_corner_radius(new_clone.appearance.grid_item_corner_radius as i32);
+
+                    if window.get_active_view_mode() == 2 {
+                        BridgeTabGrid::sync_tab_grid_ui(&window, &tab_manager, &library, &settings, &state);
+                    }
                 }
 
                 if diff_clone.viewer_settings_changed {
@@ -398,9 +460,149 @@ impl UiBridge {
             self.state.clone(),
         );
 
+        self.register_tab_grid_callbacks();
         self.register_dnd_callbacks();
         self.register_rubberband_callbacks();
         self.register_sidebar_resize_callbacks();
+    }
+
+    fn register_tab_grid_callbacks(&self) {
+        let win_grid = self.window.clone_strong();
+        let tm_grid = self.tab_manager.clone();
+        let lib_grid = self.library.clone();
+        let set_grid = self.settings.clone();
+        let st_grid = self.state.clone();
+        let fs_grid = self.fullscreen_controller.clone();
+
+        self.window.on_tab_grid_clicked(move || {
+            tracing::info!("[UiBridge: TabGrid] Tab-Grid button clicked. Switching to Masonry Tab Grid view");
+            tm_grid.set_all_videos_view_active(false);
+            win_grid.set_active_view_mode(2);
+            win_grid.set_is_browse_active(false);
+            win_grid.set_is_tab_grid_active(true);
+            BridgeViewerTabs::sync_ui(&win_grid, &tm_grid, &lib_grid, &set_grid, &st_grid);
+            BridgeViewerTabs::sync_video_embedding(&win_grid, &tm_grid, &fs_grid, &set_grid);
+            BridgeTabGrid::sync_tab_grid_ui(&win_grid, &tm_grid, &lib_grid, &set_grid, &st_grid);
+            StatusBarBridge::update_metrics(&win_grid, &st_grid);
+        });
+
+        let win_left = self.window.clone_strong();
+        let tm_left = self.tab_manager.clone();
+        let lib_left = self.library.clone();
+        let set_left = self.settings.clone();
+        let st_left = self.state.clone();
+        let fs_left = self.fullscreen_controller.clone();
+        self.window.on_tab_grid_item_left_clicked(move |tab_id| {
+            BridgeTabGrid::handle_item_left_clicked(
+                tab_id as u64,
+                &win_left,
+                &tm_left,
+                &lib_left,
+                &set_left,
+                &st_left,
+                &fs_left,
+            );
+        });
+
+        let win_mid = self.window.clone_strong();
+        let tm_mid = self.tab_manager.clone();
+        let set_mid = self.settings.clone();
+        let fs_mid = self.fullscreen_controller.clone();
+        self.window.on_tab_grid_item_middle_clicked(move |tab_id| {
+            BridgeTabGrid::handle_item_middle_clicked(
+                tab_id as u64,
+                &win_mid,
+                &tm_mid,
+                &set_mid,
+                &fs_mid,
+            );
+        });
+
+        let win_close = self.window.clone_strong();
+        let tm_close = self.tab_manager.clone();
+        let lib_close = self.library.clone();
+        let set_close = self.settings.clone();
+        let st_close = self.state.clone();
+        self.window.on_tab_grid_item_close_clicked(move |tab_id| {
+            BridgeTabGrid::handle_item_close_clicked(
+                tab_id as u64,
+                &win_close,
+                &tm_close,
+                &lib_close,
+                &set_close,
+                &st_close,
+            );
+        });
+
+        let win_cols = self.window.clone_strong();
+        let tm_cols = self.tab_manager.clone();
+        let lib_cols = self.library.clone();
+        let set_cols = self.settings.clone();
+        let st_cols = self.state.clone();
+        self.window.on_tab_grid_columns_changed(move |new_cols| {
+            let cols = (new_cols as usize).clamp(1, 10);
+            {
+                let mut st = st_cols.write();
+                st.tab_grid_columns = cols;
+                st.tab_grid_auto_columns = false;
+            }
+            {
+                let mut app_settings = set_cols.get();
+                app_settings.view.tab_grid_columns = cols;
+                app_settings.view.tab_grid_auto_columns = false;
+                set_cols.save_quiet_async(&app_settings);
+            }
+            BridgeTabGrid::sync_tab_grid_ui(&win_cols, &tm_cols, &lib_cols, &set_cols, &st_cols);
+        });
+
+        let win_auto = self.window.clone_strong();
+        let tm_auto = self.tab_manager.clone();
+        let lib_auto = self.library.clone();
+        let set_auto = self.settings.clone();
+        let st_auto = self.state.clone();
+        self.window.on_tab_grid_auto_columns_toggled(move |is_auto| {
+            {
+                let mut st = st_auto.write();
+                st.tab_grid_auto_columns = is_auto;
+            }
+            {
+                let mut app_settings = set_auto.get();
+                app_settings.view.tab_grid_auto_columns = is_auto;
+                set_auto.save_quiet_async(&app_settings);
+            }
+            BridgeTabGrid::sync_tab_grid_ui(&win_auto, &tm_auto, &lib_auto, &set_auto, &st_auto);
+        });
+
+        let win_close_all = self.window.clone_strong();
+        let tm_close_all = self.tab_manager.clone();
+        let lib_close_all = self.library.clone();
+        let set_close_all = self.settings.clone();
+        let st_close_all = self.state.clone();
+        self.window.on_tab_grid_close_all_clicked(move || {
+            tracing::info!("[UiBridge: TabGrid] Close all tabs clicked from TabGrid toolbar");
+            tm_close_all.close_all_tabs();
+            BridgeViewerTabs::sync_ui(&win_close_all, &tm_close_all, &lib_close_all, &set_close_all, &st_close_all);
+            BridgeTabGrid::sync_tab_grid_ui(&win_close_all, &tm_close_all, &lib_close_all, &set_close_all, &st_close_all);
+        });
+
+        let win_geom = self.window.clone_strong();
+        let tm_geom = self.tab_manager.clone();
+        let lib_geom = self.library.clone();
+        let set_geom = self.settings.clone();
+        let st_geom = self.state.clone();
+        self.window.on_tab_grid_viewport_geometry_changed(move |_vw, _vh| {
+            if win_geom.get_active_view_mode() == 2 {
+                BridgeTabGrid::sync_tab_grid_ui(&win_geom, &tm_geom, &lib_geom, &set_geom, &st_geom);
+            }
+        });
+
+        let win_scroll = self.window.clone_strong();
+        let tm_scroll = self.tab_manager.clone();
+        let set_scroll = self.settings.clone();
+        let st_scroll = self.state.clone();
+        self.window.on_tab_grid_scrolled(move |_dx, _dy| {
+            BridgeTabGrid::handle_scrolled(&win_scroll, &tm_scroll, &set_scroll, &st_scroll);
+        });
     }
 
     fn register_rubberband_callbacks(&self) {
@@ -607,6 +809,8 @@ impl UiBridge {
         let fs_right = self.fullscreen_controller.clone();
         let set_right = self.settings.clone();
         let win_right = self.window.clone_strong();
+        let lib_right = self.library.clone();
+        let st_right = self.state.clone();
 
         self.window.on_sidebar_right_resized(move |new_width| {
             let t0 = Instant::now();
@@ -614,6 +818,8 @@ impl UiBridge {
 
             if win_right.get_active_view_mode() == 1 {
                 BridgeViewerTabs::sync_video_embedding(&win_right, &tm_right, &fs_right, &set_right);
+            } else if win_right.get_active_view_mode() == 2 {
+                BridgeTabGrid::sync_tab_grid_ui(&win_right, &tm_right, &lib_right, &set_right, &st_right);
             }
 
             let mut last_log = last_right_clone.lock();
@@ -642,6 +848,8 @@ impl UiBridge {
         let tm_right_fin = self.tab_manager.clone();
         let fs_right_fin = self.fullscreen_controller.clone();
         let win_right_fin = self.window.clone_strong();
+        let lib_right_fin = self.library.clone();
+        let st_right_fin = self.state.clone();
 
         self.window.on_sidebar_right_resize_finished(move |final_width| {
             let width_f32 = final_width;
@@ -651,6 +859,8 @@ impl UiBridge {
 
             if win_right_fin.get_active_view_mode() == 1 {
                 BridgeViewerTabs::sync_video_embedding(&win_right_fin, &tm_right_fin, &fs_right_fin, &set_right_fin);
+            } else if win_right_fin.get_active_view_mode() == 2 {
+                BridgeTabGrid::sync_tab_grid_ui(&win_right_fin, &tm_right_fin, &lib_right_fin, &set_right_fin, &st_right_fin);
             }
         });
     }

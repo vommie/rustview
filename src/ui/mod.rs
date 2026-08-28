@@ -29,6 +29,7 @@ pub mod bridge_media;
 pub mod bridge_rubberband;
 pub mod bridge_state;
 pub mod bridge_status_bar;
+pub mod bridge_tab_grid;
 pub mod bridge_tag_dialogs;
 pub mod bridge_tags;
 pub mod bridge_thumbnails;
@@ -41,6 +42,7 @@ pub mod icons;
 pub mod models;
 pub mod rubberband_selection;
 pub mod tab_dnd;
+pub mod tab_grid;
 pub mod video_preview_animator;
 
 pub use bridge::UiBridge;
@@ -71,6 +73,7 @@ pub use bridge_rubberband::{
 };
 pub use bridge_state::*;
 pub use bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
+pub use bridge_tab_grid::BridgeTabGrid;
 pub use bridge_tag_dialogs::TagDialogController;
 pub use bridge_tags::{BridgeTags, TagActionContext};
 pub use bridge_viewer_tabs::{BridgeViewerTabs, TabDragEndParams};
@@ -86,4 +89,5 @@ pub use rubberband_selection::{
 pub use tab_dnd::{
     TabAutoScrollDirection, TabDndAutoScroller, TabDndGeometry, TabDndSession, TabSlotInfo,
 };
+pub use tab_grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
 pub use video_preview_animator::{VideoPreviewAnimator, DEFAULT_PREVIEW_INTERVAL_MS};

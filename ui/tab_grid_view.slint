@@ -1,0 +1,128 @@
+import { Theme } from "styles.slint";
+import { TabGridItemModel } from "types.slint";
+import { TabGridItemView } from "tab_grid_item.slint";
+import { TabGridPanelToolbar } from "tab_grid_panel_toolbar.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { EmptyStateView } from "empty_state_view.slint";
+
+export { TabGridItemView } from "tab_grid_item.slint";
+export { TabGridPanelToolbar } from "tab_grid_panel_toolbar.slint";
+
+/// Full-featured Masonry Grid View component displaying all open tabs.
+/// Combines a dedicated top control toolbar, smooth scrollable masonry layout canvas,
+/// and fallback empty-state view with responsive geometry updates.
+export component TabGridView inherits Rectangle {
+    background: Theme.background;
+    clip: true;
+
+    in property <[TabGridItemModel]> items: [];
+    in property <length> total-content-height: 0px;
+    in-out property <int> columns: 3;
+    in-out property <bool> auto-columns: true;
+    out property <length> scroll-offset-y: scroll-area.clamped-y;
+
+    // Grid item styling forwarded from AppSettings
+    in property <int> grid-item-padding-h: 8;
+    in property <int> grid-item-padding-v: 6;
+    in property <int> grid-spacing-val: 12;
+    in property <int> grid-padding-val: 12;
+    in property <int> grid-item-border-width: 1;
+    in property <int> grid-item-corner-radius: 4;
+
+    callback item-left-clicked(int /* tab_id */);
+    callback item-middle-clicked(int /* tab_id */);
+    callback item-close-clicked(int /* tab_id */);
+    callback item-context-menu(int /* tab_id */, length /* x */, length /* y */);
+    callback columns-changed(int /* new_columns */);
+    callback auto-columns-toggled(bool /* is_auto */);
+    callback close-all-clicked();
+    callback viewport-geometry-changed(length /* width */, length /* height */);
+    callback scrolled(length /* delta_x */, length /* delta_y */);
+
+    property <length> item-p-h: root.grid-item-padding-h * 1px;
+    property <length> item-p-v: root.grid-item-padding-v * 1px;
+    property <length> border-w: root.grid-item-border-width * 1px;
+    property <length> corner-r: root.grid-item-corner-radius * 1px;
+
+    public function scroll-by(dy: length) {
+        scroll-area.handle-scroll(0px, dy);
+    }
+
+    changed width => {
+        if self.width > 20px {
+            root.viewport-geometry-changed(self.width, scroll-area.height);
+        }
+    }
+
+    changed height => {
+        if self.height > 20px {
+            root.viewport-geometry-changed(self.width, scroll-area.height);
+        }
+    }
+
+    changed scroll-offset-y => {
+        root.scrolled(0px, root.scroll-offset-y);
+    }
+
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
+
+        // 1. TabGrid Panel Toolbar
+        TabGridPanelToolbar {
+            columns <=> root.columns;
+            auto-columns <=> root.auto-columns;
+            total-tabs: root.items.length;
+            columns-changed(c) => { root.columns-changed(c); }
+            auto-columns-toggled(a) => { root.auto-columns-toggled(a); }
+            close-all-clicked => { root.close-all-clicked(); }
+        }
+
+        // 2. Center Content Area (Masonry Scroll Canvas or Empty State)
+        Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+
+            scroll-area := SmoothScrollArea {
+                width: 100%;
+                height: 100%;
+                enable-horizontal: false;
+                enable-vertical: true;
+                animate-scroll: false;
+                content-width: self.width;
+                content-height: root.total-content-height;
+
+                // Masonry Items Container
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: root.total-content-height;
+
+                    for tab-item in root.items : TabGridItemView {
+                        item: tab-item;
+                        padding-h: root.item-p-h;
+                        padding-v: root.item-p-v;
+                        border-width-val: root.border-w;
+                        corner-radius-val: root.corner-r;
+
+                        left-clicked(id) => { root.item-left-clicked(id); }
+                        middle-clicked(id) => { root.item-middle-clicked(id); }
+                        close-clicked(id) => { root.item-close-clicked(id); }
+                        context-menu-requested(id, mx, my) => {
+                            root.item-context-menu(id, self.x + mx, self.y + my + scroll-area.clamped-y + 26px);
+                        }
+                    }
+                }
+            }
+
+            // Empty State View when 0 tabs are currently open
+            if root.items.length == 0 : EmptyStateView {
+                is-active: true;
+                title: "No Open Tabs";
+                description: "Open images or videos from the browser to display them here in the tab grid.";
+                icon-name: "grid_view";
+            }
+        }
+    }
+}

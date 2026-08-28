@@ -2,7 +2,7 @@ import { Theme } from "styles.slint";
 
 /// Generic, modular, high-performance scroll container with permanent full-width, custom-styled scrollbars.
 /// Provides real-time 1:1 cursor synchronization during scrollbar dragging with zero lag or drift,
-/// as well as smooth programmatic scroll-into-view animation API.
+/// and instant frame-synchronized viewport positioning for embedded native subwindows.
 export component SmoothScrollArea inherits Rectangle {
     in-out property <length> viewport-x: 0px;
     in-out property <length> viewport-y: 0px;
@@ -13,6 +13,7 @@ export component SmoothScrollArea inherits Rectangle {
 
     in property <bool> enable-horizontal: false;
     in property <bool> enable-vertical: true;
+    in property <bool> animate-scroll: false;
 
     // Visual Scrollbar Configuration (Permanent constant width, zero size jump on hover)
     in property <length> scrollbar-size: 7px;
@@ -135,15 +136,15 @@ export component SmoothScrollArea inherits Rectangle {
         }
     }
 
-    // Content container viewport with smooth ease-out animation for programmatic scrolling
+    // Content container viewport with real-time 1:1 lockstep positioning
     content-host := Rectangle {
         x: root.clamped-x;
         y: root.clamped-y;
         width: Math.max(parent.width, root.content-width);
         height: Math.max(parent.height, root.content-height);
 
-        animate x { duration: (root.is-dragging-h || root.is-dragging-v || scroll-touch.pressed) ? 0ms : 200ms; easing: ease-out; }
-        animate y { duration: (root.is-dragging-h || root.is-dragging-v || scroll-touch.pressed) ? 0ms : 200ms; easing: ease-out; }
+        animate x { duration: (root.animate-scroll && !root.is-dragging-h && !root.is-dragging-v && !scroll-touch.pressed) ? 200ms : 0ms; easing: ease-out; }
+        animate y { duration: (root.animate-scroll && !root.is-dragging-h && !root.is-dragging-v && !scroll-touch.pressed) ? 200ms : 0ms; easing: ease-out; }
 
         @children
     }
@@ -176,7 +177,7 @@ export component SmoothScrollArea inherits Rectangle {
                 : root.thumb-color
             );
 
-            animate y { duration: (v-touch.pressed || scroll-touch.pressed) ? 0ms : 200ms; easing: ease-out; }
+            animate y { duration: (v-touch.pressed || scroll-touch.pressed || !root.animate-scroll) ? 0ms : 200ms; easing: ease-out; }
         }
 
         // Full-track TouchArea delivering 1:1 real-time cursor tracking
@@ -250,7 +251,7 @@ export component SmoothScrollArea inherits Rectangle {
                 : root.thumb-color
             );
 
-            animate x { duration: (h-touch.pressed || scroll-touch.pressed) ? 0ms : 200ms; easing: ease-out; }
+            animate x { duration: (h-touch.pressed || scroll-touch.pressed || !root.animate-scroll) ? 0ms : 200ms; easing: ease-out; }
         }
 
         // Full-track TouchArea delivering 1:1 real-time cursor tracking

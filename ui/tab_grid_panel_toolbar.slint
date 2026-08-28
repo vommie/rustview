@@ -1,0 +1,90 @@
+import { Theme } from "styles.slint";
+import { Icons } from "icons.slint";
+import { Slider } from "std-widgets.slint";
+import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer, ToolbarToggleButton } from "panel_toolbar.slint";
+
+/// Specialized, fully modular toolbar for the TabGridView.
+/// Features a Column count slider/stepper (1 to 10), responsive "Auto" toggle button positioned directly
+/// next to the slider controls, an expander spacer, and right-aligned open tab counter and action buttons.
+export component TabGridPanelToolbar inherits PanelToolbar {
+    in-out property <int> columns: 3;
+    in-out property <bool> auto-columns: true;
+    in property <int> total-tabs: 0;
+
+    callback columns-changed(int /* new_columns */);
+    callback auto-columns-toggled(bool /* is_auto */);
+    callback close-all-clicked();
+
+    toolbar-height: 26px;
+
+    // 1. Column Count Controls (Left-aligned)
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        horizontal-stretch: 0;
+
+        Text {
+            text: "Columns:";
+            font-size: 11px;
+            font-weight: 700;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
+
+        // Columns Slider (Disabled when Auto mode is enabled)
+        Slider {
+            width: 90px;
+            minimum: 1;
+            maximum: 10;
+            value: root.columns;
+            enabled: !root.auto-columns;
+            changed(v) => {
+                root.columns = Math.round(v);
+                root.columns-changed(root.columns);
+            }
+        }
+
+        Text {
+            text: root.columns;
+            font-size: 11px;
+            font-weight: 700;
+            color: root.auto-columns ? Theme.text-muted : Theme.primary;
+            min-width: 16px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+
+    // 2. "Auto" Columns Responsive Toggle Button (Directly right of Columns slider/counter, without separator)
+    ToolbarToggleButton {
+        text: "Auto";
+        is-active: root.auto-columns;
+        tooltip: "Automatically adapt column count to window width";
+        toggled(active) => {
+            root.auto-columns = active;
+            root.auto-columns-toggled(active);
+        }
+    }
+
+    // 3. Expander / Spacer (Pushes metrics and action buttons flush to the right)
+    ToolbarSpacer {}
+
+    // 4. Open Tabs Counter Metric
+    Text {
+        text: root.total-tabs == 1 ? "1 Open Tab" : (root.total-tabs + " Open Tabs");
+        font-size: 11px;
+        font-weight: 700;
+        color: Theme.primary;
+        vertical-alignment: center;
+    }
+
+    ToolbarSeparator {}
+
+    // 5. Close All Tabs Action Button
+    ToolbarButton {
+        text: "Close All";
+        tooltip: "Close all open tabs in this session";
+        is-enabled: root.total-tabs > 0;
+        clicked => { root.close-all-clicked(); }
+    }
+}

@@ -3,13 +3,17 @@ use crate::library::dot_hidden::DotHiddenCache;
 use crate::library::models::{FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
-use crate::settings::{DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER};
+use crate::settings::{
+    DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_TAB_GRID_AUTO_COLUMNS,
+    DEFAULT_TAB_GRID_COLUMNS,
+};
 use crate::system::DesktopApp;
 use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
 use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use crate::ui::rubberband_selection::RubberbandSession;
 use crate::ui::tab_dnd::TabDndSession;
+use crate::ui::tab_grid::MasonryRect;
 use crate::viewer::TabId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -133,7 +137,7 @@ impl LruThumbnailStore {
     }
 }
 
-/// Central persistent state for UI bridges, tree expansions, virtualization windowing, and caching.
+/// Central persistent state for UI bridges, tree expansions, virtualization windowing, tab grid and caching.
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
     pub current_folder_path: Option<PathBuf>,
@@ -162,6 +166,12 @@ pub struct UiState {
     pub active_file_rename_target: Option<MediaId>,
     pub active_associated_apps: Vec<DesktopApp>,
     pub active_tab_dialog_target: Option<TabId>,
+
+    // Tab Grid Masonry State & Real-Time Layout Cache
+    pub tab_grid_columns: usize,
+    pub tab_grid_auto_columns: bool,
+    pub cached_tab_grid_rects: Vec<MasonryRect>,
+    pub cached_tab_grid_total_h: f32,
 
     // Viewport Windowing & Hysteresis Paging State
     pub loaded_slice_start: usize,
@@ -217,6 +227,10 @@ impl Default for UiState {
             active_file_rename_target: None,
             active_associated_apps: Vec::new(),
             active_tab_dialog_target: None,
+            tab_grid_columns: DEFAULT_TAB_GRID_COLUMNS,
+            tab_grid_auto_columns: DEFAULT_TAB_GRID_AUTO_COLUMNS,
+            cached_tab_grid_rects: Vec::new(),
+            cached_tab_grid_total_h: 0.0,
             loaded_slice_start: 0,
             loaded_slice_len: 0,
             loaded_slice_valid: false,

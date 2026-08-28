@@ -18,10 +18,11 @@ use rustview::settings::{
     DEFAULT_SHOW_FOLDER_METRICS, DEFAULT_SHOW_MEDIA_TYPE_BADGES, DEFAULT_SHOW_RATINGS_OVERLAY,
     DEFAULT_SHOW_TAGS_OVERLAY, DEFAULT_SIDEBAR_LEFT_WIDTH, DEFAULT_SIDEBAR_RIGHT_WIDTH,
     DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_SUPPORTED_IMAGE_FORMATS,
-    DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE,
-    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT,
-    DEFAULT_THUMBNAIL_QUALITY, DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS,
-    DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS,
+    DEFAULT_SUPPORTED_VIDEO_FORMATS, DEFAULT_TAB_GRID_AUTO_COLUMNS, DEFAULT_TAB_GRID_COLUMNS,
+    DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE, DEFAULT_THUMBNAIL_ASPECT_RATIO,
+    DEFAULT_THUMBNAIL_DB_SIZE, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_THUMBNAIL_QUALITY,
+    DEFAULT_THUMBNAIL_WIDTH, DEFAULT_TOOLTIP_DELAY_MS, DEFAULT_VIDEO_ENGINE,
+    DEFAULT_VIDEO_OFFSET_PERCENT, DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS,
     DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS, DEFAULT_VIEWER_BACKGROUND_MODE,
     DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB, DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB,
     DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_MAXIMIZED,
@@ -234,12 +235,14 @@ fn test_settings_persistence_sanitization_and_hooks() {
         DEFAULT_VIEWER_BACKGROUND_MODE
     );
 
-    // View Defaults - All 13 Columns & Persistent Media Type Filter
+    // View Defaults - All 13 Columns, TabGrid Settings & Persistent Media Type Filter
     assert_eq!(initial.view.is_table_view, DEFAULT_IS_TABLE_VIEW);
     assert_eq!(initial.view.sort_column, DEFAULT_SORT_COLUMN);
     assert_eq!(initial.view.sort_order, DEFAULT_SORT_ORDER);
     assert_eq!(initial.view.media_type_filter, DEFAULT_MEDIA_TYPE_FILTER);
     assert_eq!(DEFAULT_MEDIA_TYPE_FILTER, "Videos & Images");
+    assert_eq!(initial.view.tab_grid_columns, DEFAULT_TAB_GRID_COLUMNS);
+    assert_eq!(initial.view.tab_grid_auto_columns, DEFAULT_TAB_GRID_AUTO_COLUMNS);
     assert_eq!(initial.view.col_filename_width, DEFAULT_COL_FILENAME_WIDTH);
     assert_eq!(initial.view.col_path_width, DEFAULT_COL_PATH_WIDTH);
     assert_eq!(initial.view.col_modified_date_width, DEFAULT_COL_MODIFIED_DATE_WIDTH);
@@ -307,6 +310,8 @@ fn test_settings_persistence_sanitization_and_hooks() {
     initial.viewer.tabs.show_rating_badge = true;
     initial.viewer.background_mode = "Deep Black".to_string();
     initial.debug.obfuscate_logs = false;
+    initial.view.tab_grid_columns = 4;
+    initial.view.tab_grid_auto_columns = false;
     initial.view.col_path_width = 220.0;
     initial.view.col_flags_width = 110.0;
     initial.view.media_type_filter = "Images".to_string();
@@ -339,6 +344,8 @@ fn test_settings_persistence_sanitization_and_hooks() {
     assert!(loaded.viewer.tabs.show_rating_badge);
     assert_eq!(loaded.viewer.background_mode, "Deep Black");
     assert!(!loaded.debug.obfuscate_logs);
+    assert_eq!(loaded.view.tab_grid_columns, 4);
+    assert!(!loaded.view.tab_grid_auto_columns);
     assert_eq!(loaded.view.col_path_width, 220.0);
     assert_eq!(loaded.view.col_flags_width, 110.0);
     assert_eq!(loaded.view.media_type_filter, "Images");
@@ -351,6 +358,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
     invalid_settings.appearance.grid_item_border_width = 50;
     invalid_settings.appearance.grid_item_corner_radius = 100;
     invalid_settings.performance.short_video_threshold_secs = 500;
+    invalid_settings.view.tab_grid_columns = 50;
     invalid_settings.view.col_filename_width = 10.0;
     invalid_settings.view.col_path_width = 5.0;
     invalid_settings.view.col_size_width = 5000.0;
@@ -384,6 +392,7 @@ fn test_settings_persistence_sanitization_and_hooks() {
         sanitized.performance.short_video_threshold_secs,
         MAX_SHORT_VIDEO_THRESHOLD_SECS
     );
+    assert_eq!(sanitized.view.tab_grid_columns, 10);
     assert_eq!(sanitized.view.col_filename_width, MIN_COL_WIDTH);
     assert_eq!(sanitized.view.col_path_width, MIN_COL_WIDTH);
     assert_eq!(sanitized.view.col_size_width, MAX_COL_WIDTH);

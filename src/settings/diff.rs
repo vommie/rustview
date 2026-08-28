@@ -380,6 +380,20 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.tab_grid_columns != new.view.tab_grid_columns {
+            changes.push(format!(
+                "View: tab_grid_columns ({} -> {})",
+                old.view.tab_grid_columns, new.view.tab_grid_columns
+            ));
+        }
+
+        if old.view.tab_grid_auto_columns != new.view.tab_grid_auto_columns {
+            changes.push(format!(
+                "View: tab_grid_auto_columns ({} -> {})",
+                old.view.tab_grid_auto_columns, new.view.tab_grid_auto_columns
+            ));
+        }
+
         if old.view.col_path_width != new.view.col_path_width {
             changes.push(format!(
                 "View: col_path_width ({}px -> {}px)",

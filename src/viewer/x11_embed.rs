@@ -25,6 +25,22 @@ pub struct XRectangle {
     pub height: u16,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SubwindowGeometry {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ViewportBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
 struct X11Symbols {
     _lib_x11: *mut c_void,
     _lib_xext: *mut c_void,
@@ -192,6 +208,14 @@ unsafe fn load_symbols_from_handles(
 
 /// Retrieves the native X11 Window ID (`XID`) directly from a Slint Window via `raw-window-handle-06`.
 pub fn get_slint_window_xid(window: &slint::Window) -> Option<u64> {
+    get_slint_window_xid_with_title_fallback(window, "RustView")
+}
+
+/// Retrieves the native X11 Window ID (`XID`) from a Slint Window with a specific title fallback.
+pub fn get_slint_window_xid_with_title_fallback(
+    window: &slint::Window,
+    fallback_title: &str,
+) -> Option<u64> {
     if let Ok(handle) = window.window_handle().window_handle() {
         match handle.as_raw() {
             RawWindowHandle::Xlib(h) => {
@@ -210,7 +234,7 @@ pub fn get_slint_window_xid(window: &slint::Window) -> Option<u64> {
         }
     }
 
-    find_window_by_title("RustView")
+    find_window_by_title(fallback_title)
 }
 
 /// Recursively searches the X11 window hierarchy for a window whose title contains `title_contains`.
@@ -409,24 +433,32 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
 }
 
 /// Managed X11 Video Subwindow container embedded directly into Slint's central media viewport.
-/// Supports dynamic nonrectangular XShape clipping to render Slint context menus and popups on top.
+/// Uses a nested 2-window architecture (`container_xid` + `subwindow_xid`) to deliver hardware-level
+/// viewport clipping without scaling or shrinking video output when scrolling under toolbars.
 pub struct X11VideoSubwindow {
     api: Arc<X11Symbols>,
     display: DisplayPtr,
+    container_xid: WindowId,
     subwindow_xid: WindowId,
     parent_xid: WindowId,
-    current_x: i32,
-    current_y: i32,
-    current_w: u32,
-    current_h: u32,
+    current_container_x: i32,
+    current_container_y: i32,
+    current_container_w: u32,
+    current_container_h: u32,
+    current_sub_x: i32,
+    current_sub_y: i32,
+    current_sub_w: u32,
+    current_sub_h: u32,
     is_visible: bool,
+    is_clipped: bool,
+    last_clip_rect: Option<XRectangle>,
 }
 
 unsafe impl Send for X11VideoSubwindow {}
 unsafe impl Sync for X11VideoSubwindow {}
 
 impl X11VideoSubwindow {
-    /// Creates and initializes a new embedded subwindow attached to `parent_xid`.
+    /// Creates and initializes a new embedded subwindow pair attached to `parent_xid`.
     pub fn new(
         parent_xid: u64,
         x: i32,
@@ -443,24 +475,55 @@ impl X11VideoSubwindow {
                 return Err(ViewerError::X11("Failed to open default X11 display".into()));
             }
 
-            let subwindow_xid = (api.x_create_simple_window)(
+            let w_clamped = width.max(16);
+            let h_clamped = height.max(16);
+
+            // 1. Container Window (Parent for viewport clipping, child of parent_xid)
+            let container_xid = (api.x_create_simple_window)(
                 display,
                 parent_xid,
                 x as c_int,
                 y as c_int,
-                width.max(16) as c_uint,
-                height.max(16) as c_uint,
+                w_clamped as c_uint,
+                h_clamped as c_uint,
+                0,
+                0,
+                0,
+            );
+
+            if container_xid == 0 {
+                (api.x_close_display)(display);
+                return Err(ViewerError::X11(
+                    "Failed to create X11 container subwindow".into(),
+                ));
+            }
+
+            // 2. Video Subwindow (Child of container_xid, MPV renders directly into this)
+            let subwindow_xid = (api.x_create_simple_window)(
+                display,
+                container_xid,
+                0,
+                0,
+                w_clamped as c_uint,
+                h_clamped as c_uint,
                 0,
                 0,
                 0,
             );
 
             if subwindow_xid == 0 {
+                (api.x_destroy_window)(display, container_xid);
                 (api.x_close_display)(display);
                 return Err(ViewerError::X11(
-                    "Failed to create X11 simple subwindow".into(),
+                    "Failed to create X11 video subwindow".into(),
                 ));
             }
+
+            (api.x_select_input)(
+                display,
+                container_xid,
+                (1 << 17) | (1 << 15) | (1 << 0),
+            );
 
             (api.x_select_input)(
                 display,
@@ -468,29 +531,38 @@ impl X11VideoSubwindow {
                 (1 << 17) | (1 << 15) | (1 << 0),
             );
 
+            (api.x_map_window)(display, subwindow_xid);
             (api.x_sync)(display, 0);
 
             tracing::info!(
                 parent_xid,
+                container_xid,
                 subwindow_xid,
                 x,
                 y,
                 width,
                 height,
                 elapsed_us = t0.elapsed().as_micros(),
-                "[X11VideoSubwindow: Create] Created embedded X11 subwindow for native MPV output"
+                "[X11VideoSubwindow: Create] Created container + video subwindow pair for unscaled clipping"
             );
 
             Ok(Self {
                 api,
                 display,
+                container_xid,
                 subwindow_xid,
                 parent_xid,
-                current_x: x,
-                current_y: y,
-                current_w: width.max(16),
-                current_h: height.max(16),
+                current_container_x: x,
+                current_container_y: y,
+                current_container_w: w_clamped,
+                current_container_h: h_clamped,
+                current_sub_x: 0,
+                current_sub_y: 0,
+                current_sub_w: w_clamped,
+                current_sub_h: h_clamped,
                 is_visible: false,
+                is_clipped: false,
+                last_clip_rect: None,
             })
         }
     }
@@ -505,38 +577,137 @@ impl X11VideoSubwindow {
         self.parent_xid
     }
 
-    /// Adjusts coordinates and dimensions of the subwindow to match Slint's central media viewport.
+    /// Adjusts coordinates and dimensions of the container and subwindow for unclipped single-viewer layout.
     pub fn move_resize(&mut self, x: i32, y: i32, width: u32, height: u32) {
         let w_clamped = width.max(16);
         let h_clamped = height.max(16);
 
-        if self.current_x == x
-            && self.current_y == y
-            && self.current_w == w_clamped
-            && self.current_h == h_clamped
-        {
-            return;
-        }
-
-        self.current_x = x;
-        self.current_y = y;
-        self.current_w = w_clamped;
-        self.current_h = h_clamped;
-
         unsafe {
-            (self.api.x_move_resize_window)(
-                self.display,
-                self.subwindow_xid,
-                x as c_int,
-                y as c_int,
-                w_clamped as c_uint,
-                h_clamped as c_uint,
-            );
+            if self.current_container_x != x
+                || self.current_container_y != y
+                || self.current_container_w != w_clamped
+                || self.current_container_h != h_clamped
+            {
+                self.current_container_x = x;
+                self.current_container_y = y;
+                self.current_container_w = w_clamped;
+                self.current_container_h = h_clamped;
+
+                (self.api.x_move_resize_window)(
+                    self.display,
+                    self.container_xid,
+                    x as c_int,
+                    y as c_int,
+                    w_clamped as c_uint,
+                    h_clamped as c_uint,
+                );
+            }
+
+            if self.current_sub_x != 0
+                || self.current_sub_y != 0
+                || self.current_sub_w != w_clamped
+                || self.current_sub_h != h_clamped
+            {
+                self.current_sub_x = 0;
+                self.current_sub_y = 0;
+                self.current_sub_w = w_clamped;
+                self.current_sub_h = h_clamped;
+
+                (self.api.x_move_resize_window)(
+                    self.display,
+                    self.subwindow_xid,
+                    0,
+                    0,
+                    w_clamped as c_uint,
+                    h_clamped as c_uint,
+                );
+            }
+
             (self.api.x_flush)(self.display);
         }
     }
 
-    /// Seamlessly reparents the running video subwindow to a new parent window without restarting playback.
+    /// Dynamically updates geometry and clips the subwindow at viewport boundaries without scaling down the video content.
+    pub fn update_geometry_and_clip(
+        &mut self,
+        geom: SubwindowGeometry,
+        viewport: ViewportBounds,
+    ) -> bool {
+        let w_clamped = geom.width.max(16) as i32;
+        let h_clamped = geom.height.max(16) as i32;
+        let view_w_i32 = viewport.width.max(16) as i32;
+        let view_h_i32 = viewport.height.max(16) as i32;
+
+        // Calculate intersection between subwindow desired bounds and viewport bounds
+        let vis_x1 = geom.x.max(viewport.x);
+        let vis_y1 = geom.y.max(viewport.y);
+        let vis_x2 = (geom.x + w_clamped).min(viewport.x + view_w_i32);
+        let vis_y2 = (geom.y + h_clamped).min(viewport.y + view_h_i32);
+
+        let vis_w = vis_x2 - vis_x1;
+        let vis_h = vis_y2 - vis_y1;
+
+        if vis_w <= 0 || vis_h <= 0 {
+            // Completely outside visible viewport
+            self.hide();
+            return false;
+        }
+
+        let sub_offset_x = geom.x - vis_x1;
+        let sub_offset_y = geom.y - vis_y1;
+
+        unsafe {
+            // 1. Move and resize the container window to the VISIBLE viewport intersection on parent_xid
+            if self.current_container_x != vis_x1
+                || self.current_container_y != vis_y1
+                || self.current_container_w != vis_w as u32
+                || self.current_container_h != vis_h as u32
+            {
+                self.current_container_x = vis_x1;
+                self.current_container_y = vis_y1;
+                self.current_container_w = vis_w as u32;
+                self.current_container_h = vis_h as u32;
+
+                (self.api.x_move_resize_window)(
+                    self.display,
+                    self.container_xid,
+                    vis_x1 as c_int,
+                    vis_y1 as c_int,
+                    vis_w as c_uint,
+                    vis_h as c_uint,
+                );
+            }
+
+            // 2. Position the video subwindow inside the container with its FULL unscaled width and height
+            if self.current_sub_x != sub_offset_x
+                || self.current_sub_y != sub_offset_y
+                || self.current_sub_w != w_clamped as u32
+                || self.current_sub_h != h_clamped as u32
+            {
+                self.current_sub_x = sub_offset_x;
+                self.current_sub_y = sub_offset_y;
+                self.current_sub_w = w_clamped as u32;
+                self.current_sub_h = h_clamped as u32;
+
+                (self.api.x_move_resize_window)(
+                    self.display,
+                    self.subwindow_xid,
+                    sub_offset_x as c_int,
+                    sub_offset_y as c_int,
+                    w_clamped as c_uint,
+                    h_clamped as c_uint,
+                );
+            }
+
+            (self.api.x_flush)(self.display);
+        }
+
+        self.reset_clip_shape();
+        self.show();
+        true
+    }
+
+    /// Seamlessly reparents the running video subwindow container to a new parent window without restarting playback.
     pub fn reparent(
         &mut self,
         new_parent_xid: u64,
@@ -553,7 +724,7 @@ impl X11VideoSubwindow {
         unsafe {
             let res = (self.api.x_reparent_window)(
                 self.display,
-                self.subwindow_xid,
+                self.container_xid,
                 target_parent,
                 x as c_int,
                 y as c_int,
@@ -566,32 +737,51 @@ impl X11VideoSubwindow {
                 )));
             }
 
+            self.current_container_x = x;
+            self.current_container_y = y;
+            self.current_container_w = w_clamped;
+            self.current_container_h = h_clamped;
+
             (self.api.x_move_resize_window)(
                 self.display,
-                self.subwindow_xid,
+                self.container_xid,
                 x as c_int,
                 y as c_int,
                 w_clamped as c_uint,
                 h_clamped as c_uint,
             );
 
+            self.current_sub_x = 0;
+            self.current_sub_y = 0;
+            self.current_sub_w = w_clamped;
+            self.current_sub_h = h_clamped;
+
+            (self.api.x_move_resize_window)(
+                self.display,
+                self.subwindow_xid,
+                0,
+                0,
+                w_clamped as c_uint,
+                h_clamped as c_uint,
+            );
+
             (self.api.x_map_window)(self.display, self.subwindow_xid);
+            (self.api.x_map_window)(self.display, self.container_xid);
             (self.api.x_sync)(self.display, 0);
 
             self.parent_xid = target_parent;
-            self.current_x = x;
-            self.current_y = y;
-            self.current_w = w_clamped;
-            self.current_h = h_clamped;
             self.is_visible = true;
+            self.is_clipped = false;
+            self.last_clip_rect = None;
 
             tracing::info!(
+                container_xid = self.container_xid,
                 subwindow_xid = self.subwindow_xid,
                 new_parent_xid,
                 width = w_clamped,
                 height = h_clamped,
                 elapsed_us = t0.elapsed().as_micros(),
-                "[X11VideoSubwindow: Reparent] Subwindow reparented seamlessly"
+                "[X11VideoSubwindow: Reparent] Subwindow container reparented seamlessly"
             );
 
             Ok(())
@@ -599,7 +789,6 @@ impl X11VideoSubwindow {
     }
 
     /// Clips out specified cutout rectangles from the video subwindow using X11 Nonrectangular Shape extension.
-    /// The video continues playing and remains visible everywhere else while Slint context menus display on top!
     pub fn clip_cutout_rectangles(&mut self, main_win_rects: &[XRectangle]) {
         let Some(ref shape_rects_fn) = self.api.x_shape_combine_rectangles else {
             return;
@@ -610,25 +799,25 @@ impl X11VideoSubwindow {
 
         unsafe {
             // 1. Reset shape to full bounding rectangle first
-            shape_mask_fn(self.display, self.subwindow_xid, 0, 0, 0, 0, 0);
+            shape_mask_fn(self.display, self.container_xid, 0, 0, 0, 0, 0);
 
-            // 2. Convert coordinates from main window space to subwindow space
+            // 2. Convert coordinates from main window space to container window space
             let mut local_rects: Vec<XRectangle> = Vec::with_capacity(main_win_rects.len());
             for r in main_win_rects {
-                let local_x = (r.x as i32) - self.current_x;
-                let local_y = (r.y as i32) - self.current_y;
+                let local_x = (r.x as i32) - self.current_container_x;
+                let local_y = (r.y as i32) - self.current_container_y;
                 let local_right = local_x + (r.width as i32);
                 let local_bottom = local_y + (r.height as i32);
 
                 if local_right > 0
                     && local_bottom > 0
-                    && local_x < (self.current_w as i32)
-                    && local_y < (self.current_h as i32)
+                    && local_x < (self.current_container_w as i32)
+                    && local_y < (self.current_container_h as i32)
                 {
                     let clamped_x = local_x.max(0) as i16;
                     let clamped_y = local_y.max(0) as i16;
-                    let clamped_w = ((local_right.min(self.current_w as i32)) - (clamped_x as i32)).max(1) as u16;
-                    let clamped_h = ((local_bottom.min(self.current_h as i32)) - (clamped_y as i32)).max(1) as u16;
+                    let clamped_w = ((local_right.min(self.current_container_w as i32)) - (clamped_x as i32)).max(1) as u16;
+                    let clamped_h = ((local_bottom.min(self.current_container_h as i32)) - (clamped_y as i32)).max(1) as u16;
 
                     local_rects.push(XRectangle {
                         x: clamped_x,
@@ -643,7 +832,7 @@ impl X11VideoSubwindow {
             if !local_rects.is_empty() {
                 shape_rects_fn(
                     self.display,
-                    self.subwindow_xid,
+                    self.container_xid,
                     0, // ShapeBounding
                     0,
                     0,
@@ -652,6 +841,7 @@ impl X11VideoSubwindow {
                     3, // ShapeSubtract
                     0, // Unsorted
                 );
+                self.is_clipped = true;
             }
 
             (self.api.x_flush)(self.display);
@@ -662,28 +852,31 @@ impl X11VideoSubwindow {
     pub fn reset_clip_shape(&mut self) {
         if let Some(ref shape_mask_fn) = self.api.x_shape_combine_mask {
             unsafe {
-                shape_mask_fn(self.display, self.subwindow_xid, 0, 0, 0, 0, 0);
+                shape_mask_fn(self.display, self.container_xid, 0, 0, 0, 0, 0);
                 (self.api.x_flush)(self.display);
             }
         }
+        self.is_clipped = false;
+        self.last_clip_rect = None;
     }
 
-    /// Makes the video subwindow visible and raises it.
+    /// Makes the video subwindow and container visible and raises them.
     pub fn show(&mut self) {
         if !self.is_visible {
             unsafe {
                 (self.api.x_map_window)(self.display, self.subwindow_xid);
+                (self.api.x_map_window)(self.display, self.container_xid);
                 (self.api.x_flush)(self.display);
             }
             self.is_visible = true;
         }
     }
 
-    /// Unmaps and hides the video subwindow.
+    /// Unmaps and hides the container window reliably without desync.
     pub fn hide(&mut self) {
         if self.is_visible {
             unsafe {
-                (self.api.x_unmap_window)(self.display, self.subwindow_xid);
+                (self.api.x_unmap_window)(self.display, self.container_xid);
                 (self.api.x_flush)(self.display);
             }
             self.is_visible = false;
@@ -700,10 +893,12 @@ impl Drop for X11VideoSubwindow {
     fn drop(&mut self) {
         unsafe {
             (self.api.x_destroy_window)(self.display, self.subwindow_xid);
+            (self.api.x_destroy_window)(self.display, self.container_xid);
             (self.api.x_close_display)(self.display);
             tracing::debug!(
+                container_xid = self.container_xid,
                 subwindow_xid = self.subwindow_xid,
-                "[X11VideoSubwindow: Drop] Destroyed video subwindow and closed X11 display"
+                "[X11VideoSubwindow: Drop] Destroyed subwindow pair and closed X11 display"
             );
         }
     }

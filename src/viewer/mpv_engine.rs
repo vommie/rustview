@@ -11,6 +11,7 @@ use std::time::Instant;
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
 pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvCloseTabCallback = Arc<dyn Fn() + Send + Sync>;
+pub type MpvGridClickCallback = Arc<dyn Fn() + Send + Sync>;
 
 /// Central thread-safe MPV player engine wrapping `libmpv2` with native OSC, plugins, custom config files, and property observation.
 pub struct MpvPlayer {
@@ -20,14 +21,19 @@ pub struct MpvPlayer {
     attached_wid: Arc<RwLock<Option<u64>>>,
     is_view_active: Arc<AtomicBool>,
     is_user_paused: Arc<AtomicBool>,
+    is_tab_grid_mode: Arc<AtomicBool>,
     observer_running: Arc<AtomicBool>,
     callbacks: Arc<RwLock<Vec<MpvEventCallback>>>,
     fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>>,
     close_tab_callbacks: Arc<RwLock<Vec<MpvCloseTabCallback>>>,
+    grid_left_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
+    grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
+    grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
+    grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
 }
 
 impl MpvPlayer {
-    /// Initializes a high-performance MPV player instance configured for native X11 embedding with full user config, plugins and double-click trapping.
+    /// Initializes a high-performance MPV player instance configured for native X11 embedding with full user config, plugins, and double-click/middle-click trapping.
     pub fn new() -> Result<Self, ViewerError> {
         let t0 = Instant::now();
 
@@ -88,11 +94,15 @@ impl MpvPlayer {
 
         // Ensure window-minimized state is clean
         let _ = mpv_instance.set_property("window-minimized", false);
+        let _ = mpv_instance.set_property("ontop", false);
+        let _ = mpv_instance.set_property("border", true);
 
-        // Bind double-click and 'f' / 'F' in MPV to cycle fullscreen (intercepted by RustView observer)
+        // Bind double-click, middle-click, 'f', 'F', and 'ESC' in MPV to cycle fullscreen (intercepted by RustView observer)
         let _ = mpv_instance.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
+        let _ = mpv_instance.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["f", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["F", "cycle fullscreen"]);
+        let _ = mpv_instance.command("keybind", &["ESC", "cycle fullscreen"]);
 
         // Bind Ctrl+W variations in MPV without OSD to toggle window-minimized (intercepted by RustView observer)
         let close_keys = [
@@ -104,8 +114,7 @@ impl MpvPlayer {
             let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-minimized"]);
         }
 
-        // Ignore ESC and quit keys in MPV so Slint handles navigation, fullscreen toggles and modal dismissals
-        let _ = mpv_instance.command("keybind", &["ESC", "ignore"]);
+        // Ignore quit keys in MPV so Slint handles navigation and lifecycle
         let _ = mpv_instance.command("keybind", &["q", "ignore"]);
         let _ = mpv_instance.command("keybind", &["Q", "ignore"]);
 
@@ -115,11 +124,20 @@ impl MpvPlayer {
         let attached_wid = Arc::new(RwLock::new(None));
         let is_view_active = Arc::new(AtomicBool::new(true));
         let is_user_paused = Arc::new(AtomicBool::new(false));
+        let is_tab_grid_mode = Arc::new(AtomicBool::new(false));
         let observer_running = Arc::new(AtomicBool::new(true));
         let callbacks: Arc<RwLock<Vec<MpvEventCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>> =
             Arc::new(RwLock::new(Vec::new()));
         let close_tab_callbacks: Arc<RwLock<Vec<MpvCloseTabCallback>>> =
+            Arc::new(RwLock::new(Vec::new()));
+        let grid_left_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
+            Arc::new(RwLock::new(Vec::new()));
+        let grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
+            Arc::new(RwLock::new(Vec::new()));
+        let grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
+            Arc::new(RwLock::new(Vec::new()));
+        let grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
             Arc::new(RwLock::new(Vec::new()));
 
         let player = Self {
@@ -129,10 +147,15 @@ impl MpvPlayer {
             attached_wid: attached_wid.clone(),
             is_view_active: is_view_active.clone(),
             is_user_paused: is_user_paused.clone(),
+            is_tab_grid_mode: is_tab_grid_mode.clone(),
             observer_running: observer_running.clone(),
             callbacks: callbacks.clone(),
             fullscreen_callbacks: fullscreen_callbacks.clone(),
             close_tab_callbacks: close_tab_callbacks.clone(),
+            grid_left_click_callbacks: grid_left_click_callbacks.clone(),
+            grid_middle_click_callbacks: grid_middle_click_callbacks.clone(),
+            grid_wheel_up_callbacks: grid_wheel_up_callbacks.clone(),
+            grid_wheel_down_callbacks: grid_wheel_down_callbacks.clone(),
         };
 
         player.spawn_event_observer_thread();
@@ -163,37 +186,79 @@ impl MpvPlayer {
         Ok(())
     }
 
-    /// Controls active visibility of this video tab. Automatically manages auto-pause and auto-resume based on user intent.
-    pub fn set_view_active(&self, active: bool) {
-        if !active {
-            // Tab is being backgrounded: if video was already paused by the user, record user_pause = true
-            let currently_paused = self.is_paused();
-            if currently_paused {
-                self.is_user_paused.store(true, Ordering::SeqCst);
-            }
-            self.is_view_active.store(false, Ordering::SeqCst);
+    /// Toggles Tab-Grid mode on this MPV player instance.
+    /// When `grid_mode == true`: OSC HUD is disabled, video controls are disabled, and mouse buttons/wheel are bound to RustView grid navigation.
+    /// When `grid_mode == false`: Native MPV player controls and HUD are restored with middle-click fullscreen toggle.
+    pub fn set_tab_grid_mode(&self, grid_mode: bool) {
+        if self.is_tab_grid_mode.swap(grid_mode, Ordering::SeqCst) == grid_mode {
+            return;
+        }
 
-            // Execute auto-pause so video does not decode or play audio in the background
+        if grid_mode {
+            let _ = self.mpv.set_property("osc", "no");
+            let _ = self.mpv.set_property("input-default-bindings", "no");
+            let _ = self.mpv.set_property("input-vo-keyboard", "no");
+            let _ = self.mpv.set_property("input-cursor", "yes");
+
+            // Intercept mouse clicks on video in TabGrid
+            let _ = self.mpv.command("keybind", &["MBTN_LEFT", "no-osd cycle ontop"]);
+            let _ = self.mpv.command("keybind", &["MBTN_MID", "no-osd cycle border"]);
+
+            // Intercept mouse wheel on video in TabGrid to scroll the TabGrid smoothly in real time
+            let _ = self.mpv.command("keybind", &["WHEEL_UP", "no-osd cycle deinterlace"]);
+            let _ = self.mpv.command("keybind", &["WHEEL_DOWN", "no-osd cycle sub-visibility"]);
+        } else {
+            let _ = self.mpv.set_property("osc", "yes");
+            let _ = self.mpv.set_property("input-default-bindings", "yes");
+            let _ = self.mpv.set_property("input-vo-keyboard", "yes");
+            let _ = self.mpv.set_property("input-cursor", "yes");
+
+            // Restore standard bindings with Middle-Click Fullscreen toggle
+            let _ = self.mpv.command("keybind", &["MBTN_LEFT", "ignore"]);
+            let _ = self.mpv.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
+            let _ = self.mpv.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
+            let _ = self.mpv.command("keybind", &["ESC", "cycle fullscreen"]);
+            let _ = self.mpv.command("keybind", &["WHEEL_UP", "ignore"]);
+            let _ = self.mpv.command("keybind", &["WHEEL_DOWN", "ignore"]);
+        }
+    }
+
+    /// Helper alias to enable or disable interactivity.
+    #[inline]
+    pub fn set_interactive(&self, interactive: bool) {
+        self.set_tab_grid_mode(!interactive);
+    }
+
+    /// Controls active visibility of this video tab. Automatically manages auto-pause and auto-resume without overwriting user pause state.
+    pub fn set_view_active(&self, active: bool) {
+        self.is_view_active.store(active, Ordering::SeqCst);
+
+        if !active {
+            // Auto-pause when backgrounded: do not change is_user_paused flag
             let _ = self.mpv.set_property("pause", true);
             tracing::debug!(
-                was_user_paused = currently_paused,
-                "[MpvPlayer: AutoPause] Backgrounded video tab auto-paused"
+                user_paused = self.is_user_paused.load(Ordering::SeqCst),
+                "[MpvPlayer: AutoPause] Video tab backgrounded and auto-paused"
             );
         } else {
-            // Tab is brought to foreground: mark active first
-            self.is_view_active.store(true, Ordering::SeqCst);
             let user_paused = self.is_user_paused.load(Ordering::SeqCst);
-
             if !user_paused {
-                // Auto-resume since the video was only auto-paused when switching away
                 let _ = self.mpv.set_property("pause", false);
-                tracing::debug!("[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed");
+                tracing::debug!("[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed (playback active)");
             } else {
-                tracing::debug!("[MpvPlayer: StayPaused] Foregrounded video tab kept paused (respecting user pause)");
+                let _ = self.mpv.set_property("pause", true);
+                tracing::debug!("[MpvPlayer: StayPaused] Foregrounded video tab kept paused (user-paused)");
             }
         }
 
         self.notify_subscribers();
+    }
+
+    /// Explicitly updates the user pause intention flag.
+    #[inline]
+    pub fn set_user_paused(&self, user_paused: bool) {
+        self.is_user_paused.store(user_paused, Ordering::SeqCst);
+        self.state.write().is_user_paused = user_paused;
     }
 
     /// Returns whether this video tab is currently active and in the foreground.
@@ -208,7 +273,7 @@ impl MpvPlayer {
         self.is_user_paused.load(Ordering::SeqCst)
     }
 
-    /// Loads a video file from disk and starts immediate playback (resets user pause state).
+    /// Loads a video file from disk and starts immediate playback (Requirement 1: resets user pause state to false).
     pub fn load_file(&self, path: &Path) -> Result<(), ViewerError> {
         if !path.exists() {
             return Err(ViewerError::FileNotFound(path.to_path_buf()));
@@ -221,7 +286,7 @@ impl MpvPlayer {
             .command("loadfile", &[&path_str, "replace"])
             .map_err(|e| ViewerError::Mpv(format!("Failed to execute 'loadfile' command: {:?}", e)))?;
 
-        // Reset user pause state for freshly loaded media
+        // Requirement 1: New file load starts playing and resets user-pause
         self.is_user_paused.store(false, Ordering::SeqCst);
         let _ = self.mpv.set_property("pause", false);
 
@@ -234,7 +299,7 @@ impl MpvPlayer {
 
         {
             let mut st = self.state.write();
-            st.filename = filename.clone();
+            st.filename = filename;
             st.is_playing = true;
             st.is_paused = false;
             st.is_user_paused = false;
@@ -250,7 +315,6 @@ impl MpvPlayer {
         );
 
         self.notify_subscribers();
-
         Ok(())
     }
 
@@ -285,9 +349,9 @@ impl MpvPlayer {
         Ok(())
     }
 
-    /// Pauses playback explicitly (marks user pause as true if active).
+    /// Pauses playback explicitly (marks user pause as true if active in viewer).
     pub fn pause(&self) -> Result<(), ViewerError> {
-        if self.is_view_active.load(Ordering::SeqCst) {
+        if self.is_view_active.load(Ordering::SeqCst) && !self.is_tab_grid_mode.load(Ordering::SeqCst) {
             self.is_user_paused.store(true, Ordering::SeqCst);
         }
         self.mpv
@@ -400,7 +464,7 @@ impl MpvPlayer {
         self.callbacks.write().push(Arc::new(callback));
     }
 
-    /// Registers/replaces the listener callback triggered when double-click or 'f' requests fullscreen in MPV.
+    /// Registers the listener callback triggered when double-click, middle-click, 'f', or 'ESC' requests fullscreen toggle in MPV.
     pub fn on_toggle_fullscreen<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
@@ -410,12 +474,52 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
-    /// Registers/replaces the listener callback triggered when Ctrl+W requests closing active tab from MPV.
+    /// Registers the listener callback triggered when Ctrl+W requests closing active tab from MPV.
     pub fn on_close_tab<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
     {
         let mut cbs = self.close_tab_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
+    /// Registers the callback for left-clicking a video tile in TabGrid mode.
+    pub fn on_grid_left_click<F>(&self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut cbs = self.grid_left_click_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
+    /// Registers the callback for middle-clicking a video tile in TabGrid mode.
+    pub fn on_grid_middle_click<F>(&self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut cbs = self.grid_middle_click_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
+    /// Registers the callback for mouse wheel scrolling up over an active video tile in TabGrid mode.
+    pub fn on_grid_wheel_up<F>(&self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut cbs = self.grid_wheel_up_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
+    /// Registers the callback for mouse wheel scrolling down over an active video tile in TabGrid mode.
+    pub fn on_grid_wheel_down<F>(&self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut cbs = self.grid_wheel_down_callbacks.write();
         cbs.clear();
         cbs.push(Arc::new(callback));
     }
@@ -435,43 +539,92 @@ impl MpvPlayer {
         let running = self.observer_running.clone();
         let is_view_active = self.is_view_active.clone();
         let is_user_paused = self.is_user_paused.clone();
+        let is_tab_grid_mode = self.is_tab_grid_mode.clone();
         let callbacks = self.callbacks.clone();
         let fs_callbacks = self.fullscreen_callbacks.clone();
         let close_callbacks = self.close_tab_callbacks.clone();
+        let grid_left_callbacks = self.grid_left_click_callbacks.clone();
+        let grid_middle_callbacks = self.grid_middle_click_callbacks.clone();
+        let grid_wheel_up_callbacks = self.grid_wheel_up_callbacks.clone();
+        let grid_wheel_down_callbacks = self.grid_wheel_down_callbacks.clone();
 
         std::thread::Builder::new()
             .name("mpv-event-observer".into())
             .spawn(move || {
                 tracing::debug!("[MpvPlayer: Observer] Event observer thread started");
 
+                let mut last_deinterlace = false;
+                let mut last_sub_vis = true;
+
                 while running.load(Ordering::Relaxed) {
                     // Poll MPV event queue with a responsive 20ms timeout
                     let _ = mpv.wait_event(0.02);
 
-                    // 1. Intercept double-click / 'f' Fullscreen triggers from MPV
+                    let in_grid = is_tab_grid_mode.load(Ordering::Relaxed);
+                    let view_active = is_view_active.load(Ordering::Relaxed);
+
+                    // 1. Intercept TabGrid Mouse Clicks and Wheel Scrolling
+                    if in_grid {
+                        let ontop_val = mpv.get_property::<bool>("ontop").unwrap_or(false);
+                        if ontop_val {
+                            let _ = mpv.set_property("ontop", false);
+                            let cbs = grid_left_callbacks.read().clone();
+                            for cb in cbs {
+                                cb();
+                            }
+                        }
+
+                        let border_val = mpv.get_property::<bool>("border").unwrap_or(true);
+                        if !border_val {
+                            let _ = mpv.set_property("border", true);
+                            let cbs = grid_middle_callbacks.read().clone();
+                            for cb in cbs {
+                                cb();
+                            }
+                        }
+
+                        // Wheel Up in TabGrid Mode
+                        let deinterlace_val = mpv.get_property::<bool>("deinterlace").unwrap_or(false);
+                        if deinterlace_val != last_deinterlace {
+                            last_deinterlace = deinterlace_val;
+                            let cbs = grid_wheel_up_callbacks.read().clone();
+                            for cb in cbs {
+                                cb();
+                            }
+                        }
+
+                        // Wheel Down in TabGrid Mode
+                        let sub_vis_val = mpv.get_property::<bool>("sub-visibility").unwrap_or(true);
+                        if sub_vis_val != last_sub_vis {
+                            last_sub_vis = sub_vis_val;
+                            let cbs = grid_wheel_down_callbacks.read().clone();
+                            for cb in cbs {
+                                cb();
+                            }
+                        }
+                    }
+
+                    // 2. Intercept double-click / middle-click / 'f' / 'ESC' Fullscreen triggers from MPV (when not in grid mode)
                     let fs_requested = mpv.get_property::<bool>("fullscreen").unwrap_or(false);
                     if fs_requested {
-                        // Reset MPV's internal fullscreen property to false immediately so RustView manages the fullscreen window
                         let _ = mpv.set_property("fullscreen", false);
-
                         let fs_cbs = fs_callbacks.read().clone();
                         for cb in fs_cbs {
                             cb();
                         }
                     }
 
-                    // 2. Intercept Ctrl+W Close Tab triggers from MPV via window-minimized toggle
+                    // 3. Intercept Ctrl+W Close Tab triggers from MPV via window-minimized toggle
                     let close_requested = mpv.get_property::<bool>("window-minimized").unwrap_or(false);
                     if close_requested {
                         let _ = mpv.set_property("window-minimized", false);
-
                         let close_cbs = close_callbacks.read().clone();
                         for cb in close_cbs {
                             cb();
                         }
                     }
 
-                    // 3. Sync live playback properties
+                    // 4. Sync live playback properties
                     let pos = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
                     let dur = mpv.get_property::<f64>("duration").unwrap_or(0.0);
                     let paused = mpv.get_property::<bool>("pause").unwrap_or(false);
@@ -479,8 +632,8 @@ impl MpvPlayer {
                     let eof = mpv.get_property::<bool>("eof-reached").unwrap_or(false);
                     let idle = mpv.get_property::<bool>("idle-active").unwrap_or(true);
 
-                    // If tab is currently active and user triggers pause via HUD/keys, record user pause state
-                    if is_view_active.load(Ordering::Relaxed) {
+                    // Requirement 4: If tab is currently active in single viewer or fullscreen and user toggles pause via MPV HUD/keys:
+                    if view_active && !in_grid {
                         is_user_paused.store(paused, Ordering::Relaxed);
                     }
 

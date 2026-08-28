@@ -384,28 +384,34 @@ fn test_mpv_player_user_pause_vs_auto_pause_semantics() {
     assert!(player.is_view_active());
     assert!(!player.is_user_paused());
 
+    // 1. User explicitly pauses
     player.pause().unwrap();
     assert!(player.is_user_paused());
     assert!(player.is_paused());
 
+    // 2. Tab becomes inactive (auto-pause on backgrounding)
     player.set_view_active(false);
     assert!(!player.is_view_active());
     assert!(player.is_user_paused());
     assert!(player.is_paused());
 
+    // 3. Tab becomes active again -> remains paused because user paused it
     player.set_view_active(true);
     assert!(player.is_view_active());
     assert!(player.is_user_paused());
     assert!(player.is_paused());
 
+    // 4. User explicitly plays
     player.play().unwrap();
     assert!(!player.is_user_paused());
 
+    // 5. Tab becomes inactive while playing -> auto-pauses, but is_user_paused remains FALSE!
     player.set_view_active(false);
     assert!(!player.is_view_active());
     assert!(!player.is_user_paused(), "Auto-pause must not flag is_user_paused");
     assert!(player.is_paused(), "Background video must be auto-paused");
 
+    // 6. Tab becomes active again -> auto-resumes playing!
     player.set_view_active(true);
     assert!(player.is_view_active());
     assert!(!player.is_user_paused());
@@ -897,6 +903,7 @@ fn test_viewer_tab_manager_isolated_video_tabs_and_state_preservation() {
 
     let (tab2_id, is_new2) = tab_mgr.open_or_focus_media(media[1].id, false).unwrap();
     assert!(is_new2);
+    assert_ne!(tab1_id, tab2_id);
     assert_eq!(tab_mgr.active_tab_id(), Some(tab2_id));
 
     let tab2_player = tab_mgr.get_active_player().expect("Tab 2 must have active MpvPlayer");

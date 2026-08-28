@@ -11,6 +11,7 @@ export component ImageViewer inherits Rectangle {
     callback next-image();
     callback previous-image();
     callback image-clicked();
+    callback image-middle-clicked();
     callback viewport-geometry-changed(length /* x */, length /* y */, length /* width */, length /* height */);
 
     background: root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b);
@@ -29,7 +30,7 @@ export component ImageViewer inherits Rectangle {
         }
     }
 
-    // Mouse Wheel Scroll & Double-Click Listener over the entire ImageViewer canvas
+    // Mouse Wheel Scroll, Left-Click, and Middle-Click Listener over the entire ImageViewer canvas
     viewer-touch := TouchArea {
         width: 100%;
         height: 100%;
@@ -48,8 +49,12 @@ export component ImageViewer inherits Rectangle {
         }
 
         pointer-event(event) => {
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
-                root.image-clicked();
+            if event.kind == PointerEventKind.down {
+                if event.button == PointerEventButton.left {
+                    root.image-clicked();
+                } else if event.button == PointerEventButton.middle {
+                    root.image-middle-clicked();
+                }
             }
         }
     }

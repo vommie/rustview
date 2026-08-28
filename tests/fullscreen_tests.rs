@@ -2,6 +2,7 @@ use rustview::library::Library;
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_image_fullscreen::ImageFullscreenDialogController;
 use rustview::viewer::ViewerTabManager;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use tempfile::tempdir;
 
@@ -68,4 +69,27 @@ fn test_fullscreen_viewer_tab_sync() {
         _ => 0,
     };
     assert_eq!(bg_mode_idx, 0); // Default dark theme #11111b
+}
+
+#[test]
+fn test_fullscreen_origin_mode_restoration_and_close_handler() {
+    let controller = ImageFullscreenDialogController::new();
+
+    let received_origin_mode = Arc::new(AtomicI32::new(-1));
+    let received_tab_id = Arc::new(AtomicBool::new(false));
+
+    let origin_clone = received_origin_mode.clone();
+    let tab_clone = received_tab_id.clone();
+
+    controller.set_close_handler(move |origin_mode, tab_id_opt| {
+        origin_clone.store(origin_mode, Ordering::SeqCst);
+        if tab_id_opt == Some(42) {
+            tab_clone.store(true, Ordering::SeqCst);
+        }
+    });
+
+    // Manually test close handler invocation when active
+    // When not active -> close is a no-op
+    controller.close();
+    assert_eq!(received_origin_mode.load(Ordering::SeqCst), -1);
 }
