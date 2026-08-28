@@ -89,7 +89,27 @@ impl BridgeViewerTabs {
             fs_close.sync_active_tab(&tm_close, &set_close);
         });
 
-        // 4. Tab Drag & Drop Reordering Callbacks
+        // 4. Tab Mouse Wheel Scrolling & Cycling Callback
+        let win_wheel = window.clone_strong();
+        let tm_wheel = tab_manager.clone();
+        let lib_wheel = library.clone();
+        let set_wheel = settings.clone();
+        let st_wheel = state.clone();
+        let fs_wheel = fullscreen_controller.clone();
+        window.on_tab_wheel_scrolled(move |is_next| {
+            Self::cycle_active_tab(
+                &win_wheel,
+                &tm_wheel,
+                &lib_wheel,
+                &set_wheel,
+                &st_wheel,
+                &fs_wheel,
+                is_next,
+            );
+            Self::sync_video_embedding(&win_wheel, &tm_wheel, &fs_wheel, &set_wheel);
+        });
+
+        // 5. Tab Drag & Drop Reordering Callbacks
         let win_dstart = window.clone_strong();
         let tm_dstart = tab_manager.clone();
         let st_dstart = state.clone();
@@ -151,7 +171,7 @@ impl BridgeViewerTabs {
             Self::sync_ui(&win_dcancel, &tm_dcancel, &lib_dcancel, &set_dcancel, &st_dcancel);
         });
 
-        // 5. Viewer Toolbar Close Tab Button / Keyboard Shortcut
+        // 6. Viewer Toolbar Close Tab Button / Keyboard Shortcut
         let win_v_close = window.clone_strong();
         let tm_v_close = tab_manager.clone();
         let lib_v_close = library.clone();
@@ -171,7 +191,7 @@ impl BridgeViewerTabs {
             }
         });
 
-        // 6. Viewer Toolbar Refresh Button
+        // 7. Viewer Toolbar Refresh Button
         let win_v_refresh = window.clone_strong();
         let tm_v_refresh = tab_manager.clone();
         let lib_v_refresh = library.clone();
@@ -192,7 +212,7 @@ impl BridgeViewerTabs {
             fs_v_refresh.sync_active_tab(&tm_v_refresh, &set_v_refresh);
         });
 
-        // 7. Previous / Next Navigation in active list
+        // 8. Previous / Next Navigation in active list
         let win_prev = window.clone_strong();
         let tm_prev = tab_manager.clone();
         let lib_prev = library.clone();
@@ -215,7 +235,7 @@ impl BridgeViewerTabs {
             Self::sync_video_embedding(&win_next, &tm_next, &fs_next, &set_next);
         });
 
-        // 8. Double-click on Tab Media Viewer -> Toggle Fullscreen
+        // 9. Double-click on Tab Media Viewer -> Toggle Fullscreen
         let win_fs = window.clone_strong();
         let tm_fs = tab_manager.clone();
         let set_fs = settings.clone();
@@ -227,14 +247,14 @@ impl BridgeViewerTabs {
             }
         });
 
-        // 9. Dismiss Fullscreen from Main UI
+        // 10. Dismiss Fullscreen from Main UI
         let fs_modal = fullscreen_controller.clone();
         window.on_modal_dismiss_requested(move || {
             tracing::info!("[BridgeViewerTabs: ModalDismiss] Main UI modal dismiss triggered. Closing active fullscreen window if present.");
             fs_modal.close();
         });
 
-        // 10. Viewport Geometry Changed Callback
+        // 11. Viewport Geometry Changed Callback
         let win_geom = window.clone_strong();
         let tm_geom = tab_manager;
         let set_geom = settings;
@@ -242,6 +262,40 @@ impl BridgeViewerTabs {
         window.on_viewer_viewport_geometry_changed(move |_vx, _vy, _vw, _vh| {
             Self::sync_video_embedding(&win_geom, &tm_geom, &fs_geom, &set_geom);
         });
+    }
+
+    /// Cycles the active viewer tab with cyclic wrapping (mouse wheel on tab bar) and synchronizes UI & video embedding.
+    pub fn cycle_active_tab(
+        window: &MainWindow,
+        tab_manager: &Arc<ViewerTabManager>,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        fullscreen_controller: &ImageFullscreenDialogController,
+        is_next: bool,
+    ) {
+        let total_tabs = tab_manager.tab_count();
+        if total_tabs <= 1 {
+            return;
+        }
+
+        let t0 = Instant::now();
+        if let Some(new_tab_id) = tab_manager.cycle_tab(is_next) {
+            let all_tabs = tab_manager.list_tabs();
+            let new_title = ViewerTabManager::compute_tab_title(&all_tabs, new_tab_id);
+
+            tracing::info!(
+                new_tab_id,
+                title = %LogObscurer::filename(&new_title),
+                is_next,
+                total_tabs,
+                elapsed_us = t0.elapsed().as_micros(),
+                "[BridgeViewerTabs: CycleTab] Cycled active tab via mouse wheel with automatic scroll into view"
+            );
+
+            Self::sync_ui(window, tab_manager, library, settings, state);
+            fullscreen_controller.sync_active_tab(tab_manager, settings);
+        }
     }
 
     /// Handles tab drag initiation: computes tab widths, creates ghost item preview, and starts DND session.
@@ -273,9 +327,8 @@ impl BridgeViewerTabs {
             let w = if i == source_index && tab_width > 20.0 {
                 tab_width
             } else if let Some(t_session) = tabs.get(i) {
-                // Character-based estimate (8px per char + 48px padding & icon badges)
-                let char_len = t_session.title.chars().count() as f32;
-                (char_len * 7.5 + 52.0).clamp(70.0, 240.0)
+                let has_rating = window.get_viewer_show_tab_rating_badge() && t_session.record.rating > 0;
+                TabDndGeometry::estimate_tab_width(&t_session.title, has_rating)
             } else {
                 120.0
             };
@@ -457,6 +510,33 @@ impl BridgeViewerTabs {
             params.fullscreen_controller,
             params.settings,
         );
+    }
+
+    /// Ensures the active tab item is fully visible in the tab bar by scrolling the tab bar horizontally if needed.
+    pub fn scroll_active_tab_into_view(
+        window: &MainWindow,
+        tab_manager: &ViewerTabManager,
+        settings: &SettingsManager,
+    ) {
+        let Some(active_id) = tab_manager.active_tab_id() else {
+            return;
+        };
+
+        let tabs = tab_manager.list_tabs();
+        if tabs.len() <= 1 {
+            return;
+        }
+
+        let show_rating = settings.get().viewer.tabs.show_rating_badge;
+        if let Some((tab_x, tab_w)) = TabDndGeometry::find_tab_slot_geometry(&tabs, active_id, show_rating) {
+            tracing::debug!(
+                active_id,
+                tab_x,
+                tab_w,
+                "[BridgeViewerTabs: ScrollIntoView] Scrolling tab bar to ensure active tab is visible"
+            );
+            window.invoke_scroll_tab_into_view(tab_x, tab_w);
+        }
     }
 
     /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and MPV input hooks (Fullscreen and Ctrl+W Close Tab).
@@ -808,7 +888,7 @@ impl BridgeViewerTabs {
         }
     }
 
-    /// Synchronizes open tabs, active view modes, viewer image buffers, and right sidebar locking to Slint UI.
+    /// Synchronizes open tabs, active view modes, viewer image buffers, right sidebar locking, and auto-scrolls the active tab into view.
     pub fn sync_ui(
         window: &MainWindow,
         tab_manager: &ViewerTabManager,
@@ -917,8 +997,11 @@ impl BridgeViewerTabs {
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);
             StatusBarBridge::update_metrics(window, state);
+
+            // 4. Smoothly scroll active tab into view in the horizontal tab bar
+            Self::scroll_active_tab_into_view(window, tab_manager, settings);
         } else {
-            // 4. Returning to Browse Mode: clear active tab media ID and restore full selection
+            // Returning to Browse Mode: clear active tab media ID and restore full selection
             window.set_viewer_is_video(false);
             {
                 let mut st = state.write();

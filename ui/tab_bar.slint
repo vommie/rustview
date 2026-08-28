@@ -14,6 +14,7 @@ export component TabItemView inherits Rectangle {
     callback close-clicked();
     callback middle-clicked();
     callback context-menu-requested(length /* x */, length /* y */);
+    callback scrolled(length /* delta_x */, length /* delta_y */);
     callback drag-started(length /* press_x */, length /* press_y */, length /* item_width */);
     callback drag-moved(length /* mouse_x */, length /* mouse_y */);
     callback drag-ended();
@@ -48,7 +49,7 @@ export component TabItemView inherits Rectangle {
 
         tooltip-host := TooltipHost {
             text: root.tab.title;
-            shortcut: root.tab.is-active ? "Active Tab (Drag to reorder, Right-click for menu)" : "Click to view (Drag to reorder, Middle-click to close)";
+            shortcut: root.tab.is-active ? "Active Tab (Scroll to cycle, Drag to reorder, Right-click for menu)" : "Click to view (Scroll to cycle, Drag to reorder, Middle-click to close)";
             is-enabled: !root.is-placeholder;
         }
 
@@ -57,6 +58,11 @@ export component TabItemView inherits Rectangle {
             property <length> press-y: 0px;
             property <bool> is-drag-active: false;
             property <bool> close-clicked-recently: false;
+
+            scroll-event(event) => {
+                root.scrolled(event.delta-x, event.delta-y);
+                return accept;
+            }
 
             pointer-event(event) => {
                 if event.kind == PointerEventKind.down {
@@ -244,6 +250,7 @@ export component MediaTabBar inherits Rectangle {
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
+    callback tab-wheel-scrolled(bool /* is_next */);
 
     callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
     callback tab-drag-moved(length /* mouse_x */, length /* view_width */);
@@ -255,6 +262,10 @@ export component MediaTabBar inherits Rectangle {
 
     public function scroll-by(dx: length) {
         scroll-area.handle-scroll(dx, 0px);
+    }
+
+    public function scroll-tab-into-view(tab-x: length, tab-width: length) {
+        scroll-area.scroll-into-view-horizontal(tab-x, tab-width);
     }
 
     scroll-area := SmoothScrollArea {
@@ -276,6 +287,20 @@ export component MediaTabBar inherits Rectangle {
                 show-rating-badge: root.show-rating-badge;
                 shift-x: tab.shift_x;
                 is-placeholder: tab.is_placeholder;
+
+                scrolled(dx, dy) => {
+                    if root.tabs.length > 1 {
+                        if dy > 0px {
+                            root.tab-wheel-scrolled(false);
+                        } else if dy < 0px {
+                            root.tab-wheel-scrolled(true);
+                        } else if dx != 0px {
+                            scroll-area.handle-scroll(dx, dy);
+                        }
+                    } else {
+                        scroll-area.handle-scroll(dx, dy);
+                    }
+                }
 
                 clicked => { root.tab-selected(tab.id); }
                 middle-clicked => { root.tab-closed(tab.id); }

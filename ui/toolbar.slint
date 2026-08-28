@@ -27,6 +27,7 @@ export component TopToolbar inherits Rectangle {
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
+    callback tab-wheel-scrolled(bool /* is_next */);
 
     callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
     callback tab-drag-moved(length /* mouse_x */, length /* view_width */);
@@ -35,6 +36,10 @@ export component TopToolbar inherits Rectangle {
 
     public function scroll-tab-bar-by(dx: length) {
         tab-bar.scroll-by(dx);
+    }
+
+    public function scroll-tab-into-view(tab-x: length, tab-width: length) {
+        tab-bar.scroll-tab-into-view(tab-x, tab-width);
     }
 
     // Bottom border separator line
@@ -62,7 +67,7 @@ export component TopToolbar inherits Rectangle {
 
         ToolbarSeparator {}
 
-        // 2. Embedded MediaTabBar with integrated Drag & Drop Reordering
+        // 2. Embedded MediaTabBar with integrated Drag & Drop Reordering and Mouse Wheel Tab Cycling
         tab-bar := MediaTabBar {
             horizontal-stretch: 1;
             height: 28px;
@@ -81,6 +86,7 @@ export component TopToolbar inherits Rectangle {
             tab-selected(id) => { root.tab-selected(id); }
             tab-closed(id) => { root.tab-closed(id); }
             tab-context-menu(id, x, y) => { root.tab-context-menu(id, self.x + x, self.y + y); }
+            tab-wheel-scrolled(is-next) => { root.tab-wheel-scrolled(is-next); }
 
             tab-drag-started(id, s-idx, mx, tw) => {
                 root.tab-drag-started(id, s-idx, mx, tw);

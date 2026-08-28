@@ -2,7 +2,7 @@ import { Theme } from "styles.slint";
 
 /// Generic, modular, high-performance scroll container with permanent full-width, custom-styled scrollbars.
 /// Provides real-time 1:1 cursor synchronization during scrollbar dragging with zero lag or drift,
-/// as well as programmatic scroll-into-view API.
+/// as well as smooth programmatic scroll-into-view animation API.
 export component SmoothScrollArea inherits Rectangle {
     in-out property <length> viewport-x: 0px;
     in-out property <length> viewport-y: 0px;
@@ -21,6 +21,10 @@ export component SmoothScrollArea inherits Rectangle {
     in property <color> thumb-color: #585b70;
     in property <color> thumb-hover-color: Theme.primary;
     in property <color> thumb-pressed-color: Theme.accent;
+
+    // Internal State Properties for Dragging & Interaction
+    property <bool> is-dragging-v: false;
+    property <bool> is-dragging-h: false;
 
     // Computed boundary properties
     property <length> min-x: Math.min(0px, self.width - root.content-width);
@@ -92,6 +96,29 @@ export component SmoothScrollArea inherits Rectangle {
         }
     }
 
+    /// Programmatically scrolls the viewport to ensure the target horizontal item range [target-x, target-x + target-width] is visible in the viewport.
+    public function scroll-into-view-horizontal(target-x: length, target-width: length) {
+        if !root.has-horizontal-scrollbar {
+            return;
+        }
+        let view-w = self.width;
+        let cur-left = 0px - root.clamped-x;
+        let cur-right = cur-left + view-w;
+
+        // Add 8px margin so the tab doesn't stick directly against the edge
+        let margin: length = 8px;
+        let padded-target-x = Math.max(0px, target-x - margin);
+        let padded-target-right = target-x + target-width + margin;
+
+        if padded-target-x < cur-left {
+            // Target is to the left of current viewport -> scroll left to show left edge of item
+            root.viewport-x = 0px - padded-target-x;
+        } else if padded-target-right > cur-right {
+            // Target is to the right of current viewport -> scroll right to bring item into view at right edge
+            root.viewport-x = 0px - (padded-target-right - view-w);
+        }
+    }
+
     /// Programmatically scrolls to top
     public function scroll-to-top() {
         root.viewport-y = 0px;
@@ -108,12 +135,15 @@ export component SmoothScrollArea inherits Rectangle {
         }
     }
 
-    // Content container viewport
+    // Content container viewport with smooth ease-out animation for programmatic scrolling
     content-host := Rectangle {
         x: root.clamped-x;
         y: root.clamped-y;
         width: Math.max(parent.width, root.content-width);
         height: Math.max(parent.height, root.content-height);
+
+        animate x { duration: (root.is-dragging-h || root.is-dragging-v || scroll-touch.pressed) ? 0ms : 200ms; easing: ease-out; }
+        animate y { duration: (root.is-dragging-h || root.is-dragging-v || scroll-touch.pressed) ? 0ms : 200ms; easing: ease-out; }
 
         @children
     }
@@ -145,6 +175,8 @@ export component SmoothScrollArea inherits Rectangle {
                 ? root.thumb-hover-color
                 : root.thumb-color
             );
+
+            animate y { duration: (v-touch.pressed || scroll-touch.pressed) ? 0ms : 200ms; easing: ease-out; }
         }
 
         // Full-track TouchArea delivering 1:1 real-time cursor tracking
@@ -160,17 +192,23 @@ export component SmoothScrollArea inherits Rectangle {
             }
 
             pointer-event(e) => {
-                if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
-                    if self.mouse-y >= v-track.thumb-y && self.mouse-y <= v-track.thumb-y + v-track.thumb-h {
-                        // Grab thumb at exact click point
-                        self.drag-offset-y = self.mouse-y - v-track.thumb-y;
-                    } else {
-                        // Click on empty track: Jump center of thumb to cursor immediately
-                        self.drag-offset-y = v-track.thumb-h / 2;
-                        let target-y = Math.max(0px, Math.min(v-track.track-avail, self.mouse-y - self.drag-offset-y));
-                        let ratio = target-y / v-track.track-avail;
-                        root.viewport-y = -ratio * v-track.max-scroll-y;
+                if e.kind == PointerEventKind.down {
+                    root.is-dragging-v = true;
+                    if e.button == PointerEventButton.left {
+                        if self.mouse-y >= v-track.thumb-y && self.mouse-y <= v-track.thumb-y + v-track.thumb-h {
+                            // Grab thumb at exact click point
+                            self.drag-offset-y = self.mouse-y - v-track.thumb-y;
+                        } else {
+                            // Click on empty track: Jump center of thumb to cursor immediately
+                            self.drag-offset-y = v-track.thumb-h / 2;
+                            let target-y = Math.max(0px, Math.min(v-track.track-avail, self.mouse-y - self.drag-offset-y));
+                            let ratio = target-y / v-track.track-avail;
+                            root.viewport-y = -ratio * v-track.max-scroll-y;
+                        }
                     }
+                }
+                if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
+                    root.is-dragging-v = false;
                 }
             }
 
@@ -211,6 +249,8 @@ export component SmoothScrollArea inherits Rectangle {
                 ? root.thumb-hover-color
                 : root.thumb-color
             );
+
+            animate x { duration: (h-touch.pressed || scroll-touch.pressed) ? 0ms : 200ms; easing: ease-out; }
         }
 
         // Full-track TouchArea delivering 1:1 real-time cursor tracking
@@ -226,17 +266,23 @@ export component SmoothScrollArea inherits Rectangle {
             }
 
             pointer-event(e) => {
-                if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
-                    if self.mouse-x >= h-track.thumb-x && self.mouse-x <= h-track.thumb-x + h-track.thumb-w {
-                        // Grab thumb at exact click point
-                        self.drag-offset-x = self.mouse-x - h-track.thumb-x;
-                    } else {
-                        // Click on empty track: Jump center of thumb to cursor immediately
-                        self.drag-offset-x = h-track.thumb-w / 2;
-                        let target-x = Math.max(0px, Math.min(h-track.track-avail, self.mouse-x - self.drag-offset-x));
-                        let ratio = target-x / h-track.track-avail;
-                        root.viewport-x = -ratio * h-track.max-scroll-x;
+                if e.kind == PointerEventKind.down {
+                    root.is-dragging-h = true;
+                    if e.button == PointerEventButton.left {
+                        if self.mouse-x >= h-track.thumb-x && self.mouse-x <= h-track.thumb-x + h-track.thumb-w {
+                            // Grab thumb at exact click point
+                            self.drag-offset-x = self.mouse-x - h-track.thumb-x;
+                        } else {
+                            // Click on empty track: Jump center of thumb to cursor immediately
+                            self.drag-offset-x = h-track.thumb-w / 2;
+                            let target-x = Math.max(0px, Math.min(h-track.track-avail, self.mouse-x - self.drag-offset-x));
+                            let ratio = target-x / h-track.track-avail;
+                            root.viewport-x = -ratio * h-track.max-scroll-x;
+                        }
                     }
+                }
+                if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
+                    root.is-dragging-h = false;
                 }
             }
 

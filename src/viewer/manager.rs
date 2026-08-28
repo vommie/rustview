@@ -240,6 +240,46 @@ impl ViewerTabManager {
         Ok(new_tab_id)
     }
 
+    /// Cycles the active tab forward (`is_next = true`) or backward (`is_next = false`) with cyclic wrapping.
+    /// Returns the newly activated `TabId` if switched. If there is 1 or fewer tabs, returns `None`.
+    pub fn cycle_tab(&self, is_next: bool) -> Option<TabId> {
+        let tabs = self.tabs.read();
+        let total = tabs.len();
+        if total <= 1 {
+            return None;
+        }
+
+        let current_active = *self.active_tab_id.read();
+        let current_idx = current_active.and_then(|id| tabs.index_of(id));
+
+        let target_idx = match current_idx {
+            Some(idx) => {
+                if is_next {
+                    (idx + 1) % total
+                } else {
+                    (idx + total - 1) % total
+                }
+            }
+            None => {
+                if is_next {
+                    0
+                } else {
+                    total - 1
+                }
+            }
+        };
+
+        let target_tab = tabs.get_at(target_idx)?;
+        let target_id = target_tab.id;
+        drop(tabs);
+
+        if self.set_active_tab_internal(target_id) {
+            Some(target_id)
+        } else {
+            None
+        }
+    }
+
     /// Opens a media item in a viewer tab. Reuses existing tab if `allow_multiple` is false.
     pub fn open_or_focus_media(
         &self,

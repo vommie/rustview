@@ -191,6 +191,30 @@ fn test_tab_title_lifetime_preservation_and_reordering() {
 }
 
 #[test]
+fn test_tab_slot_geometry_lookup_and_width_estimation() {
+    let t1 = create_test_session(1, 100, "short.png", "short.png");
+    let t2 = create_test_session(2, 200, "a_much_longer_tab_title_name.png", "a_much_longer_tab_title_name.png");
+    let t3 = create_test_session(3, 300, "photo.jpg", "photo.jpg");
+
+    let tabs = vec![t1, t2, t3];
+
+    // Verify slot geometry computation for first, middle, and last tab
+    let slot0 = TabDndGeometry::find_tab_slot_geometry(&tabs, 1, false).expect("Slot 0 found");
+    assert_eq!(slot0.0, 2.0); // starts at 2px
+    assert!(slot0.1 >= 70.0);
+
+    let slot1 = TabDndGeometry::find_tab_slot_geometry(&tabs, 2, false).expect("Slot 1 found");
+    assert_eq!(slot1.0, 2.0 + slot0.1 + 4.0); // starts after slot0 + 4px spacing
+    assert!(slot1.1 > slot0.1); // longer title is wider
+
+    let slot2 = TabDndGeometry::find_tab_slot_geometry(&tabs, 3, false).expect("Slot 2 found");
+    assert_eq!(slot2.0, slot1.0 + slot1.1 + 4.0);
+
+    // Non-existent tab ID returns None
+    assert!(TabDndGeometry::find_tab_slot_geometry(&tabs, 999, false).is_none());
+}
+
+#[test]
 fn test_tab_collection_isolated_crud_and_reordering() {
     let mut collection = TabCollection::new();
     assert!(collection.is_empty());
@@ -578,6 +602,91 @@ fn test_viewer_tab_manager_allow_multiple_tabs_option_and_iteration_suffixes() {
 
     assert_eq!(title1_rem, "clip_sample.mp4");
     assert_eq!(title3_rem, "clip_sample.mp4 (2)");
+}
+
+#[test]
+fn test_viewer_tab_cycling_with_mouse_wheel_and_wrapping() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    for i in 1..=4 {
+        let p = tmp_media.path().join(format!("item_{}.png", i));
+        image::RgbImage::new(10, 10).save(&p).unwrap();
+    }
+
+    let _ = lib.refresher().refresh_folder(folder.id).unwrap();
+    let media = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(media.len(), 4);
+
+    let tab_mgr = ViewerTabManager::new(lib);
+    let mut tab_ids = Vec::new();
+
+    for m in &media {
+        let (tid, _) = tab_mgr.open_or_focus_media(m.id, true).unwrap();
+        tab_ids.push(tid);
+    }
+    assert_eq!(tab_mgr.tab_count(), 4);
+
+    // Initial state: Tab 4 (index 3) is active
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[3]));
+
+    // 1. Wheel DOWN on Tab 4 (last tab, index 3) -> Wrap around to Tab 1 (index 0)
+    let cycled_next_wrap = tab_mgr.cycle_tab(true);
+    assert_eq!(cycled_next_wrap, Some(tab_ids[0]));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[0]));
+
+    // 2. Wheel DOWN on Tab 1 (index 0) -> Tab 2 (index 1)
+    let cycled_next_1 = tab_mgr.cycle_tab(true);
+    assert_eq!(cycled_next_1, Some(tab_ids[1]));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[1]));
+
+    // 3. Wheel DOWN on Tab 2 (index 1) -> Tab 3 (index 2)
+    let cycled_next_2 = tab_mgr.cycle_tab(true);
+    assert_eq!(cycled_next_2, Some(tab_ids[2]));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[2]));
+
+    // 4. Wheel UP on Tab 3 (index 2) -> Tab 2 (index 1)
+    let cycled_prev_1 = tab_mgr.cycle_tab(false);
+    assert_eq!(cycled_prev_1, Some(tab_ids[1]));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[1]));
+
+    // 5. Wheel UP on Tab 2 (index 1) -> Tab 1 (index 0)
+    let cycled_prev_2 = tab_mgr.cycle_tab(false);
+    assert_eq!(cycled_prev_2, Some(tab_ids[0]));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[0]));
+
+    // 6. Wheel UP on Tab 1 (first tab, index 0) -> Wrap around to Tab 4 (last tab, index 3)
+    let cycled_prev_wrap = tab_mgr.cycle_tab(false);
+    assert_eq!(cycled_prev_wrap, Some(tab_ids[3]));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[3]));
+
+    // 7. Test Browse Mode (no tab active):
+    tab_mgr.activate_browse();
+    assert_eq!(tab_mgr.active_tab_id(), None);
+
+    // Wheel DOWN in Browse Mode -> Selects first tab (index 0)
+    let browse_next = tab_mgr.cycle_tab(true);
+    assert_eq!(browse_next, Some(tab_ids[0]));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[0]));
+
+    tab_mgr.activate_browse();
+    // Wheel UP in Browse Mode -> Selects last tab (index 3)
+    let browse_prev = tab_mgr.cycle_tab(false);
+    assert_eq!(browse_prev, Some(tab_ids[3]));
+    assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[3]));
+
+    // 8. Test Single Tab: Feature is inactive and returns None
+    tab_mgr.close_other_tabs(tab_ids[0]);
+    assert_eq!(tab_mgr.tab_count(), 1);
+
+    let single_next = tab_mgr.cycle_tab(true);
+    assert_eq!(single_next, None);
+
+    let single_prev = tab_mgr.cycle_tab(false);
+    assert_eq!(single_prev, None);
 }
 
 #[test]

@@ -223,6 +223,7 @@ export component MainWindow inherits Window {
     callback tab-selected(int /* tab_id */);
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
+    callback tab-wheel-scrolled(bool /* is_next */);
 
     // Tab Drag & Drop Callbacks
     callback tab-drag-started(int /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
@@ -302,6 +303,10 @@ export component MainWindow inherits Window {
 
     public function scroll-tab-bar-by(dx: length) {
         top-toolbar.scroll-tab-bar-by(dx);
+    }
+
+    public function scroll-tab-into-view(tab-x: length, tab-width: length) {
+        top-toolbar.scroll-tab-into-view(tab-x, tab-width);
     }
 
     public function scroll-folder-tree-by(dy: length) {
@@ -417,6 +422,7 @@ export component MainWindow inherits Window {
             tab-selected(id) => { root.tab-selected(id); }
             tab-closed(id) => { root.tab-closed(id); }
             tab-context-menu(id, x, y) => { root.tab-context-menu(id, x, y); }
+            tab-wheel-scrolled(is-next) => { root.tab-wheel-scrolled(is-next); }
             settings-clicked => { root.open-settings(); }
 
             tab-drag-started(id, s-idx, mx, tw) => {
