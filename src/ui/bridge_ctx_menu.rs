@@ -299,6 +299,7 @@ impl BridgeContextMenu {
                     missing_file_dialog: &missing_file_dlg,
                     delete_file_dialog: &delete_file_dlg,
                     remove_orphaned_dialog: &remove_orphaned_dlg,
+                    fullscreen_controller: &fs_ctrl,
                 },
             );
         });

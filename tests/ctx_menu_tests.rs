@@ -9,7 +9,8 @@ use rustview::ui::bridge_ctx_menu_media::MediaContextMenu;
 use rustview::ui::bridge_folders::FolderTreeNode;
 use rustview::ui::bridge_state::{
     CTX_ACTION_CLEAR_SELECTION, CTX_ACTION_COPY_IMAGE, CTX_ACTION_COPY_NAME, CTX_ACTION_COPY_PATH,
-    CTX_ACTION_DELETE_MEDIA, CTX_ACTION_OPEN, CTX_ACTION_OPEN_IN_FILE_MANAGER,
+    CTX_ACTION_DELETE_MEDIA, CTX_ACTION_OPEN, CTX_ACTION_OPEN_IN_BG_TAB,
+    CTX_ACTION_OPEN_IN_FILE_MANAGER, CTX_ACTION_OPEN_IN_FULLSCREEN, CTX_ACTION_OPEN_IN_TAB,
     CTX_ACTION_OPEN_WITH_APP_BASE, CTX_ACTION_OPEN_WITH_OTHER, CTX_ACTION_REFRESH_FILES,
     CTX_ACTION_REFRESH_METADATA, CTX_ACTION_REMOVE_FROM_DB, CTX_ACTION_RENAME,
     CTX_ACTION_SELECT_ALL, CTX_FOLDER_OPEN_IN_FILE_MANAGER, CTX_FOLDER_REFRESH,
@@ -136,29 +137,44 @@ fn test_media_context_menu_order_and_open_with_submenu() {
     assert_eq!(open_with_sub.children[3].id, CTX_ACTION_OPEN_WITH_OTHER);
     assert_eq!(open_with_sub.children[3].text, "Other Application...");
 
-    // 3: Open in File Manager
-    assert_eq!(menu.items[3].id, CTX_ACTION_OPEN_IN_FILE_MANAGER);
-    assert_eq!(menu.items[3].text, "Open in File Manager");
+    // 3: Open in Tab (Directly below Open With...)
+    assert_eq!(menu.items[3].id, CTX_ACTION_OPEN_IN_TAB);
+    assert_eq!(menu.items[3].text, "Open in Tab");
+    assert_eq!(menu.items[3].shortcut, Some("DoubleClick".to_string()));
 
-    // 4: Separator
-    assert_eq!(menu.items[4].kind, CtxMenuItemKind::Separator);
-    // 5: Rename...
-    assert_eq!(menu.items[5].id, CTX_ACTION_RENAME);
-    // 6: Copy...
-    assert_eq!(menu.items[6].text, "Copy...");
+    // 4: Open in Background-Tab (Directly below Open in Tab)
+    assert_eq!(menu.items[4].id, CTX_ACTION_OPEN_IN_BG_TAB);
+    assert_eq!(menu.items[4].text, "Open in Background-Tab");
+    assert_eq!(menu.items[4].shortcut, Some("Ctrl+MiddleClick".to_string()));
 
-    let copy_sub = &menu.items[6];
+    // 5: Open in Fullscreen (Directly below Open in Background-Tab and above Open in File Manager)
+    assert_eq!(menu.items[5].id, CTX_ACTION_OPEN_IN_FULLSCREEN);
+    assert_eq!(menu.items[5].text, "Open in Fullscreen");
+    assert_eq!(menu.items[5].shortcut, Some("MiddleClick".to_string()));
+
+    // 6: Open in File Manager
+    assert_eq!(menu.items[6].id, CTX_ACTION_OPEN_IN_FILE_MANAGER);
+    assert_eq!(menu.items[6].text, "Open in File Manager");
+
+    // 7: Separator
+    assert_eq!(menu.items[7].kind, CtxMenuItemKind::Separator);
+    // 8: Rename...
+    assert_eq!(menu.items[8].id, CTX_ACTION_RENAME);
+    // 9: Copy...
+    assert_eq!(menu.items[9].text, "Copy...");
+
+    let copy_sub = &menu.items[9];
     assert_eq!(copy_sub.children.len(), 3);
     assert_eq!(copy_sub.children[0].id, CTX_ACTION_COPY_NAME);
     assert_eq!(copy_sub.children[1].id, CTX_ACTION_COPY_PATH);
     assert_eq!(copy_sub.children[2].id, CTX_ACTION_COPY_IMAGE);
 
-    // 7: Delete File... (Directly below Copy... without separator)
-    assert_eq!(menu.items[7].id, CTX_ACTION_DELETE_MEDIA);
-    assert_eq!(menu.items[7].text, "Delete File...");
+    // 10: Delete File... (Directly below Copy... without separator)
+    assert_eq!(menu.items[10].id, CTX_ACTION_DELETE_MEDIA);
+    assert_eq!(menu.items[10].text, "Delete File...");
 
-    // 8: Separator
-    assert_eq!(menu.items[8].kind, CtxMenuItemKind::Separator);
+    // 11: Separator
+    assert_eq!(menu.items[11].kind, CtxMenuItemKind::Separator);
 
     // Refresh entries present
     assert!(menu.items.iter().any(|i| i.id == CTX_ACTION_REFRESH_FILES));
@@ -172,6 +188,29 @@ fn test_media_context_menu_order_and_open_with_submenu() {
     let deleted_menu = MediaContextMenu::build_menu(1, false, true, false, &mock_apps);
     let remove_item = deleted_menu.items.iter().find(|i| i.id == CTX_ACTION_REMOVE_FROM_DB).unwrap();
     assert_eq!(remove_item.text, "Remove from Database...");
+}
+
+#[test]
+fn test_media_context_menu_multiple_selection_plural_labels() {
+    let menu = MediaContextMenu::build_menu(4, false, false, false, &[]);
+
+    // Verify header
+    assert_eq!(menu.items[0].text, "Selected Files");
+
+    // Verify Open in Tabs / Background-Tabs plural formatting
+    let open_tab_item = menu.items.iter().find(|i| i.id == CTX_ACTION_OPEN_IN_TAB).unwrap();
+    assert_eq!(open_tab_item.text, "Open in Tabs (4 Files)");
+    assert_eq!(open_tab_item.shortcut, None); // Shortcuts omitted on multi-selection
+
+    let open_bg_tab_item = menu.items.iter().find(|i| i.id == CTX_ACTION_OPEN_IN_BG_TAB).unwrap();
+    assert_eq!(open_bg_tab_item.text, "Open in Background-Tabs (4 Files)");
+    assert_eq!(open_bg_tab_item.shortcut, None);
+
+    let open_fs_item = menu.items.iter().find(|i| i.id == CTX_ACTION_OPEN_IN_FULLSCREEN).unwrap();
+    assert_eq!(open_fs_item.text, "Open in Fullscreen");
+
+    let open_fm_item = menu.items.iter().find(|i| i.id == CTX_ACTION_OPEN_IN_FILE_MANAGER).unwrap();
+    assert_eq!(open_fm_item.text, "Open in File Manager (4 Files)");
 }
 
 #[test]

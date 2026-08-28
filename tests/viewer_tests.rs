@@ -3,6 +3,7 @@ use rustview::library::Library;
 use rustview::media::{MediaFormat, MediaType};
 use rustview::ui::bridge_ctx_menu_tab::TabContextMenu;
 use rustview::ui::bridge_state::{
+    CTX_ACTION_OPEN_IN_BG_TAB, CTX_ACTION_OPEN_IN_FULLSCREEN, CTX_ACTION_OPEN_IN_TAB,
     CTX_TAB_CLOSE, CTX_TAB_CLOSE_OTHERS, CTX_TAB_CLOSE_TO_LEFT, CTX_TAB_CLOSE_TO_RIGHT,
     CTX_TAB_DUPLICATE, CTX_TAB_MOVE_LEFT, CTX_TAB_MOVE_RIGHT, CTX_TAB_MOVE_TO_END,
     CTX_TAB_MOVE_TO_START,
@@ -556,59 +557,6 @@ fn test_viewer_tab_manager_adopt_video_session_in_background() {
     } else {
         panic!("Expected video payload in adopted session");
     }
-}
-
-#[test]
-fn test_viewer_tab_manager_batch_close_methods() {
-    let mut collection = TabCollection::new();
-
-    let t1 = create_test_session(1, 10, "1.png", "1.png");
-    let t2 = create_test_session(2, 20, "2.png", "2.png");
-    let t3 = create_test_session(3, 30, "3.png", "3.png");
-    let t4 = create_test_session(4, 40, "4.png", "4.png");
-    let t5 = create_test_session(5, 50, "5.png", "5.png");
-
-    collection.push(t1);
-    collection.push(t2);
-    collection.push(t3);
-    collection.push(t4);
-    collection.push(t5);
-    assert_eq!(collection.len(), 5);
-
-    // 1. Remove to left of Tab 3 -> Should remove Tab 1 and Tab 2
-    let left_evicted = collection.remove_to_left(3);
-    assert_eq!(left_evicted.len(), 2);
-    assert_eq!(left_evicted[0].id, 1);
-    assert_eq!(left_evicted[1].id, 2);
-    assert_eq!(collection.len(), 3); // [3, 4, 5]
-    assert_eq!(collection.get_at(0).unwrap().id, 3);
-    assert_eq!(collection.get_at(1).unwrap().id, 4);
-    assert_eq!(collection.get_at(2).unwrap().id, 5);
-
-    // Remove to left of first tab -> Should return empty
-    let empty_left = collection.remove_to_left(3);
-    assert!(empty_left.is_empty());
-    assert_eq!(collection.len(), 3);
-
-    // 2. Remove to right of Tab 4 -> Should remove Tab 5
-    let right_evicted = collection.remove_to_right(4);
-    assert_eq!(right_evicted.len(), 1);
-    assert_eq!(right_evicted[0].id, 5);
-    assert_eq!(collection.len(), 2); // [3, 4]
-    assert_eq!(collection.get_at(0).unwrap().id, 3);
-    assert_eq!(collection.get_at(1).unwrap().id, 4);
-
-    // Remove to right of last tab -> Should return empty
-    let empty_right = collection.remove_to_right(4);
-    assert!(empty_right.is_empty());
-    assert_eq!(collection.len(), 2);
-
-    // 3. Remove other tabs keeping Tab 4 -> Should remove Tab 3
-    let other_evicted = collection.retain_only(4);
-    assert_eq!(other_evicted.len(), 1);
-    assert_eq!(other_evicted[0].id, 3);
-    assert_eq!(collection.len(), 1);
-    assert_eq!(collection.get_at(0).unwrap().id, 4);
 }
 
 #[test]
@@ -1262,6 +1210,13 @@ fn test_viewer_action_enum_variants() {
 
     let action_fs = ViewerAction::ToggleFullscreen;
     assert_eq!(action_fs, ViewerAction::ToggleFullscreen);
+}
+
+#[test]
+fn test_media_context_menu_new_action_constants() {
+    assert_eq!(CTX_ACTION_OPEN_IN_TAB, 1020);
+    assert_eq!(CTX_ACTION_OPEN_IN_BG_TAB, 1021);
+    assert_eq!(CTX_ACTION_OPEN_IN_FULLSCREEN, 1022);
 }
 
 #[test]

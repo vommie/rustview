@@ -867,6 +867,262 @@ impl BridgeViewerTabs {
         }
     }
 
+    /// Opens multiple media items in foreground viewer tabs.
+    /// Prevents UI jitter by opening items 0..(N-1) in the background and only focusing/bringing the last item to the foreground.
+    pub fn open_multiple_media_tabs(
+        media_ids: &[MediaId],
+        window: &MainWindow,
+        tab_manager: &Arc<ViewerTabManager>,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        fullscreen_controller: &ImageFullscreenDialogController,
+    ) {
+        if media_ids.is_empty() {
+            return;
+        }
+
+        if media_ids.len() == 1 {
+            Self::open_media_tab(
+                media_ids[0],
+                window,
+                tab_manager,
+                library,
+                settings,
+                state,
+            );
+            return;
+        }
+
+        let t0 = Instant::now();
+        let total = media_ids.len();
+
+        tracing::info!(
+            total_items = total,
+            "[BridgeViewerTabs: OpenMultipleForeground] Opening {} media tabs with tail focus activation...",
+            total
+        );
+
+        let app_settings = settings.get();
+
+        // 1. Open items 0..(total - 1) in background
+        for &media_id in &media_ids[..total - 1] {
+            let is_video = {
+                let st = state.read();
+                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                    matches!(item.record.media_type, MediaType::Video)
+                } else if let Ok(Some(record)) = library.media().get(media_id) {
+                    matches!(record.media_type, MediaType::Video)
+                } else {
+                    false
+                }
+            };
+
+            let allow_multiple = if is_video {
+                app_settings.viewer.videos.allow_multiple_tabs
+            } else {
+                app_settings.viewer.images.allow_multiple_tabs
+            };
+
+            if let Ok((tab_id, is_new)) = tab_manager.open_media_in_background(media_id, allow_multiple)
+                && !is_video && is_new && let Ok(file_path) = library.resolve_media_path(media_id)
+            {
+                let tm_async = tab_manager.clone();
+                let w_weak = window.as_weak();
+                let lib_async = library.clone();
+                let st_async = state.clone();
+                let set_async = settings.clone();
+
+                rayon::spawn(move || {
+                    let load_res = HighResImageLoader::load_full_resolution(&file_path);
+                    let _ = w_weak.upgrade_in_event_loop(move |w| {
+                        if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
+                            return;
+                        }
+                        match load_res {
+                            Ok((w_px, h_px, pixel_buffer)) => {
+                                tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
+                            }
+                            Err(err) => {
+                                tm_async.set_tab_error(tab_id, err.to_string());
+                            }
+                        }
+                        Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                    });
+                });
+            }
+        }
+
+        // 2. Open the last item in foreground (sets active_tab_id to this last item)
+        let last_id = media_ids[total - 1];
+        let is_last_video = {
+            let st = state.read();
+            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == last_id) {
+                matches!(item.record.media_type, MediaType::Video)
+            } else if let Ok(Some(record)) = library.media().get(last_id) {
+                matches!(record.media_type, MediaType::Video)
+            } else {
+                false
+            }
+        };
+
+        let last_allow_multiple = if is_last_video {
+            app_settings.viewer.videos.allow_multiple_tabs
+        } else {
+            app_settings.viewer.images.allow_multiple_tabs
+        };
+
+        match tab_manager.open_or_focus_media(last_id, last_allow_multiple) {
+            Ok((last_tab_id, is_new)) => {
+                window.set_is_tab_grid_active(false);
+                window.set_is_browse_active(false);
+                window.set_active_view_mode(1);
+
+                Self::sync_ui(window, tab_manager, library, settings, state);
+
+                if is_last_video {
+                    Self::sync_video_embedding(window, tab_manager, fullscreen_controller, settings);
+                } else if is_new && let Ok(file_path) = library.resolve_media_path(last_id) {
+                    let tm_async = tab_manager.clone();
+                    let w_weak = window.as_weak();
+                    let lib_async = library.clone();
+                    let st_async = state.clone();
+                    let set_async = settings.clone();
+
+                    rayon::spawn(move || {
+                        let load_res = HighResImageLoader::load_full_resolution(&file_path);
+                        let _ = w_weak.upgrade_in_event_loop(move |w| {
+                            if tm_async.get_tab(last_tab_id).map(|t| t.media_id) != Some(last_id) {
+                                return;
+                            }
+                            match load_res {
+                                Ok((w_px, h_px, pixel_buffer)) => {
+                                    tm_async.update_tab_image_buffer(last_tab_id, w_px, h_px, pixel_buffer);
+                                }
+                                Err(err) => {
+                                    tm_async.set_tab_error(last_tab_id, err.to_string());
+                                }
+                            }
+                            Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                        });
+                    });
+                }
+            }
+            Err(e) => {
+                tracing::error!(media_id = last_id, error = %e, "[BridgeViewerTabs: OpenMultipleError] Failed to open last media tab in foreground");
+            }
+        }
+
+        let all_tabs = tab_manager.list_tabs();
+        let last_title = ViewerTabManager::compute_tab_title(&all_tabs, tab_manager.active_tab_id().unwrap_or(0));
+
+        StatusBarBridge::success(
+            window,
+            format!("Opened {} tabs (Foreground: '{}')", total, last_title),
+        );
+
+        tracing::info!(
+            total_opened = total,
+            elapsed_us = t0.elapsed().as_micros(),
+            "[BridgeViewerTabs: OpenMultipleForeground] Finished multi-tab foreground opening"
+        );
+    }
+
+    /// Opens multiple media items in background viewer tabs without altering active tab or view mode.
+    pub fn open_multiple_media_tabs_background(
+        media_ids: &[MediaId],
+        window: &MainWindow,
+        tab_manager: &Arc<ViewerTabManager>,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        if media_ids.is_empty() {
+            return;
+        }
+
+        let t0 = Instant::now();
+        let total = media_ids.len();
+        let app_settings = settings.get();
+
+        tracing::info!(
+            total_items = total,
+            "[BridgeViewerTabs: OpenMultipleBackground] Opening {} media tabs in background...",
+            total
+        );
+
+        let mut opened_count = 0usize;
+
+        for &media_id in media_ids {
+            let is_video = {
+                let st = state.read();
+                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                    matches!(item.record.media_type, MediaType::Video)
+                } else if let Ok(Some(record)) = library.media().get(media_id) {
+                    matches!(record.media_type, MediaType::Video)
+                } else {
+                    false
+                }
+            };
+
+            let allow_multiple = if is_video {
+                app_settings.viewer.videos.allow_multiple_tabs
+            } else {
+                app_settings.viewer.images.allow_multiple_tabs
+            };
+
+            if let Ok((tab_id, is_new)) = tab_manager.open_media_in_background(media_id, allow_multiple) {
+                opened_count += 1;
+                if !is_video && is_new && let Ok(file_path) = library.resolve_media_path(media_id) {
+                    let tm_async = tab_manager.clone();
+                    let w_weak = window.as_weak();
+                    let lib_async = library.clone();
+                    let st_async = state.clone();
+                    let set_async = settings.clone();
+
+                    rayon::spawn(move || {
+                        let load_res = HighResImageLoader::load_full_resolution(&file_path);
+                        let _ = w_weak.upgrade_in_event_loop(move |w| {
+                            if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
+                                return;
+                            }
+                            match load_res {
+                                Ok((w_px, h_px, pixel_buffer)) => {
+                                    tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
+                                }
+                                Err(err) => {
+                                    tm_async.set_tab_error(tab_id, err.to_string());
+                                }
+                            }
+                            Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                            if w.get_active_view_mode() == 2 {
+                                BridgeTabGrid::sync_tab_grid_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                            }
+                        });
+                    });
+                }
+            }
+        }
+
+        Self::sync_ui(window, tab_manager, library, settings, state);
+
+        if window.get_active_view_mode() == 2 {
+            BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, library, settings, state);
+        }
+
+        StatusBarBridge::success(
+            window,
+            format!("Opened {} tabs in background", opened_count),
+        );
+
+        tracing::info!(
+            opened_count,
+            total_requested = total,
+            elapsed_us = t0.elapsed().as_micros(),
+            "[BridgeViewerTabs: OpenMultipleBackground] Finished opening tabs in background"
+        );
+    }
+
     /// Opens a media file (Image or Video) in a viewer tab and initiates background loading or playback (Requirement 1: auto-plays on first open).
     pub fn open_media_tab(
         media_id: MediaId,

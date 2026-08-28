@@ -3,11 +3,13 @@ use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFile
 use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
 use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController};
 use super::bridge_file_selection::BridgeFileSelection;
+use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::{BridgeTags, TagActionContext};
+use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::file_selection::FileSelectionModel;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{
@@ -39,6 +41,7 @@ pub struct MediaActionContext<'a> {
     pub missing_file_dialog: &'a MissingFileDialogController,
     pub delete_file_dialog: &'a DeleteFileDialogController,
     pub remove_orphaned_dialog: &'a RemoveOrphanedFileDialogController,
+    pub fullscreen_controller: &'a ImageFullscreenDialogController,
 }
 
 pub struct MediaContextMenu;
@@ -139,6 +142,23 @@ impl MediaContextMenu {
         let can_copy = selected_count > 0;
         let can_refresh = selected_count > 0;
 
+        let open_in_tab_text = if is_single {
+            "Open in Tab".to_string()
+        } else {
+            format!("Open in Tabs ({} Files)", selected_count)
+        };
+        let open_in_tab_shortcut = if is_single { Some("DoubleClick") } else { None };
+
+        let open_in_bg_tab_text = if is_single {
+            "Open in Background-Tab".to_string()
+        } else {
+            format!("Open in Background-Tabs ({} Files)", selected_count)
+        };
+        let open_in_bg_tab_shortcut = if is_single { Some("Ctrl+MiddleClick") } else { None };
+
+        let open_in_fullscreen_text = "Open in Fullscreen".to_string();
+        let open_in_fullscreen_shortcut = if is_single { Some("MiddleClick") } else { None };
+
         let refresh_full_text = if is_single {
             "Refresh File (Full)".to_string()
         } else {
@@ -228,6 +248,27 @@ impl MediaContextMenu {
         }
 
         builder = builder
+            .action(
+                CTX_ACTION_OPEN_IN_TAB,
+                open_in_tab_text,
+                open_in_tab_shortcut,
+                None,
+                can_open,
+            )
+            .action(
+                CTX_ACTION_OPEN_IN_BG_TAB,
+                open_in_bg_tab_text,
+                open_in_bg_tab_shortcut,
+                None,
+                can_open,
+            )
+            .action(
+                CTX_ACTION_OPEN_IN_FULLSCREEN,
+                open_in_fullscreen_text,
+                open_in_fullscreen_shortcut,
+                None,
+                can_open,
+            )
             .action(
                 CTX_ACTION_OPEN_IN_FILE_MANAGER,
                 if is_single {
@@ -355,6 +396,36 @@ impl MediaContextMenu {
             CTX_ACTION_OPEN => {
                 Self::handle_open_action(window, ctx, &selected_ids);
             }
+            CTX_ACTION_OPEN_IN_TAB => {
+                let ordered_ids = ctx.state.read().get_selected_ids_ordered();
+                if !ordered_ids.is_empty() {
+                    BridgeViewerTabs::open_multiple_media_tabs(
+                        &ordered_ids,
+                        window,
+                        ctx.tab_manager,
+                        ctx.library,
+                        ctx.settings,
+                        ctx.state,
+                        ctx.fullscreen_controller,
+                    );
+                }
+            }
+            CTX_ACTION_OPEN_IN_BG_TAB => {
+                let ordered_ids = ctx.state.read().get_selected_ids_ordered();
+                if !ordered_ids.is_empty() {
+                    BridgeViewerTabs::open_multiple_media_tabs_background(
+                        &ordered_ids,
+                        window,
+                        ctx.tab_manager,
+                        ctx.library,
+                        ctx.settings,
+                        ctx.state,
+                    );
+                }
+            }
+            CTX_ACTION_OPEN_IN_FULLSCREEN => {
+                Self::handle_open_in_fullscreen_action(window, ctx, &selected_ids);
+            }
             CTX_ACTION_OPEN_WITH_OTHER => {
                 Self::handle_open_with_other_action(window, ctx, &selected_ids);
             }
@@ -451,6 +522,35 @@ impl MediaContextMenu {
             _ => {
                 ctx.dispatcher.dispatch(action_id, &context);
             }
+        }
+    }
+
+    fn handle_open_in_fullscreen_action(
+        window: &MainWindow,
+        ctx: &MediaActionContext<'_>,
+        selected_ids: &std::collections::HashSet<MediaId>,
+    ) {
+        let target_id_opt = ctx
+            .state
+            .read()
+            .get_selected_ids_ordered()
+            .first()
+            .copied()
+            .or_else(|| selected_ids.iter().next().copied());
+
+        if let Some(media_id) = target_id_opt {
+            tracing::info!(
+                media_id,
+                "[MediaContextMenu] 'Open in Fullscreen' action triggered from context menu"
+            );
+            ctx.fullscreen_controller.show_for_media(
+                media_id,
+                ctx.library,
+                ctx.settings,
+                ctx.state,
+                ctx.tab_manager,
+                window.as_weak(),
+            );
         }
     }
 
