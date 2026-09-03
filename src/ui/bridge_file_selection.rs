@@ -1,3 +1,4 @@
+use super::MainWindow;
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
@@ -6,9 +7,8 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::file_selection::FileSelectionModel;
-use super::MainWindow;
-use crate::library::models::MediaId;
 use crate::library::Library;
+use crate::library::models::MediaId;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::system::SystemFileHandler;
@@ -86,13 +86,7 @@ impl BridgeFileSelection {
         let fs_mid = fullscreen_controller;
         window.on_media_middle_clicked(move |id| {
             Self::handle_middle_click(
-                id as u64,
-                &win_mid,
-                &lib_mid,
-                &set_mid,
-                &st_mid,
-                &tm_mid,
-                &fs_mid,
+                id as u64, &win_mid, &lib_mid, &set_mid, &st_mid, &tm_mid, &fs_mid,
             );
         });
 
@@ -378,7 +372,8 @@ impl BridgeFileSelection {
         let open_images_in_tab = settings.get().viewer.images.open_in_tab;
         let open_videos_in_tab = settings.get().viewer.videos.open_in_tab;
 
-        let should_open_in_tab = (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
+        let should_open_in_tab =
+            (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
 
         if should_open_in_tab {
             tracing::info!(
@@ -448,7 +443,8 @@ impl BridgeFileSelection {
         let open_images_in_tab = settings.get().viewer.images.open_in_tab;
         let open_videos_in_tab = settings.get().viewer.videos.open_in_tab;
 
-        let should_open_in_tab = (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
+        let should_open_in_tab =
+            (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
 
         if should_open_in_tab {
             tracing::info!(
@@ -489,7 +485,13 @@ impl BridgeFileSelection {
             st.all_folder_media
                 .iter()
                 .find(|m| m.record.id == media_id)
-                .map(|m| (m.record.filename.clone(), m.full_path.clone(), m.record.is_corrupted))
+                .map(|m| {
+                    (
+                        m.record.filename.clone(),
+                        m.full_path.clone(),
+                        m.record.is_corrupted,
+                    )
+                })
         };
 
         let (filename, full_path, is_corrupted) = match full_path_opt {

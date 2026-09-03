@@ -76,8 +76,8 @@ export component MediaTile inherits Rectangle {
                     self.is-drag-active = false;
                     self.was-already-selected = item.is-selected;
 
-                    if !item.is-selected || event.modifiers.control || event.modifiers.meta || event.modifiers.shift {
-                        root.clicked(event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
+                    if !item.is-selected || event.modifiers.control || event.modifiers.shift {
+                        root.clicked(event.modifiers.control, event.modifiers.shift);
                     }
                 } else if event.button == PointerEventButton.right {
                     root.context-menu-requested(self.mouse-x, self.mouse-y);
@@ -90,7 +90,7 @@ export component MediaTile inherits Rectangle {
                     self.is-drag-active = false;
                     root.drag-ended();
                 } else {
-                    if self.was-already-selected && !event.modifiers.control && !event.modifiers.meta && !event.modifiers.shift {
+                    if self.was-already-selected && !event.modifiers.control && !event.modifiers.shift {
                         root.clicked(false, false);
                     }
                 }
@@ -396,7 +396,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                         self.press-x = self.mouse-x;
                         self.press-y = self.mouse-y;
                         self.is-rubberband-active = false;
-                        self.press-ctrl = event.modifiers.control || event.modifiers.meta;
+                        self.press-ctrl = event.modifiers.control;
                         self.press-shift = event.modifiers.shift;
                     }
                     if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {

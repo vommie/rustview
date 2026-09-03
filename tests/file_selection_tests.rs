@@ -56,6 +56,12 @@ fn test_file_selection_single_click_clears_prior() {
     assert!(!sel.is_selected(101));
     assert!(sel.is_selected(102));
     assert_eq!(sel.anchor_id(), Some(102));
+
+    sel.select_single(103);
+    assert_eq!(sel.count(), 1);
+    assert!(!sel.is_selected(101));
+    assert!(!sel.is_selected(102));
+    assert!(sel.is_selected(103));
 }
 
 #[test]
