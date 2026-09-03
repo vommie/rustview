@@ -1,4 +1,5 @@
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
+use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
@@ -93,6 +94,7 @@ impl BridgeMedia {
         tab_manager: Arc<ViewerTabManager>,
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
+        fullscreen_controller: ImageFullscreenDialogController,
     ) {
         // 1. Search Query Filter Callback
         let win = window.clone_strong();
@@ -100,7 +102,9 @@ impl BridgeMedia {
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
+        let fs_query = fullscreen_controller.clone();
         window.on_search_query_changed(move |query| {
+            fs_query.dismiss_if_quick_fullscreen();
             st.write().filter.search_query = query.to_string();
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
@@ -111,7 +115,9 @@ impl BridgeMedia {
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
+        let fs_regex = fullscreen_controller.clone();
         window.on_regex_mode_toggled(move |enabled| {
+            fs_regex.dismiss_if_quick_fullscreen();
             st.write().filter.is_regex = enabled;
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
@@ -123,7 +129,9 @@ impl BridgeMedia {
         let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
+        let fs_virt = fullscreen_controller.clone();
         window.on_virtual_folder_toggled(move |_active| {
+            fs_virt.dismiss_if_quick_fullscreen();
             Self::toggle_virtual_folder_mode(&win, &lib, &thumb, &tm, &set, &st);
         });
 
@@ -134,7 +142,9 @@ impl BridgeMedia {
         let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
+        let fs_mfilter = fullscreen_controller.clone();
         window.on_media_type_filter_changed(move |idx| {
+            fs_mfilter.dismiss_if_quick_fullscreen();
             let t0 = Instant::now();
             let new_filter = MediaTypeFilter::from_index(idx);
 
@@ -175,7 +185,9 @@ impl BridgeMedia {
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
+        let fs_sort = fullscreen_controller.clone();
         window.on_sort_column_clicked(move |col_idx| {
+            fs_sort.dismiss_if_quick_fullscreen();
             let target_col = SortColumn::from_index(col_idx);
             let (new_col, new_ord) = {
                 let mut s = st.write();
@@ -372,8 +384,10 @@ impl BridgeMedia {
 
         let last_time_clone = last_resize_time;
         let count_clone = resize_events_count;
+        let fs_col_resize = fullscreen_controller.clone();
 
         window.on_column_resized(move |_col_idx, _new_width| {
+            fs_col_resize.dismiss_if_quick_fullscreen();
             let _count = count_clone.fetch_add(1, Ordering::Relaxed);
             let mut last_log = last_time_clone.lock();
             if last_log.elapsed().as_millis() >= 100 {
@@ -383,7 +397,9 @@ impl BridgeMedia {
         });
 
         let set_res = settings.clone();
+        let fs_col_fin = fullscreen_controller.clone();
         window.on_column_resize_finished(move |col_idx, final_width| {
+            fs_col_fin.dismiss_if_quick_fullscreen();
             let width_f32 = final_width;
             let mut app_settings = set_res.get();
 
@@ -413,8 +429,10 @@ impl BridgeMedia {
         let lib_mode = library;
         let thumb_mode = thumbnails;
         let st_mode = state;
+        let fs_vmode = fullscreen_controller;
 
         window.on_view_mode_toggled_with_index(move |is_table, top_item_idx| {
+            fs_vmode.dismiss_if_quick_fullscreen();
             Self::handle_view_mode_toggled(
                 is_table,
                 top_item_idx as usize,

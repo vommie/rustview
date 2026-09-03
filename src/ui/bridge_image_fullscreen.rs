@@ -238,7 +238,7 @@ impl ImageFullscreenDialogController {
         let is_video = matches!(target_tab.payload, TabPayload::Video(_));
         self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
 
-        // Lock the entire Main UI to prevent user interaction while in fullscreen
+        // Lock the entire Main UI to prevent user interaction while in fullscreen (Tab View mode)
         if let Some(mw) = main_window_weak.upgrade() {
             mw.set_is_modal_locked(true);
         }
@@ -280,6 +280,7 @@ impl ImageFullscreenDialogController {
     }
 
     /// Displays the frameless fullscreen viewer directly for a single media item without creating or modifying tabs (Quick-Fullscreen Mode).
+    /// Leaves the Main Window unblocked (non-modal) to allow live switching upon clicking other media items.
     pub fn show_for_media(
         &self,
         media_id: MediaId,
@@ -318,8 +319,11 @@ impl ImageFullscreenDialogController {
         let is_video = matches!(record.media_type, MediaType::Video);
         self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
 
+        // Quick-Fullscreen mode from Browse view does NOT modal-lock the Main Window!
+        // This allows clicking on other media items in the Grid/Table to dynamically switch the preview.
+        // If the user clicks on anything other than a media item, Quick-Fullscreen will be dismissed.
         if let Some(mw) = main_window_weak.upgrade() {
-            mw.set_is_modal_locked(true);
+            mw.set_is_modal_locked(false);
         }
 
         let bg_mode_idx = match settings.get().viewer.background_mode.to_lowercase().as_str() {
@@ -412,8 +416,40 @@ impl ImageFullscreenDialogController {
             origin_mode,
             filename = %LogObscurer::filename(&record.filename),
             elapsed_us = t0.elapsed().as_micros(),
-            "[FullscreenViewer: ShowForMedia] Quick-Fullscreen mode activated directly from media item (tabs bypassed)"
+            "[FullscreenViewer: ShowForMedia] Quick-Fullscreen mode activated directly from media item (tabs bypassed, non-modal)"
         );
+    }
+
+    /// Returns true if Quick-Fullscreen mode is currently active (opened from Browse view on a standalone media item).
+    #[inline]
+    pub fn is_quick_fullscreen_active(&self) -> bool {
+        self.is_active.load(Ordering::SeqCst) && self.active_standalone_media_id.lock().is_some()
+    }
+
+    /// Dismisses / closes Quick-Fullscreen if currently active (triggered when interacting with non-media elements).
+    pub fn dismiss_if_quick_fullscreen(&self) {
+        if self.is_quick_fullscreen_active() {
+            tracing::info!(
+                "[FullscreenViewer: DismissQuick] Dismissing Quick-Fullscreen due to non-media interaction on Main UI"
+            );
+            self.close();
+        }
+    }
+
+    /// Updates the Quick-Fullscreen viewer dynamically to display a newly selected media item.
+    pub fn update_quick_fullscreen_media(
+        &self,
+        media_id: MediaId,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+    ) {
+        if self.is_quick_fullscreen_active() {
+            tracing::info!(
+                media_id,
+                "[FullscreenViewer: UpdateQuick] Quick-Fullscreen active; dynamically switching fullscreen view to newly clicked media item"
+            );
+            self.sync_standalone_media(media_id, library, settings);
+        }
     }
 
     /// Handles Ctrl + Double-Click in Fullscreen: Converts the current media item into a background tab
@@ -661,7 +697,8 @@ impl ImageFullscreenDialogController {
         }
     }
 
-    fn sync_standalone_media(
+    /// Synchronizes the standalone fullscreen viewer canvas with the specified media item.
+    pub fn sync_standalone_media(
         &self,
         media_id: MediaId,
         library: &Arc<Library>,

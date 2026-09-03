@@ -130,10 +130,12 @@ fn test_fullscreen_standalone_media_mode_bypasses_tabs() {
     // Quick-Fullscreen must bypass tab creation
     assert_eq!(tab_mgr.tab_count(), 0, "Quick-Fullscreen must bypass tab creation");
     assert_eq!(tab_mgr.active_tab_id(), None);
+    assert!(controller.is_quick_fullscreen_active());
 
     // Close Fullscreen
     controller.close();
     assert!(!controller.is_open());
+    assert!(!controller.is_quick_fullscreen_active());
     assert_eq!(tab_mgr.tab_count(), 0);
 
     // 2. Trigger Quick-Fullscreen on Video directly
@@ -149,10 +151,63 @@ fn test_fullscreen_standalone_media_mode_bypasses_tabs() {
     // Quick-Fullscreen must bypass tab creation for videos
     assert_eq!(tab_mgr.tab_count(), 0, "Quick-Fullscreen must bypass tab creation for videos");
     assert_eq!(tab_mgr.active_tab_id(), None);
+    assert!(controller.is_quick_fullscreen_active());
 
     controller.close();
     assert!(!controller.is_open());
+    assert!(!controller.is_quick_fullscreen_active());
     assert_eq!(tab_mgr.tab_count(), 0);
+}
+
+#[test]
+fn test_quick_fullscreen_live_switch_and_dismiss_on_non_media() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+    let tmp_config = tempdir().unwrap();
+
+    let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let img1_path = tmp_media.path().join("quick1.png");
+    let img2_path = tmp_media.path().join("quick2.png");
+    image::RgbImage::new(400, 300).save(&img1_path).unwrap();
+    image::RgbImage::new(500, 400).save(&img2_path).unwrap();
+
+    let _ = lib.refresher().refresh_folder(folder.id).unwrap();
+    let media = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(media.len(), 2);
+
+    let settings = Arc::new(SettingsManager::new(tmp_config.path()));
+    let tab_mgr = Arc::new(ViewerTabManager::new(lib.clone()));
+    let state = Arc::new(parking_lot::RwLock::new(UiState::default()));
+
+    let controller = ImageFullscreenDialogController::new();
+
+    // 1. Open Quick-Fullscreen on Media 1
+    controller.show_for_media(
+        media[0].id,
+        &lib,
+        &settings,
+        &state,
+        &tab_mgr,
+        slint::Weak::default(),
+    );
+
+    assert!(controller.is_open());
+    assert!(controller.is_quick_fullscreen_active());
+
+    // 2. Simulate clicking on Media 2 -> Live update Quick-Fullscreen
+    controller.update_quick_fullscreen_media(media[1].id, &lib, &settings);
+    assert!(controller.is_open());
+    assert!(controller.is_quick_fullscreen_active());
+
+    // 3. Tagging / rating operations do NOT call dismiss_if_quick_fullscreen -> Quick-Fullscreen remains open!
+    assert!(controller.is_quick_fullscreen_active());
+
+    // 4. Simulate clicking outside media items and outside Tag & Rate panel (e.g. folder, background, search) -> Dismiss Quick-Fullscreen
+    controller.dismiss_if_quick_fullscreen();
+    assert!(!controller.is_open());
+    assert!(!controller.is_quick_fullscreen_active());
 }
 
 #[test]
@@ -217,7 +272,6 @@ fn test_fullscreen_origin_mode_restoration_and_close_handler() {
         }
     });
 
-    // Manually test close handler invocation when active
     // When not active -> close is a no-op
     controller.close();
     assert_eq!(received_origin_mode.load(Ordering::SeqCst), -1);

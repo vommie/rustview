@@ -62,6 +62,7 @@ impl BridgeFileSelection {
         let tm = tab_manager.clone();
         let st = state.clone();
         let lc = last_click;
+        let fs = fullscreen_controller.clone();
         window.on_media_clicked(move |id, is_ctrl, is_shift| {
             Self::handle_click(
                 FileClickEvent {
@@ -75,6 +76,7 @@ impl BridgeFileSelection {
                 &tm,
                 &st,
                 &lc,
+                &fs,
             );
         });
 
@@ -83,7 +85,7 @@ impl BridgeFileSelection {
         let set_mid = settings;
         let st_mid = state.clone();
         let tm_mid = tab_manager;
-        let fs_mid = fullscreen_controller;
+        let fs_mid = fullscreen_controller.clone();
         window.on_media_middle_clicked(move |id| {
             Self::handle_middle_click(
                 id as u64, &win_mid, &lib_mid, &set_mid, &st_mid, &tm_mid, &fs_mid,
@@ -93,16 +95,18 @@ impl BridgeFileSelection {
         let win_bg = window.clone_strong();
         let lib_bg = library;
         let st_bg = state;
+        let fs_bg = fullscreen_controller;
         window.on_background_clicked(move || {
             tracing::info!(
                 "[FileSelection: BackgroundClick] Background free space clicked, clearing active file selection"
             );
+            fs_bg.dismiss_if_quick_fullscreen();
             Self::clear_selection(&win_bg, &lib_bg, &st_bg);
         });
     }
 
     /// Handles middle-click on a media tile or table row in the browse view:
-    /// directly opens the media item in Quick-Fullscreen Mode (bypassing tabs) without modifying tab sessions.
+    /// selects the item and opens it in Quick-Fullscreen Mode (non-modal) so Inspector and Tag & Rate Panel stay in sync.
     pub fn handle_middle_click(
         media_id: MediaId,
         window: &MainWindow,
@@ -114,8 +118,22 @@ impl BridgeFileSelection {
     ) {
         tracing::info!(
             media_id,
-            "[FileSelection: MiddleClick] Quick-Fullscreen mode triggered directly on media item (bypassing tabs)"
+            "[FileSelection: MiddleClick] Quick-Fullscreen mode triggered directly on media item (bypassing tabs, non-modal)"
         );
+
+        // Select the media item so Inspector and Tag & Rate Panel are immediately synchronized
+        let (changed_ids, _) = {
+            let mut st = state.write();
+            let prev_selected = st.file_selection.selected_ids().clone();
+            st.file_selection.select_single(media_id);
+            let newly_selected = st.file_selection.selected_ids();
+            let changed = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
+            (changed, st.file_selection.count())
+        };
+        Self::sync_selection_diff(window, state, &changed_ids);
+        BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
 
         fullscreen_controller.show_for_media(
             media_id,
@@ -127,7 +145,7 @@ impl BridgeFileSelection {
         );
     }
 
-    /// Handles media tile clicks with modifier keys, double-click timing, and surgical UI updates.
+    /// Handles media tile clicks with modifier keys, double-click timing, live Quick-Fullscreen synchronization, and surgical UI updates.
     pub fn handle_click(
         event: FileClickEvent,
         window: &MainWindow,
@@ -136,8 +154,14 @@ impl BridgeFileSelection {
         tab_manager: &Arc<ViewerTabManager>,
         state: &Arc<RwLock<UiState>>,
         last_click: &Arc<Mutex<Option<LastClickRecord>>>,
+        fullscreen_controller: &ImageFullscreenDialogController,
     ) {
         let t_start = Instant::now();
+
+        // If Quick-Fullscreen is currently active from Browse view, dynamically update its preview to the clicked media item!
+        if fullscreen_controller.is_quick_fullscreen_active() {
+            fullscreen_controller.update_quick_fullscreen_media(event.media_id, library, settings);
+        }
 
         // 1. Double Click Detection (< 400ms delta on same ID)
         match Self::check_double_click(event, last_click) {
@@ -188,11 +212,12 @@ impl BridgeFileSelection {
             is_shift = event.is_shift,
             selected_count = sel_count,
             changed_rows = changed_ids.len(),
+            quick_fullscreen_active = fullscreen_controller.is_quick_fullscreen_active(),
             math_us = t_math.as_micros(),
             model_sync_us = t_sync.as_micros(),
             inspector_and_tags_us = t_insp.as_micros(),
             total_click_us = t_start.elapsed().as_micros(),
-            "[FileSelection: FastInPlace] Instant selection updated with tag synchronization and status bar"
+            "[FileSelection: FastInPlace] Instant selection updated with tag synchronization, status bar, and live quick fullscreen"
         );
     }
 

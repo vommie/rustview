@@ -1,5 +1,6 @@
 use super::bridge_ctx_menu::BridgeContextMenu;
 use super::bridge_ctx_menu_tag::TagContextMenu;
+use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
@@ -931,6 +932,7 @@ impl BridgeTags {
         tab_manager: Arc<ViewerTabManager>,
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
+        _fullscreen_controller: ImageFullscreenDialogController,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
@@ -938,6 +940,7 @@ impl BridgeTags {
         let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
+        // Rating applied from RatingBar does NOT dismiss Quick-Fullscreen
         window.on_rating_applied(move |rating| {
             Self::apply_rating(
                 if rating < 0 { None } else { Some(rating as u8) },
@@ -958,6 +961,7 @@ impl BridgeTags {
         let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
+        // Tag toggle from TagTree does NOT dismiss Quick-Fullscreen
         window.on_tag_toggled(move |tag_id| {
             Self::toggle_tag(
                 tag_id as u32,
