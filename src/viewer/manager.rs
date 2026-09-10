@@ -237,8 +237,14 @@ impl ViewerTabManager {
         res
     }
 
+    #[inline]
     pub fn move_tab_to_start(&self, tab_id: TabId) -> bool {
         self.move_tab(tab_id, 0)
+    }
+
+    #[inline]
+    pub fn move_to_start(&self, tab_id: TabId) -> bool {
+        self.move_tab_to_start(tab_id)
     }
 
     pub fn move_tab_left(&self, tab_id: TabId) -> bool {
@@ -251,6 +257,11 @@ impl ViewerTabManager {
         } else {
             false
         }
+    }
+
+    #[inline]
+    pub fn move_left(&self, tab_id: TabId) -> bool {
+        self.move_tab_left(tab_id)
     }
 
     pub fn move_tab_right(&self, tab_id: TabId) -> bool {
@@ -266,13 +277,23 @@ impl ViewerTabManager {
         }
     }
 
-    pub fn move_to_end(&self, tab_id: TabId) -> bool {
+    #[inline]
+    pub fn move_right(&self, tab_id: TabId) -> bool {
+        self.move_tab_right(tab_id)
+    }
+
+    pub fn move_tab_to_end(&self, tab_id: TabId) -> bool {
         let count = self.tab_count();
         if count > 0 {
             self.move_tab(tab_id, count - 1)
         } else {
             false
         }
+    }
+
+    #[inline]
+    pub fn move_to_end(&self, tab_id: TabId) -> bool {
+        self.move_tab_to_end(tab_id)
     }
 
     // =========================================================================
@@ -544,6 +565,13 @@ impl ViewerTabManager {
         player.set_tab_grid_mode(false);
         player.set_view_active(false); // auto-pause background video
 
+        let file_exists = file_path.is_file();
+        let error_message = if !file_exists {
+            format!("Media file not found on disk:\n{}", file_path.display())
+        } else {
+            String::new()
+        };
+
         let session = MediaTabSession {
             id: new_id,
             media_id: record.id,
@@ -560,7 +588,7 @@ impl ViewerTabManager {
                 volume: 1.0,
                 duration_ms: record.duration_ms,
                 is_loading: false,
-                error_message: String::new(),
+                error_message,
             }),
             created_at: Instant::now(),
             last_accessed: Instant::now(),
@@ -915,7 +943,19 @@ impl ViewerTabManager {
         main_xid_opt: Option<u64>,
         (x, y, w, h): (i32, i32, u32, u32),
     ) {
-        if let TabPayload::Video(ref vid) = tab.payload {
+        if let TabPayload::Video(ref mut vid) = tab.payload {
+            if !tab.file_path.is_file() {
+                vid.error_message = format!("Media file not found on disk:\n{}", tab.file_path.display());
+                vid.player.set_view_active(false);
+                let mut sub_guard = vid.subwindow.lock();
+                if let Some(ref mut sub) = *sub_guard {
+                    sub.hide();
+                }
+                return;
+            }
+
+            vid.error_message.clear();
+
             let mut sub_guard = vid.subwindow.lock();
             if let Some(ref mut sub) = *sub_guard {
                 sub.move_resize(x, y, w, h);
@@ -930,6 +970,11 @@ impl ViewerTabManager {
                 sub.show();
                 *sub_guard = Some(sub);
             }
+
+            if vid.player.get_playback_state().is_idle {
+                let _ = vid.player.load_file(&tab.file_path);
+            }
+
             vid.player.set_tab_grid_mode(false);
             vid.player.set_view_active(true);
         }
@@ -982,6 +1027,7 @@ impl ViewerTabManager {
         let is_video = matches!(record.media_type, MediaType::Video);
         let filename = record.filename.clone();
         let format = record.format;
+        let file_exists = file_path.is_file();
 
         tab.media_id = record.id;
         tab.filename = filename;
@@ -992,7 +1038,35 @@ impl ViewerTabManager {
         tab.last_accessed = Instant::now();
 
         if is_video {
-            if let TabPayload::Video(ref mut vid) = tab.payload {
+            if !file_exists {
+                tracing::warn!(
+                    tab_id = tab.id,
+                    media_id = record.id,
+                    file_path = %LogObscurer::path(&file_path),
+                    "[ViewerTabManager: UpdateMedia] Video file does not exist on disk, setting error state"
+                );
+                if let TabPayload::Video(ref mut vid) = tab.payload {
+                    vid.player.stop();
+                    let mut sub_guard = vid.subwindow.lock();
+                    if let Some(ref mut sub) = *sub_guard {
+                        sub.hide();
+                    }
+                    vid.is_loading = false;
+                    vid.error_message = format!("Media file not found on disk:\n{}", file_path.display());
+                } else {
+                    tab.payload = TabPayload::Video(VideoTabPayload {
+                        player: Arc::new(MpvPlayer::new()?),
+                        subwindow: Arc::new(Mutex::new(None)),
+                        position_ms: 0,
+                        is_playing: false,
+                        volume: 1.0,
+                        duration_ms: record.duration_ms,
+                        is_loading: false,
+                        error_message: format!("Media file not found on disk:\n{}", file_path.display()),
+                    });
+                }
+            } else if let TabPayload::Video(ref mut vid) = tab.payload {
+                vid.error_message.clear();
                 let _ = vid.player.load_file(&file_path);
                 vid.player.set_tab_grid_mode(false);
                 vid.player.set_view_active(true);
@@ -1001,6 +1075,14 @@ impl ViewerTabManager {
                     sub.move_resize(x, y, w, h);
                     sub.reset_clip_shape();
                     sub.show();
+                } else if let Some(main_xid) = main_xid_opt
+                    && let Ok(mut sub) = X11VideoSubwindow::new(main_xid, x, y, w, h)
+                {
+                    let wid = sub.xid();
+                    let _ = vid.player.attach_to_window(wid);
+                    sub.reset_clip_shape();
+                    sub.show();
+                    *sub_guard = Some(sub);
                 }
             } else {
                 let player = Arc::new(MpvPlayer::new()?);
@@ -1038,13 +1120,29 @@ impl ViewerTabManager {
                 }
             }
 
-            tab.payload = TabPayload::Image(ImageTabPayload {
-                high_res_pixels: None,
-                is_loading: true,
-                error_message: String::new(),
-                orig_width: record.width,
-                orig_height: record.height,
-            });
+            if !file_exists {
+                tracing::warn!(
+                    tab_id = tab.id,
+                    media_id = record.id,
+                    file_path = %LogObscurer::path(&file_path),
+                    "[ViewerTabManager: UpdateMedia] Image file does not exist on disk, setting error state"
+                );
+                tab.payload = TabPayload::Image(ImageTabPayload {
+                    high_res_pixels: None,
+                    is_loading: false,
+                    error_message: format!("Media file not found on disk:\n{}", file_path.display()),
+                    orig_width: record.width,
+                    orig_height: record.height,
+                });
+            } else {
+                tab.payload = TabPayload::Image(ImageTabPayload {
+                    high_res_pixels: None,
+                    is_loading: true,
+                    error_message: String::new(),
+                    orig_width: record.width,
+                    orig_height: record.height,
+                });
+            }
         }
 
         Ok(())

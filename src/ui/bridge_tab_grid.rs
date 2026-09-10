@@ -115,18 +115,32 @@ impl BridgeTabGrid {
 
                 let (slint_img, is_loading, err_msg, orig_w, orig_h) = match s.payload {
                     TabPayload::Image(ref img) => {
-                        if img.high_res_pixels.is_none() && !img.is_loading && img.error_message.is_empty() {
-                            missing_image_tasks.push((s.id, s.media_id, s.file_path.clone()));
-                        }
-                        let image_obj = if let Some(ref buf) = img.high_res_pixels {
-                            Image::from_rgb8(buf.clone())
+                        if !s.file_path.is_file() {
+                            let missing_err = if img.error_message.is_empty() {
+                                format!("File not found on disk:\n{}", s.file_path.display())
+                            } else {
+                                img.error_message.clone()
+                            };
+                            (Image::default(), false, missing_err, img.orig_width, img.orig_height)
                         } else {
-                            Image::default()
-                        };
-                        (image_obj, img.is_loading, img.error_message.clone(), img.orig_width, img.orig_height)
+                            if img.high_res_pixels.is_none() && !img.is_loading && img.error_message.is_empty() {
+                                missing_image_tasks.push((s.id, s.media_id, s.file_path.clone()));
+                            }
+                            let image_obj = if let Some(ref buf) = img.high_res_pixels {
+                                Image::from_rgb8(buf.clone())
+                            } else {
+                                Image::default()
+                            };
+                            (image_obj, img.is_loading, img.error_message.clone(), img.orig_width, img.orig_height)
+                        }
                     }
                     TabPayload::Video(ref vid) => {
-                        (Image::default(), vid.is_loading, vid.error_message.clone(), s.record.width, s.record.height)
+                        let err_msg = if !s.file_path.is_file() && vid.error_message.is_empty() {
+                            format!("File not found on disk:\n{}", s.file_path.display())
+                        } else {
+                            vid.error_message.clone()
+                        };
+                        (Image::default(), vid.is_loading, err_msg, s.record.width, s.record.height)
                     }
                 };
 
@@ -212,6 +226,7 @@ impl BridgeTabGrid {
 
     /// Positions and renders running MPV video subwindows onto their corresponding Masonry tiles in the TabGrid.
     /// Clamps physical subwindow coordinates so the subwindow never renders above or below the viewport boundaries.
+    /// Strictly suppresses subwindow display if the video file does not exist on disk or has an active error.
     pub fn sync_video_subwindows(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -264,6 +279,15 @@ impl BridgeTabGrid {
                     }
                     continue;
                 };
+
+                // If video file does not exist on disk or has an error message, hide subwindow!
+                if !session.file_path.is_file() || !vid.error_message.is_empty() {
+                    let mut sub_guard = vid.subwindow.lock();
+                    if let Some(ref mut sub) = *sub_guard {
+                        sub.hide();
+                    }
+                    continue;
+                }
 
                 let header_h = 26.0f32;
                 let video_logical_x = r.x + padding_h;

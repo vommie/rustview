@@ -135,8 +135,54 @@ export component TabGridItemView inherits Rectangle {
             border-radius: Math.max(0px, root.corner-radius-val - 2px);
             clip: true;
 
-            // Render live Image buffer for image tabs
-            if !root.item.is-video && root.item.image.width > 0 : Image {
+            // Render error fallback view if file is missing or in error state
+            if root.item.error-message != "" : VerticalLayout {
+                alignment: center;
+                spacing: 6px;
+
+                HorizontalLayout {
+                    alignment: center;
+
+                    Rectangle {
+                        width: 44px;
+                        height: 44px;
+                        border-radius: 22px;
+                        background: Theme.corrupt-bg;
+                        border-width: 1px;
+                        border-color: #f38ba844;
+
+                        AppIcon {
+                            icon: Icons.media-file-corrupted;
+                            size: 24px;
+                            allow-tint: true;
+                            color: Theme.status-corrupt;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                        }
+                    }
+                }
+
+                Text {
+                    text: "File Not Found";
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: Theme.status-corrupt;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: root.item.error-message;
+                    font-size: 9px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                    overflow: elide;
+                    max-width: root.item.width - 24px;
+                }
+            }
+
+            // Render live Image buffer for image tabs when no error
+            if !root.item.is-video && root.item.image.width > 0 && root.item.error-message == "" : Image {
                 source: root.item.image;
                 width: 100%;
                 height: 100%;
@@ -144,15 +190,15 @@ export component TabGridItemView inherits Rectangle {
             }
 
             // Fallback placeholder icon
-            if !root.item.is-video && root.item.image.width == 0 : Text {
+            if !root.item.is-video && root.item.image.width == 0 && root.item.error-message == "" : Text {
                 text: "🖼";
                 font-size: 28px;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
 
-            // Video Viewport Area (X11 Subwindow maps directly to this space)
-            if root.item.is-video : Rectangle {
+            // Video Viewport Area (X11 Subwindow maps directly to this space only when no error)
+            if root.item.is-video && root.item.error-message == "" : Rectangle {
                 width: 100%;
                 height: 100%;
                 background: transparent;

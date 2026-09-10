@@ -238,6 +238,8 @@ impl ImageFullscreenDialogController {
         let is_video = matches!(target_tab.payload, TabPayload::Video(_));
         self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
 
+        let file_exists = target_tab.file_path.is_file();
+
         // Lock the entire Main UI to prevent user interaction while in fullscreen (Tab View mode)
         if let Some(mw) = main_window_weak.upgrade() {
             mw.set_is_modal_locked(true);
@@ -248,7 +250,14 @@ impl ImageFullscreenDialogController {
 
         self.with_fullscreen_window(|win| {
             ctrl.sync_tab_content(win, &target_tab, settings);
-            win.set_is_video(is_video);
+            win.set_is_video(is_video && file_exists);
+
+            if !file_exists {
+                win.set_source_image(Image::default());
+                win.set_is_loading(false);
+                let missing_msg = format!("File not found on physical disk:\n{}", target_tab.file_path.display());
+                win.set_error_message(missing_msg.into());
+            }
 
             // Re-assert fullscreen state on Winit to guarantee proper mapping
             win.window().set_fullscreen(false);
@@ -263,7 +272,7 @@ impl ImageFullscreenDialogController {
 
             ctrl.is_active.store(true, Ordering::SeqCst);
 
-            if is_video {
+            if is_video && file_exists {
                 ctrl.reparent_to_fullscreen(&tm_clone, win, tab_id);
             }
         });
@@ -272,6 +281,7 @@ impl ImageFullscreenDialogController {
             tab_id = target_tab.id,
             media_id = target_tab.media_id,
             is_video,
+            file_exists,
             origin_mode,
             filename = %LogObscurer::filename(&target_tab.filename),
             elapsed_us = t0.elapsed().as_micros(),
@@ -302,6 +312,8 @@ impl ImageFullscreenDialogController {
             return;
         };
 
+        let file_exists = file_path.is_file();
+
         *self.main_window_weak.lock() = Some(main_window_weak.clone());
         *self.library_weak.lock() = Some(library.clone());
         *self.settings_weak.lock() = Some(settings.clone());
@@ -320,8 +332,6 @@ impl ImageFullscreenDialogController {
         self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
 
         // Quick-Fullscreen mode from Browse view does NOT modal-lock the Main Window!
-        // This allows clicking on other media items in the Grid/Table to dynamically switch the preview.
-        // If the user clicks on anything other than a media item, Quick-Fullscreen will be dismissed.
         if let Some(mw) = main_window_weak.upgrade() {
             mw.set_is_modal_locked(false);
         }
@@ -332,27 +342,38 @@ impl ImageFullscreenDialogController {
             _ => 0,
         };
 
-        // Immediate placeholder image from cache so the screen is immediately populated in 0ms
-        let initial_placeholder = {
-            let st = state.read();
-            st.folder_thumbnails
-                .get(&media_id)
-                .map(|buf| Image::from_rgb8(buf.clone()))
-        };
-
         let ctrl = self.clone();
 
         self.with_fullscreen_window(|win| {
             win.set_background_mode(bg_mode_idx);
-            win.set_is_video(is_video);
+            win.set_is_video(is_video && file_exists);
 
-            if !is_video {
-                if let Some(player) = ctrl.standalone_video_player.lock().take() {
-                    player.stop();
-                }
-                if let Some(sub) = ctrl.standalone_subwindow.lock().take() {
-                    drop(sub);
-                }
+            // Clean up standalone player / subwindow if running
+            if let Some(player) = ctrl.standalone_video_player.lock().take() {
+                player.stop();
+            }
+            if let Some(sub) = ctrl.standalone_subwindow.lock().take() {
+                drop(sub);
+            }
+
+            if !file_exists {
+                tracing::warn!(
+                    media_id,
+                    file_path = %LogObscurer::path(&file_path),
+                    "[FullscreenViewer: ShowForMedia] File does not exist on disk, displaying missing-file fallback view"
+                );
+                win.set_source_image(Image::default());
+                win.set_is_loading(false);
+                let missing_msg = format!("File not found on physical disk:\n{}", file_path.display());
+                win.set_error_message(missing_msg.into());
+            } else if !is_video {
+                // Immediate placeholder image from cache so the screen is immediately populated in 0ms
+                let initial_placeholder = {
+                    let st = state.read();
+                    st.folder_thumbnails
+                        .get(&media_id)
+                        .map(|buf| Image::from_rgb8(buf.clone()))
+                };
 
                 if let Some(img) = initial_placeholder {
                     win.set_source_image(img);
@@ -389,15 +410,13 @@ impl ImageFullscreenDialogController {
             } else {
                 win.set_is_loading(false);
                 win.set_error_message("".into());
-                win.set_source_image(initial_placeholder.unwrap_or_default());
+                win.set_source_image(Image::default());
             }
 
-            // Re-assert fullscreen state on Winit to guarantee proper mapping every time
             win.window().set_fullscreen(false);
             win.window().set_fullscreen(true);
             let _ = win.show();
 
-            // Enforce true EWMH Fullscreen directly on X11 level (removes titlebar and covers taskbar)
             let fs_xid = ctrl.resolve_fs_xid(win);
             if fs_xid > 0 {
                 force_x11_fullscreen(fs_xid);
@@ -405,7 +424,7 @@ impl ImageFullscreenDialogController {
 
             ctrl.is_active.store(true, Ordering::SeqCst);
 
-            if is_video {
+            if is_video && file_exists {
                 ctrl.init_or_play_standalone_video(win, media_id, &file_path);
             }
         });
@@ -413,10 +432,11 @@ impl ImageFullscreenDialogController {
         tracing::info!(
             media_id,
             is_video,
+            file_exists,
             origin_mode,
             filename = %LogObscurer::filename(&record.filename),
             elapsed_us = t0.elapsed().as_micros(),
-            "[FullscreenViewer: ShowForMedia] Quick-Fullscreen mode activated directly from media item (tabs bypassed, non-modal)"
+            "[FullscreenViewer: ShowForMedia] Fullscreen viewer activated (non-modal, file_exists verified)"
         );
     }
 
@@ -530,6 +550,15 @@ impl ImageFullscreenDialogController {
         media_id: MediaId,
         file_path: &Path,
     ) {
+        if !file_path.is_file() {
+            tracing::warn!(
+                media_id,
+                file_path = %LogObscurer::path(file_path),
+                "[FullscreenViewer: StandaloneVideo] Target video file does not exist on disk, skipping subwindow creation"
+            );
+            return;
+        }
+
         let fs_xid = self.resolve_fs_xid(fs_win);
 
         if fs_xid == 0 {
@@ -716,30 +745,41 @@ impl ImageFullscreenDialogController {
 
         let is_video = matches!(record.media_type, MediaType::Video);
         self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
-
-        let initial_placeholder = {
-            if let Some(state_arc) = self.state_weak.lock().as_ref() {
-                let st = state_arc.read();
-                st.folder_thumbnails
-                    .get(&media_id)
-                    .map(|buf| Image::from_rgb8(buf.clone()))
-            } else {
-                None
-            }
-        };
+        let file_exists = file_path.is_file();
 
         let ctrl = self.clone();
 
         self.with_fullscreen_window(|win| {
-            win.set_is_video(is_video);
+            win.set_is_video(is_video && file_exists);
 
-            if !is_video {
-                if let Some(player) = ctrl.standalone_video_player.lock().take() {
-                    player.stop();
-                }
-                if let Some(sub) = ctrl.standalone_subwindow.lock().take() {
-                    drop(sub);
-                }
+            if let Some(player) = ctrl.standalone_video_player.lock().take() {
+                player.stop();
+            }
+            if let Some(sub) = ctrl.standalone_subwindow.lock().take() {
+                drop(sub);
+            }
+
+            if !file_exists {
+                tracing::warn!(
+                    media_id,
+                    file_path = %LogObscurer::path(&file_path),
+                    "[FullscreenViewer: StandaloneSync] Target file does not exist on disk, displaying missing-file fallback view"
+                );
+                win.set_source_image(Image::default());
+                win.set_is_loading(false);
+                let missing_msg = format!("File not found on physical disk:\n{}", file_path.display());
+                win.set_error_message(missing_msg.into());
+            } else if !is_video {
+                let initial_placeholder = {
+                    if let Some(state_arc) = self.state_weak.lock().as_ref() {
+                        let st = state_arc.read();
+                        st.folder_thumbnails
+                            .get(&media_id)
+                            .map(|buf| Image::from_rgb8(buf.clone()))
+                    } else {
+                        None
+                    }
+                };
 
                 if let Some(img) = initial_placeholder {
                     win.set_source_image(img);
@@ -775,7 +815,7 @@ impl ImageFullscreenDialogController {
             } else {
                 win.set_is_loading(false);
                 win.set_error_message("".into());
-                win.set_source_image(initial_placeholder.unwrap_or_default());
+                win.set_source_image(Image::default());
 
                 ctrl.init_or_play_standalone_video(win, media_id, &file_path);
             }
@@ -817,6 +857,14 @@ impl ImageFullscreenDialogController {
         if let Some(session) = tab_manager.get_tab(tab_id)
             && let TabPayload::Video(ref vid) = session.payload
         {
+            if !session.file_path.is_file() || !vid.error_message.is_empty() {
+                tracing::warn!(
+                    tab_id,
+                    "[FullscreenViewer: Reparent] Video file is missing or in error state; skipping subwindow reparenting"
+                );
+                return;
+            }
+
             let fs_toggle = self.clone();
             vid.player.on_toggle_fullscreen(move || {
                 let fs = fs_toggle.clone();
@@ -879,14 +927,15 @@ impl ImageFullscreenDialogController {
         let tm_clone = tab_manager.clone();
 
         if let Some(tab) = target_tab {
+            let file_exists = tab.file_path.is_file();
             let is_video = matches!(tab.payload, TabPayload::Video(_));
             self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
 
             self.with_fullscreen_window(|win| {
-                win.set_is_video(is_video);
+                win.set_is_video(is_video && file_exists);
                 ctrl.sync_tab_content(win, &tab, settings);
 
-                if is_video {
+                if is_video && file_exists {
                     ctrl.reparent_to_fullscreen(&tm_clone, win, tab.id);
                 } else if let Some(sub_slot) = tm_clone.get_subwindow_for_tab(tab.id)
                     && let Some(ref mut sub) = *sub_slot.lock()
@@ -980,6 +1029,15 @@ impl ImageFullscreenDialogController {
             _ => 0,
         };
         win.set_background_mode(bg_mode_idx);
+
+        let file_exists = session.file_path.is_file();
+        if !file_exists {
+            win.set_is_loading(false);
+            win.set_source_image(Image::default());
+            let missing_msg = format!("File not found on physical disk:\n{}", session.file_path.display());
+            win.set_error_message(missing_msg.into());
+            return;
+        }
 
         match session.payload {
             TabPayload::Image(ref img) => {

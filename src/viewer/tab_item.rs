@@ -4,6 +4,7 @@ use super::types::{ImageTabPayload, MediaTabSession, TabId, TabPayload, VideoTab
 use super::x11_embed::X11VideoSubwindow;
 use crate::library::models::{MediaId, MediaRecord};
 use crate::media::MediaType;
+use crate::settings::LogObscurer;
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -292,13 +293,24 @@ impl TabCollection {
         for tab in self.sessions.iter_mut() {
             if tab.media_id == media_id {
                 tab.record = updated_record.clone();
+                let file_exists = tab.file_path.is_file();
                 match tab.payload {
                     TabPayload::Image(ref mut img) => {
                         img.orig_width = updated_record.width;
                         img.orig_height = updated_record.height;
+                        if file_exists && !updated_record.is_deleted {
+                            img.error_message.clear();
+                        } else if !file_exists {
+                            img.error_message = format!("Media file not found on disk:\n{}", tab.file_path.display());
+                        }
                     }
                     TabPayload::Video(ref mut vid) => {
                         vid.duration_ms = updated_record.duration_ms;
+                        if file_exists && !updated_record.is_deleted {
+                            vid.error_message.clear();
+                        } else if !file_exists {
+                            vid.error_message = format!("Media file not found on disk:\n{}", tab.file_path.display());
+                        }
                     }
                 }
             }
@@ -311,6 +323,7 @@ pub struct TabSessionFactory;
 
 impl TabSessionFactory {
     /// Constructs a fully initialized `MediaTabSession` with its permanent display title.
+    /// Performs a non-blocking physical existence check before initializing video rendering or player instances.
     pub fn create_session(
         id: TabId,
         record: MediaRecord,
@@ -323,9 +336,43 @@ impl TabSessionFactory {
         let format = record.format;
         let is_video = matches!(record.media_type, MediaType::Video);
         let now = Instant::now();
+        let file_exists = file_path.is_file();
 
         let payload = if is_video {
-            Self::create_video_payload(&file_path, record.duration_ms, main_xid_opt, viewport_rect)?
+            if !file_exists {
+                tracing::warn!(
+                    tab_id = id,
+                    media_id = record.id,
+                    file_path = %LogObscurer::path(&file_path),
+                    "[TabSessionFactory: Video] Target file does not exist on disk, initializing tab in missing-file fallback state"
+                );
+                TabPayload::Video(VideoTabPayload {
+                    player: Arc::new(MpvPlayer::new()?),
+                    subwindow: Arc::new(Mutex::new(None)),
+                    position_ms: 0,
+                    is_playing: false,
+                    volume: 1.0,
+                    duration_ms: record.duration_ms,
+                    is_loading: false,
+                    error_message: format!("Media file not found on disk:\n{}", file_path.display()),
+                })
+            } else {
+                Self::create_video_payload(&file_path, record.duration_ms, main_xid_opt, viewport_rect)?
+            }
+        } else if !file_exists {
+            tracing::warn!(
+                tab_id = id,
+                media_id = record.id,
+                file_path = %LogObscurer::path(&file_path),
+                "[TabSessionFactory: Image] Target file does not exist on disk, initializing tab in missing-file fallback state"
+            );
+            TabPayload::Image(ImageTabPayload {
+                high_res_pixels: None,
+                is_loading: false,
+                error_message: format!("Media file not found on disk:\n{}", file_path.display()),
+                orig_width: record.width,
+                orig_height: record.height,
+            })
         } else {
             Self::create_image_payload(record.width, record.height)
         };

@@ -614,6 +614,7 @@ impl BridgeViewerTabs {
     }
 
     /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and MPV input hooks.
+    /// Strictly suppresses subwindow mapping if the video file does not exist on disk or is in an error state.
     pub fn sync_video_embedding(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -649,8 +650,21 @@ impl BridgeViewerTabs {
             .map(|t| matches!(t.payload, TabPayload::Video(_)))
             .unwrap_or(false);
 
-        if !is_video {
-            // Active tab is an image (or None). Ensure all video subwindows are hidden.
+        let file_exists = active_tab
+            .as_ref()
+            .map(|t| t.file_path.is_file())
+            .unwrap_or(false);
+
+        let has_error = active_tab
+            .as_ref()
+            .map(|t| match t.payload {
+                TabPayload::Video(ref vid) => !vid.error_message.is_empty(),
+                TabPayload::Image(ref img) => !img.error_message.is_empty(),
+            })
+            .unwrap_or(false);
+
+        if !is_video || !file_exists || has_error {
+            // Active tab is an image (or None) OR video file does not exist on disk. Ensure all video subwindows are hidden.
             tab_manager.hide_all_video_subwindows();
             return;
         }
@@ -805,14 +819,19 @@ impl BridgeViewerTabs {
                         .as_ref()
                         .map(|t| matches!(t.payload, TabPayload::Image(_)))
                         .unwrap_or(false);
+                    let file_exists = target_session
+                        .as_ref()
+                        .map(|t| t.file_path.is_file())
+                        .unwrap_or(false);
 
                     if let Some(session) = target_session
                         && let TabPayload::Video(ref vid) = session.payload
+                        && file_exists
                     {
                         Self::wire_player_callbacks(&vid.player, window, tab_manager, fullscreen_controller, settings);
                     }
 
-                    if is_image && let Ok(file_path) = library.resolve_media_path(target_id) {
+                    if is_image && file_exists && let Ok(file_path) = library.resolve_media_path(target_id) {
                         let tm_async = tab_manager.clone();
                         let w_weak = window.as_weak();
                         let lib_async = library.clone();
@@ -925,7 +944,10 @@ impl BridgeViewerTabs {
             };
 
             if let Ok((tab_id, is_new)) = tab_manager.open_media_in_background(media_id, allow_multiple)
-                && !is_video && is_new && let Ok(file_path) = library.resolve_media_path(media_id)
+                && !is_video
+                && is_new
+                && let Ok(file_path) = library.resolve_media_path(media_id)
+                && file_path.is_file()
             {
                 let tm_async = tab_manager.clone();
                 let w_weak = window.as_weak();
@@ -980,9 +1002,18 @@ impl BridgeViewerTabs {
 
                 Self::sync_ui(window, tab_manager, library, settings, state);
 
+                let file_exists = tab_manager
+                    .get_tab(last_tab_id)
+                    .map(|t| t.file_path.is_file())
+                    .unwrap_or(false);
+
                 if is_last_video {
-                    Self::sync_video_embedding(window, tab_manager, fullscreen_controller, settings);
-                } else if is_new && let Ok(file_path) = library.resolve_media_path(last_id) {
+                    if file_exists {
+                        Self::sync_video_embedding(window, tab_manager, fullscreen_controller, settings);
+                    } else {
+                        tab_manager.hide_all_video_subwindows();
+                    }
+                } else if is_new && file_exists && let Ok(file_path) = library.resolve_media_path(last_id) {
                     let tm_async = tab_manager.clone();
                     let w_weak = window.as_weak();
                     let lib_async = library.clone();
@@ -1073,7 +1104,11 @@ impl BridgeViewerTabs {
 
             if let Ok((tab_id, is_new)) = tab_manager.open_media_in_background(media_id, allow_multiple) {
                 opened_count += 1;
-                if !is_video && is_new && let Ok(file_path) = library.resolve_media_path(media_id) {
+                if !is_video
+                    && is_new
+                    && let Ok(file_path) = library.resolve_media_path(media_id)
+                    && file_path.is_file()
+                {
                     let tm_async = tab_manager.clone();
                     let w_weak = window.as_weak();
                     let lib_async = library.clone();
@@ -1162,10 +1197,19 @@ impl BridgeViewerTabs {
                     .map(|t| matches!(t.payload, TabPayload::Video(_)))
                     .unwrap_or(false);
 
+                let file_exists = tab_manager
+                    .get_tab(tab_id)
+                    .map(|t| t.file_path.is_file())
+                    .unwrap_or(false);
+
                 if is_video_session {
-                    let fs_dummy = ImageFullscreenDialogController::new();
-                    Self::sync_video_embedding(window, tab_manager, &fs_dummy, settings);
-                } else if is_new && let Ok(file_path) = library.resolve_media_path(media_id) {
+                    if file_exists {
+                        let fs_dummy = ImageFullscreenDialogController::new();
+                        Self::sync_video_embedding(window, tab_manager, &fs_dummy, settings);
+                    } else {
+                        tab_manager.hide_all_video_subwindows();
+                    }
+                } else if is_new && file_exists && let Ok(file_path) = library.resolve_media_path(media_id) {
                     let tm_async = tab_manager.clone();
                     let w_weak = window.as_weak();
                     let lib_async = library.clone();
@@ -1225,9 +1269,10 @@ impl BridgeViewerTabs {
                     tab_id,
                     is_new,
                     is_video = is_video_session,
+                    file_exists,
                     allow_multiple,
                     open_time_us = t0.elapsed().as_micros(),
-                    "[BridgeViewerTabs: Open] Tab opened and UI synchronized (auto-play initialized)"
+                    "[BridgeViewerTabs: Open] Tab opened and UI synchronized"
                 );
             }
             Err(e) => {
@@ -1288,7 +1333,12 @@ impl BridgeViewerTabs {
                     .map(|t| matches!(t.payload, TabPayload::Video(_)))
                     .unwrap_or(false);
 
-                if !is_video_session && is_new && let Ok(file_path) = library.resolve_media_path(media_id) {
+                let file_exists = tab_manager
+                    .get_tab(tab_id)
+                    .map(|t| t.file_path.is_file())
+                    .unwrap_or(false);
+
+                if !is_video_session && is_new && file_exists && let Ok(file_path) = library.resolve_media_path(media_id) {
                     let tm_async = tab_manager.clone();
                     let w_weak = window.as_weak();
                     let lib_async = library.clone();
@@ -1357,6 +1407,7 @@ impl BridgeViewerTabs {
                     tab_id,
                     is_new,
                     is_video = is_video_session,
+                    file_exists,
                     allow_multiple,
                     open_time_us = t0.elapsed().as_micros(),
                     "[BridgeViewerTabs: OpenBackground] Tab opened in background and UI synchronized"

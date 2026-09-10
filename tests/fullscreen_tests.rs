@@ -276,3 +276,70 @@ fn test_fullscreen_origin_mode_restoration_and_close_handler() {
     controller.close();
     assert_eq!(received_origin_mode.load(Ordering::SeqCst), -1);
 }
+
+#[test]
+fn test_fullscreen_missing_media_renders_fallback_without_freeze() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+    let tmp_config = tempdir().unwrap();
+
+    let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let img_path = tmp_media.path().join("missing_img.png");
+    let vid_path = tmp_media.path().join("missing_vid.mp4");
+
+    image::RgbImage::new(400, 300).save(&img_path).unwrap();
+    std::fs::write(&vid_path, b"test vid").unwrap();
+
+    let _ = lib.refresher().refresh_folder(folder.id).unwrap();
+    let media = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(media.len(), 2);
+
+    // Now delete both physical files from disk so they become missing/deleted!
+    std::fs::remove_file(&img_path).unwrap();
+    std::fs::remove_file(&vid_path).unwrap();
+    assert!(!img_path.exists());
+    assert!(!vid_path.exists());
+
+    let settings = Arc::new(SettingsManager::new(tmp_config.path()));
+    let tab_mgr = Arc::new(ViewerTabManager::new(lib.clone()));
+    let state = Arc::new(parking_lot::RwLock::new(UiState::default()));
+
+    let controller = ImageFullscreenDialogController::new();
+
+    // 1. Show missing video in Quick Fullscreen: must not freeze or spawn hung X11 subwindow
+    controller.show_for_media(
+        media[1].id,
+        &lib,
+        &settings,
+        &state,
+        &tab_mgr,
+        slint::Weak::default(),
+    );
+
+    assert!(controller.is_open());
+    assert!(controller.is_quick_fullscreen_active());
+
+    // Cleanly close without hanging
+    controller.close();
+    assert!(!controller.is_open());
+    assert!(!controller.is_quick_fullscreen_active());
+
+    // 2. Show missing image in Quick Fullscreen: must not freeze
+    controller.show_for_media(
+        media[0].id,
+        &lib,
+        &settings,
+        &state,
+        &tab_mgr,
+        slint::Weak::default(),
+    );
+
+    assert!(controller.is_open());
+    assert!(controller.is_quick_fullscreen_active());
+
+    controller.close();
+    assert!(!controller.is_open());
+    assert!(!controller.is_quick_fullscreen_active());
+}

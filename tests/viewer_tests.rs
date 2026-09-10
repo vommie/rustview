@@ -12,8 +12,8 @@ use rustview::ui::tab_dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
 use rustview::viewer::tab_item::{ImageBufferEvictor, TabCollection, TabTitleFormatter};
 use rustview::viewer::{
     find_window_by_pid_and_title, find_window_by_title, HighResImageLoader, ImageTabPayload,
-    MediaTabSession, MpvPlayer, TabPayload, ViewerAction, ViewerError, ViewerTabManager,
-    MAX_CACHED_HIGH_RES_BUFFERS,
+    MediaTabSession, MpvPlayer, TabPayload, ViewerAction, ViewerError,
+    ViewerTabManager, MAX_CACHED_HIGH_RES_BUFFERS,
 };
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::PathBuf;
@@ -1224,4 +1224,46 @@ fn test_x11_window_finder_smoke() {
     let pid = std::process::id();
     let _ = find_window_by_pid_and_title(pid, "NonExistentDummyTitle");
     let _ = find_window_by_title("NonExistentDummyTitle");
+}
+
+#[test]
+fn test_viewer_tab_missing_file_opens_with_fallback_error_without_subwindow() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Arc::new(Library::open(tmp_db.path()).unwrap());
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let vid_path = tmp_media.path().join("deleted_vid.mp4");
+    std::fs::write(&vid_path, b"dummy").unwrap();
+
+    let _ = lib.refresher().refresh_folder(folder.id).unwrap();
+    let media = lib.media().get_by_folder(folder.id).unwrap()[0].clone();
+
+    // Delete file from disk
+    std::fs::remove_file(&vid_path).unwrap();
+    assert!(!vid_path.exists());
+
+    let tab_mgr = ViewerTabManager::new(lib);
+
+    // Open media in tab: should succeed and create tab session
+    let (tab_id, is_new) = tab_mgr.open_or_focus_media(media.id, false).unwrap();
+    assert!(is_new);
+    assert_eq!(tab_mgr.tab_count(), 1);
+
+    let session = tab_mgr.get_tab(tab_id).unwrap();
+    assert_eq!(session.media_id, media.id);
+
+    // Payload must be Video with error_message set, subwindow None
+    if let TabPayload::Video(ref vid) = session.payload {
+        assert!(!vid.error_message.is_empty(), "Error message must be populated for missing file");
+        assert!(vid.error_message.contains("Media file not found on disk"));
+        assert!(vid.subwindow.lock().is_none(), "Subwindow must not be created for missing video file");
+    } else {
+        panic!("Expected Video payload");
+    }
+
+    // Tab can be cleanly closed
+    assert_eq!(tab_mgr.close_tab(tab_id), None);
+    assert_eq!(tab_mgr.tab_count(), 0);
 }
