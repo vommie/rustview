@@ -202,6 +202,9 @@ export component MainWindow inherits Window {
     in-out property <string> tag-filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
 
+    // Focus state reflecting active editing in text input fields
+    property <bool> is-text-input-focused: media-toolbar.search-has-focus || sidebar_right.tag-filter-has-focus;
+
     in-out property <bool> is-context-menu-open: false;
     in-out property <length> context-menu-x: 0px;
     in-out property <length> context-menu-y: 0px;
@@ -274,6 +277,9 @@ export component MainWindow inherits Window {
     callback media-hover-changed(int /* id */, bool /* is_hover */);
     callback background-clicked();
     callback visible-chunk-changed(int /* first_item */, int /* last_item */, int /* total */);
+
+    // Keyboard Navigation Callback (Direction, Shift held, Page rows calculated at trigger instant)
+    callback media-navigate(int /* direction: 0=Up, 1=Down, 2=Left, 3=Right, 4=PageUp, 5=PageDown, 6=Home, 7=End */, bool /* is_shift */, int /* page_rows */);
 
     callback media-drag-started(int /* id */, length /* x */, length /* y */);
     callback media-drag-moved(length /* x */, length /* y */);
@@ -373,6 +379,24 @@ export component MainWindow inherits Window {
         }
     }
 
+    /// Dynamically calculates how many full rows fit into the current visible media viewport height
+    pure public function get-media-page-rows() -> int {
+        if root.is-table-view {
+            return table-view.get-page-rows();
+        } else {
+            return grid-view.get-page-rows();
+        }
+    }
+
+    /// Programmatically scrolls the media view so that the item at item-idx is fully visible (never cut off)
+    public function scroll-media-item-into-view(item-idx: int) {
+        if root.is-table-view {
+            table-view.scroll-item-into-view(item-idx);
+        } else {
+            grid-view.scroll-item-into-view(item-idx);
+        }
+    }
+
     pure public function get-top-visible-index() -> int {
         if root.is-table-view {
             return table-view.get-top-visible-index();
@@ -397,6 +421,10 @@ export component MainWindow inherits Window {
                 return accept;
             }
 
+            if root.is-context-menu-open || root.is-choice-popup-open || root.is-dragging-media || root.is-dragging-tab || root.rubberband-active {
+                return reject;
+            }
+
             if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
                 if root.active-view-mode == 1 {
                     root.viewer-close-tab();
@@ -407,6 +435,45 @@ export component MainWindow inherits Window {
             if (event.modifiers.control || event.modifiers.meta) && (event.text == "f" || event.text == "F" || event.text == "\u{06}") {
                 if root.active-view-mode == 0 {
                     media-toolbar.focus-search();
+                    return accept;
+                }
+            }
+
+            // Keyboard navigation in Browse View (active-view-mode == 0), strictly active when not typing in text fields
+            if root.active-view-mode == 0 && !root.is-text-input-focused {
+                let is-shift = event.modifiers.shift;
+                let page-rows = root.get-media-page-rows();
+
+                if event.text == Key.UpArrow {
+                    root.media-navigate(0 /* Up */, is-shift, page-rows);
+                    return accept;
+                }
+                if event.text == Key.DownArrow {
+                    root.media-navigate(1 /* Down */, is-shift, page-rows);
+                    return accept;
+                }
+                if event.text == Key.LeftArrow {
+                    root.media-navigate(2 /* Left */, is-shift, page-rows);
+                    return accept;
+                }
+                if event.text == Key.RightArrow {
+                    root.media-navigate(3 /* Right */, is-shift, page-rows);
+                    return accept;
+                }
+                if event.text == Key.PageUp {
+                    root.media-navigate(4 /* PageUp */, is-shift, page-rows);
+                    return accept;
+                }
+                if event.text == Key.PageDown {
+                    root.media-navigate(5 /* PageDown */, is-shift, page-rows);
+                    return accept;
+                }
+                if event.text == Key.Home {
+                    root.media-navigate(6 /* Home */, is-shift, page-rows);
+                    return accept;
+                }
+                if event.text == Key.End {
+                    root.media-navigate(7 /* End */, is-shift, page-rows);
                     return accept;
                 }
             }
@@ -585,6 +652,9 @@ export component MainWindow inherits Window {
                         rubberband-width: root.rubberband-width;
                         rubberband-height: root.rubberband-height;
 
+                        ensure-focus => {
+                            main-window-focus.focus();
+                        }
                         visible-chunk-changed(first, last, tot) => {
                             root.visible-chunk-changed(first, last, tot);
                         }
@@ -637,6 +707,9 @@ export component MainWindow inherits Window {
                         col-format-width <=> root.col-format-width;
                         col-flags-width <=> root.col-flags-width;
 
+                        ensure-focus => {
+                            main-window-focus.focus();
+                        }
                         visible-chunk-changed(first, last, tot) => {
                             root.visible-chunk-changed(first, last, tot);
                         }

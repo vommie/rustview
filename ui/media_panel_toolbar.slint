@@ -17,6 +17,8 @@ export component MediaPanelToolbar inherits PanelToolbar {
     in property <string> virtual-folder-tooltip: "";
     in-out property <int> media-type-filter-idx: 2;
 
+    out property <bool> search-has-focus: search-field.has-focus;
+
     callback thumb-width-changed(int);
     callback search-changed(string);
     callback regex-toggled(bool);
@@ -42,7 +44,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
     // 2. Expander / Spacer (Pushes search & view actions to the right)
     ToolbarSpacer {}
 
-    // 3. Virtual Folder / Recursive Subfolders View Toggle Button (Icon-only, disabled when no subfolders or global query active)
+    // 3. Virtual Folder / Recursive Subfolders View Toggle Button
     ToolbarButton {
         icon: root.is-virtual-folder ? Icons.virtual-folder-disable : Icons.virtual-folder-enable;
         tooltip: root.virtual-folder-tooltip != "" ? root.virtual-folder-tooltip : (

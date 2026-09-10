@@ -237,6 +237,8 @@ export component TagPanel inherits VerticalLayout {
     in-out property <bool> tag-filter-is-regex: false;
     in property <[TagColumnView]> tag-columns: [];
 
+    out property <bool> filter-has-focus: filter-input.has-focus;
+
     callback mode-toggled(bool);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);

@@ -12,6 +12,9 @@ export component SearchField inherits Rectangle {
     in property <string> placeholder-text: "Filter...";
     in property <bool> is-enabled: true;
 
+    // Output property reflecting internal text input focus state for focus routing
+    out property <bool> has-focus: input.has-focus;
+
     // Feature Toggle Options (Sensible Defaults)
     in property <bool> enable-regex-toggle: true;
     in property <bool> enable-clear-button: true;
@@ -112,7 +115,7 @@ export component SearchField inherits Rectangle {
             }
         }
 
-        // 2. Central Text Input & Placeholder Container (Fills entire available height and width to prevent dead-zones)
+        // 2. Central Text Input & Placeholder Container
         input-container := Rectangle {
             horizontal-stretch: 1;
             height: 100%;
@@ -174,7 +177,7 @@ export component SearchField inherits Rectangle {
             }
         }
 
-        // 3. Integrated Regex Toggle Button (Pinned to the right, vertically centered)
+        // 3. Integrated Regex Toggle Button
         if root.enable-regex-toggle : VerticalLayout {
             alignment: center;
             horizontal-stretch: 0;
@@ -235,7 +238,7 @@ export component SearchField inherits Rectangle {
             }
         }
 
-        // 4. Integrated Clear / Reset Button (Pinned to the right, vertically centered)
+        // 4. Integrated Clear / Reset Button
         if root.enable-clear-button && root.text != "" : VerticalLayout {
             alignment: center;
             horizontal-stretch: 0;

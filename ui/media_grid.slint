@@ -53,6 +53,7 @@ export component MediaTile inherits Rectangle {
     callback drag-started(int /* id */, length /* local_x */, length /* local_y */);
     callback drag-moved(length /* local_x */, length /* local_y */);
     callback drag-ended();
+    callback ensure-focus();
 
     property <bool> is-hovered: tile-touch.has-hover;
     changed is-hovered => {
@@ -70,6 +71,7 @@ export component MediaTile inherits Rectangle {
 
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
+                root.ensure-focus();
                 if event.button == PointerEventButton.left {
                     self.press-x = self.mouse-x;
                     self.press-y = self.mouse-y;
@@ -309,11 +311,28 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-drag-started(int /* id */, length /* x */, length /* y */);
     callback item-drag-moved(length /* x */, length /* y */);
     callback item-drag-ended();
+    callback ensure-focus();
 
     // Rubberband selection callbacks
     callback rubberband-started(length /* start_content_x */, length /* start_content_y */, length /* view_x */, length /* view_y */, bool /* ctrl */, bool /* shift */);
     callback rubberband-moved(length /* content_x */, length /* content_y */, length /* view_x */, length /* view_y */);
     callback rubberband-ended();
+
+    /// Calculates dynamically how many full rows fit into the current visible viewport height
+    pure public function get-page-rows() -> int {
+        return Math.max(1, Math.floor((scroll-area.height - (root.grid-padding * 2) + root.grid-spacing) / Math.max(1px, root.row-stride)));
+    }
+
+    /// Scrolls the viewport so that the item at item-idx is completely visible (never cut off)
+    public function scroll-item-into-view(item-idx: int) {
+        if root.columns > 0 && item-idx >= 0 && item-idx < root.total-items-count {
+            let target-row = Math.floor(item-idx / root.columns);
+            let target-y = (target-row == 0) ? 0px : (root.grid-padding + (target-row * root.row-stride));
+            let is-last-row = (target-row >= root.total-rows - 1);
+            let target-h = is-last-row ? (root.item-tile-height + root.grid-padding) : root.item-tile-height;
+            scroll-area.scroll-into-view(target-y, target-h);
+        }
+    }
 
     public function scroll-to-top() {
         scroll-area.scroll-to-top();
@@ -393,6 +412,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
                 pointer-event(event) => {
                     if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        root.ensure-focus();
                         self.press-x = self.mouse-x;
                         self.press-y = self.mouse-y;
                         self.is-rubberband-active = false;
@@ -467,6 +487,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     border-width-val: root.border-w;
                     corner-radius-val: root.corner-r;
 
+                    ensure-focus => { root.ensure-focus(); }
                     clicked(ctrl, shift) => { root.item-clicked(self.item.id, ctrl, shift); }
                     middle-clicked => { root.item-middle-clicked(self.item.id); }
                     hover-changed(hover) => { root.item-hover-changed(self.item.id, hover); }

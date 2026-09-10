@@ -23,6 +23,7 @@ use super::bridge_thumbnails::BridgeThumbnails;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::dnd_foldertree_autoscroller::DndFolderTreeAutoScroller;
 use super::favorites::FavoriteManager;
+use super::keyboard_navigation::{handle_keyboard_navigate, KeyboardNavigateParams};
 use super::rubberband_selection::RubberbandAutoScroller;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
@@ -470,10 +471,34 @@ impl UiBridge {
             self.fullscreen_controller.clone(),
         );
 
+        self.register_keyboard_navigation_callbacks();
         self.register_tab_grid_callbacks();
         self.register_dnd_callbacks();
         self.register_rubberband_callbacks();
         self.register_sidebar_resize_callbacks();
+    }
+
+    fn register_keyboard_navigation_callbacks(&self) {
+        let win = self.window.clone_strong();
+        let lib = self.library.clone();
+        let thumb = self.thumbnails.clone();
+        let set = self.settings.clone();
+        let st = self.state.clone();
+        let fs = self.fullscreen_controller.clone();
+
+        self.window.on_media_navigate(move |direction_code, is_shift, page_rows| {
+            handle_keyboard_navigate(KeyboardNavigateParams {
+                direction_code,
+                is_shift,
+                page_rows,
+                window: &win,
+                library: &lib,
+                thumbnails: &thumb,
+                settings: &set,
+                state: &st,
+                fullscreen_controller: &fs,
+            });
+        });
     }
 
     fn register_tab_grid_callbacks(&self) {

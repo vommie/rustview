@@ -39,6 +39,7 @@ pub mod fallback_view;
 pub mod favorites;
 pub mod file_selection;
 pub mod icons;
+pub mod keyboard_navigation;
 pub mod models;
 pub mod rubberband_selection;
 pub mod tab_dnd;
@@ -85,6 +86,9 @@ pub use fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, Fallbac
 pub use favorites::FavoriteManager;
 pub use file_selection::{FileSelectionModel, FileSelectionSummary};
 pub use icons::{IconAsset, IconManager, IconMetadata};
+pub use keyboard_navigation::{
+    calculate_target_index, handle_keyboard_navigate, KeyboardNavigateParams, NavigationDirection,
+};
 pub use rubberband_selection::{
     GridLayoutConfig, RectF32, RubberbandAutoScroller, RubberbandGeometry, RubberbandSession,
     RubberbandStartParams, TableLayoutConfig,

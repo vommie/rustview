@@ -29,6 +29,7 @@ export component MediaTableRow inherits Rectangle {
     callback drag-started(int /* id */, length /* x */, length /* y */);
     callback drag-moved(length /* x */, length /* y */);
     callback drag-ended();
+    callback ensure-focus();
 
     height: root.row-height;
     // Strict Priority: Selected > Deleted > Corrupted > Normal
@@ -54,6 +55,7 @@ export component MediaTableRow inherits Rectangle {
 
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
+                root.ensure-focus();
                 if event.button == PointerEventButton.left {
                     self.press-x = self.mouse-x;
                     self.press-y = self.mouse-y;
@@ -421,6 +423,7 @@ export component MediaTableView inherits Rectangle {
     callback item-drag-started(int /* id */, length /* x */, length /* y */);
     callback item-drag-moved(length /* x */, length /* y */);
     callback item-drag-ended();
+    callback ensure-focus();
 
     // Rubberband selection callbacks
     callback rubberband-started(length /* start_content_x */, length /* start_content_y */, length /* view_x */, length /* view_y */, bool /* ctrl */, bool /* shift */);
@@ -449,6 +452,19 @@ export component MediaTableView inherits Rectangle {
     property <int> pool-rows-count: Math.min(root.total-items-count, Math.ceil(scroll-area.height / root.row-height) + 12);
     property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / root.row-height));
     property <int> scroll-block: Math.floor(-scroll-area.clamped-y / (root.row-height * 6));
+
+    /// Calculates dynamically how many full table rows fit into the current visible viewport height
+    pure public function get-page-rows() -> int {
+        return Math.max(1, Math.floor(scroll-area.height / Math.max(1px, root.row-height)));
+    }
+
+    /// Scrolls the viewport so that the table row at item-idx is completely visible (never cut off)
+    public function scroll-item-into-view(item-idx: int) {
+        if item-idx >= 0 && item-idx < root.total-items-count {
+            let target-y = (item-idx == 0) ? 0px : (item-idx * root.row-height);
+            scroll-area.scroll-into-view(target-y, root.row-height);
+        }
+    }
 
     public function scroll-to-top() {
         scroll-area.scroll-to-top();
@@ -550,6 +566,7 @@ export component MediaTableView inherits Rectangle {
 
                 pointer-event(event) => {
                     if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        root.ensure-focus();
                         self.press-x = self.mouse-x;
                         self.press-y = self.mouse-y;
                         self.is-rubberband-active = false;
@@ -630,6 +647,7 @@ export component MediaTableView inherits Rectangle {
 
                     scroll-offset-x: scroll-area.clamped-x;
 
+                    ensure-focus => { root.ensure-focus(); }
                     clicked(ctrl, shift) => {
                         root.item-clicked(item.id, ctrl, shift);
                     }

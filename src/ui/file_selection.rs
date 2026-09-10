@@ -69,8 +69,8 @@ impl FileSelectionModel {
         }
     }
 
-    /// Selects a contiguous range between the anchor and the target ID (Shift + Click).
-    /// If `additive` is true (Ctrl + Shift + Click), existing selections outside the range are preserved.
+    /// Selects a contiguous range between the anchor and the target ID (Shift + Click / Shift + Arrow).
+    /// If `additive` is true (Ctrl + Shift), existing selections outside the range are preserved.
     pub fn select_range(
         &mut self,
         target_id: MediaId,
@@ -82,6 +82,9 @@ impl FileSelectionModel {
         }
 
         let anchor = self.anchor_id.unwrap_or(target_id);
+        if self.anchor_id.is_none() {
+            self.anchor_id = Some(anchor);
+        }
 
         let anchor_idx = ordered_visible_ids
             .iter()
@@ -159,10 +162,22 @@ impl FileSelectionModel {
         self.anchor_id
     }
 
-    /// Returns the last clicked file ID.
+    /// Explicitly sets the anchor item.
+    #[inline]
+    pub fn set_anchor_id(&mut self, id: Option<MediaId>) {
+        self.anchor_id = id;
+    }
+
+    /// Returns the last clicked or focused file ID.
     #[inline]
     pub fn last_clicked_id(&self) -> Option<MediaId> {
         self.last_clicked_id
+    }
+
+    /// Explicitly sets the last clicked or focused file ID.
+    #[inline]
+    pub fn set_last_clicked_id(&mut self, id: Option<MediaId>) {
+        self.last_clicked_id = id;
     }
 
     /// Prunes IDs that no longer exist in the active dataset.

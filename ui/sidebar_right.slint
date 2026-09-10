@@ -24,6 +24,8 @@ export component SidebarRight inherits Rectangle {
     in-out property <bool> tag-filter-is-regex: false;
     in property <[TagColumnView]> tag-columns: [];
 
+    out property <bool> tag-filter-has-focus: tag-panel.filter-has-focus;
+
     in property <string> info-filename: "-";
     in property <string> info-path-label: "Path:";
     in property <string> info-path: "-";
