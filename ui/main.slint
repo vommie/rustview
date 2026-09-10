@@ -381,6 +381,10 @@ export component MainWindow inherits Window {
         }
     }
 
+    public function focus-search() {
+        media-toolbar.focus-search();
+    }
+
     // Keyboard Shortcuts & Navigation Handling
     forward-focus: main-window-focus;
     main-window-focus := FocusScope {
@@ -396,6 +400,13 @@ export component MainWindow inherits Window {
             if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
                 if root.active-view-mode == 1 {
                     root.viewer-close-tab();
+                    return accept;
+                }
+            }
+
+            if (event.modifiers.control || event.modifiers.meta) && (event.text == "f" || event.text == "F" || event.text == "\u{06}") {
+                if root.active-view-mode == 0 {
+                    media-toolbar.focus-search();
                     return accept;
                 }
             }
@@ -512,7 +523,7 @@ export component MainWindow inherits Window {
                     visible: root.active-view-mode == 0 || root.active-view-mode == 1;
                     vertical-stretch: 0;
 
-                    MediaPanelToolbar {
+                    media-toolbar := MediaPanelToolbar {
                         visible: root.active-view-mode == 0;
                         thumb-width <=> root.thumb-size;
                         search-text <=> root.search-query;

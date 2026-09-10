@@ -42,6 +42,9 @@ export component SearchField inherits Rectangle {
     callback accepted(string /* current_text */);
     callback cleared();
 
+    // Focus forwarding: ensures any focus received by SearchField is passed directly to TextInput
+    forward-focus: input;
+
     // Programmatic Public API
     public function clear() {
         root.text = "";
@@ -109,68 +112,64 @@ export component SearchField inherits Rectangle {
             }
         }
 
-        // 2. Central Text Input & Placeholder Container (Stretches to fill horizontal space, vertically centered)
-        VerticalLayout {
-            alignment: center;
+        // 2. Central Text Input & Placeholder Container (Fills entire available height and width to prevent dead-zones)
+        input-container := Rectangle {
             horizontal-stretch: 1;
+            height: 100%;
+            clip: true;
 
-            Rectangle {
-                height: root.font-size + 6px;
-                clip: true;
+            if input.text == "" : Text {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: 100%;
+                text: root.placeholder-text;
+                font-size: root.font-size;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+                horizontal-alignment: left;
+                overflow: elide;
+            }
 
-                if input.text == "" : Text {
-                    x: 0px;
-                    y: 0px;
-                    width: 100%;
-                    height: 100%;
-                    text: root.placeholder-text;
-                    font-size: root.font-size;
-                    color: Theme.text-muted;
-                    vertical-alignment: center;
-                    horizontal-alignment: left;
-                    overflow: elide;
+            input := TextInput {
+                x: 0px;
+                y: 0px;
+                width: 100%;
+                height: 100%;
+                text <=> root.text;
+                font-size: root.font-size;
+                color: root.is-enabled
+                    ? (root.custom-text != transparent ? root.custom-text : Theme.text)
+                    : Theme.text-muted;
+                selection-background-color: Theme.primary;
+                selection-foreground-color: #000000;
+                vertical-alignment: center;
+                horizontal-alignment: left;
+                single-line: true;
+                enabled: root.is-enabled;
+
+                edited => {
+                    root.search-changed(self.text);
                 }
 
-                input := TextInput {
-                    x: 0px;
-                    y: 0px;
-                    width: 100%;
-                    height: 100%;
-                    text <=> root.text;
-                    font-size: root.font-size;
-                    color: root.is-enabled
-                        ? (root.custom-text != transparent ? root.custom-text : Theme.text)
-                        : Theme.text-muted;
-                    selection-background-color: Theme.primary;
-                    selection-foreground-color: #000000;
-                    vertical-alignment: center;
-                    horizontal-alignment: left;
-                    single-line: true;
-                    enabled: root.is-enabled;
+                accepted => {
+                    root.accepted(self.text);
+                }
 
-                    edited => {
-                        root.search-changed(self.text);
-                    }
-
-                    accepted => {
-                        root.accepted(self.text);
-                    }
-
-                    key-pressed(event) => {
-                        if event.text == Key.Escape && root.enable-escape-clear {
-                            if root.text != "" {
-                                root.text = "";
-                                root.search-changed("");
-                                root.cleared();
-                                return accept;
-                            }
-                        }
-                        if event.text == Key.Return {
-                            root.accepted(self.text);
+                key-pressed(event) => {
+                    if event.text == Key.Escape && root.enable-escape-clear {
+                        if root.text != "" {
+                            root.text = "";
+                            root.search-changed("");
+                            root.cleared();
                             return accept;
                         }
-                        return reject;
                     }
+                    if event.text == Key.Return {
+                        root.accepted(self.text);
+                        return accept;
+                    }
+                    return reject;
                 }
             }
         }

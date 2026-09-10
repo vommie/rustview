@@ -19,6 +19,8 @@ export component TagSearchFilter inherits Rectangle {
     callback accepted(string);
     callback cleared();
 
+    forward-focus: field;
+
     public function clear() {
         field.clear();
     }

@@ -352,6 +352,85 @@ fn test_file_selection_filter_pruning_lifecycle() {
 }
 
 #[test]
+fn test_search_query_filter_on_active_query_results_page() {
+    let tmp_db = tempdir().unwrap();
+    let lib = Library::open(tmp_db.path()).unwrap();
+
+    // 1. Create a set of records representing query results (e.g. from Rating 5 or Tag query)
+    let r1 = create_dummy_record(10, "mountain_sunset.jpg", 1000, 1920, 1080, MediaFormat::Jpeg, 5);
+    let r2 = create_dummy_record(20, "ocean_breeze.jpg", 2000, 1920, 1080, MediaFormat::Jpeg, 5);
+    let r3 = create_dummy_record(30, "mountain_peak.png", 1500, 1024, 768, MediaFormat::Png, 5);
+    let r4 = create_dummy_record(40, "city_night.jpg", 3000, 1920, 1080, MediaFormat::Jpeg, 5);
+
+    let indexed: Vec<IndexedMediaRecord> = vec![r1, r2, r3, r4]
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let is_video = matches!(r.media_type, MediaType::Video);
+            let ar_str = approximate_aspect_ratio(r.width, r.height);
+            let ar_value = if r.height > 0 { r.width as f32 / r.height as f32 } else { 0.0 };
+            IndexedMediaRecord {
+                index: i,
+                full_path: PathBuf::from(&r.filename),
+                folder_path_str: "/media/nature".into(),
+                folder_path_lower: "/media/nature".to_string(),
+                filename_lower: r.filename.to_lowercase(),
+                filename_slint: r.filename.clone().into(),
+                modified_date_str: "2026-08-20 12:00:00".into(),
+                created_date_str: "2026-08-20 10:00:00".into(),
+                filesize_mb_str: format_filesize_mb(r.file_size).into(),
+                rating_str: r.rating.to_string().into(),
+                tags_count: 1,
+                tags_count_str: "1".into(),
+                width_str: r.width.to_string().into(),
+                height_str: r.height.to_string().into(),
+                ar_str: ar_str.into(),
+                ar_value,
+                duration_str: format_duration_hms_ms(r.duration_ms, is_video).into(),
+                format_str: r.format.default_extension().into(),
+                flags_str: "OK".into(),
+                is_corrupted: false,
+                is_deleted: false,
+                has_tags: true,
+                record: r,
+            }
+        })
+        .collect();
+
+    // 2. Emulate an active query state: rating = 5, query string empty initially
+    let mut query_filter = QueryFilter {
+        rating: Some(5),
+        search_query: String::new(),
+        is_regex: false,
+        ..Default::default()
+    };
+
+    let initial_matched = query_filter.execute_indexed_refs(&lib, &indexed, None);
+    assert_eq!(initial_matched.len(), 4, "All 4 records with rating 5 must match initially");
+
+    // 3. User types "mountain" into the Browse-View search filter field on this Query-Results page
+    query_filter.search_query = "mountain".to_string();
+    let mountain_matched = query_filter.execute_indexed_refs(&lib, &indexed, None);
+    assert_eq!(mountain_matched.len(), 2, "Only the 2 mountain files must match the text filter");
+    let names: Vec<&str> = mountain_matched.iter().map(|m| m.record.filename.as_str()).collect();
+    assert!(names.contains(&"mountain_sunset.jpg"));
+    assert!(names.contains(&"mountain_peak.png"));
+
+    // 4. Test with Regex enabled on the Query-Results page: "^ocean.*"
+    query_filter.is_regex = true;
+    query_filter.search_query = "^ocean.*".to_string();
+    let regex_matched = query_filter.execute_indexed_refs(&lib, &indexed, None);
+    assert_eq!(regex_matched.len(), 1);
+    assert_eq!(regex_matched[0].record.filename, "ocean_breeze.jpg");
+
+    // 5. Test clear search filter on the Query-Results page: restores all 4 items of the active query
+    query_filter.is_regex = false;
+    query_filter.search_query.clear();
+    let cleared_matched = query_filter.execute_indexed_refs(&lib, &indexed, None);
+    assert_eq!(cleared_matched.len(), 4, "Clearing the search query must restore all active query results");
+}
+
+#[test]
 fn test_file_selection_visual_sort_order_preservation() {
     let r1 = create_dummy_record(100, "C_File.mp4", 1000, 1920, 1080, MediaFormat::Mp4, 1);
     let r2 = create_dummy_record(200, "A_File.mp4", 2000, 1920, 1080, MediaFormat::Mp4, 2);

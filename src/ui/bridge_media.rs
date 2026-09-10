@@ -96,7 +96,7 @@ impl BridgeMedia {
         state: Arc<RwLock<UiState>>,
         fullscreen_controller: ImageFullscreenDialogController,
     ) {
-        // 1. Search Query Filter Callback
+        // 1. Search Query Filter Callback with enhanced logging
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -105,11 +105,21 @@ impl BridgeMedia {
         let fs_query = fullscreen_controller.clone();
         window.on_search_query_changed(move |query| {
             fs_query.dismiss_if_quick_fullscreen();
+            let (is_query, dataset_count) = {
+                let s = st.read();
+                (s.is_query_active, s.all_folder_media.len())
+            };
+            tracing::info!(
+                query = %LogObscurer::query(&query),
+                is_query_active = is_query,
+                dataset_count = dataset_count,
+                "[SearchFilter: Input] Search filter query changed via UI input"
+            );
             st.write().filter.search_query = query.to_string();
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 2. Regular Expression Mode Toggle Callback
+        // 2. Regular Expression Mode Toggle Callback with enhanced logging
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -118,6 +128,12 @@ impl BridgeMedia {
         let fs_regex = fullscreen_controller.clone();
         window.on_regex_mode_toggled(move |enabled| {
             fs_regex.dismiss_if_quick_fullscreen();
+            let is_query = st.read().is_query_active;
+            tracing::info!(
+                regex_enabled = enabled,
+                is_query_active = is_query,
+                "[SearchFilter: Regex] Regex mode toggled via UI input"
+            );
             st.write().filter.is_regex = enabled;
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });

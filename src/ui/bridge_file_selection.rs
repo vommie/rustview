@@ -26,6 +26,17 @@ pub struct FileClickEvent {
     pub is_shift: bool,
 }
 
+/// Context parameter bundle for handling media file click events.
+pub struct FileClickContext<'a> {
+    pub window: &'a MainWindow,
+    pub library: &'a Arc<Library>,
+    pub settings: &'a Arc<SettingsManager>,
+    pub tab_manager: &'a Arc<ViewerTabManager>,
+    pub state: &'a Arc<RwLock<UiState>>,
+    pub last_click: &'a Arc<Mutex<Option<LastClickRecord>>>,
+    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+}
+
 /// Discriminant representing the detected double click type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DoubleClickKind {
@@ -70,13 +81,15 @@ impl BridgeFileSelection {
                     is_ctrl,
                     is_shift,
                 },
-                &win,
-                &lib,
-                &set,
-                &tm,
-                &st,
-                &lc,
-                &fs,
+                FileClickContext {
+                    window: &win,
+                    library: &lib,
+                    settings: &set,
+                    tab_manager: &tm,
+                    state: &st,
+                    last_click: &lc,
+                    fullscreen_controller: &fs,
+                },
             );
         });
 
@@ -148,42 +161,36 @@ impl BridgeFileSelection {
     /// Handles media tile clicks with modifier keys, double-click timing, live Quick-Fullscreen synchronization, and surgical UI updates.
     pub fn handle_click(
         event: FileClickEvent,
-        window: &MainWindow,
-        library: &Arc<Library>,
-        settings: &Arc<SettingsManager>,
-        tab_manager: &Arc<ViewerTabManager>,
-        state: &Arc<RwLock<UiState>>,
-        last_click: &Arc<Mutex<Option<LastClickRecord>>>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        ctx: FileClickContext<'_>,
     ) {
         let t_start = Instant::now();
 
         // If Quick-Fullscreen is currently active from Browse view, dynamically update its preview to the clicked media item!
-        if fullscreen_controller.is_quick_fullscreen_active() {
-            fullscreen_controller.update_quick_fullscreen_media(event.media_id, library, settings);
+        if ctx.fullscreen_controller.is_quick_fullscreen_active() {
+            ctx.fullscreen_controller.update_quick_fullscreen_media(event.media_id, ctx.library, ctx.settings);
         }
 
         // 1. Double Click Detection (< 400ms delta on same ID)
-        match Self::check_double_click(event, last_click) {
+        match Self::check_double_click(event, ctx.last_click) {
             DoubleClickKind::Normal => {
                 Self::handle_double_click(
                     event.media_id,
-                    state,
-                    library,
-                    settings,
-                    tab_manager,
-                    window,
+                    ctx.state,
+                    ctx.library,
+                    ctx.settings,
+                    ctx.tab_manager,
+                    ctx.window,
                 );
                 return;
             }
             DoubleClickKind::Ctrl => {
                 Self::handle_ctrl_double_click(
                     event.media_id,
-                    state,
-                    library,
-                    settings,
-                    tab_manager,
-                    window,
+                    ctx.state,
+                    ctx.library,
+                    ctx.settings,
+                    ctx.tab_manager,
+                    ctx.window,
                 );
                 return;
             }
@@ -191,19 +198,19 @@ impl BridgeFileSelection {
         }
 
         // 2. Selection Mutation Math (Strictly scoped to active visible items)
-        let (changed_ids, sel_count) = Self::mutate_selection(event, state);
+        let (changed_ids, sel_count) = Self::mutate_selection(event, ctx.state);
         let t_math = t_start.elapsed();
 
         // 3. Fast In-Place Slint Model Mutation with Viewport Translation
         let t_sync_start = Instant::now();
-        Self::sync_selection_diff(window, state, &changed_ids);
+        Self::sync_selection_diff(ctx.window, ctx.state, &changed_ids);
         let t_sync = t_sync_start.elapsed();
 
         // 4. Update Inspector Fields, Synchronize TagTree Highlight/Counts, and Update Status Bar
         let t_insp_start = Instant::now();
-        BridgeInspector::update(window, state);
-        BridgeTags::sync_tag_selection(window, library, state);
-        StatusBarBridge::update_metrics(window, state);
+        BridgeInspector::update(ctx.window, ctx.state);
+        BridgeTags::sync_tag_selection(ctx.window, ctx.library, ctx.state);
+        StatusBarBridge::update_metrics(ctx.window, ctx.state);
         let t_insp = t_insp_start.elapsed();
 
         tracing::debug!(
@@ -212,7 +219,7 @@ impl BridgeFileSelection {
             is_shift = event.is_shift,
             selected_count = sel_count,
             changed_rows = changed_ids.len(),
-            quick_fullscreen_active = fullscreen_controller.is_quick_fullscreen_active(),
+            quick_fullscreen_active = ctx.fullscreen_controller.is_quick_fullscreen_active(),
             math_us = t_math.as_micros(),
             model_sync_us = t_sync.as_micros(),
             inspector_and_tags_us = t_insp.as_micros(),

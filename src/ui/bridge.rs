@@ -7,7 +7,7 @@ use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
 use super::bridge_file_dialog_delete::DeleteFileDialogController;
 use super::bridge_file_dialog_missing::MissingFileDialogController;
 use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
-use super::bridge_file_selection::{BridgeFileSelection, LastClickRecord};
+use super::bridge_file_selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use super::bridge_folder_dialogs::FolderDialogController;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
@@ -980,13 +980,15 @@ impl UiBridge {
                 is_ctrl,
                 is_shift,
             },
-            &self.window,
-            &self.library,
-            &self.settings,
-            &self.tab_manager,
-            &self.state,
-            &self.last_click,
-            &self.fullscreen_controller,
+            FileClickContext {
+                window: &self.window,
+                library: &self.library,
+                settings: &self.settings,
+                tab_manager: &self.tab_manager,
+                state: &self.state,
+                last_click: &self.last_click,
+                fullscreen_controller: &self.fullscreen_controller,
+            },
         );
     }
 

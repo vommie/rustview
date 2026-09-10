@@ -25,6 +25,12 @@ export component MediaPanelToolbar inherits PanelToolbar {
     callback refresh-clicked();
     callback view-mode-toggled(bool /* target_is_table */);
 
+    forward-focus: search-field;
+
+    public function focus-search() {
+        search-field.focus-input();
+    }
+
     toolbar-height: 26px;
 
     // 1. Thumbnail Width Slider Control (Visible in Grid View only)

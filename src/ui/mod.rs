@@ -60,6 +60,9 @@ pub use bridge_file_dialog_delete::DeleteFileDialogController;
 pub use bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 pub use bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
 pub use bridge_file_dialogs::{FileRenameContext, FileRenameDialogController};
+pub use bridge_file_selection::{
+    BridgeFileSelection, FileClickContext, FileClickEvent, LastClickRecord,
+};
 pub use bridge_folder_dialog_delete::DeleteFolderDialogController;
 pub use bridge_folder_dialog_missing_delete::MissingFolderDeleteDialogController;
 pub use bridge_folder_dialog_move::MoveFolderDialogController;
