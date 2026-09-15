@@ -2,7 +2,7 @@ use super::MainWindow;
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
-use super::bridge_state::UiState;
+use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
@@ -114,6 +114,7 @@ impl BridgeFileSelection {
                 "[FileSelection: BackgroundClick] Background free space clicked, clearing active file selection"
             );
             fs_bg.dismiss_if_quick_fullscreen();
+            st_bg.write().last_active_panel = LastActivePanel::Media;
             Self::clear_selection(&win_bg, &lib_bg, &st_bg);
         });
     }
@@ -134,9 +135,9 @@ impl BridgeFileSelection {
             "[FileSelection: MiddleClick] Quick-Fullscreen mode triggered directly on media item (bypassing tabs, non-modal)"
         );
 
-        // Select the media item so Inspector and Tag & Rate Panel are immediately synchronized
         let (changed_ids, _) = {
             let mut st = state.write();
+            st.last_active_panel = LastActivePanel::Media;
             let prev_selected = st.file_selection.selected_ids().clone();
             st.file_selection.select_single(media_id);
             let newly_selected = st.file_selection.selected_ids();
@@ -165,7 +166,6 @@ impl BridgeFileSelection {
     ) {
         let t_start = Instant::now();
 
-        // If Quick-Fullscreen is currently active from Browse view, dynamically update its preview to the clicked media item!
         if ctx.fullscreen_controller.is_quick_fullscreen_active() {
             ctx.fullscreen_controller.update_quick_fullscreen_media(event.media_id, ctx.library, ctx.settings);
         }
@@ -197,7 +197,7 @@ impl BridgeFileSelection {
             DoubleClickKind::None => {}
         }
 
-        // 2. Selection Mutation Math (Strictly scoped to active visible items)
+        // 2. Selection Mutation Math
         let (changed_ids, sel_count) = Self::mutate_selection(event, ctx.state);
         let t_math = t_start.elapsed();
 
@@ -262,6 +262,7 @@ impl BridgeFileSelection {
         state: &Arc<RwLock<UiState>>,
     ) -> (Vec<MediaId>, usize) {
         let mut st = state.write();
+        st.last_active_panel = LastActivePanel::Media;
         let prev_selected = st.file_selection.selected_ids().clone();
 
         if event.is_shift {
@@ -325,6 +326,7 @@ impl BridgeFileSelection {
         let t_start = Instant::now();
         let changed_ids = {
             let mut st = state.write();
+            st.last_active_panel = LastActivePanel::Media;
             let prev_selected = st.file_selection.selected_ids().clone();
             let visible_ids: Vec<MediaId> = st
                 .active_indices
@@ -435,8 +437,7 @@ impl BridgeFileSelection {
         }
     }
 
-    /// Handles Ctrl + double-click on a media tile: restores original selection state (compensating rollback)
-    /// and opens images/videos in a background viewer tab without stealing focus or altering the selection.
+    /// Handles Ctrl + double-click on a media tile: restores original selection state and opens in a background viewer tab.
     pub fn handle_ctrl_double_click(
         media_id: MediaId,
         state: &Arc<RwLock<UiState>>,
@@ -462,7 +463,6 @@ impl BridgeFileSelection {
             }
         };
 
-        // 1. Revert/rollback the selection toggle done by the first click of the double-click sequence
         {
             let mut st = state.write();
             st.file_selection.toggle(media_id);

@@ -86,6 +86,18 @@ impl ImageFullscreenDialogController {
         *self.cached_viewport_rect.lock() = (x, y, w, h);
     }
 
+    /// Returns the active media ID being viewed in fullscreen if available.
+    pub fn get_active_media_id(&self) -> Option<MediaId> {
+        if let Some(tab_id) = *self.active_fullscreen_tab_id.lock()
+            && let Some(ref tm) = *self.tab_manager_weak.lock()
+            && let Some(tab) = tm.get_tab(tab_id)
+        {
+            Some(tab.media_id)
+        } else {
+            *self.active_standalone_media_id.lock()
+        }
+    }
+
     /// Evaluates if successive clicks qualify as a double-click (< 400ms interval), distinguishing between normal and Ctrl-modified double clicks.
     pub fn check_double_click(&self, is_ctrl: bool) -> DoubleClickKind {
         let now = Instant::now();
@@ -140,6 +152,15 @@ impl ImageFullscreenDialogController {
                 let ctrl_close = ctrl.clone();
                 win.on_request_close(move || {
                     ctrl_close.close();
+                });
+
+                let ctrl_ren = ctrl.clone();
+                win.on_request_rename(move || {
+                    if let Some(ref mw_weak) = *ctrl_ren.main_window_weak.lock()
+                        && let Some(mw) = mw_weak.upgrade()
+                    {
+                        mw.invoke_request_rename();
+                    }
                 });
 
                 let ctrl_click = ctrl.clone();
@@ -240,7 +261,6 @@ impl ImageFullscreenDialogController {
 
         let file_exists = target_tab.file_path.is_file();
 
-        // Lock the entire Main UI to prevent user interaction while in fullscreen (Tab View mode)
         if let Some(mw) = main_window_weak.upgrade() {
             mw.set_is_modal_locked(true);
         }
@@ -259,12 +279,10 @@ impl ImageFullscreenDialogController {
                 win.set_error_message(missing_msg.into());
             }
 
-            // Re-assert fullscreen state on Winit to guarantee proper mapping
             win.window().set_fullscreen(false);
             win.window().set_fullscreen(true);
             let _ = win.show();
 
-            // Enforce true EWMH Fullscreen directly on X11 level (removes titlebar and covers taskbar)
             let fs_xid = ctrl.resolve_fs_xid(win);
             if fs_xid > 0 {
                 force_x11_fullscreen(fs_xid);
@@ -290,7 +308,6 @@ impl ImageFullscreenDialogController {
     }
 
     /// Displays the frameless fullscreen viewer directly for a single media item without creating or modifying tabs (Quick-Fullscreen Mode).
-    /// Leaves the Main Window unblocked (non-modal) to allow live switching upon clicking other media items.
     pub fn show_for_media(
         &self,
         media_id: MediaId,
@@ -331,7 +348,6 @@ impl ImageFullscreenDialogController {
         let is_video = matches!(record.media_type, MediaType::Video);
         self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
 
-        // Quick-Fullscreen mode from Browse view does NOT modal-lock the Main Window!
         if let Some(mw) = main_window_weak.upgrade() {
             mw.set_is_modal_locked(false);
         }
@@ -348,7 +364,6 @@ impl ImageFullscreenDialogController {
             win.set_background_mode(bg_mode_idx);
             win.set_is_video(is_video && file_exists);
 
-            // Clean up standalone player / subwindow if running
             if let Some(player) = ctrl.standalone_video_player.lock().take() {
                 player.stop();
             }
@@ -367,7 +382,6 @@ impl ImageFullscreenDialogController {
                 let missing_msg = format!("File not found on physical disk:\n{}", file_path.display());
                 win.set_error_message(missing_msg.into());
             } else if !is_video {
-                // Immediate placeholder image from cache so the screen is immediately populated in 0ms
                 let initial_placeholder = {
                     let st = state.read();
                     st.folder_thumbnails
@@ -440,13 +454,11 @@ impl ImageFullscreenDialogController {
         );
     }
 
-    /// Returns true if Quick-Fullscreen mode is currently active (opened from Browse view on a standalone media item).
     #[inline]
     pub fn is_quick_fullscreen_active(&self) -> bool {
         self.is_active.load(Ordering::SeqCst) && self.active_standalone_media_id.lock().is_some()
     }
 
-    /// Dismisses / closes Quick-Fullscreen if currently active (triggered when interacting with non-media elements).
     pub fn dismiss_if_quick_fullscreen(&self) {
         if self.is_quick_fullscreen_active() {
             tracing::info!(
@@ -456,7 +468,6 @@ impl ImageFullscreenDialogController {
         }
     }
 
-    /// Updates the Quick-Fullscreen viewer dynamically to display a newly selected media item.
     pub fn update_quick_fullscreen_media(
         &self,
         media_id: MediaId,
@@ -472,13 +483,10 @@ impl ImageFullscreenDialogController {
         }
     }
 
-    /// Handles Ctrl + Double-Click in Fullscreen: Converts the current media item into a background tab
-    /// ONLY if it was opened standalone from the Browse View, preserving video playback and closing fullscreen.
     pub fn handle_ctrl_double_click(&self) {
         let origin_mode = *self.origin_view_mode.lock();
         let standalone_id_opt = *self.active_standalone_media_id.lock();
 
-        // ONLY convert if opened directly from Browse view (origin_mode == 0) in standalone mode!
         if origin_mode != 0 || standalone_id_opt.is_none() {
             tracing::debug!(
                 origin_mode,
@@ -543,7 +551,6 @@ impl ImageFullscreenDialogController {
         self.close();
     }
 
-    /// Initializes or reuses MPV and X11 subwindow directly on the fullscreen window before video load to guarantee 0ms flicker.
     fn init_or_play_standalone_video(
         &self,
         fs_win: &ImageFullscreenWindow,
@@ -626,6 +633,16 @@ impl ImageFullscreenDialogController {
                     close_fs.close();
                 });
 
+                // Wire F2 rename callback directly from MPV
+                let ctrl_fs_ren = self.clone();
+                p.on_rename_requested(move || {
+                    if let Some(ref mw_weak) = *ctrl_fs_ren.main_window_weak.lock() {
+                        let _ = mw_weak.upgrade_in_event_loop(move |w| {
+                            w.invoke_request_rename();
+                        });
+                    }
+                });
+
                 let fs_convert = self.clone();
                 p.on_convert_to_background_tab(move || {
                     if fs_convert.check_double_click(true) == DoubleClickKind::Ctrl {
@@ -634,7 +651,6 @@ impl ImageFullscreenDialogController {
                     }
                 });
 
-                // Attach WID BEFORE loading video to prevent mid-playback VO reload!
                 let _ = p.attach_to_window(wid);
                 *player_opt = Some(p.clone());
                 p
@@ -668,7 +684,6 @@ impl ImageFullscreenDialogController {
         });
     }
 
-    /// Navigates adjacent items in standalone Quick-Fullscreen mode.
     pub fn navigate_standalone_adjacent(&self, is_next: bool) {
         let Some(current_id) = *self.active_standalone_media_id.lock() else {
             return;
@@ -726,7 +741,6 @@ impl ImageFullscreenDialogController {
         }
     }
 
-    /// Synchronizes the standalone fullscreen viewer canvas with the specified media item.
     pub fn sync_standalone_media(
         &self,
         media_id: MediaId,
@@ -822,7 +836,6 @@ impl ImageFullscreenDialogController {
         });
     }
 
-    /// Reparents the running X11 video subwindow into the fullscreen window without interrupting playback and starts playback.
     fn reparent_to_fullscreen(
         &self,
         tab_manager: &Arc<ViewerTabManager>,
@@ -880,6 +893,13 @@ impl ImageFullscreenDialogController {
                             "[BridgeViewerTabs: MpvCloseTab] Ctrl+W intercepted from MPV video player in fullscreen. Invoking viewer_close_tab..."
                         );
                         w.invoke_viewer_close_tab();
+                    });
+                });
+
+                let win_ren = mw_weak.clone();
+                vid.player.on_rename_requested(move || {
+                    let _ = win_ren.upgrade_in_event_loop(move |w| {
+                        w.invoke_request_rename();
                     });
                 });
             }

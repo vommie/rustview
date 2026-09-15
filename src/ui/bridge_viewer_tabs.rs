@@ -251,7 +251,7 @@ impl BridgeViewerTabs {
             Self::sync_video_embedding(&win_next, &tm_next, &fs_next, &set_next);
         });
 
-        // 9a. Double-click on Tab Media Viewer -> Toggle Fullscreen (Requirement 3: Fullscreen auto-plays)
+        // 9a. Double-click on Tab Media Viewer -> Toggle Fullscreen
         let win_fs = window.clone_strong();
         let tm_fs = tab_manager.clone();
         let set_fs = settings.clone();
@@ -263,7 +263,7 @@ impl BridgeViewerTabs {
             }
         });
 
-        // 9b. Middle-click on Tab Media Viewer -> Toggle Fullscreen directly without double-click timing
+        // 9b. Middle-click on Tab Media Viewer -> Toggle Fullscreen directly
         let win_fs_mid = window.clone_strong();
         let tm_fs_mid = tab_manager.clone();
         let set_fs_mid = settings.clone();
@@ -290,7 +290,7 @@ impl BridgeViewerTabs {
         });
     }
 
-    /// Helper wiring interactive fullscreen and close callbacks onto an MpvPlayer instance.
+    /// Helper wiring interactive fullscreen, close, and F2 rename callbacks onto an MpvPlayer instance.
     pub fn wire_player_callbacks(
         player: &Arc<crate::viewer::MpvPlayer>,
         window: &MainWindow,
@@ -325,6 +325,16 @@ impl BridgeViewerTabs {
                     "[BridgeViewerTabs: MpvCloseTab] Ctrl+W intercepted from MPV video player. Invoking viewer_close_tab..."
                 );
                 w.invoke_viewer_close_tab();
+            });
+        });
+
+        let win_ren = window.as_weak();
+        player.on_rename_requested(move || {
+            let _ = win_ren.upgrade_in_event_loop(move |w| {
+                tracing::info!(
+                    "[BridgeViewerTabs: MpvRename] F2 intercepted from MPV video player. Invoking request_rename..."
+                );
+                w.invoke_request_rename();
             });
         });
     }
@@ -614,7 +624,6 @@ impl BridgeViewerTabs {
     }
 
     /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and MPV input hooks.
-    /// Strictly suppresses subwindow mapping if the video file does not exist on disk or is in an error state.
     pub fn sync_video_embedding(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -627,22 +636,18 @@ impl BridgeViewerTabs {
 
         let view_mode = window.get_active_view_mode();
 
-        // 1. Browse mode (mode 0): No video tabs are active on screen. Hide ALL video subwindows!
         if view_mode == 0 {
             tab_manager.hide_all_video_subwindows();
             return;
         }
 
-        // 2. Tab Grid mode (mode 2): Subwindow positioning on tiles is managed by BridgeTabGrid::sync_video_subwindows
         if view_mode == 2 {
             return;
         }
 
-        // 3. Tab Viewer mode (mode 1): Single tab viewing
         let active_tab = tab_manager.get_active_tab();
         let active_tab_id = active_tab.as_ref().map(|t| t.id);
 
-        // Hide all other video subwindows
         tab_manager.hide_video_subwindows_except(active_tab_id);
 
         let is_video = active_tab
@@ -664,7 +669,6 @@ impl BridgeViewerTabs {
             .unwrap_or(false);
 
         if !is_video || !file_exists || has_error {
-            // Active tab is an image (or None) OR video file does not exist on disk. Ensure all video subwindows are hidden.
             tab_manager.hide_all_video_subwindows();
             return;
         }
@@ -722,7 +726,6 @@ impl BridgeViewerTabs {
                 *sub_guard = Some(sub);
             }
 
-            // Restore interactive controls and resume video playback in Tab View mode
             vid.player.set_tab_grid_mode(false);
             vid.player.set_view_active(true);
         }
@@ -843,7 +846,6 @@ impl BridgeViewerTabs {
                             let load_res = HighResImageLoader::load_full_resolution(&file_path);
 
                             let _ = w_weak.upgrade_in_event_loop(move |w| {
-                                // Discard stale image decodes if the tab navigated away before completion
                                 if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(target_id) {
                                     tracing::debug!(
                                         target_id,
@@ -887,7 +889,6 @@ impl BridgeViewerTabs {
     }
 
     /// Opens multiple media items in foreground viewer tabs.
-    /// Prevents UI jitter by opening items 0..(N-1) in the background and only focusing/bringing the last item to the foreground.
     pub fn open_multiple_media_tabs(
         media_ids: &[MediaId],
         window: &MainWindow,
@@ -975,7 +976,7 @@ impl BridgeViewerTabs {
             }
         }
 
-        // 2. Open the last item in foreground (sets active_tab_id to this last item)
+        // 2. Open the last item in foreground
         let last_id = media_ids[total - 1];
         let is_last_video = {
             let st = state.read();
@@ -1158,7 +1159,7 @@ impl BridgeViewerTabs {
         );
     }
 
-    /// Opens a media file (Image or Video) in a viewer tab and initiates background loading or playback (Requirement 1: auto-plays on first open).
+    /// Opens a media file (Image or Video) in a viewer tab and initiates background loading or playback.
     pub fn open_media_tab(
         media_id: MediaId,
         window: &MainWindow,
@@ -1228,7 +1229,6 @@ impl BridgeViewerTabs {
                         let load_res = HighResImageLoader::load_full_resolution(&file_path);
 
                         let _ = w_weak.upgrade_in_event_loop(move |w| {
-                            // Discard if tab is no longer on this media_id
                             if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
                                 tracing::debug!(
                                     media_id,

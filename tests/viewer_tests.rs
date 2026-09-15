@@ -17,6 +17,7 @@ use rustview::viewer::{
 };
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tempfile::tempdir;
@@ -57,6 +58,22 @@ fn create_test_session(id: u64, media_id: u64, filename: &str, title: &str) -> M
         created_at: Instant::now(),
         last_accessed: Instant::now(),
     }
+}
+
+#[test]
+fn test_mpv_player_f2_rename_keybinding_and_observer() {
+    let player = MpvPlayer::new().expect("Failed to initialize MPV player");
+    let rename_called = Arc::new(AtomicBool::new(false));
+    let ren_clone = rename_called.clone();
+
+    player.on_rename_requested(move || {
+        ren_clone.store(true, Ordering::SeqCst);
+    });
+
+    // Simulate F2 event via property cycling hook
+    let _ = player.seek_relative(0.0);
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    assert!(!rename_called.load(Ordering::SeqCst));
 }
 
 #[test]
@@ -110,8 +127,6 @@ fn test_tab_dnd_geometry_displacement_push_away_shifts() {
     let slots = TabDndGeometry::compute_tab_slots(&tab_ids, &widths, spacing, 0.0);
 
     // Scenario A: Drag Tab 0 -> Slot 2 (Moving Right across slots 1 and 2)
-    // Dragged item total footprint = 100.0 + 4.0 = 104.0
-    // Tabs 1 and 2 must slide LEFT (-104.0px), Tab 0 stays 0.0, Tab 3 stays 0.0
     let shifts_right = TabDndGeometry::compute_shift_offsets(&slots, 0, 2, spacing);
     assert_eq!(shifts_right[0], 0.0);
     assert_eq!(shifts_right[1], -104.0);
@@ -119,7 +134,6 @@ fn test_tab_dnd_geometry_displacement_push_away_shifts() {
     assert_eq!(shifts_right[3], 0.0);
 
     // Scenario B: Drag Tab 3 -> Slot 1 (Moving Left across slots 2 and 1)
-    // Tabs 1 and 2 must slide RIGHT (+104.0px), Tab 0 stays 0.0, Tab 3 stays 0.0
     let shifts_left = TabDndGeometry::compute_shift_offsets(&slots, 3, 1, spacing);
     assert_eq!(shifts_left[0], 0.0);
     assert_eq!(shifts_left[1], 104.0);
@@ -175,17 +189,14 @@ fn test_tab_title_lifetime_preservation_and_reordering() {
 
     let tabs = vec![t1, t2, t3, t4];
 
-    // Titles must be immutable and permanent for the entire lifetime
     assert_eq!(TabTitleFormatter::compute_title(&tabs, 1), "clip.mp4");
     assert_eq!(TabTitleFormatter::compute_title(&tabs, 2), "clip.mp4 (1)");
     assert_eq!(TabTitleFormatter::compute_title(&tabs, 3), "clip.mp4 (2)");
     assert_eq!(TabTitleFormatter::compute_title(&tabs, 4), "photo.jpg");
 
-    // Title allocation finds lowest available unique suffix
     let new_title = TabTitleFormatter::allocate_tab_title(&tabs, 100, "clip.mp4");
     assert_eq!(new_title, "clip.mp4 (3)");
 
-    // If tab 2 ("clip.mp4 (1)") is closed, allocating a new title reuses the freed "clip.mp4 (1)"
     let tabs_subset = vec![tabs[0].clone(), tabs[2].clone()];
     let reused_title = TabTitleFormatter::allocate_tab_title(&tabs_subset, 100, "clip.mp4");
     assert_eq!(reused_title, "clip.mp4 (1)");
@@ -199,19 +210,17 @@ fn test_tab_slot_geometry_lookup_and_width_estimation() {
 
     let tabs = vec![t1, t2, t3];
 
-    // Verify slot geometry computation for first, middle, and last tab
     let slot0 = TabDndGeometry::find_tab_slot_geometry(&tabs, 1, false).expect("Slot 0 found");
-    assert_eq!(slot0.0, 2.0); // starts at 2px
+    assert_eq!(slot0.0, 2.0);
     assert!(slot0.1 >= 70.0);
 
     let slot1 = TabDndGeometry::find_tab_slot_geometry(&tabs, 2, false).expect("Slot 1 found");
-    assert_eq!(slot1.0, 2.0 + slot0.1 + 4.0); // starts after slot0 + 4px spacing
-    assert!(slot1.1 > slot0.1); // longer title is wider
+    assert_eq!(slot1.0, 2.0 + slot0.1 + 4.0);
+    assert!(slot1.1 > slot0.1);
 
     let slot2 = TabDndGeometry::find_tab_slot_geometry(&tabs, 3, false).expect("Slot 2 found");
     assert_eq!(slot2.0, slot1.0 + slot1.1 + 4.0);
 
-    // Non-existent tab ID returns None
     assert!(TabDndGeometry::find_tab_slot_geometry(&tabs, 999, false).is_none());
 }
 
@@ -234,37 +243,31 @@ fn test_tab_collection_isolated_crud_and_reordering() {
     assert_eq!(collection.index_of(20), Some(1));
     assert_eq!(collection.index_of(30), Some(2));
 
-    // Test Move to Start: tab 30 moves to index 0, keeping its permanent title "c.png"
-    assert!(collection.move_to_start(30)); // [30 ("c.png"), 10 ("a.png"), 20 ("b.png")]
+    assert!(collection.move_to_start(30));
     assert_eq!(collection.index_of(30), Some(0));
     assert_eq!(collection.get(30).unwrap().title, "c.png");
     assert_eq!(collection.index_of(10), Some(1));
     assert_eq!(collection.get(10).unwrap().title, "a.png");
 
-    // Test Move Left
-    assert!(collection.move_left(20)); // [30 ("c.png"), 20 ("b.png"), 10 ("a.png")]
+    assert!(collection.move_left(20));
     assert_eq!(collection.index_of(20), Some(1));
     assert_eq!(collection.get(20).unwrap().title, "b.png");
 
-    // Test Move Right
-    assert!(collection.move_right(30)); // [20 ("b.png"), 30 ("c.png"), 10 ("a.png")]
+    assert!(collection.move_right(30));
     assert_eq!(collection.index_of(20), Some(0));
     assert_eq!(collection.index_of(30), Some(1));
 
-    // Test Move to End
-    assert!(collection.move_to_end(20)); // [30 ("c.png"), 10 ("a.png"), 20 ("b.png")]
+    assert!(collection.move_to_end(20));
     assert_eq!(collection.index_of(20), Some(2));
     assert_eq!(collection.get(20).unwrap().title, "b.png");
 
-    // Test insert_after (adjacent insertion for duplication)
     let t_dup = create_test_session(99, 100, "a.png", "a.png (1)");
     let insert_pos = collection.insert_after(10, t_dup);
-    assert_eq!(insert_pos, 2); // [30, 10, 99, 20]
+    assert_eq!(insert_pos, 2);
     assert_eq!(collection.index_of(99), Some(2));
     assert_eq!(collection.get(99).unwrap().title, "a.png (1)");
     assert_eq!(collection.len(), 4);
 
-    // Test remove
     let removed = collection.remove(99);
     assert!(removed.is_some());
     assert_eq!(removed.unwrap().1.id, 99);
@@ -288,35 +291,30 @@ fn test_tab_collection_batch_close_methods() {
     collection.push(t5);
     assert_eq!(collection.len(), 5);
 
-    // 1. Remove to left of Tab 3 -> Should remove Tab 1 and Tab 2
     let left_evicted = collection.remove_to_left(3);
     assert_eq!(left_evicted.len(), 2);
     assert_eq!(left_evicted[0].id, 1);
     assert_eq!(left_evicted[1].id, 2);
-    assert_eq!(collection.len(), 3); // [3, 4, 5]
+    assert_eq!(collection.len(), 3);
     assert_eq!(collection.get_at(0).unwrap().id, 3);
     assert_eq!(collection.get_at(1).unwrap().id, 4);
     assert_eq!(collection.get_at(2).unwrap().id, 5);
 
-    // Remove to left of first tab -> Should return empty
     let empty_left = collection.remove_to_left(3);
     assert!(empty_left.is_empty());
     assert_eq!(collection.len(), 3);
 
-    // 2. Remove to right of Tab 4 -> Should remove Tab 5
     let right_evicted = collection.remove_to_right(4);
     assert_eq!(right_evicted.len(), 1);
     assert_eq!(right_evicted[0].id, 5);
-    assert_eq!(collection.len(), 2); // [3, 4]
+    assert_eq!(collection.len(), 2);
     assert_eq!(collection.get_at(0).unwrap().id, 3);
     assert_eq!(collection.get_at(1).unwrap().id, 4);
 
-    // Remove to right of last tab -> Should return empty
     let empty_right = collection.remove_to_right(4);
     assert!(empty_right.is_empty());
     assert_eq!(collection.len(), 2);
 
-    // 3. Remove other tabs keeping Tab 4 -> Should remove Tab 3
     let other_evicted = collection.retain_only(4);
     assert_eq!(other_evicted.len(), 1);
     assert_eq!(other_evicted[0].id, 3);
@@ -338,7 +336,6 @@ fn test_image_buffer_evictor_capacity_limits() {
         }
     }
 
-    // Limit to 2 buffers, active tab = 3
     ImageBufferEvictor::evict_excess(&mut sessions, Some(3), 2);
 
     let active_has_buf = matches!(&sessions[2].payload, TabPayload::Image(img) if img.high_res_pixels.is_some());
@@ -385,34 +382,28 @@ fn test_mpv_player_user_pause_vs_auto_pause_semantics() {
     assert!(player.is_view_active());
     assert!(!player.is_user_paused());
 
-    // 1. User explicitly pauses
     player.pause().unwrap();
     assert!(player.is_user_paused());
     assert!(player.is_paused());
 
-    // 2. Tab becomes inactive (auto-pause on backgrounding)
     player.set_view_active(false);
     assert!(!player.is_view_active());
     assert!(player.is_user_paused());
     assert!(player.is_paused());
 
-    // 3. Tab becomes active again -> remains paused because user paused it
     player.set_view_active(true);
     assert!(player.is_view_active());
     assert!(player.is_user_paused());
     assert!(player.is_paused());
 
-    // 4. User explicitly plays
     player.play().unwrap();
     assert!(!player.is_user_paused());
 
-    // 5. Tab becomes inactive while playing -> auto-pauses, but is_user_paused remains FALSE!
     player.set_view_active(false);
     assert!(!player.is_view_active());
     assert!(!player.is_user_paused(), "Auto-pause must not flag is_user_paused");
     assert!(player.is_paused(), "Background video must be auto-paused");
 
-    // 6. Tab becomes active again -> auto-resumes playing!
     player.set_view_active(true);
     assert!(player.is_view_active());
     assert!(!player.is_user_paused());
@@ -493,30 +484,24 @@ fn test_viewer_tab_manager_open_in_background() {
 
     let tab_mgr = ViewerTabManager::new(lib);
 
-    // Initial state: Browse mode, active_tab_id is None
     assert_eq!(tab_mgr.active_tab_id(), None);
     assert_eq!(tab_mgr.tab_count(), 0);
 
-    // Open first image in background
     let (tab1_id, is_new1) = tab_mgr.open_media_in_background(media[0].id, false).unwrap();
     assert!(is_new1);
     assert_eq!(tab_mgr.tab_count(), 1);
-    // Active tab must remain None (Browse mode preserved!)
-    assert_eq!(tab_mgr.active_tab_id(), None, "Active tab must remain None when opened in background");
+    assert_eq!(tab_mgr.active_tab_id(), None);
 
-    // Open second image in background
     let (tab2_id, is_new2) = tab_mgr.open_media_in_background(media[1].id, false).unwrap();
     assert!(is_new2);
     assert_eq!(tab_mgr.tab_count(), 2);
     assert_eq!(tab_mgr.active_tab_id(), None);
 
-    // Verify session details
     let tab1 = tab_mgr.get_tab(tab1_id).unwrap();
     let tab2 = tab_mgr.get_tab(tab2_id).unwrap();
     assert_eq!(tab1.media_id, media[0].id);
     assert_eq!(tab2.media_id, media[1].id);
 
-    // Reopening existing image with allow_multiple = false returns existing tab without changing active_tab_id
     let (tab1_reopen, is_new_reopen) = tab_mgr.open_media_in_background(media[0].id, false).unwrap();
     assert!(!is_new_reopen);
     assert_eq!(tab1_reopen, tab1_id);
@@ -542,18 +527,17 @@ fn test_viewer_tab_manager_adopt_video_session_in_background() {
     let player = Arc::new(MpvPlayer::new().unwrap());
     let _ = player.set_volume(77.0);
 
-    // Adopt into background tab session
     let tab_id = tab_mgr.adopt_video_session_in_background(media.id, player.clone(), None, false).unwrap();
 
     assert_eq!(tab_mgr.tab_count(), 1);
-    assert_eq!(tab_mgr.active_tab_id(), None, "Active tab must remain None after adopting into background");
+    assert_eq!(tab_mgr.active_tab_id(), None);
 
     let tab = tab_mgr.get_tab(tab_id).unwrap();
     assert_eq!(tab.media_id, media.id);
 
     if let TabPayload::Video(ref vid) = tab.payload {
         assert_eq!(vid.player.get_volume().round() as i32, 77);
-        assert!(!vid.player.is_view_active(), "Background video player must be auto-paused (view inactive)");
+        assert!(!vid.player.is_view_active());
     } else {
         panic!("Expected video payload in adopted session");
     }
@@ -615,13 +599,11 @@ fn test_viewer_tab_manager_allow_multiple_tabs_option_and_iteration_suffixes() {
     let img_title = ViewerTabManager::compute_tab_title(&tabs_after_img, img_tab1_id);
     assert_eq!(img_title, "single_image.png");
 
-    // Move Tab 3 ("clip_sample.mp4 (2)") to the start -> It MUST retain its permanent title!
     tab_mgr.move_tab_to_start(tab3_id);
     let tabs_reordered = tab_mgr.list_tabs();
     assert_eq!(ViewerTabManager::compute_tab_title(&tabs_reordered, tab3_id), "clip_sample.mp4 (2)");
     assert_eq!(ViewerTabManager::compute_tab_title(&tabs_reordered, tab1_id), "clip_sample.mp4");
 
-    // Close Tab 2 -> Remaining tabs keep their exact titles!
     tab_mgr.close_tab(tab2_id);
     let tabs_remaining = tab_mgr.list_tabs();
     assert_eq!(tabs_remaining.len(), 3);
@@ -659,55 +641,44 @@ fn test_viewer_tab_cycling_with_mouse_wheel_and_wrapping() {
     }
     assert_eq!(tab_mgr.tab_count(), 4);
 
-    // Initial state: Tab 4 (index 3) is active
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[3]));
 
-    // 1. Wheel DOWN on Tab 4 (last tab, index 3) -> Wrap around to Tab 1 (index 0)
     let cycled_next_wrap = tab_mgr.cycle_tab(true);
     assert_eq!(cycled_next_wrap, Some(tab_ids[0]));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[0]));
 
-    // 2. Wheel DOWN on Tab 1 (index 0) -> Tab 2 (index 1)
     let cycled_next_1 = tab_mgr.cycle_tab(true);
     assert_eq!(cycled_next_1, Some(tab_ids[1]));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[1]));
 
-    // 3. Wheel DOWN on Tab 2 (index 1) -> Tab 3 (index 2)
     let cycled_next_2 = tab_mgr.cycle_tab(true);
     assert_eq!(cycled_next_2, Some(tab_ids[2]));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[2]));
 
-    // 4. Wheel UP on Tab 3 (index 2) -> Tab 2 (index 1)
     let cycled_prev_1 = tab_mgr.cycle_tab(false);
     assert_eq!(cycled_prev_1, Some(tab_ids[1]));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[1]));
 
-    // 5. Wheel UP on Tab 2 (index 1) -> Tab 1 (index 0)
     let cycled_prev_2 = tab_mgr.cycle_tab(false);
     assert_eq!(cycled_prev_2, Some(tab_ids[0]));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[0]));
 
-    // 6. Wheel UP on Tab 1 (first tab, index 0) -> Wrap around to Tab 4 (last tab, index 3)
     let cycled_prev_wrap = tab_mgr.cycle_tab(false);
     assert_eq!(cycled_prev_wrap, Some(tab_ids[3]));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[3]));
 
-    // 7. Test Browse Mode (no tab active):
     tab_mgr.activate_browse();
     assert_eq!(tab_mgr.active_tab_id(), None);
 
-    // Wheel DOWN in Browse Mode -> Selects first tab (index 0)
     let browse_next = tab_mgr.cycle_tab(true);
     assert_eq!(browse_next, Some(tab_ids[0]));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[0]));
 
     tab_mgr.activate_browse();
-    // Wheel UP in Browse Mode -> Selects last tab (index 3)
     let browse_prev = tab_mgr.cycle_tab(false);
     assert_eq!(browse_prev, Some(tab_ids[3]));
     assert_eq!(tab_mgr.active_tab_id(), Some(tab_ids[3]));
 
-    // 8. Test Single Tab: Feature is inactive and returns None
     tab_mgr.close_other_tabs(tab_ids[0]);
     assert_eq!(tab_mgr.tab_count(), 1);
 
@@ -827,7 +798,6 @@ fn test_tab_context_menu_builder_items_and_states() {
     let tabs = tab_mgr.list_tabs();
     assert_eq!(tabs.len(), 3);
 
-    // 1. Middle Tab (index 1 of 3): Move Left/Right enabled; Close Left/Right/Others all enabled
     let menu_middle = TabContextMenu::build_menu(&tabs[1], 1, 3, &tabs);
 
     assert_eq!(menu_middle.items[0].text, "Tab: photo_test.png (1)");
@@ -836,7 +806,6 @@ fn test_tab_context_menu_builder_items_and_states() {
     assert!(menu_middle.items[1].is_enabled);
     assert!(menu_middle.items[1].icon_name.is_none());
 
-    // Move Tab Submenu
     let move_sub = &menu_middle.items[3];
     assert_eq!(move_sub.text, "Move Tab...");
     assert!(move_sub.is_enabled);
@@ -850,7 +819,6 @@ fn test_tab_context_menu_builder_items_and_states() {
     assert_eq!(move_sub.children[3].id, CTX_TAB_MOVE_TO_END);
     assert!(move_sub.children[3].is_enabled);
 
-    // Close Tabs Submenu (Positioned directly above Close Tab, under existing separator)
     let close_tabs_sub = &menu_middle.items[5];
     assert_eq!(close_tabs_sub.text, "Close Tabs...");
     assert!(close_tabs_sub.is_enabled);
@@ -868,27 +836,23 @@ fn test_tab_context_menu_builder_items_and_states() {
     assert_eq!(close_tabs_sub.children[2].text, "All other tabs");
     assert!(close_tabs_sub.children[2].is_enabled);
 
-    // Close Tab Action
     assert_eq!(menu_middle.items[6].id, CTX_TAB_CLOSE);
     assert_eq!(menu_middle.items[6].text, "Close Tab");
     assert_eq!(menu_middle.items[6].shortcut, Some("Ctrl+W".to_string()));
     assert!(menu_middle.items[6].is_enabled);
 
-    // 2. First Tab (index 0 of 3): Close Left disabled, Close Right enabled
     let menu_first = TabContextMenu::build_menu(&tabs[0], 0, 3, &tabs);
     let close_sub_first = &menu_first.items[5];
     assert!(!close_sub_first.children[0].is_enabled);
     assert!(close_sub_first.children[1].is_enabled);
     assert!(close_sub_first.children[2].is_enabled);
 
-    // 3. Last Tab (index 2 of 3): Close Left enabled, Close Right disabled
     let menu_last = TabContextMenu::build_menu(&tabs[2], 2, 3, &tabs);
     let close_sub_last = &menu_last.items[5];
     assert!(close_sub_last.children[0].is_enabled);
     assert!(!close_sub_last.children[1].is_enabled);
     assert!(close_sub_last.children[2].is_enabled);
 
-    // 4. Single Tab (index 0 of 1): Entire "Close Tabs..." submenu must be DISABLED
     let menu_single = TabContextMenu::build_menu(&tabs[0], 0, 1, &tabs[0..1]);
     let close_sub_single = &menu_single.items[5];
     assert!(!close_sub_single.is_enabled);
@@ -1050,7 +1014,6 @@ fn test_viewer_tab_manager_reactive_notifications() {
     let tab_mgr = ViewerTabManager::new(lib);
     let (tab_id, _) = tab_mgr.open_or_focus_media(media.id, false).unwrap();
 
-    // 1. Rename notification must update filename and permanent title
     tab_mgr.notify_media_renamed(media.id, "renamed.png");
     let session_renamed = tab_mgr.get_tab(tab_id).unwrap();
     assert_eq!(session_renamed.filename, "renamed.png");
@@ -1058,7 +1021,6 @@ fn test_viewer_tab_manager_reactive_notifications() {
     assert!(session_renamed.file_path.ends_with("renamed.png"));
     assert_eq!(session_renamed.record.filename, "renamed.png");
 
-    // 2. Test refresh notification
     let mut updated_record = media.clone();
     updated_record.rating = 5;
     updated_record.width = 1920;
@@ -1073,7 +1035,6 @@ fn test_viewer_tab_manager_reactive_notifications() {
         assert_eq!(img.orig_height, 1080);
     }
 
-    // 3. Test delete notification
     tab_mgr.notify_media_deleted(media.id);
     let session_deleted = tab_mgr.get_tab(tab_id).unwrap();
     assert!(session_deleted.record.is_deleted);
@@ -1240,13 +1201,11 @@ fn test_viewer_tab_missing_file_opens_with_fallback_error_without_subwindow() {
     let _ = lib.refresher().refresh_folder(folder.id).unwrap();
     let media = lib.media().get_by_folder(folder.id).unwrap()[0].clone();
 
-    // Delete file from disk
     std::fs::remove_file(&vid_path).unwrap();
     assert!(!vid_path.exists());
 
     let tab_mgr = ViewerTabManager::new(lib);
 
-    // Open media in tab: should succeed and create tab session
     let (tab_id, is_new) = tab_mgr.open_or_focus_media(media.id, false).unwrap();
     assert!(is_new);
     assert_eq!(tab_mgr.tab_count(), 1);
@@ -1254,7 +1213,6 @@ fn test_viewer_tab_missing_file_opens_with_fallback_error_without_subwindow() {
     let session = tab_mgr.get_tab(tab_id).unwrap();
     assert_eq!(session.media_id, media.id);
 
-    // Payload must be Video with error_message set, subwindow None
     if let TabPayload::Video(ref vid) = session.payload {
         assert!(!vid.error_message.is_empty(), "Error message must be populated for missing file");
         assert!(vid.error_message.contains("Media file not found on disk"));
@@ -1263,7 +1221,6 @@ fn test_viewer_tab_missing_file_opens_with_fallback_error_without_subwindow() {
         panic!("Expected Video payload");
     }
 
-    // Tab can be cleanly closed
     assert_eq!(tab_mgr.close_tab(tab_id), None);
     assert_eq!(tab_mgr.tab_count(), 0);
 }

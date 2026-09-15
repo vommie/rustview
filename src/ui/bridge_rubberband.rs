@@ -1,6 +1,6 @@
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_inspector::BridgeInspector;
-use super::bridge_state::UiState;
+use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
@@ -51,6 +51,7 @@ impl BridgeRubberband {
 
         let baseline = {
             let mut st = params.state.write();
+            st.last_active_panel = LastActivePanel::Media;
             let current_sel = st.file_selection.selected_ids().clone();
             st.rubberband_session.start(RubberbandStartParams {
                 start_content_x: params.start_content_x,
@@ -91,6 +92,7 @@ impl BridgeRubberband {
         // 1. Update session coordinates
         {
             let mut st = params.state.write();
+            st.last_active_panel = LastActivePanel::Media;
             st.rubberband_session.update_content_point(
                 params.content_x,
                 params.content_y,
@@ -129,6 +131,7 @@ impl BridgeRubberband {
 
                 {
                     let mut st = st_weak.write();
+                    st.last_active_panel = LastActivePanel::Media;
                     st.rubberband_session.update_content_point(new_content_x, new_content_y, last_vx, last_vy);
                 }
 
@@ -230,6 +233,7 @@ impl BridgeRubberband {
 
         let changed_ids = {
             let mut st = state.write();
+            st.last_active_panel = LastActivePanel::Media;
             let prev = st.file_selection.selected_ids().clone();
             st.file_selection.set_selection(target_selection);
             FileSelectionModel::compute_selection_diff(&prev, st.file_selection.selected_ids())
@@ -254,6 +258,7 @@ impl BridgeRubberband {
 
         let final_count = {
             let mut st = state.write();
+            st.last_active_panel = LastActivePanel::Media;
             st.rubberband_session.reset();
             st.file_selection.count()
         };

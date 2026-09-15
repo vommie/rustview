@@ -68,6 +68,93 @@ fn test_file_operations_media_rename_lifecycle() {
 }
 
 #[test]
+fn test_check_rename_conflict_detection() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let p1 = tmp_media.path().join("source.jpg");
+    let p2 = tmp_media.path().join("occupied.jpg");
+
+    image::RgbImage::new(100, 100).save(&p1).unwrap();
+    image::RgbImage::new(200, 200).save(&p2).unwrap();
+
+    lib.refresher().refresh_folder(folder.id).unwrap();
+    let list = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(list.len(), 2);
+
+    let m1 = list.iter().find(|m| m.filename == "source.jpg").unwrap();
+
+    // 1. Same name -> Not a conflict
+    let self_check = lib.file_operations().check_rename_conflict(m1.id, "source.jpg").unwrap();
+    assert!(self_check.is_none());
+
+    // 2. Free name -> Not a conflict
+    let free_check = lib.file_operations().check_rename_conflict(m1.id, "available.jpg").unwrap();
+    assert!(free_check.is_none());
+
+    // 3. Occupied name -> Conflict detected
+    let conflict_check = lib.file_operations().check_rename_conflict(m1.id, "occupied.jpg").unwrap();
+    assert!(conflict_check.is_some());
+    let report = conflict_check.unwrap();
+    assert_eq!(report.source.filename, "source.jpg");
+    assert_eq!(report.destination.filename, "occupied.jpg");
+    assert_eq!(report.destination.width, 200);
+}
+
+#[test]
+fn test_rename_media_with_overwrite_purges_old_db_record() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let folder = lib.folders().add_folder(tmp_media.path()).unwrap();
+
+    let p1 = tmp_media.path().join("keep.png");
+    let p2 = tmp_media.path().join("replace.png");
+
+    image::RgbImage::new(300, 300).save(&p1).unwrap();
+    image::RgbImage::new(150, 150).save(&p2).unwrap();
+
+    lib.refresher().refresh_folder(folder.id).unwrap();
+    let list = lib.media().get_by_folder(folder.id).unwrap();
+    let m1 = list.iter().find(|m| m.filename == "keep.png").unwrap().clone();
+    let m2 = list.iter().find(|m| m.filename == "replace.png").unwrap().clone();
+
+    lib.media().set_rating(m1.id, 5).unwrap();
+
+    // Renaming m1 to replace.png with overwrite = true
+    let updated = lib
+        .file_operations()
+        .rename_media_with_overwrite(m1.id, "replace.png", true)
+        .expect("Overwrite rename failed");
+
+    assert_eq!(updated.id, m1.id);
+    assert_eq!(updated.filename, "replace.png");
+    assert_eq!(updated.rating, 5);
+
+    // Replaced record must be purged from LMDB
+    assert!(lib.media().get(m2.id).unwrap().is_none());
+
+    let folder_media = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(folder_media.len(), 1);
+    assert_eq!(folder_media[0].id, m1.id);
+    assert_eq!(folder_media[0].filename, "replace.png");
+
+    // Old filename "keep.png" is completely forgotten. Creating a new keep.png must be treated as new item!
+    image::RgbImage::new(50, 50).save(&p1).unwrap();
+    let refresh_report = lib.refresher().refresh_folder(folder.id).unwrap();
+    assert_eq!(refresh_report.new_media, 1);
+
+    let folder_media_new = lib.media().get_by_folder(folder.id).unwrap();
+    assert_eq!(folder_media_new.len(), 2);
+    let new_keep = folder_media_new.iter().find(|m| m.filename == "keep.png").unwrap();
+    assert_ne!(new_keep.id, m1.id);
+}
+
+#[test]
 fn test_file_operations_media_refresh_lifecycle() {
     let tmp_db = tempdir().unwrap();
     let tmp_media = tempdir().unwrap();

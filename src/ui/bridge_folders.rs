@@ -1,7 +1,7 @@
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
-use super::bridge_state::UiState;
+use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::{FolderNodeView, MainWindow};
@@ -247,6 +247,7 @@ impl BridgeFolders {
         let fs_select = fullscreen_controller.clone();
         window.on_folder_selected(move |id, path| {
             fs_select.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Folder;
             Self::select_folder(
                 id as u64,
                 PathBuf::from(path.as_str()),
@@ -265,6 +266,7 @@ impl BridgeFolders {
         let fs_expand = fullscreen_controller.clone();
         window.on_folder_toggle_expand(move |id| {
             fs_expand.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Folder;
             Self::toggle_expand(id as u64, &win, &lib, &set, &st);
         });
 
@@ -275,6 +277,7 @@ impl BridgeFolders {
         let fs_frefresh = fullscreen_controller.clone();
         window.on_folder_refresh_clicked(move || {
             fs_frefresh.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Folder;
             Self::refresh_folder_tree(&win, &lib, &set, &st);
         });
 
@@ -285,6 +288,7 @@ impl BridgeFolders {
         let fs_collapse = fullscreen_controller.clone();
         window.on_folder_collapse_all_clicked(move || {
             fs_collapse.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Folder;
             Self::collapse_all_except_active(&win, &lib, &set, &st);
         });
 
@@ -295,6 +299,7 @@ impl BridgeFolders {
         let fs_hidden = fullscreen_controller.clone();
         window.on_toggle_hidden_folders(move |show_hidden| {
             fs_hidden.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Folder;
             let mut app_settings = set.get();
             app_settings.folders.show_hidden_folders = show_hidden;
             set.save_quiet_async(&app_settings);
@@ -310,6 +315,7 @@ impl BridgeFolders {
         let fs_fav = fullscreen_controller;
         window.on_favorite_selected(move |path_str| {
             fs_fav.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Folder;
             let path = PathBuf::from(path_str.as_str());
             if let Ok(Some(folder)) = lib.folders().get_folder_by_path(&path) {
                 Self::select_folder(folder.id, path, &win, &lib, &thumb, &set, &st);

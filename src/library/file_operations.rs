@@ -122,17 +122,28 @@ impl<'a> FileOperations<'a> {
     }
 
     /// Atomically renames a media file on the physical filesystem and updates its LMDB record.
+    #[inline]
     pub fn rename_media(
         &self,
         media_id: MediaId,
         new_filename: &str,
+    ) -> Result<MediaRecord, LibraryError> {
+        self.rename_media_with_overwrite(media_id, new_filename, false)
+    }
+
+    /// Renames a media file physically on disk and updates LMDB storage, optionally overwriting an existing destination file.
+    pub fn rename_media_with_overwrite(
+        &self,
+        media_id: MediaId,
+        new_filename: &str,
+        overwrite_existing: bool,
     ) -> Result<MediaRecord, LibraryError> {
         let t0 = Instant::now();
         let validated_name = FilenameValidator::validate(new_filename)?;
 
         let mut wtxn = self.db.env.write_txn()?;
 
-        let record = self
+        let mut record = self
             .db
             .media
             .get(&wtxn, &media_id)?
@@ -144,23 +155,89 @@ impl<'a> FileOperations<'a> {
             .get(&wtxn, &record.folder_id)?
             .ok_or(LibraryError::FolderNotFound(record.folder_id))?;
 
-        let paths = self.resolve_rename_paths(&folder, &record, validated_name)?;
+        let paths = self.resolve_rename_paths(&folder, &record, validated_name.clone())?;
 
         if is_same_file_path(&paths.old_path, &paths.new_path) {
             return Ok(record);
         }
 
-        self.verify_destination_available(&paths)?;
+        if paths.new_path.exists() && !overwrite_existing {
+            return Err(LibraryError::FileOperationAlreadyExists(paths.validated_name));
+        }
+
+        // If overwriting, purge the existing destination record from LMDB (media, thumbnails, tags, hash index)
+        if overwrite_existing && paths.new_path.exists() {
+            let mut target_media_ids = self
+                .db
+                .media_by_folder
+                .get(&wtxn, &folder.id)?
+                .unwrap_or_default();
+
+            let mut overwritten_id_opt = None;
+            for &t_id in &target_media_ids {
+                if t_id != media_id
+                    && let Some(t_rec) = self.db.media.get(&wtxn, &t_id)?
+                    && t_rec.filename.eq_ignore_ascii_case(&validated_name)
+                {
+                    overwritten_id_opt = Some((t_id, t_rec.file_hash));
+                    break;
+                }
+            }
+
+            if let Some((old_dst_id, old_hash)) = overwritten_id_opt {
+                tracing::info!(
+                    overwritten_media_id = old_dst_id,
+                    folder_id = folder.id,
+                    "[FileOperations: Rename Overwrite] Purging overwritten record from LMDB"
+                );
+                self.db.update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
+                self.db.media.delete(&mut wtxn, &old_dst_id)?;
+                self.db.thumbnails.delete(&mut wtxn, &old_dst_id)?;
+                self.db.video_previews.delete(&mut wtxn, &old_dst_id)?;
+                self.db.tags_by_media.delete(&mut wtxn, &old_dst_id)?;
+
+                target_media_ids.retain(|&id| id != old_dst_id);
+                self.db.media_by_folder.put(&mut wtxn, &folder.id, &target_media_ids)?;
+            }
+        }
 
         tracing::info!(
             media = %LogObscurer::media(Some(media_id), &record.filename),
             old_path = %LogObscurer::path(&paths.old_path),
             new_path = %LogObscurer::path(&paths.new_path),
+            overwrite = overwrite_existing,
             "Executing physical file rename operation..."
         );
 
-        let mtime = self.perform_fs_rename(&paths, record.modification_time)?;
-        let updated_record = self.commit_rename_to_db(&mut wtxn, media_id, record, &paths, mtime)?;
+        robust_move_file(&paths.old_path, &paths.new_path)?;
+
+        let fs_meta = std::fs::metadata(&paths.new_path)?;
+        let mtime = fs_meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(record.modification_time);
+
+        let ctime = fs_meta
+            .created()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(record.creation_time);
+
+        let format = MediaFormat::from_path(&paths.new_path);
+        let media_type = format.media_type().unwrap_or(record.media_type);
+
+        record.filename = paths.validated_name.clone();
+        record.modification_time = mtime;
+        record.creation_time = ctime;
+        record.file_size = fs_meta.len();
+        record.format = format;
+        record.media_type = media_type;
+        record.is_deleted = false;
+
+        self.db.media.put(&mut wtxn, &media_id, &record)?;
 
         wtxn.commit()?;
 
@@ -171,7 +248,67 @@ impl<'a> FileOperations<'a> {
             "Committed file rename operation to LMDB storage successfully"
         );
 
-        Ok(updated_record)
+        Ok(record)
+    }
+
+    /// Probes whether renaming `media_id` to `new_filename` causes a collision with an existing file in the same directory.
+    pub fn check_rename_conflict(
+        &self,
+        media_id: MediaId,
+        new_filename: &str,
+    ) -> Result<Option<FileConflictReport>, LibraryError> {
+        let validated_name = FilenameValidator::validate(new_filename)?;
+
+        let rtxn = self.db.env.read_txn()?;
+        let source_record = self
+            .db
+            .media
+            .get(&rtxn, &media_id)?
+            .ok_or(LibraryError::MediaNotFound(media_id))?;
+
+        let folder = self
+            .db
+            .folders
+            .get(&rtxn, &source_record.folder_id)?
+            .ok_or(LibraryError::FolderNotFound(source_record.folder_id))?;
+
+        let src_path = Path::new(&folder.path).join(&source_record.filename);
+        let dst_path = Path::new(&folder.path).join(&validated_name);
+
+        // Same file on disk: not a conflict
+        if is_same_file_path(&src_path, &dst_path) {
+            return Ok(None);
+        }
+
+        let target_media_ids = self
+            .db
+            .media_by_folder
+            .get(&rtxn, &folder.id)?
+            .unwrap_or_default();
+
+        let mut existing_target_media_id = None;
+        for &t_id in &target_media_ids {
+            if t_id != media_id
+                && let Some(t_rec) = self.db.media.get(&rtxn, &t_id)?
+                && t_rec.filename.eq_ignore_ascii_case(&validated_name)
+            {
+                existing_target_media_id = Some(t_id);
+                break;
+            }
+        }
+        drop(rtxn);
+
+        if dst_path.exists() || existing_target_media_id.is_some() {
+            let source_details = self.probe_file_details(&src_path, folder.id, Some(media_id))?;
+            let dest_details = self.probe_file_details(&dst_path, folder.id, existing_target_media_id)?;
+
+            Ok(Some(FileConflictReport {
+                source: source_details,
+                destination: dest_details,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Generates a unique, collision-free filename in the target folder by appending sequential counter suffixes like `(1)`, `(2)`.
@@ -799,46 +936,5 @@ impl<'a> FileOperations<'a> {
             new_path,
             validated_name,
         })
-    }
-
-    fn verify_destination_available(&self, paths: &RenamePaths) -> Result<(), LibraryError> {
-        if paths.new_path.exists() {
-            return Err(LibraryError::FileOperationAlreadyExists(
-                paths.validated_name.clone(),
-            ));
-        }
-        Ok(())
-    }
-
-    fn perform_fs_rename(
-        &self,
-        paths: &RenamePaths,
-        fallback_mtime: i64,
-    ) -> Result<i64, LibraryError> {
-        std::fs::rename(&paths.old_path, &paths.new_path)?;
-
-        let fs_meta = std::fs::metadata(&paths.new_path)?;
-        let mtime = fs_meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(fallback_mtime);
-
-        Ok(mtime)
-    }
-
-    fn commit_rename_to_db(
-        &self,
-        wtxn: &mut heed::RwTxn,
-        media_id: MediaId,
-        mut record: MediaRecord,
-        paths: &RenamePaths,
-        mtime: i64,
-    ) -> Result<MediaRecord, LibraryError> {
-        record.filename = paths.validated_name.clone();
-        record.modification_time = mtime;
-        self.db.media.put(wtxn, &media_id, &record)?;
-        Ok(record)
     }
 }

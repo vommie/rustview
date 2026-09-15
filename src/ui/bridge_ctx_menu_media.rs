@@ -1,7 +1,8 @@
+use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
 use super::bridge_file_dialog_delete::DeleteFileDialogController;
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
-use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController};
+use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
@@ -41,6 +42,7 @@ pub struct MediaActionContext<'a> {
     pub missing_file_dialog: &'a MissingFileDialogController,
     pub delete_file_dialog: &'a DeleteFileDialogController,
     pub remove_orphaned_dialog: &'a RemoveOrphanedFileDialogController,
+    pub conflict_dialog: &'a FileOpsConflictDialogController,
     pub fullscreen_controller: &'a ImageFullscreenDialogController,
 }
 
@@ -821,10 +823,7 @@ impl MediaContextMenu {
     ) {
         if let Some(&target_id) = selected_ids.iter().next()
             && selected_ids.len() == 1
-            && let Ok(Some(record)) = ctx.library.media().get(target_id)
         {
-            ctx.state.write().active_file_rename_target = Some(target_id);
-
             let dialog_ctx = FileDialogContext {
                 library: ctx.library.clone(),
                 thumbnails: ctx.thumbnails.clone(),
@@ -833,37 +832,15 @@ impl MediaContextMenu {
                 state: ctx.state.clone(),
             };
 
-            let ren_exec = ctx.rename_dialog.clone();
-            let win_exec = window.clone_strong();
-            let ren_close1 = ctx.rename_dialog.clone();
-            let win_close1 = window.clone_strong();
-            let st_close1 = ctx.state.clone();
-            let ren_close2 = ctx.rename_dialog.clone();
-            let win_close2 = window.clone_strong();
-            let st_close2 = ctx.state.clone();
-            let missing_dlg = ctx.missing_file_dialog.clone();
-
-            FileRenameDialogController::show(
-                ctx.rename_dialog,
+            FileRenameDialogController::open(RenameDialogParams {
+                dialog_ref: ctx.rename_dialog,
                 window,
-                &record.filename,
-                move |new_name| {
-                    FileRenameDialogController::execute(
-                        target_id,
-                        &new_name,
-                        &dialog_ctx,
-                        &win_exec,
-                        &ren_exec,
-                        &missing_dlg,
-                    );
-                },
-                move || {
-                    FileRenameDialogController::close(&ren_close1, &st_close1, &win_close1);
-                },
-                move || {
-                    FileRenameDialogController::close(&ren_close2, &st_close2, &win_close2);
-                },
-            );
+                media_id: target_id,
+                ctx: &dialog_ctx,
+                conflict_dialog: ctx.conflict_dialog,
+                missing_dialog: ctx.missing_file_dialog,
+                fullscreen_controller: ctx.fullscreen_controller,
+            });
         }
     }
 }

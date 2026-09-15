@@ -7,8 +7,9 @@ use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
 use super::bridge_file_dialog_delete::DeleteFileDialogController;
 use super::bridge_file_dialog_missing::MissingFileDialogController;
 use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
+use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
 use super::bridge_file_selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
-use super::bridge_folder_dialogs::FolderDialogController;
+use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::bridge_folders::BridgeFolders;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
@@ -27,6 +28,7 @@ use super::keyboard_navigation::{handle_keyboard_navigate, KeyboardNavigateParam
 use super::rubberband_selection::RubberbandAutoScroller;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
+use crate::library::folders::normalize_path;
 use crate::library::models::{FileTransferKind, FolderId, MediaId, TagId};
 use crate::library::Library;
 use crate::query::{MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
@@ -44,6 +46,21 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Parameter struct grouping rename trigger dependencies.
+pub struct RenameActionParams<'a> {
+    pub window: &'a MainWindow,
+    pub library: &'a Arc<Library>,
+    pub thumbnails: &'a Arc<ThumbnailManager>,
+    pub tab_manager: &'a Arc<ViewerTabManager>,
+    pub settings: &'a Arc<SettingsManager>,
+    pub state: &'a Arc<RwLock<UiState>>,
+    pub rename_dialog: &'a Rc<RefCell<Option<FileRenameDialog>>>,
+    pub missing_dialog: &'a MissingFileDialogController,
+    pub conflict_dialog: &'a FileOpsConflictDialogController,
+    pub folder_dialogs: &'a FolderDialogController,
+    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+}
 
 pub struct UiBridge {
     window: MainWindow,
@@ -119,7 +136,6 @@ impl UiBridge {
         window.set_sort_column_idx(initial_sort_col.to_index());
         window.set_sort_order_idx(initial_sort_ord.to_index());
 
-        // Restore Persistent Media Type Filter & Tab Grid View Settings
         let initial_media_type_filter = MediaTypeFilter::from_str_name(&v_settings.media_type_filter);
         initial_state.filter.media_type_filter = initial_media_type_filter;
         window.set_media_type_filter_idx(initial_media_type_filter.to_index());
@@ -129,7 +145,6 @@ impl UiBridge {
         window.set_tab_grid_columns(v_settings.tab_grid_columns as i32);
         window.set_tab_grid_auto_columns(v_settings.tab_grid_auto_columns);
 
-        // Restore All 13 Table Column Widths
         window.set_col_filename_width(v_settings.col_filename_width);
         window.set_col_path_width(v_settings.col_path_width);
         window.set_col_modified_date_width(v_settings.col_modified_date_width);
@@ -161,7 +176,6 @@ impl UiBridge {
 
         StatusBarBridge::info(&window, "Initializing RustView...");
 
-        // Initialize Tab Bar, View Mode and Viewer Settings
         window.set_is_browse_active(true);
         window.set_is_tab_grid_active(false);
         window.set_active_view_mode(0);
@@ -190,7 +204,6 @@ impl UiBridge {
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let last_click = Arc::new(Mutex::new(None));
 
-        // Wire Fullscreen on_close restore handler across originating view modes
         let win_fs_close = window.as_weak();
         let tm_fs_close = tab_manager.clone();
         let lib_fs_close = library.clone();
@@ -219,19 +232,16 @@ impl UiBridge {
                 );
 
                 if origin_mode == 2 {
-                    // Restoring to Tab-Grid (Masonry view)
                     tm.set_all_videos_view_active(false);
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &lib, &set, &st);
                 } else if origin_mode == 1 {
-                    // Restoring to Single Tab Viewer
                     if let Some(tab_id) = tab_id_opt {
                         tm.set_active_tab_internal(tab_id, true);
                     }
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                 } else {
-                    // Restoring to Browse view (origin_mode == 0, including Quick-Fullscreen)
                     tm.activate_browse();
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
@@ -444,6 +454,7 @@ impl UiBridge {
                 missing_file_dialog: self.missing_file_dialog.clone(),
                 delete_file_dialog: self.delete_file_dialog.clone(),
                 remove_orphaned_dialog: self.remove_orphaned_dialog.clone(),
+                conflict_dialog: self.conflict_dialog.clone(),
                 tag_dialogs: self.tag_dialogs.clone(),
                 folder_dialogs: self.folder_dialogs.clone(),
                 fullscreen_controller: self.fullscreen_controller.clone(),
@@ -471,11 +482,164 @@ impl UiBridge {
             self.fullscreen_controller.clone(),
         );
 
+        self.register_rename_callbacks();
         self.register_keyboard_navigation_callbacks();
         self.register_tab_grid_callbacks();
         self.register_dnd_callbacks();
         self.register_rubberband_callbacks();
         self.register_sidebar_resize_callbacks();
+    }
+
+    fn register_rename_callbacks(&self) {
+        let win = self.window.clone_strong();
+        let lib = self.library.clone();
+        let thumb = self.thumbnails.clone();
+        let tm = self.tab_manager.clone();
+        let set = self.settings.clone();
+        let st = self.state.clone();
+        let ren_dlg = self.rename_dialog.clone();
+        let missing_dlg = self.missing_file_dialog.clone();
+        let conflict_dlg = self.conflict_dialog.clone();
+        let fld_dlg = self.folder_dialogs.clone();
+        let fs_ctrl = self.fullscreen_controller.clone();
+
+        self.window.on_request_rename(move || {
+            Self::trigger_rename_action(RenameActionParams {
+                window: &win,
+                library: &lib,
+                thumbnails: &thumb,
+                tab_manager: &tm,
+                settings: &set,
+                state: &st,
+                rename_dialog: &ren_dlg,
+                missing_dialog: &missing_dlg,
+                conflict_dialog: &conflict_dlg,
+                folder_dialogs: &fld_dlg,
+                fullscreen_controller: &fs_ctrl,
+            });
+        });
+    }
+
+    /// Central unified dispatch action for F2 / rename across all application views with focus sensitivity.
+    pub fn trigger_rename_action(params: RenameActionParams<'_>) {
+        let window = params.window;
+        let active_mode = window.get_active_view_mode();
+        let is_fs = params.fullscreen_controller.is_open();
+
+        // 1. Fullscreen mode: Always rename the media item in fullscreen
+        if is_fs {
+            if let Some(media_id) = params.fullscreen_controller.get_active_media_id() {
+                Self::open_media_rename(media_id, &params);
+            }
+            return;
+        }
+
+        // 2. Tab Viewer mode (mode 1): Always rename the active tab's media item
+        if active_mode == 1 {
+            if let Some(media_id) = params.tab_manager.get_active_media_id() {
+                Self::open_media_rename(media_id, &params);
+            }
+            return;
+        }
+
+        // 3. Browse mode (mode 0) / Tab Grid (mode 2): Context-sensitive based on last active panel
+        let last_panel = params.state.read().last_active_panel;
+
+        if last_panel == LastActivePanel::Folder {
+            let current_folder_id = params.state.read().current_folder_id;
+            let Some(folder_id) = current_folder_id else {
+                StatusBarBridge::info(window, "No folder selected to rename (F2).");
+                return;
+            };
+
+            // Protect root directory from renaming
+            let is_root = {
+                let app_settings = params.settings.get();
+                if let Some(ref root_p) = app_settings.general.root_folder
+                    && let Ok(Some(folder_rec)) = params.library.folders().get_folder(folder_id)
+                {
+                    normalize_path(Path::new(&folder_rec.path)) == normalize_path(root_p)
+                } else {
+                    false
+                }
+            };
+
+            if is_root {
+                StatusBarBridge::info(window, "Cannot rename the library root directory.");
+                return;
+            }
+
+            let folder_rec_opt = params.library.folders().get_folder(folder_id).ok().flatten();
+            let Some(folder_rec) = folder_rec_opt else {
+                StatusBarBridge::error(window, "Folder record not found in database.");
+                return;
+            };
+
+            let folder_name = Path::new(&folder_rec.path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| folder_rec.path.clone());
+
+            let folder_ctx = FolderDialogContext {
+                library: params.library.clone(),
+                thumbnails: params.thumbnails.clone(),
+                settings: params.settings.clone(),
+                state: params.state.clone(),
+            };
+
+            tracing::info!(
+                folder_id,
+                folder_name = %folder_name,
+                "[UiBridge: RenameAction] F2 pressed on Folder Tree focus: Opening Rename Folder dialog"
+            );
+
+            params.folder_dialogs.show_rename(
+                window,
+                folder_id,
+                &folder_name,
+                folder_ctx,
+            );
+            return;
+        }
+
+        // 4. Media panel focus: Check single selection
+        let sel_ids = params.state.read().file_selection.selected_ids().clone();
+        if sel_ids.len() == 1 {
+            let media_id = *sel_ids.iter().next().unwrap();
+            Self::open_media_rename(media_id, &params);
+        } else if sel_ids.is_empty() {
+            StatusBarBridge::info(window, "Select a file to rename (F2).");
+        } else {
+            StatusBarBridge::warn(
+                window,
+                "Cannot rename multiple files at once. Select a single file.",
+            );
+        }
+    }
+
+    fn open_media_rename(media_id: MediaId, params: &RenameActionParams<'_>) {
+        tracing::info!(
+            media_id,
+            "[UiBridge: RenameAction] Opening rename dialog for media file"
+        );
+
+        let dialog_ctx = FileDialogContext {
+            library: params.library.clone(),
+            thumbnails: params.thumbnails.clone(),
+            tab_manager: params.tab_manager.clone(),
+            settings: params.settings.clone(),
+            state: params.state.clone(),
+        };
+
+        FileRenameDialogController::open(RenameDialogParams {
+            dialog_ref: params.rename_dialog,
+            window: params.window,
+            media_id,
+            ctx: &dialog_ctx,
+            conflict_dialog: params.conflict_dialog,
+            missing_dialog: params.missing_dialog,
+            fullscreen_controller: params.fullscreen_controller,
+        });
     }
 
     fn register_keyboard_navigation_callbacks(&self) {
@@ -873,7 +1037,6 @@ impl UiBridge {
         let lib_right = self.library.clone();
         let st_right = self.state.clone();
 
-        // Right sidebar resizes the Tag & Rate Panel / Inspector -> Does NOT dismiss Quick-Fullscreen
         self.window.on_sidebar_right_resized(move |new_width| {
             let t0 = Instant::now();
             let count = right_count_clone.fetch_add(1, Ordering::Relaxed) + 1;

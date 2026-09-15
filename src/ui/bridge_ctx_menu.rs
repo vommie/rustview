@@ -3,6 +3,7 @@ pub use super::bridge_ctx_menu_media::{MediaActionContext, MediaContextMenu};
 pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use super::bridge_ctx_menu_tab::{TabActionContext, TabContextMenu};
 pub use super::bridge_ctx_menu_tag::TagContextMenu;
+pub use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
 pub use super::bridge_file_dialog_delete::DeleteFileDialogController;
 pub use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 pub use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
@@ -62,6 +63,7 @@ pub struct ContextMenuRegistration {
     pub missing_file_dialog: MissingFileDialogController,
     pub delete_file_dialog: DeleteFileDialogController,
     pub remove_orphaned_dialog: RemoveOrphanedFileDialogController,
+    pub conflict_dialog: FileOpsConflictDialogController,
     pub tag_dialogs: TagDialogController,
     pub folder_dialogs: FolderDialogController,
     pub fullscreen_controller: ImageFullscreenDialogController,
@@ -92,6 +94,7 @@ impl BridgeContextMenu {
         let tm = tab_manager.clone();
         let st = state.clone();
         window.on_media_context_menu(move |id, x, y| {
+            st.write().last_active_panel = LastActivePanel::Media;
             Self::show_media_menu(
                 MediaMenuContext {
                     window: &win,
@@ -120,6 +123,7 @@ impl BridgeContextMenu {
         let tm = tab_manager.clone();
         let st = state.clone();
         window.on_folder_context_menu(move |id, x, y| {
+            st.write().last_active_panel = LastActivePanel::Folder;
             Self::show_folder_menu(
                 FolderMenuContext {
                     window: &win,
@@ -163,7 +167,6 @@ impl BridgeContextMenu {
             let active = st.read().active_context_menu.clone();
             CtxMenuPresenter::handle_submenu_request(&win, active.as_ref(), depth, m_idx as usize);
 
-            // Update active submenus map for multi-level cutout tracking
             {
                 let mut map = active_submenus_event.write();
                 if depth == 0 {
@@ -237,6 +240,7 @@ impl BridgeContextMenu {
         let missing_file_dlg = reg.missing_file_dialog;
         let delete_file_dlg = reg.delete_file_dialog;
         let remove_orphaned_dlg = reg.remove_orphaned_dialog;
+        let conflict_dlg = reg.conflict_dialog;
         let tag_dlg = reg.tag_dialogs;
         let fld_dlg = reg.folder_dialogs;
         let fs_ctrl = reg.fullscreen_controller;
@@ -299,6 +303,7 @@ impl BridgeContextMenu {
                     missing_file_dialog: &missing_file_dlg,
                     delete_file_dialog: &delete_file_dlg,
                     remove_orphaned_dialog: &remove_orphaned_dlg,
+                    conflict_dialog: &conflict_dlg,
                     fullscreen_controller: &fs_ctrl,
                 },
             );
@@ -400,7 +405,6 @@ impl BridgeContextMenu {
         state.write().active_tab_dialog_target = Some(tab_id);
 
         let menu = TabContextMenu::build_menu(tab, tab_idx, total_tabs, &tabs);
-        // Position directly below tab bar
         Self::open_custom_menu(window, state, tab_manager, menu, x, y + 10.0);
     }
 
@@ -444,10 +448,10 @@ impl BridgeContextMenu {
 /// Dynamically calculates the exact pixel dimensions of a menu from its items to eliminate black overhangs.
 pub fn calculate_menu_dimensions(items: &[CtxMenuItem]) -> (f32, f32) {
     let width = 230.0;
-    let mut height = 8.0; // 4px top + 4px bottom padding
+    let mut height = 8.0;
     for (i, item) in items.iter().enumerate() {
         if i > 0 {
-            height += 1.0; // 1px item spacing
+            height += 1.0;
         }
         height += match item.kind {
             CtxMenuItemKind::Separator => 7.0,
@@ -460,10 +464,10 @@ pub fn calculate_menu_dimensions(items: &[CtxMenuItem]) -> (f32, f32) {
 
 /// Calculates the exact vertical offset of an item with `menu_index` within its parent menu box.
 pub fn calculate_item_y_offset(items: &[CtxMenuItem], target_menu_idx: usize) -> f32 {
-    let mut offset_y = 4.0; // 4px top padding
+    let mut offset_y = 4.0;
     for (i, item) in items.iter().enumerate() {
         if i > 0 {
-            offset_y += 1.0; // 1px item spacing
+            offset_y += 1.0;
         }
         if item.menu_index == target_menu_idx {
             return offset_y;
@@ -492,14 +496,12 @@ pub fn make_rounded_cutout_rectangles(
     let pr = ((6.0 * scale).round() as i16).max(2).min(ph as i16 / 3);
 
     vec![
-        // Central wide band
         XRectangle {
             x: px,
             y: py + pr,
             width: pw,
             height: ph.saturating_sub((pr * 2) as u16).max(1),
         },
-        // Intermediate horizontal band for smooth corner step
         XRectangle {
             x: px + 1,
             y: py + 2,
@@ -512,7 +514,6 @@ pub fn make_rounded_cutout_rectangles(
             width: pw.saturating_sub(4).max(1),
             height: ph.saturating_sub(2).max(1),
         },
-        // Top & bottom horizontal inset band
         XRectangle {
             x: px + pr,
             y: py,

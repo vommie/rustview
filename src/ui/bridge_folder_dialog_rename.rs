@@ -4,11 +4,12 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::{MainWindow, RenameFolderDialog};
+use crate::library::folder_operations::FolderOperations;
 use crate::library::models::FolderId;
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 /// Specialized controller managing the Rename Folder modal dialog lifecycle and execution.
@@ -22,7 +23,7 @@ impl RenameFolderDialogController {
         Self::default()
     }
 
-    /// Displays the Rename Folder modal dialog with pre-populated name and clears any prior errors.
+    /// Displays the Rename Folder modal dialog with pre-populated name and real-time conflict checking.
     pub fn show(
         &self,
         window: &MainWindow,
@@ -33,8 +34,16 @@ impl RenameFolderDialogController {
         window.set_is_context_menu_open(false);
         self.ensure_dialog_instantiated();
 
+        let parent_path_opt = ctx
+            .library
+            .folders()
+            .get_folder(folder_id)
+            .ok()
+            .flatten()
+            .and_then(|f| PathBuf::from(&f.path).parent().map(|p| p.to_path_buf()));
+
         if let Some(ref win) = *self.dialog.borrow() {
-            self.bind_dialog_events(win, window, folder_id, ctx);
+            self.bind_dialog_events(win, window, folder_id, parent_path_opt, ctx);
             self.populate_dialog_fields(win, current_name);
 
             window.set_is_modal_locked(true);
@@ -105,8 +114,67 @@ impl RenameFolderDialogController {
         win: &RenameFolderDialog,
         window: &MainWindow,
         folder_id: FolderId,
+        parent_path_opt: Option<PathBuf>,
         ctx: FolderDialogContext,
     ) {
+        let win_weak_edit = win.as_weak();
+        let lib_edit = ctx.library.clone();
+        let parent_p_edit = parent_path_opt;
+
+        win.on_name_edited(move |typed| {
+            let trimmed = typed.trim().to_string();
+            if let Some(w) = win_weak_edit.upgrade() {
+                if trimmed.is_empty() {
+                    w.set_has_conflict(false);
+                    w.set_suggested_name("".into());
+                    w.set_conflict_message("".into());
+                    w.set_error_message("".into());
+                    return;
+                }
+
+                match lib_edit.folder_operations().check_rename_conflict(folder_id, &trimmed) {
+                    Ok(Some(conflict_path)) => {
+                        let folder_name = conflict_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or(trimmed.clone());
+
+                        let parent = parent_p_edit.as_deref().unwrap_or_else(|| Path::new("/"));
+                        let suggestion = FolderOperations::generate_unique_folder_name(parent, &trimmed);
+
+                        w.set_has_conflict(true);
+                        w.set_suggested_name(suggestion.into());
+                        w.set_conflict_message(format!("Folder '{}' already exists in parent directory.", folder_name).into());
+                        w.set_error_message("".into());
+                    }
+                    Ok(None) => {
+                        w.set_has_conflict(false);
+                        w.set_suggested_name("".into());
+                        w.set_conflict_message("".into());
+                        w.set_error_message("".into());
+                    }
+                    Err(e) => {
+                        w.set_has_conflict(false);
+                        w.set_error_message(e.to_string().into());
+                    }
+                }
+            }
+        });
+
+        let win_weak_sug = win.as_weak();
+        win.on_use_suggested_name(move || {
+            if let Some(w) = win_weak_sug.upgrade() {
+                let sug = w.get_suggested_name();
+                if !sug.is_empty() {
+                    w.set_new_name(sug);
+                    w.set_has_conflict(false);
+                    w.set_conflict_message("".into());
+                    w.set_suggested_name("".into());
+                    w.set_error_message("".into());
+                }
+            }
+        });
+
         let ctrl_confirm = self.clone();
         let win_confirm = window.clone_strong();
         let ctx_confirm = ctx;
@@ -132,6 +200,9 @@ impl RenameFolderDialogController {
     fn populate_dialog_fields(&self, win: &RenameFolderDialog, current_name: &str) {
         win.set_initial_name(current_name.into());
         win.set_new_name(current_name.into());
+        win.set_has_conflict(false);
+        win.set_suggested_name("".into());
+        win.set_conflict_message("".into());
         win.set_error_message("".into());
     }
 
@@ -142,10 +213,23 @@ impl RenameFolderDialogController {
         state: &RwLock<UiState>,
     ) -> bool {
         let is_active = state.read().current_folder_id == Some(folder_id);
+        let new_path = PathBuf::from(new_path_str);
+        let mut st = state.write();
+
         if is_active {
-            let mut st = state.write();
-            st.current_folder_path = Some(PathBuf::from(new_path_str));
+            st.current_folder_path = Some(new_path.clone());
         }
+
+        // Update all in-memory media full paths belonging to this renamed folder subtree
+        for item in st.all_folder_media.iter_mut() {
+            if item.record.folder_id == folder_id {
+                item.full_path = new_path.join(&item.record.filename);
+                item.folder_path_str = new_path_str.to_string().into();
+                item.folder_path_lower = new_path_str.to_lowercase();
+            }
+        }
+
+        st.invalidate_folder_tree_cache();
         is_active
     }
 }

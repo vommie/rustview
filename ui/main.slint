@@ -263,6 +263,7 @@ export component MainWindow inherits Window {
     callback viewer-viewport-geometry-changed(length /* x */, length /* y */, length /* width */, length /* height */);
 
     callback modal-dismiss-requested();
+    callback request-rename();
 
     callback folder-selected(int, string);
     callback folder-toggle-expand(int);
@@ -379,7 +380,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    /// Dynamically calculates how many full rows fit into the current visible media viewport height
     pure public function get-media-page-rows() -> int {
         if root.is-table-view {
             return table-view.get-page-rows();
@@ -388,7 +388,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    /// Programmatically scrolls the media view so that the item at item-idx is fully visible (never cut off)
     public function scroll-media-item-into-view(item-idx: int) {
         if root.is-table-view {
             table-view.scroll-item-into-view(item-idx);
@@ -409,7 +408,6 @@ export component MainWindow inherits Window {
         media-toolbar.focus-search();
     }
 
-    // Keyboard Shortcuts & Navigation Handling
     forward-focus: main-window-focus;
     main-window-focus := FocusScope {
         key-pressed(event) => {
@@ -423,6 +421,12 @@ export component MainWindow inherits Window {
 
             if root.is-context-menu-open || root.is-choice-popup-open || root.is-dragging-media || root.is-dragging-tab || root.rubberband-active {
                 return reject;
+            }
+
+            // F2 Shortcut for file renaming across Browse, Tab, and Tab Grid modes (when not editing a text input)
+            if event.text == Key.F2 && !root.is-text-input-focused {
+                root.request-rename();
+                return accept;
             }
 
             if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
@@ -866,7 +870,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Context Menu Popup Overlay
     if root.is-context-menu-open : ContextMenuPopup {
         level0-items: root.level0-context-items;
         level1-items: root.level1-context-items;
@@ -881,7 +884,6 @@ export component MainWindow inherits Window {
         dismissed => { root.context-menu-dismissed(); }
     }
 
-    // Floating Choice Popup Overlay
     if root.is-choice-popup-open : FloatingChoicePopup {
         target-folder-name: root.choice-target-folder-name;
         item-count: root.choice-item-count;
@@ -893,7 +895,6 @@ export component MainWindow inherits Window {
         dismissed => { root.choice-popup-dismissed(); }
     }
 
-    // Global Non-Blocking Tooltip Overlay
     if GlobalTooltip.is-visible && TooltipSettings.enabled : Rectangle {
         x: 0px;
         y: 0px;
@@ -969,7 +970,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Modal UI Blocking Overlay
     if root.is-modal-locked : Rectangle {
         background: #00000066;
 

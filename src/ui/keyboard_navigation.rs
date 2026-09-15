@@ -2,7 +2,7 @@ use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::{BridgeMedia, MediaReloadOptions};
-use super::bridge_state::UiState;
+use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
@@ -80,7 +80,6 @@ pub fn calculate_target_index(
     let target = match direction {
         NavigationDirection::Left => {
             if cols == 1 {
-                // TableView: Left/Right does not move vertical rows
                 return None;
             }
             if current_idx > 0 {
@@ -91,7 +90,6 @@ pub fn calculate_target_index(
         }
         NavigationDirection::Right => {
             if cols == 1 {
-                // TableView: Left/Right does not move vertical rows
                 return None;
             }
             if current_idx + 1 < total_items {
@@ -236,11 +234,10 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
                 params.page_rows.max(1) as usize,
             ) {
                 Some(t) => t,
-                None => return, // At boundary, no movement
+                None => return,
             }
         }
         None => {
-            // Nothing currently selected: select first item (or last item if End)
             if direction == NavigationDirection::End {
                 total_items.saturating_sub(1)
             } else {
@@ -255,9 +252,10 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
         st.all_folder_media[orig_idx].record.id
     };
 
-    // Update selection state
+    // Update selection state and mark last active panel as Media
     let (changed_ids, sel_count) = {
         let mut st = params.state.write();
+        st.last_active_panel = LastActivePanel::Media;
         let prev_selected = st.file_selection.selected_ids().clone();
 
         if params.is_shift {
@@ -280,7 +278,6 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
         (changed, count)
     };
 
-    // Check if target index is outside the loaded slice window
     let need_slice_reanchor = {
         let st = params.state.read();
         !st.loaded_slice_valid
@@ -301,15 +298,12 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
         BridgeFileSelection::sync_selection_diff(params.window, params.state, &changed_ids);
     }
 
-    // Ensure target item is fully scrolled into view
     params.window.invoke_scroll_media_item_into_view(target_idx as i32);
 
-    // Live update Quick-Fullscreen if currently active
     if params.fullscreen_controller.is_quick_fullscreen_active() {
         params.fullscreen_controller.update_quick_fullscreen_media(target_media_id, params.library, params.settings);
     }
 
-    // Synchronize Metadata Inspector, Tag Panel, and Status Bar
     BridgeInspector::update(params.window, params.state);
     BridgeTags::sync_tag_selection(params.window, params.library, params.state);
     StatusBarBridge::update_metrics(params.window, params.state);

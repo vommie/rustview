@@ -15,13 +15,14 @@ export component ImageFullscreenWindow inherits Window {
     in property <bool> is-video: false;
 
     callback request-close();
+    callback request-rename();
     callback next-image();
     callback previous-image();
     callback canvas-clicked(bool /* is_ctrl */);
 
     background: root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b);
 
-    // Keyboard navigation and instant ESC / Ctrl+W dismissal
+    // Keyboard navigation and instant ESC / Ctrl+W / F2 handling
     forward-focus: fs-focus;
     fs-focus := FocusScope {
         key-pressed(event) => {
@@ -31,6 +32,10 @@ export component ImageFullscreenWindow inherits Window {
             }
             if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
                 root.request-close();
+                return accept;
+            }
+            if event.text == Key.F2 {
+                root.request-rename();
                 return accept;
             }
             if event.text == Key.RightArrow || event.text == Key.Space {
@@ -115,7 +120,7 @@ export component ImageFullscreenWindow inherits Window {
         }
     }
 
-    // Centered Fallback View for missing or unreadable files (Using media_file_corrupted.svg)
+    // Centered Fallback View for missing or unreadable files
     if root.error-message != "" && !root.is-loading : VerticalLayout {
         alignment: center;
         spacing: 16px;

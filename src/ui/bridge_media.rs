@@ -1,7 +1,7 @@
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
-use super::bridge_state::UiState;
+use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
@@ -96,7 +96,7 @@ impl BridgeMedia {
         state: Arc<RwLock<UiState>>,
         fullscreen_controller: ImageFullscreenDialogController,
     ) {
-        // 1. Search Query Filter Callback with enhanced logging
+        // 1. Search Query Filter Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -105,6 +105,7 @@ impl BridgeMedia {
         let fs_query = fullscreen_controller.clone();
         window.on_search_query_changed(move |query| {
             fs_query.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Media;
             let (is_query, dataset_count) = {
                 let s = st.read();
                 (s.is_query_active, s.all_folder_media.len())
@@ -119,7 +120,7 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 2. Regular Expression Mode Toggle Callback with enhanced logging
+        // 2. Regular Expression Mode Toggle Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -128,6 +129,7 @@ impl BridgeMedia {
         let fs_regex = fullscreen_controller.clone();
         window.on_regex_mode_toggled(move |enabled| {
             fs_regex.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Media;
             let is_query = st.read().is_query_active;
             tracing::info!(
                 regex_enabled = enabled,
@@ -148,6 +150,7 @@ impl BridgeMedia {
         let fs_virt = fullscreen_controller.clone();
         window.on_virtual_folder_toggled(move |_active| {
             fs_virt.dismiss_if_quick_fullscreen();
+            st.write().last_active_panel = LastActivePanel::Media;
             Self::toggle_virtual_folder_mode(&win, &lib, &thumb, &tm, &set, &st);
         });
 
@@ -166,6 +169,7 @@ impl BridgeMedia {
 
             {
                 let mut s = st.write();
+                s.last_active_panel = LastActivePanel::Media;
                 s.filter.media_type_filter = new_filter;
             }
 
@@ -207,6 +211,7 @@ impl BridgeMedia {
             let target_col = SortColumn::from_index(col_idx);
             let (new_col, new_ord) = {
                 let mut s = st.write();
+                s.last_active_panel = LastActivePanel::Media;
                 if s.sort_column == target_col {
                     s.sort_order = s.sort_order.toggle();
                 } else {
@@ -258,7 +263,6 @@ impl BridgeMedia {
                 let win_w = win_hover.as_weak();
                 let st_c = st.clone();
 
-                // Mode A: Animated GIF Hover Playback with faithful frame delays
                 if format == MediaFormat::Gif && let Some(file_path) = full_path_opt {
                     if let Some(preview) = thumb.try_get_animated_preview(media_id) {
                         let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
@@ -325,9 +329,7 @@ impl BridgeMedia {
                             },
                         );
                     }
-                }
-                // Mode B: Video Hover Keyframe Animation
-                else if let Some(images) = VideoPreviewAnimator::load_preview_images(&thumb, media_id) {
+                } else if let Some(images) = VideoPreviewAnimator::load_preview_images(&thumb, media_id) {
                     let timer = VideoPreviewAnimator::start_animation(images, move |img| {
                         if let Some(w) = win_w.upgrade() {
                             let media_model = w.get_media_items();
@@ -355,7 +357,6 @@ impl BridgeMedia {
                 ACTIVE_HOVER_MEDIA_ID.with(|active_id| *active_id.borrow_mut() = None);
                 ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
 
-                // Restore static thumbnail immediately on mouse leave
                 let media_model = win_hover.get_media_items();
                 let start_window = win_hover.get_visible_start_index() as usize;
                 let visible_count = media_model.row_count();
@@ -449,6 +450,7 @@ impl BridgeMedia {
 
         window.on_view_mode_toggled_with_index(move |is_table, top_item_idx| {
             fs_vmode.dismiss_if_quick_fullscreen();
+            st_mode.write().last_active_panel = LastActivePanel::Media;
             Self::handle_view_mode_toggled(
                 is_table,
                 top_item_idx as usize,
@@ -1554,7 +1556,6 @@ impl BridgeMedia {
                 let refreshed_count = successful_items.len();
                 let missing_count = missing_files.len();
 
-                // Extract list of all open image tabs that need re-decoding
                 let mut image_tabs_to_reload: Vec<(MediaId, u64, PathBuf)> = Vec::new();
                 for item in &successful_items {
                     if matches!(item.updated_record.media_type, MediaType::Image) {
@@ -1568,7 +1569,6 @@ impl BridgeMedia {
                     }
                 }
 
-                // Check if active tab is video and has hash change -> reload MPV file
                 let active_video_reload_path = successful_items
                     .iter()
                     .find_map(|item| {
@@ -1671,7 +1671,6 @@ impl BridgeMedia {
                         }
                     }
 
-                    // Reload video in MPV if currently active tab video was refreshed
                     if let Some(ref v_path) = active_video_reload_path {
                         tracing::info!(
                             path = %LogObscurer::path(v_path),
@@ -1682,7 +1681,6 @@ impl BridgeMedia {
                         }
                     }
 
-                    // Reload full resolution image buffers for open viewer tabs
                     for (media_id, tab_id, full_file_path) in image_tabs_to_reload {
                         let tm_async = tab_mgr_arc.clone();
                         let w_weak_tab = w.as_weak();
@@ -1693,6 +1691,15 @@ impl BridgeMedia {
                         rayon::spawn(move || {
                             let load_res = HighResImageLoader::load_full_resolution(&full_file_path);
                             let _ = w_weak_tab.upgrade_in_event_loop(move |w_ui| {
+                                if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
+                                    tracing::debug!(
+                                        media_id,
+                                        tab_id,
+                                        "[BridgeMedia: DiscardStale] Discarding stale decoded image buffer because tab navigated away"
+                                    );
+                                    return;
+                                }
+
                                 match load_res {
                                     Ok((w_px, h_px, pixel_buffer)) => {
                                         tracing::info!(
@@ -2252,7 +2259,6 @@ impl BridgeMedia {
             BridgeTags::sync_tag_selection(window, library, state);
         }
 
-        // Always synchronize Virtual Folder button enablement and Status Bar metrics on every view reload
         Self::update_virtual_folder_button_state(window, library, state);
         StatusBarBridge::update_metrics(window, state);
 

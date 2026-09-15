@@ -78,6 +78,14 @@ pub const CTX_TAB_CLOSE_TO_LEFT: CtxMenuActionId = 4007;
 pub const CTX_TAB_CLOSE_TO_RIGHT: CtxMenuActionId = 4008;
 pub const CTX_TAB_CLOSE_OTHERS: CtxMenuActionId = 4009;
 
+/// Identifies the last active UI panel/target clicked by the user for context-aware actions like F2 renaming.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LastActivePanel {
+    #[default]
+    Media,
+    Folder,
+}
+
 /// High-performance LRU-managed bounded in-memory thumbnail store preventing RAM bloat on 100k+ datasets.
 #[derive(Debug, Clone)]
 pub struct LruThumbnailStore {
@@ -124,6 +132,12 @@ impl LruThumbnailStore {
     }
 
     #[inline]
+    pub fn remove(&mut self, id: &MediaId) {
+        self.map.remove(id);
+        self.order.retain(|i| i != id);
+    }
+
+    #[inline]
     pub fn clear(&mut self) {
         self.map.clear();
         self.order.clear();
@@ -154,6 +168,7 @@ pub struct UiState {
     pub folder_thumbnails: LruThumbnailStore,
     pub active_indices: Vec<usize>,
     pub file_selection: FileSelectionModel,
+    pub last_active_panel: LastActivePanel,
     pub active_tab_media_id: Option<MediaId>,
     pub rubberband_session: RubberbandSession,
     pub active_tab_dnd_session: Option<TabDndSession>,
@@ -215,6 +230,7 @@ impl Default for UiState {
             folder_thumbnails: LruThumbnailStore::default(),
             active_indices: Vec::new(),
             file_selection: FileSelectionModel::new(),
+            last_active_panel: LastActivePanel::Media,
             active_tab_media_id: None,
             rubberband_session: RubberbandSession::default(),
             active_tab_dnd_session: None,

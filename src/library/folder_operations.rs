@@ -3,6 +3,7 @@ use super::error::LibraryError;
 use super::models::{FolderId, FolderRecord};
 use crate::settings::LogObscurer;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 /// POSIX Linux folder component name validator.
 pub struct FolderValidator;
@@ -23,9 +24,9 @@ impl FolderValidator {
             ));
         }
 
-        if trimmed.contains('/') || trimmed.contains('\0') {
+        if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('\0') {
             return Err(LibraryError::FileOperationInvalidFilename(
-                "Folder name cannot contain '/' or NUL characters".to_string(),
+                "Folder name cannot contain path separators or NUL characters".to_string(),
             ));
         }
 
@@ -119,12 +120,70 @@ impl<'a> FolderOperations<'a> {
         })
     }
 
+    /// Probes whether renaming `folder_id` to `new_name` causes a collision in the parent directory.
+    pub fn check_rename_conflict(
+        &self,
+        folder_id: FolderId,
+        new_name: &str,
+    ) -> Result<Option<PathBuf>, LibraryError> {
+        let valid_name = FolderValidator::validate(new_name)?;
+
+        let rtxn = self.db.env.read_txn()?;
+        let record = self
+            .db
+            .folders
+            .get(&rtxn, &folder_id)?
+            .ok_or(LibraryError::FolderNotFound(folder_id))?;
+
+        let old_path = PathBuf::from(&record.path);
+        let parent_path = match old_path.parent() {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+
+        let new_path = parent_path.join(&valid_name);
+
+        if old_path == new_path {
+            return Ok(None);
+        }
+
+        let new_path_str = new_path.to_string_lossy().to_string();
+        let exists_in_db = self.db.folders_by_path.get(&rtxn, &new_path_str)?.is_some();
+
+        if new_path.exists() || exists_in_db {
+            Ok(Some(new_path))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Generates a unique, collision-free folder name in the target parent directory by appending sequential counter suffixes like `(1)`, `(2)`.
+    pub fn generate_unique_folder_name(parent_path: &Path, original_name: &str) -> String {
+        let trimmed = original_name.trim();
+        let mut counter = 1u32;
+        loop {
+            let candidate = format!("{} ({})", trimmed, counter);
+            if !parent_path.join(&candidate).exists() {
+                return candidate;
+            }
+            counter += 1;
+            if counter > 100_000 {
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                return format!("{}_{}", trimmed, timestamp);
+            }
+        }
+    }
+
     /// Atomically renames a folder physically on disk and updates all LMDB path indices recursively.
     pub fn rename_folder(
         &self,
         folder_id: FolderId,
         new_name: &str,
     ) -> Result<FolderRecord, LibraryError> {
+        let t0 = Instant::now();
         let valid_name = FolderValidator::validate(new_name)?;
 
         let mut wtxn = self.db.env.write_txn()?;
@@ -202,6 +261,7 @@ impl<'a> FolderOperations<'a> {
 
         tracing::info!(
             folder = %LogObscurer::folder(Some(folder_id), &record.path),
+            elapsed_us = t0.elapsed().as_micros(),
             "Folder rename committed successfully to LMDB"
         );
 
@@ -209,7 +269,6 @@ impl<'a> FolderOperations<'a> {
     }
 
     /// Moves a folder and all its contents to the system Trash using FreeDesktop spec (or permanent delete).
-    /// Completely purges the folder and its contents from the LMDB database.
     pub fn delete_folder(
         &self,
         folder_id: FolderId,
@@ -289,8 +348,6 @@ impl<'a> FolderOperations<'a> {
     }
 
     /// Checks if a folder exists on physical storage. If it exists, atomically restores `is_deleted = false` in LMDB.
-    /// Returns `Ok(true)` if the folder physically exists on disk and is active/restored.
-    /// Returns `Ok(false)` if the folder does not exist on disk.
     pub fn check_and_restore_if_exists(&self, folder_id: FolderId) -> Result<bool, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let folder = self
@@ -322,7 +379,6 @@ impl<'a> FolderOperations<'a> {
     }
 
     /// Purges an orphaned/missing folder and all its descendant metadata from LMDB completely.
-    /// Does NOT perform physical filesystem deletions since the directory does not exist on disk.
     pub fn purge_folder_from_db(
         &self,
         folder_id: FolderId,
@@ -412,7 +468,6 @@ impl<'a> FolderOperations<'a> {
 
         let dst_path = dst_parent_path.join(folder_name);
 
-        // Cycle check: Cannot move folder into itself or into one of its descendants
         if dst_parent_path.starts_with(&src_path) || src_path == dst_path {
             return Err(LibraryError::FileOperationRenameFailed(
                 "Cannot move a folder into itself or its own subdirectories".into(),

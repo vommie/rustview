@@ -1,21 +1,35 @@
-import { LineEdit } from "std-widgets.slint";
+import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { ButtonBar } from "button_bar.slint";
 
 export component FileRenameDialog inherits Window {
     title: "RustView - Rename Media File";
-    preferred-width: 440px;
-    preferred-height: 180px;
-    min-width: 380px;
-    min-height: 160px;
+    preferred-width: 480px;
+    preferred-height: 230px;
+    min-width: 400px;
+    min-height: 190px;
+    always-on-top: true;
     background: Theme.background;
 
     in-out property <string> initial-name: "";
     in-out property <string> new-name <=> name-input.text;
     in property <string> error-message: "";
 
+    // Conflict & Smart Resolution Properties
+    in-out property <bool> has-conflict: false;
+    in-out property <string> suggested-name: "";
+    in-out property <string> conflict-message: "";
+
     callback confirmed(string);
     callback cancelled();
+    callback name-edited(string);
+    callback use-suggested-name();
+
+    forward-focus: name-input;
+
+    public function select-all() {
+        name-input.select-all();
+    }
 
     VerticalLayout {
         padding: 0px;
@@ -45,9 +59,52 @@ export component FileRenameDialog inherits Window {
                 placeholder-text: "New filename...";
                 height: 32px;
                 vertical-stretch: 0;
+                edited => {
+                    root.name-edited(self.text);
+                }
                 accepted => {
                     if self.text != "" {
                         root.confirmed(self.text);
+                    }
+                }
+            }
+
+            // Real-time Conflict Alert & Quick Resolution Action
+            if root.has-conflict : Rectangle {
+                background: #f9e2af18;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: #f9e2af44;
+
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 6px;
+
+                    Text {
+                        text: "⚠ " + root.conflict-message;
+                        font-size: 11px;
+                        font-weight: 700;
+                        color: #f9e2af;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+
+                        Text {
+                            text: "Next available name:";
+                            font-size: 11px;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+
+                        Button {
+                            text: "Use \"" + root.suggested-name + "\"";
+                            clicked => {
+                                root.use-suggested-name();
+                            }
+                        }
                     }
                 }
             }
@@ -65,7 +122,7 @@ export component FileRenameDialog inherits Window {
             bar-height: 48px;
             show-cancel: true;
             show-save: true;
-            text-save: "Rename";
+            text-save: root.has-conflict ? "Resolve..." : "Rename";
             text-cancel: "Cancel";
             cancel-clicked => { root.cancelled(); }
             save-clicked => {

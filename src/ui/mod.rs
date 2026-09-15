@@ -46,7 +46,7 @@ pub mod tab_dnd;
 pub mod tab_grid;
 pub mod video_preview_animator;
 
-pub use bridge::UiBridge;
+pub use bridge::{RenameActionParams, UiBridge};
 pub use bridge_ctx_menu::{FolderMenuContext, MediaMenuContext};
 pub use bridge_ctx_menu_folder::FolderContextMenu;
 pub use bridge_ctx_menu_media::MediaContextMenu;
@@ -60,7 +60,7 @@ pub use bridge_file_dialog_conflict::{
 pub use bridge_file_dialog_delete::DeleteFileDialogController;
 pub use bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 pub use bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
-pub use bridge_file_dialogs::{FileRenameContext, FileRenameDialogController};
+pub use bridge_file_dialogs::{FileRenameContext, FileRenameDialogController, RenameDialogParams};
 pub use bridge_file_selection::{
     BridgeFileSelection, FileClickContext, FileClickEvent, LastClickRecord,
 };
