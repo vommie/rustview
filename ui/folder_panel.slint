@@ -161,6 +161,7 @@ export component FolderPanel inherits VerticalLayout {
 
     in property <[FolderNodeView]> folders: [];
     in property <bool> is-refreshing: false;
+    in property <bool> is-busy: false;
     in-out property <bool> show-hidden-folders: false;
     in property <int> drop-target-folder-id: -1;
     out property <length> scroll-offset-y: tree-list.scroll-offset-y;
@@ -168,7 +169,8 @@ export component FolderPanel inherits VerticalLayout {
     callback folder-clicked(int, string);
     callback folder-toggle-expand(int);
     callback folder-context-menu(int, length, length);
-    callback refresh-clicked();
+    callback folder-refresh-all-clicked();
+    callback folder-refresh-relative-clicked();
     callback collapse-all-clicked();
     callback toggle-hidden-folders(bool);
     callback row-hovered(int);
@@ -206,10 +208,17 @@ export component FolderPanel inherits VerticalLayout {
     // Modular Encapsulated Panel Toolbar
     FolderPanelToolbar {
         is-refreshing: root.is-refreshing;
+        is-busy: root.is-busy;
         show-hidden <=> root.show-hidden-folders;
         collapse-all-clicked => { root.collapse-all-clicked(); }
         toggle-hidden-clicked(h) => { root.toggle-hidden-folders(h); }
-        refresh-clicked => { root.refresh-clicked(); }
+        refresh-selected(idx) => {
+            if idx == 0 {
+                root.folder-refresh-all-clicked();
+            } else {
+                root.folder-refresh-relative-clicked();
+            }
+        }
     }
 
     // Scrollable Tree Box

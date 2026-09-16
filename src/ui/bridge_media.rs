@@ -514,6 +514,11 @@ impl BridgeMedia {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        if Self::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(window, "Cannot switch view mode: another operation is in progress.");
+            return;
+        }
+
         let t0 = Instant::now();
         thumbnails.cancel_pipeline();
 
@@ -633,16 +638,18 @@ impl BridgeMedia {
         }
     }
 
+    /// Evaluates whether any intensive background operation is running (Single-Operation Guard).
+    /// Uses `try_read()` on `state` to prevent re-entrant lock deadlocks.
     pub fn is_system_busy(
         window: &MainWindow,
         thumbnails: &ThumbnailManager,
         state: &RwLock<UiState>,
     ) -> bool {
-        let st = state.read();
-        if st.is_refreshing_media || st.is_refreshing_folders {
-            return true;
+        if let Some(st) = state.try_read() {
+            if st.is_refreshing_media || st.is_refreshing_folders {
+                return true;
+            }
         }
-        drop(st);
 
         if window.get_is_indexing_media() || window.get_is_refreshing_folders() {
             return true;
@@ -863,6 +870,7 @@ impl BridgeMedia {
         targets: Vec<(MediaId, PathBuf, MediaRecord)>,
         window: &MainWindow,
         library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
         state: &Arc<RwLock<UiState>>,
         operation_desc: &str,
     ) {
@@ -871,10 +879,19 @@ impl BridgeMedia {
             return;
         }
 
+        if Self::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot start refresh: another operation is already in progress.",
+            );
+            return;
+        }
+
         {
             let mut st = state.write();
             st.is_refreshing_media = true;
         }
+        window.set_is_system_busy(true);
 
         StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
         StatusBarBridge::info(
@@ -884,6 +901,7 @@ impl BridgeMedia {
 
         let w_weak = window.as_weak();
         let lib_arc = library.clone();
+        let thumb_arc = thumbnails.clone();
         let st_arc = state.clone();
         let op_desc_owned = operation_desc.to_string();
 
@@ -1183,6 +1201,8 @@ impl BridgeMedia {
                     BridgeInspector::update(&w, &st_arc);
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
                     Self::update_virtual_folder_button_state(&w, &lib_arc, &st_arc);
+                    let busy = Self::is_system_busy(&w, &thumb_arc, &st_arc);
+                    w.set_is_system_busy(busy);
                     StatusBarBridge::update_metrics(&w, &st_arc);
                 });
             })
@@ -1192,8 +1212,17 @@ impl BridgeMedia {
     pub fn refresh_selected_metadata_only(
         window: &MainWindow,
         library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        if Self::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot start refresh: another operation is already in progress.",
+            );
+            return;
+        }
+
         let selected_ids = {
             let st = state.read();
             st.file_selection.selected_ids().clone()
@@ -1234,6 +1263,7 @@ impl BridgeMedia {
             targets,
             window,
             library,
+            thumbnails,
             state,
             &desc,
         );
@@ -1247,6 +1277,14 @@ impl BridgeMedia {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        if Self::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot start refresh: another operation is already in progress.",
+            );
+            return;
+        }
+
         let selected_ids = {
             let st = state.read();
             if window.get_active_view_mode() == 1 {
@@ -1289,6 +1327,7 @@ impl BridgeMedia {
             let mut st = state.write();
             st.is_refreshing_media = true;
         }
+        window.set_is_system_busy(true);
 
         StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
 
@@ -1715,7 +1754,7 @@ impl BridgeMedia {
                                             media_id,
                                             tab_id,
                                             error = %err,
-                                            "[BridgeMedia: RefreshTabSync] Failed to reload image buffer for open tab"
+                                            "[BridgeViewerTabs: RefreshTabSync] Failed to reload image buffer for open tab"
                                         );
                                         tm_async.set_tab_error(tab_id, err.to_string());
                                     }
@@ -1807,6 +1846,8 @@ impl BridgeMedia {
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
                     Self::update_virtual_folder_button_state(&w, &lib_arc, &st_arc);
                     BridgeViewerTabs::sync_ui(&w, &tab_mgr_arc, &lib_arc, &set_arc, &st_arc);
+                    let busy = Self::is_system_busy(&w, &thumb_arc, &st_arc);
+                    w.set_is_system_busy(busy);
                     StatusBarBridge::update_metrics(&w, &st_arc);
                 });
             })

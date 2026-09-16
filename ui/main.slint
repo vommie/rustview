@@ -43,6 +43,9 @@ export component MainWindow inherits Window {
     min-height: 600px;
     background: Theme.background;
 
+    // Global Operation State Properties (Single Refreshment Guarantee)
+    in-out property <bool> is-system-busy: false;
+
     // View state & Mode properties (0 = Browse Library, 1 = Tab Viewer, 2 = Tab Grid)
     in-out property <int> active-view-mode: 0;
     in-out property <bool> is-browse-active: true;
@@ -202,7 +205,6 @@ export component MainWindow inherits Window {
     in-out property <string> tag-filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
 
-    // Focus state reflecting active editing in text input fields
     property <bool> is-text-input-focused: media-toolbar.search-has-focus || sidebar_right.tag-filter-has-focus;
 
     in-out property <bool> is-context-menu-open: false;
@@ -268,7 +270,8 @@ export component MainWindow inherits Window {
     callback folder-selected(int, string);
     callback folder-toggle-expand(int);
     callback folder-context-menu(int /* id */, length /* x */, length /* y */);
-    callback folder-refresh-clicked();
+    callback folder-refresh-all-clicked();
+    callback folder-refresh-relative-clicked();
     callback folder-collapse-all-clicked();
     callback favorite-selected(string);
     callback toggle-hidden-folders(bool /* show_hidden */);
@@ -279,8 +282,8 @@ export component MainWindow inherits Window {
     callback background-clicked();
     callback visible-chunk-changed(int /* first_item */, int /* last_item */, int /* total */);
 
-    // Keyboard Navigation Callback (Direction, Shift held, Page rows calculated at trigger instant)
-    callback media-navigate(int /* direction: 0=Up, 1=Down, 2=Left, 3=Right, 4=PageUp, 5=PageDown, 6=Home, 7=End */, bool /* is_shift */, int /* page_rows */);
+    // Keyboard Navigation Callback
+    callback media-navigate(int /* direction */, bool /* is_shift */, int /* page_rows */);
 
     callback media-drag-started(int /* id */, length /* x */, length /* y */);
     callback media-drag-moved(length /* x */, length /* y */);
@@ -423,7 +426,7 @@ export component MainWindow inherits Window {
                 return reject;
             }
 
-            // F2 Shortcut for file renaming across Browse, Tab, and Tab Grid modes (when not editing a text input)
+            // F2 Shortcut for file renaming across Browse, Tab, and Tab Grid modes
             if event.text == Key.F2 && !root.is-text-input-focused {
                 root.request-rename();
                 return accept;
@@ -443,7 +446,7 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Keyboard navigation in Browse View (active-view-mode == 0), strictly active when not typing in text fields
+            // Keyboard navigation in Browse View
             if root.active-view-mode == 0 && !root.is-text-input-focused {
                 let is-shift = event.modifiers.shift;
                 let page-rows = root.get-media-page-rows();
@@ -556,6 +559,7 @@ export component MainWindow inherits Window {
                 favorites: root.favorites;
                 drop-target-folder-id: root.drop-target-folder-id;
                 is-refreshing-folders: root.is-refreshing-folders;
+                is-busy: root.is-system-busy;
                 show-hidden-folders <=> root.show-hidden-folders;
                 toggle-hidden-folders(h) => { root.toggle-hidden-folders(h); }
                 folder-collapse-all-clicked => { root.folder-collapse-all-clicked(); }
@@ -564,7 +568,8 @@ export component MainWindow inherits Window {
                 folder-row-hovered(id) => { root.folder-row-hovered(id); }
                 folder-row-unhovered(id) => { root.folder-row-unhovered(id); }
                 folder-context-menu(id, x, y) => { root.folder-context-menu(id, sidebar_left.x + x, 38px + sidebar_left.y + y); }
-                folder-refresh-clicked => { root.folder-refresh-clicked(); }
+                folder-refresh-all-clicked => { root.folder-refresh-all-clicked(); }
+                folder-refresh-relative-clicked => { root.folder-refresh-relative-clicked(); }
                 favorite-clicked(path) => { root.favorite-selected(path); }
             }
 
@@ -600,6 +605,7 @@ export component MainWindow inherits Window {
                         search-text <=> root.search-query;
                         regex-mode <=> root.regex-mode;
                         is-table-view: root.is-table-view;
+                        is-busy: root.is-system-busy;
                         is-virtual-folder <=> root.is-virtual-folder;
                         is-virtual-folder-enabled: root.is-virtual-folder-btn-enabled;
                         virtual-folder-tooltip: root.virtual-folder-tooltip;

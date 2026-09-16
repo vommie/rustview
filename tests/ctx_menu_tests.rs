@@ -13,8 +13,9 @@ use rustview::ui::bridge_state::{
     CTX_ACTION_OPEN_IN_FILE_MANAGER, CTX_ACTION_OPEN_IN_FULLSCREEN, CTX_ACTION_OPEN_IN_TAB,
     CTX_ACTION_OPEN_WITH_APP_BASE, CTX_ACTION_OPEN_WITH_OTHER, CTX_ACTION_REFRESH_FILES,
     CTX_ACTION_REFRESH_METADATA, CTX_ACTION_REMOVE_FROM_DB, CTX_ACTION_RENAME,
-    CTX_ACTION_SELECT_ALL, CTX_FOLDER_OPEN_IN_FILE_MANAGER, CTX_FOLDER_REFRESH,
-    CTX_FOLDER_REFRESH_METADATA,
+    CTX_ACTION_SELECT_ALL, CTX_FOLDER_OPEN_IN_FILE_MANAGER, CTX_FOLDER_REFRESH_FILES_FULL,
+    CTX_FOLDER_REFRESH_FILES_META, CTX_FOLDER_REFRESH_TREE_FULL,
+    CTX_FOLDER_REFRESH_TREE_RELATIVE,
 };
 use slint::Model;
 use std::sync::Arc;
@@ -236,6 +237,7 @@ fn test_folder_context_menu_open_in_file_manager_at_top() {
         false,
         true,
         &mut dot_hidden_cache,
+        false, // is_busy = false
     );
 
     assert_eq!(menu.items[0].kind, CtxMenuItemKind::Header);
@@ -246,6 +248,21 @@ fn test_folder_context_menu_open_in_file_manager_at_top() {
     assert_eq!(menu.items[2].kind, CtxMenuItemKind::Separator);
     assert_eq!(menu.items[3].text, "Rename Folder...");
 
-    assert!(menu.items.iter().any(|i| i.id == CTX_FOLDER_REFRESH));
-    assert!(menu.items.iter().any(|i| i.id == CTX_FOLDER_REFRESH_METADATA));
+    // Verify "Refresh..." submenu and nested actions
+    assert!(menu.items.iter().any(|i| i.text == "Refresh..."));
+    let refresh_sub = menu.items.iter().find(|i| i.text == "Refresh...").unwrap();
+    assert_eq!(refresh_sub.kind, CtxMenuItemKind::Submenu);
+    assert!(refresh_sub.is_enabled);
+
+    assert!(refresh_sub.children.iter().any(|i| i.id == CTX_FOLDER_REFRESH_FILES_FULL));
+    assert!(refresh_sub.children.iter().any(|i| i.id == CTX_FOLDER_REFRESH_FILES_META));
+    assert!(refresh_sub.children.iter().any(|i| i.id == CTX_FOLDER_REFRESH_TREE_FULL));
+    assert!(refresh_sub.children.iter().any(|i| i.id == CTX_FOLDER_REFRESH_TREE_RELATIVE));
+
+    // Verify shortcuts are None (no F5 claim)
+    for child in &refresh_sub.children {
+        if child.kind == CtxMenuItemKind::Action {
+            assert_eq!(child.shortcut, None);
+        }
+    }
 }

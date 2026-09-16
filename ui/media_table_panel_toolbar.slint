@@ -9,6 +9,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
     in-out property <string> search-text: "";
     in-out property <bool> regex-mode: false;
     in property <bool> is-table-view: true;
+    in property <bool> is-busy: false;
     in-out property <bool> is-virtual-folder: false;
     in property <bool> is-virtual-folder-enabled: true;
     in property <string> virtual-folder-tooltip: "";
@@ -37,7 +38,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
                     : "Recursive folder view: Show media from current folder and all subfolders")
         );
         is-active: root.is-virtual-folder;
-        is-enabled: root.is-virtual-folder-enabled;
+        is-enabled: root.is-virtual-folder-enabled && !root.is-busy;
         clicked => {
             root.is-virtual-folder = !root.is-virtual-folder;
             root.virtual-folder-toggled(root.is-virtual-folder);
@@ -49,6 +50,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
     // 3. Media Type Select Button (Videos, Images, Videos & Images)
     ToolbarSelectButton {
         current-index <=> root.media-type-filter-idx;
+        is-enabled: !root.is-busy;
         button-display-mode: 0; // Icon only on main button
         popup-display-mode: 2;  // Icon + Text in dropdown options
         tooltip: "Filter media types (Videos, Images, Videos & Images)";
@@ -95,6 +97,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
     ToolbarButton {
         icon: Icons.refresh;
         tooltip: "Scan and refresh media in current folder";
+        is-enabled: !root.is-busy;
         clicked => { root.refresh-clicked(); }
     }
 

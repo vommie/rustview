@@ -215,8 +215,14 @@ impl BridgeFolders {
         let win = window.clone_strong();
         let fs_refresh = fullscreen_controller.clone();
 
+        // 1. Toolbar Refresh Media Button (Single-Operation Guard)
         window.on_refresh_folder(move || {
             fs_refresh.dismiss_if_quick_fullscreen();
+            if BridgeMedia::is_system_busy(&win, &thumb, &st) {
+                StatusBarBridge::warn(&win, "Cannot refresh: another operation is already in progress.");
+                return;
+            }
+
             let (folder_id_opt, path_opt) = {
                 let s = st.read();
                 (s.current_folder_id, s.current_folder_path.clone())
@@ -226,7 +232,7 @@ impl BridgeFolders {
                     folder_id = id,
                     path = %LogObscurer::path(&path),
                     is_virtual_folder = st.read().is_virtual_folder_mode,
-                    "[FolderRefresh: Toolbar] User clicked Toolbar Refresh button. Executing explicit full refresh & thumbnail generation."
+                    "[FolderRefresh: Toolbar] Executing explicit full media refresh & thumbnail generation."
                 );
                 Self::refresh_folder_explicit(id, path, &win, &lib, &thumb, &set, &st);
             }
@@ -270,15 +276,38 @@ impl BridgeFolders {
             Self::toggle_expand(id as u64, &win, &lib, &set, &st);
         });
 
-        let lib = library.clone();
-        let set = settings.clone();
-        let st = state.clone();
-        let win = window.clone_strong();
-        let fs_frefresh = fullscreen_controller.clone();
-        window.on_folder_refresh_clicked(move || {
-            fs_frefresh.dismiss_if_quick_fullscreen();
-            st.write().last_active_panel = LastActivePanel::Folder;
-            Self::refresh_folder_tree(&win, &lib, &set, &st);
+        // 2. Folder Tree Combo-Button: Option 0 = Entire Tree Scan
+        let lib_all = library.clone();
+        let thumb_all = thumbnails.clone();
+        let set_all = settings.clone();
+        let st_all = state.clone();
+        let win_all = window.clone_strong();
+        let fs_all = fullscreen_controller.clone();
+        window.on_folder_refresh_all_clicked(move || {
+            fs_all.dismiss_if_quick_fullscreen();
+            st_all.write().last_active_panel = LastActivePanel::Folder;
+            if BridgeMedia::is_system_busy(&win_all, &thumb_all, &st_all) {
+                StatusBarBridge::warn(&win_all, "Cannot refresh folder tree: another operation is already in progress.");
+                return;
+            }
+            Self::refresh_folder_tree(&win_all, &lib_all, &thumb_all, &set_all, &st_all);
+        });
+
+        // 3. Folder Tree Combo-Button: Option 1 = Relative Subtree Scan
+        let lib_rel = library.clone();
+        let thumb_rel = thumbnails.clone();
+        let set_rel = settings.clone();
+        let st_rel = state.clone();
+        let win_rel = window.clone_strong();
+        let fs_rel = fullscreen_controller.clone();
+        window.on_folder_refresh_relative_clicked(move || {
+            fs_rel.dismiss_if_quick_fullscreen();
+            st_rel.write().last_active_panel = LastActivePanel::Folder;
+            if BridgeMedia::is_system_busy(&win_rel, &thumb_rel, &st_rel) {
+                StatusBarBridge::warn(&win_rel, "Cannot refresh folder tree: another operation is already in progress.");
+                return;
+            }
+            Self::refresh_selected_folder_subtree(&win_rel, &lib_rel, &thumb_rel, &set_rel, &st_rel);
         });
 
         let lib = library.clone();
@@ -484,12 +513,22 @@ impl BridgeFolders {
         });
     }
 
+    /// Full recursive scan starting from the library root folder.
     pub fn refresh_folder_tree(
         window: &MainWindow,
         library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        if BridgeMedia::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot refresh folder tree: another operation is already in progress.",
+            );
+            return;
+        }
+
         let root_setting = settings.get().general.root_folder;
         let Some(ref root_dir) = root_setting else {
             StatusBarBridge::warn(window, "Cannot refresh folders: No root directory configured.");
@@ -507,8 +546,9 @@ impl BridgeFolders {
             st.is_refreshing_folders = true;
             st.folder_scan_count = 0;
         }
+        window.set_is_system_busy(true);
         StatusBarBridge::update_folder_scan_progress(window, true, 0);
-        StatusBarBridge::info(window, "Scanning directory tree on filesystem...");
+        StatusBarBridge::info(window, "Scanning entire directory tree on filesystem...");
 
         let t_start = Instant::now();
         let w_weak = window.as_weak();
@@ -527,7 +567,7 @@ impl BridgeFolders {
                     &normalized_root,
                     Some(move |count| {
                         let mut last = last_progress_report.lock();
-                        if last.elapsed().as_millis() >= 40 {
+                        if last.elapsed().as_millis() >= 35 {
                             *last = Instant::now();
                             let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
                                 StatusBarBridge::update_folder_scan_progress(&w, true, count);
@@ -540,25 +580,44 @@ impl BridgeFolders {
                     {
                         let mut s = st.write();
                         s.is_refreshing_folders = false;
-                        s.invalidate_folder_tree_cache();
                     }
                     StatusBarBridge::update_folder_scan_progress(&w, false, 0);
 
                     match report_res {
                         Ok(report) => {
-                            let status_msg = format!(
-                                "Folder scan completed in {}ms: {} total dirs, {} new added, {} deleted, {} restored",
-                                t_start.elapsed().as_millis(),
-                                report.total_scanned_dirs,
-                                report.new_folders_added,
-                                report.folders_marked_deleted,
-                                report.folders_restored
-                            );
-                            StatusBarBridge::success(&w, status_msg);
-                            Self::reload_tree(&w, &lib, &set, &st);
-                            Self::scroll_to_selected(&w);
-                            BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
-                            StatusBarBridge::update_metrics(&w, &st);
+                            let elapsed_ms = t_start.elapsed().as_millis();
+                            if !report.has_changes() {
+                                tracing::info!(
+                                    scanned = report.total_scanned_dirs,
+                                    elapsed_ms,
+                                    "[FolderTreeRefresh] Full scan verified: No changes detected in tree. Tree re-render bypassed."
+                                );
+                                StatusBarBridge::info(
+                                    &w,
+                                    format!(
+                                        "Tree verified in {}ms: No changes detected ({} dirs checked).",
+                                        elapsed_ms, report.total_scanned_dirs
+                                    ),
+                                );
+                            } else {
+                                {
+                                    let mut s = st.write();
+                                    s.invalidate_folder_tree_cache();
+                                }
+                                let status_msg = format!(
+                                    "Tree scan completed in {}ms: {} total dirs ({} new added, {} removed, {} restored).",
+                                    elapsed_ms,
+                                    report.total_scanned_dirs,
+                                    report.new_folders_added,
+                                    report.folders_marked_deleted,
+                                    report.folders_restored
+                                );
+                                StatusBarBridge::success(&w, status_msg);
+                                Self::reload_tree(&w, &lib, &set, &st);
+                                Self::scroll_to_selected(&w);
+                                BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
+                                StatusBarBridge::update_metrics(&w, &st);
+                            }
                         }
                         Err(e) => {
                             tracing::error!(error = %e, "[FolderTreeRefreshError] Failed to refresh folder tree");
@@ -568,6 +627,162 @@ impl BridgeFolders {
                 });
             })
             .expect("Failed to spawn folder tree refresher background thread");
+    }
+
+    /// Triggers a relative scan on the currently selected folder in the tree.
+    pub fn refresh_selected_folder_subtree(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let (target_fid, target_path) = {
+            let st = state.read();
+            (st.current_folder_id, st.current_folder_path.clone())
+        };
+
+        if let (Some(fid), Some(path)) = (target_fid, target_path) {
+            Self::refresh_folder_subtree(fid, path, window, library, thumbnails, settings, state);
+        } else {
+            StatusBarBridge::warn(
+                window,
+                "No folder selected for relative tree refresh. Please select a folder first.",
+            );
+        }
+    }
+
+    /// Highly optimized, targeted recursive scan restricted to a specific subfolder subtree.
+    pub fn refresh_folder_subtree(
+        folder_id: FolderId,
+        path: PathBuf,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        if BridgeMedia::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot refresh folder tree: another operation is already in progress.",
+            );
+            return;
+        }
+
+        let normalized_path = normalize_path(&path);
+        if !normalized_path.is_dir() {
+            StatusBarBridge::error(window, "Selected folder directory not found on filesystem.");
+            return;
+        }
+
+        let folder_name = normalized_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
+
+        {
+            let mut st = state.write();
+            st.is_refreshing_folders = true;
+            st.folder_scan_count = 0;
+        }
+        window.set_is_system_busy(true);
+        StatusBarBridge::update_folder_scan_progress(window, true, 0);
+        StatusBarBridge::info(
+            window,
+            format!("Scanning subfolder tree under '{}' on filesystem...", folder_name),
+        );
+
+        let t_start = Instant::now();
+        let w_weak = window.as_weak();
+        let lib = library.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        let f_name_owned = folder_name.clone();
+
+        std::thread::Builder::new()
+            .name(format!("folder-subtree-refresher-{}", folder_id))
+            .spawn(move || {
+                let refresher = lib.folder_tree_refresher();
+                let w_weak_progress = w_weak.clone();
+                let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
+
+                let report_res = refresher.refresh_subtree(
+                    &normalized_path,
+                    Some(move |count| {
+                        let mut last = last_progress_report.lock();
+                        if last.elapsed().as_millis() >= 35 {
+                            *last = Instant::now();
+                            let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
+                                StatusBarBridge::update_folder_scan_progress(&w, true, count);
+                            });
+                        }
+                    }),
+                );
+
+                let _ = w_weak.upgrade_in_event_loop(move |w| {
+                    {
+                        let mut s = st.write();
+                        s.is_refreshing_folders = false;
+                    }
+                    StatusBarBridge::update_folder_scan_progress(&w, false, 0);
+
+                    match report_res {
+                        Ok(report) => {
+                            let elapsed_ms = t_start.elapsed().as_millis();
+                            if !report.has_changes() {
+                                tracing::info!(
+                                    folder_id,
+                                    folder_name = %f_name_owned,
+                                    scanned = report.total_scanned_dirs,
+                                    elapsed_ms,
+                                    "[FolderTreeSubtree] Relative scan verified: No changes detected in subtree. Tree re-render bypassed."
+                                );
+                                StatusBarBridge::info(
+                                    &w,
+                                    format!(
+                                        "Subtree verified in {}ms: No changes in '{}' ({} subdirs checked).",
+                                        elapsed_ms, f_name_owned, report.total_scanned_dirs
+                                    ),
+                                );
+                            } else {
+                                {
+                                    let mut s = st.write();
+                                    s.invalidate_folder_tree_cache();
+                                }
+                                tracing::info!(
+                                    folder_id,
+                                    folder_name = %f_name_owned,
+                                    new_added = report.new_folders_added,
+                                    deleted = report.folders_marked_deleted,
+                                    restored = report.folders_restored,
+                                    elapsed_ms,
+                                    "[FolderTreeSubtree] Relative scan completed with changes. Synchronizing tree view."
+                                );
+                                let status_msg = format!(
+                                    "Subtree scan completed in {}ms for '{}': {} dirs scanned ({} new added, {} removed, {} restored).",
+                                    elapsed_ms,
+                                    f_name_owned,
+                                    report.total_scanned_dirs,
+                                    report.new_folders_added,
+                                    report.folders_marked_deleted,
+                                    report.folders_restored
+                                );
+                                StatusBarBridge::success(&w, status_msg);
+                                Self::reload_tree(&w, &lib, &set, &st);
+                                Self::scroll_to_selected(&w);
+                                BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
+                                StatusBarBridge::update_metrics(&w, &st);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(folder_id, error = %e, "[FolderSubtreeRefreshError] Failed to refresh subtree");
+                            StatusBarBridge::error(&w, format!("Subtree scan failed: {}", e));
+                        }
+                    }
+                });
+            })
+            .expect("Failed to spawn folder subtree refresher background thread");
     }
 
     pub fn select_folder(
@@ -602,6 +817,14 @@ impl BridgeFolders {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        if BridgeMedia::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot refresh: another operation is already in progress.",
+            );
+            return;
+        }
+
         Self::select_folder_internal(
             folder_id,
             path,
@@ -621,8 +844,17 @@ impl BridgeFolders {
         path: PathBuf,
         window: &MainWindow,
         library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        if BridgeMedia::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot refresh: another operation is already in progress.",
+            );
+            return;
+        }
+
         let normalized_path = normalize_path(&path);
         let folder_name = normalized_path
             .file_name()
@@ -657,6 +889,7 @@ impl BridgeFolders {
             targets,
             window,
             library,
+            thumbnails,
             state,
             &format!("folder '{}'", folder_name),
         );
@@ -734,7 +967,7 @@ impl BridgeFolders {
         Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
-        // Collect target folder IDs (either single active folder or recursive subtree)
+        // Collect target folder IDs
         let target_folder_ids = if is_virtual_folder {
             ctx.library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
         } else {

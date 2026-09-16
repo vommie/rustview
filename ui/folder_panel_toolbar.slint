@@ -1,16 +1,18 @@
 import { Theme } from "styles.slint";
 import { Icons } from "icons.slint";
-import { PanelToolbar, ToolbarButton, ToolbarSpacer, ToolbarSeparator } from "panel_toolbar.slint";
+import { PanelToolbar, ToolbarButton, ToolbarSpacer, ToolbarSeparator, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
 import { Throbber } from "throbber.slint";
 
 /// Specialized, fully encapsulated horizontal toolbar for the Folders Panel.
 /// Houses folder tree control actions such as rescanning, structure refresh, active background throbber indicator,
-/// collapse-all non-active branches, and toggle button for showing/hiding hidden folders.
+/// collapse-all non-active branches, toggle button for showing/hiding hidden folders, and an intelligent combo refresh button.
 export component FolderPanelToolbar inherits PanelToolbar {
     in property <bool> is-refreshing: false;
+    in property <bool> is-busy: false;
     in-out property <bool> show-hidden: false;
+    in-out property <int> refresh-mode-idx: 0;
 
-    callback refresh-clicked();
+    callback refresh-selected(int /* 0 = Entire Tree, 1 = Selected Folder */);
     callback collapse-all-clicked();
     callback toggle-hidden-clicked(bool);
 
@@ -51,11 +53,30 @@ export component FolderPanelToolbar inherits PanelToolbar {
 
     ToolbarSeparator {}
 
-    // 5. Folder Refresh Action Button
-    ToolbarButton {
-        icon: Icons.refresh;
-        tooltip: "Scan and refresh folder structure";
-        is-enabled: !root.is-refreshing;
-        clicked => { root.refresh-clicked(); }
+    // 5. Folder Tree Refresh Combo-Button (ToolbarSelectButton API)
+    ToolbarSelectButton {
+        current-index <=> root.refresh-mode-idx;
+        is-enabled: !root.is-busy && !root.is-refreshing;
+        button-display-mode: 0; // Icon only on main button
+        popup-display-mode: 2;  // Icon + Text in dropdown options
+        popup-align-right: true;
+        tooltip: "Scan and refresh folder tree (Entire Tree or Selected Folder)";
+
+        model: [
+            {
+                id: 0,
+                text: "Refresh Entire Tree (Full)",
+                icon: Icons.refresh
+            },
+            {
+                id: 1,
+                text: "Refresh Selected Folder (Relative)",
+                icon: Icons.refresh
+            }
+        ];
+
+        selected(idx) => {
+            root.refresh-selected(idx);
+        }
     }
 }

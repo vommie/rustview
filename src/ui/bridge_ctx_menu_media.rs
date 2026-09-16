@@ -135,14 +135,14 @@ impl MediaContextMenu {
         selected_count: usize,
         is_single_image: bool,
         all_selected_deleted: bool,
-        _is_busy: bool,
+        is_busy: bool,
         associated_apps: &[DesktopApp],
     ) -> CtxMenu {
         let is_single = selected_count == 1;
         let can_open = selected_count > 0;
-        let can_rename = is_single;
+        let can_rename = is_single && !is_busy;
         let can_copy = selected_count > 0;
-        let can_refresh = selected_count > 0;
+        let can_refresh = selected_count > 0 && !is_busy;
 
         let open_in_tab_text = if is_single {
             "Open in Tab".to_string()
@@ -315,7 +315,7 @@ impl MediaContextMenu {
                 delete_action_text,
                 Some("Del"),
                 Some("trash"),
-                selected_count > 0,
+                selected_count > 0 && !is_busy,
             )
             .separator()
             .submenu(
@@ -444,6 +444,13 @@ impl MediaContextMenu {
                 Self::handle_copy_image_action(window, ctx, &selected_ids);
             }
             CTX_ACTION_DELETE_MEDIA => {
+                if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
+                    StatusBarBridge::warn(
+                        window,
+                        "Cannot delete files: an active operation is in progress.",
+                    );
+                    return;
+                }
                 let ids_vec: Vec<MediaId> = selected_ids.into_iter().collect();
                 let dialog_ctx = FileDialogContext {
                     library: ctx.library.clone(),
@@ -455,6 +462,13 @@ impl MediaContextMenu {
                 ctx.delete_file_dialog.show(window, ids_vec, dialog_ctx);
             }
             CTX_ACTION_REMOVE_FROM_DB => {
+                if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
+                    StatusBarBridge::warn(
+                        window,
+                        "Cannot modify database: an active operation is in progress.",
+                    );
+                    return;
+                }
                 let ids_vec: Vec<MediaId> = selected_ids.into_iter().collect();
                 let dialog_ctx = FileDialogContext {
                     library: ctx.library.clone(),
@@ -466,13 +480,28 @@ impl MediaContextMenu {
                 ctx.remove_orphaned_dialog.show(window, ids_vec, dialog_ctx);
             }
             CTX_ACTION_REFRESH_METADATA => {
+                if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
+                    StatusBarBridge::warn(
+                        window,
+                        "Cannot start refresh: another operation is already in progress.",
+                    );
+                    return;
+                }
                 BridgeMedia::refresh_selected_metadata_only(
                     window,
                     ctx.library,
+                    ctx.thumbnails,
                     ctx.state,
                 );
             }
             CTX_ACTION_REFRESH_FILES => {
+                if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
+                    StatusBarBridge::warn(
+                        window,
+                        "Cannot start refresh: another operation is already in progress.",
+                    );
+                    return;
+                }
                 BridgeMedia::refresh_selected_media(
                     window,
                     ctx.library,
@@ -483,6 +512,13 @@ impl MediaContextMenu {
                 );
             }
             CTX_ACTION_RENAME => {
+                if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
+                    StatusBarBridge::warn(
+                        window,
+                        "Cannot rename: an active operation is in progress.",
+                    );
+                    return;
+                }
                 Self::handle_rename_action(window, ctx, &selected_ids);
             }
             CTX_ACTION_SELECT_ALL => {

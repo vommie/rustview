@@ -5,7 +5,10 @@ use rustview::library::Library;
 use rustview::settings::SettingsManager;
 use rustview::ui::bridge_ctx_menu::FolderContextMenuBuilder;
 use rustview::ui::bridge_folders::{BridgeFolders, FolderFlattenContext, FolderTreeBuilder};
-use rustview::ui::bridge_state::{UiState, CTX_FOLDER_REFRESH, CTX_FOLDER_REFRESH_METADATA};
+use rustview::ui::bridge_state::{
+    UiState, CTX_FOLDER_REFRESH_FILES_FULL, CTX_FOLDER_REFRESH_FILES_META,
+    CTX_FOLDER_REFRESH_TREE_FULL, CTX_FOLDER_REFRESH_TREE_RELATIVE,
+};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use tempfile::tempdir;
@@ -34,6 +37,7 @@ fn test_folder_tree_hierarchy_building_and_counts() {
         .expect("Folder refresh failed");
 
     assert_eq!(report.new_folders_added, 4); // root, sub1, sub1_a, sub2
+    assert!(report.has_changes());
 
     let folders = lib.folders().list_folders().unwrap();
     assert_eq!(folders.len(), 4);
@@ -115,6 +119,55 @@ fn test_folder_tree_hierarchy_building_and_counts() {
 }
 
 #[test]
+fn test_folder_tree_refresher_subtree_and_has_changes() {
+    let tmp_db = tempdir().unwrap();
+    let tmp_media = tempdir().unwrap();
+
+    let lib = Library::open(tmp_db.path()).expect("Failed to open LMDB library");
+    let root = tmp_media.path();
+
+    let sub1 = root.join("Sub1");
+    let sub2 = root.join("Sub2");
+    fs::create_dir_all(&sub1).unwrap();
+    fs::create_dir_all(&sub2).unwrap();
+
+    // Initial full tree refresh
+    let report_initial = lib
+        .folder_tree_refresher()
+        .refresh_tree(root, None::<fn(usize)>)
+        .unwrap();
+    assert_eq!(report_initial.new_folders_added, 3);
+    assert!(report_initial.has_changes());
+
+    // 1. Relative scan on Sub1 with no changes on disk
+    let report_unchanged = lib
+        .folder_tree_refresher()
+        .refresh_subtree(&sub1, None::<fn(usize)>)
+        .unwrap();
+    assert_eq!(report_unchanged.total_scanned_dirs, 1);
+    assert_eq!(report_unchanged.new_folders_added, 0);
+    assert_eq!(report_unchanged.folders_marked_deleted, 0);
+    assert_eq!(report_unchanged.folders_restored, 0);
+    assert!(!report_unchanged.has_changes());
+
+    // 2. Add sub-folder inside Sub1 on disk
+    let sub1_nested = sub1.join("Nested_A");
+    fs::create_dir_all(&sub1_nested).unwrap();
+
+    let report_changed = lib
+        .folder_tree_refresher()
+        .refresh_subtree(&sub1, None::<fn(usize)>)
+        .unwrap();
+    assert_eq!(report_changed.total_scanned_dirs, 2);
+    assert_eq!(report_changed.new_folders_added, 1);
+    assert!(report_changed.has_changes());
+
+    // Sub2 outside Sub1 must be completely unaffected
+    let sub2_folder = lib.folders().get_folder_by_path(&sub2).unwrap().unwrap();
+    assert!(!sub2_folder.is_deleted);
+}
+
+#[test]
 fn test_folder_context_menu_items_and_refresh_action() {
     let tmp_db = tempdir().unwrap();
     let tmp_media = tempdir().unwrap();
@@ -137,6 +190,7 @@ fn test_folder_context_menu_items_and_refresh_action() {
 
     let mut dot_hidden_cache = DotHiddenCache::new();
 
+    // 1. Test when system is NOT busy
     let menu = FolderContextMenuBuilder::build_menu(
         &sub1_folder,
         &tree,
@@ -144,26 +198,52 @@ fn test_folder_context_menu_items_and_refresh_action() {
         false,
         true,
         &mut dot_hidden_cache,
+        false, // is_busy = false
     );
 
-    let refresh_item = menu
+    let refresh_sub = menu
         .items
         .iter()
-        .find(|item| item.id == CTX_FOLDER_REFRESH)
-        .expect("Refresh Folder (Full) menu item must exist in folder context menu");
+        .find(|item| item.text == "Refresh...")
+        .expect("Refresh... submenu must exist in folder context menu");
 
-    assert_eq!(refresh_item.text, "Refresh Folder (Full)");
-    assert_eq!(refresh_item.shortcut, Some("F5".to_string()));
-    assert!(refresh_item.is_enabled);
+    assert!(refresh_sub.is_enabled);
 
-    let refresh_meta_item = menu
-        .items
+    let files_full = refresh_sub
+        .children
         .iter()
-        .find(|item| item.id == CTX_FOLDER_REFRESH_METADATA)
-        .expect("Refresh Folder (Metadata) menu item must exist in folder context menu");
+        .find(|item| item.id == CTX_FOLDER_REFRESH_FILES_FULL)
+        .expect("Refresh Files (Full) must exist in Refresh... submenu");
+    assert_eq!(files_full.text, "Refresh Files (Full)");
+    assert_eq!(files_full.shortcut, None); // F5 hotkey claim removed
+    assert!(files_full.is_enabled);
 
-    assert_eq!(refresh_meta_item.text, "Refresh Folder (Metadata)");
-    assert!(refresh_meta_item.is_enabled);
+    let files_meta = refresh_sub
+        .children
+        .iter()
+        .find(|item| item.id == CTX_FOLDER_REFRESH_FILES_META)
+        .expect("Refresh Files (Meta) must exist in Refresh... submenu");
+    assert_eq!(files_meta.text, "Refresh Files (Meta)");
+    assert_eq!(files_meta.shortcut, None);
+    assert!(files_meta.is_enabled);
+
+    let tree_full = refresh_sub
+        .children
+        .iter()
+        .find(|item| item.id == CTX_FOLDER_REFRESH_TREE_FULL)
+        .expect("Refresh Tree (Full) must exist in Refresh... submenu");
+    assert_eq!(tree_full.text, "Refresh Tree (Full)");
+    assert_eq!(tree_full.shortcut, None);
+    assert!(tree_full.is_enabled);
+
+    let tree_rel = refresh_sub
+        .children
+        .iter()
+        .find(|item| item.id == CTX_FOLDER_REFRESH_TREE_RELATIVE)
+        .expect("Refresh Tree (Relative) must exist in Refresh... submenu");
+    assert_eq!(tree_rel.text, "Refresh Tree (Relative)");
+    assert_eq!(tree_rel.shortcut, None);
+    assert!(tree_rel.is_enabled);
 
     let move_item = menu
         .items
@@ -171,6 +251,24 @@ fn test_folder_context_menu_items_and_refresh_action() {
         .find(|item| item.text == "Move to...")
         .expect("Move to... item must exist");
     assert!(move_item.is_enabled);
+
+    // 2. Test when system IS busy -> Refresh submenu and items must be disabled!
+    let menu_busy = FolderContextMenuBuilder::build_menu(
+        &sub1_folder,
+        &tree,
+        false,
+        false,
+        true,
+        &mut dot_hidden_cache,
+        true, // is_busy = true
+    );
+
+    let refresh_sub_busy = menu_busy
+        .items
+        .iter()
+        .find(|item| item.text == "Refresh...")
+        .expect("Refresh... submenu must exist");
+    assert!(!refresh_sub_busy.is_enabled);
 }
 
 #[test]

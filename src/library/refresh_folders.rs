@@ -19,6 +19,14 @@ pub struct FolderTreeRefreshReport {
     pub unchanged_folders: usize,
 }
 
+impl FolderTreeRefreshReport {
+    /// Returns true if any filesystem structure changes were detected (additions, deletions, or restorations).
+    #[inline]
+    pub fn has_changes(&self) -> bool {
+        self.new_folders_added > 0 || self.folders_marked_deleted > 0 || self.folders_restored > 0
+    }
+}
+
 pub struct FolderTreeRefresher<'a> {
     db: &'a LibraryDatabase,
 }
@@ -28,8 +36,7 @@ impl<'a> FolderTreeRefresher<'a> {
         Self { db }
     }
 
-    /// Parallelized recursive directory scan and LMDB synchronization.
-    /// Uses Linux d_type getdents64 extraction without regular file stat calls across all CPU threads.
+    /// Parallelized recursive directory scan and LMDB synchronization for the entire library tree.
     pub fn refresh_tree<F>(
         &self,
         root_path: &Path,
@@ -38,27 +45,51 @@ impl<'a> FolderTreeRefresher<'a> {
     where
         F: Fn(usize) + Send + Sync + 'static,
     {
+        self.refresh_path(root_path, progress_callback)
+    }
+
+    /// Targeted, highly efficient recursive directory scan and LMDB synchronization for a specific subfolder subtree.
+    pub fn refresh_subtree<F>(
+        &self,
+        target_path: &Path,
+        progress_callback: Option<F>,
+    ) -> Result<FolderTreeRefreshReport, LibraryError>
+    where
+        F: Fn(usize) + Send + Sync + 'static,
+    {
+        self.refresh_path(target_path, progress_callback)
+    }
+
+    /// Core engine performing parallel directory discovery and atomic LMDB synchronization for any root or subtree path.
+    pub fn refresh_path<F>(
+        &self,
+        base_path: &Path,
+        progress_callback: Option<F>,
+    ) -> Result<FolderTreeRefreshReport, LibraryError>
+    where
+        F: Fn(usize) + Send + Sync + 'static,
+    {
         let t_total = Instant::now();
-        let canonical_root = match root_path.canonicalize() {
+        let canonical_base = match base_path.canonicalize() {
             Ok(p) => p,
-            Err(_) => root_path.to_path_buf(),
+            Err(_) => base_path.to_path_buf(),
         };
 
-        let root_str = canonical_root.to_string_lossy().to_string();
+        let base_str = canonical_base.to_string_lossy().to_string();
         tracing::info!(
-            root = %LogObscurer::path(&canonical_root),
+            target_base = %LogObscurer::path(&canonical_base),
             "[Benchmark: FolderTreeScan] Starting parallel multi-threaded directory discovery..."
         );
 
         // 1. Ultra-fast multi-core recursive directory discovery (Zero inner canonicalize syscalls)
         let t_fs_discovery = Instant::now();
         let discovered =
-            Self::discover_directories_parallel(&canonical_root, progress_callback.as_ref())?;
+            Self::discover_directories_parallel(&canonical_base, progress_callback.as_ref())?;
         let total_scanned = discovered.len();
         let fs_elapsed_ms = t_fs_discovery.elapsed().as_millis();
 
         tracing::info!(
-            root = %LogObscurer::path(&canonical_root),
+            target_base = %LogObscurer::path(&canonical_base),
             discovered_dirs = total_scanned,
             fs_discovery_ms = fs_elapsed_ms,
             "[Benchmark: FolderTreeScan] Parallel directory discovery completed. Beginning LMDB sync transaction..."
@@ -72,14 +103,14 @@ impl<'a> FolderTreeRefresher<'a> {
             ..Default::default()
         };
 
-        // Ensure root folder itself is registered
-        let root_folder_id = match self.db.folders_by_path.get(&wtxn, &root_str)? {
+        // Ensure base folder itself is registered
+        let base_folder_id = match self.db.folders_by_path.get(&wtxn, &base_str)? {
             Some(id) => {
-                if let Some(mut root_record) = self.db.folders.get(&wtxn, &id)?
-                    && root_record.is_deleted
+                if let Some(mut base_record) = self.db.folders.get(&wtxn, &id)?
+                    && base_record.is_deleted
                 {
-                    root_record.is_deleted = false;
-                    self.db.folders.put(&mut wtxn, &id, &root_record)?;
+                    base_record.is_deleted = false;
+                    self.db.folders.put(&mut wtxn, &id, &base_record)?;
                     report.folders_restored += 1;
                 }
                 id
@@ -88,7 +119,7 @@ impl<'a> FolderTreeRefresher<'a> {
                 let new_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
                 let record = FolderRecord {
                     id: new_id,
-                    path: root_str.clone(),
+                    path: base_str.clone(),
                     added_at: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_secs() as i64)
@@ -96,7 +127,7 @@ impl<'a> FolderTreeRefresher<'a> {
                     is_deleted: false,
                 };
                 self.db.folders.put(&mut wtxn, &new_id, &record)?;
-                self.db.folders_by_path.put(&mut wtxn, &root_str, &new_id)?;
+                self.db.folders_by_path.put(&mut wtxn, &base_str, &new_id)?;
                 self.db
                     .media_by_folder
                     .put(&mut wtxn, &new_id, &Vec::new())?;
@@ -105,25 +136,25 @@ impl<'a> FolderTreeRefresher<'a> {
             }
         };
 
-        // Load all existing folders under root from LMDB
-        let mut existing_in_root: HashMap<String, (FolderId, FolderRecord)> = HashMap::new();
+        // Load all existing folders under base from LMDB
+        let mut existing_in_base: HashMap<String, (FolderId, FolderRecord)> = HashMap::new();
         for entry in self.db.folders.iter(&wtxn)? {
             let (id, record) = entry?;
             let path_obj = Path::new(&record.path);
-            if path_obj.starts_with(&canonical_root) && record.id != root_folder_id {
-                existing_in_root.insert(record.path.clone(), (id, record));
+            if path_obj.starts_with(&canonical_base) && record.id != base_folder_id {
+                existing_in_base.insert(record.path.clone(), (id, record));
             }
         }
 
         // Process all discovered subdirectories
         for dir_path in discovered {
-            if dir_path == canonical_root {
+            if dir_path == canonical_base {
                 continue;
             }
 
             let path_str = dir_path.to_string_lossy().to_string();
 
-            if let Some((id, mut existing_rec)) = existing_in_root.remove(&path_str) {
+            if let Some((id, mut existing_rec)) = existing_in_base.remove(&path_str) {
                 if existing_rec.is_deleted {
                     existing_rec.is_deleted = false;
                     self.db.folders.put(&mut wtxn, &id, &existing_rec)?;
@@ -152,8 +183,8 @@ impl<'a> FolderTreeRefresher<'a> {
             }
         }
 
-        // Any remaining records in existing_in_root are missing on physical disk -> mark is_deleted = true
-        for (id, mut missing_rec) in existing_in_root.into_values() {
+        // Any remaining records in existing_in_base are missing on physical disk -> mark is_deleted = true
+        for (id, mut missing_rec) in existing_in_base.into_values() {
             if !missing_rec.is_deleted {
                 missing_rec.is_deleted = true;
                 self.db.folders.put(&mut wtxn, &id, &missing_rec)?;
@@ -165,15 +196,17 @@ impl<'a> FolderTreeRefresher<'a> {
         let lmdb_elapsed_ms = t_lmdb_sync.elapsed().as_millis();
 
         tracing::info!(
+            target_base = %LogObscurer::path(&canonical_base),
             total_scanned = report.total_scanned_dirs,
             new_added = report.new_folders_added,
             marked_deleted = report.folders_marked_deleted,
             restored = report.folders_restored,
             unchanged = report.unchanged_folders,
+            has_changes = report.has_changes(),
             fs_discovery_ms = fs_elapsed_ms,
             lmdb_sync_ms = lmdb_elapsed_ms,
             total_time_ms = t_total.elapsed().as_millis(),
-            "[Benchmark: FolderTreeCommit] Folder tree refresh transaction committed to LMDB storage."
+            "[Benchmark: FolderTreeCommit] Folder tree scan transaction committed to LMDB storage."
         );
 
         Ok(report)
@@ -222,9 +255,9 @@ impl<'a> FolderTreeRefresher<'a> {
         let added_count = sub_dirs.len();
         local_dirs.push(dir);
 
-        let cur = counter.fetch_add(added_count, Ordering::Relaxed);
+        let cur = counter.fetch_add(added_count, Ordering::Relaxed) + added_count;
         if let Some(cb) = progress_callback
-            && cur.is_multiple_of(256)
+            && (cur.is_multiple_of(32) || cur == added_count)
         {
             cb(cur);
         }
@@ -267,9 +300,9 @@ impl<'a> FolderTreeRefresher<'a> {
                     if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
                         let p = entry.path();
                         queue.push_back(p);
-                        let cur = counter.fetch_add(1, Ordering::Relaxed);
+                        let cur = counter.fetch_add(1, Ordering::Relaxed) + 1;
                         if let Some(cb) = progress_callback
-                            && cur.is_multiple_of(256)
+                            && (cur.is_multiple_of(32) || cur == 1)
                         {
                             cb(cur);
                         }

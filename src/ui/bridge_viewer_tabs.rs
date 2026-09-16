@@ -207,7 +207,7 @@ impl BridgeViewerTabs {
             }
         });
 
-        // 7. Viewer Toolbar Refresh Button
+        // 7. Viewer Toolbar Refresh Button (Guarded by is_system_busy)
         let win_v_refresh = window.clone_strong();
         let tm_v_refresh = tab_manager.clone();
         let lib_v_refresh = library.clone();
@@ -216,6 +216,10 @@ impl BridgeViewerTabs {
         let st_v_refresh = state.clone();
         let fs_v_refresh = fullscreen_controller.clone();
         window.on_viewer_refresh(move || {
+            if BridgeMedia::is_system_busy(&win_v_refresh, &thumb_v_refresh, &st_v_refresh) {
+                StatusBarBridge::warn(&win_v_refresh, "Cannot refresh: another operation is already in progress.");
+                return;
+            }
             tracing::info!("[BridgeViewerTabs: Refresh] Refresh requested from viewer toolbar");
             Self::refresh_active_tab(
                 &win_v_refresh,
@@ -740,6 +744,14 @@ impl BridgeViewerTabs {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        if BridgeMedia::is_system_busy(window, thumbnails, state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot refresh active tab: another operation is already in progress.",
+            );
+            return;
+        }
+
         let active_media_id = match tab_manager.get_active_media_id() {
             Some(id) => id,
             None => return,

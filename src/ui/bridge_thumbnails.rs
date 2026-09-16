@@ -1,4 +1,5 @@
 use super::MainWindow;
+use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms};
@@ -11,7 +12,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Subsystem managing background thumbnail worker draining and UI status bar reflection.
+/// Subsystem managing background thumbnail worker draining, UI status bar reflection, and live busy-state propagation.
 pub struct BridgeThumbnails;
 
 impl BridgeThumbnails {
@@ -32,6 +33,12 @@ impl BridgeThumbnails {
                 let Some(window) = window_weak.upgrade() else {
                     return;
                 };
+
+                // Keep window.is_system_busy continuously synchronized with high precision
+                let is_busy = BridgeMedia::is_system_busy(&window, &thumb_ref, &st_ref);
+                if window.get_is_system_busy() != is_busy {
+                    window.set_is_system_busy(is_busy);
+                }
 
                 let t_drain_start = Instant::now();
                 let batch = thumb_ref.drain_ready_batch(64);

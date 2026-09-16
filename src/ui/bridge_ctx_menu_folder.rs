@@ -1,6 +1,7 @@
 use super::MainWindow;
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::bridge_folders::{BridgeFolders, FolderTreeNode};
+use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
@@ -33,6 +34,7 @@ impl FolderContextMenu {
         show_hidden_folders: bool,
         support_dot_hidden_files: bool,
         dot_hidden_cache: &mut DotHiddenCache,
+        is_busy: bool,
     ) -> CtxMenu {
         let t0 = Instant::now();
         let target_path = Path::new(&target_folder.path);
@@ -79,22 +81,40 @@ impl FolderContextMenu {
             builder = builder.item(move_submenu);
         }
 
-        // Separator above and below Refresh Folder options
+        // Modular "Refresh..." submenu containing files and tree refreshes (no F5 shortcuts!)
+        let can_refresh = !target_folder.is_deleted && !is_busy;
         builder = builder.separator();
-        builder = builder.action(
-            CTX_FOLDER_REFRESH,
-            "Refresh Folder (Full)",
-            Some("F5"),
-            Some("refresh"),
-            !target_folder.is_deleted,
-        );
-        builder = builder.action(
-            CTX_FOLDER_REFRESH_METADATA,
-            "Refresh Folder (Metadata)",
-            None,
-            Some("refresh"),
-            !target_folder.is_deleted,
-        );
+        builder = builder.submenu("Refresh...", Some("refresh"), can_refresh, |sub| {
+            sub.action(
+                CTX_FOLDER_REFRESH_FILES_FULL,
+                "Refresh Files (Full)",
+                None,
+                Some("refresh"),
+                can_refresh,
+            )
+            .action(
+                CTX_FOLDER_REFRESH_FILES_META,
+                "Refresh Files (Meta)",
+                None,
+                Some("refresh"),
+                can_refresh,
+            )
+            .separator()
+            .action(
+                CTX_FOLDER_REFRESH_TREE_FULL,
+                "Refresh Tree (Full)",
+                None,
+                Some("refresh"),
+                !is_busy,
+            )
+            .action(
+                CTX_FOLDER_REFRESH_TREE_RELATIVE,
+                "Refresh Tree (Relative)",
+                None,
+                Some("refresh"),
+                can_refresh,
+            )
+        });
         builder = builder.separator();
 
         if !is_root {
@@ -128,6 +148,7 @@ impl FolderContextMenu {
         show_hidden_folders: bool,
         support_dot_hidden_files: bool,
         dot_hidden_cache: &mut DotHiddenCache,
+        is_busy: bool,
     ) -> CtxMenu {
         Self::build_menu_from_cached_tree(
             target_folder,
@@ -136,6 +157,7 @@ impl FolderContextMenu {
             show_hidden_folders,
             support_dot_hidden_files,
             dot_hidden_cache,
+            is_busy,
         )
     }
 
@@ -278,7 +300,7 @@ impl FolderContextMenu {
         }
     }
 
-    /// Handles folder context menu action routing.
+    /// Handles folder context menu action routing with full single-refreshment guards.
     pub fn handle_action(
         action_id: CtxMenuActionId,
         window: &MainWindow,
@@ -295,7 +317,38 @@ impl FolderContextMenu {
             return;
         }
 
-        // 2. Standard Folder Actions
+        // 2. Refreshment Actions: Check single-operation busy guard
+        let is_refresh_action = action_id == CTX_FOLDER_REFRESH
+            || action_id == CTX_FOLDER_REFRESH_FILES_FULL
+            || action_id == CTX_FOLDER_REFRESH_METADATA
+            || action_id == CTX_FOLDER_REFRESH_FILES_META
+            || action_id == CTX_FOLDER_REFRESH_TREE_FULL
+            || action_id == CTX_FOLDER_REFRESH_TREE_RELATIVE;
+
+        if is_refresh_action && BridgeMedia::is_system_busy(window, &ctx.thumbnails, &ctx.state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot start refresh: another operation is already in progress.",
+            );
+            return;
+        }
+
+        // 3. Full Tree Refresh
+        if action_id == CTX_FOLDER_REFRESH_TREE_FULL {
+            tracing::info!(
+                "[FolderContextMenu: Refresh Tree Full] Full tree scan triggered from folder context menu"
+            );
+            BridgeFolders::refresh_folder_tree(
+                window,
+                &ctx.library,
+                &ctx.thumbnails,
+                &ctx.settings,
+                &ctx.state,
+            );
+            return;
+        }
+
+        // 4. Folder-Specific Actions
         if let Some(fid) = target_folder_id
             && let Ok(Some(rec)) = ctx.library.folders().get_folder(fid)
         {
@@ -321,10 +374,10 @@ impl FolderContextMenu {
                         format!("Opened folder '{}' in File Manager.", name),
                     );
                 }
-            } else if action_id == CTX_FOLDER_REFRESH {
+            } else if action_id == CTX_FOLDER_REFRESH || action_id == CTX_FOLDER_REFRESH_FILES_FULL {
                 tracing::info!(
                     folder = %LogObscurer::folder(Some(fid), &rec.path),
-                    "[FolderContextMenu: Refresh Full] Explicit Refresh Folder (Full) action triggered via context menu"
+                    "[FolderContextMenu: Refresh Files Full] Explicit Refresh Files (Full) triggered via context menu"
                 );
                 BridgeFolders::refresh_folder_explicit(
                     fid,
@@ -335,16 +388,31 @@ impl FolderContextMenu {
                     &ctx.settings,
                     &ctx.state,
                 );
-            } else if action_id == CTX_FOLDER_REFRESH_METADATA {
+            } else if action_id == CTX_FOLDER_REFRESH_METADATA || action_id == CTX_FOLDER_REFRESH_FILES_META {
                 tracing::info!(
                     folder = %LogObscurer::folder(Some(fid), &rec.path),
-                    "[FolderContextMenu: Refresh Metadata] Explicit Refresh Folder (Metadata) action triggered via context menu"
+                    "[FolderContextMenu: Refresh Files Meta] Explicit Refresh Files (Meta) triggered via context menu"
                 );
                 BridgeFolders::refresh_folder_metadata_only(
                     fid,
                     PathBuf::from(&rec.path),
                     window,
                     &ctx.library,
+                    &ctx.thumbnails,
+                    &ctx.state,
+                );
+            } else if action_id == CTX_FOLDER_REFRESH_TREE_RELATIVE {
+                tracing::info!(
+                    folder = %LogObscurer::folder(Some(fid), &rec.path),
+                    "[FolderContextMenu: Refresh Tree Relative] Targeted relative tree scan triggered via context menu"
+                );
+                BridgeFolders::refresh_folder_subtree(
+                    fid,
+                    PathBuf::from(&rec.path),
+                    window,
+                    &ctx.library,
+                    &ctx.thumbnails,
+                    &ctx.settings,
                     &ctx.state,
                 );
             } else if action_id == CTX_FOLDER_RENAME {

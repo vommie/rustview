@@ -14,6 +14,7 @@ export component SidebarLeft inherits Rectangle {
     in property <[FolderNodeView]> folders: [];
     in property <[FavoriteItemView]> favorites: [];
     in property <bool> is-refreshing-folders: false;
+    in property <bool> is-busy: false;
     in-out property <bool> show-hidden-folders: false;
     in property <int> drop-target-folder-id: -1;
     out property <length> folder-tree-scroll-y: folder-panel.scroll-offset-y;
@@ -21,7 +22,8 @@ export component SidebarLeft inherits Rectangle {
     callback folder-clicked(int /* id */, string /* path */);
     callback folder-toggle-expand(int /* id */);
     callback folder-context-menu(int /* id */, length /* x */, length /* y */);
-    callback folder-refresh-clicked();
+    callback folder-refresh-all-clicked();
+    callback folder-refresh-relative-clicked();
     callback folder-collapse-all-clicked();
     callback favorite-clicked(string /* path */);
     callback toggle-hidden-folders(bool /* show_hidden */);
@@ -53,6 +55,7 @@ export component SidebarLeft inherits Rectangle {
             folders: root.folders;
             drop-target-folder-id: root.drop-target-folder-id;
             is-refreshing: root.is-refreshing-folders;
+            is-busy: root.is-busy;
             show-hidden-folders <=> root.show-hidden-folders;
             toggle-hidden-folders(h) => { root.toggle-hidden-folders(h); }
             collapse-all-clicked => { root.folder-collapse-all-clicked(); }
@@ -61,7 +64,8 @@ export component SidebarLeft inherits Rectangle {
             row-hovered(id) => { root.folder-row-hovered(id); }
             row-unhovered(id) => { root.folder-row-unhovered(id); }
             folder-context-menu(id, x, y) => { root.folder-context-menu(id, folder-panel.x + x, folder-panel.y + y); }
-            refresh-clicked => { root.folder-refresh-clicked(); }
+            folder-refresh-all-clicked => { root.folder-refresh-all-clicked(); }
+            folder-refresh-relative-clicked => { root.folder-refresh-relative-clicked(); }
         }
     }
 }

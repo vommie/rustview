@@ -48,6 +48,7 @@ pub struct MediaMenuContext<'a> {
 pub struct FolderMenuContext<'a> {
     pub window: &'a MainWindow,
     pub library: &'a Library,
+    pub thumbnails: &'a ThumbnailManager,
     pub settings: &'a SettingsManager,
     pub tab_manager: &'a ViewerTabManager,
     pub state: &'a Arc<RwLock<UiState>>,
@@ -75,7 +76,7 @@ pub struct BridgeContextMenu;
 impl BridgeContextMenu {
     pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
         Self::register_media_menu(window, &reg.library, &reg.thumbnails, &reg.tab_manager, &reg.state);
-        Self::register_folder_menu(window, &reg.library, &reg.settings, &reg.tab_manager, &reg.state);
+        Self::register_folder_menu(window, &reg.library, &reg.thumbnails, &reg.settings, &reg.tab_manager, &reg.state);
         Self::register_tab_menu(window, &reg.tab_manager, &reg.state);
         Self::register_popup_events(window, &reg.tab_manager, &reg.state);
         Self::register_action_dispatcher(window, reg);
@@ -113,12 +114,14 @@ impl BridgeContextMenu {
     fn register_folder_menu(
         window: &MainWindow,
         library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
         settings: &Arc<SettingsManager>,
         tab_manager: &Arc<ViewerTabManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
+        let th = thumbnails.clone();
         let set = settings.clone();
         let tm = tab_manager.clone();
         let st = state.clone();
@@ -128,6 +131,7 @@ impl BridgeContextMenu {
                 FolderMenuContext {
                     window: &win,
                     library: &lib,
+                    thumbnails: &th,
                     settings: &set,
                     tab_manager: &tm,
                     state: &st,
@@ -316,9 +320,9 @@ impl BridgeContextMenu {
         x: f32,
         y: f32,
     ) {
+        let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let (all_selected_deleted, selected_count, is_single_image, associated_apps) =
             MediaContextMenu::prepare_selection(ctx.window, ctx.library, ctx.state, media_id);
-        let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let menu = MediaContextMenu::build_menu(
             selected_count,
             is_single_image,
@@ -335,6 +339,9 @@ impl BridgeContextMenu {
         x: f32,
         y: f32,
     ) {
+        // Evaluate busy status before taking the write lock to prevent deadlocks
+        let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
+
         let app_settings = ctx.settings.get();
         let root_setting = app_settings.general.root_folder;
         let show_hidden_folders = app_settings.folders.show_hidden_folders;
@@ -380,6 +387,7 @@ impl BridgeContextMenu {
             show_hidden_folders,
             support_dot_hidden_files,
             dot_hidden_cache,
+            is_busy,
         );
 
         drop(st);

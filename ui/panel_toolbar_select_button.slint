@@ -17,6 +17,7 @@ export component ToolbarSelectButton inherits Rectangle {
     in property <bool> allow-icon-tint: true;
     in property <string> tooltip: "";
     in property <duration> tooltip-delay: 0ms;
+    in property <bool> popup-align-right: false;
 
     // Display modes: 0 = Icon Only, 1 = Text Only, 2 = Icon + Text
     in property <int> button-display-mode: 0;
@@ -119,7 +120,7 @@ export component ToolbarSelectButton inherits Rectangle {
     }
 
     popup := PopupWindow {
-        x: 0px;
+        x: root.popup-align-right ? (root.width - popup-content.preferred-width) : 0px;
         y: root.height + 3px;
         width: popup-content.preferred-width;
         height: popup-content.preferred-height;

@@ -64,7 +64,11 @@ pub const CTX_FOLDER_RENAME: CtxMenuActionId = 3001;
 pub const CTX_FOLDER_DELETE: CtxMenuActionId = 3002;
 pub const CTX_FOLDER_PURGE_DB: CtxMenuActionId = 3003;
 pub const CTX_FOLDER_REFRESH: CtxMenuActionId = 3004;
+pub const CTX_FOLDER_REFRESH_FILES_FULL: CtxMenuActionId = 3004;
 pub const CTX_FOLDER_REFRESH_METADATA: CtxMenuActionId = 3005;
+pub const CTX_FOLDER_REFRESH_FILES_META: CtxMenuActionId = 3005;
+pub const CTX_FOLDER_REFRESH_TREE_FULL: CtxMenuActionId = 3006;
+pub const CTX_FOLDER_REFRESH_TREE_RELATIVE: CtxMenuActionId = 3007;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 // Tab Context Menu Action IDs
