@@ -206,18 +206,16 @@ impl BridgeFolders {
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
         settings_dialog: Rc<RefCell<SettingsDialogController>>,
-        fullscreen_controller: ImageFullscreenDialogController,
+        _fullscreen_controller: ImageFullscreenDialogController,
     ) {
         let lib = library.clone();
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
         let win = window.clone_strong();
-        let fs_refresh = fullscreen_controller.clone();
 
         // 1. Toolbar Refresh Media Button (Single-Operation Guard)
         window.on_refresh_folder(move || {
-            fs_refresh.dismiss_if_quick_fullscreen();
             if BridgeMedia::is_system_busy(&win, &thumb, &st) {
                 StatusBarBridge::warn(&win, "Cannot refresh: another operation is already in progress.");
                 return;
@@ -239,9 +237,7 @@ impl BridgeFolders {
         });
 
         let dialog = settings_dialog;
-        let fs_settings = fullscreen_controller.clone();
         window.on_open_settings(move || {
-            fs_settings.dismiss_if_quick_fullscreen();
             dialog.borrow_mut().show();
         });
 
@@ -250,9 +246,7 @@ impl BridgeFolders {
         let set = settings.clone();
         let st = state.clone();
         let win = window.clone_strong();
-        let fs_select = fullscreen_controller.clone();
         window.on_folder_selected(move |id, path| {
-            fs_select.dismiss_if_quick_fullscreen();
             st.write().last_active_panel = LastActivePanel::Folder;
             Self::select_folder(
                 id as u64,
@@ -269,9 +263,7 @@ impl BridgeFolders {
         let set = settings.clone();
         let st = state.clone();
         let win = window.clone_strong();
-        let fs_expand = fullscreen_controller.clone();
         window.on_folder_toggle_expand(move |id| {
-            fs_expand.dismiss_if_quick_fullscreen();
             st.write().last_active_panel = LastActivePanel::Folder;
             Self::toggle_expand(id as u64, &win, &lib, &set, &st);
         });
@@ -282,9 +274,7 @@ impl BridgeFolders {
         let set_all = settings.clone();
         let st_all = state.clone();
         let win_all = window.clone_strong();
-        let fs_all = fullscreen_controller.clone();
         window.on_folder_refresh_all_clicked(move || {
-            fs_all.dismiss_if_quick_fullscreen();
             st_all.write().last_active_panel = LastActivePanel::Folder;
             if BridgeMedia::is_system_busy(&win_all, &thumb_all, &st_all) {
                 StatusBarBridge::warn(&win_all, "Cannot refresh folder tree: another operation is already in progress.");
@@ -299,9 +289,7 @@ impl BridgeFolders {
         let set_rel = settings.clone();
         let st_rel = state.clone();
         let win_rel = window.clone_strong();
-        let fs_rel = fullscreen_controller.clone();
         window.on_folder_refresh_relative_clicked(move || {
-            fs_rel.dismiss_if_quick_fullscreen();
             st_rel.write().last_active_panel = LastActivePanel::Folder;
             if BridgeMedia::is_system_busy(&win_rel, &thumb_rel, &st_rel) {
                 StatusBarBridge::warn(&win_rel, "Cannot refresh folder tree: another operation is already in progress.");
@@ -314,9 +302,7 @@ impl BridgeFolders {
         let set = settings.clone();
         let st = state.clone();
         let win = window.clone_strong();
-        let fs_collapse = fullscreen_controller.clone();
         window.on_folder_collapse_all_clicked(move || {
-            fs_collapse.dismiss_if_quick_fullscreen();
             st.write().last_active_panel = LastActivePanel::Folder;
             Self::collapse_all_except_active(&win, &lib, &set, &st);
         });
@@ -325,9 +311,7 @@ impl BridgeFolders {
         let st = state.clone();
         let win = window.clone_strong();
         let lib = library.clone();
-        let fs_hidden = fullscreen_controller.clone();
         window.on_toggle_hidden_folders(move |show_hidden| {
-            fs_hidden.dismiss_if_quick_fullscreen();
             st.write().last_active_panel = LastActivePanel::Folder;
             let mut app_settings = set.get();
             app_settings.folders.show_hidden_folders = show_hidden;
@@ -341,9 +325,7 @@ impl BridgeFolders {
         let set = settings;
         let st = state;
         let win = window.clone_strong();
-        let fs_fav = fullscreen_controller;
         window.on_favorite_selected(move |path_str| {
-            fs_fav.dismiss_if_quick_fullscreen();
             st.write().last_active_panel = LastActivePanel::Folder;
             let path = PathBuf::from(path_str.as_str());
             if let Ok(Some(folder)) = lib.folders().get_folder_by_path(&path) {

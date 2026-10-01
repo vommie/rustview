@@ -446,7 +446,8 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
     }
 }
 
-/// Enforces true EWMH fullscreen state (`_NET_WM_STATE_FULLSCREEN` + `_NET_WM_STATE_ABOVE` + stripped decorations) directly via X11.
+/// Enforces true EWMH fullscreen state (`_NET_WM_STATE_FULLSCREEN` + stripped decorations) directly via X11.
+/// Does NOT set `_NET_WM_STATE_ABOVE`, allowing standard window managers to seamlessly handle Alt+Tab switching.
 pub fn force_x11_fullscreen(window_xid: u64) {
     if window_xid == 0 {
         return;
@@ -466,7 +467,6 @@ pub fn force_x11_fullscreen(window_xid: u64) {
         let atom_net_wm_state = (api.x_intern_atom)(display, c"_NET_WM_STATE".as_ptr(), 0);
         let atom_net_wm_fullscreen =
             (api.x_intern_atom)(display, c"_NET_WM_STATE_FULLSCREEN".as_ptr(), 0);
-        let atom_net_wm_above = (api.x_intern_atom)(display, c"_NET_WM_STATE_ABOVE".as_ptr(), 0);
         let atom_atom = (api.x_intern_atom)(display, c"ATOM".as_ptr(), 0);
         let atom_motif = (api.x_intern_atom)(display, c"_MOTIF_WM_HINTS".as_ptr(), 0);
 
@@ -497,8 +497,8 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             5,
         );
 
-        // 2. Set _NET_WM_STATE property directly on the window
-        let states = [atom_net_wm_fullscreen, atom_net_wm_above];
+        // 2. Set _NET_WM_STATE property directly on the window (clean fullscreen without above-lock)
+        let states = [atom_net_wm_fullscreen];
         (api.x_change_property)(
             display,
             window_xid,
@@ -507,10 +507,10 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             32,
             0, // PropModeReplace
             states.as_ptr() as *const u8,
-            2,
+            1,
         );
 
-        // 3. Send EWMH ClientMessage event to Root Window to notify Window Manager (KWin, Mutter, etc.)
+        // 3. Send EWMH ClientMessage event to Root Window to notify Window Manager
         #[repr(C)]
         struct ClientMessageData {
             data: [c_long; 5],
@@ -540,7 +540,7 @@ pub fn force_x11_fullscreen(window_xid: u64) {
                 data: [
                     1, // _NET_WM_STATE_ADD
                     atom_net_wm_fullscreen as c_long,
-                    atom_net_wm_above as c_long,
+                    0,
                     1, // normal application source indication
                     0,
                 ],

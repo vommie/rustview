@@ -101,6 +101,8 @@ impl UiBridge {
         controller.set_main_window(window.as_weak());
         let settings_dialog = Rc::new(RefCell::new(controller));
         let fullscreen_controller = ImageFullscreenDialogController::new();
+        fullscreen_controller.set_thumbnails(thumbnails.clone());
+
         let rename_dialog = Rc::new(RefCell::new(None));
         let missing_file_dialog = MissingFileDialogController::new();
         let delete_file_dialog = DeleteFileDialogController::new();
@@ -207,14 +209,16 @@ impl UiBridge {
         let win_fs_close = window.as_weak();
         let tm_fs_close = tab_manager.clone();
         let lib_fs_close = library.clone();
+        let thumb_fs_close = thumbnails.clone();
         let set_fs_close = settings.clone();
         let st_fs_close = state.clone();
         let fs_controller_close = fullscreen_controller.clone();
 
-        fullscreen_controller.set_close_handler(move |origin_mode, tab_id_opt| {
+        fullscreen_controller.set_close_handler(move |origin_mode, tab_id_opt, standalone_media_id_opt| {
             let win_w = win_fs_close.clone();
             let tm = tm_fs_close.clone();
             let lib = lib_fs_close.clone();
+            let thumb = thumb_fs_close.clone();
             let set = set_fs_close.clone();
             let st = st_fs_close.clone();
             let fs_ctrl = fs_controller_close.clone();
@@ -228,6 +232,7 @@ impl UiBridge {
                 tracing::info!(
                     origin_mode,
                     target_tab_id = ?tab_id_opt,
+                    standalone_media_id = ?standalone_media_id_opt,
                     "[FullscreenViewer: RestoreOrigin] Restoring UI and video subwindows to originating view mode"
                 );
 
@@ -243,6 +248,17 @@ impl UiBridge {
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                 } else {
                     tm.activate_browse();
+                    // Always select and reveal the media item that was active in Quick-Fullscreen
+                    if let Some(media_id) = standalone_media_id_opt {
+                        BridgeFileSelection::select_and_reveal_media(
+                            media_id,
+                            &w,
+                            &lib,
+                            Some(&thumb),
+                            &set,
+                            &st,
+                        );
+                    }
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                 }
@@ -674,7 +690,6 @@ impl UiBridge {
         let fs_grid = self.fullscreen_controller.clone();
 
         self.window.on_tab_grid_clicked(move || {
-            fs_grid.dismiss_if_quick_fullscreen();
             tracing::info!("[UiBridge: TabGrid] Tab-Grid button clicked. Switching to Masonry Tab Grid view");
             tm_grid.set_all_videos_view_active(false);
             win_grid.set_active_view_mode(2);
@@ -693,7 +708,6 @@ impl UiBridge {
         let st_left = self.state.clone();
         let fs_left = self.fullscreen_controller.clone();
         self.window.on_tab_grid_item_left_clicked(move |tab_id| {
-            fs_left.dismiss_if_quick_fullscreen();
             BridgeTabGrid::handle_item_left_clicked(
                 tab_id as u64,
                 &win_left,
@@ -724,9 +738,7 @@ impl UiBridge {
         let lib_close = self.library.clone();
         let set_close = self.settings.clone();
         let st_close = self.state.clone();
-        let fs_close = self.fullscreen_controller.clone();
         self.window.on_tab_grid_item_close_clicked(move |tab_id| {
-            fs_close.dismiss_if_quick_fullscreen();
             BridgeTabGrid::handle_item_close_clicked(
                 tab_id as u64,
                 &win_close,
@@ -742,9 +754,7 @@ impl UiBridge {
         let lib_cols = self.library.clone();
         let set_cols = self.settings.clone();
         let st_cols = self.state.clone();
-        let fs_cols = self.fullscreen_controller.clone();
         self.window.on_tab_grid_columns_changed(move |new_cols| {
-            fs_cols.dismiss_if_quick_fullscreen();
             let cols = (new_cols as usize).clamp(1, 10);
             {
                 let mut st = st_cols.write();
@@ -765,9 +775,7 @@ impl UiBridge {
         let lib_auto = self.library.clone();
         let set_auto = self.settings.clone();
         let st_auto = self.state.clone();
-        let fs_auto = self.fullscreen_controller.clone();
         self.window.on_tab_grid_auto_columns_toggled(move |is_auto| {
-            fs_auto.dismiss_if_quick_fullscreen();
             {
                 let mut st = st_auto.write();
                 st.tab_grid_auto_columns = is_auto;
@@ -785,9 +793,7 @@ impl UiBridge {
         let lib_close_all = self.library.clone();
         let set_close_all = self.settings.clone();
         let st_close_all = self.state.clone();
-        let fs_close_all = self.fullscreen_controller.clone();
         self.window.on_tab_grid_close_all_clicked(move || {
-            fs_close_all.dismiss_if_quick_fullscreen();
             tracing::info!("[UiBridge: TabGrid] Close all tabs clicked from TabGrid toolbar");
             tm_close_all.close_all_tabs();
             BridgeViewerTabs::sync_ui(&win_close_all, &tm_close_all, &lib_close_all, &set_close_all, &st_close_all);
@@ -818,9 +824,7 @@ impl UiBridge {
         let win_start = self.window.clone_strong();
         let st_start = self.state.clone();
         let scroller_start = self.rubberband_autoscroller.clone();
-        let fs_rstart = self.fullscreen_controller.clone();
         self.window.on_rubberband_started(move |cx, cy, vx, vy, ctrl, shift| {
-            fs_rstart.dismiss_if_quick_fullscreen();
             BridgeRubberband::handle_started(RubberbandDragStartParams {
                 start_content_x: cx,
                 start_content_y: cy,
@@ -866,9 +870,7 @@ impl UiBridge {
         let thumb_start = self.thumbnails.clone();
         let st_start = self.state.clone();
         let autoscroll_start = self.dnd_foldertree_autoscroller.clone();
-        let fs_dstart = self.fullscreen_controller.clone();
         self.window.on_media_drag_started(move |id, x, y| {
-            fs_dstart.dismiss_if_quick_fullscreen();
             BridgeDnd::handle_drag_started(DragStartParams {
                 media_id: id as u64,
                 start_x: x,
@@ -926,9 +928,7 @@ impl UiBridge {
         let set_copy = self.settings.clone();
         let st_copy = self.state.clone();
         let conflict_copy = self.conflict_dialog.clone();
-        let fs_copy = self.fullscreen_controller.clone();
         self.window.on_choice_popup_copy(move |target_fid| {
-            fs_copy.dismiss_if_quick_fullscreen();
             win_copy.set_is_choice_popup_open(false);
             BridgeDnd::start_batch_transfer(BatchTransferParams {
                 window: &win_copy,
@@ -948,9 +948,7 @@ impl UiBridge {
         let set_mv = self.settings.clone();
         let st_mv = self.state.clone();
         let conflict_mv = self.conflict_dialog.clone();
-        let fs_mv = self.fullscreen_controller.clone();
         self.window.on_choice_popup_move(move |target_fid| {
-            fs_mv.dismiss_if_quick_fullscreen();
             win_mv.set_is_choice_popup_open(false);
             BridgeDnd::start_batch_transfer(BatchTransferParams {
                 window: &win_mv,
@@ -965,16 +963,12 @@ impl UiBridge {
         });
 
         let win_cancel = self.window.clone_strong();
-        let fs_canc = self.fullscreen_controller.clone();
         self.window.on_choice_popup_cancel(move || {
-            fs_canc.dismiss_if_quick_fullscreen();
             win_cancel.set_is_choice_popup_open(false);
         });
 
         let win_dism = self.window.clone_strong();
-        let fs_dism = self.fullscreen_controller.clone();
         self.window.on_choice_popup_dismissed(move || {
-            fs_dism.dismiss_if_quick_fullscreen();
             win_dism.set_is_choice_popup_open(false);
         });
     }
@@ -985,10 +979,8 @@ impl UiBridge {
 
         let last_left_clone = last_left_resize;
         let left_count_clone = left_events_count;
-        let fs_sleft = self.fullscreen_controller.clone();
 
         self.window.on_sidebar_left_resized(move |new_width| {
-            fs_sleft.dismiss_if_quick_fullscreen();
             let t0 = Instant::now();
             let count = left_count_clone.fetch_add(1, Ordering::Relaxed) + 1;
 
@@ -1015,9 +1007,7 @@ impl UiBridge {
         });
 
         let set_left = self.settings.clone();
-        let fs_sleft_fin = self.fullscreen_controller.clone();
         self.window.on_sidebar_left_resize_finished(move |final_width| {
-            fs_sleft_fin.dismiss_if_quick_fullscreen();
             let width_f32 = final_width;
             let mut app_settings = set_left.get();
             app_settings.view.sidebar_left_width = width_f32;

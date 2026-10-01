@@ -2,6 +2,7 @@ use super::MainWindow;
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
+use super::bridge_media::{BridgeMedia, MediaReloadOptions};
 use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
@@ -12,6 +13,7 @@ use crate::library::models::MediaId;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::system::SystemFileHandler;
+use crate::thumbnails::ThumbnailManager;
 use crate::viewer::ViewerTabManager;
 use parking_lot::{Mutex, RwLock};
 use slint::{ComponentHandle, Model};
@@ -98,7 +100,7 @@ impl BridgeFileSelection {
         let set_mid = settings;
         let st_mid = state.clone();
         let tm_mid = tab_manager;
-        let fs_mid = fullscreen_controller.clone();
+        let fs_mid = fullscreen_controller;
         window.on_media_middle_clicked(move |id| {
             Self::handle_middle_click(
                 id as u64, &win_mid, &lib_mid, &set_mid, &st_mid, &tm_mid, &fs_mid,
@@ -108,12 +110,10 @@ impl BridgeFileSelection {
         let win_bg = window.clone_strong();
         let lib_bg = library;
         let st_bg = state;
-        let fs_bg = fullscreen_controller;
         window.on_background_clicked(move || {
             tracing::info!(
                 "[FileSelection: BackgroundClick] Background free space clicked, clearing active file selection"
             );
-            fs_bg.dismiss_if_quick_fullscreen();
             st_bg.write().last_active_panel = LastActivePanel::Media;
             Self::clear_selection(&win_bg, &lib_bg, &st_bg);
         });
@@ -156,6 +156,79 @@ impl BridgeFileSelection {
             state,
             tab_manager,
             window.as_weak(),
+        );
+    }
+
+    /// Programmatically selects a single media item in Browse Mode, synchronizing UI tiles,
+    /// viewport windowing/slicing, Inspector, Tag & Rate panel, and status bar.
+    pub fn select_and_reveal_media(
+        media_id: MediaId,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: Option<&Arc<ThumbnailManager>>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let t_start = Instant::now();
+
+        let (changed_ids, target_visual_idx_opt) = {
+            let mut st = state.write();
+            st.last_active_panel = LastActivePanel::Media;
+            let prev_selected = st.file_selection.selected_ids().clone();
+            st.file_selection.select_single(media_id);
+            let newly_selected = st.file_selection.selected_ids();
+            let changed = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
+
+            let visual_idx = if !st.active_indices.is_empty() {
+                st.active_indices.iter().position(|&idx| {
+                    st.all_folder_media.get(idx).map(|m| m.record.id == media_id).unwrap_or(false)
+                })
+            } else {
+                st.all_folder_media.iter().position(|m| m.record.id == media_id)
+            };
+
+            (changed, visual_idx)
+        };
+
+        if let Some(target_idx) = target_visual_idx_opt {
+            let need_slice_reanchor = {
+                let st = state.read();
+                !st.loaded_slice_valid
+                    || target_idx < st.loaded_slice_start
+                    || target_idx >= (st.loaded_slice_start + st.loaded_slice_len)
+            };
+
+            if need_slice_reanchor {
+                if let Some(thumb_mgr) = thumbnails {
+                    BridgeMedia::reload_with_options(
+                        window,
+                        library,
+                        thumb_mgr,
+                        settings,
+                        state,
+                        MediaReloadOptions::with_anchor(false, false, target_idx),
+                    );
+                } else if !changed_ids.is_empty() {
+                    Self::sync_selection_diff(window, state, &changed_ids);
+                }
+            } else if !changed_ids.is_empty() {
+                Self::sync_selection_diff(window, state, &changed_ids);
+            }
+
+            window.invoke_scroll_media_item_into_view(target_idx as i32);
+        } else if !changed_ids.is_empty() {
+            Self::sync_selection_diff(window, state, &changed_ids);
+        }
+
+        BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
+
+        tracing::info!(
+            media_id,
+            visual_index = ?target_visual_idx_opt,
+            elapsed_us = t_start.elapsed().as_micros(),
+            "[FileSelection: SelectAndReveal] Media item selected and revealed in Browse Mode"
         );
     }
 

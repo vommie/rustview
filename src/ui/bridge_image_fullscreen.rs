@@ -1,12 +1,12 @@
+use super::bridge_file_selection::{BridgeFileSelection, DoubleClickKind, LastClickRecord};
+use super::bridge_state::UiState;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
-use super::ImageFullscreenWindow;
-use super::MainWindow;
+use super::{ImageFullscreenWindow, MainWindow};
 use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
-use crate::ui::bridge_file_selection::{DoubleClickKind, LastClickRecord};
-use crate::ui::bridge_state::UiState;
+use crate::thumbnails::ThumbnailManager;
 use crate::viewer::{
     force_x11_fullscreen, get_slint_window_xid_with_title_fallback, HighResImageLoader,
     MediaTabSession, MpvPlayer, TabId, TabPayload, ViewerTabManager, X11VideoSubwindow,
@@ -23,15 +23,18 @@ thread_local! {
     static FULLSCREEN_WINDOW: RefCell<Option<ImageFullscreenWindow>> = const { RefCell::new(None) };
 }
 
-pub type FullscreenCloseCallback = Arc<dyn Fn(i32 /* origin_mode */, Option<TabId>) + Send + Sync>;
+pub type FullscreenCloseCallback = Arc<dyn Fn(i32 /* origin_mode */, Option<TabId>, Option<MediaId>) + Send + Sync>;
 
-/// Specialized controller managing the frameless Fullscreen Media Viewer window lifecycle with seamless subwindow reparenting and quick fullscreen mode.
+/// Specialized controller managing the single, persistent Fullscreen Media Viewer window.
+/// Enforces strict exclusivity: Tab-Fullscreen shows ONLY the tab's own file and cannot navigate.
+/// Quick-Fullscreen operates dynamically within the Browse View context.
 #[derive(Clone, Default)]
 pub struct ImageFullscreenDialogController {
     window_weak: Arc<Mutex<Option<slint::Weak<ImageFullscreenWindow>>>>,
     main_window_weak: Arc<Mutex<Option<slint::Weak<MainWindow>>>>,
     tab_manager_weak: Arc<Mutex<Option<Arc<ViewerTabManager>>>>,
     library_weak: Arc<Mutex<Option<Arc<Library>>>>,
+    thumbnails_weak: Arc<Mutex<Option<Arc<ThumbnailManager>>>>,
     state_weak: Arc<Mutex<Option<Arc<RwLock<UiState>>>>>,
     settings_weak: Arc<Mutex<Option<Arc<SettingsManager>>>>,
     last_click_record: Arc<Mutex<Option<LastClickRecord>>>,
@@ -55,6 +58,7 @@ impl ImageFullscreenDialogController {
             main_window_weak: Arc::new(Mutex::new(None)),
             tab_manager_weak: Arc::new(Mutex::new(None)),
             library_weak: Arc::new(Mutex::new(None)),
+            thumbnails_weak: Arc::new(Mutex::new(None)),
             state_weak: Arc::new(Mutex::new(None)),
             settings_weak: Arc::new(Mutex::new(None)),
             last_click_record: Arc::new(Mutex::new(None)),
@@ -72,10 +76,16 @@ impl ImageFullscreenDialogController {
         }
     }
 
-    /// Registers a closure executed when the fullscreen window closes, passing the originating view mode.
+    /// Stores the ThumbnailManager instance to facilitate smooth slice re-anchoring when browsing from fullscreen.
+    pub fn set_thumbnails(&self, thumbnails: Arc<ThumbnailManager>) {
+        *self.thumbnails_weak.lock() = Some(thumbnails);
+    }
+
+    /// Registers a closure executed when the fullscreen window closes, passing the originating view mode,
+    /// optional tab ID, and optional standalone media ID.
     pub fn set_close_handler<F>(&self, handler: F)
     where
-        F: Fn(i32, Option<TabId>) + Send + Sync + 'static,
+        F: Fn(i32, Option<TabId>, Option<MediaId>) + Send + Sync + 'static,
     {
         *self.close_handler.lock() = Some(Arc::new(handler));
     }
@@ -178,28 +188,20 @@ impl ImageFullscreenDialogController {
 
                 let ctrl_next = ctrl.clone();
                 win.on_next_image(move || {
+                    // Strict exclusivity: Tab-Fullscreen can NEVER navigate to other files.
                     if ctrl_next.active_fullscreen_tab_id.lock().is_some() {
-                        if let Some(ref mw_weak) = *ctrl_next.main_window_weak.lock()
-                            && let Some(mw) = mw_weak.upgrade()
-                        {
-                            mw.invoke_viewer_next();
-                        }
-                    } else {
-                        ctrl_next.navigate_standalone_adjacent(true);
+                        return;
                     }
+                    ctrl_next.navigate_standalone_adjacent(true);
                 });
 
                 let ctrl_prev = ctrl.clone();
                 win.on_previous_image(move || {
+                    // Strict exclusivity: Tab-Fullscreen can NEVER navigate to other files.
                     if ctrl_prev.active_fullscreen_tab_id.lock().is_some() {
-                        if let Some(ref mw_weak) = *ctrl_prev.main_window_weak.lock()
-                            && let Some(mw) = mw_weak.upgrade()
-                        {
-                            mw.invoke_viewer_previous();
-                        }
-                    } else {
-                        ctrl_prev.navigate_standalone_adjacent(false);
+                        return;
                     }
+                    ctrl_prev.navigate_standalone_adjacent(false);
                 });
 
                 let ctrl_sys_close = ctrl.clone();
@@ -232,6 +234,7 @@ impl ImageFullscreenDialogController {
     }
 
     /// Displays the frameless fullscreen media window for any specific tab without changing active tab state (auto-plays).
+    /// Tab-Fullscreen is strictly exclusive: it shows only the tab's own file and cannot navigate.
     pub fn show_for_tab(
         &self,
         tab_id: TabId,
@@ -247,6 +250,16 @@ impl ImageFullscreenDialogController {
         let t0 = Instant::now();
         *self.main_window_weak.lock() = Some(main_window_weak.clone());
         *self.tab_manager_weak.lock() = Some(tab_manager.clone());
+
+        // Cleanly detach and pause any standalone video player when entering Tab-Fullscreen
+        if let Some(player) = self.standalone_video_player.lock().as_ref() {
+            player.set_view_active(false);
+            player.pause().ok();
+        }
+        if let Some(sub) = self.standalone_subwindow.lock().as_mut() {
+            sub.hide();
+        }
+
         *self.active_fullscreen_tab_id.lock() = Some(tab_id);
         *self.active_standalone_media_id.lock() = None;
 
@@ -267,10 +280,13 @@ impl ImageFullscreenDialogController {
 
         let ctrl = self.clone();
         let tm_clone = tab_manager.clone();
+        let was_already_open = self.is_open();
 
         self.with_fullscreen_window(|win| {
             ctrl.sync_tab_content(win, &target_tab, settings);
             win.set_is_video(is_video && file_exists);
+            // Strict requirement: Tab-Fullscreen can NEVER navigate away from its own file.
+            win.set_allow_navigation(false);
 
             if !file_exists {
                 win.set_source_image(Image::default());
@@ -279,16 +295,17 @@ impl ImageFullscreenDialogController {
                 win.set_error_message(missing_msg.into());
             }
 
-            win.window().set_fullscreen(false);
-            win.window().set_fullscreen(true);
-            let _ = win.show();
+            if !was_already_open {
+                win.window().set_fullscreen(false);
+                win.window().set_fullscreen(true);
+                let _ = win.show();
 
-            let fs_xid = ctrl.resolve_fs_xid(win);
-            if fs_xid > 0 {
-                force_x11_fullscreen(fs_xid);
+                let fs_xid = ctrl.resolve_fs_xid(win);
+                if fs_xid > 0 {
+                    force_x11_fullscreen(fs_xid);
+                }
+                ctrl.is_active.store(true, Ordering::SeqCst);
             }
-
-            ctrl.is_active.store(true, Ordering::SeqCst);
 
             if is_video && file_exists {
                 ctrl.reparent_to_fullscreen(&tm_clone, win, tab_id);
@@ -301,13 +318,15 @@ impl ImageFullscreenDialogController {
             is_video,
             file_exists,
             origin_mode,
+            in_place_swap = was_already_open,
             filename = %LogObscurer::filename(&target_tab.filename),
             elapsed_us = t0.elapsed().as_micros(),
-            "[FullscreenViewer: ShowForTab] Fullscreen media viewer activated with true X11 fullscreen mapping"
+            "[FullscreenViewer: ShowForTab] Tab-Fullscreen activated (exclusive to tab, navigation disabled)"
         );
     }
 
     /// Displays the frameless fullscreen viewer directly for a single media item without creating or modifying tabs (Quick-Fullscreen Mode).
+    /// Quick-Fullscreen allows adjacent navigation within the Browse View context.
     pub fn show_for_media(
         &self,
         media_id: MediaId,
@@ -317,6 +336,15 @@ impl ImageFullscreenDialogController {
         tab_manager: &Arc<ViewerTabManager>,
         main_window_weak: slint::Weak<MainWindow>,
     ) {
+        // Strict exclusivity: A currently displayed Tab-Fullscreen cannot be hijacked by Browse-Mode actions.
+        if self.is_open() && self.active_fullscreen_tab_id.lock().is_some() {
+            tracing::info!(
+                media_id,
+                "[FullscreenViewer: ShowForMedia] Ignored Quick-Fullscreen request because Tab-Fullscreen is currently exclusive"
+            );
+            return;
+        }
+
         let t0 = Instant::now();
         let record_res = library.media().get(media_id);
         let Some(record) = record_res.ok().flatten() else {
@@ -324,18 +352,17 @@ impl ImageFullscreenDialogController {
             return;
         };
 
-        let Ok(file_path) = library.resolve_media_path(media_id) else {
+        if library.resolve_media_path(media_id).is_err() {
             tracing::warn!(media_id, "[FullscreenViewer: ShowForMedia] Failed to resolve media file path");
             return;
-        };
-
-        let file_exists = file_path.is_file();
+        }
 
         *self.main_window_weak.lock() = Some(main_window_weak.clone());
         *self.library_weak.lock() = Some(library.clone());
         *self.settings_weak.lock() = Some(settings.clone());
         *self.state_weak.lock() = Some(state.clone());
         *self.tab_manager_weak.lock() = Some(tab_manager.clone());
+
         *self.active_fullscreen_tab_id.lock() = None;
         *self.active_standalone_media_id.lock() = Some(media_id);
 
@@ -345,112 +372,45 @@ impl ImageFullscreenDialogController {
             .unwrap_or(0);
         *self.origin_view_mode.lock() = origin_mode;
 
-        let is_video = matches!(record.media_type, MediaType::Video);
-        self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
+        let was_already_open = self.is_open();
 
-        if let Some(mw) = main_window_weak.upgrade() {
-            mw.set_is_modal_locked(false);
+        if !was_already_open {
+            let bg_mode_idx = match settings.get().viewer.background_mode.to_lowercase().as_str() {
+                "deep black" | "black" => 1,
+                "transparent checkerboard" | "checkerboard" => 2,
+                _ => 0,
+            };
+
+            let ctrl = self.clone();
+            self.with_fullscreen_window(|win| {
+                win.set_background_mode(bg_mode_idx);
+                win.window().set_fullscreen(false);
+                win.window().set_fullscreen(true);
+                let _ = win.show();
+
+                let fs_xid = ctrl.resolve_fs_xid(win);
+                if fs_xid > 0 {
+                    force_x11_fullscreen(fs_xid);
+                }
+                ctrl.is_active.store(true, Ordering::SeqCst);
+            });
         }
 
-        let bg_mode_idx = match settings.get().viewer.background_mode.to_lowercase().as_str() {
-            "deep black" | "black" => 1,
-            "transparent checkerboard" | "checkerboard" => 2,
-            _ => 0,
-        };
-
-        let ctrl = self.clone();
-
+        // Quick-Fullscreen allows navigation
         self.with_fullscreen_window(|win| {
-            win.set_background_mode(bg_mode_idx);
-            win.set_is_video(is_video && file_exists);
-
-            if let Some(player) = ctrl.standalone_video_player.lock().take() {
-                player.stop();
-            }
-            if let Some(sub) = ctrl.standalone_subwindow.lock().take() {
-                drop(sub);
-            }
-
-            if !file_exists {
-                tracing::warn!(
-                    media_id,
-                    file_path = %LogObscurer::path(&file_path),
-                    "[FullscreenViewer: ShowForMedia] File does not exist on disk, displaying missing-file fallback view"
-                );
-                win.set_source_image(Image::default());
-                win.set_is_loading(false);
-                let missing_msg = format!("File not found on physical disk:\n{}", file_path.display());
-                win.set_error_message(missing_msg.into());
-            } else if !is_video {
-                let initial_placeholder = {
-                    let st = state.read();
-                    st.folder_thumbnails
-                        .get(&media_id)
-                        .map(|buf| Image::from_rgb8(buf.clone()))
-                };
-
-                if let Some(img) = initial_placeholder {
-                    win.set_source_image(img);
-                    win.set_is_loading(false);
-                } else {
-                    win.set_source_image(Image::default());
-                    win.set_is_loading(true);
-                }
-                win.set_error_message("".into());
-
-                let win_weak_async = win.as_weak();
-                let fpath_clone = file_path.clone();
-                let ctrl_async = ctrl.clone();
-                let cur_media_id = media_id;
-
-                rayon::spawn(move || {
-                    let load_res = HighResImageLoader::load_full_resolution(&fpath_clone);
-                    let _ = win_weak_async.upgrade_in_event_loop(move |w| {
-                        if *ctrl_async.active_standalone_media_id.lock() != Some(cur_media_id) {
-                            return;
-                        }
-                        match load_res {
-                            Ok((_w, _h, pixel_buf)) => {
-                                w.set_source_image(Image::from_rgb8(pixel_buf));
-                                w.set_is_loading(false);
-                            }
-                            Err(err) => {
-                                w.set_error_message(err.to_string().into());
-                                w.set_is_loading(false);
-                            }
-                        }
-                    });
-                });
-            } else {
-                win.set_is_loading(false);
-                win.set_error_message("".into());
-                win.set_source_image(Image::default());
-            }
-
-            win.window().set_fullscreen(false);
-            win.window().set_fullscreen(true);
-            let _ = win.show();
-
-            let fs_xid = ctrl.resolve_fs_xid(win);
-            if fs_xid > 0 {
-                force_x11_fullscreen(fs_xid);
-            }
-
-            ctrl.is_active.store(true, Ordering::SeqCst);
-
-            if is_video && file_exists {
-                ctrl.init_or_play_standalone_video(win, media_id, &file_path);
-            }
+            win.set_allow_navigation(true);
         });
+
+        // Surgical in-place update of media content
+        self.sync_standalone_media(media_id, library, settings);
 
         tracing::info!(
             media_id,
-            is_video,
-            file_exists,
             origin_mode,
+            in_place_swap = was_already_open,
             filename = %LogObscurer::filename(&record.filename),
             elapsed_us = t0.elapsed().as_micros(),
-            "[FullscreenViewer: ShowForMedia] Fullscreen viewer activated (non-modal, file_exists verified)"
+            "[FullscreenViewer: ShowForMedia] Quick-Fullscreen active (navigation enabled within Browse context)"
         );
     }
 
@@ -459,15 +419,11 @@ impl ImageFullscreenDialogController {
         self.is_active.load(Ordering::SeqCst) && self.active_standalone_media_id.lock().is_some()
     }
 
-    pub fn dismiss_if_quick_fullscreen(&self) {
-        if self.is_quick_fullscreen_active() {
-            tracing::info!(
-                "[FullscreenViewer: DismissQuick] Dismissing Quick-Fullscreen due to non-media interaction on Main UI"
-            );
-            self.close();
-        }
-    }
+    /// No-op stub maintained for compatibility; Quick Fullscreen is strictly closed via manual user triggers (ESC, Double-Click, Middle-Click).
+    #[inline]
+    pub fn dismiss_if_quick_fullscreen(&self) {}
 
+    /// Replaces the standalone media content in Quick-Fullscreen while keeping it open.
     pub fn update_quick_fullscreen_media(
         &self,
         media_id: MediaId,
@@ -477,7 +433,7 @@ impl ImageFullscreenDialogController {
         if self.is_quick_fullscreen_active() {
             tracing::info!(
                 media_id,
-                "[FullscreenViewer: UpdateQuick] Quick-Fullscreen active; dynamically switching fullscreen view to newly clicked media item"
+                "[FullscreenViewer: UpdateQuick] Quick-Fullscreen active; dynamically replacing fullscreen content in-place"
             );
             self.sync_standalone_media(media_id, library, settings);
         }
@@ -551,6 +507,7 @@ impl ImageFullscreenDialogController {
         self.close();
     }
 
+    /// Initializes or reuses the persistent MPV player and X11 video subwindow in fullscreen mode without tearing or destruction.
     fn init_or_play_standalone_video(
         &self,
         fs_win: &ImageFullscreenWindow,
@@ -561,7 +518,7 @@ impl ImageFullscreenDialogController {
             tracing::warn!(
                 media_id,
                 file_path = %LogObscurer::path(file_path),
-                "[FullscreenViewer: StandaloneVideo] Target video file does not exist on disk, skipping subwindow creation"
+                "[FullscreenViewer: StandaloneVideo] Target video file does not exist on disk, skipping subwindow display"
             );
             return;
         }
@@ -633,7 +590,6 @@ impl ImageFullscreenDialogController {
                     close_fs.close();
                 });
 
-                // Wire F2 rename callback directly from MPV
                 let ctrl_fs_ren = self.clone();
                 p.on_rename_requested(move || {
                     if let Some(ref mw_weak) = *ctrl_fs_ren.main_window_weak.lock() {
@@ -684,7 +640,47 @@ impl ImageFullscreenDialogController {
         });
     }
 
+    /// Synchronizes Browse Mode selection to the specified media ID while in Quick-Fullscreen.
+    pub fn sync_browse_selection(&self, media_id: MediaId) {
+        if *self.origin_view_mode.lock() != 0 {
+            return;
+        }
+
+        let Some(state_arc) = self.state_weak.lock().clone() else {
+            return;
+        };
+        let Some(library_arc) = self.library_weak.lock().clone() else {
+            return;
+        };
+        let Some(settings_arc) = self.settings_weak.lock().clone() else {
+            return;
+        };
+        let Some(mw_weak) = self.main_window_weak.lock().clone() else {
+            return;
+        };
+
+        let thumb_opt = self.thumbnails_weak.lock().clone();
+
+        let _ = mw_weak.upgrade_in_event_loop(move |mw| {
+            BridgeFileSelection::select_and_reveal_media(
+                media_id,
+                &mw,
+                &library_arc,
+                thumb_opt.as_ref(),
+                &settings_arc,
+                &state_arc,
+            );
+        });
+    }
+
+    /// Navigates to the adjacent media item in Quick-Fullscreen.
+    /// Strictly disabled for Tab-Fullscreen (enforced in callers and here).
     pub fn navigate_standalone_adjacent(&self, is_next: bool) {
+        if self.active_fullscreen_tab_id.lock().is_some() {
+            tracing::debug!("[FullscreenViewer: StandaloneNavigate] Bypassed navigation because Tab-Fullscreen is active");
+            return;
+        }
+
         let Some(current_id) = *self.active_standalone_media_id.lock() else {
             return;
         };
@@ -703,30 +699,63 @@ impl ImageFullscreenDialogController {
 
         let target_media_id_opt = {
             let st = state_arc.read();
-            let current_pos = if !st.active_indices.is_empty() {
-                st.active_indices.iter().position(|&idx| {
-                    st.all_folder_media.get(idx).map(|m| m.record.id == current_id).unwrap_or(false)
-                })
+
+            let collection_len = if !st.active_indices.is_empty() {
+                st.active_indices.len()
             } else {
-                st.all_folder_media.iter().position(|m| m.record.id == current_id)
+                st.all_folder_media.len()
             };
 
-            if let Some(pos) = current_pos {
-                let target_pos = if is_next {
-                    pos.checked_add(1)
+            if collection_len == 0 {
+                tracing::info!(
+                    current_id,
+                    "[FullscreenViewer: Navigate] Active collection is empty. Standalone navigation safely bypassed."
+                );
+                None
+            } else {
+                let current_pos = if !st.active_indices.is_empty() {
+                    st.active_indices.iter().position(|&idx| {
+                        st.all_folder_media.get(idx).map(|m| m.record.id == current_id).unwrap_or(false)
+                    })
                 } else {
-                    pos.checked_sub(1)
+                    st.all_folder_media.iter().position(|m| m.record.id == current_id)
                 };
 
-                target_pos.and_then(|t_idx| {
-                    if !st.active_indices.is_empty() {
-                        st.active_indices.get(t_idx).and_then(|&idx| st.all_folder_media.get(idx)).map(|m| m.record.id)
-                    } else {
-                        st.all_folder_media.get(t_idx).map(|m| m.record.id)
+                match current_pos {
+                    Some(pos) => {
+                        let target_idx = if is_next {
+                            (pos + 1) % collection_len
+                        } else {
+                            (pos + collection_len - 1) % collection_len
+                        };
+
+                        if !st.active_indices.is_empty() {
+                            st.active_indices.get(target_idx).and_then(|&idx| st.all_folder_media.get(idx)).map(|m| m.record.id)
+                        } else {
+                            st.all_folder_media.get(target_idx).map(|m| m.record.id)
+                        }
                     }
-                })
-            } else {
-                None
+                    None => {
+                        // Orphaned recovery: file is no longer in search/filter results
+                        let recovery_idx = if is_next { 0 } else { collection_len - 1 };
+                        let recovered_id = if !st.active_indices.is_empty() {
+                            st.active_indices.get(recovery_idx).and_then(|&idx| st.all_folder_media.get(idx)).map(|m| m.record.id)
+                        } else {
+                            st.all_folder_media.get(recovery_idx).map(|m| m.record.id)
+                        };
+
+                        tracing::info!(
+                            current_id,
+                            is_next,
+                            recovery_idx,
+                            total_in_results = collection_len,
+                            target_id = ?recovered_id,
+                            "[FullscreenViewer: OrphanedNavigation] Current file not found in active query results. Anchoring to nearest collection boundary."
+                        );
+
+                        recovered_id
+                    }
+                }
             }
         };
 
@@ -735,12 +764,13 @@ impl ImageFullscreenDialogController {
                 current_id,
                 target_id,
                 is_next,
-                "[FullscreenViewer: StandaloneNavigate] Navigating to adjacent media in standalone fullscreen"
+                "[FullscreenViewer: StandaloneNavigate] Navigating in-place to target media in Quick-Fullscreen"
             );
             self.sync_standalone_media(target_id, &library_arc, &settings_arc);
         }
     }
 
+    /// Performs a high-performance in-place media replacement on the existing fullscreen window.
     pub fn sync_standalone_media(
         &self,
         media_id: MediaId,
@@ -766,24 +796,37 @@ impl ImageFullscreenDialogController {
         self.with_fullscreen_window(|win| {
             win.set_is_video(is_video && file_exists);
 
-            if let Some(player) = ctrl.standalone_video_player.lock().take() {
-                player.stop();
-            }
-            if let Some(sub) = ctrl.standalone_subwindow.lock().take() {
-                drop(sub);
-            }
-
             if !file_exists {
                 tracing::warn!(
                     media_id,
                     file_path = %LogObscurer::path(&file_path),
                     "[FullscreenViewer: StandaloneSync] Target file does not exist on disk, displaying missing-file fallback view"
                 );
+                if let Some(sub) = ctrl.standalone_subwindow.lock().as_mut() {
+                    sub.hide();
+                }
+                if let Some(player) = ctrl.standalone_video_player.lock().as_ref() {
+                    player.pause().ok();
+                }
                 win.set_source_image(Image::default());
                 win.set_is_loading(false);
                 let missing_msg = format!("File not found on physical disk:\n{}", file_path.display());
                 win.set_error_message(missing_msg.into());
-            } else if !is_video {
+            } else if is_video {
+                win.set_is_loading(false);
+                win.set_error_message("".into());
+                win.set_source_image(Image::default());
+
+                ctrl.init_or_play_standalone_video(win, media_id, &file_path);
+            } else {
+                if let Some(sub) = ctrl.standalone_subwindow.lock().as_mut() {
+                    sub.hide();
+                }
+                if let Some(player) = ctrl.standalone_video_player.lock().as_ref() {
+                    player.set_view_active(false);
+                    player.pause().ok();
+                }
+
                 let initial_placeholder = {
                     if let Some(state_arc) = self.state_weak.lock().as_ref() {
                         let st = state_arc.read();
@@ -826,14 +869,11 @@ impl ImageFullscreenDialogController {
                         }
                     });
                 });
-            } else {
-                win.set_is_loading(false);
-                win.set_error_message("".into());
-                win.set_source_image(Image::default());
-
-                ctrl.init_or_play_standalone_video(win, media_id, &file_path);
             }
         });
+
+        // Always synchronize Browse Mode selection to match the active fullscreen item
+        self.sync_browse_selection(media_id);
     }
 
     fn reparent_to_fullscreen(
@@ -935,37 +975,43 @@ impl ImageFullscreenDialogController {
     }
 
     /// Synchronizes active tab payload into the fullscreen window if currently visible.
+    /// Tab-Fullscreen is strictly bound to its own tab ID and will close if that tab disappears.
     pub fn sync_active_tab(&self, tab_manager: &Arc<ViewerTabManager>, settings: &SettingsManager) {
         if !self.is_open() {
             return;
         }
 
         let fs_tab_id = *self.active_fullscreen_tab_id.lock();
-        let target_tab = fs_tab_id.and_then(|id| tab_manager.get_tab(id)).or_else(|| tab_manager.get_active_tab());
+        let Some(tab_id) = fs_tab_id else {
+            return;
+        };
+
+        // Strictly lookup ONLY the assigned tab session
+        let Some(tab) = tab_manager.get_tab(tab_id) else {
+            self.close();
+            return;
+        };
 
         let ctrl = self.clone();
         let tm_clone = tab_manager.clone();
 
-        if let Some(tab) = target_tab {
-            let file_exists = tab.file_path.is_file();
-            let is_video = matches!(tab.payload, TabPayload::Video(_));
-            self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
+        let file_exists = tab.file_path.is_file();
+        let is_video = matches!(tab.payload, TabPayload::Video(_));
+        self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
 
-            self.with_fullscreen_window(|win| {
-                win.set_is_video(is_video && file_exists);
-                ctrl.sync_tab_content(win, &tab, settings);
+        self.with_fullscreen_window(|win| {
+            win.set_is_video(is_video && file_exists);
+            win.set_allow_navigation(false);
+            ctrl.sync_tab_content(win, &tab, settings);
 
-                if is_video && file_exists {
-                    ctrl.reparent_to_fullscreen(&tm_clone, win, tab.id);
-                } else if let Some(sub_slot) = tm_clone.get_subwindow_for_tab(tab.id)
-                    && let Some(ref mut sub) = *sub_slot.lock()
-                {
-                    sub.hide();
-                }
-            });
-        } else if self.active_standalone_media_id.lock().is_none() {
-            self.close();
-        }
+            if is_video && file_exists {
+                ctrl.reparent_to_fullscreen(&tm_clone, win, tab.id);
+            } else if let Some(sub_slot) = tm_clone.get_subwindow_for_tab(tab.id)
+                && let Some(ref mut sub) = *sub_slot.lock()
+            {
+                sub.hide();
+            }
+        });
     }
 
     /// Hides and dismisses the fullscreen media window, restores video subwindow to originating layout, and safely unlocks the Main UI.
@@ -977,6 +1023,7 @@ impl ImageFullscreenDialogController {
         let was_video = self.is_fullscreen_video.load(Ordering::SeqCst);
         let fs_tab_id = *self.active_fullscreen_tab_id.lock();
         let is_standalone = fs_tab_id.is_none();
+        let standalone_media_id = *self.active_standalone_media_id.lock();
         let origin_mode = *self.origin_view_mode.lock();
         let tm_weak = self.tab_manager_weak.lock().clone();
         let main_xid_opt = *self.cached_main_xid.lock();
@@ -988,7 +1035,7 @@ impl ImageFullscreenDialogController {
         *self.active_fullscreen_tab_id.lock() = None;
         *self.active_standalone_media_id.lock() = None;
 
-        // Stop and clean up standalone player if active
+        // Clean up standalone player and subwindow
         if let Some(player) = self.standalone_video_player.lock().take() {
             player.stop();
         }
@@ -1001,14 +1048,12 @@ impl ImageFullscreenDialogController {
             && let Some(ref tm) = tm_weak
             && let Some(main_xid) = main_xid_opt
             && let Some(target_id) = fs_tab_id
+            && let Some(session) = tm.get_tab(target_id)
+            && let TabPayload::Video(ref vid) = session.payload
+            && let Some(ref mut sub) = *vid.subwindow.lock()
         {
             let (x, y, w, h) = viewport_rect;
-            if let Some(session) = tm.get_tab(target_id)
-                && let TabPayload::Video(ref vid) = session.payload
-                && let Some(ref mut sub) = *vid.subwindow.lock()
-            {
-                let _ = sub.reparent(main_xid, x, y, w, h);
-            }
+            let _ = sub.reparent(main_xid, x, y, w, h);
         }
 
         // Hide Fullscreen Slint Window on the Main UI thread
@@ -1025,7 +1070,7 @@ impl ImageFullscreenDialogController {
                 mw.set_is_modal_locked(false);
                 tracing::info!("[FullscreenViewer: Close] Main UI modal lock released");
                 if let Some(handler) = handler_opt {
-                    handler(origin_mode, fs_tab_id);
+                    handler(origin_mode, fs_tab_id, standalone_media_id);
                 }
             });
         }

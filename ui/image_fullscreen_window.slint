@@ -6,13 +6,13 @@ import { Icons, AppIcon } from "icons.slint";
 export component ImageFullscreenWindow inherits Window {
     title: "RustView - Fullscreen";
     no-frame: true;
-    always-on-top: true;
 
     in property <image> source-image;
     in property <bool> is-loading: false;
     in property <string> error-message: "";
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
     in property <bool> is-video: false;
+    in property <bool> allow-navigation: false; // ONLY true for Quick-Fullscreen (Browse View); strictly false for Tab-Fullscreen
 
     callback request-close();
     callback request-rename();
@@ -30,7 +30,13 @@ export component ImageFullscreenWindow inherits Window {
                 root.request-close();
                 return accept;
             }
-            if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
+            // Close on Ctrl+W or Meta+W (Command+W on macOS)
+            if (event.text == "w" || event.text == "W") && (event.modifiers.control || event.modifiers.meta) {
+                root.request-close();
+                return accept;
+            }
+            // Handle terminal ASCII 0x17 (Ctrl+W) only when Control modifier is explicitly pressed
+            if event.modifiers.control && event.text == "\u{17}" {
                 root.request-close();
                 return accept;
             }
@@ -38,32 +44,43 @@ export component ImageFullscreenWindow inherits Window {
                 root.request-rename();
                 return accept;
             }
-            if event.text == Key.RightArrow || event.text == Key.Space {
-                root.next-image();
-                return accept;
+
+            // Navigation is ONLY permitted in Quick-Fullscreen (Browse context). Tab-Fullscreen is strictly locked to its own file.
+            if root.allow-navigation {
+                // Next image: RightArrow, DownArrow, PageDown, or Space
+                if event.text == Key.RightArrow || event.text == Key.DownArrow || event.text == Key.PageDown || event.text == Key.Space {
+                    root.next-image();
+                    return accept;
+                }
+                // Previous image: LeftArrow, UpArrow, or PageUp
+                if event.text == Key.LeftArrow || event.text == Key.UpArrow || event.text == Key.PageUp {
+                    root.previous-image();
+                    return accept;
+                }
             }
-            if event.text == Key.LeftArrow {
-                root.previous-image();
-                return accept;
-            }
+
             return reject;
         }
     }
 
-    // Interactive canvas supporting double-click/middle-click/right-click to close and mouse wheel navigation
+    // Interactive canvas supporting double-click/middle-click to close and mouse wheel navigation.
+    // Right-click intentionally has NO action in RustView fullscreen.
     fs-touch := TouchArea {
         width: 100%;
         height: 100%;
         enabled: !root.is-video || root.error-message != ""; // Native MPV handles its own controls ONLY when actively playing video without error
 
         scroll-event(event) => {
-            if event.delta-y < 0px {
-                root.next-image();
-                return accept;
-            }
-            if event.delta-y > 0px {
-                root.previous-image();
-                return accept;
+            // Wheel navigation only permitted in Quick-Fullscreen
+            if root.allow-navigation {
+                if event.delta-y < 0px {
+                    root.next-image();
+                    return accept;
+                }
+                if event.delta-y > 0px {
+                    root.previous-image();
+                    return accept;
+                }
             }
             return reject;
         }
@@ -74,9 +91,8 @@ export component ImageFullscreenWindow inherits Window {
                     root.canvas-clicked(event.modifiers.control || event.modifiers.meta);
                 } else if event.button == PointerEventButton.middle {
                     root.request-close();
-                } else if event.button == PointerEventButton.right {
-                    root.request-close();
                 }
+                // Right click intentionally does nothing in RustView fullscreen
             }
         }
     }
@@ -165,7 +181,7 @@ export component ImageFullscreenWindow inherits Window {
         }
 
         Text {
-            text: "Press Escape, Ctrl+W, or click anywhere to exit fullscreen.";
+            text: "Press Escape, Ctrl+W, or double-click to exit fullscreen.";
             font-size: 11px;
             color: Theme.text-muted;
             opacity: 0.7;
