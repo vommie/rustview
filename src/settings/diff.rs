@@ -464,6 +464,17 @@ impl SettingsDiff {
             ));
         }
 
+        if self.window_geometry_changed {
+            changes.push(format!(
+                "Window: geometry (maximized: {} -> {}, size: {}x{} -> {}x{}, pos: {:?},{:?} -> {:?},{:?})",
+                old.window.is_maximized, new.window.is_maximized,
+                old.window.width, old.window.height,
+                new.window.width, new.window.height,
+                old.window.x, old.window.y,
+                new.window.x, new.window.y
+            ));
+        }
+
         changes
     }
 }

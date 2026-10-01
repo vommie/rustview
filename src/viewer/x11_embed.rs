@@ -41,6 +41,23 @@ pub struct ViewportBounds {
     pub height: u32,
 }
 
+#[repr(C)]
+struct ClientMessageData {
+    data: [c_long; 5],
+}
+
+#[repr(C)]
+struct ClientMessageEv {
+    type_: c_int,
+    serial: c_ulong,
+    send_event: c_int,
+    display: DisplayPtr,
+    window: WindowId,
+    message_type: AtomId,
+    format: c_int,
+    data: ClientMessageData,
+}
+
 struct X11Symbols {
     _lib_x11: *mut c_void,
     _lib_xext: *mut c_void,
@@ -225,35 +242,34 @@ pub fn get_slint_window_xid(window: &slint::Window) -> Option<u64> {
     get_slint_window_xid_with_title_fallback(window, "RustView")
 }
 
-/// Retrieves the native X11 Window ID (`XID`) from a Slint Window with a specific title fallback.
+/// Retrieves the native X11 Window ID (`XID`) from a Slint Window with process PID verification.
 pub fn get_slint_window_xid_with_title_fallback(
     window: &slint::Window,
     fallback_title: &str,
 ) -> Option<u64> {
     if let Ok(handle) = window.window_handle().window_handle() {
-        match handle.as_raw() {
+        let raw_xid = match handle.as_raw() {
             RawWindowHandle::Xlib(h) => {
                 let xid = h.window;
-                if xid > 0 {
-                    return Some(xid);
-                }
+                if xid > 0 { Some(xid) } else { None }
             }
             RawWindowHandle::Xcb(h) => {
                 let xid = h.window.get() as u64;
-                if xid > 0 {
-                    return Some(xid);
-                }
+                if xid > 0 { Some(xid) } else { None }
             }
-            _ => {}
+            _ => None,
+        };
+        if let Some(xid) = raw_xid {
+            return Some(xid);
         }
     }
 
-    find_window_by_title(fallback_title)
+    // Fallback: search exclusively for windows created by our own PID
+    find_window_by_pid_and_title(std::process::id(), fallback_title)
 }
 
-/// Recursively searches the X11 window hierarchy for a window whose title contains `title_contains`.
-pub fn find_window_by_title(title_contains: &str) -> Option<u64> {
-    let t0 = Instant::now();
+/// Discovers the native X11 Window ID (`XID`) belonging to `target_pid` whose title contains `title_contains`.
+pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Option<u64> {
     let api = get_x11_api().ok()?;
 
     unsafe {
@@ -263,19 +279,83 @@ pub fn find_window_by_title(title_contains: &str) -> Option<u64> {
         }
 
         let root = (api.x_default_root_window)(display);
-        let mut found_xid = None;
-        search_tree_by_title(&api, display, root, title_contains, &mut found_xid);
-        (api.x_close_display)(display);
+        let atom_pid = (api.x_intern_atom)(display, c"_NET_WM_PID".as_ptr(), 0);
 
-        tracing::debug!(
-            title_contains,
-            found_xid = ?found_xid,
-            elapsed_us = t0.elapsed().as_micros(),
-            "[X11WindowFinder: TitleSearch] Window tree search completed"
+        let mut root_return = 0;
+        let mut parent_return = 0;
+        let mut children_ptr: *mut WindowId = std::ptr::null_mut();
+        let mut nchildren: c_uint = 0;
+
+        let query_res = (api.x_query_tree)(
+            display,
+            root,
+            &mut root_return,
+            &mut parent_return,
+            &mut children_ptr,
+            &mut nchildren,
         );
+
+        let mut found_xid = None;
+
+        if query_res != 0 && !children_ptr.is_null() && nchildren > 0 {
+            let slice = std::slice::from_raw_parts(children_ptr, nchildren as usize);
+
+            for &win_id in slice.iter().rev() {
+                let mut actual_type = 0;
+                let mut actual_format = 0;
+                let mut nitems = 0;
+                let mut bytes_after = 0;
+                let mut prop_data: *mut u8 = std::ptr::null_mut();
+
+                let res_pid = (api.x_get_window_property)(
+                    display,
+                    win_id,
+                    atom_pid,
+                    0,
+                    1,
+                    0,
+                    0, // AnyPropertyType
+                    &mut actual_type,
+                    &mut actual_format,
+                    &mut nitems,
+                    &mut bytes_after,
+                    &mut prop_data,
+                );
+
+                if res_pid == 0 && !prop_data.is_null() && nitems > 0 {
+                    let win_pid = *(prop_data as *const u32);
+                    (api.x_free)(prop_data as *mut c_void);
+
+                    if win_pid == target_pid {
+                        if title_contains.is_empty() {
+                            found_xid = Some(win_id);
+                            break;
+                        }
+
+                        let mut title_found = None;
+                        search_tree_by_title(&api, display, win_id, title_contains, &mut title_found);
+                        if title_found.is_some() {
+                            found_xid = Some(win_id);
+                            break;
+                        } else if found_xid.is_none() {
+                            found_xid = Some(win_id);
+                        }
+                    }
+                }
+            }
+
+            (api.x_free)(children_ptr as *mut c_void);
+        }
+
+        (api.x_close_display)(display);
 
         found_xid
     }
+}
+
+/// Discovers window belonging to the current process matching a specific title substring.
+pub fn find_window_by_title(title_contains: &str) -> Option<u64> {
+    find_window_by_pid_and_title(std::process::id(), title_contains)
 }
 
 unsafe fn search_tree_by_title(
@@ -359,13 +439,12 @@ unsafe fn search_tree_by_title(
     }
 }
 
-/// Helper discovering the native X11 Window ID (`XID`) of a Slint window by PID and title string.
-pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Option<u64> {
-    if let Some(xid) = find_window_by_title(title_contains) {
-        return Some(xid);
+/// Queries X11 Extended Window Manager Hints (`_NET_WM_STATE`) on the window to determine whether it is maximized.
+pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
+    if window_xid == 0 {
+        return None;
     }
 
-    let t0 = Instant::now();
     let api = get_x11_api().ok()?;
 
     unsafe {
@@ -374,80 +453,128 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
             return None;
         }
 
-        let root = (api.x_default_root_window)(display);
-        let atom_pid = (api.x_intern_atom)(display, c"_NET_WM_PID".as_ptr(), 0);
+        let atom_net_wm_state = (api.x_intern_atom)(display, c"_NET_WM_STATE".as_ptr(), 0);
+        let atom_max_vert =
+            (api.x_intern_atom)(display, c"_NET_WM_STATE_MAXIMIZED_VERT".as_ptr(), 0);
+        let atom_max_horz =
+            (api.x_intern_atom)(display, c"_NET_WM_STATE_MAXIMIZED_HORZ".as_ptr(), 0);
 
-        let mut root_return = 0;
-        let mut parent_return = 0;
-        let mut children_ptr: *mut WindowId = std::ptr::null_mut();
-        let mut nchildren: c_uint = 0;
+        let mut actual_type = 0;
+        let mut actual_format = 0;
+        let mut nitems = 0;
+        let mut bytes_after = 0;
+        let mut prop_data: *mut u8 = std::ptr::null_mut();
 
-        let query_res = (api.x_query_tree)(
+        let res = (api.x_get_window_property)(
             display,
-            root,
-            &mut root_return,
-            &mut parent_return,
-            &mut children_ptr,
-            &mut nchildren,
+            window_xid,
+            atom_net_wm_state,
+            0,
+            1024,
+            0,
+            0, // AnyPropertyType
+            &mut actual_type,
+            &mut actual_format,
+            &mut nitems,
+            &mut bytes_after,
+            &mut prop_data,
         );
 
-        let mut found_xid = None;
+        let mut has_vert = false;
+        let mut has_horz = false;
 
-        if query_res != 0 && !children_ptr.is_null() && nchildren > 0 {
-            let slice = std::slice::from_raw_parts(children_ptr, nchildren as usize);
-
-            for &win_id in slice.iter().rev() {
-                let mut actual_type = 0;
-                let mut actual_format = 0;
-                let mut nitems = 0;
-                let mut bytes_after = 0;
-                let mut prop_data: *mut u8 = std::ptr::null_mut();
-
-                let res_pid = (api.x_get_window_property)(
-                    display,
-                    win_id,
-                    atom_pid,
-                    0,
-                    1,
-                    0,
-                    6,
-                    &mut actual_type,
-                    &mut actual_format,
-                    &mut nitems,
-                    &mut bytes_after,
-                    &mut prop_data,
-                );
-
-                if res_pid == 0 && !prop_data.is_null() && nitems > 0 {
-                    let win_pid = *(prop_data as *const u32);
-                    (api.x_free)(prop_data as *mut c_void);
-
-                    if win_pid == target_pid {
-                        found_xid = Some(win_id);
-                        break;
-                    }
+        if res == 0 && !prop_data.is_null() && nitems > 0 {
+            let slice = std::slice::from_raw_parts(prop_data as *const AtomId, nitems as usize);
+            for &atom in slice {
+                if atom == atom_max_vert {
+                    has_vert = true;
+                }
+                if atom == atom_max_horz {
+                    has_horz = true;
                 }
             }
-
-            (api.x_free)(children_ptr as *mut c_void);
+            (api.x_free)(prop_data as *mut c_void);
         }
 
         (api.x_close_display)(display);
 
-        tracing::debug!(
-            target_pid,
-            title_contains,
-            found_xid = ?found_xid,
-            elapsed_us = t0.elapsed().as_micros(),
-            "[X11WindowFinder: PidSearch] Window handle query completed"
+        let is_max = has_vert && has_horz;
+        Some(is_max)
+    }
+}
+
+/// Enforces window maximization or un-maximization directly via X11 EWMH protocol messages.
+pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
+    if window_xid == 0 {
+        return;
+    }
+
+    let Ok(api) = get_x11_api() else {
+        return;
+    };
+
+    unsafe {
+        let display = (api.x_open_display)(std::ptr::null());
+        if display.is_null() {
+            return;
+        }
+
+        let root = (api.x_default_root_window)(display);
+        let atom_net_wm_state = (api.x_intern_atom)(display, c"_NET_WM_STATE".as_ptr(), 0);
+        let atom_max_vert =
+            (api.x_intern_atom)(display, c"_NET_WM_STATE_MAXIMIZED_VERT".as_ptr(), 0);
+        let atom_max_horz =
+            (api.x_intern_atom)(display, c"_NET_WM_STATE_MAXIMIZED_HORZ".as_ptr(), 0);
+        let atom_atom = (api.x_intern_atom)(display, c"ATOM".as_ptr(), 0);
+
+        if maximized {
+            let states = [atom_max_vert, atom_max_horz];
+            (api.x_change_property)(
+                display,
+                window_xid,
+                atom_net_wm_state,
+                atom_atom,
+                32,
+                0, // PropModeReplace
+                states.as_ptr() as *const u8,
+                2,
+            );
+        }
+
+        let mut ev = ClientMessageEv {
+            type_: 33, // ClientMessage
+            serial: 0,
+            send_event: 1,
+            display,
+            window: window_xid,
+            message_type: atom_net_wm_state,
+            format: 32,
+            data: ClientMessageData {
+                data: [
+                    if maximized { 1 } else { 0 }, // 1 = _NET_WM_STATE_ADD, 0 = _NET_WM_STATE_REMOVE
+                    atom_max_vert as c_long,
+                    atom_max_horz as c_long,
+                    1,
+                    0,
+                ],
+            },
+        };
+
+        let mask = (1 << 19) | (1 << 20); // SubstructureRedirectMask | SubstructureNotifyMask
+        (api.x_send_event)(
+            display,
+            root,
+            0,
+            mask,
+            &mut ev as *mut _ as *mut c_void,
         );
 
-        found_xid
+        (api.x_flush)(display);
+        (api.x_close_display)(display);
     }
 }
 
 /// Enforces true EWMH fullscreen state (`_NET_WM_STATE_FULLSCREEN` + stripped decorations) directly via X11.
-/// Does NOT set `_NET_WM_STATE_ABOVE`, allowing standard window managers to seamlessly handle Alt+Tab switching.
 pub fn force_x11_fullscreen(window_xid: u64) {
     if window_xid == 0 {
         return;
@@ -470,7 +597,6 @@ pub fn force_x11_fullscreen(window_xid: u64) {
         let atom_atom = (api.x_intern_atom)(display, c"ATOM".as_ptr(), 0);
         let atom_motif = (api.x_intern_atom)(display, c"_MOTIF_WM_HINTS".as_ptr(), 0);
 
-        // 1. Set _MOTIF_WM_HINTS to remove all borders and title bars (decorations = 0)
         #[repr(C)]
         struct MotifHints {
             flags: c_ulong,
@@ -482,7 +608,7 @@ pub fn force_x11_fullscreen(window_xid: u64) {
         let hints = MotifHints {
             flags: 2, // MWM_HINTS_DECORATIONS
             functions: 0,
-            decorations: 0, // 0 = no decorations
+            decorations: 0,
             input_mode: 0,
             status: 0,
         };
@@ -497,7 +623,6 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             5,
         );
 
-        // 2. Set _NET_WM_STATE property directly on the window (clean fullscreen without above-lock)
         let states = [atom_net_wm_fullscreen];
         (api.x_change_property)(
             display,
@@ -509,24 +634,6 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             states.as_ptr() as *const u8,
             1,
         );
-
-        // 3. Send EWMH ClientMessage event to Root Window to notify Window Manager
-        #[repr(C)]
-        struct ClientMessageData {
-            data: [c_long; 5],
-        }
-
-        #[repr(C)]
-        struct ClientMessageEv {
-            type_: c_int,
-            serial: c_ulong,
-            send_event: c_int,
-            display: DisplayPtr,
-            window: WindowId,
-            message_type: AtomId,
-            format: c_int,
-            data: ClientMessageData,
-        }
 
         let mut ev = ClientMessageEv {
             type_: 33, // ClientMessage
@@ -541,7 +648,7 @@ pub fn force_x11_fullscreen(window_xid: u64) {
                     1, // _NET_WM_STATE_ADD
                     atom_net_wm_fullscreen as c_long,
                     0,
-                    1, // normal application source indication
+                    1,
                     0,
                 ],
             },
@@ -567,8 +674,6 @@ pub fn force_x11_fullscreen(window_xid: u64) {
 }
 
 /// Managed X11 Video Subwindow container embedded directly into Slint's central media viewport.
-/// Uses a nested 2-window architecture (`container_xid` + `subwindow_xid`) to deliver hardware-level
-/// viewport clipping without scaling or shrinking video output when scrolling under toolbars.
 pub struct X11VideoSubwindow {
     api: Arc<X11Symbols>,
     display: DisplayPtr,
@@ -592,7 +697,6 @@ unsafe impl Send for X11VideoSubwindow {}
 unsafe impl Sync for X11VideoSubwindow {}
 
 impl X11VideoSubwindow {
-    /// Creates and initializes a new embedded subwindow pair attached to `parent_xid`.
     pub fn new(
         parent_xid: u64,
         x: i32,
@@ -612,7 +716,6 @@ impl X11VideoSubwindow {
             let w_clamped = width.max(16);
             let h_clamped = height.max(16);
 
-            // 1. Container Window (Parent for viewport clipping, child of parent_xid)
             let container_xid = (api.x_create_simple_window)(
                 display,
                 parent_xid,
@@ -632,7 +735,6 @@ impl X11VideoSubwindow {
                 ));
             }
 
-            // 2. Video Subwindow (Child of container_xid, MPV renders directly into this)
             let subwindow_xid = (api.x_create_simple_window)(
                 display,
                 container_xid,
@@ -711,7 +813,6 @@ impl X11VideoSubwindow {
         self.parent_xid
     }
 
-    /// Adjusts coordinates and dimensions of the container and subwindow for unclipped single-viewer layout.
     pub fn move_resize(&mut self, x: i32, y: i32, width: u32, height: u32) {
         let w_clamped = width.max(16);
         let h_clamped = height.max(16);
@@ -761,7 +862,6 @@ impl X11VideoSubwindow {
         }
     }
 
-    /// Dynamically updates geometry and clips the subwindow at viewport boundaries without scaling down the video content.
     pub fn update_geometry_and_clip(
         &mut self,
         geom: SubwindowGeometry,
@@ -772,7 +872,6 @@ impl X11VideoSubwindow {
         let view_w_i32 = viewport.width.max(16) as i32;
         let view_h_i32 = viewport.height.max(16) as i32;
 
-        // Calculate intersection between subwindow desired bounds and viewport bounds
         let vis_x1 = geom.x.max(viewport.x);
         let vis_y1 = geom.y.max(viewport.y);
         let vis_x2 = (geom.x + w_clamped).min(viewport.x + view_w_i32);
@@ -782,7 +881,6 @@ impl X11VideoSubwindow {
         let vis_h = vis_y2 - vis_y1;
 
         if vis_w <= 0 || vis_h <= 0 {
-            // Completely outside visible viewport
             self.hide();
             return false;
         }
@@ -791,7 +889,6 @@ impl X11VideoSubwindow {
         let sub_offset_y = geom.y - vis_y1;
 
         unsafe {
-            // 1. Move and resize the container window to the VISIBLE viewport intersection on parent_xid
             if self.current_container_x != vis_x1
                 || self.current_container_y != vis_y1
                 || self.current_container_w != vis_w as u32
@@ -812,7 +909,6 @@ impl X11VideoSubwindow {
                 );
             }
 
-            // 2. Position the video subwindow inside the container with its FULL unscaled width and height
             if self.current_sub_x != sub_offset_x
                 || self.current_sub_y != sub_offset_y
                 || self.current_sub_w != w_clamped as u32
@@ -841,7 +937,6 @@ impl X11VideoSubwindow {
         true
     }
 
-    /// Seamlessly reparents the running video subwindow container to a new parent window without restarting playback.
     pub fn reparent(
         &mut self,
         new_parent_xid: u64,
@@ -922,7 +1017,6 @@ impl X11VideoSubwindow {
         }
     }
 
-    /// Clips out specified cutout rectangles from the video subwindow using X11 Nonrectangular Shape extension.
     pub fn clip_cutout_rectangles(&mut self, main_win_rects: &[XRectangle]) {
         let Some(ref shape_rects_fn) = self.api.x_shape_combine_rectangles else {
             return;
@@ -932,10 +1026,8 @@ impl X11VideoSubwindow {
         };
 
         unsafe {
-            // 1. Reset shape to full bounding rectangle first
             shape_mask_fn(self.display, self.container_xid, 0, 0, 0, 0, 0);
 
-            // 2. Convert coordinates from main window space to container window space
             let mut local_rects: Vec<XRectangle> = Vec::with_capacity(main_win_rects.len());
             for r in main_win_rects {
                 let local_x = (r.x as i32) - self.current_container_x;
@@ -950,8 +1042,12 @@ impl X11VideoSubwindow {
                 {
                     let clamped_x = local_x.max(0) as i16;
                     let clamped_y = local_y.max(0) as i16;
-                    let clamped_w = ((local_right.min(self.current_container_w as i32)) - (clamped_x as i32)).max(1) as u16;
-                    let clamped_h = ((local_bottom.min(self.current_container_h as i32)) - (clamped_y as i32)).max(1) as u16;
+                    let clamped_w = ((local_right.min(self.current_container_w as i32))
+                        - (clamped_x as i32))
+                        .max(1) as u16;
+                    let clamped_h = ((local_bottom.min(self.current_container_h as i32))
+                        - (clamped_y as i32))
+                        .max(1) as u16;
 
                     local_rects.push(XRectangle {
                         x: clamped_x,
@@ -962,7 +1058,6 @@ impl X11VideoSubwindow {
                 }
             }
 
-            // 3. Subtract all intersecting cutout rectangles
             if !local_rects.is_empty() {
                 shape_rects_fn(
                     self.display,
@@ -982,7 +1077,6 @@ impl X11VideoSubwindow {
         }
     }
 
-    /// Resets the window shape to the full standard rectangle.
     pub fn reset_clip_shape(&mut self) {
         if let Some(ref shape_mask_fn) = self.api.x_shape_combine_mask {
             unsafe {
@@ -994,7 +1088,6 @@ impl X11VideoSubwindow {
         self.last_clip_rect = None;
     }
 
-    /// Makes the video subwindow and container visible and raises them.
     pub fn show(&mut self) {
         if !self.is_visible {
             unsafe {
@@ -1006,7 +1099,6 @@ impl X11VideoSubwindow {
         }
     }
 
-    /// Unmaps and hides the container window reliably without desync.
     pub fn hide(&mut self) {
         if self.is_visible {
             unsafe {

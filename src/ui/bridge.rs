@@ -184,9 +184,10 @@ impl UiBridge {
         window.set_tabs(ModelRc::new(VecModel::from(vec![])));
         window.set_viewer_show_tab_rating_badge(app_settings.viewer.tabs.show_rating_badge);
 
+        let initial_win_sz = window.window().size();
         if let Some(main_xid) = crate::viewer::get_slint_window_xid(window.window()) {
-            tab_manager.set_main_viewport_info(main_xid, 0, 64, 800, 600);
-            fullscreen_controller.set_main_viewport_info(main_xid, 0, 64, 800, 600);
+            tab_manager.set_main_viewport_info(main_xid, 0, 64, initial_win_sz.width.max(800), initial_win_sz.height.max(600));
+            fullscreen_controller.set_main_viewport_info(main_xid, 0, 64, initial_win_sz.width.max(800), initial_win_sz.height.max(600));
         }
 
         window.set_is_virtual_folder(false);
@@ -248,7 +249,6 @@ impl UiBridge {
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                 } else {
                     tm.activate_browse();
-                    // Always select and reveal the media item that was active in Quick-Fullscreen
                     if let Some(media_id) = standalone_media_id_opt {
                         BridgeFileSelection::select_and_reveal_media(
                             media_id,
@@ -320,8 +320,9 @@ impl UiBridge {
         Timer::single_shot(std::time::Duration::from_millis(50), move || {
             if let Some(win) = w_weak.upgrade() {
                 if let Some(main_xid) = crate::viewer::get_slint_window_xid(win.window()) {
-                    tm_post.set_main_viewport_info(main_xid, 0, 64, 800, 600);
-                    fs_post.set_main_viewport_info(main_xid, 0, 64, 800, 600);
+                    let sz = win.window().size();
+                    tm_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
+                    fs_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
                 }
                 tracing::info!(
                     "[UiBridge: PostMount] Slint UI event loop ready. Mounting root folder..."

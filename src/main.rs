@@ -4,7 +4,18 @@ use rustview::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge};
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
+
+#[derive(Debug, Clone)]
+struct WindowGeometryTracker {
+    last_unmaximized_width: u32,
+    last_unmaximized_height: u32,
+    last_unmaximized_x: Option<i32>,
+    last_unmaximized_y: Option<i32>,
+    is_maximized: bool,
+    initialization_settled: bool,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
@@ -78,40 +89,193 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize Slint Window
     let main_window = MainWindow::new()?;
 
+    // Register XDG Desktop Application ID after platform initialization
+    if let Err(e) = slint::set_xdg_app_id("org.rustview.app") {
+        tracing::warn!(error = %e, "[WindowState: Init] Failed to register XDG App ID");
+    }
+
     // Restore Window Size, Position & State (Guarded by SPoT Minimum Geometry Constants)
     let win_state = settings.get().window;
-    if win_state.width >= MIN_WINDOW_WIDTH && win_state.height >= MIN_WINDOW_HEIGHT {
+    let should_maximize = win_state.is_maximized;
+    let initial_width = win_state.width.max(MIN_WINDOW_WIDTH);
+    let initial_height = win_state.height.max(MIN_WINDOW_HEIGHT);
+
+    // If starting maximized, bypass pre-map set_size/set_position to prevent X11 WM from resetting to windowed mode
+    if !should_maximize {
         main_window
             .window()
-            .set_size(slint::PhysicalSize::new(win_state.width, win_state.height));
-    }
-    if let (Some(x), Some(y)) = (win_state.x, win_state.y) {
-        main_window
-            .window()
-            .set_position(slint::PhysicalPosition::new(x, y));
-    }
-    if win_state.is_maximized {
+            .set_size(slint::PhysicalSize::new(initial_width, initial_height));
+
+        if let (Some(x), Some(y)) = (win_state.x, win_state.y)
+            && x >= 0
+            && y >= 0
+        {
+            main_window
+                .window()
+                .set_position(slint::PhysicalPosition::new(x, y));
+        }
+    } else {
         main_window.window().set_maximized(true);
     }
 
+    // Geometry tracker maintaining clean unmaximized dimensions throughout the app lifetime
+    let tracker = Arc::new(parking_lot::Mutex::new(WindowGeometryTracker {
+        last_unmaximized_width: initial_width,
+        last_unmaximized_height: initial_height,
+        last_unmaximized_x: win_state.x,
+        last_unmaximized_y: win_state.y,
+        is_maximized: should_maximize,
+        initialization_settled: false,
+    }));
+
+    // Active Window Mount & Maximization Watcher:
+    // Periodically checks when the X11 surface is mapped, enforces maximization, and cleanly stops upon confirmation.
+    let watcher_timer = Rc::new(slint::Timer::default());
+    let watcher_timer_clone = watcher_timer.clone();
+    let main_weak_watcher = main_window.as_weak();
+    let tracker_watcher = tracker.clone();
+    let mut attempts = 0usize;
+
+    watcher_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(40),
+        move || {
+            attempts += 1;
+            let Some(w) = main_weak_watcher.upgrade() else {
+                watcher_timer_clone.stop();
+                return;
+            };
+
+            let win = w.window();
+            let xid_opt = rustview::viewer::get_slint_window_xid(win);
+            let x11_max = xid_opt.and_then(rustview::viewer::is_x11_window_maximized);
+            let cur_size = win.size();
+
+            let is_window_ready = xid_opt.is_some() || cur_size.width > 0;
+
+            if should_maximize {
+                if x11_max == Some(true) {
+                    let mut t = tracker_watcher.lock();
+                    t.is_maximized = true;
+                    t.initialization_settled = true;
+                    watcher_timer_clone.stop();
+                    return;
+                }
+
+                if is_window_ready && attempts < 30 {
+                    win.set_maximized(false);
+                    win.set_maximized(true);
+
+                    if let Some(xid) = xid_opt {
+                        rustview::viewer::force_x11_maximized(xid, true);
+                    }
+                }
+            } else if is_window_ready {
+                let mut t = tracker_watcher.lock();
+                t.is_maximized = false;
+                t.initialization_settled = true;
+                watcher_timer_clone.stop();
+                return;
+            }
+
+            if attempts >= 35 {
+                let mut t = tracker_watcher.lock();
+                t.initialization_settled = true;
+                watcher_timer_clone.stop();
+            }
+        },
+    );
+
+    // Continuous runtime window state tracker: prevents maximized dimensions from overwriting windowed geometry
+    let runtime_tracker_timer = slint::Timer::default();
+    let main_weak_tracker = main_window.as_weak();
+    let tracker_runtime = tracker.clone();
+
+    runtime_tracker_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(350),
+        move || {
+            let Some(w) = main_weak_tracker.upgrade() else { return; };
+            let win = w.window();
+
+            let mut t = tracker_runtime.lock();
+            if !t.initialization_settled {
+                return;
+            }
+
+            let slint_max = win.is_maximized();
+            let xid_opt = rustview::viewer::get_slint_window_xid(win);
+            let x11_max = xid_opt.and_then(rustview::viewer::is_x11_window_maximized);
+            let is_max = x11_max.unwrap_or(slint_max);
+
+            let cur_size = win.size();
+            let cur_pos = win.position();
+
+            t.is_maximized = is_max;
+
+            // When NOT maximized, update last unmaximized dimensions and position
+            if !is_max && cur_size.width >= MIN_WINDOW_WIDTH && cur_size.height >= MIN_WINDOW_HEIGHT {
+                t.last_unmaximized_width = cur_size.width;
+                t.last_unmaximized_height = cur_size.height;
+                if cur_pos.x != 0 || cur_pos.y != 0 || t.last_unmaximized_x.is_none() {
+                    t.last_unmaximized_x = Some(cur_pos.x);
+                    t.last_unmaximized_y = Some(cur_pos.y);
+                }
+            }
+        },
+    );
+
     // Persist Window Geometry on Close Request
     let settings_for_close = settings.clone();
-    let main_weak = main_window.as_weak();
+    let main_weak_close = main_window.as_weak();
+    let tracker_close = tracker.clone();
+
     main_window.window().on_close_requested(move || {
-        if let Some(w) = main_weak.upgrade() {
+        if let Some(w) = main_weak_close.upgrade() {
             let win = w.window();
-            let is_max = win.is_maximized();
-            let size = win.size();
-            let pos = win.position();
+            let slint_max = win.is_maximized();
+            let xid_opt = rustview::viewer::get_slint_window_xid(win);
+            let x11_max = xid_opt.and_then(rustview::viewer::is_x11_window_maximized);
+            let cur_size = win.size();
+            let cur_pos = win.position();
+
+            let t = tracker_close.lock();
+            let is_max = x11_max.unwrap_or(false) || slint_max || t.is_maximized;
+
+            let final_width = if !is_max && cur_size.width >= MIN_WINDOW_WIDTH {
+                cur_size.width
+            } else {
+                t.last_unmaximized_width
+            };
+
+            let final_height = if !is_max && cur_size.height >= MIN_WINDOW_HEIGHT {
+                cur_size.height
+            } else {
+                t.last_unmaximized_height
+            };
+
+            let final_x = if is_max {
+                t.last_unmaximized_x
+            } else if cur_pos.x != 0 || cur_pos.y != 0 {
+                Some(cur_pos.x)
+            } else {
+                t.last_unmaximized_x
+            };
+
+            let final_y = if is_max {
+                t.last_unmaximized_y
+            } else if cur_pos.x != 0 || cur_pos.y != 0 {
+                Some(cur_pos.y)
+            } else {
+                t.last_unmaximized_y
+            };
 
             let mut current_settings = settings_for_close.get();
             current_settings.window.is_maximized = is_max;
-            if !is_max {
-                current_settings.window.width = size.width;
-                current_settings.window.height = size.height;
-                current_settings.window.x = Some(pos.x);
-                current_settings.window.y = Some(pos.y);
-            }
+            current_settings.window.width = final_width;
+            current_settings.window.height = final_height;
+            current_settings.window.x = final_x;
+            current_settings.window.y = final_y;
             settings_for_close.save_quiet(&current_settings);
         }
         CloseRequestResponse::HideWindow
@@ -129,6 +293,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("RustView UI & Storage Engine Ready.");
     main_window.run()?;
 
+    tracing::info!("[RustView: Shutdown] Event loop finished. Application exiting cleanly.");
     Ok(())
 }
 
