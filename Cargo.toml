@@ -1,6 +1,6 @@
 [package]
 name = "rustview"
-version = "0.3.19"
+version = "0.3.21"
 edition = "2024"
 build = "build.rs"
 
@@ -39,18 +39,6 @@ slint-build = "1"
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
 tempfile = "3"
-
-[[bench]]
-name = "database"
-harness = false
-
-[[bench]]
-name = "hashing"
-harness = false
-
-[[bench]]
-name = "thumbnails"
-harness = false
 
 # Enable maximum SIMD & native optimizations for both the rustview crate and dependencies in dev cargo run
 [profile.dev]
