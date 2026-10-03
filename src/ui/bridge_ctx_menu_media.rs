@@ -131,6 +131,150 @@ impl MediaContextMenu {
         )
     }
 
+    /// Single Point of Truth (SPoT): Reusable builder appending the file open actions:
+    /// "Open", "Open With..." (desktop application icons + Other Application...), and "Open in File Manager".
+    pub fn append_file_open_entries(
+        mut builder: CtxMenuBuilder,
+        is_single: bool,
+        can_open: bool,
+        associated_apps: &[DesktopApp],
+    ) -> CtxMenuBuilder {
+        builder = builder.action(
+            CTX_ACTION_OPEN,
+            if is_single {
+                "Open".to_string()
+            } else {
+                "Open Selected Files".to_string()
+            },
+            None,
+            None,
+            can_open,
+        );
+
+        if can_open {
+            let apps = associated_apps.to_vec();
+            builder = builder.submenu("Open With...", None, true, move |mut sub| {
+                for (idx, app) in apps.iter().enumerate() {
+                    let action_id = CTX_ACTION_OPEN_WITH_APP_BASE + (idx as CtxMenuActionId);
+                    sub = sub.action_with_icon_path(
+                        action_id,
+                        app.name.clone(),
+                        None,
+                        app.icon_path.clone(),
+                        true,
+                    );
+                }
+
+                if !apps.is_empty() {
+                    sub = sub.separator();
+                }
+
+                sub.action(
+                    CTX_ACTION_OPEN_WITH_OTHER,
+                    "Other Application...",
+                    None,
+                    None,
+                    true,
+                )
+            });
+        }
+
+        builder = builder.action(
+            CTX_ACTION_OPEN_IN_FILE_MANAGER,
+            if is_single {
+                "Open in File Manager".to_string()
+            } else {
+                "Open in File Manager (Multiple Files)".to_string()
+            },
+            None,
+            None,
+            can_open,
+        );
+
+        builder
+    }
+
+    /// Single Point of Truth (SPoT): Reusable builder appending file management actions:
+    /// "Rename...", "Copy..." (File Name, File Path, and Image Content if single image),
+    /// and "Delete File..." / "Remove from Database...".
+    pub fn append_file_management_entries(
+        mut builder: CtxMenuBuilder,
+        is_single: bool,
+        is_single_image: bool,
+        all_selected_deleted: bool,
+        is_busy: bool,
+    ) -> CtxMenuBuilder {
+        let can_rename = is_single && !is_busy;
+
+        let copy_name_text = if is_single {
+            "File Name".to_string()
+        } else {
+            "File Names".to_string()
+        };
+
+        let copy_path_text = if is_single {
+            "File Path".to_string()
+        } else {
+            "File Paths".to_string()
+        };
+
+        let delete_action_text = if all_selected_deleted {
+            if is_single {
+                "Remove from Database...".to_string()
+            } else {
+                "Remove Files from Database...".to_string()
+            }
+        } else if is_single {
+            "Delete File...".to_string()
+        } else {
+            "Delete Files...".to_string()
+        };
+
+        let delete_action_id = if all_selected_deleted {
+            CTX_ACTION_REMOVE_FROM_DB
+        } else {
+            CTX_ACTION_DELETE_MEDIA
+        };
+
+        builder = builder
+            .action(
+                CTX_ACTION_RENAME,
+                if is_single {
+                    "Rename...".to_string()
+                } else {
+                    "Rename (Single File Only)".to_string()
+                },
+                Some("F2"),
+                None,
+                can_rename,
+            )
+            .submenu("Copy...", None, true, move |sub| {
+                let mut sub_builder = sub
+                    .action(CTX_ACTION_COPY_NAME, copy_name_text, None, None, true)
+                    .action(CTX_ACTION_COPY_PATH, copy_path_text, None, None, true);
+
+                if is_single_image {
+                    sub_builder = sub_builder.action(
+                        CTX_ACTION_COPY_IMAGE,
+                        "Image Content",
+                        None,
+                        None,
+                        true,
+                    );
+                }
+                sub_builder
+            })
+            .action(
+                delete_action_id,
+                delete_action_text,
+                Some("Del"),
+                Some("trash"),
+                !is_busy,
+            );
+
+        builder
+    }
+
     pub fn build_menu(
         selected_count: usize,
         is_single_image: bool,
@@ -140,9 +284,6 @@ impl MediaContextMenu {
     ) -> CtxMenu {
         let is_single = selected_count == 1;
         let can_open = selected_count > 0;
-        let can_rename = is_single && !is_busy;
-        let can_copy = selected_count > 0;
-        let can_refresh = selected_count > 0 && !is_busy;
 
         let open_in_tab_text = if is_single {
             "Open in Tab".to_string()
@@ -173,82 +314,19 @@ impl MediaContextMenu {
             format!("Refresh {} Files (Metadata)", selected_count)
         };
 
-        let copy_name_text = if is_single {
-            "File Name".to_string()
-        } else {
-            format!("File Names ({})", selected_count)
-        };
-
-        let copy_path_text = if is_single {
-            "File Path".to_string()
-        } else {
-            format!("File Paths ({})", selected_count)
-        };
-
-        let delete_action_text = if all_selected_deleted {
-            if is_single {
-                "Remove from Database...".to_string()
-            } else {
-                format!("Remove {} Files from Database...", selected_count)
-            }
-        } else if is_single {
-            "Delete File...".to_string()
-        } else {
-            format!("Delete {} Files...", selected_count)
-        };
-
-        let delete_action_id = if all_selected_deleted {
-            CTX_ACTION_REMOVE_FROM_DB
-        } else {
-            CTX_ACTION_DELETE_MEDIA
-        };
+        let can_refresh = selected_count > 0 && !is_busy;
 
         let mut builder = CtxMenuBuilder::new()
             .header(if is_single {
                 "Selected File"
             } else {
                 "Selected Files"
-            })
-            .action(
-                CTX_ACTION_OPEN,
-                if is_single {
-                    "Open".to_string()
-                } else {
-                    format!("Open ({} Files)", selected_count)
-                },
-                None,
-                None,
-                can_open,
-            );
-
-        if can_open {
-            let apps = associated_apps.to_vec();
-            builder = builder.submenu("Open With...", None, true, move |mut sub| {
-                for (idx, app) in apps.iter().enumerate() {
-                    let action_id = CTX_ACTION_OPEN_WITH_APP_BASE + (idx as CtxMenuActionId);
-                    sub = sub.action_with_icon_path(
-                        action_id,
-                        app.name.clone(),
-                        None,
-                        app.icon_path.clone(),
-                        true,
-                    );
-                }
-
-                if !apps.is_empty() {
-                    sub = sub.separator();
-                }
-
-                sub.action(
-                    CTX_ACTION_OPEN_WITH_OTHER,
-                    "Other Application...",
-                    None,
-                    None,
-                    true,
-                )
             });
-        }
 
+        // 1. Shared File Open Actions (Open, Open With..., Open in File Manager)
+        builder = Self::append_file_open_entries(builder, is_single, can_open, associated_apps);
+
+        // 2. Tab Navigation Actions
         builder = builder
             .action(
                 CTX_ACTION_OPEN_IN_TAB,
@@ -271,52 +349,19 @@ impl MediaContextMenu {
                 None,
                 can_open,
             )
-            .action(
-                CTX_ACTION_OPEN_IN_FILE_MANAGER,
-                if is_single {
-                    "Open in File Manager".to_string()
-                } else {
-                    format!("Open in File Manager ({} Files)", selected_count)
-                },
-                None,
-                None,
-                can_open,
-            )
-            .separator()
-            .action(
-                CTX_ACTION_RENAME,
-                if is_single {
-                    "Rename...".to_string()
-                } else {
-                    format!("Rename (Single File Only, {} selected)", selected_count)
-                },
-                Some("F2"),
-                None,
-                can_rename,
-            )
-            .submenu("Copy...", None, can_copy, move |sub| {
-                let mut sub_builder = sub
-                    .action(CTX_ACTION_COPY_NAME, copy_name_text, None, None, true)
-                    .action(CTX_ACTION_COPY_PATH, copy_path_text, None, None, true);
+            .separator();
 
-                if is_single_image {
-                    sub_builder = sub_builder.action(
-                        CTX_ACTION_COPY_IMAGE,
-                        "Image Content",
-                        None,
-                        None,
-                        true,
-                    );
-                }
-                sub_builder
-            })
-            .action(
-                delete_action_id,
-                delete_action_text,
-                Some("Del"),
-                Some("trash"),
-                selected_count > 0 && !is_busy,
-            )
+        // 3. Shared File Management Actions (Rename, Copy, Delete File / Remove from DB)
+        builder = Self::append_file_management_entries(
+            builder,
+            is_single,
+            is_single_image,
+            all_selected_deleted,
+            is_busy,
+        );
+
+        // 4. Rating, Refresh & Selection Utilities
+        builder = builder
             .separator()
             .submenu(
                 "Rate Selection",
@@ -366,25 +411,43 @@ impl MediaContextMenu {
         builder.build()
     }
 
+    /// Primary action handler executing media file context actions on active browser selections.
     pub fn handle_action(
         action_id: CtxMenuActionId,
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
     ) {
-        let selected_ids = ctx.state.read().file_selection.selected_ids().clone();
+        let selected_ids: Vec<MediaId> = ctx.state.read().get_selected_ids_ordered();
+        let fallback_ids = if selected_ids.is_empty() {
+            ctx.state.read().file_selection.selected_ids().iter().copied().collect()
+        } else {
+            selected_ids
+        };
+
+        Self::handle_file_action_for_ids(action_id, window, ctx, &fallback_ids);
+    }
+
+    /// Single Point of Truth (SPoT): Shared execution logic for file operations across both Media and Tab context menus.
+    pub fn handle_file_action_for_ids(
+        action_id: CtxMenuActionId,
+        window: &MainWindow,
+        ctx: &MediaActionContext<'_>,
+        target_ids: &[MediaId],
+    ) {
         let context = CtxMenuContext {
             position_x: 0.0,
             position_y: 0.0,
-            selected_item_count: selected_ids.len(),
-            target_ids: selected_ids.iter().copied().collect(),
+            selected_item_count: target_ids.len(),
+            target_ids: target_ids.to_vec(),
         };
 
         if (CTX_ACTION_OPEN_WITH_APP_BASE..CTX_ACTION_OPEN_WITH_APP_BASE + 500).contains(&action_id) {
             let app_idx = (action_id - CTX_ACTION_OPEN_WITH_APP_BASE) as usize;
-            Self::handle_open_with_specific_app(window, ctx, &selected_ids, app_idx);
+            Self::handle_open_with_specific_app(window, ctx, target_ids, app_idx);
             return;
         }
 
+        let target_id_set: std::collections::HashSet<MediaId> = target_ids.iter().copied().collect();
         let tag_action_ctx = TagActionContext {
             window,
             library: ctx.library,
@@ -396,13 +459,12 @@ impl MediaContextMenu {
 
         match action_id {
             CTX_ACTION_OPEN => {
-                Self::handle_open_action(window, ctx, &selected_ids);
+                Self::handle_open_action(window, ctx, target_ids);
             }
             CTX_ACTION_OPEN_IN_TAB => {
-                let ordered_ids = ctx.state.read().get_selected_ids_ordered();
-                if !ordered_ids.is_empty() {
+                if !target_ids.is_empty() {
                     BridgeViewerTabs::open_multiple_media_tabs(
-                        &ordered_ids,
+                        target_ids,
                         window,
                         ctx.tab_manager,
                         ctx.library,
@@ -413,10 +475,9 @@ impl MediaContextMenu {
                 }
             }
             CTX_ACTION_OPEN_IN_BG_TAB => {
-                let ordered_ids = ctx.state.read().get_selected_ids_ordered();
-                if !ordered_ids.is_empty() {
+                if !target_ids.is_empty() {
                     BridgeViewerTabs::open_multiple_media_tabs_background(
-                        &ordered_ids,
+                        target_ids,
                         window,
                         ctx.tab_manager,
                         ctx.library,
@@ -426,22 +487,22 @@ impl MediaContextMenu {
                 }
             }
             CTX_ACTION_OPEN_IN_FULLSCREEN => {
-                Self::handle_open_in_fullscreen_action(window, ctx, &selected_ids);
+                Self::handle_open_in_fullscreen_action(window, ctx, target_ids);
             }
             CTX_ACTION_OPEN_WITH_OTHER => {
-                Self::handle_open_with_other_action(window, ctx, &selected_ids);
+                Self::handle_open_with_other_action(window, ctx, target_ids);
             }
             CTX_ACTION_OPEN_IN_FILE_MANAGER => {
-                Self::handle_open_in_file_manager_action(window, ctx, &selected_ids);
+                Self::handle_open_in_file_manager_action(window, ctx, target_ids);
             }
             CTX_ACTION_COPY_NAME => {
-                Self::handle_copy_name_action(window, ctx, &selected_ids);
+                Self::handle_copy_name_action(window, ctx, target_ids);
             }
             CTX_ACTION_COPY_PATH => {
-                Self::handle_copy_path_action(window, ctx, &selected_ids);
+                Self::handle_copy_path_action(window, ctx, target_ids);
             }
             CTX_ACTION_COPY_IMAGE => {
-                Self::handle_copy_image_action(window, ctx, &selected_ids);
+                Self::handle_copy_image_action(window, ctx, target_ids);
             }
             CTX_ACTION_DELETE_MEDIA => {
                 if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
@@ -451,7 +512,6 @@ impl MediaContextMenu {
                     );
                     return;
                 }
-                let ids_vec: Vec<MediaId> = selected_ids.into_iter().collect();
                 let dialog_ctx = FileDialogContext {
                     library: ctx.library.clone(),
                     thumbnails: ctx.thumbnails.clone(),
@@ -459,7 +519,7 @@ impl MediaContextMenu {
                     settings: ctx.settings.clone(),
                     state: ctx.state.clone(),
                 };
-                ctx.delete_file_dialog.show(window, ids_vec, dialog_ctx);
+                ctx.delete_file_dialog.show(window, target_ids.to_vec(), dialog_ctx);
             }
             CTX_ACTION_REMOVE_FROM_DB => {
                 if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
@@ -469,7 +529,6 @@ impl MediaContextMenu {
                     );
                     return;
                 }
-                let ids_vec: Vec<MediaId> = selected_ids.into_iter().collect();
                 let dialog_ctx = FileDialogContext {
                     library: ctx.library.clone(),
                     thumbnails: ctx.thumbnails.clone(),
@@ -477,7 +536,7 @@ impl MediaContextMenu {
                     settings: ctx.settings.clone(),
                     state: ctx.state.clone(),
                 };
-                ctx.remove_orphaned_dialog.show(window, ids_vec, dialog_ctx);
+                ctx.remove_orphaned_dialog.show(window, target_ids.to_vec(), dialog_ctx);
             }
             CTX_ACTION_REFRESH_METADATA => {
                 if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
@@ -519,7 +578,7 @@ impl MediaContextMenu {
                     );
                     return;
                 }
-                Self::handle_rename_action(window, ctx, &selected_ids);
+                Self::handle_rename_action(window, ctx, target_ids);
             }
             CTX_ACTION_SELECT_ALL => {
                 BridgeFileSelection::select_all(window, ctx.library, ctx.state)
@@ -528,32 +587,32 @@ impl MediaContextMenu {
                 BridgeFileSelection::clear_selection(window, ctx.library, ctx.state)
             }
             CTX_ACTION_RATE_5 => BridgeTags::apply_rating_to_ids(
-                &selected_ids,
+                &target_id_set,
                 5,
                 &tag_action_ctx,
             ),
             CTX_ACTION_RATE_4 => BridgeTags::apply_rating_to_ids(
-                &selected_ids,
+                &target_id_set,
                 4,
                 &tag_action_ctx,
             ),
             CTX_ACTION_RATE_3 => BridgeTags::apply_rating_to_ids(
-                &selected_ids,
+                &target_id_set,
                 3,
                 &tag_action_ctx,
             ),
             CTX_ACTION_RATE_2 => BridgeTags::apply_rating_to_ids(
-                &selected_ids,
+                &target_id_set,
                 2,
                 &tag_action_ctx,
             ),
             CTX_ACTION_RATE_1 => BridgeTags::apply_rating_to_ids(
-                &selected_ids,
+                &target_id_set,
                 1,
                 &tag_action_ctx,
             ),
             CTX_ACTION_RATE_0 => BridgeTags::apply_rating_to_ids(
-                &selected_ids,
+                &target_id_set,
                 0,
                 &tag_action_ctx,
             ),
@@ -566,20 +625,12 @@ impl MediaContextMenu {
     fn handle_open_in_fullscreen_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) {
-        let target_id_opt = ctx
-            .state
-            .read()
-            .get_selected_ids_ordered()
-            .first()
-            .copied()
-            .or_else(|| selected_ids.iter().next().copied());
-
-        if let Some(media_id) = target_id_opt {
+        if let Some(&media_id) = target_ids.first() {
             tracing::info!(
                 media_id,
-                "[MediaContextMenu] 'Open in Fullscreen' action triggered from context menu"
+                "[MediaContextMenu] 'Open in Fullscreen' action triggered"
             );
             ctx.fullscreen_controller.show_for_media(
                 media_id,
@@ -595,19 +646,18 @@ impl MediaContextMenu {
     fn handle_open_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        _selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) {
-        let ordered_ids = ctx.state.read().get_selected_ids_ordered();
-        if ordered_ids.is_empty() {
+        if target_ids.is_empty() {
             return;
         }
 
         tracing::info!(
-            selected_count = ordered_ids.len(),
+            target_count = target_ids.len(),
             "[MediaContextMenu] 'Open' action triggered from context menu"
         );
 
-        for id in ordered_ids {
+        for &id in target_ids {
             BridgeFileSelection::open_media(id, ctx.state, ctx.library, window);
         }
     }
@@ -615,7 +665,7 @@ impl MediaContextMenu {
     fn handle_open_with_specific_app(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
         app_idx: usize,
     ) {
         let app_opt = ctx.state.read().active_associated_apps.get(app_idx).cloned();
@@ -624,7 +674,7 @@ impl MediaContextMenu {
             return;
         };
 
-        let paths = Self::collect_selected_paths(ctx, selected_ids);
+        let paths = Self::collect_paths_for_ids(ctx, target_ids);
         if paths.is_empty() {
             return;
         }
@@ -649,9 +699,9 @@ impl MediaContextMenu {
     fn handle_open_with_other_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) {
-        let paths = Self::collect_selected_paths(ctx, selected_ids);
+        let paths = Self::collect_paths_for_ids(ctx, target_ids);
         let Some(first_path) = paths.first() else {
             return;
         };
@@ -669,31 +719,29 @@ impl MediaContextMenu {
         }
     }
 
-    fn collect_selected_paths(
+    pub fn collect_paths_for_ids(
         ctx: &MediaActionContext<'_>,
-        _selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) -> Vec<PathBuf> {
-        let paths = ctx.state.read().get_selected_paths_ordered();
-        if !paths.is_empty() {
-            return paths;
-        }
+        let mut paths = Vec::with_capacity(target_ids.len());
+        let st = ctx.state.read();
 
-        let selected_ids = ctx.state.read().file_selection.selected_ids().clone();
-        let mut fallback_paths = Vec::with_capacity(selected_ids.len());
-        for &id in &selected_ids {
-            if let Ok(p) = ctx.library.resolve_media_path(id) {
-                fallback_paths.push(p);
+        for &id in target_ids {
+            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id) {
+                paths.push(item.full_path.clone());
+            } else if let Ok(p) = ctx.library.resolve_media_path(id) {
+                paths.push(p);
             }
         }
-        fallback_paths
+        paths
     }
 
     fn handle_open_in_file_manager_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) {
-        let paths = Self::collect_selected_paths(ctx, selected_ids);
+        let paths = Self::collect_paths_for_ids(ctx, target_ids);
         if paths.is_empty() {
             return;
         }
@@ -730,14 +778,24 @@ impl MediaContextMenu {
     fn handle_copy_name_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        _selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) {
+        if target_ids.is_empty() {
+            return;
+        }
+
+        let mut names = Vec::with_capacity(target_ids.len());
         let st = ctx.state.read();
-        let names: Vec<String> = st
-            .get_selected_media_ordered()
-            .into_iter()
-            .map(|item| item.record.filename.clone())
-            .collect();
+
+        for &id in target_ids {
+            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id) {
+                names.push(item.record.filename.clone());
+            } else if let Ok(Some(rec)) = ctx.library.media().get(id) {
+                names.push(rec.filename);
+            } else if let Some(tab) = ctx.tab_manager.get_tab_by_media_id(id) {
+                names.push(tab.filename);
+            }
+        }
         drop(st);
 
         if names.is_empty() {
@@ -760,9 +818,9 @@ impl MediaContextMenu {
     fn handle_copy_path_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) {
-        let paths = Self::collect_selected_paths(ctx, selected_ids);
+        let paths = Self::collect_paths_for_ids(ctx, target_ids);
         if paths.is_empty() {
             return;
         }
@@ -784,13 +842,13 @@ impl MediaContextMenu {
     fn handle_copy_image_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) {
-        let Some(&single_id) = selected_ids.iter().next() else {
+        let Some(&single_id) = target_ids.first() else {
             return;
         };
 
-        if selected_ids.len() != 1 {
+        if target_ids.len() != 1 {
             return;
         }
 
@@ -804,6 +862,8 @@ impl MediaContextMenu {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
                 (name, p)
+            } else if let Some(tab) = ctx.tab_manager.get_tab_by_media_id(single_id) {
+                (tab.filename.clone(), tab.file_path.clone())
             } else {
                 return;
             }
@@ -855,10 +915,10 @@ impl MediaContextMenu {
     fn handle_rename_action(
         window: &MainWindow,
         ctx: &MediaActionContext<'_>,
-        selected_ids: &std::collections::HashSet<MediaId>,
+        target_ids: &[MediaId],
     ) {
-        if let Some(&target_id) = selected_ids.iter().next()
-            && selected_ids.len() == 1
+        if let Some(&target_id) = target_ids.first()
+            && target_ids.len() == 1
         {
             let dialog_ctx = FileDialogContext {
                 library: ctx.library.clone(),

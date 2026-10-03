@@ -23,6 +23,40 @@ impl CtxMenuBuilder {
         self
     }
 
+    pub fn header_with_tooltip(
+        mut self,
+        text: impl Into<String>,
+        tooltip: impl Into<String>,
+    ) -> Self {
+        self.items
+            .push(CtxMenuItem::new_header_with_tooltip(text, tooltip));
+        self
+    }
+
+    /// Single Point of Truth (SPoT): Formats a dynamic header with a sticky prefix and left-side ellipsis (…filename.ext)
+    /// to prevent visual overflow in context menus while preserving the category prefix and the file extension.
+    /// Returns `(display_text, full_tooltip_text)`.
+    pub fn format_header_title(
+        prefix: &str,
+        name: &str,
+        max_name_chars: usize,
+    ) -> (String, String) {
+        let trimmed_name = name.trim();
+        let full_text = format!("{}{}", prefix, trimmed_name);
+
+        let char_count = trimmed_name.chars().count();
+        if char_count <= max_name_chars {
+            (full_text.clone(), full_text)
+        } else {
+            let keep_count = max_name_chars.saturating_sub(1);
+            let chars: Vec<char> = trimmed_name.chars().collect();
+            let start_idx = char_count.saturating_sub(keep_count);
+            let suffix: String = chars[start_idx..].iter().collect();
+            let display_text = format!("{}…{}", prefix, suffix);
+            (display_text, full_text)
+        }
+    }
+
     pub fn separator(mut self) -> Self {
         self.items.push(CtxMenuItem::new_separator());
         self
@@ -47,6 +81,7 @@ impl CtxMenuBuilder {
             is_enabled,
             children: Vec::new(),
             menu_index: 0,
+            tooltip: None,
         });
         self
     }
@@ -70,6 +105,7 @@ impl CtxMenuBuilder {
             is_enabled,
             children: Vec::new(),
             menu_index: 0,
+            tooltip: None,
         });
         self
     }
@@ -94,6 +130,7 @@ impl CtxMenuBuilder {
             is_enabled,
             children: Vec::new(),
             menu_index: 0,
+            tooltip: None,
         });
         self
     }
@@ -118,6 +155,7 @@ impl CtxMenuBuilder {
             is_enabled,
             children: Vec::new(),
             menu_index: 0,
+            tooltip: None,
         });
         self
     }
@@ -146,6 +184,7 @@ impl CtxMenuBuilder {
             is_enabled,
             children: child_menu.items,
             menu_index: 0,
+            tooltip: None,
         });
         self
     }

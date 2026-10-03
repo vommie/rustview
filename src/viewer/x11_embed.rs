@@ -264,7 +264,6 @@ pub fn get_slint_window_xid_with_title_fallback(
         }
     }
 
-    // Fallback: search exclusively for windows created by our own PID
     find_window_by_pid_and_title(std::process::id(), fallback_title)
 }
 
@@ -314,7 +313,7 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
                     0,
                     1,
                     0,
-                    0, // AnyPropertyType
+                    0,
                     &mut actual_type,
                     &mut actual_format,
                     &mut nitems,
@@ -353,7 +352,6 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
     }
 }
 
-/// Discovers window belonging to the current process matching a specific title substring.
 pub fn find_window_by_title(title_contains: &str) -> Option<u64> {
     find_window_by_pid_and_title(std::process::id(), title_contains)
 }
@@ -439,7 +437,6 @@ unsafe fn search_tree_by_title(
     }
 }
 
-/// Queries X11 Extended Window Manager Hints (`_NET_WM_STATE`) on the window to determine whether it is maximized.
 pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
     if window_xid == 0 {
         return None;
@@ -472,7 +469,7 @@ pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
             0,
             1024,
             0,
-            0, // AnyPropertyType
+            0,
             &mut actual_type,
             &mut actual_format,
             &mut nitems,
@@ -503,7 +500,6 @@ pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
     }
 }
 
-/// Enforces window maximization or un-maximization directly via X11 EWMH protocol messages.
 pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
     if window_xid == 0 {
         return;
@@ -535,14 +531,14 @@ pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
                 atom_net_wm_state,
                 atom_atom,
                 32,
-                0, // PropModeReplace
+                0,
                 states.as_ptr() as *const u8,
                 2,
             );
         }
 
         let mut ev = ClientMessageEv {
-            type_: 33, // ClientMessage
+            type_: 33,
             serial: 0,
             send_event: 1,
             display,
@@ -551,7 +547,7 @@ pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
             format: 32,
             data: ClientMessageData {
                 data: [
-                    if maximized { 1 } else { 0 }, // 1 = _NET_WM_STATE_ADD, 0 = _NET_WM_STATE_REMOVE
+                    if maximized { 1 } else { 0 },
                     atom_max_vert as c_long,
                     atom_max_horz as c_long,
                     1,
@@ -560,7 +556,7 @@ pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
             },
         };
 
-        let mask = (1 << 19) | (1 << 20); // SubstructureRedirectMask | SubstructureNotifyMask
+        let mask = (1 << 19) | (1 << 20);
         (api.x_send_event)(
             display,
             root,
@@ -574,7 +570,6 @@ pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
     }
 }
 
-/// Enforces true EWMH fullscreen state (`_NET_WM_STATE_FULLSCREEN` + stripped decorations) directly via X11.
 pub fn force_x11_fullscreen(window_xid: u64) {
     if window_xid == 0 {
         return;
@@ -606,7 +601,7 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             status: c_ulong,
         }
         let hints = MotifHints {
-            flags: 2, // MWM_HINTS_DECORATIONS
+            flags: 2,
             functions: 0,
             decorations: 0,
             input_mode: 0,
@@ -618,7 +613,7 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             atom_motif,
             atom_motif,
             32,
-            0, // PropModeReplace
+            0,
             &hints as *const _ as *const u8,
             5,
         );
@@ -630,13 +625,13 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             atom_net_wm_state,
             atom_atom,
             32,
-            0, // PropModeReplace
+            0,
             states.as_ptr() as *const u8,
             1,
         );
 
         let mut ev = ClientMessageEv {
-            type_: 33, // ClientMessage
+            type_: 33,
             serial: 0,
             send_event: 1,
             display,
@@ -645,7 +640,7 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             format: 32,
             data: ClientMessageData {
                 data: [
-                    1, // _NET_WM_STATE_ADD
+                    1,
                     atom_net_wm_fullscreen as c_long,
                     0,
                     1,
@@ -654,7 +649,7 @@ pub fn force_x11_fullscreen(window_xid: u64) {
             },
         };
 
-        let mask = (1 << 19) | (1 << 20); // SubstructureRedirectMask | SubstructureNotifyMask
+        let mask = (1 << 19) | (1 << 20);
         (api.x_send_event)(
             display,
             root,
@@ -690,7 +685,7 @@ pub struct X11VideoSubwindow {
     current_sub_h: u32,
     is_visible: bool,
     is_clipped: bool,
-    last_clip_rect: Option<XRectangle>,
+    last_applied_local_rects: Vec<XRectangle>,
 }
 
 unsafe impl Send for X11VideoSubwindow {}
@@ -798,7 +793,7 @@ impl X11VideoSubwindow {
                 current_sub_h: h_clamped,
                 is_visible: false,
                 is_clipped: false,
-                last_clip_rect: None,
+                last_applied_local_rects: Vec::new(),
             })
         }
     }
@@ -932,7 +927,6 @@ impl X11VideoSubwindow {
             (self.api.x_flush)(self.display);
         }
 
-        self.reset_clip_shape();
         self.show();
         true
     }
@@ -1001,7 +995,7 @@ impl X11VideoSubwindow {
             self.parent_xid = target_parent;
             self.is_visible = true;
             self.is_clipped = false;
-            self.last_clip_rect = None;
+            self.last_applied_local_rects.clear();
 
             tracing::info!(
                 container_xid = self.container_xid,
@@ -1017,6 +1011,10 @@ impl X11VideoSubwindow {
         }
     }
 
+    /// Punches transparent cutout holes out of the X11 container window so that context menus and tooltips
+    /// are ALWAYS rendered on top of the MPV player without hardware occlusion.
+    /// Strictly shapes ONLY `container_xid` (never `subwindow_xid`), preventing MPV OpenGL/EGL surface damage
+    /// and eliminating transparent desktop punch-through under X11 compositors.
     pub fn clip_cutout_rectangles(&mut self, main_win_rects: &[XRectangle]) {
         let Some(ref shape_rects_fn) = self.api.x_shape_combine_rectangles else {
             return;
@@ -1025,52 +1023,87 @@ impl X11VideoSubwindow {
             return;
         };
 
-        unsafe {
-            shape_mask_fn(self.display, self.container_xid, 0, 0, 0, 0, 0);
+        if !self.is_visible {
+            return;
+        }
 
-            let mut local_rects: Vec<XRectangle> = Vec::with_capacity(main_win_rects.len());
-            for r in main_win_rects {
-                let local_x = (r.x as i32) - self.current_container_x;
-                let local_y = (r.y as i32) - self.current_container_y;
-                let local_right = local_x + (r.width as i32);
-                let local_bottom = local_y + (r.height as i32);
+        let container_w = self.current_container_w;
+        let container_h = self.current_container_h;
+        if container_w == 0 || container_h == 0 {
+            return;
+        }
 
-                if local_right > 0
-                    && local_bottom > 0
-                    && local_x < (self.current_container_w as i32)
-                    && local_y < (self.current_container_h as i32)
-                {
-                    let clamped_x = local_x.max(0) as i16;
-                    let clamped_y = local_y.max(0) as i16;
-                    let clamped_w = ((local_right.min(self.current_container_w as i32))
-                        - (clamped_x as i32))
-                        .max(1) as u16;
-                    let clamped_h = ((local_bottom.min(self.current_container_h as i32))
-                        - (clamped_y as i32))
-                        .max(1) as u16;
+        let mut container_cutouts: Vec<XRectangle> = Vec::with_capacity(main_win_rects.len());
 
-                    local_rects.push(XRectangle {
-                        x: clamped_x,
-                        y: clamped_y,
-                        width: clamped_w,
-                        height: clamped_h,
-                    });
-                }
+        for r in main_win_rects {
+            let local_x = (r.x as i32) - self.current_container_x;
+            let local_y = (r.y as i32) - self.current_container_y;
+            let local_right = local_x + (r.width as i32);
+            let local_bottom = local_y + (r.height as i32);
+
+            if local_right > 0
+                && local_bottom > 0
+                && local_x < (container_w as i32)
+                && local_y < (container_h as i32)
+            {
+                let clamped_x = local_x.max(0) as i16;
+                let clamped_y = local_y.max(0) as i16;
+                let clamped_w = ((local_right.min(container_w as i32)) - (clamped_x as i32)).max(1) as u16;
+                let clamped_h = ((local_bottom.min(container_h as i32)) - (clamped_y as i32)).max(1) as u16;
+
+                container_cutouts.push(XRectangle {
+                    x: clamped_x,
+                    y: clamped_y,
+                    width: clamped_w,
+                    height: clamped_h,
+                });
             }
+        }
 
-            if !local_rects.is_empty() {
+        // Subwindow-level cache: if the exact local cutouts have already been applied, skip all X11 calls completely!
+        if self.last_applied_local_rects == container_cutouts && self.is_clipped == !container_cutouts.is_empty() {
+            return;
+        }
+
+        unsafe {
+            if container_cutouts.is_empty() {
+                // No cutouts intersect this subwindow: restore clean rectangular shape
+                shape_mask_fn(self.display, self.container_xid, 0, 0, 0, 0, 0);
+                self.is_clipped = false;
+                self.last_applied_local_rects.clear();
+            } else {
+                // 1. Establish full container rectangular shape as the baseline mask (ShapeSet)
+                let full_rect_container = XRectangle {
+                    x: 0,
+                    y: 0,
+                    width: container_w.min(32767) as u16,
+                    height: container_h.min(32767) as u16,
+                };
                 shape_rects_fn(
                     self.display,
                     self.container_xid,
                     0, // ShapeBounding
-                    0,
-                    0,
-                    local_rects.as_ptr(),
-                    local_rects.len() as c_int,
+                    0, 0,
+                    &full_rect_container,
+                    1,
+                    0, // ShapeSet
+                    0, // Unsorted
+                );
+
+                // 2. Subtract all intersecting cutout rectangles cleanly (ShapeSubtract)
+                shape_rects_fn(
+                    self.display,
+                    self.container_xid,
+                    0, // ShapeBounding
+                    0, 0,
+                    container_cutouts.as_ptr(),
+                    container_cutouts.len() as c_int,
                     3, // ShapeSubtract
                     0, // Unsorted
                 );
+
                 self.is_clipped = true;
+                self.last_applied_local_rects = container_cutouts;
             }
 
             (self.api.x_flush)(self.display);
@@ -1085,7 +1118,7 @@ impl X11VideoSubwindow {
             }
         }
         self.is_clipped = false;
-        self.last_clip_rect = None;
+        self.last_applied_local_rects.clear();
     }
 
     pub fn show(&mut self) {

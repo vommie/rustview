@@ -227,6 +227,7 @@ impl BridgeTabGrid {
     /// Positions and renders running MPV video subwindows onto their corresponding Masonry tiles in the TabGrid.
     /// Clamps physical subwindow coordinates so the subwindow never renders above or below the viewport boundaries.
     /// Strictly suppresses subwindow display if the video file does not exist on disk or has an active error.
+    /// Re-applies all active overlay cutouts (context menus + tooltips) across every mapped subwindow.
     pub fn sync_video_subwindows(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -340,6 +341,9 @@ impl BridgeTabGrid {
                         let _ = sub.reparent(main_xid, geom.x, geom.y, geom.width, geom.height);
                     }
                     let is_visible = sub.update_geometry_and_clip(geom, viewport);
+                    if is_visible {
+                        tab_manager.reapply_active_cutouts_to_subwindow(sub);
+                    }
 
                     tracing::debug!(
                         tab_id = session.id,
@@ -354,7 +358,10 @@ impl BridgeTabGrid {
                 } else if let Ok(mut sub) = X11VideoSubwindow::new(main_xid, geom.x, geom.y, geom.width, geom.height) {
                     let wid = sub.xid();
                     let _ = vid.player.attach_to_window(wid);
-                    sub.update_geometry_and_clip(geom, viewport);
+                    let is_visible = sub.update_geometry_and_clip(geom, viewport);
+                    if is_visible {
+                        tab_manager.reapply_active_cutouts_to_subwindow(&mut sub);
+                    }
                     *sub_guard = Some(sub);
 
                     tracing::info!(

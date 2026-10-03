@@ -39,15 +39,17 @@ impl TagContextMenu {
     }
 
     /// Builds tag item context menu with dynamic reparenting submenu.
+    /// Formats the header using sticky prefix and left-side ellipsis to eliminate menu text overflow while attaching the full path as tooltip.
     pub fn build_tag_menu(
         tag: &TagRecord,
         all_tags: &[TagRecord],
         descendants: &HashSet<TagId>,
     ) -> CtxMenu {
+        let (header_title, tooltip) = CtxMenuBuilder::format_header_title("Tag: ", &tag.name, 26);
         let move_submenu = Self::build_reparent_submenu(tag.id, all_tags, descendants);
 
         CtxMenuBuilder::new()
-            .header(format!("Tag: {}", tag.name))
+            .header_with_tooltip(header_title, tooltip)
             .action(
                 CTX_TAG_ADD_CHILD,
                 "Add Child Tag...",

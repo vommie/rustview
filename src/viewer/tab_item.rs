@@ -285,6 +285,26 @@ impl TabCollection {
         for tab in self.sessions.iter_mut() {
             if tab.media_id == media_id {
                 tab.record.is_deleted = true;
+                let missing_msg = format!(
+                    "Media file not found on disk:\n{}",
+                    tab.file_path.display()
+                );
+                match tab.payload {
+                    TabPayload::Image(ref mut img) => {
+                        img.is_loading = false;
+                        img.high_res_pixels = None;
+                        img.error_message = missing_msg;
+                    }
+                    TabPayload::Video(ref mut vid) => {
+                        vid.is_loading = false;
+                        vid.error_message = missing_msg;
+                        vid.player.stop();
+                        let mut sub = vid.subwindow.lock();
+                        if let Some(ref mut s) = *sub {
+                            s.hide();
+                        }
+                    }
+                }
             }
         }
     }
@@ -301,7 +321,10 @@ impl TabCollection {
                         if file_exists && !updated_record.is_deleted {
                             img.error_message.clear();
                         } else if !file_exists {
-                            img.error_message = format!("Media file not found on disk:\n{}", tab.file_path.display());
+                            img.error_message = format!(
+                                "Media file not found on disk:\n{}",
+                                tab.file_path.display()
+                            );
                         }
                     }
                     TabPayload::Video(ref mut vid) => {
@@ -309,7 +332,10 @@ impl TabCollection {
                         if file_exists && !updated_record.is_deleted {
                             vid.error_message.clear();
                         } else if !file_exists {
-                            vid.error_message = format!("Media file not found on disk:\n{}", tab.file_path.display());
+                            vid.error_message = format!(
+                                "Media file not found on disk:\n{}",
+                                tab.file_path.display()
+                            );
                         }
                     }
                 }
@@ -354,7 +380,10 @@ impl TabSessionFactory {
                     volume: 1.0,
                     duration_ms: record.duration_ms,
                     is_loading: false,
-                    error_message: format!("Media file not found on disk:\n{}", file_path.display()),
+                    error_message: format!(
+                        "Media file not found on disk:\n{}",
+                        file_path.display()
+                    ),
                 })
             } else {
                 Self::create_video_payload(&file_path, record.duration_ms, main_xid_opt, viewport_rect)?
@@ -369,7 +398,10 @@ impl TabSessionFactory {
             TabPayload::Image(ImageTabPayload {
                 high_res_pixels: None,
                 is_loading: false,
-                error_message: format!("Media file not found on disk:\n{}", file_path.display()),
+                error_message: format!(
+                    "Media file not found on disk:\n{}",
+                    file_path.display()
+                ),
                 orig_width: record.width,
                 orig_height: record.height,
             })

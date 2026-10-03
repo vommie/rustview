@@ -2,6 +2,7 @@ use super::bridge_file_dialogs::FileDialogContext;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::{MainWindow, RemoveOrphanedFileDialog};
@@ -46,6 +47,11 @@ impl RemoveOrphanedFileDialogController {
                         .iter()
                         .find(|m| m.record.id == id)
                         .map(|m| m.record.filename.clone())
+                })
+                .or_else(|| {
+                    media_ids.first().and_then(|&id| {
+                        ctx.tab_manager.get_tab_by_media_id(id).map(|t| t.filename)
+                    })
                 })
                 .unwrap_or_else(|| "Selected file".to_string())
         };
@@ -118,6 +124,17 @@ impl RemoveOrphanedFileDialogController {
         );
         BridgeInspector::update(window, &ctx.state);
         BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
+
+        if window.get_active_view_mode() == 2 {
+            BridgeTabGrid::sync_tab_grid_ui(
+                window,
+                &ctx.tab_manager,
+                &ctx.library,
+                &ctx.settings,
+                &ctx.state,
+            );
+        }
+
         StatusBarBridge::update_metrics(window, &ctx.state);
     }
 

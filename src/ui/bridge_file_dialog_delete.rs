@@ -2,6 +2,7 @@ use super::bridge_file_dialogs::FileDialogContext;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::models::format_filesize;
@@ -54,6 +55,11 @@ impl DeleteFileDialogController {
                         name = rec.filename.clone();
                     }
                     total += rec.file_size;
+                } else if let Some(tab) = ctx.tab_manager.get_tab_by_media_id(id) {
+                    if idx == 0 {
+                        name = tab.filename.clone();
+                    }
+                    total += tab.record.file_size;
                 }
             }
             (name, total)
@@ -98,6 +104,8 @@ impl DeleteFileDialogController {
                     paths_to_delete.push(item.full_path.clone());
                 } else if let Ok(p) = ctx.library.resolve_media_path(id) {
                     paths_to_delete.push(p);
+                } else if let Some(tab) = ctx.tab_manager.get_tab_by_media_id(id) {
+                    paths_to_delete.push(tab.file_path.clone());
                 }
             }
         }
@@ -168,6 +176,17 @@ impl DeleteFileDialogController {
         );
         BridgeInspector::update(window, &ctx.state);
         BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
+
+        if window.get_active_view_mode() == 2 {
+            BridgeTabGrid::sync_tab_grid_ui(
+                window,
+                &ctx.tab_manager,
+                &ctx.library,
+                &ctx.settings,
+                &ctx.state,
+            );
+        }
+
         StatusBarBridge::update_metrics(window, &ctx.state);
     }
 

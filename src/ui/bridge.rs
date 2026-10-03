@@ -505,6 +505,24 @@ impl UiBridge {
         self.register_dnd_callbacks();
         self.register_rubberband_callbacks();
         self.register_sidebar_resize_callbacks();
+        self.register_tooltip_overlay_callbacks();
+    }
+
+    fn register_tooltip_overlay_callbacks(&self) {
+        let tm = self.tab_manager.clone();
+        let win_weak = self.window.as_weak();
+
+        self.window.on_global_tooltip_state_changed(move |is_visible, x, y, w, h| {
+            if let Some(win) = win_weak.upgrade() {
+                if is_visible && w > 2.0 && h > 2.0 {
+                    let scale = win.window().scale_factor();
+                    let cutouts = super::bridge_ctx_menu::make_rounded_cutout_rectangles(x, y, w, h, scale);
+                    tm.set_tooltip_cutouts(cutouts);
+                } else {
+                    tm.clear_tooltip_cutouts();
+                }
+            }
+        });
     }
 
     fn register_rename_callbacks(&self) {

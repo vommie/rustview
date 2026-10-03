@@ -1,3 +1,4 @@
+use super::bridge_ctx_menu_media::MediaContextMenu;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
@@ -5,7 +6,9 @@ use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::MainWindow;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
 use crate::library::Library;
+use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
+use crate::system::DesktopApp;
 use crate::viewer::{HighResImageLoader, MediaTabSession, TabId, TabPayload, ViewerTabManager};
 use parking_lot::RwLock;
 use slint::ComponentHandle;
@@ -25,16 +28,25 @@ pub struct TabActionContext<'a> {
 pub struct TabContextMenu;
 
 impl TabContextMenu {
-    /// Builds the declarative context menu for a viewer tab item with Move and Close Tabs submenus.
-    /// Uses pure text-only action entries (no icons) for a clean, consistent look.
+    /// Builds the declarative context menu for a viewer tab item with Move, Close, Open, Open With, Rename, Copy, and Delete options.
+    /// Strictly leverages shared builder methods from `MediaContextMenu` to eliminate any logic duplication.
+    /// Formats the header using sticky prefix and left-side ellipsis to eliminate menu text overflow while attaching the full path as tooltip.
     pub fn build_menu(
         tab: &MediaTabSession,
         tab_idx: usize,
         total_tabs: usize,
         all_tabs: &[MediaTabSession],
+        associated_apps: &[DesktopApp],
+        is_busy: bool,
     ) -> CtxMenu {
         let display_title = ViewerTabManager::compute_tab_title(all_tabs, tab.id);
-        let header_text = format!("Tab: {}", display_title);
+
+        let (header_title, _) = CtxMenuBuilder::format_header_title("Tab: ", &display_title, 26);
+        let header_tooltip = if !tab.file_path.as_os_str().is_empty() {
+            format!("Tab: {} ({})", display_title, tab.file_path.display())
+        } else {
+            format!("Tab: {}", display_title)
+        };
 
         let can_move_left = tab_idx > 0;
         let can_move_right = tab_idx + 1 < total_tabs;
@@ -44,8 +56,8 @@ impl TabContextMenu {
         let has_tabs_to_right = tab_idx + 1 < total_tabs;
         let has_other_tabs = total_tabs > 1;
 
-        CtxMenuBuilder::new()
-            .header(header_text)
+        let mut builder = CtxMenuBuilder::new()
+            .header_with_tooltip(header_title, header_tooltip)
             .action(
                 CTX_TAB_DUPLICATE,
                 "Duplicate Tab",
@@ -114,11 +126,35 @@ impl TabContextMenu {
                 Some("Ctrl+W"),
                 None,
                 true,
-            )
-            .build()
+            );
+
+        // Section 2: Shared File Open Actions (Open, Open With..., Open in File Manager)
+        builder = builder.separator();
+        builder = MediaContextMenu::append_file_open_entries(
+            builder,
+            true, // is_single
+            true, // can_open
+            associated_apps,
+        );
+
+        // Section 3: Shared File Management Actions (Rename, Copy, Delete File / Remove from DB)
+        let is_image = matches!(tab.payload, TabPayload::Image(_))
+            || matches!(tab.record.media_type, MediaType::Image);
+        let is_deleted = tab.record.is_deleted || !tab.file_path.exists();
+
+        builder = builder.separator();
+        builder = MediaContextMenu::append_file_management_entries(
+            builder,
+            true,     // is_single
+            is_image, // is_single_image
+            is_deleted,
+            is_busy,
+        );
+
+        builder.build()
     }
 
-    /// Handles tab context menu action routing.
+    /// Handles tab-management context menu action routing (IDs 4001..4009).
     pub fn handle_action(
         action_id: CtxMenuActionId,
         ctx: TabActionContext<'_>,

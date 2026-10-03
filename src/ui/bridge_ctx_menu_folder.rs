@@ -27,6 +27,7 @@ pub struct FolderContextMenu;
 
 impl FolderContextMenu {
     /// Builds the declarative context menu for a folder item directly from the in-memory cached FolderTree hierarchy with zero disk I/O.
+    /// Formats the header using sticky prefix and left-side ellipsis to eliminate menu text overflow while attaching the full path as tooltip.
     pub fn build_menu_from_cached_tree(
         target_folder: &FolderRecord,
         cached_tree: &[FolderTreeNode],
@@ -43,13 +44,20 @@ impl FolderContextMenu {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| target_folder.path.clone());
 
-        let title_header = if target_folder.is_deleted {
-            format!("Missing Folder: {}", folder_name)
+        let (prefix, max_chars) = if target_folder.is_deleted {
+            ("Missing Folder: ", 18usize)
         } else {
-            format!("Folder: {}", folder_name)
+            ("Folder: ", 24usize)
         };
 
-        let mut builder = CtxMenuBuilder::new().header(title_header);
+        let (header_title, _) = CtxMenuBuilder::format_header_title(prefix, &folder_name, max_chars);
+        let header_tooltip = format!(
+            "{}{}",
+            if target_folder.is_deleted { "Missing Folder: " } else { "Folder: " },
+            target_folder.path
+        );
+
+        let mut builder = CtxMenuBuilder::new().header_with_tooltip(header_title, header_tooltip);
 
         // Open in File Manager right at the top
         builder = builder.action(

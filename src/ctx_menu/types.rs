@@ -16,7 +16,7 @@ pub enum CtxMenuItemKind {
     Submenu = 5,
 }
 
-/// Generic, decoupled context menu item data structure supporting arbitrary nesting depth.
+/// Generic, decoupled context menu item data structure supporting arbitrary nesting depth and tooltips.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CtxMenuItem {
     pub id: CtxMenuActionId,
@@ -29,6 +29,8 @@ pub struct CtxMenuItem {
     pub is_enabled: bool,
     pub children: Vec<CtxMenuItem>,
     pub menu_index: usize,
+    #[serde(default)]
+    pub tooltip: Option<String>,
 }
 
 impl CtxMenuItem {
@@ -44,6 +46,7 @@ impl CtxMenuItem {
             is_enabled: true,
             children: Vec::new(),
             menu_index: 0,
+            tooltip: None,
         }
     }
 
@@ -59,6 +62,7 @@ impl CtxMenuItem {
             is_enabled: true,
             children: Vec::new(),
             menu_index: 0,
+            tooltip: None,
         }
     }
 
@@ -74,6 +78,7 @@ impl CtxMenuItem {
             is_enabled: false,
             children: Vec::new(),
             menu_index: 0,
+            tooltip: None,
         }
     }
 
@@ -89,6 +94,23 @@ impl CtxMenuItem {
             is_enabled: false,
             children: Vec::new(),
             menu_index: 0,
+            tooltip: None,
+        }
+    }
+
+    pub fn new_header_with_tooltip(text: impl Into<String>, tooltip: impl Into<String>) -> Self {
+        Self {
+            id: 0,
+            text: text.into(),
+            shortcut: None,
+            icon_name: None,
+            icon_path: None,
+            kind: CtxMenuItemKind::Header,
+            is_checked: false,
+            is_enabled: false,
+            children: Vec::new(),
+            menu_index: 0,
+            tooltip: Some(tooltip.into()),
         }
     }
 
@@ -109,6 +131,7 @@ impl CtxMenuItem {
             is_enabled,
             children,
             menu_index: 0,
+            tooltip: None,
         }
     }
 }

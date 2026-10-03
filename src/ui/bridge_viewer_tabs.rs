@@ -628,6 +628,7 @@ impl BridgeViewerTabs {
     }
 
     /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and MPV input hooks.
+    /// Also re-applies all active overlay cutouts (menus + tooltips) across the subwindow.
     pub fn sync_video_embedding(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -715,18 +716,16 @@ impl BridgeViewerTabs {
             if let Some(ref mut sub) = *sub_guard {
                 if sub.parent_xid() == main_xid {
                     sub.move_resize(phys_x, phys_y, phys_w, phys_h);
-                    sub.reset_clip_shape();
-                    sub.show();
                 } else {
                     let _ = sub.reparent(main_xid, phys_x, phys_y, phys_w, phys_h);
-                    sub.reset_clip_shape();
-                    sub.show();
                 }
+                sub.show();
+                tab_manager.reapply_active_cutouts_to_subwindow(sub);
             } else if let Ok(mut sub) = X11VideoSubwindow::new(main_xid, phys_x, phys_y, phys_w, phys_h) {
                 let wid = sub.xid();
                 let _ = vid.player.attach_to_window(wid);
-                sub.reset_clip_shape();
                 sub.show();
+                tab_manager.reapply_active_cutouts_to_subwindow(&mut sub);
                 *sub_guard = Some(sub);
             }
 

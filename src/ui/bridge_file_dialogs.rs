@@ -9,6 +9,7 @@ pub use super::bridge_inspector::BridgeInspector;
 pub use super::bridge_media::BridgeMedia;
 pub use super::bridge_state::UiState;
 pub use super::bridge_status_bar::StatusBarBridge;
+pub use super::bridge_tab_grid::BridgeTabGrid;
 pub use super::bridge_viewer_tabs::BridgeViewerTabs;
 pub use super::models::format_timestamp;
 pub use super::{FileRenameDialog, MainWindow};
@@ -72,6 +73,10 @@ impl FileRenameDialogController {
                     let path = ctx.library.resolve_media_path(media_id).ok()?;
                     let name = path.file_name().map(|n| n.to_string_lossy().to_string())?;
                     Some((name, path))
+                })
+                .or_else(|| {
+                    let tab = ctx.tab_manager.get_tab_by_media_id(media_id)?;
+                    Some((tab.filename, tab.file_path))
                 })
         };
 
@@ -345,6 +350,18 @@ impl FileRenameDialogController {
                     false,
                     false,
                 );
+
+                // If in TabGrid mode (mode 2), also update all TabGrid masonry tiles
+                if window.get_active_view_mode() == 2 {
+                    BridgeTabGrid::sync_tab_grid_ui(
+                        window,
+                        &ctx.tab_manager,
+                        &ctx.library,
+                        &ctx.settings,
+                        &ctx.state,
+                    );
+                }
+
                 StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {

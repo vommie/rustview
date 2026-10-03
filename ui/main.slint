@@ -231,6 +231,35 @@ export component MainWindow inherits Window {
     in property <string> info-hash: "-";
     in property <int> info-selection-count: 0;
 
+    // Reactive Tooltip State Hooks
+    property <bool> tooltip-active: GlobalTooltip.is-visible && TooltipSettings.enabled;
+    property <length> tooltip-bubble-x: Math.max(8px, Math.min(self.width - tooltip-bubble-w - 8px, GlobalTooltip.pos-x));
+    property <length> tooltip-bubble-y: Math.max(8px, Math.min(self.height - tooltip-bubble-h - 8px, GlobalTooltip.pos-y));
+    property <length> tooltip-bubble-w: tooltip-bubble.preferred-width;
+    property <length> tooltip-bubble-h: tooltip-bubble.preferred-height;
+
+    callback global-tooltip-state-changed(bool /* is_visible */, length /* x */, length /* y */, length /* width */, length /* height */);
+
+    changed tooltip-active => {
+        if self.tooltip-active {
+            root.global-tooltip-state-changed(true, self.tooltip-bubble-x, self.tooltip-bubble-y, self.tooltip-bubble-w, self.tooltip-bubble-h);
+        } else {
+            root.global-tooltip-state-changed(false, 0px, 0px, 0px, 0px);
+        }
+    }
+
+    changed tooltip-bubble-x => {
+        if self.tooltip-active {
+            root.global-tooltip-state-changed(true, self.tooltip-bubble-x, self.tooltip-bubble-y, self.tooltip-bubble-w, self.tooltip-bubble-h);
+        }
+    }
+
+    changed tooltip-bubble-y => {
+        if self.tooltip-active {
+            root.global-tooltip-state-changed(true, self.tooltip-bubble-x, self.tooltip-bubble-y, self.tooltip-bubble-w, self.tooltip-bubble-h);
+        }
+    }
+
     callback refresh-folder();
     callback open-settings();
     callback browse-clicked();
@@ -901,22 +930,22 @@ export component MainWindow inherits Window {
         dismissed => { root.choice-popup-dismissed(); }
     }
 
-    if GlobalTooltip.is-visible && TooltipSettings.enabled : Rectangle {
+    // High-Priority Global Tooltip Layer (Strictly rendered over all context menus and media at z: 200)
+    Rectangle {
         x: 0px;
         y: 0px;
         width: 100%;
         height: 100%;
         z: 200;
         background: transparent;
+        visible: root.tooltip-active;
 
-        Rectangle {
-            property <length> bubble-w: bubble-layout.preferred-width;
-            property <length> bubble-h: bubble-layout.preferred-height;
-
-            x: Math.max(8px, Math.min(parent.width - self.bubble-w - 8px, GlobalTooltip.pos-x));
-            y: Math.max(8px, Math.min(parent.height - self.bubble-h - 8px, GlobalTooltip.pos-y));
-            width: self.bubble-w;
-            height: self.bubble-h;
+        tooltip-bubble := Rectangle {
+            x: root.tooltip-bubble-x;
+            y: root.tooltip-bubble-y;
+            width: bubble-layout.preferred-width;
+            height: bubble-layout.preferred-height;
+            visible: root.tooltip-active;
 
             background: TooltipSettings.default-background;
             border-radius: TooltipSettings.default-corner-radius;

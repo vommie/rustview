@@ -3,7 +3,7 @@ import { Icons, AppIcon } from "icons.slint";
 import { TabGridItemModel } from "types.slint";
 
 /// Standalone Masonry Tile item for the TabGridView.
-/// Displays live loaded image buffers or transparent video subwindow placeholders with full aspect ratio preservation.
+/// Displays live loaded image buffers or solid video subwindow placeholders with full aspect ratio preservation.
 export component TabGridItemView inherits Rectangle {
     in property <TabGridItemModel> item;
     in property <length> padding-h: 8px;
@@ -27,7 +27,6 @@ export component TabGridItemView inherits Rectangle {
     border-radius: root.corner-radius-val;
     clip: true;
 
-    // Full-Tile TouchArea: Handles mouse actions across the entire item area
     tile-touch := TouchArea {
         width: 100%;
         height: 100%;
@@ -100,7 +99,6 @@ export component TabGridItemView inherits Rectangle {
                         y: (parent.height - self.height) / 2;
                     }
 
-                    // Close Button
                     Rectangle {
                         width: 16px;
                         height: 16px;
@@ -135,7 +133,6 @@ export component TabGridItemView inherits Rectangle {
             border-radius: Math.max(0px, root.corner-radius-val - 2px);
             clip: true;
 
-            // Render error fallback view if file is missing or in error state
             if root.item.error-message != "" : VerticalLayout {
                 alignment: center;
                 spacing: 6px;
@@ -181,7 +178,6 @@ export component TabGridItemView inherits Rectangle {
                 }
             }
 
-            // Render live Image buffer for image tabs when no error
             if !root.item.is-video && root.item.image.width > 0 && root.item.error-message == "" : Image {
                 source: root.item.image;
                 width: 100%;
@@ -189,7 +185,6 @@ export component TabGridItemView inherits Rectangle {
                 image-fit: contain;
             }
 
-            // Fallback placeholder icon
             if !root.item.is-video && root.item.image.width == 0 && root.item.error-message == "" : Text {
                 text: "🖼";
                 font-size: 28px;
@@ -197,13 +192,14 @@ export component TabGridItemView inherits Rectangle {
                 vertical-alignment: center;
             }
 
-            // Video Viewport Area (X11 Subwindow maps directly to this space only when no error)
+            // Video Viewport Area: Solid black background ensures Slint's canvas is 100% opaque.
+            // When XShape cutouts punch through the MPV window, Slint's opaque background and menus are revealed,
+            // guaranteeing the desktop never shines through.
             if root.item.is-video && root.item.error-message == "" : Rectangle {
                 width: 100%;
                 height: 100%;
-                background: transparent;
+                background: #000000;
 
-                // Bottom-right paused video indicator badge
                 Rectangle {
                     x: parent.width - 24px;
                     y: parent.height - 20px;

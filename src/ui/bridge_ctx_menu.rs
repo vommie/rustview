@@ -25,6 +25,7 @@ use crate::ctx_menu::{CtxMenu, CtxMenuItem, CtxMenuItemKind, CtxMenuDispatcher};
 use crate::library::models::{FolderId, FolderRecord, MediaId};
 use crate::library::Library;
 use crate::settings::SettingsManager;
+use crate::system::DesktopIntegration;
 use crate::thumbnails::ThumbnailManager;
 use crate::viewer::{TabId, ViewerTabManager, XRectangle};
 use parking_lot::RwLock;
@@ -77,7 +78,7 @@ impl BridgeContextMenu {
     pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
         Self::register_media_menu(window, &reg.library, &reg.thumbnails, &reg.tab_manager, &reg.state);
         Self::register_folder_menu(window, &reg.library, &reg.thumbnails, &reg.settings, &reg.tab_manager, &reg.state);
-        Self::register_tab_menu(window, &reg.tab_manager, &reg.state);
+        Self::register_tab_menu(window, &reg.tab_manager, &reg.thumbnails, &reg.state);
         Self::register_popup_events(window, &reg.tab_manager, &reg.state);
         Self::register_action_dispatcher(window, reg);
     }
@@ -146,13 +147,15 @@ impl BridgeContextMenu {
     fn register_tab_menu(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
+        thumbnails: &Arc<ThumbnailManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let win = window.clone_strong();
         let tm = tab_manager.clone();
+        let th = thumbnails.clone();
         let st = state.clone();
         window.on_tab_context_menu(move |id, x, y| {
-            Self::show_tab_menu(&win, &tm, &st, id as u64, x, y);
+            Self::show_tab_menu(&win, &tm, &th, &st, id as u64, x, y);
         });
     }
 
@@ -190,36 +193,9 @@ impl BridgeContextMenu {
                 }
             }
 
-            if let Some(ref menu) = active {
-                let scale = win.window().scale_factor();
-                let win_w = win.window().size().width as f32 / scale;
-                let win_h = win.window().size().height as f32 / scale;
-
-                let (w0, h0) = calculate_menu_dimensions(&menu.items);
-                let l0_x = win.get_context_menu_x().max(8.0).min(win_w - w0 - 8.0);
-                let l0_y = win.get_context_menu_y().max(8.0).min(win_h - h0 - 8.0);
-
-                let mut cutouts = make_rounded_cutout_rectangles(l0_x, l0_y, w0, h0, scale);
-
-                let sub_map = active_submenus_event.read().clone();
-                for (&sub_depth, &sub_menu_idx) in &sub_map {
-                    if sub_depth == 1 && let Some(children) = menu.find_children_by_menu_index(sub_menu_idx) {
-                        let (w1, h1) = calculate_menu_dimensions(children);
-                        let l1_x = if l0_x + w0 + w1 - 2.0 + 8.0 > win_w {
-                            (l0_x - w1 + 2.0).max(8.0)
-                        } else {
-                            l0_x + w0 - 2.0
-                        };
-                        let sub1_y = calculate_item_y_offset(&menu.items, sub_menu_idx);
-                        let l1_y = (l0_y + sub1_y - 4.0).max(8.0).min(win_h - h1 - 8.0);
-
-                        let sub_cutouts = make_rounded_cutout_rectangles(l1_x, l1_y, w1, h1, scale);
-                        cutouts.extend(sub_cutouts);
-                    }
-                }
-
-                tm_sub.clip_video_subwindow(&cutouts);
-            }
+            let sub_map = active_submenus_event.read().clone();
+            let all_cutouts = calculate_all_active_menu_cutouts(&win, active.as_ref(), &sub_map);
+            tm_sub.set_menu_cutouts(all_cutouts);
         });
 
         let win = window.clone_strong();
@@ -228,7 +204,7 @@ impl BridgeContextMenu {
         window.on_context_menu_dismissed(move || {
             active_submenus_dismiss.write().clear();
             CtxMenuPresenter::dismiss(&win);
-            tm.reset_video_subwindow_clip();
+            tm.clear_menu_cutouts();
         });
     }
 
@@ -251,12 +227,12 @@ impl BridgeContextMenu {
 
         window.on_context_menu_item_clicked(move |action_id| {
             CtxMenuPresenter::dismiss(&win);
-            tab_mgr.reset_video_subwindow_clip();
+            tab_mgr.clear_menu_cutouts();
             let action_u64 = action_id as u64;
 
             // 1. Folder Actions
             if action_u64 >= CTX_FOLDER_MOVE_BASE || (3000..4000).contains(&action_u64) {
-                let target_folder_id = st.read().active_folder_dialog_target;
+                let target_folder_id = st.write().active_folder_dialog_target.take();
                 let ctx = FolderDialogContext {
                     library: lib.clone(),
                     thumbnails: thumb.clone(),
@@ -274,25 +250,60 @@ impl BridgeContextMenu {
                 return;
             }
 
-            // 3. Tab Actions
-            if (4000..5000).contains(&action_u64) {
-                let target_tab_id = st.read().active_tab_dialog_target;
-                TabContextMenu::handle_action(
-                    action_u64,
-                    TabActionContext {
-                        window: &win,
-                        tab_manager: &tab_mgr,
+            // 3. Tab Context Menu Invocations (Both tab lifecycle and unified file actions)
+            let active_tab_target = st.write().active_tab_dialog_target.take();
+            if let Some(target_tab_id) = active_tab_target {
+                if (4000..5000).contains(&action_u64) {
+                    TabContextMenu::handle_action(
+                        action_u64,
+                        TabActionContext {
+                            window: &win,
+                            tab_manager: &tab_mgr,
+                            library: &lib,
+                            settings: &set,
+                            state: &st,
+                            fullscreen_controller: &fs_ctrl,
+                        },
+                        Some(target_tab_id),
+                    );
+                    return;
+                }
+
+                // If a unified file action was clicked on a tab context menu:
+                if let Some(tab) = tab_mgr.get_tab(target_tab_id) {
+                    let media_action_ctx = MediaActionContext {
                         library: &lib,
+                        thumbnails: &thumb,
+                        tab_manager: &tab_mgr,
                         settings: &set,
                         state: &st,
+                        dispatcher: &disp,
+                        rename_dialog: &ren_dlg,
+                        missing_file_dialog: &missing_file_dlg,
+                        delete_file_dialog: &delete_file_dlg,
+                        remove_orphaned_dialog: &remove_orphaned_dlg,
+                        conflict_dialog: &conflict_dlg,
                         fullscreen_controller: &fs_ctrl,
-                    },
-                    target_tab_id,
-                );
-                return;
+                    };
+
+                    tracing::info!(
+                        target_tab_id,
+                        media_id = tab.media_id,
+                        action_id = action_u64,
+                        "[BridgeContextMenu] Routing unified file action from tab context menu to shared handler"
+                    );
+
+                    MediaContextMenu::handle_file_action_for_ids(
+                        action_u64,
+                        &win,
+                        &media_action_ctx,
+                        &[tab.media_id],
+                    );
+                    return;
+                }
             }
 
-            // 4. Media File Actions
+            // 4. Standard Media Grid / Table Selection Actions
             MediaContextMenu::handle_action(
                 action_u64,
                 &win,
@@ -320,6 +331,7 @@ impl BridgeContextMenu {
         x: f32,
         y: f32,
     ) {
+        ctx.state.write().active_tab_dialog_target = None;
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let (all_selected_deleted, selected_count, is_single_image, associated_apps) =
             MediaContextMenu::prepare_selection(ctx.window, ctx.library, ctx.state, media_id);
@@ -339,7 +351,6 @@ impl BridgeContextMenu {
         x: f32,
         y: f32,
     ) {
-        // Evaluate busy status before taking the write lock to prevent deadlocks
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
 
         let app_settings = ctx.settings.get();
@@ -349,6 +360,7 @@ impl BridgeContextMenu {
 
         let mut st = ctx.state.write();
         st.active_folder_dialog_target = Some(folder_id);
+        st.active_tab_dialog_target = None;
 
         if st.cached_folder_tree.is_none()
             && let Some(ref root_dir) = root_setting
@@ -397,6 +409,7 @@ impl BridgeContextMenu {
     pub fn show_tab_menu(
         window: &MainWindow,
         tab_manager: &ViewerTabManager,
+        thumbnails: &ThumbnailManager,
         state: &Arc<RwLock<UiState>>,
         tab_id: TabId,
         x: f32,
@@ -410,9 +423,28 @@ impl BridgeContextMenu {
         };
 
         let tab = &tabs[tab_idx];
-        state.write().active_tab_dialog_target = Some(tab_id);
+        let is_busy = BridgeMedia::is_system_busy(window, thumbnails, state);
 
-        let menu = TabContextMenu::build_menu(tab, tab_idx, total_tabs, &tabs);
+        let associated_apps = if tab.file_path.exists() {
+            DesktopIntegration::get_associated_apps(&tab.file_path)
+        } else {
+            Vec::new()
+        };
+
+        {
+            let mut st = state.write();
+            st.active_tab_dialog_target = Some(tab_id);
+            st.active_associated_apps = associated_apps.clone();
+        }
+
+        let menu = TabContextMenu::build_menu(
+            tab,
+            tab_idx,
+            total_tabs,
+            &tabs,
+            &associated_apps,
+            is_busy,
+        );
         Self::open_custom_menu(window, state, tab_manager, menu, x, y + 10.0);
     }
 
@@ -446,11 +478,57 @@ impl BridgeContextMenu {
         let l0_y = y.max(8.0).min(win_h - h - 8.0);
 
         let cutouts = make_rounded_cutout_rectangles(l0_x, l0_y, w, h, scale);
-        tab_manager.clip_video_subwindow(&cutouts);
+        tab_manager.set_menu_cutouts(cutouts);
 
         let mut st = state.write();
         CtxMenuPresenter::open(window, &mut st.active_context_menu, menu, x, y);
     }
+}
+
+/// Computes cutout rectangles for the base menu and all currently active submenu levels (Depths 1 through 5).
+pub fn calculate_all_active_menu_cutouts(
+    window: &MainWindow,
+    menu_opt: Option<&CtxMenu>,
+    sub_map: &HashMap<i32, usize>,
+) -> Vec<XRectangle> {
+    let scale = window.window().scale_factor();
+    let win_w = window.window().size().width as f32 / scale;
+    let win_h = window.window().size().height as f32 / scale;
+
+    let Some(menu) = menu_opt else {
+        return Vec::new();
+    };
+
+    let (w0, h0) = calculate_menu_dimensions(&menu.items);
+    let l0_x = window.get_context_menu_x().max(8.0).min(win_w - w0 - 8.0);
+    let l0_y = window.get_context_menu_y().max(8.0).min(win_h - h0 - 8.0);
+
+    let mut all_cutouts = make_rounded_cutout_rectangles(l0_x, l0_y, w0, h0, scale);
+    let mut level_coords: HashMap<i32, (f32, f32, f32, f32)> = HashMap::new();
+    level_coords.insert(0, (l0_x, l0_y, w0, h0));
+
+    for depth in 1..=5 {
+        if let Some(&menu_idx) = sub_map.get(&depth)
+            && let Some(children) = menu.find_children_by_menu_index(menu_idx)
+            && let Some(&(prev_x, prev_y, prev_w, _prev_h)) = level_coords.get(&(depth - 1))
+        {
+            let (w_sub, h_sub) = calculate_menu_dimensions(children);
+            let x_sub = if prev_x + prev_w + w_sub - 2.0 + 8.0 > win_w {
+                (prev_x - w_sub + 2.0).max(8.0)
+            } else {
+                prev_x + prev_w - 2.0
+            };
+
+            let y_offset = calculate_item_y_offset(&menu.items, menu_idx);
+            let y_sub = (prev_y + y_offset - 4.0).max(8.0).min(win_h - h_sub - 8.0);
+
+            let sub_cutouts = make_rounded_cutout_rectangles(x_sub, y_sub, w_sub, h_sub, scale);
+            all_cutouts.extend(sub_cutouts);
+            level_coords.insert(depth, (x_sub, y_sub, w_sub, h_sub));
+        }
+    }
+
+    all_cutouts
 }
 
 /// Dynamically calculates the exact pixel dimensions of a menu from its items to eliminate black overhangs.

@@ -25,6 +25,8 @@ pub struct ViewerTabManager {
     library: Arc<Library>,
     main_window_xid: RwLock<Option<u64>>,
     cached_viewport_rect: RwLock<(i32, i32, u32, u32)>,
+    active_menu_cutouts: RwLock<Vec<XRectangle>>,
+    active_tooltip_cutouts: RwLock<Vec<XRectangle>>,
 }
 
 impl ViewerTabManager {
@@ -36,6 +38,8 @@ impl ViewerTabManager {
             library,
             main_window_xid: RwLock::new(None),
             cached_viewport_rect: RwLock::new((0, 64, 800, 600)),
+            active_menu_cutouts: RwLock::new(Vec::new()),
+            active_tooltip_cutouts: RwLock::new(Vec::new()),
         }
     }
 
@@ -58,7 +62,7 @@ impl ViewerTabManager {
     }
 
     // =========================================================================
-    // Active Player & Subwindow Queries & Clipping
+    // Active Player & Subwindow Queries & Centralized Overlay Clipping
     // =========================================================================
 
     /// Returns the MPV player associated with the currently active tab if it is a video tab.
@@ -148,21 +152,94 @@ impl ViewerTabManager {
         }
     }
 
-    /// Clips out a cutout shape from the active video subwindow so context menus display seamlessly on top.
-    pub fn clip_video_subwindow(&self, rects: &[XRectangle]) {
-        if let Some(sub_slot) = self.get_active_subwindow()
-            && let Some(ref mut sub) = *sub_slot.lock()
+    // =========================================================================
+    // Dynamic XShape Overlay Clipping (Menu & Tooltip Layer Hierarchy)
+    // =========================================================================
+
+    /// Updates active context menu cutouts with deduplication to eliminate redundant XShape calls.
+    pub fn set_menu_cutouts(&self, cutouts: Vec<XRectangle>) {
         {
-            sub.clip_cutout_rectangles(rects);
+            let current = self.active_menu_cutouts.read();
+            if *current == cutouts {
+                return;
+            }
+        }
+        *self.active_menu_cutouts.write() = cutouts;
+        self.apply_combined_cutouts_to_all_subwindows();
+    }
+
+    /// Clears active context menu cutouts with deduplication.
+    pub fn clear_menu_cutouts(&self) {
+        {
+            let mut writer = self.active_menu_cutouts.write();
+            if writer.is_empty() {
+                return;
+            }
+            writer.clear();
+        }
+        self.apply_combined_cutouts_to_all_subwindows();
+    }
+
+    /// Updates active tooltip cutouts (Z: 200) with deduplication.
+    pub fn set_tooltip_cutouts(&self, cutouts: Vec<XRectangle>) {
+        {
+            let current = self.active_tooltip_cutouts.read();
+            if *current == cutouts {
+                return;
+            }
+        }
+        *self.active_tooltip_cutouts.write() = cutouts;
+        self.apply_combined_cutouts_to_all_subwindows();
+    }
+
+    /// Clears active tooltip cutouts with deduplication.
+    pub fn clear_tooltip_cutouts(&self) {
+        {
+            let mut writer = self.active_tooltip_cutouts.write();
+            if writer.is_empty() {
+                return;
+            }
+            writer.clear();
+        }
+        self.apply_combined_cutouts_to_all_subwindows();
+    }
+
+    /// Returns all combined cutouts (both menu and tooltip).
+    pub fn get_combined_cutouts(&self) -> Vec<XRectangle> {
+        let mut combined = self.active_menu_cutouts.read().clone();
+        let tooltips = self.active_tooltip_cutouts.read();
+        combined.extend_from_slice(&tooltips);
+        combined
+    }
+
+    /// Re-applies all active cutouts to a specific subwindow (e.g. during scroll or resize).
+    pub fn reapply_active_cutouts_to_subwindow(&self, sub: &mut X11VideoSubwindow) {
+        let combined = self.get_combined_cutouts();
+        if !combined.is_empty() {
+            sub.clip_cutout_rectangles(&combined);
+        } else {
+            sub.reset_clip_shape();
         }
     }
 
-    /// Resets the active video subwindow shape to full bounding rectangle.
-    pub fn reset_video_subwindow_clip(&self) {
-        if let Some(sub_slot) = self.get_active_subwindow()
-            && let Some(ref mut sub) = *sub_slot.lock()
-        {
-            sub.reset_clip_shape();
+    /// Re-applies all combined cutouts (menus + tooltips) across EVERY visible video subwindow on screen.
+    pub fn apply_combined_cutouts_to_all_subwindows(&self) {
+        let combined = self.get_combined_cutouts();
+        let tabs = self.tabs.read();
+
+        for tab in tabs.all() {
+            if let TabPayload::Video(ref vid) = tab.payload {
+                let mut sub_guard = vid.subwindow.lock();
+                if let Some(ref mut sub) = *sub_guard
+                    && sub.is_visible()
+                {
+                    if !combined.is_empty() {
+                        sub.clip_cutout_rectangles(&combined);
+                    } else {
+                        sub.reset_clip_shape();
+                    }
+                }
+            }
         }
     }
 
@@ -283,7 +360,7 @@ impl ViewerTabManager {
     }
 
     pub fn move_tab_to_end(&self, tab_id: TabId) -> bool {
-        let count = self.tab_count();
+        let count = self.sessions_count();
         if count > 0 {
             self.move_tab(tab_id, count - 1)
         } else {
@@ -294,6 +371,11 @@ impl ViewerTabManager {
     #[inline]
     pub fn move_to_end(&self, tab_id: TabId) -> bool {
         self.move_tab_to_end(tab_id)
+    }
+
+    #[inline]
+    fn sessions_count(&self) -> usize {
+        self.tabs.read().len()
     }
 
     // =========================================================================
@@ -370,7 +452,6 @@ impl ViewerTabManager {
     ) -> Result<(TabId, bool), ViewerError> {
         let mut tabs = self.tabs.write();
 
-        // 1. Focus existing tab if duplicates are disabled
         if !allow_multiple
             && let Some(existing) = tabs.get_by_media_id_mut(media_id)
         {
@@ -387,7 +468,6 @@ impl ViewerTabManager {
             return Ok((id, false));
         }
 
-        // 2. Resolve media record and path
         let record = self
             .library
             .media()
@@ -399,21 +479,18 @@ impl ViewerTabManager {
         let main_xid_opt = *self.main_window_xid.read();
         let viewport_rect = *self.cached_viewport_rect.read();
 
-        // 3. Pause active video tab prior to activating the new one
         if let Some(current_id) = *self.active_tab_id.read()
             && let Some(current_tab) = tabs.get_mut(current_id)
         {
             Self::pause_session_playback(current_tab);
         }
 
-        // 4. Allocate a permanent unique display title for the new tab session
         let title = TabTitleFormatter::allocate_tab_title(
             tabs.all(),
             media_id,
             &record.filename,
         );
 
-        // 5. Construct session via TabSessionFactory (OCP)
         let session = TabSessionFactory::create_session(
             new_id,
             record,
@@ -445,7 +522,6 @@ impl ViewerTabManager {
     ) -> Result<(TabId, bool), ViewerError> {
         let mut tabs = self.tabs.write();
 
-        // 1. If duplicates are disabled and a tab already exists for this media_id, leave it in background
         if !allow_multiple
             && let Some(existing) = tabs.get_by_media_id_mut(media_id)
         {
@@ -458,7 +534,6 @@ impl ViewerTabManager {
             return Ok((id, false));
         }
 
-        // 2. Resolve media record and path
         let record = self
             .library
             .media()
@@ -470,14 +545,12 @@ impl ViewerTabManager {
         let main_xid_opt = *self.main_window_xid.read();
         let viewport_rect = *self.cached_viewport_rect.read();
 
-        // 3. Allocate a permanent unique display title for the new tab session
         let title = TabTitleFormatter::allocate_tab_title(
             tabs.all(),
             media_id,
             &record.filename,
         );
 
-        // 4. Construct session via TabSessionFactory (OCP)
         let session = TabSessionFactory::create_session(
             new_id,
             record,
@@ -487,7 +560,6 @@ impl ViewerTabManager {
             viewport_rect,
         )?;
 
-        // 5. Ensure background session does not play or show video subwindow
         if let TabPayload::Video(ref vid) = session.payload {
             vid.player.set_tab_grid_mode(false);
             vid.player.set_view_active(false);
@@ -498,7 +570,6 @@ impl ViewerTabManager {
         }
 
         tabs.push(session);
-        // Note: active_tab_id remains UNCHANGED!
 
         tracing::info!(
             tab_id = new_id,
@@ -550,7 +621,6 @@ impl ViewerTabManager {
             &record.filename,
         );
 
-        // Reparent subwindow back to main window container if main_xid is known, and hide it
         if let Some(ref mut sub) = subwindow {
             sub.hide();
             if let Some(main_xid) = main_xid_opt
@@ -563,7 +633,7 @@ impl ViewerTabManager {
         }
 
         player.set_tab_grid_mode(false);
-        player.set_view_active(false); // auto-pause background video
+        player.set_view_active(false);
 
         let file_exists = file_path.is_file();
         let error_message = if !file_exists {
@@ -710,7 +780,6 @@ impl ViewerTabManager {
         self.set_active_tab_internal(tab_id, false)
     }
 
-    /// Internal activation logic ensuring playback and interactivity are reliably resumed even when returning to the same active tab.
     pub fn set_active_tab_internal(&self, tab_id: TabId, force_resume: bool) -> bool {
         let current_active = *self.active_tab_id.read();
         let main_xid_opt = *self.main_window_xid.read();
@@ -725,7 +794,6 @@ impl ViewerTabManager {
             return true;
         }
 
-        // 1. Auto-pause previous video tab when switching away
         if let Some(prev_id) = current_active
             && prev_id != tab_id
             && let Some(prev_tab) = tabs.get_mut(prev_id)
@@ -733,7 +801,6 @@ impl ViewerTabManager {
             Self::pause_session_playback(prev_tab);
         }
 
-        // 2. Activate target tab and resume playback according to user pause state
         if let Some(new_tab) = tabs.get_mut(tab_id) {
             new_tab.last_accessed = Instant::now();
             *self.active_tab_id.write() = Some(tab_id);
@@ -776,7 +843,6 @@ impl ViewerTabManager {
         *active
     }
 
-    /// Closes all tabs located to the left of the specified `tab_id`.
     pub fn close_tabs_to_left(&self, tab_id: TabId) -> (usize, Option<TabId>) {
         let mut tabs = self.tabs.write();
         let mut active = self.active_tab_id.write();
@@ -818,7 +884,6 @@ impl ViewerTabManager {
         (closed_count, *active)
     }
 
-    /// Closes all tabs located to the right of the specified `tab_id`.
     pub fn close_tabs_to_right(&self, tab_id: TabId) -> (usize, Option<TabId>) {
         let mut tabs = self.tabs.write();
         let mut active = self.active_tab_id.write();
@@ -860,7 +925,6 @@ impl ViewerTabManager {
         (closed_count, *active)
     }
 
-    /// Closes all open tabs except `keep_tab_id`, ensuring `keep_tab_id` is foregrounded and active.
     pub fn close_other_tabs(&self, keep_tab_id: TabId) -> (usize, Option<TabId>) {
         let mut tabs = self.tabs.write();
         let mut active = self.active_tab_id.write();

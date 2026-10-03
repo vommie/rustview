@@ -46,7 +46,7 @@ impl CtxMenuDispatcher {
         }
     }
 
-    /// Converts a slice of CtxMenuItems into a Slint Model for any depth level with native image support.
+    /// Converts a slice of CtxMenuItems into a Slint Model for any depth level with native image and tooltip support.
     pub fn items_to_slint_model(
         items: &[CtxMenuItem],
         depth: i32,
@@ -72,6 +72,7 @@ impl CtxMenuDispatcher {
                     has_submenu: !item.children.is_empty(),
                     submenu_depth: depth,
                     menu_index: item.menu_index as i32,
+                    tooltip: item.tooltip.clone().unwrap_or_default().into(),
                 }
             })
             .collect();
@@ -106,6 +107,7 @@ impl CtxMenuDispatcher {
                         has_submenu: !child.children.is_empty(),
                         submenu_depth: 1,
                         menu_index: child.menu_index as i32,
+                        tooltip: child.tooltip.clone().unwrap_or_default().into(),
                     });
                 }
             }
