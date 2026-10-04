@@ -1,9 +1,9 @@
 use super::schema::{
     AppSettings, GridAspectRatio, DEFAULT_COL_FLAGS_WIDTH, DEFAULT_COL_PATH_WIDTH,
-    DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_PREVIEW_FORMAT, DEFAULT_SCALING_ALGORITHM,
-    DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT, DEFAULT_VIDEO_ENGINE,
-    DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH,
-    MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
+    DEFAULT_FULLSCREEN_FALLBACK_TARGET, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_PREVIEW_FORMAT,
+    DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT,
+    DEFAULT_VIDEO_ENGINE, DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_WINDOW_HEIGHT,
+    DEFAULT_WINDOW_WIDTH, MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
     MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_GRID_ITEM_PADDING_V,
     MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_L1_CACHE_SLOTS, MAX_PREVIEW_FRAME_COUNT,
     MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH, MAX_TAB_GRID_COLUMNS,
@@ -227,6 +227,13 @@ impl SettingsStore {
             "dark" | "deep black" | "black" | "transparent checkerboard" | "checkerboard"
         ) {
             settings.viewer.background_mode = DEFAULT_VIEWER_BACKGROUND_MODE.to_string();
+        }
+
+        // Fullscreen Sanitization
+        settings.fullscreen.specific_monitor = settings.fullscreen.specific_monitor.trim().to_string();
+        let fb_lower = settings.fullscreen.fallback_target.to_lowercase();
+        if fb_lower != "same" && fb_lower != "different" {
+            settings.fullscreen.fallback_target = DEFAULT_FULLSCREEN_FALLBACK_TARGET.to_string();
         }
 
         // Sanitize all 13 view column widths

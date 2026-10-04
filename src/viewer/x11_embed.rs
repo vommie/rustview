@@ -237,37 +237,46 @@ unsafe fn load_symbols_from_handles(
     Ok(symbols)
 }
 
-/// Retrieves the native X11 Window ID (`XID`) directly from a Slint Window via `raw-window-handle-06`.
+/// Retrieves the raw native X11 Window ID directly from Slint's internal window handle with zero heuristic searching.
+pub fn get_raw_window_xid(window: &slint::Window) -> Option<u64> {
+    if let Ok(handle) = window.window_handle().window_handle() {
+        match handle.as_raw() {
+            RawWindowHandle::Xlib(h) => {
+                if h.window > 0 {
+                    return Some(h.window);
+                }
+            }
+            RawWindowHandle::Xcb(h) => {
+                let xid = h.window.get() as u64;
+                if xid > 0 {
+                    return Some(xid);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Retrieves the native X11 Window ID (`XID`) directly from a Slint Window with "RustView" title fallback.
 pub fn get_slint_window_xid(window: &slint::Window) -> Option<u64> {
     get_slint_window_xid_with_title_fallback(window, "RustView")
 }
 
-/// Retrieves the native X11 Window ID (`XID`) from a Slint Window with process PID verification.
+/// Retrieves the native X11 Window ID (`XID`) from a Slint Window with process PID and strict title verification.
 pub fn get_slint_window_xid_with_title_fallback(
     window: &slint::Window,
     fallback_title: &str,
 ) -> Option<u64> {
-    if let Ok(handle) = window.window_handle().window_handle() {
-        let raw_xid = match handle.as_raw() {
-            RawWindowHandle::Xlib(h) => {
-                let xid = h.window;
-                if xid > 0 { Some(xid) } else { None }
-            }
-            RawWindowHandle::Xcb(h) => {
-                let xid = h.window.get() as u64;
-                if xid > 0 { Some(xid) } else { None }
-            }
-            _ => None,
-        };
-        if let Some(xid) = raw_xid {
-            return Some(xid);
-        }
+    if let Some(xid) = get_raw_window_xid(window) {
+        return Some(xid);
     }
 
     find_window_by_pid_and_title(std::process::id(), fallback_title)
 }
 
 /// Discovers the native X11 Window ID (`XID`) belonging to `target_pid` whose title contains `title_contains`.
+/// Performs STRICT title matching to prevent accidentally capturing other windows of the same process.
 pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Option<u64> {
     let api = get_x11_api().ok()?;
 
@@ -336,8 +345,6 @@ pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Op
                         if title_found.is_some() {
                             found_xid = Some(win_id);
                             break;
-                        } else if found_xid.is_none() {
-                            found_xid = Some(win_id);
                         }
                     }
                 }
@@ -399,7 +406,14 @@ unsafe fn search_tree_by_title(
                 if res == 0 && !name_data.is_null() && name_items > 0 {
                     let slice = std::slice::from_raw_parts(name_data, name_items as usize);
                     let title_str = String::from_utf8_lossy(slice);
-                    if title_str.contains(title_match) {
+                    // Match window title strictly to avoid matching "RustView - Settings" when searching for "RustView"
+                    let matches = if title_match == "RustView" {
+                        title_str.trim() == "RustView"
+                    } else {
+                        title_str.contains(title_match)
+                    };
+
+                    if matches {
                         *out_found = Some(window);
                     }
                     (api.x_free)(name_data as *mut c_void);
@@ -664,6 +678,173 @@ pub fn force_x11_fullscreen(window_xid: u64) {
         tracing::debug!(
             window_xid,
             "[X11Fullscreen: Enforce] Enforced true EWMH fullscreen state and stripped decorations via X11"
+        );
+    }
+}
+
+/// Enforces true EWMH fullscreen state on a specific monitor using `_NET_WM_FULLSCREEN_MONITORS`.
+pub fn force_x11_fullscreen_on_monitor(
+    window_xid: u64,
+    monitor_index: usize,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) {
+    if window_xid == 0 {
+        return;
+    }
+
+    let Ok(api) = get_x11_api() else {
+        return;
+    };
+
+    unsafe {
+        let display = (api.x_open_display)(std::ptr::null());
+        if display.is_null() {
+            return;
+        }
+
+        let root = (api.x_default_root_window)(display);
+        let atom_net_wm_state = (api.x_intern_atom)(display, c"_NET_WM_STATE".as_ptr(), 0);
+        let atom_net_wm_fullscreen =
+            (api.x_intern_atom)(display, c"_NET_WM_STATE_FULLSCREEN".as_ptr(), 0);
+        let atom_fullscreen_monitors =
+            (api.x_intern_atom)(display, c"_NET_WM_FULLSCREEN_MONITORS".as_ptr(), 0);
+        let atom_atom = (api.x_intern_atom)(display, c"ATOM".as_ptr(), 0);
+        let atom_cardinal = (api.x_intern_atom)(display, c"CARDINAL".as_ptr(), 0);
+        let atom_motif = (api.x_intern_atom)(display, c"_MOTIF_WM_HINTS".as_ptr(), 0);
+
+        // 1. Strip window decorations
+        #[repr(C)]
+        struct MotifHints {
+            flags: c_ulong,
+            functions: c_ulong,
+            decorations: c_ulong,
+            input_mode: c_long,
+            status: c_ulong,
+        }
+        let hints = MotifHints {
+            flags: 2,
+            functions: 0,
+            decorations: 0,
+            input_mode: 0,
+            status: 0,
+        };
+        (api.x_change_property)(
+            display,
+            window_xid,
+            atom_motif,
+            atom_motif,
+            32,
+            0,
+            &hints as *const _ as *const u8,
+            5,
+        );
+
+        // 2. Set window property _NET_WM_FULLSCREEN_MONITORS on client window
+        let mon_idx = monitor_index as c_long;
+        let mon_indices = [mon_idx, mon_idx, mon_idx, mon_idx];
+        (api.x_change_property)(
+            display,
+            window_xid,
+            atom_fullscreen_monitors,
+            atom_cardinal,
+            32,
+            0,
+            mon_indices.as_ptr() as *const u8,
+            4,
+        );
+
+        // 3. Send _NET_WM_FULLSCREEN_MONITORS client message to root window
+        let mut ev_mon = ClientMessageEv {
+            type_: 33,
+            serial: 0,
+            send_event: 1,
+            display,
+            window: window_xid,
+            message_type: atom_fullscreen_monitors,
+            format: 32,
+            data: ClientMessageData {
+                data: [
+                    mon_idx,
+                    mon_idx,
+                    mon_idx,
+                    mon_idx,
+                    1, // source indication (1 = normal application)
+                ],
+            },
+        };
+        let mask = (1 << 19) | (1 << 20);
+        (api.x_send_event)(
+            display,
+            root,
+            0,
+            mask,
+            &mut ev_mon as *mut _ as *mut c_void,
+        );
+
+        // 4. Move and resize window to the target monitor bounds
+        (api.x_move_resize_window)(
+            display,
+            window_xid,
+            x as c_int,
+            y as c_int,
+            width.max(16) as c_uint,
+            height.max(16) as c_uint,
+        );
+
+        // 5. Set _NET_WM_STATE property
+        let states = [atom_net_wm_fullscreen];
+        (api.x_change_property)(
+            display,
+            window_xid,
+            atom_net_wm_state,
+            atom_atom,
+            32,
+            0,
+            states.as_ptr() as *const u8,
+            1,
+        );
+
+        // 6. Send _NET_WM_STATE_FULLSCREEN client message to root window
+        let mut ev_fs = ClientMessageEv {
+            type_: 33,
+            serial: 0,
+            send_event: 1,
+            display,
+            window: window_xid,
+            message_type: atom_net_wm_state,
+            format: 32,
+            data: ClientMessageData {
+                data: [
+                    1, // _NET_WM_STATE_ADD
+                    atom_net_wm_fullscreen as c_long,
+                    0,
+                    1,
+                    0,
+                ],
+            },
+        };
+        (api.x_send_event)(
+            display,
+            root,
+            0,
+            mask,
+            &mut ev_fs as *mut _ as *mut c_void,
+        );
+
+        (api.x_flush)(display);
+        (api.x_close_display)(display);
+
+        tracing::info!(
+            window_xid,
+            monitor_index,
+            x,
+            y,
+            width,
+            height,
+            "[X11Fullscreen: TargetMonitor] Positioned and fullscreened window onto target monitor via EWMH"
         );
     }
 }
@@ -1013,8 +1194,6 @@ impl X11VideoSubwindow {
 
     /// Punches transparent cutout holes out of the X11 container window so that context menus and tooltips
     /// are ALWAYS rendered on top of the MPV player without hardware occlusion.
-    /// Strictly shapes ONLY `container_xid` (never `subwindow_xid`), preventing MPV OpenGL/EGL surface damage
-    /// and eliminating transparent desktop punch-through under X11 compositors.
     pub fn clip_cutout_rectangles(&mut self, main_win_rects: &[XRectangle]) {
         let Some(ref shape_rects_fn) = self.api.x_shape_combine_rectangles else {
             return;
@@ -1048,8 +1227,10 @@ impl X11VideoSubwindow {
             {
                 let clamped_x = local_x.max(0) as i16;
                 let clamped_y = local_y.max(0) as i16;
-                let clamped_w = ((local_right.min(container_w as i32)) - (clamped_x as i32)).max(1) as u16;
-                let clamped_h = ((local_bottom.min(container_h as i32)) - (clamped_y as i32)).max(1) as u16;
+                let clamped_w =
+                    ((local_right.min(container_w as i32)) - (clamped_x as i32)).max(1) as u16;
+                let clamped_h =
+                    ((local_bottom.min(container_h as i32)) - (clamped_y as i32)).max(1) as u16;
 
                 container_cutouts.push(XRectangle {
                     x: clamped_x,
@@ -1060,19 +1241,18 @@ impl X11VideoSubwindow {
             }
         }
 
-        // Subwindow-level cache: if the exact local cutouts have already been applied, skip all X11 calls completely!
-        if self.last_applied_local_rects == container_cutouts && self.is_clipped == !container_cutouts.is_empty() {
+        if self.last_applied_local_rects == container_cutouts
+            && self.is_clipped == !container_cutouts.is_empty()
+        {
             return;
         }
 
         unsafe {
             if container_cutouts.is_empty() {
-                // No cutouts intersect this subwindow: restore clean rectangular shape
                 shape_mask_fn(self.display, self.container_xid, 0, 0, 0, 0, 0);
                 self.is_clipped = false;
                 self.last_applied_local_rects.clear();
             } else {
-                // 1. Establish full container rectangular shape as the baseline mask (ShapeSet)
                 let full_rect_container = XRectangle {
                     x: 0,
                     y: 0,
@@ -1083,19 +1263,20 @@ impl X11VideoSubwindow {
                     self.display,
                     self.container_xid,
                     0, // ShapeBounding
-                    0, 0,
+                    0,
+                    0,
                     &full_rect_container,
                     1,
                     0, // ShapeSet
                     0, // Unsorted
                 );
 
-                // 2. Subtract all intersecting cutout rectangles cleanly (ShapeSubtract)
                 shape_rects_fn(
                     self.display,
                     self.container_xid,
                     0, // ShapeBounding
-                    0, 0,
+                    0,
+                    0,
                     container_cutouts.as_ptr(),
                     container_cutouts.len() as c_int,
                     3, // ShapeSubtract

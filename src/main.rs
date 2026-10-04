@@ -1,5 +1,6 @@
 use rustview::library::Library;
 use rustview::settings::{LogObscurer, SettingsManager, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
+use rustview::system::SystemDisplayService;
 use rustview::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge};
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -13,6 +14,8 @@ struct WindowGeometryTracker {
     last_unmaximized_height: u32,
     last_unmaximized_x: Option<i32>,
     last_unmaximized_y: Option<i32>,
+    active_monitor_x: i32,
+    active_monitor_y: i32,
     is_maximized: bool,
     initialization_settled: bool,
 }
@@ -65,6 +68,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Launching RustView with Full Tracing & Persistent State...");
 
+    // Diagnostic System, Distro, Kernel, Session, and Monitor info emission (Runs ONLY ONCE at startup)
+    SystemDisplayService::log_system_diagnostics();
+
     std::fs::create_dir_all(&data_dir)?;
     std::fs::create_dir_all(&config_dir)?;
 
@@ -94,42 +100,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!(error = %e, "[WindowState: Init] Failed to register XDG App ID");
     }
 
-    // Restore Window Size, Position & State (Guarded by SPoT Minimum Geometry Constants)
+    // Restore Window Size, Position & State on the Target Monitor
     let win_state = settings.get().window;
     let should_maximize = win_state.is_maximized;
     let initial_width = win_state.width.max(MIN_WINDOW_WIDTH);
     let initial_height = win_state.height.max(MIN_WINDOW_HEIGHT);
 
-    // If starting maximized, bypass pre-map set_size/set_position to prevent X11 WM from resetting to windowed mode
-    if !should_maximize {
-        main_window
-            .window()
-            .set_size(slint::PhysicalSize::new(initial_width, initial_height));
-
-        if let (Some(x), Some(y)) = (win_state.x, win_state.y)
-            && x >= 0
-            && y >= 0
-        {
-            main_window
-                .window()
-                .set_position(slint::PhysicalPosition::new(x, y));
+    // Validate that saved position falls on an active display; otherwise anchor cleanly to primary display
+    let detected_monitors = SystemDisplayService::detect_monitors();
+    let (target_x, target_y) = match (win_state.x, win_state.y) {
+        (Some(x), Some(y)) => {
+            let on_active_screen = detected_monitors.iter().any(|m| m.contains_point(x + 50, y + 50));
+            if on_active_screen {
+                (x, y)
+            } else if let Some(primary) = detected_monitors.iter().find(|m| m.is_primary) {
+                (primary.x + 40, primary.y + 40)
+            } else {
+                (x, y)
+            }
         }
-    } else {
+        _ => (0, 0),
+    };
+
+    // Always set size and target position first so the window lands on the correct monitor
+    main_window
+        .window()
+        .set_size(slint::PhysicalSize::new(initial_width, initial_height));
+
+    main_window
+        .window()
+        .set_position(slint::PhysicalPosition::new(target_x, target_y));
+
+    if should_maximize {
         main_window.window().set_maximized(true);
     }
 
-    // Geometry tracker maintaining clean unmaximized dimensions throughout the app lifetime
+    // Geometry tracker maintaining clean unmaximized dimensions and active monitor coordinates
     let tracker = Arc::new(parking_lot::Mutex::new(WindowGeometryTracker {
         last_unmaximized_width: initial_width,
         last_unmaximized_height: initial_height,
-        last_unmaximized_x: win_state.x,
-        last_unmaximized_y: win_state.y,
+        last_unmaximized_x: Some(target_x),
+        last_unmaximized_y: Some(target_y),
+        active_monitor_x: target_x,
+        active_monitor_y: target_y,
         is_maximized: should_maximize,
         initialization_settled: false,
     }));
 
     // Active Window Mount & Maximization Watcher:
-    // Periodically checks when the X11 surface is mapped, enforces maximization, and cleanly stops upon confirmation.
     let watcher_timer = Rc::new(slint::Timer::default());
     let watcher_timer_clone = watcher_timer.clone();
     let main_weak_watcher = main_window.as_weak();
@@ -147,7 +165,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             let win = w.window();
-            let xid_opt = rustview::viewer::get_slint_window_xid(win);
+            let xid_opt = rustview::viewer::get_raw_window_xid(win);
             let x11_max = xid_opt.and_then(rustview::viewer::is_x11_window_maximized);
             let cur_size = win.size();
 
@@ -163,7 +181,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 if is_window_ready && attempts < 30 {
-                    win.set_maximized(false);
                     win.set_maximized(true);
 
                     if let Some(xid) = xid_opt {
@@ -186,7 +203,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
-    // Continuous runtime window state tracker: prevents maximized dimensions from overwriting windowed geometry
+    // Continuous runtime window state tracker: accurately tracks monitor position and dimensions.
+    // NOTE: Does NOT call display detection or target resolution in the loop, completely preventing CPU and log spam.
     let runtime_tracker_timer = slint::Timer::default();
     let main_weak_tracker = main_window.as_weak();
     let tracker_runtime = tracker.clone();
@@ -204,7 +222,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let slint_max = win.is_maximized();
-            let xid_opt = rustview::viewer::get_slint_window_xid(win);
+            let xid_opt = rustview::viewer::get_raw_window_xid(win);
             let x11_max = xid_opt.and_then(rustview::viewer::is_x11_window_maximized);
             let is_max = x11_max.unwrap_or(slint_max);
 
@@ -212,20 +230,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let cur_pos = win.position();
 
             t.is_maximized = is_max;
+            t.active_monitor_x = cur_pos.x;
+            t.active_monitor_y = cur_pos.y;
 
-            // When NOT maximized, update last unmaximized dimensions and position
             if !is_max && cur_size.width >= MIN_WINDOW_WIDTH && cur_size.height >= MIN_WINDOW_HEIGHT {
                 t.last_unmaximized_width = cur_size.width;
                 t.last_unmaximized_height = cur_size.height;
-                if cur_pos.x != 0 || cur_pos.y != 0 || t.last_unmaximized_x.is_none() {
-                    t.last_unmaximized_x = Some(cur_pos.x);
-                    t.last_unmaximized_y = Some(cur_pos.y);
+                t.last_unmaximized_x = Some(cur_pos.x);
+                t.last_unmaximized_y = Some(cur_pos.y);
+            } else if is_max {
+                // When maximized, keep unmaximized anchor aligned with the active monitor so unmaximizing never jumps displays
+                if let Some(lux) = t.last_unmaximized_x {
+                    let on_active_display = (lux - cur_pos.x).abs() < 1920;
+                    if !on_active_display {
+                        t.last_unmaximized_x = Some(cur_pos.x + 60);
+                        t.last_unmaximized_y = Some(cur_pos.y + 60);
+                    }
                 }
             }
         },
     );
 
-    // Persist Window Geometry on Close Request
+    // Persist Window Geometry and Target Screen on Close Request
     let settings_for_close = settings.clone();
     let main_weak_close = main_window.as_weak();
     let tracker_close = tracker.clone();
@@ -234,7 +260,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(w) = main_weak_close.upgrade() {
             let win = w.window();
             let slint_max = win.is_maximized();
-            let xid_opt = rustview::viewer::get_slint_window_xid(win);
+            let xid_opt = rustview::viewer::get_raw_window_xid(win);
             let x11_max = xid_opt.and_then(rustview::viewer::is_x11_window_maximized);
             let cur_size = win.size();
             let cur_pos = win.position();
@@ -254,20 +280,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 t.last_unmaximized_height
             };
 
-            let final_x = if is_max {
-                t.last_unmaximized_x
-            } else if cur_pos.x != 0 || cur_pos.y != 0 {
-                Some(cur_pos.x)
+            let (final_x, final_y) = if is_max {
+                // If maximized, persist the target screen's anchor position
+                let anchor_x = t.last_unmaximized_x.unwrap_or(t.active_monitor_x + 60);
+                let anchor_y = t.last_unmaximized_y.unwrap_or(t.active_monitor_y + 60);
+                (Some(anchor_x), Some(anchor_y))
             } else {
-                t.last_unmaximized_x
-            };
-
-            let final_y = if is_max {
-                t.last_unmaximized_y
-            } else if cur_pos.x != 0 || cur_pos.y != 0 {
-                Some(cur_pos.y)
-            } else {
-                t.last_unmaximized_y
+                (t.last_unmaximized_x.or(Some(cur_pos.x)), t.last_unmaximized_y.or(Some(cur_pos.y)))
             };
 
             let mut current_settings = settings_for_close.get();
@@ -277,6 +296,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             current_settings.window.x = final_x;
             current_settings.window.y = final_y;
             settings_for_close.save_quiet(&current_settings);
+
+            tracing::info!(
+                is_max,
+                saved_x = ?final_x,
+                saved_y = ?final_y,
+                saved_size = format!("{}x{}", final_width, final_height),
+                active_screen_x = t.active_monitor_x,
+                "[Shutdown: WindowState] Persisted window geometry and monitor anchor cleanly"
+            );
         }
         CloseRequestResponse::HideWindow
     });

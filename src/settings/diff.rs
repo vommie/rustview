@@ -33,6 +33,9 @@ pub struct SettingsDiff {
     // Viewer Subsystem
     pub viewer_settings_changed: bool,
 
+    // Fullscreen Subsystem
+    pub fullscreen_settings_changed: bool,
+
     // Tags Subsystem
     pub tags_settings_changed: bool,
     pub tag_expansion_changed: bool,
@@ -102,6 +105,7 @@ impl SettingsDiff {
         let view_settings_changed = old.view != new.view;
         let formats_settings_changed = old.formats != new.formats;
         let viewer_settings_changed = old.viewer != new.viewer;
+        let fullscreen_settings_changed = old.fullscreen != new.fullscreen;
         let tags_settings_changed = old.tags.default_match_mode != new.tags.default_match_mode
             || old.tags.default_scope_mode != new.tags.default_scope_mode;
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
@@ -121,6 +125,7 @@ impl SettingsDiff {
             || view_settings_changed
             || formats_settings_changed
             || viewer_settings_changed
+            || fullscreen_settings_changed
             || tags_settings_changed
             || tag_expansion_changed
             || debug_settings_changed
@@ -141,6 +146,7 @@ impl SettingsDiff {
             view_settings_changed,
             formats_settings_changed,
             viewer_settings_changed,
+            fullscreen_settings_changed,
             tags_settings_changed,
             tag_expansion_changed,
             debug_settings_changed,
@@ -454,6 +460,16 @@ impl SettingsDiff {
             changes.push(format!(
                 "Viewer: background_mode ({} -> {})",
                 old.viewer.background_mode, new.viewer.background_mode
+            ));
+        }
+
+        if self.fullscreen_settings_changed {
+            changes.push(format!(
+                "Fullscreen: specific_enabled: {}, specific_monitor: '{}', fallback_enabled: {}, fallback_target: '{}'",
+                new.fullscreen.enable_specific_monitor,
+                new.fullscreen.specific_monitor,
+                new.fullscreen.enable_fallback_rule,
+                new.fullscreen.fallback_target
             ));
         }
 

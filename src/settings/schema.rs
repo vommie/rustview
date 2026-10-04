@@ -199,6 +199,14 @@ pub const DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE: bool = false;
 pub const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "Dark";
 
 // =============================================================================
+// SECTION 11: Fullscreen Settings - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_FULLSCREEN_ENABLE_SPECIFIC_MONITOR: bool = false;
+pub const DEFAULT_FULLSCREEN_SPECIFIC_MONITOR: &str = "";
+pub const DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE: bool = false;
+pub const DEFAULT_FULLSCREEN_FALLBACK_TARGET: &str = "same"; // "same" or "different"
+
+// =============================================================================
 // Enums & Domain Data Models
 // =============================================================================
 
@@ -541,6 +549,26 @@ impl Default for ViewerSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct FullscreenSettings {
+    pub enable_specific_monitor: bool,
+    pub specific_monitor: String,
+    pub enable_fallback_rule: bool,
+    pub fallback_target: String, // "same" or "different"
+}
+
+impl Default for FullscreenSettings {
+    fn default() -> Self {
+        Self {
+            enable_specific_monitor: DEFAULT_FULLSCREEN_ENABLE_SPECIFIC_MONITOR,
+            specific_monitor: DEFAULT_FULLSCREEN_SPECIFIC_MONITOR.to_string(),
+            enable_fallback_rule: DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE,
+            fallback_target: DEFAULT_FULLSCREEN_FALLBACK_TARGET.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TagSettings {
     pub default_match_mode: String,
     pub default_scope_mode: String,
@@ -610,6 +638,8 @@ pub struct AppSettings {
     pub formats: FormatsSettings,
     #[serde(default)]
     pub viewer: ViewerSettings,
+    #[serde(default)]
+    pub fullscreen: FullscreenSettings,
     #[serde(default)]
     pub tags: TagSettings,
     #[serde(default)]

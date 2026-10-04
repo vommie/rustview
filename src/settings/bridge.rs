@@ -2,15 +2,19 @@ use super::registry::SettingsManager;
 use super::schema::{
     AppSettings, GridAspectRatio, DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS,
 };
+use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::{MainWindow, SettingsWindow};
-use slint::{CloseRequestResponse, ComponentHandle};
+use slint::{CloseRequestResponse, ComponentHandle, ModelRc, VecModel};
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub struct SettingsDialogController {
     settings_window: Option<SettingsWindow>,
     manager: Arc<SettingsManager>,
     main_window_weak: Option<slint::Weak<MainWindow>>,
+    detected_monitors: Rc<RefCell<Vec<MonitorInfo>>>,
 }
 
 impl SettingsDialogController {
@@ -19,6 +23,7 @@ impl SettingsDialogController {
             settings_window: None,
             manager,
             main_window_weak: None,
+            detected_monitors: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -128,7 +133,9 @@ impl SettingsDialogController {
             },
         );
         window.set_video_offset_percent(settings.performance.video_offset_percent as i32);
-        window.set_short_video_threshold_secs(settings.performance.short_video_threshold_secs as i32);
+        window.set_short_video_threshold_secs(
+            settings.performance.short_video_threshold_secs as i32,
+        );
         window.set_generate_video_previews(settings.performance.generate_video_previews);
         window.set_preview_frame_count(settings.performance.preview_frame_count as i32);
         window.set_custom_preview_settings(settings.performance.custom_preview_settings);
@@ -156,11 +163,50 @@ impl SettingsDialogController {
         window.set_open_videos_in_tab(settings.viewer.videos.open_in_tab);
         window.set_allow_multiple_video_tabs(settings.viewer.videos.allow_multiple_tabs);
         window.set_viewer_show_tab_rating_badge(settings.viewer.tabs.show_rating_badge);
-        window.set_viewer_background_mode_idx(match settings.viewer.background_mode.to_lowercase().as_str() {
-            "deep black" | "black" => 1,
-            "transparent checkerboard" | "checkerboard" => 2,
-            _ => 0,
-        });
+        window.set_viewer_background_mode_idx(
+            match settings.viewer.background_mode.to_lowercase().as_str() {
+                "deep black" | "black" => 1,
+                "transparent checkerboard" | "checkerboard" => 2,
+                _ => 0,
+            },
+        );
+
+        // Fullscreen & Target Display properties
+        let monitors = SystemDisplayService::detect_monitors();
+        let mut options = Vec::with_capacity(monitors.len());
+        for m in &monitors {
+            options.push(slint::SharedString::from(m.display_name()));
+        }
+
+        if options.is_empty() {
+            options.push(slint::SharedString::from("No displays detected"));
+        }
+
+        let target_saved = &settings.fullscreen.specific_monitor;
+        let mut selected_idx = 0usize;
+        if !target_saved.is_empty() {
+            for (idx, m) in monitors.iter().enumerate() {
+                if m.connector.eq_ignore_ascii_case(target_saved)
+                    || m.model.eq_ignore_ascii_case(target_saved)
+                {
+                    selected_idx = idx;
+                    break;
+                }
+            }
+        }
+
+        *self.detected_monitors.borrow_mut() = monitors;
+        window.set_display_options(ModelRc::new(VecModel::from(options)));
+        window.set_selected_display_idx(selected_idx as i32);
+
+        window.set_fullscreen_enable_specific(settings.fullscreen.enable_specific_monitor);
+        window.set_fullscreen_enable_fallback(settings.fullscreen.enable_fallback_rule);
+        let fallback_idx = if settings.fullscreen.fallback_target.eq_ignore_ascii_case("different") {
+            1
+        } else {
+            0
+        };
+        window.set_fullscreen_fallback_target_idx(fallback_idx);
 
         // Debug properties
         window.set_obfuscate_logs(settings.debug.obfuscate_logs);
@@ -182,9 +228,50 @@ impl SettingsDialogController {
             }
         });
 
+        // Interactive Display Refreshment
+        let w_weak_refresh = w_weak.clone();
+        let detected_monitors_refresh = self.detected_monitors.clone();
+        window.on_refresh_displays(move || {
+            tracing::info!(
+                "[SettingsDialog: Displays] User triggered display re-scan from Settings dialog"
+            );
+            let monitors = SystemDisplayService::detect_monitors();
+            let mut options = Vec::with_capacity(monitors.len());
+            for m in &monitors {
+                options.push(slint::SharedString::from(m.display_name()));
+            }
+
+            if options.is_empty() {
+                options.push(slint::SharedString::from("No displays detected"));
+            }
+
+            if let Some(w) = w_weak_refresh.upgrade() {
+                let cur_idx = w.get_selected_display_idx() as usize;
+                let prev_monitors = detected_monitors_refresh.borrow();
+                let cur_connector = prev_monitors.get(cur_idx).map(|m| m.connector.clone());
+                drop(prev_monitors);
+
+                let mut new_idx = 0usize;
+                if let Some(ref conn) = cur_connector {
+                    for (i, m) in monitors.iter().enumerate() {
+                        if m.connector.eq_ignore_ascii_case(conn) {
+                            new_idx = i;
+                            break;
+                        }
+                    }
+                }
+
+                *detected_monitors_refresh.borrow_mut() = monitors;
+                w.set_display_options(ModelRc::new(VecModel::from(options)));
+                w.set_selected_display_idx(new_idx as i32);
+            }
+        });
+
         let w_weak_save = w_weak.clone();
         let mgr_save = manager;
         let main_weak_save = main_weak.clone();
+        let detected_monitors_save = self.detected_monitors.clone();
+
         window.on_save_and_apply(move || {
             if let Some(w) = w_weak_save.upgrade() {
                 let mut current = mgr_save.get();
@@ -224,10 +311,8 @@ impl SettingsDialogController {
                     w.get_grid_item_padding_h().clamp(0, 32) as u32;
                 current.appearance.grid_item_padding_vertical =
                     w.get_grid_item_padding_v().clamp(0, 32) as u32;
-                current.appearance.grid_spacing =
-                    w.get_grid_spacing().clamp(0, 48) as u32;
-                current.appearance.grid_padding =
-                    w.get_grid_padding().clamp(0, 48) as u32;
+                current.appearance.grid_spacing = w.get_grid_spacing().clamp(0, 48) as u32;
+                current.appearance.grid_padding = w.get_grid_padding().clamp(0, 48) as u32;
                 current.appearance.grid_item_border_width =
                     w.get_grid_item_border_width().clamp(0, 6) as u32;
                 current.appearance.grid_item_corner_radius =
@@ -246,8 +331,7 @@ impl SettingsDialogController {
                 } else {
                     "WebP".to_string()
                 };
-                current.performance.thumbnail_quality =
-                    w.get_thumb_quality().clamp(10, 100) as u8;
+                current.performance.thumbnail_quality = w.get_thumb_quality().clamp(10, 100) as u8;
                 current.performance.scaling_algorithm = match w.get_scaling_algo_idx() {
                     1 => "Bilinear".to_string(),
                     2 => "Lanczos3".to_string(),
@@ -272,8 +356,7 @@ impl SettingsDialogController {
                 } else {
                     "WebP".to_string()
                 };
-                current.performance.preview_quality =
-                    w.get_preview_quality().clamp(10, 100) as u8;
+                current.performance.preview_quality = w.get_preview_quality().clamp(10, 100) as u8;
 
                 // Save Formats Parameters
                 current.formats.auto_detect_extensionless_media = w.get_auto_detect_extensionless();
@@ -288,6 +371,22 @@ impl SettingsDialogController {
                     1 => "Deep Black".to_string(),
                     2 => "Transparent Checkerboard".to_string(),
                     _ => "Dark".to_string(),
+                };
+
+                // Save Fullscreen & Target Display Parameters
+                current.fullscreen.enable_specific_monitor = w.get_fullscreen_enable_specific();
+                let sel_disp_idx = w.get_selected_display_idx() as usize;
+                let monitors_guard = detected_monitors_save.borrow();
+                if let Some(m) = monitors_guard.get(sel_disp_idx) {
+                    current.fullscreen.specific_monitor = m.connector.clone();
+                }
+                drop(monitors_guard);
+
+                current.fullscreen.enable_fallback_rule = w.get_fullscreen_enable_fallback();
+                current.fullscreen.fallback_target = if w.get_fullscreen_fallback_target_idx() == 1 {
+                    "different".to_string()
+                } else {
+                    "same".to_string()
                 };
 
                 // Save Debug Parameters

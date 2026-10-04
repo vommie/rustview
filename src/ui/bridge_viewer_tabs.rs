@@ -58,7 +58,9 @@ impl BridgeViewerTabs {
         let set_browse = settings.clone();
         let fs_browse = fullscreen_controller.clone();
         window.on_browse_clicked(move || {
-            tracing::info!("[BridgeViewerTabs: Browse] User clicked Browse button. Switching to media browser and auto-pausing video tabs");
+            tracing::info!(
+                "[BridgeViewerTabs: Browse] User clicked Browse button. Switching to media browser and auto-pausing video tabs"
+            );
             tm_browse.activate_browse();
             win_browse.set_is_tab_grid_active(false);
             win_browse.set_is_browse_active(true);
@@ -98,7 +100,13 @@ impl BridgeViewerTabs {
             Self::sync_video_embedding(&win_close, &tm_close, &fs_close, &set_close);
             fs_close.sync_active_tab(&tm_close, &set_close);
             if win_close.get_active_view_mode() == 2 {
-                BridgeTabGrid::sync_tab_grid_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
+                BridgeTabGrid::sync_tab_grid_ui(
+                    &win_close,
+                    &tm_close,
+                    &lib_close,
+                    &set_close,
+                    &st_close,
+                );
             }
         });
 
@@ -181,7 +189,13 @@ impl BridgeViewerTabs {
             scroller_dcancel.stop();
             st_dcancel.write().active_tab_dnd_session = None;
             win_dcancel.set_is_dragging_tab(false);
-            Self::sync_ui(&win_dcancel, &tm_dcancel, &lib_dcancel, &set_dcancel, &st_dcancel);
+            Self::sync_ui(
+                &win_dcancel,
+                &tm_dcancel,
+                &lib_dcancel,
+                &set_dcancel,
+                &st_dcancel,
+            );
         });
 
         // 6. Viewer Toolbar Close Tab Button / Keyboard Shortcut
@@ -198,11 +212,23 @@ impl BridgeViewerTabs {
                     "[BridgeViewerTabs: ViewerClose] Closed active tab from viewer toolbar / shortcut"
                 );
                 tm_v_close.close_tab(active_id);
-                Self::sync_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
+                Self::sync_ui(
+                    &win_v_close,
+                    &tm_v_close,
+                    &lib_v_close,
+                    &set_v_close,
+                    &st_v_close,
+                );
                 Self::sync_video_embedding(&win_v_close, &tm_v_close, &fs_v_close, &set_v_close);
                 fs_v_close.sync_active_tab(&tm_v_close, &set_v_close);
                 if win_v_close.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
+                    BridgeTabGrid::sync_tab_grid_ui(
+                        &win_v_close,
+                        &tm_v_close,
+                        &lib_v_close,
+                        &set_v_close,
+                        &st_v_close,
+                    );
                 }
             }
         });
@@ -217,7 +243,10 @@ impl BridgeViewerTabs {
         let fs_v_refresh = fullscreen_controller.clone();
         window.on_viewer_refresh(move || {
             if BridgeMedia::is_system_busy(&win_v_refresh, &thumb_v_refresh, &st_v_refresh) {
-                StatusBarBridge::warn(&win_v_refresh, "Cannot refresh: another operation is already in progress.");
+                StatusBarBridge::warn(
+                    &win_v_refresh,
+                    "Cannot refresh: another operation is already in progress.",
+                );
                 return;
             }
             tracing::info!("[BridgeViewerTabs: Refresh] Refresh requested from viewer toolbar");
@@ -240,7 +269,9 @@ impl BridgeViewerTabs {
         let set_prev = settings.clone();
         let fs_prev = fullscreen_controller.clone();
         window.on_viewer_previous(move || {
-            Self::navigate_adjacent(&win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, &fs_prev, false);
+            Self::navigate_adjacent(
+                &win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, &fs_prev, false,
+            );
             Self::sync_video_embedding(&win_prev, &tm_prev, &fs_prev, &set_prev);
         });
 
@@ -251,7 +282,9 @@ impl BridgeViewerTabs {
         let set_next = settings.clone();
         let fs_next = fullscreen_controller.clone();
         window.on_viewer_next(move || {
-            Self::navigate_adjacent(&win_next, &tm_next, &lib_next, &set_next, &st_next, &fs_next, true);
+            Self::navigate_adjacent(
+                &win_next, &tm_next, &lib_next, &set_next, &st_next, &fs_next, true,
+            );
             Self::sync_video_embedding(&win_next, &tm_next, &fs_next, &set_next);
         });
 
@@ -262,7 +295,9 @@ impl BridgeViewerTabs {
         let fs_ctrl = fullscreen_controller.clone();
         window.on_viewer_image_clicked(move || {
             if fs_ctrl.check_double_click(false) == DoubleClickKind::Normal {
-                tracing::info!("[BridgeViewerTabs: DoubleClick] Double-click detected on viewer canvas. Launching fullscreen viewer window (auto-play)...");
+                tracing::info!(
+                    "[BridgeViewerTabs: DoubleClick] Double-click detected on viewer canvas. Launching fullscreen viewer window (auto-play)..."
+                );
                 fs_ctrl.show(&tm_fs, &set_fs, win_fs.as_weak());
             }
         });
@@ -273,14 +308,18 @@ impl BridgeViewerTabs {
         let set_fs_mid = settings.clone();
         let fs_ctrl_mid = fullscreen_controller.clone();
         window.on_viewer_image_middle_clicked(move || {
-            tracing::info!("[BridgeViewerTabs: MiddleClick] Middle-click detected on viewer canvas. Launching fullscreen viewer window directly (auto-play)...");
+            tracing::info!(
+                "[BridgeViewerTabs: MiddleClick] Middle-click detected on viewer canvas. Launching fullscreen viewer window directly (auto-play)..."
+            );
             fs_ctrl_mid.show(&tm_fs_mid, &set_fs_mid, win_fs_mid.as_weak());
         });
 
         // 10. Dismiss Fullscreen from Main UI
         let fs_modal = fullscreen_controller.clone();
         window.on_modal_dismiss_requested(move || {
-            tracing::info!("[BridgeViewerTabs: ModalDismiss] Main UI modal dismiss triggered. Closing active fullscreen window if present.");
+            tracing::info!(
+                "[BridgeViewerTabs: ModalDismiss] Main UI modal dismiss triggered. Closing active fullscreen window if present."
+            );
             fs_modal.close();
         });
 
@@ -313,10 +352,14 @@ impl BridgeViewerTabs {
             let set = set_toggle.clone();
             let _ = win_toggle.upgrade_in_event_loop(move |w| {
                 if fs.is_open() {
-                    tracing::info!("[BridgeViewerTabs: MpvDblClick] Fullscreen exit requested via MPV event");
+                    tracing::info!(
+                        "[BridgeViewerTabs: MpvDblClick] Fullscreen exit requested via MPV event"
+                    );
                     fs.close();
                 } else if w.get_active_view_mode() == 1 {
-                    tracing::info!("[BridgeViewerTabs: MpvDblClick] Fullscreen enter requested via MPV event (auto-play)");
+                    tracing::info!(
+                        "[BridgeViewerTabs: MpvDblClick] Fullscreen enter requested via MPV event (auto-play)"
+                    );
                     fs.show(&tm, &set, w.as_weak());
                 }
             });
@@ -408,7 +451,8 @@ impl BridgeViewerTabs {
             let w = if i == source_index && tab_width > 20.0 {
                 tab_width
             } else if let Some(t_session) = tabs.get(i) {
-                let has_rating = window.get_viewer_show_tab_rating_badge() && t_session.record.rating > 0;
+                let has_rating =
+                    window.get_viewer_show_tab_rating_badge() && t_session.record.rating > 0;
                 TabDndGeometry::estimate_tab_width(&t_session.title, has_rating)
             } else {
                 120.0
@@ -616,7 +660,9 @@ impl BridgeViewerTabs {
         }
 
         let show_rating = settings.get().viewer.tabs.show_rating_badge;
-        if let Some((tab_x, tab_w)) = TabDndGeometry::find_tab_slot_geometry(&tabs, active_id, show_rating) {
+        if let Some((tab_x, tab_w)) =
+            TabDndGeometry::find_tab_slot_geometry(&tabs, active_id, show_rating)
+        {
             tracing::debug!(
                 active_id,
                 tab_x,
@@ -628,7 +674,6 @@ impl BridgeViewerTabs {
     }
 
     /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and MPV input hooks.
-    /// Also re-applies all active overlay cutouts (menus + tooltips) across the subwindow.
     pub fn sync_video_embedding(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -710,7 +755,13 @@ impl BridgeViewerTabs {
         if let Some(active_session) = active_tab
             && let TabPayload::Video(ref vid) = active_session.payload
         {
-            Self::wire_player_callbacks(&vid.player, window, tab_manager, fullscreen_controller, settings);
+            Self::wire_player_callbacks(
+                &vid.player,
+                window,
+                tab_manager,
+                fullscreen_controller,
+                settings,
+            );
 
             let mut sub_guard = vid.subwindow.lock();
             if let Some(ref mut sub) = *sub_guard {
@@ -721,7 +772,9 @@ impl BridgeViewerTabs {
                 }
                 sub.show();
                 tab_manager.reapply_active_cutouts_to_subwindow(sub);
-            } else if let Ok(mut sub) = X11VideoSubwindow::new(main_xid, phys_x, phys_y, phys_w, phys_h) {
+            } else if let Ok(mut sub) =
+                X11VideoSubwindow::new(main_xid, phys_x, phys_y, phys_w, phys_h)
+            {
                 let wid = sub.xid();
                 let _ = vid.player.attach_to_window(wid);
                 sub.show();
@@ -790,10 +843,15 @@ impl BridgeViewerTabs {
             let st = state.read();
             let current_pos = if !st.active_indices.is_empty() {
                 st.active_indices.iter().position(|&idx| {
-                    st.all_folder_media.get(idx).map(|m| m.record.id == active_media_id).unwrap_or(false)
+                    st.all_folder_media
+                        .get(idx)
+                        .map(|m| m.record.id == active_media_id)
+                        .unwrap_or(false)
                 })
             } else {
-                st.all_folder_media.iter().position(|m| m.record.id == active_media_id)
+                st.all_folder_media
+                    .iter()
+                    .position(|m| m.record.id == active_media_id)
             };
 
             if let Some(pos) = current_pos {
@@ -805,7 +863,10 @@ impl BridgeViewerTabs {
 
                 target_pos.and_then(|t_idx| {
                     if !st.active_indices.is_empty() {
-                        st.active_indices.get(t_idx).and_then(|&idx| st.all_folder_media.get(idx)).map(|m| m.record.id)
+                        st.active_indices
+                            .get(t_idx)
+                            .and_then(|&idx| st.all_folder_media.get(idx))
+                            .map(|m| m.record.id)
                     } else {
                         st.all_folder_media.get(t_idx).map(|m| m.record.id)
                     }
@@ -842,7 +903,13 @@ impl BridgeViewerTabs {
                         && let TabPayload::Video(ref vid) = session.payload
                         && file_exists
                     {
-                        Self::wire_player_callbacks(&vid.player, window, tab_manager, fullscreen_controller, settings);
+                        Self::wire_player_callbacks(
+                            &vid.player,
+                            window,
+                            tab_manager,
+                            fullscreen_controller,
+                            settings,
+                        );
                     }
 
                     if is_image && file_exists && let Ok(file_path) = library.resolve_media_path(target_id) {
@@ -893,7 +960,11 @@ impl BridgeViewerTabs {
                     }
                 }
                 Err(e) => {
-                    tracing::error!(target_id, error = %e, "[BridgeViewerTabs: NavigateError] Failed to navigate tab to media");
+                    tracing::error!(
+                        target_id,
+                        error = %e,
+                        "[BridgeViewerTabs: NavigateError] Failed to navigate tab to media"
+                    );
                 }
             }
         }
@@ -955,7 +1026,8 @@ impl BridgeViewerTabs {
                 app_settings.viewer.images.allow_multiple_tabs
             };
 
-            if let Ok((tab_id, is_new)) = tab_manager.open_media_in_background(media_id, allow_multiple)
+            if let Ok((tab_id, is_new)) =
+                tab_manager.open_media_in_background(media_id, allow_multiple)
                 && !is_video
                 && is_new
                 && let Ok(file_path) = library.resolve_media_path(media_id)
@@ -1021,7 +1093,12 @@ impl BridgeViewerTabs {
 
                 if is_last_video {
                     if file_exists {
-                        Self::sync_video_embedding(window, tab_manager, fullscreen_controller, settings);
+                        Self::sync_video_embedding(
+                            window,
+                            tab_manager,
+                            fullscreen_controller,
+                            settings,
+                        );
                     } else {
                         tab_manager.hide_all_video_subwindows();
                     }
@@ -1052,12 +1129,19 @@ impl BridgeViewerTabs {
                 }
             }
             Err(e) => {
-                tracing::error!(media_id = last_id, error = %e, "[BridgeViewerTabs: OpenMultipleError] Failed to open last media tab in foreground");
+                tracing::error!(
+                    media_id = last_id,
+                    error = %e,
+                    "[BridgeViewerTabs: OpenMultipleError] Failed to open last media tab in foreground"
+                );
             }
         }
 
         let all_tabs = tab_manager.list_tabs();
-        let last_title = ViewerTabManager::compute_tab_title(&all_tabs, tab_manager.active_tab_id().unwrap_or(0));
+        let last_title = ViewerTabManager::compute_tab_title(
+            &all_tabs,
+            tab_manager.active_tab_id().unwrap_or(0),
+        );
 
         StatusBarBridge::success(
             window,
@@ -1114,7 +1198,9 @@ impl BridgeViewerTabs {
                 app_settings.viewer.images.allow_multiple_tabs
             };
 
-            if let Ok((tab_id, is_new)) = tab_manager.open_media_in_background(media_id, allow_multiple) {
+            if let Ok((tab_id, is_new)) =
+                tab_manager.open_media_in_background(media_id, allow_multiple)
+            {
                 opened_count += 1;
                 if !is_video
                     && is_new
@@ -1135,7 +1221,12 @@ impl BridgeViewerTabs {
                             }
                             match load_res {
                                 Ok((w_px, h_px, pixel_buffer)) => {
-                                    tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
+                                    tm_async.update_tab_image_buffer(
+                                        tab_id,
+                                        w_px,
+                                        h_px,
+                                        pixel_buffer,
+                                    );
                                 }
                                 Err(err) => {
                                     tm_async.set_tab_error(tab_id, err.to_string());
@@ -1143,7 +1234,13 @@ impl BridgeViewerTabs {
                             }
                             Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
                             if w.get_active_view_mode() == 2 {
-                                BridgeTabGrid::sync_tab_grid_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                                BridgeTabGrid::sync_tab_grid_ui(
+                                    &w,
+                                    &tm_async,
+                                    &lib_async,
+                                    &set_async,
+                                    &st_async,
+                                );
                             }
                         });
                     });
@@ -1287,7 +1384,11 @@ impl BridgeViewerTabs {
                 );
             }
             Err(e) => {
-                tracing::error!(media_id, error = %e, "[BridgeViewerTabs: OpenError] Failed to open media tab");
+                tracing::error!(
+                    media_id,
+                    error = %e,
+                    "[BridgeViewerTabs: OpenError] Failed to open media tab"
+                );
                 StatusBarBridge::error(
                     window,
                     format!("Failed to open tab for media #{}: {}", media_id, e),
@@ -1386,7 +1487,12 @@ impl BridgeViewerTabs {
                                         decode_time_ms = t_decode.elapsed().as_millis(),
                                         "[BridgeViewerTabs: AsyncLoadBackground] High-res image decoded successfully for background tab"
                                     );
-                                    tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
+                                    tm_async.update_tab_image_buffer(
+                                        tab_id,
+                                        w_px,
+                                        h_px,
+                                        pixel_buffer,
+                                    );
                                 }
                                 Err(err) => {
                                     tracing::error!(
@@ -1400,7 +1506,13 @@ impl BridgeViewerTabs {
                             }
                             Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
                             if w.get_active_view_mode() == 2 {
-                                BridgeTabGrid::sync_tab_grid_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                                BridgeTabGrid::sync_tab_grid_ui(
+                                    &w,
+                                    &tm_async,
+                                    &lib_async,
+                                    &set_async,
+                                    &st_async,
+                                );
                             }
                         });
                     });
@@ -1410,7 +1522,14 @@ impl BridgeViewerTabs {
                 let tab_title = ViewerTabManager::compute_tab_title(&all_tabs, tab_id);
                 StatusBarBridge::success(
                     window,
-                    format!("Opened '{}' in background tab", if tab_title.is_empty() { filename_hint } else { tab_title }),
+                    format!(
+                        "Opened '{}' in background tab",
+                        if tab_title.is_empty() {
+                            filename_hint
+                        } else {
+                            tab_title
+                        }
+                    ),
                 );
 
                 tracing::info!(
@@ -1425,7 +1544,11 @@ impl BridgeViewerTabs {
                 );
             }
             Err(e) => {
-                tracing::error!(media_id, error = %e, "[BridgeViewerTabs: OpenBackgroundError] Failed to open background media tab");
+                tracing::error!(
+                    media_id,
+                    error = %e,
+                    "[BridgeViewerTabs: OpenBackgroundError] Failed to open background media tab"
+                );
                 StatusBarBridge::error(
                     window,
                     format!("Failed to open background tab for media #{}: {}", media_id, e),
@@ -1450,19 +1573,17 @@ impl BridgeViewerTabs {
         // 1. Prepare Tab Models for the Top Toolbar
         let tab_models: Vec<TabItemModel> = tabs
             .iter()
-            .map(|t| {
-                TabItemModel {
-                    id: t.id as i32,
-                    media_id: t.media_id as i32,
-                    title: t.title.clone().into(),
-                    format_str: t.format.default_extension().into(),
-                    is_active: !is_tab_grid && Some(t.id) == active_id_opt,
-                    is_video: matches!(t.payload, TabPayload::Video(_)),
-                    rating: t.record.rating as i32,
-                    has_tags: false,
-                    shift_x: 0.0,
-                    is_placeholder: false,
-                }
+            .map(|t| TabItemModel {
+                id: t.id as i32,
+                media_id: t.media_id as i32,
+                title: t.title.clone().into(),
+                format_str: t.format.default_extension().into(),
+                is_active: !is_tab_grid && Some(t.id) == active_id_opt,
+                is_video: matches!(t.payload, TabPayload::Video(_)),
+                rating: t.record.rating as i32,
+                has_tags: false,
+                shift_x: 0.0,
+                is_placeholder: false,
             })
             .collect();
 
@@ -1493,7 +1614,10 @@ impl BridgeViewerTabs {
             window.set_viewer_filename(active_tab.title.clone().into());
 
             let res_str = if active_tab.record.width > 0 && active_tab.record.height > 0 {
-                format!("{} × {}", active_tab.record.width, active_tab.record.height)
+                format!(
+                    "{} × {}",
+                    active_tab.record.width, active_tab.record.height
+                )
             } else {
                 String::new()
             };
@@ -1503,10 +1627,15 @@ impl BridgeViewerTabs {
                 let st = state.read();
                 let current_pos = if !st.active_indices.is_empty() {
                     st.active_indices.iter().position(|&idx| {
-                        st.all_folder_media.get(idx).map(|m| m.record.id == active_tab.media_id).unwrap_or(false)
+                        st.all_folder_media
+                            .get(idx)
+                            .map(|m| m.record.id == active_tab.media_id)
+                            .unwrap_or(false)
                     })
                 } else {
-                    st.all_folder_media.iter().position(|m| m.record.id == active_tab.media_id)
+                    st.all_folder_media
+                        .iter()
+                        .position(|m| m.record.id == active_tab.media_id)
                 };
 
                 let total_available = if !st.active_indices.is_empty() {

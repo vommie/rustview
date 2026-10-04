@@ -323,6 +323,7 @@ impl UiBridge {
                     let sz = win.window().size();
                     tm_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
                     fs_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
+                    tracing::info!(main_xid, "[UiBridge: PostMount] Verified and cached main window XID");
                 }
                 tracing::info!(
                     "[UiBridge: PostMount] Slint UI event loop ready. Mounting root folder..."
@@ -555,7 +556,6 @@ impl UiBridge {
         });
     }
 
-    /// Central unified dispatch action for F2 / rename across all application views with focus sensitivity.
     pub fn trigger_rename_action(params: RenameActionParams<'_>) {
         let window = params.window;
         let active_mode = window.get_active_view_mode();
