@@ -2,6 +2,7 @@ use super::bridge_ctx_menu_media::MediaContextMenu;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::MainWindow;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
@@ -223,8 +224,15 @@ impl TabContextMenu {
                                         }
                                     }
                                     BridgeViewerTabs::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                                    if w.get_active_view_mode() == 2 {
+                                        BridgeTabGrid::sync_tab_grid_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
+                                    }
                                 });
                             });
+                        }
+
+                        if ctx.window.get_active_view_mode() == 2 {
+                            BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                         }
 
                         let all_tabs = ctx.tab_manager.list_tabs();
@@ -244,24 +252,36 @@ impl TabContextMenu {
                 tracing::info!(tab_id, "[TabContextMenu: Move] Move tab to start requested");
                 if ctx.tab_manager.move_tab_to_start(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    if ctx.window.get_active_view_mode() == 2 {
+                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    }
                 }
             }
             CTX_TAB_MOVE_LEFT => {
                 tracing::info!(tab_id, "[TabContextMenu: Move] Move tab left requested");
                 if ctx.tab_manager.move_tab_left(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    if ctx.window.get_active_view_mode() == 2 {
+                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    }
                 }
             }
             CTX_TAB_MOVE_RIGHT => {
                 tracing::info!(tab_id, "[TabContextMenu: Move] Move tab right requested");
                 if ctx.tab_manager.move_tab_right(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    if ctx.window.get_active_view_mode() == 2 {
+                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    }
                 }
             }
             CTX_TAB_MOVE_TO_END => {
                 tracing::info!(tab_id, "[TabContextMenu: Move] Move tab to end requested");
                 if ctx.tab_manager.move_to_end(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    if ctx.window.get_active_view_mode() == 2 {
+                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                    }
                 }
             }
             CTX_TAB_CLOSE_TO_LEFT => {
@@ -279,6 +299,10 @@ impl TabContextMenu {
                 BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                 BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
                 ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+
+                if ctx.window.get_active_view_mode() == 2 {
+                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                }
 
                 if closed_count > 0 {
                     StatusBarBridge::success(
@@ -303,6 +327,10 @@ impl TabContextMenu {
                 BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
                 ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
 
+                if ctx.window.get_active_view_mode() == 2 {
+                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                }
+
                 if closed_count > 0 {
                     StatusBarBridge::success(
                         ctx.window,
@@ -326,6 +354,10 @@ impl TabContextMenu {
                 BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
                 ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
 
+                if ctx.window.get_active_view_mode() == 2 {
+                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                }
+
                 if closed_count > 0 {
                     StatusBarBridge::success(
                         ctx.window,
@@ -339,6 +371,10 @@ impl TabContextMenu {
                 BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                 BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
                 ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+
+                if ctx.window.get_active_view_mode() == 2 {
+                    BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                }
             }
             _ => {}
         }
