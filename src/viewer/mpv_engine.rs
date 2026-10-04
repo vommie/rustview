@@ -4,8 +4,8 @@ use crate::settings::LogObscurer;
 use libmpv2::Mpv;
 use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
@@ -104,6 +104,9 @@ impl MpvPlayer {
         let _ = mpv_instance.set_property("border", true);
         let _ = mpv_instance.set_property("snap-window", false);
 
+        // Bind single left click to ignore so click-to-focus does not accidentally pause/unpause video
+        let _ = mpv_instance.command("keybind", &["MBTN_LEFT", "ignore"]);
+
         // Bind double-click, middle-click, 'f', 'F', and 'ESC' in MPV to cycle fullscreen
         let _ = mpv_instance.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
@@ -117,9 +120,16 @@ impl MpvPlayer {
 
         // Bind Ctrl+Click and Ctrl+DoubleClick in MPV to toggle window-maximized
         let convert_keys = [
-            "Ctrl+MBTN_LEFT", "ctrl+MBTN_LEFT", "Ctrl+mbtn_left", "ctrl+mbtn_left",
-            "Ctrl+MBTN_LEFT_DBL", "ctrl+MBTN_LEFT_DBL", "Ctrl+mbtn_left_dbl", "ctrl+mbtn_left_dbl",
-            "Ctrl+MBTN_LEFT_HOLD", "ctrl+MBTN_LEFT_HOLD",
+            "Ctrl+MBTN_LEFT",
+            "ctrl+MBTN_LEFT",
+            "Ctrl+mbtn_left",
+            "ctrl+mbtn_left",
+            "Ctrl+MBTN_LEFT_DBL",
+            "ctrl+MBTN_LEFT_DBL",
+            "Ctrl+mbtn_left_dbl",
+            "ctrl+mbtn_left_dbl",
+            "Ctrl+MBTN_LEFT_HOLD",
+            "ctrl+MBTN_LEFT_HOLD",
         ];
         for k in convert_keys {
             let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-maximized"]);
@@ -127,9 +137,16 @@ impl MpvPlayer {
 
         // Bind Ctrl+W variations in MPV without OSD to toggle window-minimized
         let close_keys = [
-            "ctrl+w", "Ctrl+w", "ctrl+W", "Ctrl+W",
-            "meta+w", "Meta+w", "cmd+w", "Command+w",
-            "ctrl+F4", "Ctrl+F4",
+            "ctrl+w",
+            "Ctrl+w",
+            "ctrl+W",
+            "Ctrl+W",
+            "meta+w",
+            "Meta+w",
+            "cmd+w",
+            "Command+w",
+            "ctrl+F4",
+            "Ctrl+F4",
         ];
         for k in close_keys {
             let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-minimized"]);
@@ -138,6 +155,23 @@ impl MpvPlayer {
         // Ignore quit keys in MPV so Slint handles navigation and lifecycle
         let _ = mpv_instance.command("keybind", &["q", "ignore"]);
         let _ = mpv_instance.command("keybind", &["Q", "ignore"]);
+
+        // Define the dedicated tabgrid input section for Grid View (active ONLY in Tab-Grid mode).
+        // This isolates wheel and click hijacking to Tab-Grid mode without overriding or ignoring normal wheel bindings.
+        let tabgrid_bindings = "MBTN_LEFT no-osd cycle ontop\nMBTN_MID no-osd cycle border\nWHEEL_UP no-osd cycle deinterlace\nWHEEL_DOWN no-osd cycle sub-visibility\nF2 no-osd cycle snap-window\nf2 no-osd cycle snap-window\n";
+        if let Err(e) = mpv_instance.command(
+            "define-section",
+            &["rustview_tabgrid", tabgrid_bindings, "force"],
+        ) {
+            tracing::warn!(
+                error = ?e,
+                "[MpvPlayer: Init] Failed to define 'rustview_tabgrid' input section"
+            );
+        } else {
+            tracing::debug!(
+                "[MpvPlayer: Init] Defined 'rustview_tabgrid' input section for isolated grid scroll handling"
+            );
+        }
 
         let mpv_arc = Arc::new(mpv_instance);
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
@@ -189,7 +223,7 @@ impl MpvPlayer {
 
         tracing::info!(
             elapsed_us = t0.elapsed().as_micros(),
-            "[MpvPlayer: Init] Native libmpv2 player engine initialized with F2 rename interception"
+            "[MpvPlayer: Init] Native libmpv2 player engine initialized with unreserved mouse wheel pass-through and F2 rename interception"
         );
 
         Ok(player)
@@ -215,29 +249,35 @@ impl MpvPlayer {
     }
 
     /// Toggles Tab-Grid mode on this MPV player instance.
+    /// When `grid_mode` is true, enables the `rustview_tabgrid` input section to intercept scroll and clicks for grid navigation.
+    /// When `grid_mode` is false (normal Tab View or Fullscreen), disables `rustview_tabgrid` so that mouse wheel (up/down)
+    /// falls back to MPV's native or user-configured bindings without being swallowed or ignored.
     pub fn set_tab_grid_mode(&self, grid_mode: bool) {
         if self.is_tab_grid_mode.swap(grid_mode, Ordering::SeqCst) == grid_mode {
             return;
         }
 
         if grid_mode {
+            tracing::info!(
+                "[MpvPlayer: GridMode] Activating Tab-Grid mode (OSC off, wheel scrolls grid, clicks select/fullscreen)"
+            );
             let _ = self.mpv.set_property("osc", "no");
             let _ = self.mpv.set_property("input-default-bindings", "no");
             let _ = self.mpv.set_property("input-vo-keyboard", "no");
             let _ = self.mpv.set_property("input-cursor", "yes");
 
-            // Intercept mouse clicks on video in TabGrid
-            let _ = self.mpv.command("keybind", &["MBTN_LEFT", "no-osd cycle ontop"]);
-            let _ = self.mpv.command("keybind", &["MBTN_MID", "no-osd cycle border"]);
-
-            // Intercept mouse wheel on video in TabGrid
-            let _ = self.mpv.command("keybind", &["WHEEL_UP", "no-osd cycle deinterlace"]);
-            let _ = self.mpv.command("keybind", &["WHEEL_DOWN", "no-osd cycle sub-visibility"]);
-
-            // Ensure F2 remains bound even in grid mode
-            let _ = self.mpv.command("keybind", &["F2", "no-osd cycle snap-window"]);
-            let _ = self.mpv.command("keybind", &["f2", "no-osd cycle snap-window"]);
+            // Enable the dedicated tabgrid input section (intercepts mouse clicks and wheel for grid scrolling)
+            let _ = self.mpv.command(
+                "enable-section",
+                &["rustview_tabgrid", "allow-hide-cursor+allow-vo-dragging"],
+            );
         } else {
+            tracing::info!(
+                "[MpvPlayer: GridMode] Deactivating Tab-Grid mode (restoring normal/fullscreen playback, mouse wheel passed directly to MPV)"
+            );
+            // Disable the tabgrid section to restore underlying keybindings and unreserve mouse wheel
+            let _ = self.mpv.command("disable-section", &["rustview_tabgrid"]);
+
             let _ = self.mpv.set_property("osc", "yes");
             let _ = self.mpv.set_property("input-default-bindings", "yes");
             let _ = self.mpv.set_property("input-vo-keyboard", "yes");
@@ -245,23 +285,38 @@ impl MpvPlayer {
 
             // Restore standard bindings with Middle-Click Fullscreen toggle and Ctrl+DoubleClick
             let _ = self.mpv.command("keybind", &["MBTN_LEFT", "ignore"]);
-            let _ = self.mpv.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
-            let _ = self.mpv.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
+            let _ = self
+                .mpv
+                .command("keybind", &["MBTN_MID", "cycle fullscreen"]);
+            let _ = self
+                .mpv
+                .command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
             let _ = self.mpv.command("keybind", &["ESC", "cycle fullscreen"]);
-            let _ = self.mpv.command("keybind", &["WHEEL_UP", "ignore"]);
-            let _ = self.mpv.command("keybind", &["WHEEL_DOWN", "ignore"]);
 
             // Re-assert F2 binding
-            let _ = self.mpv.command("keybind", &["F2", "no-osd cycle snap-window"]);
-            let _ = self.mpv.command("keybind", &["f2", "no-osd cycle snap-window"]);
+            let _ = self
+                .mpv
+                .command("keybind", &["F2", "no-osd cycle snap-window"]);
+            let _ = self
+                .mpv
+                .command("keybind", &["f2", "no-osd cycle snap-window"]);
 
             let convert_keys = [
-                "Ctrl+MBTN_LEFT", "ctrl+MBTN_LEFT", "Ctrl+mbtn_left", "ctrl+mbtn_left",
-                "Ctrl+MBTN_LEFT_DBL", "ctrl+MBTN_LEFT_DBL", "Ctrl+mbtn_left_dbl", "ctrl+mbtn_left_dbl",
-                "Ctrl+MBTN_LEFT_HOLD", "ctrl+MBTN_LEFT_HOLD",
+                "Ctrl+MBTN_LEFT",
+                "ctrl+MBTN_LEFT",
+                "Ctrl+mbtn_left",
+                "ctrl+mbtn_left",
+                "Ctrl+MBTN_LEFT_DBL",
+                "ctrl+MBTN_LEFT_DBL",
+                "Ctrl+mbtn_left_dbl",
+                "ctrl+mbtn_left_dbl",
+                "Ctrl+MBTN_LEFT_HOLD",
+                "ctrl+MBTN_LEFT_HOLD",
             ];
             for k in convert_keys {
-                let _ = self.mpv.command("keybind", &[k, "no-osd cycle window-maximized"]);
+                let _ = self
+                    .mpv
+                    .command("keybind", &[k, "no-osd cycle window-maximized"]);
             }
         }
     }
@@ -285,10 +340,14 @@ impl MpvPlayer {
             let user_paused = self.is_user_paused.load(Ordering::SeqCst);
             if !user_paused {
                 let _ = self.mpv.set_property("pause", false);
-                tracing::debug!("[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed (playback active)");
+                tracing::debug!(
+                    "[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed (playback active)"
+                );
             } else {
                 let _ = self.mpv.set_property("pause", true);
-                tracing::debug!("[MpvPlayer: StayPaused] Foregrounded video tab kept paused (user-paused)");
+                tracing::debug!(
+                    "[MpvPlayer: StayPaused] Foregrounded video tab kept paused (user-paused)"
+                );
             }
         }
 
@@ -322,7 +381,9 @@ impl MpvPlayer {
 
         self.mpv
             .command("loadfile", &[&path_str, "replace"])
-            .map_err(|e| ViewerError::Mpv(format!("Failed to execute 'loadfile' command: {:?}", e)))?;
+            .map_err(|e| {
+                ViewerError::Mpv(format!("Failed to execute 'loadfile' command: {:?}", e))
+            })?;
 
         self.is_user_paused.store(false, Ordering::SeqCst);
         let _ = self.mpv.set_property("pause", false);
@@ -386,7 +447,9 @@ impl MpvPlayer {
     }
 
     pub fn pause(&self) -> Result<(), ViewerError> {
-        if self.is_view_active.load(Ordering::SeqCst) && !self.is_tab_grid_mode.load(Ordering::SeqCst) {
+        if self.is_view_active.load(Ordering::SeqCst)
+            && !self.is_tab_grid_mode.load(Ordering::SeqCst)
+        {
             self.is_user_paused.store(true, Ordering::SeqCst);
         }
         self.mpv
@@ -404,11 +467,7 @@ impl MpvPlayer {
 
     pub fn toggle_pause(&self) -> Result<(), ViewerError> {
         let is_paused = self.is_paused();
-        if is_paused {
-            self.play()
-        } else {
-            self.pause()
-        }
+        if is_paused { self.play() } else { self.pause() }
     }
 
     pub fn seek_relative(&self, seconds: f64) -> Result<(), ViewerError> {
@@ -619,8 +678,9 @@ impl MpvPlayer {
                             }
                         }
 
-                        // Wheel Up in TabGrid Mode
-                        let deinterlace_val = mpv.get_property::<bool>("deinterlace").unwrap_or(false);
+                        // Wheel Up in TabGrid Mode (scrolls grid up)
+                        let deinterlace_val =
+                            mpv.get_property::<bool>("deinterlace").unwrap_or(false);
                         if deinterlace_val != last_deinterlace {
                             last_deinterlace = deinterlace_val;
                             let cbs = grid_wheel_up_callbacks.read().clone();
@@ -629,8 +689,9 @@ impl MpvPlayer {
                             }
                         }
 
-                        // Wheel Down in TabGrid Mode
-                        let sub_vis_val = mpv.get_property::<bool>("sub-visibility").unwrap_or(true);
+                        // Wheel Down in TabGrid Mode (scrolls grid down)
+                        let sub_vis_val =
+                            mpv.get_property::<bool>("sub-visibility").unwrap_or(true);
                         if sub_vis_val != last_sub_vis {
                             last_sub_vis = sub_vis_val;
                             let cbs = grid_wheel_down_callbacks.read().clone();
@@ -661,7 +722,9 @@ impl MpvPlayer {
                     }
 
                     // 4. Intercept Ctrl+W Close Tab triggers from MPV via window-minimized toggle
-                    let close_requested = mpv.get_property::<bool>("window-minimized").unwrap_or(false);
+                    let close_requested = mpv
+                        .get_property::<bool>("window-minimized")
+                        .unwrap_or(false);
                     if close_requested {
                         let _ = mpv.set_property("window-minimized", false);
                         let close_cbs = close_callbacks.read().clone();
@@ -671,7 +734,9 @@ impl MpvPlayer {
                     }
 
                     // 5. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert standalone video to background tab
-                    let convert_requested = mpv.get_property::<bool>("window-maximized").unwrap_or(false);
+                    let convert_requested = mpv
+                        .get_property::<bool>("window-maximized")
+                        .unwrap_or(false);
                     if convert_requested {
                         let _ = mpv.set_property("window-maximized", false);
                         let convert_cbs = convert_callbacks.read().clone();
