@@ -31,6 +31,26 @@ impl SettingsDialogController {
         self.main_window_weak = Some(weak);
     }
 
+    /// Checks if the settings window is currently open and mapped.
+    pub fn is_open(&self) -> bool {
+        self.settings_window
+            .as_ref()
+            .map(|w| w.window().is_visible())
+            .unwrap_or(false)
+    }
+
+    /// Programmatically closes and hides the settings window, releasing the main window modal lock.
+    pub fn close(&self) {
+        if let Some(ref w) = self.settings_window {
+            let _ = w.hide();
+        }
+        if let Some(ref mw_weak) = self.main_window_weak
+            && let Some(mw) = mw_weak.upgrade()
+        {
+            mw.set_is_modal_locked(false);
+        }
+    }
+
     pub fn show(&mut self) {
         if self.settings_window.is_none() {
             let window = SettingsWindow::new().expect("Failed to create SettingsWindow");
@@ -407,6 +427,9 @@ impl SettingsDialogController {
         let w_weak_cancel = w_weak;
         let main_weak_cancel = main_weak;
         window.on_cancel_clicked(move || {
+            tracing::info!(
+                "[SettingsDialog: Cancel] Settings window cancelled/dismissed via Escape key or Cancel button"
+            );
             if let Some(w) = w_weak_cancel.upgrade() {
                 if let Some(ref mw) = main_weak_cancel
                     && let Some(main) = mw.upgrade()
@@ -419,6 +442,9 @@ impl SettingsDialogController {
 
         let main_weak_close = self.main_window_weak.clone();
         window.window().on_close_requested(move || {
+            tracing::info!(
+                "[SettingsDialog: CloseRequest] Settings window closed via titlebar close button"
+            );
             if let Some(ref mw) = main_weak_close
                 && let Some(main) = mw.upgrade()
             {

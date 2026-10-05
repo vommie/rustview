@@ -18,101 +18,113 @@ export component DeleteFileDialog inherits Window {
     callback permanent-delete-confirmed();
     callback cancelled();
 
-    VerticalLayout {
-        padding: 0px;
-        spacing: 0px;
-        alignment: space-between;
+    forward-focus: dialog-focus;
 
-        VerticalLayout {
-            padding: 16px;
-            spacing: 12px;
-            vertical-stretch: 1;
-
-            Text {
-                text: "⚠ Delete File" + (root.files-count > 1 ? "s" : "");
-                font-size: 15px;
-                font-weight: 700;
-                color: #f38ba8;
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
             }
-
-            Text {
-                text: root.files-count > 1
-                    ? ("Are you sure you want to delete the " + root.files-count + " selected files (" + root.file-size-str + ")?")
-                    : ("Are you sure you want to delete '" + root.file-name + "' (" + root.file-size-str + ")?");
-                font-size: 12px;
-                color: Theme.text;
-                wrap: word-wrap;
-            }
-
-            Rectangle {
-                background: #f38ba818;
-                border-radius: 4px;
-                border-width: 1px;
-                border-color: #f38ba844;
-
-                VerticalLayout {
-                    padding: 8px;
-                    spacing: 4px;
-
-                    Text {
-                        text: "Database and storage cleanup:";
-                        font-size: 11px;
-                        font-weight: 700;
-                        color: #f38ba8;
-                    }
-
-                    Text {
-                        text: root.files-count > 1
-                            ? ("• " + root.files-count + " media records, thumbnails and preview caches will be deleted")
-                            : "• Media record, thumbnail and preview cache will be removed from database";
-                        font-size: 11px;
-                        color: Theme.text;
-                    }
-                }
-            }
-
-            if root.error-message != "" : Text {
-                text: root.error-message;
-                font-size: 11px;
-                color: #ff5555;
-                wrap: word-wrap;
-            }
+            return reject;
         }
 
-        // Action Buttons Bar
-        Rectangle {
-            height: 48px;
-            background: Theme.surface;
-            vertical-stretch: 0;
+        VerticalLayout {
+            padding: 0px;
+            spacing: 0px;
+            alignment: space-between;
 
-            Rectangle {
-                y: 0px;
-                height: 1px;
-                background: Theme.border;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 12px;
+                vertical-stretch: 1;
+
+                Text {
+                    text: "⚠ Delete File" + (root.files-count > 1 ? "s" : "");
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: #f38ba8;
+                }
+
+                Text {
+                    text: root.files-count > 1
+                        ? ("Are you sure you want to delete the " + root.files-count + " selected files (" + root.file-size-str + ")?")
+                        : ("Are you sure you want to delete '" + root.file-name + "' (" + root.file-size-str + ")?");
+                    font-size: 12px;
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+
+                Rectangle {
+                    background: #f38ba818;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #f38ba844;
+
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 4px;
+
+                        Text {
+                            text: "Database and storage cleanup:";
+                            font-size: 11px;
+                            font-weight: 700;
+                            color: #f38ba8;
+                        }
+
+                        Text {
+                            text: root.files-count > 1
+                                ? ("• " + root.files-count + " media records, thumbnails and preview caches will be deleted")
+                                : "• Media record, thumbnail and preview cache will be removed from database";
+                            font-size: 11px;
+                            color: Theme.text;
+                        }
+                    }
+                }
+
+                if root.error-message != "" : Text {
+                    text: root.error-message;
+                    font-size: 11px;
+                    color: #ff5555;
+                    wrap: word-wrap;
+                }
             }
 
-            HorizontalLayout {
-                padding-left: 16px;
-                padding-right: 16px;
-                padding-top: 6px;
-                padding-bottom: 6px;
-                spacing: 10px;
-                alignment: end;
+            // Action Buttons Bar
+            Rectangle {
+                height: 48px;
+                background: Theme.surface;
+                vertical-stretch: 0;
 
-                Button {
-                    text: "Cancel";
-                    clicked => { root.cancelled(); }
+                Rectangle {
+                    y: 0px;
+                    height: 1px;
+                    background: Theme.border;
                 }
 
-                Button {
-                    text: "Permanently Delete";
-                    clicked => { root.permanent-delete-confirmed(); }
-                }
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    padding-top: 6px;
+                    padding-bottom: 6px;
+                    spacing: 10px;
+                    alignment: end;
 
-                Button {
-                    text: "Move to Trash";
-                    primary: true;
-                    clicked => { root.move-to-trash-confirmed(); }
+                    Button {
+                        text: "Cancel";
+                        clicked => { root.cancelled(); }
+                    }
+
+                    Button {
+                        text: "Permanently Delete";
+                        clicked => { root.permanent-delete-confirmed(); }
+                    }
+
+                    Button {
+                        text: "Move to Trash";
+                        primary: true;
+                        clicked => { root.move-to-trash-confirmed(); }
+                    }
                 }
             }
         }

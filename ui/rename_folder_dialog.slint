@@ -31,103 +31,120 @@ export component RenameFolderDialog inherits Window {
         name-input.select-all();
     }
 
-    VerticalLayout {
-        padding: 0px;
-        spacing: 0px;
-        alignment: space-between;
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            return reject;
+        }
 
         VerticalLayout {
-            padding: 16px;
-            spacing: 10px;
-            vertical-stretch: 1;
+            padding: 0px;
+            spacing: 0px;
+            alignment: space-between;
 
-            Text {
-                text: "📁 Rename Directory";
-                font-size: 14px;
-                font-weight: 700;
-                color: Theme.primary;
-            }
+            VerticalLayout {
+                padding: 16px;
+                spacing: 10px;
+                vertical-stretch: 1;
 
-            Text {
-                text: "Enter a new name for this folder on disk and in database:";
-                font-size: 11px;
-                color: Theme.text-muted;
-            }
-
-            name-input := LineEdit {
-                text: root.initial-name;
-                placeholder-text: "Folder name...";
-                height: 32px;
-                vertical-stretch: 0;
-                edited => {
-                    root.name-edited(self.text);
+                Text {
+                    text: "📁 Rename Directory";
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: Theme.primary;
                 }
-                accepted => {
-                    if self.text != "" {
-                        root.confirmed(self.text);
+
+                Text {
+                    text: "Enter a new name for this folder on disk and in database:";
+                    font-size: 11px;
+                    color: Theme.text-muted;
+                }
+
+                name-input := LineEdit {
+                    text: root.initial-name;
+                    placeholder-text: "Folder name...";
+                    height: 32px;
+                    vertical-stretch: 0;
+                    edited => {
+                        root.name-edited(self.text);
+                    }
+                    accepted => {
+                        if self.text != "" {
+                            root.confirmed(self.text);
+                        }
+                    }
+                    key-pressed(event) => {
+                        if event.text == Key.Escape {
+                            root.cancelled();
+                            return accept;
+                        }
+                        return reject;
                     }
                 }
-            }
 
-            // Real-time Conflict Alert & Quick Resolution Action
-            if root.has-conflict : Rectangle {
-                background: #f9e2af18;
-                border-radius: 4px;
-                border-width: 1px;
-                border-color: #f9e2af44;
+                // Real-time Conflict Alert & Quick Resolution Action
+                if root.has-conflict : Rectangle {
+                    background: #f9e2af18;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #f9e2af44;
 
-                VerticalLayout {
-                    padding: 8px;
-                    spacing: 6px;
-
-                    Text {
-                        text: "⚠ " + root.conflict-message;
-                        font-size: 11px;
-                        font-weight: 700;
-                        color: #f9e2af;
-                        wrap: word-wrap;
-                    }
-
-                    HorizontalLayout {
-                        spacing: 8px;
-                        alignment: start;
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 6px;
 
                         Text {
-                            text: "Next available name:";
+                            text: "⚠ " + root.conflict-message;
                             font-size: 11px;
-                            color: Theme.text-muted;
-                            vertical-alignment: center;
+                            font-weight: 700;
+                            color: #f9e2af;
+                            wrap: word-wrap;
                         }
 
-                        Button {
-                            text: "Use \"" + root.suggested-name + "\"";
-                            clicked => {
-                                root.use-suggested-name();
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+
+                            Text {
+                                text: "Next available name:";
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                            }
+
+                            Button {
+                                text: "Use \"" + root.suggested-name + "\"";
+                                clicked => {
+                                    root.use-suggested-name();
+                                }
                             }
                         }
                     }
                 }
+
+                if root.error-message != "" : Text {
+                    text: root.error-message;
+                    font-size: 11px;
+                    color: #ff5555;
+                    wrap: word-wrap;
+                }
             }
 
-            if root.error-message != "" : Text {
-                text: root.error-message;
-                font-size: 11px;
-                color: #ff5555;
-                wrap: word-wrap;
-            }
-        }
-
-        ButtonBar {
-            vertical-stretch: 0;
-            bar-height: 48px;
-            show-cancel: true;
-            show-save: true;
-            text-save: root.has-conflict ? "Rename Anyway" : "Rename";
-            text-cancel: "Cancel";
-            cancel-clicked => { root.cancelled(); }
-            save-clicked => {
-                if name-input.text != "" {
-                    root.confirmed(name-input.text);
+            ButtonBar {
+                vertical-stretch: 0;
+                bar-height: 48px;
+                show-cancel: true;
+                show-save: true;
+                text-save: root.has-conflict ? "Rename Anyway" : "Rename";
+                text-cancel: "Cancel";
+                cancel-clicked => { root.cancelled(); }
+                save-clicked => {
+                    if name-input.text != "" {
+                        root.confirmed(name-input.text);
+                    }
                 }
             }
         }

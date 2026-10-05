@@ -19,6 +19,17 @@ export component FloatingChoicePopup inherits Rectangle {
     height: 100%;
     z: 150;
 
+    forward-focus: popup-focus;
+    popup-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.dismissed();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     // Transparent backdrop dismissing the menu on outside clicks without side-effects
     backdrop := TouchArea {
         pointer-event(event) => {

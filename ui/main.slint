@@ -451,7 +451,23 @@ export component MainWindow inherits Window {
                 return accept;
             }
 
-            if root.is-context-menu-open || root.is-choice-popup-open || root.is-dragging-media || root.is-dragging-tab || root.rubberband-active {
+            if root.is-choice-popup-open {
+                if event.text == Key.Escape {
+                    root.choice-popup-dismissed();
+                    return accept;
+                }
+                return reject;
+            }
+
+            if root.is-context-menu-open {
+                if event.text == Key.Escape {
+                    root.context-menu-dismissed();
+                    return accept;
+                }
+                return reject;
+            }
+
+            if root.is-dragging-media || root.is-dragging-tab || root.rubberband-active {
                 return reject;
             }
 

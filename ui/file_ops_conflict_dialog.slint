@@ -28,372 +28,384 @@ export component FileOpsConflictDialog inherits Window {
 
     property <bool> is-identical: root.source-file.hash_str != "" && root.source-file.hash_str == root.destination-file.hash_str;
 
-    VerticalLayout {
-        padding: 0px;
-        spacing: 0px;
-        alignment: space-between;
+    forward-focus: dialog-focus;
 
-        // Top Notification Header
-        Rectangle {
-            height: 52px;
-            background: Theme.surface;
-            vertical-stretch: 0;
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancel-clicked();
+                return accept;
+            }
+            return reject;
+        }
 
+        VerticalLayout {
+            padding: 0px;
+            spacing: 0px;
+            alignment: space-between;
+
+            // Top Notification Header
             Rectangle {
-                y: parent.height - 1px;
-                height: 1px;
-                background: Theme.border;
+                height: 52px;
+                background: Theme.surface;
+                vertical-stretch: 0;
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    spacing: 12px;
+                    alignment: start;
+
+                    Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 16px;
+                        background: #f9e2af22;
+                        y: (parent.height - self.height) / 2;
+
+                        Text {
+                            text: "⚠";
+                            font-size: 16px;
+                            color: #f9e2af;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 2px;
+
+                        Text {
+                            text: "File Name Conflict Detected" + (root.total-conflicts > 1 ? (" (" + root.conflict-index + " of " + root.total-conflicts + ")") : "");
+                            font-size: 13px;
+                            font-weight: 700;
+                            color: Theme.text;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 0px;
+                            alignment: start;
+
+                            Text {
+                                text: "'" + root.source-file.filename + "' already exists in the target folder. Both files are ";
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: root.is-identical ? "identical" : "different";
+                                font-size: 11px;
+                                font-weight: 700;
+                                color: root.is-identical ? #a6e3a1 : #fab387;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: ".";
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
             }
 
+            // Side-by-Side Split View Comparison Area
             HorizontalLayout {
                 padding-left: 16px;
                 padding-right: 16px;
+                padding-top: 12px;
+                padding-bottom: 12px;
                 spacing: 12px;
-                alignment: start;
+                vertical-stretch: 1;
 
+                // Source File Card (Left)
                 Rectangle {
-                    width: 32px;
-                    height: 32px;
-                    border-radius: 16px;
-                    background: #f9e2af22;
-                    y: (parent.height - self.height) / 2;
+                    horizontal-stretch: 1;
+                    height: card-left-layout.preferred-height;
+                    background: Theme.surface;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    clip: true;
 
+                    card-left-layout := VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+
+                        Rectangle {
+                            height: 18px;
+                            HorizontalLayout {
+                                alignment: start;
+                                Text {
+                                    text: "SOURCE FILE (" + (root.is-copy ? "Copying" : "Moving") + ")";
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    color: Theme.primary;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Clickable & Animated Thumbnail Preview Box with Hover Effect
+                        Rectangle {
+                            height: 120px;
+                            background: #000000;
+                            border-radius: 4px;
+                            border-width: src-thumb-touch.has-hover ? 1.5px : 1px;
+                            border-color: src-thumb-touch.has-hover ? Theme.primary : Theme.border;
+                            clip: true;
+
+                            property <bool> is-src-hovered: src-thumb-touch.has-hover;
+                            changed is-src-hovered => {
+                                root.source-hover-changed(self.is-src-hovered);
+                            }
+
+                            if root.source-file.thumbnail.width > 0 : Image {
+                                source: root.source-file.thumbnail;
+                                width: 100%;
+                                height: 100%;
+                                image-fit: contain;
+                                opacity: src-thumb-touch.has-hover ? 0.92 : 1.0;
+                            }
+
+                            if root.source-file.thumbnail.width == 0 : Text {
+                                text: "📄";
+                                font-size: 32px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            if src-thumb-touch.has-hover : Rectangle {
+                                background: #89b4fa15;
+                            }
+
+                            src-thumb-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.open-source-file(); }
+                            }
+                        }
+
+                        // Metadata attributes
+                        VerticalLayout {
+                            spacing: 3px;
+
+                            Text {
+                                text: root.source-file.filename;
+                                font-size: 13px;
+                                font-weight: 700;
+                                color: Theme.text;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: "Folder: " + root.source-file.folder_path;
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: "Size: " + root.source-file.filesize_str + "  •  " + root.source-file.dimensions_str;
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                            }
+                            Text {
+                                text: "Modified: " + root.source-file.date_str;
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                            }
+                            Text {
+                                text: "MD5: " + root.source-file.hash_str;
+                                font-size: 11px;
+                                font-family: "monospace";
+                                color: Theme.text-muted;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+
+                // Center Arrow Indicator
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    width: 24px;
                     Text {
-                        text: "⚠";
-                        font-size: 16px;
-                        color: #f9e2af;
+                        text: "➔";
+                        font-size: 20px;
+                        color: Theme.text-muted;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
                 }
 
-                VerticalLayout {
-                    alignment: center;
-                    spacing: 2px;
+                // Destination File Card (Right)
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: card-right-layout.preferred-height;
+                    background: Theme.surface;
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    clip: true;
 
-                    Text {
-                        text: "File Name Conflict Detected" + (root.total-conflicts > 1 ? (" (" + root.conflict-index + " of " + root.total-conflicts + ")") : "");
-                        font-size: 13px;
-                        font-weight: 700;
-                        color: Theme.text;
+                    card-right-layout := VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+
+                        Rectangle {
+                            height: 18px;
+                            HorizontalLayout {
+                                alignment: start;
+                                Text {
+                                    text: "DESTINATION FILE (Existing)";
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    color: #f9e2af;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Clickable & Animated Thumbnail Preview Box with Hover Effect
+                        Rectangle {
+                            height: 120px;
+                            background: #000000;
+                            border-radius: 4px;
+                            border-width: dst-thumb-touch.has-hover ? 1.5px : 1px;
+                            border-color: dst-thumb-touch.has-hover ? #f9e2af : Theme.border;
+                            clip: true;
+
+                            property <bool> is-dst-hovered: dst-thumb-touch.has-hover;
+                            changed is-dst-hovered => {
+                                root.destination-hover-changed(self.is-dst-hovered);
+                            }
+
+                            if root.destination-file.thumbnail.width > 0 : Image {
+                                source: root.destination-file.thumbnail;
+                                width: 100%;
+                                height: 100%;
+                                image-fit: contain;
+                                opacity: dst-thumb-touch.has-hover ? 0.92 : 1.0;
+                            }
+
+                            if root.destination-file.thumbnail.width == 0 : Text {
+                                text: "📄";
+                                font-size: 32px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            if dst-thumb-touch.has-hover : Rectangle {
+                                background: #f9e2af15;
+                            }
+
+                            dst-thumb-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.open-destination-file(); }
+                            }
+                        }
+
+                        // Metadata attributes
+                        VerticalLayout {
+                            spacing: 3px;
+
+                            Text {
+                                text: root.destination-file.filename;
+                                font-size: 13px;
+                                font-weight: 700;
+                                color: Theme.text;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: "Folder: " + root.destination-file.folder_path;
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: "Size: " + root.destination-file.filesize_str + "  •  " + root.destination-file.dimensions_str;
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                            }
+                            Text {
+                                text: "Modified: " + root.destination-file.date_str;
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                            }
+                            Text {
+                                text: "MD5: " + root.destination-file.hash_str;
+                                font-size: 11px;
+                                font-family: "monospace";
+                                color: Theme.text-muted;
+                                overflow: elide;
+                            }
+                        }
                     }
+                }
+            }
 
+            // Bottom Action Bar
+            Rectangle {
+                height: 48px;
+                background: Theme.surface;
+                vertical-stretch: 0;
+
+                Rectangle {
+                    y: 0px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    padding-top: 6px;
+                    padding-bottom: 6px;
+                    spacing: 12px;
+
+                    // Left: Apply to all Checkbox (Only shown when multiple files are processed)
                     HorizontalLayout {
-                        spacing: 0px;
                         alignment: start;
-
-                        Text {
-                            text: "'" + root.source-file.filename + "' already exists in the target folder. Both files are ";
-                            font-size: 11px;
-                            color: Theme.text-muted;
-                            vertical-alignment: center;
-                        }
-
-                        Text {
-                            text: root.is-identical ? "identical" : "different";
-                            font-size: 11px;
-                            font-weight: 700;
-                            color: root.is-identical ? #a6e3a1 : #fab387;
-                            vertical-alignment: center;
-                        }
-
-                        Text {
-                            text: ".";
-                            font-size: 11px;
-                            color: Theme.text-muted;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Side-by-Side Split View Comparison Area
-        HorizontalLayout {
-            padding-left: 16px;
-            padding-right: 16px;
-            padding-top: 12px;
-            padding-bottom: 12px;
-            spacing: 12px;
-            vertical-stretch: 1;
-
-            // Source File Card (Left)
-            Rectangle {
-                horizontal-stretch: 1;
-                height: card-left-layout.preferred-height;
-                background: Theme.surface;
-                border-radius: 6px;
-                border-width: 1px;
-                border-color: Theme.border;
-                clip: true;
-
-                card-left-layout := VerticalLayout {
-                    padding: 12px;
-                    spacing: 8px;
-
-                    Rectangle {
-                        height: 18px;
-                        HorizontalLayout {
-                            alignment: start;
-                            Text {
-                                text: "SOURCE FILE (" + (root.is-copy ? "Copying" : "Moving") + ")";
-                                font-size: 11px;
-                                font-weight: 700;
-                                color: Theme.primary;
-                                vertical-alignment: center;
-                            }
+                        if root.total-conflicts > 1 : CheckBox {
+                            text: "Apply this action to all remaining conflicts";
+                            checked <=> root.apply-to-all;
                         }
                     }
 
-                    // Clickable & Animated Thumbnail Preview Box with Hover Effect
-                    Rectangle {
-                        height: 120px;
-                        background: #000000;
-                        border-radius: 4px;
-                        border-width: src-thumb-touch.has-hover ? 1.5px : 1px;
-                        border-color: src-thumb-touch.has-hover ? Theme.primary : Theme.border;
-                        clip: true;
+                    // Right: Action Buttons (Skip is only shown when multiple files are processed)
+                    HorizontalLayout {
+                        alignment: end;
+                        spacing: 10px;
 
-                        property <bool> is-src-hovered: src-thumb-touch.has-hover;
-                        changed is-src-hovered => {
-                            root.source-hover-changed(self.is-src-hovered);
+                        Button {
+                            text: "Cancel";
+                            clicked => { root.cancel-clicked(); }
                         }
 
-                        if root.source-file.thumbnail.width > 0 : Image {
-                            source: root.source-file.thumbnail;
-                            width: 100%;
-                            height: 100%;
-                            image-fit: contain;
-                            opacity: src-thumb-touch.has-hover ? 0.92 : 1.0;
+                        if root.total-conflicts > 1 : Button {
+                            text: "Skip";
+                            clicked => { root.skip-clicked(); }
                         }
 
-                        if root.source-file.thumbnail.width == 0 : Text {
-                            text: "📄";
-                            font-size: 32px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                        Button {
+                            text: "Auto-Rename";
+                            clicked => { root.auto-rename-clicked(); }
                         }
 
-                        if src-thumb-touch.has-hover : Rectangle {
-                            background: #89b4fa15;
+                        Button {
+                            text: "Overwrite";
+                            primary: true;
+                            clicked => { root.overwrite-clicked(); }
                         }
-
-                        src-thumb-touch := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.open-source-file(); }
-                        }
-                    }
-
-                    // Metadata attributes
-                    VerticalLayout {
-                        spacing: 3px;
-
-                        Text {
-                            text: root.source-file.filename;
-                            font-size: 13px;
-                            font-weight: 700;
-                            color: Theme.text;
-                            overflow: elide;
-                        }
-                        Text {
-                            text: "Folder: " + root.source-file.folder_path;
-                            font-size: 11px;
-                            color: Theme.text-muted;
-                            overflow: elide;
-                        }
-                        Text {
-                            text: "Size: " + root.source-file.filesize_str + "  •  " + root.source-file.dimensions_str;
-                            font-size: 11px;
-                            color: Theme.text-muted;
-                        }
-                        Text {
-                            text: "Modified: " + root.source-file.date_str;
-                            font-size: 11px;
-                            color: Theme.text-muted;
-                        }
-                        Text {
-                            text: "MD5: " + root.source-file.hash_str;
-                            font-size: 11px;
-                            font-family: "monospace";
-                            color: Theme.text-muted;
-                            overflow: elide;
-                        }
-                    }
-                }
-            }
-
-            // Center Arrow Indicator
-            VerticalLayout {
-                alignment: center;
-                horizontal-stretch: 0;
-                width: 24px;
-                Text {
-                    text: "➔";
-                    font-size: 20px;
-                    color: Theme.text-muted;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-
-            // Destination File Card (Right)
-            Rectangle {
-                horizontal-stretch: 1;
-                height: card-right-layout.preferred-height;
-                background: Theme.surface;
-                border-radius: 6px;
-                border-width: 1px;
-                border-color: Theme.border;
-                clip: true;
-
-                card-right-layout := VerticalLayout {
-                    padding: 12px;
-                    spacing: 8px;
-
-                    Rectangle {
-                        height: 18px;
-                        HorizontalLayout {
-                            alignment: start;
-                            Text {
-                                text: "DESTINATION FILE (Existing)";
-                                font-size: 11px;
-                                font-weight: 700;
-                                color: #f9e2af;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-
-                    // Clickable & Animated Thumbnail Preview Box with Hover Effect
-                    Rectangle {
-                        height: 120px;
-                        background: #000000;
-                        border-radius: 4px;
-                        border-width: dst-thumb-touch.has-hover ? 1.5px : 1px;
-                        border-color: dst-thumb-touch.has-hover ? #f9e2af : Theme.border;
-                        clip: true;
-
-                        property <bool> is-dst-hovered: dst-thumb-touch.has-hover;
-                        changed is-dst-hovered => {
-                            root.destination-hover-changed(self.is-dst-hovered);
-                        }
-
-                        if root.destination-file.thumbnail.width > 0 : Image {
-                            source: root.destination-file.thumbnail;
-                            width: 100%;
-                            height: 100%;
-                            image-fit: contain;
-                            opacity: dst-thumb-touch.has-hover ? 0.92 : 1.0;
-                        }
-
-                        if root.destination-file.thumbnail.width == 0 : Text {
-                            text: "📄";
-                            font-size: 32px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-
-                        if dst-thumb-touch.has-hover : Rectangle {
-                            background: #f9e2af15;
-                        }
-
-                        dst-thumb-touch := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.open-destination-file(); }
-                        }
-                    }
-
-                    // Metadata attributes
-                    VerticalLayout {
-                        spacing: 3px;
-
-                        Text {
-                            text: root.destination-file.filename;
-                            font-size: 13px;
-                            font-weight: 700;
-                            color: Theme.text;
-                            overflow: elide;
-                        }
-                        Text {
-                            text: "Folder: " + root.destination-file.folder_path;
-                            font-size: 11px;
-                            color: Theme.text-muted;
-                            overflow: elide;
-                        }
-                        Text {
-                            text: "Size: " + root.destination-file.filesize_str + "  •  " + root.destination-file.dimensions_str;
-                            font-size: 11px;
-                            color: Theme.text-muted;
-                        }
-                        Text {
-                            text: "Modified: " + root.destination-file.date_str;
-                            font-size: 11px;
-                            color: Theme.text-muted;
-                        }
-                        Text {
-                            text: "MD5: " + root.destination-file.hash_str;
-                            font-size: 11px;
-                            font-family: "monospace";
-                            color: Theme.text-muted;
-                            overflow: elide;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Bottom Action Bar
-        Rectangle {
-            height: 48px;
-            background: Theme.surface;
-            vertical-stretch: 0;
-
-            Rectangle {
-                y: 0px;
-                height: 1px;
-                background: Theme.border;
-            }
-
-            HorizontalLayout {
-                padding-left: 16px;
-                padding-right: 16px;
-                padding-top: 6px;
-                padding-bottom: 6px;
-                spacing: 12px;
-
-                // Left: Apply to all Checkbox (Only shown when multiple files are processed)
-                HorizontalLayout {
-                    alignment: start;
-                    if root.total-conflicts > 1 : CheckBox {
-                        text: "Apply this action to all remaining conflicts";
-                        checked <=> root.apply-to-all;
-                    }
-                }
-
-                // Right: Action Buttons (Skip is only shown when multiple files are processed)
-                HorizontalLayout {
-                    alignment: end;
-                    spacing: 10px;
-
-                    Button {
-                        text: "Cancel";
-                        clicked => { root.cancel-clicked(); }
-                    }
-
-                    if root.total-conflicts > 1 : Button {
-                        text: "Skip";
-                        clicked => { root.skip-clicked(); }
-                    }
-
-                    Button {
-                        text: "Auto-Rename";
-                        clicked => { root.auto-rename-clicked(); }
-                    }
-
-                    Button {
-                        text: "Overwrite";
-                        primary: true;
-                        clicked => { root.overwrite-clicked(); }
                     }
                 }
             }

@@ -115,125 +115,137 @@ export component SettingsWindow inherits Window {
     callback save-and-apply();
     callback cancel-clicked();
 
-    VerticalLayout {
-        padding: 0px;
-        spacing: 0px;
+    forward-focus: dialog-focus;
 
-        HorizontalLayout {
-            vertical-stretch: 1;
-            horizontal-stretch: 1;
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancel-clicked();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
             padding: 0px;
             spacing: 0px;
 
-            SettingsSidebar {
-                active-category <=> root.active-category;
-            }
-
-            SmoothScrollArea {
+            HorizontalLayout {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
-                enable-horizontal: false;
-                enable-vertical: true;
-                content-width: self.width;
-                content-height: page-content.preferred-height;
+                padding: 0px;
+                spacing: 0px;
 
-                page-content := VerticalLayout {
-                    padding: 16px;
-                    spacing: 16px;
-                    alignment: start;
+                SettingsSidebar {
+                    active-category <=> root.active-category;
+                }
 
-                    if root.active-category == 0 : SettingsPageGeneral {
-                        root-folder-path <=> root.root-folder-path;
-                        remember-last-folder <=> root.remember-last-folder;
-                        confirm-delete <=> root.confirm-delete;
-                        deletion-mode-idx <=> root.deletion-mode-idx;
-                        browse-root-folder => { root.browse-root-folder(); }
-                    }
+                SmoothScrollArea {
+                    vertical-stretch: 1;
+                    horizontal-stretch: 1;
+                    enable-horizontal: false;
+                    enable-vertical: true;
+                    content-width: self.width;
+                    content-height: page-content.preferred-height;
 
-                    if root.active-category == 1 : SettingsPageFolders {
-                        auto-reveal-remembered-folder <=> root.auto-reveal-remembered-folder;
-                        persist-folder-tree-state <=> root.persist-folder-tree-state;
-                        show-deleted-folders <=> root.show-deleted-folders;
-                        show-folder-metrics <=> root.show-folder-metrics;
-                        show-hidden-folders <=> root.show-hidden-folders;
-                        support-dot-hidden-files <=> root.support-dot-hidden-files;
-                    }
+                    page-content := VerticalLayout {
+                        padding: 16px;
+                        spacing: 16px;
+                        alignment: start;
 
-                    if root.active-category == 2 : SettingsPageAppearance {
-                        default-thumb-size <=> root.default-thumb-size;
-                        thumb-aspect-idx <=> root.thumb-aspect-idx;
-                        show-filenames <=> root.show-filenames;
-                        show-rating-badge <=> root.show-rating-badge;
-                        show-tag-badge <=> root.show-tag-badge;
-                        show-media-type-badges <=> root.show-media-type-badges;
-                        enable-hover-previews <=> root.enable-hover-previews;
-                        enable-tooltips <=> root.enable-tooltips;
-                        tooltip-delay-ms <=> root.tooltip-delay-ms;
-                        grid-item-padding-h <=> root.grid-item-padding-h;
-                        grid-item-padding-v <=> root.grid-item-padding-v;
-                        grid-spacing <=> root.grid-spacing;
-                        grid-padding <=> root.grid-padding;
-                        grid-item-border-width <=> root.grid-item-border-width;
-                        grid-item-corner-radius <=> root.grid-item-corner-radius;
-                    }
+                        if root.active-category == 0 : SettingsPageGeneral {
+                            root-folder-path <=> root.root-folder-path;
+                            remember-last-folder <=> root.remember-last-folder;
+                            confirm-delete <=> root.confirm-delete;
+                            deletion-mode-idx <=> root.deletion-mode-idx;
+                            browse-root-folder => { root.browse-root-folder(); }
+                        }
 
-                    if root.active-category == 3 : SettingsPagePerformance {
-                        worker-threads <=> root.worker-threads;
-                        batch-commit-size <=> root.batch-commit-size;
-                        l1-cache-slots <=> root.l1-cache-slots;
-                        thumb-db-size <=> root.thumb-db-size;
-                        thumb-format-idx <=> root.thumb-format-idx;
-                        thumb-quality <=> root.thumb-quality;
-                        scaling-algo-idx <=> root.scaling-algo-idx;
-                        video-engine-idx <=> root.video-engine-idx;
-                        video-offset-percent <=> root.video-offset-percent;
-                        short-video-threshold-secs <=> root.short-video-threshold-secs;
-                        generate-video-previews <=> root.generate-video-previews;
-                        preview-frame-count <=> root.preview-frame-count;
-                        custom-preview-settings <=> root.custom-preview-settings;
-                        preview-format-idx <=> root.preview-format-idx;
-                        preview-quality <=> root.preview-quality;
-                    }
+                        if root.active-category == 1 : SettingsPageFolders {
+                            auto-reveal-remembered-folder <=> root.auto-reveal-remembered-folder;
+                            persist-folder-tree-state <=> root.persist-folder-tree-state;
+                            show-deleted-folders <=> root.show-deleted-folders;
+                            show-folder-metrics <=> root.show-folder-metrics;
+                            show-hidden-folders <=> root.show-hidden-folders;
+                            support-dot-hidden-files <=> root.support-dot-hidden-files;
+                        }
 
-                    if root.active-category == 4 : SettingsPageFormats {
-                        supported-image-formats: root.supported-image-formats;
-                        supported-video-formats: root.supported-video-formats;
-                        auto-detect-extensionless <=> root.auto-detect-extensionless;
-                    }
+                        if root.active-category == 2 : SettingsPageAppearance {
+                            default-thumb-size <=> root.default-thumb-size;
+                            thumb-aspect-idx <=> root.thumb-aspect-idx;
+                            show-filenames <=> root.show-filenames;
+                            show-rating-badge <=> root.show-rating-badge;
+                            show-tag-badge <=> root.show-tag-badge;
+                            show-media-type-badges <=> root.show-media-type-badges;
+                            enable-hover-previews <=> root.enable-hover-previews;
+                            enable-tooltips <=> root.enable-tooltips;
+                            tooltip-delay-ms <=> root.tooltip-delay-ms;
+                            grid-item-padding-h <=> root.grid-item-padding-h;
+                            grid-item-padding-v <=> root.grid-item-padding-v;
+                            grid-spacing <=> root.grid-spacing;
+                            grid-padding <=> root.grid-padding;
+                            grid-item-border-width <=> root.grid-item-border-width;
+                            grid-item-corner-radius <=> root.grid-item-corner-radius;
+                        }
 
-                    if root.active-category == 5 : SettingsPageViewer {
-                        open-images-in-tab <=> root.open-images-in-tab;
-                        allow-multiple-image-tabs <=> root.allow-multiple-image-tabs;
-                        open-videos-in-tab <=> root.open-videos-in-tab;
-                        allow-multiple-video-tabs <=> root.allow-multiple-video-tabs;
-                        show-tab-rating-badge <=> root.viewer-show-tab-rating-badge;
-                        background-mode-idx <=> root.viewer-background-mode-idx;
-                    }
+                        if root.active-category == 3 : SettingsPagePerformance {
+                            worker-threads <=> root.worker-threads;
+                            batch-commit-size <=> root.batch-commit-size;
+                            l1-cache-slots <=> root.l1-cache-slots;
+                            thumb-db-size <=> root.thumb-db-size;
+                            thumb-format-idx <=> root.thumb-format-idx;
+                            thumb-quality <=> root.thumb-quality;
+                            scaling-algo-idx <=> root.scaling-algo-idx;
+                            video-engine-idx <=> root.video-engine-idx;
+                            video-offset-percent <=> root.video-offset-percent;
+                            short-video-threshold-secs <=> root.short-video-threshold-secs;
+                            generate-video-previews <=> root.generate-video-previews;
+                            preview-frame-count <=> root.preview-frame-count;
+                            custom-preview-settings <=> root.custom-preview-settings;
+                            preview-format-idx <=> root.preview-format-idx;
+                            preview-quality <=> root.preview-quality;
+                        }
 
-                    if root.active-category == 6 : SettingsPageFullscreen {
-                        display-options: root.display-options;
-                        selected-display-idx <=> root.selected-display-idx;
-                        enable-specific-monitor <=> root.fullscreen-enable-specific;
-                        enable-fallback-rule <=> root.fullscreen-enable-fallback;
-                        fallback-target-idx <=> root.fullscreen-fallback-target-idx;
-                        refresh-displays => { root.refresh-displays(); }
-                    }
+                        if root.active-category == 4 : SettingsPageFormats {
+                            supported-image-formats: root.supported-image-formats;
+                            supported-video-formats: root.supported-video-formats;
+                            auto-detect-extensionless <=> root.auto-detect-extensionless;
+                        }
 
-                    if root.active-category == 7 : SettingsPageTags {}
+                        if root.active-category == 5 : SettingsPageViewer {
+                            open-images-in-tab <=> root.open-images-in-tab;
+                            allow-multiple-image-tabs <=> root.allow-multiple-image-tabs;
+                            open-videos-in-tab <=> root.open-videos-in-tab;
+                            allow-multiple-video-tabs <=> root.allow-multiple-video-tabs;
+                            show-tab-rating-badge <=> root.viewer-show-tab-rating-badge;
+                            background-mode-idx <=> root.viewer-background-mode-idx;
+                        }
 
-                    if root.active-category == 8 : SettingsPageDebug {
-                        obfuscate-logs <=> root.obfuscate-logs;
+                        if root.active-category == 6 : SettingsPageFullscreen {
+                            display-options: root.display-options;
+                            selected-display-idx <=> root.selected-display-idx;
+                            enable-specific-monitor <=> root.fullscreen-enable-specific;
+                            enable-fallback-rule <=> root.fullscreen-enable-fallback;
+                            fallback-target-idx <=> root.fullscreen-fallback-target-idx;
+                            refresh-displays => { root.refresh-displays(); }
+                        }
+
+                        if root.active-category == 7 : SettingsPageTags {}
+
+                        if root.active-category == 8 : SettingsPageDebug {
+                            obfuscate-logs <=> root.obfuscate-logs;
+                        }
                     }
                 }
             }
-        }
 
-        ButtonBar {
-            vertical-stretch: 0;
-            show-cancel: true;
-            show-save: true;
-            cancel-clicked => { root.cancel-clicked(); }
-            save-clicked => { root.save-and-apply(); }
+            ButtonBar {
+                vertical-stretch: 0;
+                show-cancel: true;
+                show-save: true;
+                cancel-clicked => { root.cancel-clicked(); }
+                save-clicked => { root.save-and-apply(); }
+            }
         }
     }
 }

@@ -1,4 +1,3 @@
-
 import { LineEdit } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { ButtonBar } from "button_bar.slint";
@@ -18,60 +17,83 @@ export component RenameTagDialog inherits Window {
     callback confirmed(string);
     callback cancelled();
 
-    VerticalLayout {
-        padding: 0px;
-        spacing: 0px;
-        alignment: space-between;
+    forward-focus: name-input;
+
+    public function select-all() {
+        name-input.select-all();
+    }
+
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            return reject;
+        }
 
         VerticalLayout {
-            padding: 16px;
-            spacing: 10px;
-            vertical-stretch: 1;
+            padding: 0px;
+            spacing: 0px;
+            alignment: space-between;
 
-            Text {
-                text: "Rename Tag";
-                font-size: 14px;
-                font-weight: 700;
-                color: Theme.primary;
-            }
+            VerticalLayout {
+                padding: 16px;
+                spacing: 10px;
+                vertical-stretch: 1;
 
-            Text {
-                text: "Enter a new name for this tag:";
-                font-size: 11px;
-                color: Theme.text-muted;
-            }
+                Text {
+                    text: "Rename Tag";
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                }
 
-            name-input := LineEdit {
-                text: root.initial-name;
-                placeholder-text: "New tag name...";
-                height: 32px;
-                vertical-stretch: 0;
-                accepted => {
-                    if self.text != "" {
-                        root.confirmed(self.text);
+                Text {
+                    text: "Enter a new name for this tag:";
+                    font-size: 11px;
+                    color: Theme.text-muted;
+                }
+
+                name-input := LineEdit {
+                    text: root.initial-name;
+                    placeholder-text: "New tag name...";
+                    height: 32px;
+                    vertical-stretch: 0;
+                    accepted => {
+                        if self.text != "" {
+                            root.confirmed(self.text);
+                        }
                     }
+                    key-pressed(event) => {
+                        if event.text == Key.Escape {
+                            root.cancelled();
+                            return accept;
+                        }
+                        return reject;
+                    }
+                }
+
+                if root.error-message != "" : Text {
+                    text: root.error-message;
+                    font-size: 11px;
+                    color: #ff5555;
+                    wrap: word-wrap;
                 }
             }
 
-            if root.error-message != "" : Text {
-                text: root.error-message;
-                font-size: 11px;
-                color: #ff5555;
-                wrap: word-wrap;
-            }
-        }
-
-        ButtonBar {
-            vertical-stretch: 0;
-            bar-height: 48px;
-            show-cancel: true;
-            show-save: true;
-            text-save: "Rename";
-            text-cancel: "Cancel";
-            cancel-clicked => { root.cancelled(); }
-            save-clicked => {
-                if name-input.text != "" {
-                    root.confirmed(name-input.text);
+            ButtonBar {
+                vertical-stretch: 0;
+                bar-height: 48px;
+                show-cancel: true;
+                show-save: true;
+                text-save: "Rename";
+                text-cancel: "Cancel";
+                cancel-clicked => { root.cancelled(); }
+                save-clicked => {
+                    if name-input.text != "" {
+                        root.confirmed(name-input.text);
+                    }
                 }
             }
         }

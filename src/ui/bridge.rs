@@ -507,6 +507,47 @@ impl UiBridge {
         self.register_rubberband_callbacks();
         self.register_sidebar_resize_callbacks();
         self.register_tooltip_overlay_callbacks();
+        self.register_modal_dismiss_callback();
+    }
+
+    /// Single Point of Truth (SPoT): Universal handler for dismissing modal dialogs and fullscreen when backdrop is clicked or Escape is pressed.
+    fn register_modal_dismiss_callback(&self) {
+        let fs_ctrl = self.fullscreen_controller.clone();
+        let ren_dlg = self.rename_dialog.clone();
+        let set_dlg = self.settings_dialog.clone();
+        let miss_dlg = self.missing_file_dialog.clone();
+        let del_dlg = self.delete_file_dialog.clone();
+        let orph_dlg = self.remove_orphaned_dialog.clone();
+        let conf_dlg = self.conflict_dialog.clone();
+        let fld_dlg = self.folder_dialogs.clone();
+        let tag_dlg = self.tag_dialogs.clone();
+        let win = self.window.clone_strong();
+        let st = self.state.clone();
+
+        self.window.on_modal_dismiss_requested(move || {
+            tracing::info!(
+                "[UiBridge: ModalDismiss] Main UI modal dismiss requested (backdrop clicked or Escape pressed during modal lock)"
+            );
+            if fs_ctrl.is_open() {
+                fs_ctrl.close();
+            }
+            FileRenameDialogController::close(&ren_dlg, &st, &win, &fs_ctrl);
+            set_dlg.borrow().close();
+            miss_dlg.close(&win);
+            del_dlg.close(&win);
+            orph_dlg.close(&win);
+            conf_dlg.close(&win);
+            fld_dlg.close_rename(&win);
+            fld_dlg.close_delete(&win);
+            fld_dlg.close_missing_delete(&win);
+            fld_dlg.close_move(&win);
+            fld_dlg.close_remove_orphaned(&win);
+            fld_dlg.close_reborn_warn(&win);
+            tag_dlg.close_add(&win);
+            tag_dlg.close_rename(&win);
+            tag_dlg.close_delete(&win);
+            win.set_is_modal_locked(false);
+        });
     }
 
     fn register_tooltip_overlay_callbacks(&self) {
@@ -983,11 +1024,13 @@ impl UiBridge {
 
         let win_cancel = self.window.clone_strong();
         self.window.on_choice_popup_cancel(move || {
+            tracing::info!("[UiBridge: ChoicePopup] Floating choice popup cancelled via Cancel button");
             win_cancel.set_is_choice_popup_open(false);
         });
 
         let win_dism = self.window.clone_strong();
         self.window.on_choice_popup_dismissed(move || {
+            tracing::info!("[UiBridge: ChoicePopup] Floating choice popup dismissed via Escape key or backdrop click");
             win_dism.set_is_choice_popup_open(false);
         });
     }

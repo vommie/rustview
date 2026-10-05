@@ -314,16 +314,7 @@ impl BridgeViewerTabs {
             fs_ctrl_mid.show(&tm_fs_mid, &set_fs_mid, win_fs_mid.as_weak());
         });
 
-        // 10. Dismiss Fullscreen from Main UI
-        let fs_modal = fullscreen_controller.clone();
-        window.on_modal_dismiss_requested(move || {
-            tracing::info!(
-                "[BridgeViewerTabs: ModalDismiss] Main UI modal dismiss triggered. Closing active fullscreen window if present."
-            );
-            fs_modal.close();
-        });
-
-        // 11. Viewport Geometry Changed Callback
+        // 10. Viewport Geometry Changed Callback
         let win_geom = window.clone_strong();
         let tm_geom = tab_manager;
         let set_geom = settings;
