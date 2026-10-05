@@ -99,6 +99,10 @@ pub const DEFAULT_SIDEBAR_RIGHT_WIDTH: f32 = 280.0;
 pub const MIN_SIDEBAR_WIDTH: f32 = 150.0;
 pub const MAX_SIDEBAR_WIDTH: f32 = 700.0;
 
+// Sidebar Panel Tabs Constants
+pub const DEFAULT_LEFT_SIDEBAR_PANEL_TABS: &[&str] = &["folders", "favorites"];
+pub const DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB: &str = "folders";
+
 // =============================================================================
 // SECTION 5: Performance, Video & Engine - Single Point of Truth Constants
 // =============================================================================
@@ -392,6 +396,10 @@ pub struct ViewSettings {
 
     pub sidebar_left_width: f32,
     pub sidebar_right_width: f32,
+
+    // Sidebar Panel Tabs Configuration (Dock panel tabs in left sidebar)
+    pub left_sidebar_panel_tabs: Vec<String>,
+    pub left_sidebar_active_panel_tab: String,
 }
 
 impl Default for ViewSettings {
@@ -421,6 +429,12 @@ impl Default for ViewSettings {
 
             sidebar_left_width: DEFAULT_SIDEBAR_LEFT_WIDTH,
             sidebar_right_width: DEFAULT_SIDEBAR_RIGHT_WIDTH,
+
+            left_sidebar_panel_tabs: DEFAULT_LEFT_SIDEBAR_PANEL_TABS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            left_sidebar_active_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
         }
     }
 }

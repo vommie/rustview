@@ -116,3 +116,13 @@ export struct TabGridItemModel {
     width: length,
     height: length,
 }
+
+/// Dynamic Model representing an individual dock panel tab in a sidebar (e.g. Folders vs Favorites).
+export struct SidebarPanelTabModel {
+    id: string,
+    title: string,
+    icon_name: string,
+    is_active: bool,
+    shift_x: length,
+    is_placeholder: bool,
+}

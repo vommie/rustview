@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
-import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView, TabItemModel, TabGridItemModel } from "types.slint";
+import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView, TabItemModel, TabGridItemModel, SidebarPanelTabModel } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
 import { SidebarRight } from "sidebar_right.slint";
@@ -51,6 +51,21 @@ export component MainWindow inherits Window {
     in-out property <bool> is-browse-active: true;
     in-out property <bool> is-tab-grid-active: false;
     in property <[TabItemModel]> tabs: [];
+
+    // Sidebar Panel Tabs Properties (Left Sidebar dock panels: Folders & Favorites)
+    in property <[SidebarPanelTabModel]> sidebar-panel-tabs: [];
+    in-out property <string> active-sidebar-panel-tab: "folders";
+    in-out property <bool> is-dragging-sidebar-panel-tab: false;
+    in-out property <length> sidebar-panel-tab-drag-ghost-x: 0px;
+    in-out property <length> sidebar-panel-tab-drag-ghost-width: 100px;
+    in-out property <string> sidebar-panel-tab-drag-ghost-title: "";
+    in-out property <string> sidebar-panel-tab-drag-ghost-icon: "";
+
+    callback sidebar-panel-tab-selected(string /* tab_id */);
+    callback sidebar-panel-tab-drag-started(string /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
+    callback sidebar-panel-tab-drag-moved(length /* mouse_x */, length /* view_width */);
+    callback sidebar-panel-tab-drag-ended(string /* tab_id */, int /* target_index */);
+    callback sidebar-panel-tab-drag-cancelled(string /* tab_id */);
 
     // Tab Grid Masonry View State Properties
     in property <[TabGridItemModel]> tab-grid-items: [];
@@ -467,7 +482,7 @@ export component MainWindow inherits Window {
                 return reject;
             }
 
-            if root.is-dragging-media || root.is-dragging-tab || root.rubberband-active {
+            if root.is-dragging-media || root.is-dragging-tab || root.is-dragging-sidebar-panel-tab || root.rubberband-active {
                 return reject;
             }
 
@@ -600,6 +615,19 @@ export component MainWindow inherits Window {
             sidebar_left := SidebarLeft {
                 sidebar-width: (root.active-view-mode == 0) ? root.sidebar-left-width : 0px;
                 visible: root.active-view-mode == 0;
+                panel-tabs: root.sidebar-panel-tabs;
+                active-panel-tab: root.active-sidebar-panel-tab;
+                is-dragging-panel-tab: root.is-dragging-sidebar-panel-tab;
+                panel-tab-drag-ghost-x: root.sidebar-panel-tab-drag-ghost-x;
+                panel-tab-drag-ghost-width: root.sidebar-panel-tab-drag-ghost-width;
+                panel-tab-drag-ghost-title: root.sidebar-panel-tab-drag-ghost-title;
+                panel-tab-drag-ghost-icon: root.sidebar-panel-tab-drag-ghost-icon;
+                panel-tab-selected(id) => { root.sidebar-panel-tab-selected(id); }
+                panel-tab-drag-started(id, idx, mx, tw) => { root.sidebar-panel-tab-drag-started(id, idx, mx, tw); }
+                panel-tab-drag-moved(mx, vw) => { root.sidebar-panel-tab-drag-moved(mx, vw); }
+                panel-tab-drag-ended(id, idx) => { root.sidebar-panel-tab-drag-ended(id, idx); }
+                panel-tab-drag-cancelled(id) => { root.sidebar-panel-tab-drag-cancelled(id); }
+
                 folders: root.folders;
                 favorites: root.favorites;
                 drop-target-folder-id: root.drop-target-folder-id;

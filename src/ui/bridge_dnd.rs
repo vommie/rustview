@@ -168,6 +168,15 @@ impl BridgeDnd {
         autoscroller.update_cursor(window, current_x, current_y);
 
         if !autoscroller.is_active() {
+            // Guard: Only test folder tree drop target if "folders" tab is currently active
+            let active_panel_tab = window.get_active_sidebar_panel_tab();
+            if active_panel_tab.as_str() != "folders" {
+                if window.get_drop_target_folder_id() != -1 {
+                    window.set_drop_target_folder_id(-1);
+                }
+                return;
+            }
+
             let sidebar_w = window.get_sidebar_left_width();
             let scroll_y = window.get_folder_tree_scroll_y();
             let window_h = window.window().size().height as f32;
@@ -214,6 +223,12 @@ impl BridgeDnd {
     pub fn handle_folder_hovered(folder_id: FolderId, window: &MainWindow, state: &Arc<RwLock<UiState>>) {
         let is_dragging = window.get_is_dragging_media();
         if !is_dragging {
+            return;
+        }
+
+        // Guard: Only highlight if Folders tab is active
+        let active_panel_tab = window.get_active_sidebar_panel_tab();
+        if active_panel_tab.as_str() != "folders" {
             return;
         }
 

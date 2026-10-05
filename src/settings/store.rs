@@ -1,6 +1,7 @@
 use super::schema::{
     AppSettings, GridAspectRatio, DEFAULT_COL_FLAGS_WIDTH, DEFAULT_COL_PATH_WIDTH,
-    DEFAULT_FULLSCREEN_FALLBACK_TARGET, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_PREVIEW_FORMAT,
+    DEFAULT_FULLSCREEN_FALLBACK_TARGET, DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB,
+    DEFAULT_LEFT_SIDEBAR_PANEL_TABS, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_PREVIEW_FORMAT,
     DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT,
     DEFAULT_VIDEO_ENGINE, DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH, MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
@@ -268,6 +269,21 @@ impl SettingsStore {
             .view
             .sidebar_right_width
             .clamp(MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH);
+
+        // Sanitize Left Sidebar Panel Tabs configuration
+        let valid_tabs = DEFAULT_LEFT_SIDEBAR_PANEL_TABS;
+        settings.view.left_sidebar_panel_tabs.retain(|t| valid_tabs.contains(&t.as_str()));
+        if settings.view.left_sidebar_panel_tabs.is_empty() {
+            settings.view.left_sidebar_panel_tabs = valid_tabs.iter().map(|s| s.to_string()).collect();
+        }
+        for &tab in valid_tabs {
+            if !settings.view.left_sidebar_panel_tabs.iter().any(|t| t == tab) {
+                settings.view.left_sidebar_panel_tabs.push(tab.to_string());
+            }
+        }
+        if !settings.view.left_sidebar_panel_tabs.contains(&settings.view.left_sidebar_active_panel_tab) {
+            settings.view.left_sidebar_active_panel_tab = DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string();
+        }
 
         // Sanitize window geometry: enforce sane limits while strictly preserving maximization
         if settings.window.width < MIN_WINDOW_WIDTH {

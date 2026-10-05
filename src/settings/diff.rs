@@ -414,6 +414,20 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.left_sidebar_panel_tabs != new.view.left_sidebar_panel_tabs {
+            changes.push(format!(
+                "View: left_sidebar_panel_tabs ({:?} -> {:?})",
+                old.view.left_sidebar_panel_tabs, new.view.left_sidebar_panel_tabs
+            ));
+        }
+
+        if old.view.left_sidebar_active_panel_tab != new.view.left_sidebar_active_panel_tab {
+            changes.push(format!(
+                "View: left_sidebar_active_panel_tab ({} -> {})",
+                old.view.left_sidebar_active_panel_tab, new.view.left_sidebar_active_panel_tab
+            ));
+        }
+
         if old.formats.auto_detect_extensionless_media != new.formats.auto_detect_extensionless_media {
             changes.push(format!(
                 "Formats: auto_detect_extensionless_media ({} -> {})",

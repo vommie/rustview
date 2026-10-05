@@ -4,14 +4,15 @@ use crate::library::models::{FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{
-    DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_TAB_GRID_AUTO_COLUMNS,
-    DEFAULT_TAB_GRID_COLUMNS,
+    DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER,
+    DEFAULT_TAB_GRID_AUTO_COLUMNS, DEFAULT_TAB_GRID_COLUMNS,
 };
 use crate::system::DesktopApp;
 use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
 use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use crate::ui::rubberband_selection::RubberbandSession;
+use crate::ui::sidebar_panel_tab_dnd::SidebarPanelTabDndSession;
 use crate::ui::tab_dnd::TabDndSession;
 use crate::ui::tab_grid::MasonryRect;
 use crate::viewer::TabId;
@@ -176,6 +177,8 @@ pub struct UiState {
     pub active_tab_media_id: Option<MediaId>,
     pub rubberband_session: RubberbandSession,
     pub active_tab_dnd_session: Option<TabDndSession>,
+    pub active_sidebar_panel_tab: String,
+    pub active_sidebar_panel_tab_dnd_session: Option<SidebarPanelTabDndSession>,
     pub media_row_map: HashMap<MediaId, usize>,
     pub filter: QueryFilter,
     pub last_executed_query: String,
@@ -238,6 +241,8 @@ impl Default for UiState {
             active_tab_media_id: None,
             rubberband_session: RubberbandSession::default(),
             active_tab_dnd_session: None,
+            active_sidebar_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
+            active_sidebar_panel_tab_dnd_session: None,
             media_row_map: HashMap::new(),
             filter: QueryFilter::default(),
             last_executed_query: String::new(),

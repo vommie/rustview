@@ -15,6 +15,7 @@ use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
+use super::bridge_sidebar_panel_tabs::BridgeSidebarPanelTabs;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
@@ -206,6 +207,9 @@ impl UiBridge {
         let state = Arc::new(RwLock::new(initial_state));
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let last_click = Arc::new(Mutex::new(None));
+
+        // Initialize Left Sidebar Panel Tabs from persisted settings
+        BridgeSidebarPanelTabs::init(&window, &settings, &state);
 
         let win_fs_close = window.as_weak();
         let tm_fs_close = tab_manager.clone();
@@ -424,6 +428,9 @@ impl UiBridge {
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
                 }
 
+                // Sync sidebar panel tabs if their settings changed
+                BridgeSidebarPanelTabs::sync_ui(&window, &settings, &state);
+
                 StatusBarBridge::update_metrics(&window, &state);
             });
         });
@@ -448,6 +455,12 @@ impl UiBridge {
             self.state.clone(),
             self.settings_dialog.clone(),
             self.fullscreen_controller.clone(),
+        );
+
+        BridgeSidebarPanelTabs::register_callbacks(
+            &self.window,
+            self.settings.clone(),
+            self.state.clone(),
         );
 
         BridgeFileSelection::register_callbacks(

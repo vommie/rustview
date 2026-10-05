@@ -10,7 +10,10 @@ pub const FOLDER_TREE_AUTOSCROLL_BASE_SPEED_PX: f32 = 3.0;
 pub const FOLDER_TREE_AUTOSCROLL_MAX_SPEED_PX: f32 = 18.0;
 pub const FOLDER_TREE_AUTOSCROLL_ACCEL_DURATION_SECS: f32 = 1.5;
 pub const FOLDER_TREE_AUTOSCROLL_TICK_INTERVAL_MS: u64 = 16; // ~60 FPS
-pub const FOLDER_TREE_TOP_OFFSET_PX: f32 = 263.0;
+
+/// Fixed Y offset from window top to the first folder row:
+/// TopToolbar (38px) + Sidebar padding (8px) + SidebarPanelTabBar (28px) + spacing (6px) + FolderPanelToolbar (26px) + spacing (6px) = 112px.
+pub const FOLDER_TREE_TOP_OFFSET_PX: f32 = 112.0;
 pub const FOLDER_TREE_ROW_HEIGHT_PX: f32 = 24.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +59,12 @@ impl DndFolderTreeAutoScroller {
 
     /// Evaluates cursor position relative to the FolderTree boundaries and starts/adjusts or stops auto-scrolling.
     pub fn update_cursor(&self, window: &MainWindow, cursor_x: f32, cursor_y: f32) {
+        let active_tab = window.get_active_sidebar_panel_tab();
+        if active_tab.as_str() != "folders" {
+            self.stop();
+            return;
+        }
+
         let sidebar_w = window.get_sidebar_left_width();
         let window_h = window.window().size().height as f32;
         let tree_bottom_y = window_h - 36.0;

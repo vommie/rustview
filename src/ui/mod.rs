@@ -27,6 +27,7 @@ pub mod bridge_image_fullscreen;
 pub mod bridge_inspector;
 pub mod bridge_media;
 pub mod bridge_rubberband;
+pub mod bridge_sidebar_panel_tabs;
 pub mod bridge_state;
 pub mod bridge_status_bar;
 pub mod bridge_tab_grid;
@@ -42,6 +43,7 @@ pub mod icons;
 pub mod keyboard_navigation;
 pub mod models;
 pub mod rubberband_selection;
+pub mod sidebar_panel_tab_dnd;
 pub mod tab_dnd;
 pub mod tab_grid;
 pub mod video_preview_animator;
@@ -75,6 +77,7 @@ pub use bridge_image_fullscreen::ImageFullscreenDialogController;
 pub use bridge_rubberband::{
     BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams,
 };
+pub use bridge_sidebar_panel_tabs::BridgeSidebarPanelTabs;
 pub use bridge_state::*;
 pub use bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
 pub use bridge_tab_grid::BridgeTabGrid;
@@ -92,6 +95,9 @@ pub use keyboard_navigation::{
 pub use rubberband_selection::{
     GridLayoutConfig, RectF32, RubberbandAutoScroller, RubberbandGeometry, RubberbandSession,
     RubberbandStartParams, TableLayoutConfig,
+};
+pub use sidebar_panel_tab_dnd::{
+    SidebarPanelTabDndGeometry, SidebarPanelTabDndSession, SidebarPanelTabSlotInfo,
 };
 pub use tab_dnd::{
     TabAutoScrollDirection, TabDndAutoScroller, TabDndGeometry, TabDndSession, TabSlotInfo,
