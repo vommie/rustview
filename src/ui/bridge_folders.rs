@@ -1,3 +1,4 @@
+use super::bridge_favorites::BridgeFavorites;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
@@ -310,7 +311,7 @@ impl BridgeFolders {
         let set = settings.clone();
         let st = state.clone();
         let win = window.clone_strong();
-        let lib = library.clone();
+        let lib = library;
         window.on_toggle_hidden_folders(move |show_hidden| {
             st.write().last_active_panel = LastActivePanel::Folder;
             let mut app_settings = set.get();
@@ -318,19 +319,6 @@ impl BridgeFolders {
             set.save_quiet_async(&app_settings);
             Self::reload_tree(&win, &lib, &set, &st);
             Self::scroll_to_selected(&win);
-        });
-
-        let lib = library;
-        let thumb = thumbnails;
-        let set = settings;
-        let st = state;
-        let win = window.clone_strong();
-        window.on_favorite_selected(move |path_str| {
-            st.write().last_active_panel = LastActivePanel::Folder;
-            let path = PathBuf::from(path_str.as_str());
-            if let Ok(Some(folder)) = lib.folders().get_folder_by_path(&path) {
-                Self::select_folder(folder.id, path, &win, &lib, &thumb, &set, &st);
-            }
         });
     }
 
@@ -949,6 +937,9 @@ impl BridgeFolders {
         Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
+        // Synchronize surgical selection indicator in Favorites panel
+        BridgeFavorites::set_selected_path(Some(&normalized_path));
+
         // Collect target folder IDs
         let target_folder_ids = if is_virtual_folder {
             ctx.library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
@@ -1331,6 +1322,8 @@ impl BridgeFolders {
         window.set_empty_state_title("No Root Directory".into());
         window.set_empty_state_description(status_msg.into());
         window.set_empty_state_icon("settings".into());
+
+        BridgeFavorites::set_selected_path(None);
 
         StatusBarBridge::info(window, status_msg);
         StatusBarBridge::update_metrics(window, state);

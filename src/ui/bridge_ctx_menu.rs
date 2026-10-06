@@ -1,4 +1,5 @@
-pub use super::bridge_ctx_menu_folder::FolderContextMenu;
+pub use super::bridge_ctx_menu_favorite::FavoriteContextMenu;
+pub use super::bridge_ctx_menu_folder::{FolderContextMenu, FolderMenuBuildParams};
 pub use super::bridge_ctx_menu_media::{MediaActionContext, MediaContextMenu};
 pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use super::bridge_ctx_menu_tab::{TabActionContext, TabContextMenu};
@@ -9,17 +10,15 @@ pub use super::bridge_file_dialog_missing::{MissingFileDialogController, Missing
 pub use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
 pub use super::bridge_file_dialogs::{FileDialogContext, FileRenameContext, FileRenameDialogController};
 
-pub use super::bridge_ctx_menu_folder::FolderContextMenu as FolderContextMenuBuilder;
-pub use super::bridge_ctx_menu_media::MediaContextMenu as MediaContextMenuBuilder;
-pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter as SlintContextMenuPresenter;
-pub use super::bridge_file_dialogs::FileRenameDialogController as FileRenameController;
-
+use super::bridge_favorite_dialog_rename::FavoriteRenameDialogController;
+use super::bridge_favorites::BridgeFavorites;
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::bridge_folders::{FolderTreeBuilder, FolderTreeNode};
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_tag_dialogs::TagDialogController;
+use super::favorites::FavoriteManager;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{CtxMenu, CtxMenuItem, CtxMenuItemKind, CtxMenuDispatcher};
 use crate::library::models::{FolderId, FolderRecord, MediaId};
@@ -51,6 +50,7 @@ pub struct FolderMenuContext<'a> {
     pub library: &'a Library,
     pub thumbnails: &'a ThumbnailManager,
     pub settings: &'a SettingsManager,
+    pub favorites: &'a Arc<RwLock<FavoriteManager>>,
     pub tab_manager: &'a ViewerTabManager,
     pub state: &'a Arc<RwLock<UiState>>,
 }
@@ -59,9 +59,11 @@ pub struct ContextMenuRegistration {
     pub library: Arc<Library>,
     pub thumbnails: Arc<ThumbnailManager>,
     pub tab_manager: Arc<ViewerTabManager>,
+    pub favorites: Arc<RwLock<FavoriteManager>>,
     pub state: Arc<RwLock<UiState>>,
     pub dispatcher: Arc<CtxMenuDispatcher>,
     pub rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
+    pub favorite_rename_dialog: FavoriteRenameDialogController,
     pub missing_file_dialog: MissingFileDialogController,
     pub delete_file_dialog: DeleteFileDialogController,
     pub remove_orphaned_dialog: RemoveOrphanedFileDialogController,
@@ -77,8 +79,9 @@ pub struct BridgeContextMenu;
 impl BridgeContextMenu {
     pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
         Self::register_media_menu(window, &reg.library, &reg.thumbnails, &reg.tab_manager, &reg.state);
-        Self::register_folder_menu(window, &reg.library, &reg.thumbnails, &reg.settings, &reg.tab_manager, &reg.state);
+        Self::register_folder_menu(window, &reg.library, &reg.thumbnails, &reg.settings, &reg.favorites, &reg.tab_manager, &reg.state);
         Self::register_tab_menu(window, &reg.tab_manager, &reg.thumbnails, &reg.state);
+        Self::register_favorite_menu(window, &reg.tab_manager, &reg.state);
         Self::register_popup_events(window, &reg.tab_manager, &reg.state);
         Self::register_action_dispatcher(window, reg);
     }
@@ -117,6 +120,7 @@ impl BridgeContextMenu {
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
         settings: &Arc<SettingsManager>,
+        favorites: &Arc<RwLock<FavoriteManager>>,
         tab_manager: &Arc<ViewerTabManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
@@ -124,6 +128,7 @@ impl BridgeContextMenu {
         let lib = library.clone();
         let th = thumbnails.clone();
         let set = settings.clone();
+        let favs = favorites.clone();
         let tm = tab_manager.clone();
         let st = state.clone();
         window.on_folder_context_menu(move |id, x, y| {
@@ -134,6 +139,7 @@ impl BridgeContextMenu {
                     library: &lib,
                     thumbnails: &th,
                     settings: &set,
+                    favorites: &favs,
                     tab_manager: &tm,
                     state: &st,
                 },
@@ -156,6 +162,27 @@ impl BridgeContextMenu {
         let st = state.clone();
         window.on_tab_context_menu(move |id, x, y| {
             Self::show_tab_menu(&win, &tm, &th, &st, id as u64, x, y);
+        });
+    }
+
+    fn register_favorite_menu(
+        window: &MainWindow,
+        tab_manager: &Arc<ViewerTabManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let win = window.clone_strong();
+        let tm = tab_manager.clone();
+        let st = state.clone();
+        window.on_favorite_context_menu(move |path_str, alias_str, x, y| {
+            Self::show_favorite_menu(
+                &win,
+                &tm,
+                &st,
+                path_str.as_str(),
+                alias_str.as_str(),
+                x,
+                y,
+            );
         });
     }
 
@@ -213,10 +240,12 @@ impl BridgeContextMenu {
         let lib = reg.library;
         let thumb = reg.thumbnails;
         let tab_mgr = reg.tab_manager;
+        let favs = reg.favorites;
         let st = reg.state;
         let set = reg.settings;
         let disp = reg.dispatcher;
         let ren_dlg = reg.rename_dialog;
+        let fav_ren_dlg = reg.favorite_rename_dialog;
         let missing_file_dlg = reg.missing_file_dialog;
         let delete_file_dlg = reg.delete_file_dialog;
         let remove_orphaned_dlg = reg.remove_orphaned_dialog;
@@ -230,7 +259,31 @@ impl BridgeContextMenu {
             tab_mgr.clear_menu_cutouts();
             let action_u64 = action_id as u64;
 
-            // 1. Folder Actions
+            // 1. Favorites Action Handling (5000..6000)
+            if (5000..6000).contains(&action_u64) {
+                let target_fav = st.write().active_favorite_target.take();
+                FavoriteContextMenu::handle_action(
+                    action_u64,
+                    &win,
+                    &favs,
+                    &fav_ren_dlg,
+                    target_fav,
+                );
+                return;
+            }
+
+            // 2. Folder Actions
+            if action_u64 == CTX_FOLDER_ADD_TO_FAVORITES {
+                let target_folder_id = st.write().active_folder_dialog_target.take();
+                if let Some(fid) = target_folder_id
+                    && let Ok(Some(rec)) = lib.folders().get_folder(fid)
+                {
+                    let path = std::path::PathBuf::from(&rec.path);
+                    let _ = BridgeFavorites::add_favorite(&win, &favs, path, None);
+                }
+                return;
+            }
+
             if action_u64 >= CTX_FOLDER_MOVE_BASE || (3000..4000).contains(&action_u64) {
                 let target_folder_id = st.write().active_folder_dialog_target.take();
                 let ctx = FolderDialogContext {
@@ -243,14 +296,14 @@ impl BridgeContextMenu {
                 return;
             }
 
-            // 2. Tag Actions
+            // 3. Tag Actions
             if action_u64 >= CTX_TAG_MOVE_TARGET_BASE || (2000..3000).contains(&action_u64) {
                 let bundle = tag_dlg.create_action_bundle(&win, &lib, &thumb, &set, &st);
                 TagContextMenu::handle_action(action_u64, &win, &lib, &set, &st, bundle);
                 return;
             }
 
-            // 3. Tab Context Menu Invocations (Both tab lifecycle and unified file actions)
+            // 4. Tab Context Menu Invocations (Both tab lifecycle and unified file actions)
             let active_tab_target = st.write().active_tab_dialog_target.take();
             if let Some(target_tab_id) = active_tab_target {
                 if (4000..5000).contains(&action_u64) {
@@ -303,7 +356,7 @@ impl BridgeContextMenu {
                 }
             }
 
-            // 4. Standard Media Grid / Table Selection Actions
+            // 5. Standard Media Grid / Table Selection Actions
             MediaContextMenu::handle_action(
                 action_u64,
                 &win,
@@ -392,15 +445,18 @@ impl BridgeContextMenu {
             .map(|r| Path::new(&folder_rec.path) == r)
             .unwrap_or(false);
 
-        let menu = FolderContextMenu::build_menu_from_cached_tree(
-            &folder_rec,
-            tree,
+        let is_favorite = ctx.favorites.read().has_path(Path::new(&folder_rec.path));
+
+        let menu = FolderContextMenu::build_menu_from_cached_tree(FolderMenuBuildParams {
+            target_folder: &folder_rec,
+            cached_tree: tree,
             is_root,
             show_hidden_folders,
             support_dot_hidden_files,
             dot_hidden_cache,
             is_busy,
-        );
+            is_favorite,
+        });
 
         drop(st);
         Self::open_custom_menu(ctx.window, ctx.state, ctx.tab_manager, menu, x, y);
@@ -446,6 +502,29 @@ impl BridgeContextMenu {
             is_busy,
         );
         Self::open_custom_menu(window, state, tab_manager, menu, x, y + 10.0);
+    }
+
+    pub fn show_favorite_menu(
+        window: &MainWindow,
+        tab_manager: &ViewerTabManager,
+        state: &Arc<RwLock<UiState>>,
+        path_str: &str,
+        alias_str: &str,
+        x: f32,
+        y: f32,
+    ) {
+        let path = std::path::PathBuf::from(path_str);
+        let is_valid = path.is_dir();
+
+        {
+            let mut st = state.write();
+            st.active_favorite_target = Some((alias_str.to_string(), path.clone()));
+            st.active_tab_dialog_target = None;
+            st.active_folder_dialog_target = None;
+        }
+
+        let menu = FavoriteContextMenu::build_menu(alias_str, &path, is_valid);
+        Self::open_custom_menu(window, state, tab_manager, menu, x, y);
     }
 
     fn find_record_in_tree(nodes: &[FolderTreeNode], target_id: FolderId) -> Option<FolderRecord> {

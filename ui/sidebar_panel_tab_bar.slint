@@ -13,10 +13,8 @@ export component SidebarPanelTabItem inherits Rectangle {
     callback drag-ended();
     callback drag-cancelled();
 
-    // Elastic layout sizing: fills available space or auto-sizes with min/max bounds (doubled max-width: 320px)
-    horizontal-stretch: 1;
-    min-width: 60px;
-    max-width: 320px;
+    // Dynamische Inhaltsbreite: Mindestens 60px, maximal 110px (ohne unzulässigen min-width/max-width Konflikt)
+    width: Math.min(110px, Math.max(60px, content-layout.preferred-width));
     height: 26px;
     background: transparent;
 
@@ -26,7 +24,6 @@ export component SidebarPanelTabItem inherits Rectangle {
         height: 100%;
         border-radius: 4px;
 
-        // Smooth animated displacement for neighbor tabs during drag reordering
         animate x { duration: 180ms; easing: ease-out; }
         opacity: root.is-placeholder ? 0.22 : 1.0;
         animate opacity { duration: 120ms; }
@@ -94,7 +91,7 @@ export component SidebarPanelTabItem inherits Rectangle {
             }
         }
 
-        HorizontalLayout {
+        content-layout := HorizontalLayout {
             padding-left: 8px;
             padding-right: 8px;
             spacing: 6px;
@@ -182,7 +179,7 @@ export component SidebarPanelTabBar inherits Rectangle {
     in property <[SidebarPanelTabModel]> tabs: [];
     in property <bool> is-dragging-tab: false;
     in property <length> drag-ghost-x: 0px;
-    in property <length> drag-ghost-width: 120px;
+    in property <length> drag-ghost-width: 100px;
     in property <string> drag-ghost-title: "";
     in property <string> drag-ghost-icon: "";
 

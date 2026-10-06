@@ -1,7 +1,7 @@
 use super::sidebar_panel_tab_dnd::{SidebarPanelTabDndGeometry, SidebarPanelTabDndSession};
 use super::{MainWindow, SidebarPanelTabModel};
 use crate::settings::SettingsManager;
-use crate::ui::bridge_state::UiState;
+use crate::ui::bridge_state::{LastActivePanel, UiState};
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::sync::Arc;
@@ -82,6 +82,11 @@ impl BridgeSidebarPanelTabs {
             {
                 let mut st = st_sel.write();
                 st.active_sidebar_panel_tab = id_str.clone();
+                if id_str == "favorites" {
+                    st.last_active_panel = LastActivePanel::Favorite;
+                } else if id_str == "folders" {
+                    st.last_active_panel = LastActivePanel::Folder;
+                }
             }
             {
                 let mut app_settings = set_sel.get();
@@ -99,9 +104,24 @@ impl BridgeSidebarPanelTabs {
             let id_str = tab_id.as_str().to_string();
             let app_settings = set_dstart.get();
             let tab_ids = app_settings.view.left_sidebar_panel_tabs.clone();
-            let total_tabs = tab_ids.len();
 
-            let widths = vec![tab_width; total_tabs];
+            let widths: Vec<f32> = tab_ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| {
+                    if i == source_idx as usize && tab_width > 20.0 {
+                        tab_width.clamp(60.0, 110.0)
+                    } else {
+                        let title = match id.as_str() {
+                            "folders" => "Folders",
+                            "favorites" => "Favorites",
+                            other => other,
+                        };
+                        SidebarPanelTabDndGeometry::estimate_tab_width(title)
+                    }
+                })
+                .collect();
+
             let slots = SidebarPanelTabDndGeometry::compute_tab_slots(&tab_ids, &widths, 4.0, 0.0);
 
             let grab_offset = if let Some(s) = slots.get(source_idx as usize) {

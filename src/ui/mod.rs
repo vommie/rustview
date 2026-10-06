@@ -2,12 +2,14 @@ slint::include_modules!();
 
 pub mod bridge;
 pub mod bridge_ctx_menu;
+pub mod bridge_ctx_menu_favorite;
 pub mod bridge_ctx_menu_folder;
 pub mod bridge_ctx_menu_media;
 pub mod bridge_ctx_menu_presenter;
 pub mod bridge_ctx_menu_tab;
 pub mod bridge_ctx_menu_tag;
 pub mod bridge_dnd;
+pub mod bridge_favorite_dialog_rename;
 pub mod bridge_favorites;
 pub mod bridge_file_dialog_conflict;
 pub mod bridge_file_dialog_delete;
@@ -50,12 +52,15 @@ pub mod video_preview_animator;
 
 pub use bridge::{RenameActionParams, UiBridge};
 pub use bridge_ctx_menu::{FolderMenuContext, MediaMenuContext};
-pub use bridge_ctx_menu_folder::FolderContextMenu;
+pub use bridge_ctx_menu_favorite::FavoriteContextMenu;
+pub use bridge_ctx_menu_folder::{FolderContextMenu, FolderMenuBuildParams};
 pub use bridge_ctx_menu_media::MediaContextMenu;
 pub use bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use bridge_ctx_menu_tab::{TabActionContext, TabContextMenu};
 pub use bridge_ctx_menu_tag::TagContextMenu;
 pub use bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
+pub use bridge_favorite_dialog_rename::FavoriteRenameDialogController;
+pub use bridge_favorites::BridgeFavorites;
 pub use bridge_file_dialog_conflict::{
     ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController,
 };
@@ -86,7 +91,7 @@ pub use bridge_tags::{BridgeTags, TagActionContext};
 pub use bridge_viewer_tabs::{BridgeViewerTabs, TabDragEndParams};
 pub use dnd_foldertree_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
 pub use fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, FallbackViewState};
-pub use favorites::FavoriteManager;
+pub use favorites::{FavoriteEntry, FavoriteManager};
 pub use file_selection::{FileSelectionModel, FileSelectionSummary};
 pub use icons::{IconAsset, IconManager, IconMetadata};
 pub use keyboard_navigation::{

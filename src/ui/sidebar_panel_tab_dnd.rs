@@ -14,6 +14,12 @@ pub struct SidebarPanelTabSlotInfo {
 pub struct SidebarPanelTabDndGeometry;
 
 impl SidebarPanelTabDndGeometry {
+    /// Computes the content-based estimated tab width for sidebar dock tabs, clamped between 60px and 110px.
+    pub fn estimate_tab_width(title: &str) -> f32 {
+        let text_w = title.chars().count() as f32 * 7.5;
+        (33.0 + text_w).clamp(60.0, 110.0)
+    }
+
     /// Computes horizontal slots (start_x, width, center_x) for all panel tabs in sequence.
     pub fn compute_tab_slots(
         tab_ids: &[String],
@@ -25,7 +31,7 @@ impl SidebarPanelTabDndGeometry {
         let mut current_x = padding_start;
 
         for (i, id) in tab_ids.iter().enumerate() {
-            let w = widths.get(i).copied().unwrap_or(100.0);
+            let w = widths.get(i).copied().unwrap_or(80.0);
             slots.push(SidebarPanelTabSlotInfo {
                 tab_id: id.clone(),
                 index: i,
@@ -54,11 +60,9 @@ impl SidebarPanelTabDndGeometry {
         let source_idx = source_index.min(total - 1);
         let mut best_target = source_idx;
 
-        // 6px hysteresis margin prevents rapid flip-flopping at exact midpoint boundaries
         const HYSTERESIS_PX: f32 = 6.0;
 
         if dragged_center_x > slots[source_idx].center_x {
-            // Dragging to the RIGHT
             for (idx, slot) in slots.iter().enumerate().skip(source_idx + 1) {
                 let threshold = if idx <= current_target_index {
                     slot.center_x - HYSTERESIS_PX
@@ -73,7 +77,6 @@ impl SidebarPanelTabDndGeometry {
                 }
             }
         } else if dragged_center_x < slots[source_idx].center_x {
-            // Dragging to the LEFT
             for (idx, slot) in slots[..source_idx].iter().enumerate().rev() {
                 let threshold = if idx >= current_target_index {
                     slot.center_x + HYSTERESIS_PX
@@ -108,12 +111,10 @@ impl SidebarPanelTabDndGeometry {
         let dragged_item_width = slots[source_index].width + spacing;
 
         if source_index < target_index {
-            // Dragged RIGHT: Intermediate tabs shift LEFT (-dragged_item_width)
             for shift in &mut shifts[(source_index + 1)..=target_index] {
                 *shift = -dragged_item_width;
             }
         } else if source_index > target_index {
-            // Dragged LEFT: Intermediate tabs shift RIGHT (+dragged_item_width)
             for shift in &mut shifts[target_index..source_index] {
                 *shift = dragged_item_width;
             }
@@ -162,7 +163,7 @@ impl SidebarPanelTabDndSession {
             .slots
             .get(self.source_index)
             .map(|s| s.width)
-            .unwrap_or(100.0);
+            .unwrap_or(80.0);
         let left = self.current_cursor_x - self.grab_offset_x;
         left + (source_slot_w / 2.0)
     }
@@ -177,6 +178,6 @@ impl SidebarPanelTabDndSession {
         self.slots
             .get(self.source_index)
             .map(|s| s.width)
-            .unwrap_or(100.0)
+            .unwrap_or(80.0)
     }
 }

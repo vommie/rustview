@@ -42,6 +42,7 @@ export component SidebarLeft inherits Rectangle {
     callback folder-refresh-relative-clicked();
     callback folder-collapse-all-clicked();
     callback favorite-clicked(string /* path */);
+    callback favorite-context-menu(string /* path */, string /* alias */, length /* x */, length /* y */);
     callback toggle-hidden-folders(bool /* show_hidden */);
     callback folder-row-hovered(int /* folder_id */);
     callback folder-row-unhovered(int /* folder_id */);
@@ -108,6 +109,9 @@ export component SidebarLeft inherits Rectangle {
                 visible: root.active-panel-tab == "favorites";
                 favorites: root.favorites;
                 favorite-clicked(path) => { root.favorite-clicked(path); }
+                favorite-context-menu(path, alias, x, y) => {
+                    root.favorite-context-menu(path, alias, stacked-container.x + x, stacked-container.y + y);
+                }
             }
         }
     }

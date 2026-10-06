@@ -1,32 +1,121 @@
 import { Theme } from "styles.slint";
 import { FavoriteItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { TooltipHost } from "tooltips.slint";
 
 export component FavoriteItemRow inherits Rectangle {
     in property <FavoriteItemView> item;
     callback clicked();
+    callback context-menu-requested(length /* x */, length /* y */);
 
-    height: 26px;
-    background: root.item.is-selected ? Theme.surface-selected : (fav-touch.has-hover ? Theme.surface-hover : transparent);
-    border-radius: 2px;
+    property <color> row-bg: root.item.is-selected ? Theme.surface-selected : (
+        fav-touch.has-hover ? Theme.surface-hover : Theme.background
+    );
 
-    fav-touch := TouchArea {
-        clicked => { root.clicked(); }
+    height: 38px;
+    background: root.row-bg;
+    border-radius: 4px;
+    border-width: root.item.is-selected ? 1px : 0px;
+    border-color: root.item.is-selected ? Theme.accent : transparent;
+
+    // Card-weiter Tooltip mit dem ungekürzten Pfad
+    tooltip-host := TooltipHost {
+        text: root.item.path;
+        is-enabled: true;
     }
 
-    HorizontalLayout {
+    fav-touch := TouchArea {
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                tooltip-host.on-hover-leave();
+                if event.button == PointerEventButton.left {
+                    root.clicked();
+                } else if event.button == PointerEventButton.right {
+                    root.context-menu-requested(fav-touch.mouse-x, fav-touch.mouse-y);
+                }
+            }
+        }
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: fav-touch.has-hover;
+    changed is-hovered => {
+        if self.is-hovered {
+            tooltip-host.on-hover-enter(fav-touch.mouse-x, fav-touch.mouse-y);
+        } else {
+            tooltip-host.on-hover-leave();
+        }
+    }
+
+    VerticalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        spacing: 6px;
+        padding-top: 3px;
+        padding-bottom: 3px;
+        spacing: 1px;
         alignment: center;
 
-        Text {
-            text: root.item.alias;
-            color: root.item.is-valid ? Theme.text : Theme.text-muted;
-            font-italic: !root.item.is-valid;
-            vertical-alignment: center;
-            horizontal-stretch: 1;
-            overflow: elide;
+        // Line 1: Linksbündig & vertikal perfekt zentriert (gleiche Schriftgröße, selbe Mitte)
+        HorizontalLayout {
+            height: 16px;
+            spacing: 5px;
+            alignment: start;
+
+            Text {
+                text: root.item.alias;
+                color: root.item.is-selected ? Theme.accent : (root.item.is-valid ? Theme.text : Theme.text-muted);
+                font-weight: root.item.is-selected ? 700 : 500;
+                font-size: 11px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            if root.item.original_folder != "" : Text {
+                text: root.item.original_folder;
+                color: Theme.text-muted;
+                font-size: 11px;
+                font-italic: true;
+                opacity: 0.75;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        // Line 2: Dezenter Pfad mit führender Ellipsis (.../ordner/unterordner)
+        path-box := Rectangle {
+            clip: true;
+            height: 14px;
+            property <bool> is-overflowing: path-txt.preferred-width > self.width;
+
+            path-txt := Text {
+                x: path-box.is-overflowing ? (path-box.width - self.preferred-width) : 0px;
+                y: 0px;
+                height: 100%;
+                text: root.item.path;
+                font-size: 9.5px;
+                color: Theme.text-muted;
+                opacity: 0.7;
+                font-italic: !root.item.is-valid;
+                vertical-alignment: center;
+            }
+
+            if path-box.is-overflowing : Rectangle {
+                x: 0px;
+                y: 0px;
+                width: 14px;
+                height: 100%;
+                background: root.row-bg;
+
+                Text {
+                    text: "...";
+                    font-size: 9.5px;
+                    color: Theme.text-muted;
+                    opacity: 0.7;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
 }
@@ -40,6 +129,7 @@ export component FavoritesList inherits Rectangle {
 
     in property <[FavoriteItemView]> favorites: [];
     callback favorite-clicked(string);
+    callback favorite-context-menu(string /* path */, string /* alias */, length /* x */, length /* y */);
 
     if root.favorites.length == 0 : VerticalLayout {
         alignment: center;
@@ -70,12 +160,24 @@ export component FavoritesList inherits Rectangle {
         content-height: fav-layout.preferred-height;
 
         fav-layout := VerticalLayout {
-            spacing: 0px;
+            padding-left: 2px;
+            padding-right: 6px;
+            padding-top: 2px;
+            padding-bottom: 2px;
+            spacing: 2px;
             alignment: start;
 
             for fav in root.favorites: FavoriteItemRow {
                 item: fav;
                 clicked => { root.favorite-clicked(fav.path); }
+                context-menu-requested(mx, my) => {
+                    root.favorite-context-menu(
+                        fav.path,
+                        fav.alias,
+                        self.x + mx,
+                        self.y + my + scroll-area.clamped-y
+                    );
+                }
             }
         }
     }
@@ -87,11 +189,12 @@ export component FavoritesPanel inherits VerticalLayout {
 
     in property <[FavoriteItemView]> favorites: [];
     callback favorite-clicked(string);
+    callback favorite-context-menu(string /* path */, string /* alias */, length /* x */, length /* y */);
 
-    // Scrollable List Container occupying full panel height
     FavoritesList {
         vertical-stretch: 1;
         favorites: root.favorites;
         favorite-clicked(path) => { root.favorite-clicked(path); }
+        favorite-context-menu(path, alias, x, y) => { root.favorite-context-menu(path, alias, x, y); }
     }
 }

@@ -70,6 +70,7 @@ pub const CTX_FOLDER_REFRESH_METADATA: CtxMenuActionId = 3005;
 pub const CTX_FOLDER_REFRESH_FILES_META: CtxMenuActionId = 3005;
 pub const CTX_FOLDER_REFRESH_TREE_FULL: CtxMenuActionId = 3006;
 pub const CTX_FOLDER_REFRESH_TREE_RELATIVE: CtxMenuActionId = 3007;
+pub const CTX_FOLDER_ADD_TO_FAVORITES: CtxMenuActionId = 3008;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 // Tab Context Menu Action IDs
@@ -83,12 +84,18 @@ pub const CTX_TAB_CLOSE_TO_LEFT: CtxMenuActionId = 4007;
 pub const CTX_TAB_CLOSE_TO_RIGHT: CtxMenuActionId = 4008;
 pub const CTX_TAB_CLOSE_OTHERS: CtxMenuActionId = 4009;
 
+// Favorites Context Menu Action IDs
+pub const CTX_FAVORITE_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 5001;
+pub const CTX_FAVORITE_RENAME: CtxMenuActionId = 5002;
+pub const CTX_FAVORITE_REMOVE: CtxMenuActionId = 5003;
+
 /// Identifies the last active UI panel/target clicked by the user for context-aware actions like F2 renaming.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LastActivePanel {
     #[default]
     Media,
     Folder,
+    Favorite,
 }
 
 /// High-performance LRU-managed bounded in-memory thumbnail store preventing RAM bloat on 100k+ datasets.
@@ -191,6 +198,8 @@ pub struct UiState {
     pub active_file_rename_target: Option<MediaId>,
     pub active_associated_apps: Vec<DesktopApp>,
     pub active_tab_dialog_target: Option<TabId>,
+    pub active_favorite_target: Option<(String, PathBuf)>,
+    pub selected_favorite_path: Option<PathBuf>,
 
     // Tab Grid Masonry State & Real-Time Layout Cache
     pub tab_grid_columns: usize,
@@ -255,6 +264,8 @@ impl Default for UiState {
             active_file_rename_target: None,
             active_associated_apps: Vec::new(),
             active_tab_dialog_target: None,
+            active_favorite_target: None,
+            selected_favorite_path: None,
             tab_grid_columns: DEFAULT_TAB_GRID_COLUMNS,
             tab_grid_auto_columns: DEFAULT_TAB_GRID_AUTO_COLUMNS,
             cached_tab_grid_rects: Vec::new(),

@@ -33,6 +33,7 @@ export { RebornFolderDeleteWarnDialog } from "reborn_folder_delete_warn_dialog.s
 export { MissingFolderDeleteDialog } from "missing_folder_delete_dialog.slint";
 export { MissingFileDialog } from "missing_file_dialog.slint";
 export { ImageFullscreenWindow } from "image_fullscreen_window.slint";
+export { FavoriteRenameDialog } from "favorite_rename_dialog.slint";
 export { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 
 export component MainWindow inherits Window {
@@ -318,6 +319,7 @@ export component MainWindow inherits Window {
     callback folder-refresh-relative-clicked();
     callback folder-collapse-all-clicked();
     callback favorite-selected(string);
+    callback favorite-context-menu(string /* path */, string /* alias */, length /* x */, length /* y */);
     callback toggle-hidden-folders(bool /* show_hidden */);
     callback media-clicked(int /* id */, bool /* is_ctrl */, bool /* is_shift */);
     callback media-middle-clicked(int /* id */);
@@ -644,6 +646,9 @@ export component MainWindow inherits Window {
                 folder-refresh-all-clicked => { root.folder-refresh-all-clicked(); }
                 folder-refresh-relative-clicked => { root.folder-refresh-relative-clicked(); }
                 favorite-clicked(path) => { root.favorite-selected(path); }
+                favorite-context-menu(path, alias, x, y) => {
+                    root.favorite-context-menu(path, alias, sidebar_left.x + x, 38px + sidebar_left.y + y);
+                }
             }
 
             resizer_left := ResizerBar {

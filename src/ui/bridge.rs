@@ -2,6 +2,7 @@ use super::bridge_ctx_menu::{
     BridgeContextMenu, ContextMenuRegistration, MediaMenuContext,
 };
 use super::bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
+use super::bridge_favorite_dialog_rename::FavoriteRenameDialogController;
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
 use super::bridge_file_dialog_delete::DeleteFileDialogController;
@@ -57,6 +58,8 @@ pub struct RenameActionParams<'a> {
     pub settings: &'a Arc<SettingsManager>,
     pub state: &'a Arc<RwLock<UiState>>,
     pub rename_dialog: &'a Rc<RefCell<Option<FileRenameDialog>>>,
+    pub favorite_rename_dialog: &'a FavoriteRenameDialogController,
+    pub favorites: &'a Arc<RwLock<FavoriteManager>>,
     pub missing_dialog: &'a MissingFileDialogController,
     pub conflict_dialog: &'a FileOpsConflictDialogController,
     pub folder_dialogs: &'a FolderDialogController,
@@ -72,6 +75,7 @@ pub struct UiBridge {
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
     fullscreen_controller: ImageFullscreenDialogController,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
+    favorite_rename_dialog: FavoriteRenameDialogController,
     missing_file_dialog: MissingFileDialogController,
     delete_file_dialog: DeleteFileDialogController,
     remove_orphaned_dialog: RemoveOrphanedFileDialogController,
@@ -105,6 +109,7 @@ impl UiBridge {
         fullscreen_controller.set_thumbnails(thumbnails.clone());
 
         let rename_dialog = Rc::new(RefCell::new(None));
+        let favorite_rename_dialog = FavoriteRenameDialogController::new();
         let missing_file_dialog = MissingFileDialogController::new();
         let delete_file_dialog = DeleteFileDialogController::new();
         let remove_orphaned_dialog = RemoveOrphanedFileDialogController::new();
@@ -286,6 +291,7 @@ impl UiBridge {
             settings_dialog,
             fullscreen_controller,
             rename_dialog,
+            favorite_rename_dialog,
             missing_file_dialog,
             delete_file_dialog,
             remove_orphaned_dialog,
@@ -304,7 +310,8 @@ impl UiBridge {
         bridge.register_subsystem_callbacks();
         bridge.register_settings_subscriber();
 
-        bridge.reload_favorites();
+        // Initialize surgical Favorites model
+        BridgeFavorites::init(&bridge.window, &bridge.favorites);
         bridge.reload_tags();
         BridgeFolders::reload_tree(
             &bridge.window,
@@ -479,9 +486,11 @@ impl UiBridge {
                 library: self.library.clone(),
                 thumbnails: self.thumbnails.clone(),
                 tab_manager: self.tab_manager.clone(),
+                favorites: self.favorites.clone(),
                 state: self.state.clone(),
                 dispatcher: self.ctx_menu_dispatcher.clone(),
                 rename_dialog: self.rename_dialog.clone(),
+                favorite_rename_dialog: self.favorite_rename_dialog.clone(),
                 missing_file_dialog: self.missing_file_dialog.clone(),
                 delete_file_dialog: self.delete_file_dialog.clone(),
                 remove_orphaned_dialog: self.remove_orphaned_dialog.clone(),
@@ -513,6 +522,24 @@ impl UiBridge {
             self.fullscreen_controller.clone(),
         );
 
+        // Favorites Navigation Handler
+        let win_fav = self.window.clone_strong();
+        let lib_fav = self.library.clone();
+        let thumb_fav = self.thumbnails.clone();
+        let set_fav = self.settings.clone();
+        let st_fav = self.state.clone();
+        self.window.on_favorite_selected(move |path_str| {
+            st_fav.write().last_active_panel = LastActivePanel::Favorite;
+            BridgeFavorites::handle_favorite_clicked(
+                path_str.as_str(),
+                &win_fav,
+                &lib_fav,
+                &thumb_fav,
+                &set_fav,
+                &st_fav,
+            );
+        });
+
         self.register_rename_callbacks();
         self.register_keyboard_navigation_callbacks();
         self.register_tab_grid_callbacks();
@@ -523,10 +550,11 @@ impl UiBridge {
         self.register_modal_dismiss_callback();
     }
 
-    /// Single Point of Truth (SPoT): Universal handler for dismissing modal dialogs and fullscreen when backdrop is clicked or Escape is pressed.
+    /// Universal handler for dismissing modal dialogs and fullscreen when backdrop is clicked or Escape is pressed.
     fn register_modal_dismiss_callback(&self) {
         let fs_ctrl = self.fullscreen_controller.clone();
         let ren_dlg = self.rename_dialog.clone();
+        let fav_ren_dlg = self.favorite_rename_dialog.clone();
         let set_dlg = self.settings_dialog.clone();
         let miss_dlg = self.missing_file_dialog.clone();
         let del_dlg = self.delete_file_dialog.clone();
@@ -545,6 +573,7 @@ impl UiBridge {
                 fs_ctrl.close();
             }
             FileRenameDialogController::close(&ren_dlg, &st, &win, &fs_ctrl);
+            fav_ren_dlg.close(&win);
             set_dlg.borrow().close();
             miss_dlg.close(&win);
             del_dlg.close(&win);
@@ -588,6 +617,8 @@ impl UiBridge {
         let set = self.settings.clone();
         let st = self.state.clone();
         let ren_dlg = self.rename_dialog.clone();
+        let fav_ren_dlg = self.favorite_rename_dialog.clone();
+        let favs = self.favorites.clone();
         let missing_dlg = self.missing_file_dialog.clone();
         let conflict_dlg = self.conflict_dialog.clone();
         let fld_dlg = self.folder_dialogs.clone();
@@ -602,6 +633,8 @@ impl UiBridge {
                 settings: &set,
                 state: &st,
                 rename_dialog: &ren_dlg,
+                favorite_rename_dialog: &fav_ren_dlg,
+                favorites: &favs,
                 missing_dialog: &missing_dlg,
                 conflict_dialog: &conflict_dlg,
                 folder_dialogs: &fld_dlg,
@@ -631,10 +664,60 @@ impl UiBridge {
             return;
         }
 
-        // 3. Browse mode (mode 0) / Tab Grid (mode 2): Context-sensitive based on last active panel
+        // 3. Browse mode (mode 0) / Tab Grid (mode 2): Context-sensitive based on active panel tab & focus
         let last_panel = params.state.read().last_active_panel;
+        let active_sidebar_tab = window.get_active_sidebar_panel_tab();
+        let is_folders_tab = active_sidebar_tab.as_str() == "folders";
+        let is_favorites_tab = active_sidebar_tab.as_str() == "favorites";
 
-        if last_panel == LastActivePanel::Folder {
+        let effective_panel = match last_panel {
+            LastActivePanel::Media => LastActivePanel::Media,
+            LastActivePanel::Folder => {
+                if is_favorites_tab {
+                    LastActivePanel::Favorite
+                } else {
+                    LastActivePanel::Folder
+                }
+            }
+            LastActivePanel::Favorite => {
+                if is_folders_tab {
+                    LastActivePanel::Folder
+                } else {
+                    LastActivePanel::Favorite
+                }
+            }
+        };
+
+        // FAVORITES FOCUS: Rename selected favorite
+        if effective_panel == LastActivePanel::Favorite {
+            let selected_fav_path = params.state.read().selected_favorite_path.clone();
+            let path_to_rename = selected_fav_path.or_else(|| {
+                params.state.read().current_folder_path.clone()
+            });
+
+            if let Some(path) = path_to_rename
+                && let Some(entry) = params.favorites.read().get_by_path(&path)
+            {
+                tracing::info!(
+                    path = %LogObscurer::path(&path),
+                    alias = %entry.alias,
+                    "[UiBridge: RenameAction] F2 pressed on Favorite focus: Opening Rename Favorite dialog"
+                );
+                params.favorite_rename_dialog.show(
+                    params.window,
+                    &entry.alias,
+                    entry.path.clone(),
+                    params.favorites.clone(),
+                );
+                return;
+            }
+
+            StatusBarBridge::info(window, "Select a favorite to rename (F2).");
+            return;
+        }
+
+        // FOLDER TREE FOCUS: Rename selected folder
+        if effective_panel == LastActivePanel::Folder {
             let current_folder_id = params.state.read().current_folder_id;
             let Some(folder_id) = current_folder_id else {
                 StatusBarBridge::info(window, "No folder selected to rename (F2).");

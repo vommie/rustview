@@ -22,29 +22,33 @@ struct MoveMenuTraverseContext<'a> {
     hidden_excluded: usize,
 }
 
+/// Parameter bundle for constructing the folder context menu.
+pub struct FolderMenuBuildParams<'a> {
+    pub target_folder: &'a FolderRecord,
+    pub cached_tree: &'a [FolderTreeNode],
+    pub is_root: bool,
+    pub show_hidden_folders: bool,
+    pub support_dot_hidden_files: bool,
+    pub dot_hidden_cache: &'a mut DotHiddenCache,
+    pub is_busy: bool,
+    pub is_favorite: bool,
+}
+
 /// Domain context menu builder and action handler for folder tree nodes.
 pub struct FolderContextMenu;
 
 impl FolderContextMenu {
     /// Builds the declarative context menu for a folder item directly from the in-memory cached FolderTree hierarchy with zero disk I/O.
-    /// Formats the header using sticky prefix and left-side ellipsis to eliminate menu text overflow while attaching the full path as tooltip.
-    pub fn build_menu_from_cached_tree(
-        target_folder: &FolderRecord,
-        cached_tree: &[FolderTreeNode],
-        is_root: bool,
-        show_hidden_folders: bool,
-        support_dot_hidden_files: bool,
-        dot_hidden_cache: &mut DotHiddenCache,
-        is_busy: bool,
-    ) -> CtxMenu {
+    /// Places "Add to Favorites" above "Delete Folder" with standalone separators, visibly disabled if already a favorite.
+    pub fn build_menu_from_cached_tree(params: FolderMenuBuildParams<'_>) -> CtxMenu {
         let t0 = Instant::now();
-        let target_path = Path::new(&target_folder.path);
+        let target_path = Path::new(&params.target_folder.path);
         let folder_name = target_path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| target_folder.path.clone());
+            .unwrap_or_else(|| params.target_folder.path.clone());
 
-        let (prefix, max_chars) = if target_folder.is_deleted {
+        let (prefix, max_chars) = if params.target_folder.is_deleted {
             ("Missing Folder: ", 18usize)
         } else {
             ("Folder: ", 24usize)
@@ -53,8 +57,8 @@ impl FolderContextMenu {
         let (header_title, _) = CtxMenuBuilder::format_header_title(prefix, &folder_name, max_chars);
         let header_tooltip = format!(
             "{}{}",
-            if target_folder.is_deleted { "Missing Folder: " } else { "Folder: " },
-            target_folder.path
+            if params.target_folder.is_deleted { "Missing Folder: " } else { "Folder: " },
+            params.target_folder.path
         );
 
         let mut builder = CtxMenuBuilder::new().header_with_tooltip(header_title, header_tooltip);
@@ -65,32 +69,32 @@ impl FolderContextMenu {
             "Open in File Manager",
             None,
             Some("folder"),
-            !target_folder.is_deleted,
+            !params.target_folder.is_deleted,
         );
         builder = builder.separator();
 
-        if !is_root {
+        if !params.is_root {
             builder = builder.action(
                 CTX_FOLDER_RENAME,
                 "Rename Folder...",
                 Some("F2"),
                 Some("edit"),
-                !target_folder.is_deleted,
+                !params.target_folder.is_deleted,
             );
 
             let move_submenu = Self::build_reparent_submenu_from_tree(
-                target_folder,
-                cached_tree,
-                show_hidden_folders,
-                support_dot_hidden_files,
-                dot_hidden_cache,
+                params.target_folder,
+                params.cached_tree,
+                params.show_hidden_folders,
+                params.support_dot_hidden_files,
+                params.dot_hidden_cache,
                 t0,
             );
             builder = builder.item(move_submenu);
         }
 
-        // Modular "Refresh..." submenu containing files and tree refreshes (no F5 shortcuts!)
-        let can_refresh = !target_folder.is_deleted && !is_busy;
+        // Modular "Refresh..." submenu containing files and tree refreshes
+        let can_refresh = !params.target_folder.is_deleted && !params.is_busy;
         builder = builder.separator();
         builder = builder.submenu("Refresh...", Some("refresh"), can_refresh, |sub| {
             sub.action(
@@ -113,7 +117,7 @@ impl FolderContextMenu {
                 "Refresh Tree (Full)",
                 None,
                 Some("refresh"),
-                !is_busy,
+                !params.is_busy,
             )
             .action(
                 CTX_FOLDER_REFRESH_TREE_RELATIVE,
@@ -123,10 +127,20 @@ impl FolderContextMenu {
                 can_refresh,
             )
         });
+
+        // Standalone Add to Favorites action above Delete Folder
+        builder = builder.separator();
+        builder = builder.action(
+            CTX_FOLDER_ADD_TO_FAVORITES,
+            "Add to Favorites",
+            None,
+            Some("favorite"),
+            !params.is_favorite && !params.target_folder.is_deleted,
+        );
         builder = builder.separator();
 
-        if !is_root {
-            if target_folder.is_deleted {
+        if !params.is_root {
+            if params.target_folder.is_deleted {
                 builder = builder.action(
                     CTX_FOLDER_PURGE_DB,
                     "Remove from Database...",
@@ -146,27 +160,6 @@ impl FolderContextMenu {
         }
 
         builder.build()
-    }
-
-    /// Backward-compatible wrapper calling `build_menu_from_cached_tree`.
-    pub fn build_menu(
-        target_folder: &FolderRecord,
-        cached_tree: &[FolderTreeNode],
-        is_root: bool,
-        show_hidden_folders: bool,
-        support_dot_hidden_files: bool,
-        dot_hidden_cache: &mut DotHiddenCache,
-        is_busy: bool,
-    ) -> CtxMenu {
-        Self::build_menu_from_cached_tree(
-            target_folder,
-            cached_tree,
-            is_root,
-            show_hidden_folders,
-            support_dot_hidden_files,
-            dot_hidden_cache,
-            is_busy,
-        )
     }
 
     /// Traverses the cached in-memory tree to build the "Move to..." submenu with zero disk I/O and zero redundant allocations.
