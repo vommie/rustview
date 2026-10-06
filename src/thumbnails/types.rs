@@ -8,6 +8,8 @@ use crate::settings::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_THUMBNAIL_BOUND: u32 = DEFAULT_THUMBNAIL_DB_SIZE;
 pub const THUMBNAIL_SIZE: u32 = DEFAULT_THUMBNAIL_DB_SIZE;
@@ -185,6 +187,34 @@ impl ThumbnailConfig {
     pub fn from_app_settings(settings: &AppSettings) -> Self {
         Self::from_performance_settings(&settings.performance)
     }
+
+    /// Returns a copy of this configuration with an overridden video timestamp position offset (1..=99%).
+    #[inline]
+    pub fn with_video_offset_percent(&self, offset: u8) -> Self {
+        let mut cfg = self.clone();
+        cfg.video_offset_percent = offset.clamp(1, 99);
+        cfg
+    }
+}
+
+/// Generates a thread-safe, non-blocking pseudo-random percentage between 1 and 99 (inclusive)
+/// using splitmix64 bit mixing and nanosecond timestamp entropy with zero external crate dependencies.
+pub fn generate_random_video_offset_percent() -> u8 {
+    static SEED: AtomicU64 = AtomicU64::new(0x8543_6234_7235_2981);
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(42);
+
+    let prev = SEED.fetch_add(0x9E37_79B9_7F4A_7C15 ^ nanos, Ordering::Relaxed);
+    let mut x = prev ^ nanos;
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+
+    // Uniformly maps to range 1..=99
+    ((x % 99) + 1) as u8
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

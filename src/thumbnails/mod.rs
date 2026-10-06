@@ -21,10 +21,11 @@ pub use loader::{PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
 pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 pub use store::PackStore;
 pub use types::{
-    anonymize_target, calculate_aspect_dimensions, FitMode, ScalingAlgorithm, ThumbnailConfig,
-    ThumbnailFormat, ThumbnailHandle, ThumbnailLocation, ThumbnailPriority, ThumbnailStorageStats,
-    VideoPreviewRecord, VideoThumbnailEngine, DEFAULT_THUMBNAIL_BOUND, THUMBNAIL_BYTE_SIZE,
-    THUMBNAIL_CHANNELS, THUMBNAIL_PIXELS, THUMBNAIL_SIZE,
+    anonymize_target, calculate_aspect_dimensions, generate_random_video_offset_percent,
+    FitMode, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailHandle,
+    ThumbnailLocation, ThumbnailPriority, ThumbnailStorageStats, VideoPreviewRecord,
+    VideoThumbnailEngine, DEFAULT_THUMBNAIL_BOUND, THUMBNAIL_BYTE_SIZE, THUMBNAIL_CHANNELS,
+    THUMBNAIL_PIXELS, THUMBNAIL_SIZE,
 };
 
 use crate::library::models::MediaId;
@@ -166,6 +167,18 @@ impl ThumbnailManager {
         config: &ThumbnailConfig,
     ) -> Result<CachedThumbnail, ThumbnailError> {
         self.scheduler.regenerate_sync(media_id, file_path, config)
+    }
+
+    /// Explicitly regenerates thumbnail & previews with an overridden video offset percentage, overwriting PackStore and LMDB index.
+    pub fn regenerate_with_offset_sync(
+        &self,
+        media_id: MediaId,
+        file_path: &Path,
+        config: &ThumbnailConfig,
+        offset_percent: u8,
+    ) -> Result<CachedThumbnail, ThumbnailError> {
+        self.scheduler
+            .regenerate_with_offset_sync(media_id, file_path, config, offset_percent)
     }
 
     pub fn cache(&self) -> &L1ThumbnailCache {

@@ -46,6 +46,16 @@ pub struct MediaActionContext<'a> {
     pub fullscreen_controller: &'a ImageFullscreenDialogController,
 }
 
+/// Metadata describing active selection state for context menu construction.
+#[derive(Debug, Clone)]
+pub struct MediaSelectionMeta {
+    pub all_selected_deleted: bool,
+    pub selected_count: usize,
+    pub is_single_image: bool,
+    pub has_video: bool,
+    pub associated_apps: Vec<DesktopApp>,
+}
+
 pub struct MediaContextMenu;
 
 impl MediaContextMenu {
@@ -54,7 +64,7 @@ impl MediaContextMenu {
         library: &Library,
         state: &Arc<RwLock<UiState>>,
         media_id: MediaId,
-    ) -> (bool, usize, bool, Vec<DesktopApp>) {
+    ) -> MediaSelectionMeta {
         let (selected_count, changed_ids) = {
             let mut st = state.write();
             let mut changed = Vec::new();
@@ -83,7 +93,7 @@ impl MediaContextMenu {
             .copied()
             .unwrap_or(media_id);
 
-        let (is_single_image, all_selected_deleted, target_path_opt) = {
+        let (has_video, is_single_image, all_selected_deleted, target_path_opt) = {
             let st = state.read();
             let selected_ids = st.file_selection.selected_ids();
 
@@ -96,23 +106,40 @@ impl MediaContextMenu {
                         .unwrap_or(false)
                 });
 
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
-                (
-                    matches!(item.record.media_type, MediaType::Image),
-                    all_deleted,
-                    Some(item.full_path.clone()),
-                )
+            let mut contains_video = false;
+            for &id in selected_ids {
+                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id)
+                    && matches!(item.record.media_type, MediaType::Video)
+                {
+                    contains_video = true;
+                    break;
+                } else if let Ok(Some(rec)) = library.media().get(id)
+                    && matches!(rec.media_type, MediaType::Video)
+                {
+                    contains_video = true;
+                    break;
+                }
+            }
+
+            let is_single_img = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
+                matches!(item.record.media_type, MediaType::Image)
             } else {
-                let is_img = library
+                library
                     .media()
                     .get(single_id)
                     .ok()
                     .flatten()
                     .map(|m| matches!(m.media_type, MediaType::Image))
-                    .unwrap_or(false);
-                let path = library.resolve_media_path(single_id).ok();
-                (is_img, all_deleted, path)
-            }
+                    .unwrap_or(false)
+            };
+
+            let path = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
+                Some(item.full_path.clone())
+            } else {
+                library.resolve_media_path(single_id).ok()
+            };
+
+            (contains_video, is_single_img, all_deleted, path)
         };
 
         let associated_apps = if let Some(ref path) = target_path_opt {
@@ -123,12 +150,13 @@ impl MediaContextMenu {
 
         state.write().active_associated_apps = associated_apps.clone();
 
-        (
+        MediaSelectionMeta {
             all_selected_deleted,
             selected_count,
-            is_single && is_single_image,
+            is_single_image: is_single && is_single_image,
+            has_video,
             associated_apps,
-        )
+        }
     }
 
     /// Single Point of Truth (SPoT): Reusable builder appending the file open actions:
@@ -278,6 +306,7 @@ impl MediaContextMenu {
     pub fn build_menu(
         selected_count: usize,
         is_single_image: bool,
+        has_video: bool,
         all_selected_deleted: bool,
         is_busy: bool,
         associated_apps: &[DesktopApp],
@@ -302,16 +331,30 @@ impl MediaContextMenu {
         let open_in_fullscreen_text = "Open in Fullscreen".to_string();
         let open_in_fullscreen_shortcut = if is_single { Some("MiddleClick") } else { None };
 
+        // Submenu: Refresh -> File (Full), File (Metadata), Thumbnail (Random Pos.) / Thumbnail
         let refresh_full_text = if is_single {
-            "Refresh File (Full)".to_string()
+            "File (Full)".to_string()
         } else {
-            format!("Refresh {} Files (Full)", selected_count)
+            format!("Files (Full) ({} Files)", selected_count)
         };
 
         let refresh_meta_text = if is_single {
-            "Refresh File (Metadata)".to_string()
+            "File (Metadata)".to_string()
         } else {
-            format!("Refresh {} Files (Metadata)", selected_count)
+            format!("Files (Metadata) ({} Files)", selected_count)
+        };
+
+        // Context-sensitive naming: videos specify Random Pos., pure image selections use Thumbnail
+        let regen_thumb_text = if is_single {
+            if has_video {
+                "Thumbnail (Random Pos.)".to_string()
+            } else {
+                "Thumbnail".to_string()
+            }
+        } else if has_video {
+            format!("Thumbnails (Random Pos.) ({} Files)", selected_count)
+        } else {
+            format!("Thumbnails ({} Files)", selected_count)
         };
 
         let can_refresh = selected_count > 0 && !is_busy;
@@ -360,7 +403,7 @@ impl MediaContextMenu {
             is_busy,
         );
 
-        // 4. Rating, Refresh & Selection Utilities
+        // 4. Rating, Modular Refresh Submenu & Selection Utilities
         builder = builder
             .separator()
             .submenu(
@@ -378,19 +421,33 @@ impl MediaContextMenu {
                 },
             )
             .separator()
-            .action(
-                CTX_ACTION_REFRESH_FILES,
-                refresh_full_text,
-                Some("F5"),
+            .submenu(
+                "Refresh",
                 Some("refresh"),
                 can_refresh,
-            )
-            .action(
-                CTX_ACTION_REFRESH_METADATA,
-                refresh_meta_text,
-                None,
-                Some("refresh"),
-                can_refresh,
+                |sub| {
+                    sub.action(
+                        CTX_ACTION_REFRESH_FILES,
+                        refresh_full_text,
+                        Some("F5"),
+                        Some("refresh"),
+                        can_refresh,
+                    )
+                    .action(
+                        CTX_ACTION_REFRESH_METADATA,
+                        refresh_meta_text,
+                        None,
+                        Some("refresh"),
+                        can_refresh,
+                    )
+                    .action(
+                        CTX_ACTION_REGENERATE_THUMB_RANDOM,
+                        regen_thumb_text,
+                        None,
+                        Some("refresh"),
+                        can_refresh,
+                    )
+                },
             )
             .separator()
             .action(
@@ -550,6 +607,23 @@ impl MediaContextMenu {
                     window,
                     ctx.library,
                     ctx.thumbnails,
+                    ctx.state,
+                );
+            }
+            CTX_ACTION_REGENERATE_THUMB_RANDOM => {
+                if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
+                    StatusBarBridge::warn(
+                        window,
+                        "Cannot regenerate thumbnail: another operation is already in progress.",
+                    );
+                    return;
+                }
+                BridgeMedia::regenerate_selected_thumbnails_random(
+                    window,
+                    ctx.library,
+                    ctx.thumbnails,
+                    ctx.tab_manager,
+                    ctx.settings,
                     ctx.state,
                 );
             }

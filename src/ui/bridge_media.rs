@@ -3,6 +3,7 @@ use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
@@ -18,8 +19,8 @@ use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
-    PreparedTarget, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager,
-    VideoPreviewRecord,
+    generate_random_video_offset_percent, PreparedTarget, ThumbnailConfig, ThumbnailGenerator,
+    ThumbnailLocation, ThumbnailManager, VideoPreviewRecord,
 };
 use crate::viewer::{HighResImageLoader, ViewerTabManager};
 use parking_lot::RwLock;
@@ -75,6 +76,7 @@ struct ProcessedRefreshedItem {
     primary_width: u32,
     primary_height: u32,
     tags_count: usize,
+    random_offset_pct: Option<u8>,
 }
 
 /// Container holding processed results from parallel lightweight metadata-only refreshes.
@@ -1253,6 +1255,7 @@ impl BridgeMedia {
         );
     }
 
+    /// Full media refresh: re-extracts file metadata, recalculates hash, and regenerates thumbnails and previews.
     pub fn refresh_selected_media(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -1261,10 +1264,52 @@ impl BridgeMedia {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        Self::execute_media_refresh(
+            window,
+            library,
+            thumbnails,
+            tab_manager,
+            settings,
+            state,
+            false,
+        );
+    }
+
+    /// Random thumbnail regeneration: re-extracts media and, for videos, generates a new thumbnail at a randomized position (1..=99%).
+    pub fn regenerate_selected_thumbnails_random(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        tab_manager: &Arc<ViewerTabManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        Self::execute_media_refresh(
+            window,
+            library,
+            thumbnails,
+            tab_manager,
+            settings,
+            state,
+            true,
+        );
+    }
+
+    /// Unified, modular multi-threaded media refresh & thumbnail regeneration engine (zero redundancy).
+    fn execute_media_refresh(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        tab_manager: &Arc<ViewerTabManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        random_video_offset: bool,
+    ) {
         if Self::is_system_busy(window, thumbnails, state) {
+            let op_name = if random_video_offset { "regenerate thumbnail" } else { "start refresh" };
             StatusBarBridge::warn(
                 window,
-                "Cannot start refresh: another operation is already in progress.",
+                format!("Cannot {}: another operation is already in progress.", op_name),
             );
             return;
         }
@@ -1316,7 +1361,13 @@ impl BridgeMedia {
         StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
 
         let is_tab_mode_initial = window.get_active_view_mode() == 1;
-        let start_msg = if total_items == 1 {
+        let start_msg = if random_video_offset {
+            if total_items == 1 {
+                "Regenerating thumbnail...".to_string()
+            } else {
+                format!("Regenerating thumbnails for {} selected files...", total_items)
+            }
+        } else if total_items == 1 {
             if is_tab_mode_initial {
                 "Refreshing the file (Full)...".to_string()
             } else {
@@ -1404,19 +1455,34 @@ impl BridgeMedia {
                         let format = MediaFormat::from_path(&file_path);
                         let is_video = format.media_type() == Some(MediaType::Video);
 
+                        // If random offset requested and item is a video, dynamically generate a randomized percentage (1..=99%)
+                        let (item_cfg, chosen_rand_pct) = if random_video_offset && is_video {
+                            let rand_pct = generate_random_video_offset_percent();
+                            tracing::info!(
+                                media_id,
+                                random_offset_percent = rand_pct,
+                                file = %LogObscurer::path(&file_path),
+                                "[Thumbnail: RandomRegen] Rolled new thumbnail position at {}% for video",
+                                rand_pct
+                            );
+                            (cfg_ref.with_video_offset_percent(rand_pct), Some(rand_pct))
+                        } else {
+                            (cfg_ref.clone(), None)
+                        };
+
                         let (primary_frame_opt, preview_rec, orig_w, orig_h, duration_ms, gen_ok) = if is_zero_byte {
                             (None, None, 0, 0, 0, false)
                         } else if is_video {
-                            match gen_ref.generate_video_thumbnails(&file_path, &cfg_ref) {
+                            match gen_ref.generate_video_thumbnails(&file_path, &item_cfg) {
                                 Ok(video_res) => {
                                     let primary = video_res.primary_frame;
                                     let mut preview_rec = None;
 
                                     if !video_res.preview_frames.is_empty() {
-                                        let (p_format, p_quality) = if cfg_ref.custom_preview_settings {
-                                            (cfg_ref.preview_format, cfg_ref.preview_quality)
+                                        let (p_format, p_quality) = if item_cfg.custom_preview_settings {
+                                            (item_cfg.preview_format, item_cfg.preview_quality)
                                         } else {
-                                            (cfg_ref.format, cfg_ref.quality)
+                                            (item_cfg.format, item_cfg.quality)
                                         };
 
                                         let mut locations = Vec::with_capacity(video_res.preview_frames.len());
@@ -1447,8 +1513,8 @@ impl BridgeMedia {
                         } else {
                             match gen_ref.generate_image_thumbnail(
                                 &file_path,
-                                cfg_ref.max_bound,
-                                cfg_ref.scaling_algorithm,
+                                item_cfg.max_bound,
+                                item_cfg.scaling_algorithm,
                             ) {
                                 Ok(frame) => (Some(frame.clone()), None, frame.orig_width, frame.orig_height, 0u64, true),
                                 Err(_) => (None, None, 0, 0, 0, false),
@@ -1460,8 +1526,8 @@ impl BridgeMedia {
                                 &primary_frame.rgb_pixels,
                                 primary_frame.width,
                                 primary_frame.height,
-                                cfg_ref.format,
-                                cfg_ref.quality,
+                                item_cfg.format,
+                                item_cfg.quality,
                             ) {
                                 store.append(&compressed_primary).ok()
                             } else {
@@ -1518,6 +1584,7 @@ impl BridgeMedia {
                             primary_width: pw,
                             primary_height: ph,
                             tags_count: assigned_tags_count,
+                            random_offset_pct: chosen_rand_pct,
                         })
                     })
                     .collect();
@@ -1807,6 +1874,30 @@ impl BridgeMedia {
                                 refreshed_count, missing_count
                             ),
                         );
+                    } else if random_video_offset {
+                        let success_msg = if total_items == 1 {
+                            if let Some(pct) = successful_items[0].random_offset_pct {
+                                format!(
+                                    "Regenerated thumbnail at {}% for '{}' in {}ms.",
+                                    pct,
+                                    successful_items[0].updated_record.filename,
+                                    t_start.elapsed().as_millis()
+                                )
+                            } else {
+                                format!(
+                                    "Regenerated thumbnail for '{}' in {}ms.",
+                                    successful_items[0].updated_record.filename,
+                                    t_start.elapsed().as_millis()
+                                )
+                            }
+                        } else {
+                            format!(
+                                "Regenerated {} thumbnails in {}ms.",
+                                refreshed_count,
+                                t_start.elapsed().as_millis()
+                            )
+                        };
+                        StatusBarBridge::success(&w, success_msg);
                     } else {
                         let is_tab_view = w.get_active_view_mode() == 1;
                         let success_msg = if total_items == 1 {
@@ -1830,6 +1921,9 @@ impl BridgeMedia {
                     BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
                     Self::update_virtual_folder_button_state(&w, &lib_arc, &st_arc);
                     BridgeViewerTabs::sync_ui(&w, &tab_mgr_arc, &lib_arc, &set_arc, &st_arc);
+                    if w.get_active_view_mode() == 2 {
+                        BridgeTabGrid::sync_tab_grid_ui(&w, &tab_mgr_arc, &lib_arc, &set_arc, &st_arc);
+                    }
                     let busy = Self::is_system_busy(&w, &thumb_arc, &st_arc);
                     w.set_is_system_busy(busy);
                     StatusBarBridge::update_metrics(&w, &st_arc);

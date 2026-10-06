@@ -41,6 +41,7 @@ pub const CTX_ACTION_RATE_4: CtxMenuActionId = 1014;
 pub const CTX_ACTION_RATE_5: CtxMenuActionId = 1015;
 pub const CTX_ACTION_REMOVE_FROM_DB: CtxMenuActionId = 1016;
 pub const CTX_ACTION_REFRESH_FILES: CtxMenuActionId = 1017;
+pub const CTX_ACTION_REGENERATE_THUMB_RANDOM: CtxMenuActionId = 1018;
 pub const CTX_ACTION_OPEN_IN_TAB: CtxMenuActionId = 1020;
 pub const CTX_ACTION_OPEN_IN_BG_TAB: CtxMenuActionId = 1021;
 pub const CTX_ACTION_OPEN_IN_FULLSCREEN: CtxMenuActionId = 1022;

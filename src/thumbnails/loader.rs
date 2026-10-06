@@ -1046,4 +1046,16 @@ impl ThumbnailScheduler {
 
         Ok(item)
     }
+
+    /// Explicitly regenerates thumbnail & previews with an overridden video offset percentage, overwriting PackStore and LMDB index.
+    pub fn regenerate_with_offset_sync(
+        &self,
+        media_id: MediaId,
+        file_path: &Path,
+        config: &ThumbnailConfig,
+        offset_percent: u8,
+    ) -> Result<super::cache::CachedThumbnail, ThumbnailError> {
+        let custom_cfg = config.with_video_offset_percent(offset_percent);
+        self.regenerate_sync(media_id, file_path, &custom_cfg)
+    }
 }

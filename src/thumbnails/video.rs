@@ -705,7 +705,8 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
             }
         }
 
-        let primary_offset_pct = (config.video_offset_percent.clamp(1, 90) as f64) / 100.0;
+        // Support full 1..=99% position extraction for dynamic random position selection
+        let primary_offset_pct = (config.video_offset_percent.clamp(1, 99) as f64) / 100.0;
         let preview_count = config.preview_frame_count.clamp(2, 100) as usize;
 
         let stream_ctx = VideoStreamContext {
@@ -730,7 +731,8 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                 threshold_secs = threshold,
                 strategy = "SinglePassForwardSweep",
                 target_previews = preview_count,
-                "[VideoThumbnailer] Executing high-speed single forward-pass sweep for video"
+                primary_offset_pct = primary_offset_pct,
+                "[VideoThumbnailer] Executing single forward-pass sweep for video"
             );
             self.extract_targeted_sequential(SequentialExtractionParams {
                 ictx,
@@ -749,7 +751,8 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                 threshold_secs = threshold,
                 strategy = "ForwardKeyframeSeekAndDecode",
                 target_previews = preview_count,
-                "[VideoThumbnailer] Executing forward keyframe seeks across long video timeline"
+                primary_offset_pct = primary_offset_pct,
+                "[VideoThumbnailer] Executing forward keyframe seeks across video timeline"
             );
             self.extract_seek_forward(SeekForwardExtractionParams {
                 ictx,
@@ -771,6 +774,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                     orig_width = res.orig_width,
                     orig_height = res.orig_height,
                     duration_ms = res.duration_ms,
+                    primary_offset_pct = primary_offset_pct,
                     elapsed_us = t0.elapsed().as_micros(),
                     "[VideoThumbnailer] Successfully extracted primary and preview frames with metadata"
                 );
@@ -797,7 +801,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let config = ThumbnailConfig {
             max_bound,
             scaling_algorithm: scaling_algo,
-            video_offset_percent: (time_percent * 100.0).clamp(1.0, 90.0) as u8,
+            video_offset_percent: (time_percent * 100.0).clamp(1.0, 99.0) as u8,
             generate_video_previews: false,
             ..Default::default()
         };
@@ -850,7 +854,7 @@ impl VideoFrameDecoder for MpvVideoThumbnailer {
         let config = ThumbnailConfig {
             max_bound,
             scaling_algorithm: scaling_algo,
-            video_offset_percent: (time_percent * 100.0).clamp(1.0, 90.0) as u8,
+            video_offset_percent: (time_percent * 100.0).clamp(1.0, 99.0) as u8,
             generate_video_previews: false,
             video_engine: VideoThumbnailEngine::Mpv,
             ..Default::default()

@@ -1,6 +1,6 @@
 pub use super::bridge_ctx_menu_favorite::FavoriteContextMenu;
 pub use super::bridge_ctx_menu_folder::{FolderContextMenu, FolderMenuBuildParams};
-pub use super::bridge_ctx_menu_media::{MediaActionContext, MediaContextMenu};
+pub use super::bridge_ctx_menu_media::{MediaActionContext, MediaContextMenu, MediaSelectionMeta};
 pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use super::bridge_ctx_menu_tab::{TabActionContext, TabContextMenu};
 pub use super::bridge_ctx_menu_tag::TagContextMenu;
@@ -386,14 +386,14 @@ impl BridgeContextMenu {
     ) {
         ctx.state.write().active_tab_dialog_target = None;
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
-        let (all_selected_deleted, selected_count, is_single_image, associated_apps) =
-            MediaContextMenu::prepare_selection(ctx.window, ctx.library, ctx.state, media_id);
+        let sel_meta = MediaContextMenu::prepare_selection(ctx.window, ctx.library, ctx.state, media_id);
         let menu = MediaContextMenu::build_menu(
-            selected_count,
-            is_single_image,
-            all_selected_deleted,
+            sel_meta.selected_count,
+            sel_meta.is_single_image,
+            sel_meta.has_video,
+            sel_meta.all_selected_deleted,
             is_busy,
-            &associated_apps,
+            &sel_meta.associated_apps,
         );
         Self::open_custom_menu(ctx.window, ctx.state, ctx.tab_manager, menu, x, y);
     }
