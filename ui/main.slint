@@ -145,6 +145,7 @@ export component MainWindow inherits Window {
     in-out property <length> drag-y: 0px;
     in-out property <int> drop-target-folder-id: -1;
     out property <length> folder-tree-scroll-y: sidebar_left.folder-tree-scroll-y;
+    out property <length> folder-tree-container-height: sidebar_left.folder-tree-container-height;
 
     // Rubberband Area Selection State Properties
     in-out property <bool> rubberband-active: false;
@@ -238,14 +239,21 @@ export component MainWindow inherits Window {
     in property <[FavoriteItemView]> favorites: [];
     in property <[TagColumnView]> tag-columns: [];
 
+    // Metadata Inspector properties
     in property <string> info-filename: "-";
+    in property <string> info-filename-tooltip: "";
     in property <string> info-path-label: "Path:";
     in property <string> info-path: "-";
+    in property <string> info-path-tooltip: "";
     in property <string> info-size: "-";
+    in property <string> info-size-tooltip: "";
     in property <string> info-dimensions: "-";
     in property <string> info-format: "-";
     in property <string> info-hash: "-";
+    in property <string> info-hash-tooltip: "";
     in property <int> info-selection-count: 0;
+    in-out property <bool> info-is-collapsed: false;
+    callback info-collapsed-toggled(bool);
 
     // Reactive Tooltip State Hooks
     property <bool> tooltip-active: GlobalTooltip.is-visible && TooltipSettings.enabled;
@@ -649,6 +657,22 @@ export component MainWindow inherits Window {
                 favorite-context-menu(path, alias, x, y) => {
                     root.favorite-context-menu(path, alias, sidebar_left.x + x, 38px + sidebar_left.y + y);
                 }
+
+                // Info Inspector in SidebarLeft
+                info-filename: root.info-filename;
+                info-filename-tooltip: root.info-filename-tooltip;
+                info-path-label: root.info-path-label;
+                info-path: root.info-path;
+                info-path-tooltip: root.info-path-tooltip;
+                info-size: root.info-size;
+                info-size-tooltip: root.info-size-tooltip;
+                info-dimensions: root.info-dimensions;
+                info-format: root.info-format;
+                info-hash: root.info-hash;
+                info-hash-tooltip: root.info-hash-tooltip;
+                info-selection-count: root.info-selection-count;
+                info-is-collapsed <=> root.info-is-collapsed;
+                info-collapsed-toggled(c) => { root.info-collapsed-toggled(c); }
             }
 
             resizer_left := ResizerBar {
@@ -903,14 +927,6 @@ export component MainWindow inherits Window {
                 is-tab-view: root.active-view-mode == 1;
                 tag-filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
-                info-filename: root.info-filename;
-                info-path-label: root.info-path-label;
-                info-path: root.info-path;
-                info-size: root.info-size;
-                info-dimensions: root.info-dimensions;
-                info-format: root.info-format;
-                info-hash: root.info-hash;
-                info-selection-count: root.info-selection-count;
 
                 mode-toggled(assign) => { root.tag-mode-toggled(assign); }
                 rating-selected(r) => { root.rating-applied(r); }

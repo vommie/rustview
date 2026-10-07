@@ -179,8 +179,8 @@ impl BridgeDnd {
 
             let sidebar_w = window.get_sidebar_left_width();
             let scroll_y = window.get_folder_tree_scroll_y();
-            let window_h = window.window().size().height as f32;
-            let tree_bottom_y = window_h - 28.0;
+            let tree_container_h = window.get_folder_tree_container_height();
+            let tree_bottom_y = FOLDER_TREE_TOP_OFFSET_PX + tree_container_h;
 
             if current_x >= 0.0 && current_x <= sidebar_w && current_y >= FOLDER_TREE_TOP_OFFSET_PX && current_y <= tree_bottom_y {
                 let local_y = current_y - FOLDER_TREE_TOP_OFFSET_PX - scroll_y;

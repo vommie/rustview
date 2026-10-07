@@ -153,6 +153,9 @@ impl UiBridge {
         window.set_tab_grid_columns(v_settings.tab_grid_columns as i32);
         window.set_tab_grid_auto_columns(v_settings.tab_grid_auto_columns);
 
+        initial_state.is_inspector_collapsed = v_settings.is_inspector_collapsed;
+        window.set_info_is_collapsed(v_settings.is_inspector_collapsed);
+
         window.set_col_filename_width(v_settings.col_filename_width);
         window.set_col_path_width(v_settings.col_path_width);
         window.set_col_modified_date_width(v_settings.col_modified_date_width);
@@ -394,6 +397,10 @@ impl UiBridge {
                     window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms as i32);
                 }
 
+                if diff_clone.view_settings_changed {
+                    window.set_info_is_collapsed(new_clone.view.is_inspector_collapsed);
+                }
+
                 if diff_clone.appearance_grid_changed {
                     window.set_thumb_size(new_clone.appearance.default_thumbnail_size as i32);
                     let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
@@ -538,6 +545,20 @@ impl UiBridge {
                 &set_fav,
                 &st_fav,
             );
+        });
+
+        // Inspector Collapsed State Persistence Callback
+        let set_collapse = self.settings.clone();
+        let st_collapse = self.state.clone();
+        self.window.on_info_collapsed_toggled(move |collapsed| {
+            tracing::info!(
+                collapsed,
+                "[UiBridge: InfoInspector] Toggled inspector collapsible panel state"
+            );
+            st_collapse.write().is_inspector_collapsed = collapsed;
+            let mut app_settings = set_collapse.get();
+            app_settings.view.is_inspector_collapsed = collapsed;
+            set_collapse.save_quiet_async(&app_settings);
         });
 
         self.register_rename_callbacks();

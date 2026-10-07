@@ -1,7 +1,7 @@
+use super::models::{format_bytes_with_locale, format_filesize};
 use super::MainWindow;
 use super::bridge_state::UiState;
 use super::file_selection::FileSelectionSummary;
-use super::models::format_filesize;
 use crate::media::MediaHasher;
 use crate::query::filters::IndexedMediaRecord;
 use parking_lot::RwLock;
@@ -70,34 +70,47 @@ impl BridgeInspector {
 
     fn render_empty(window: &MainWindow) {
         window.set_info_filename("- (No selection)".into());
+        window.set_info_filename_tooltip("".into());
         window.set_info_path_label("Path:".into());
         window.set_info_path("-".into());
+        window.set_info_path_tooltip("".into());
         window.set_info_size("-".into());
+        window.set_info_size_tooltip("".into());
         window.set_info_dimensions("-".into());
         window.set_info_format("-".into());
         window.set_info_hash("-".into());
+        window.set_info_hash_tooltip("".into());
         window.set_info_selection_count(0);
     }
 
     fn render_single(window: &MainWindow, item: &IndexedMediaRecord) {
+        let full_filename = item.record.filename.clone();
         window.set_info_filename(item.filename_slint.clone());
+        window.set_info_filename_tooltip(full_filename.into());
+
         window.set_info_path_label("Path:".into());
         let parent_path_str = item
             .full_path
             .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "-".to_string());
-        window.set_info_path(parent_path_str.into());
+        window.set_info_path(parent_path_str.clone().into());
+        window.set_info_path_tooltip(parent_path_str.into());
 
         window.set_info_size(format_filesize(item.record.file_size).into());
+        window.set_info_size_tooltip(format_bytes_with_locale(item.record.file_size).into());
+
         let dim_str = if item.record.width > 0 && item.record.height > 0 {
             format!("{} × {}", item.record.width, item.record.height)
         } else {
             "-".to_string()
         };
         window.set_info_dimensions(dim_str.into());
-        window.set_info_format(format!("{:?}", item.record.format).into());
-        window.set_info_hash(MediaHasher::to_hex(&item.record.file_hash).into());
+        window.set_info_format(item.record.format.display_name().into());
+
+        let hash_hex = MediaHasher::to_hex(&item.record.file_hash);
+        window.set_info_hash(hash_hex.clone().into());
+        window.set_info_hash_tooltip(hash_hex.into());
         window.set_info_selection_count(1);
     }
 
@@ -108,7 +121,9 @@ impl BridgeInspector {
         root_folder_opt: Option<&Path>,
     ) {
         window.set_info_selection_count(summary.count as i32);
-        window.set_info_filename(format!("{} multiple files selected", summary.count).into());
+        let multi_title = format!("{} multiple files selected", summary.count);
+        window.set_info_filename(multi_title.clone().into());
+        window.set_info_filename_tooltip(multi_title.into());
         window.set_info_path_label("Subfolders:".into());
 
         // Group counts by folder path
@@ -146,7 +161,13 @@ impl BridgeInspector {
         };
 
         window.set_info_path(subfolders_str.into());
+        let bare_root_path = root_folder_opt
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "-".to_string());
+        window.set_info_path_tooltip(bare_root_path.into());
+
         window.set_info_size(format!("{} (total)", format_filesize(summary.total_size_bytes)).into());
+        window.set_info_size_tooltip(format_bytes_with_locale(summary.total_size_bytes).into());
 
         let dim_str = if summary.is_uniform_dimensions {
             if let Some((w, h)) = summary.min_dimensions {
@@ -164,7 +185,7 @@ impl BridgeInspector {
         let format_str = summary
             .format_breakdown
             .iter()
-            .map(|(fmt, count)| format!("{:?} ({})", fmt, count))
+            .map(|(fmt, count)| format!("{} ({})", fmt.display_name(), count))
             .collect::<Vec<_>>()
             .join(", ");
         window.set_info_format(format_str.into());
@@ -177,6 +198,7 @@ impl BridgeInspector {
         } else {
             "— (Multi-selection)".to_string()
         };
-        window.set_info_hash(detail_str.into());
+        window.set_info_hash(detail_str.clone().into());
+        window.set_info_hash_tooltip(detail_str.into());
     }
 }

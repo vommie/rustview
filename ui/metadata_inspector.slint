@@ -1,4 +1,6 @@
 import { Theme } from "styles.slint";
+import { Icons, AppIcon } from "icons.slint";
+import { TooltipArea } from "tooltips.slint";
 
 /// Standalone text component that dynamically clips overflowing text on the left side with an ellipsis badge "…".
 export component LeftElidedText inherits Rectangle {
@@ -40,113 +42,214 @@ export component LeftElidedText inherits Rectangle {
     }
 }
 
-export component MetadataRow inherits HorizontalLayout {
+export component MetadataRow inherits Rectangle {
     in property <string> label: "";
     in property <string> value: "-";
     in property <color> value-color: Theme.text-muted;
     in property <length> value-font-size: 11px;
+    in property <string> tooltip: "";
 
-    spacing: 4px;
+    height: 18px;
 
-    Text {
-        text: root.label;
-        color: Theme.text-muted;
-        font-size: root.value-font-size;
-        min-width: 72px;
-    }
+    TooltipArea {
+        width: 100%;
+        height: 100%;
+        text: root.tooltip;
+        tooltip-enabled: root.tooltip != "";
 
-    Text {
-        text: root.value;
-        color: root.value-color;
-        font-size: root.value-font-size;
-        horizontal-stretch: 1;
-        overflow: elide;
+        HorizontalLayout {
+            spacing: 4px;
+
+            Text {
+                text: root.label;
+                color: Theme.text-muted;
+                font-size: root.value-font-size;
+                min-width: 68px;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: root.value;
+                color: root.value-color;
+                font-size: root.value-font-size;
+                horizontal-stretch: 1;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
     }
 }
 
-export component MetadataPathRow inherits HorizontalLayout {
+export component MetadataPathRow inherits Rectangle {
     in property <string> label: "Path:";
     in property <string> path-value: "-";
     in property <color> value-color: Theme.text;
     in property <length> value-font-size: 11px;
+    in property <string> tooltip: "";
 
-    spacing: 4px;
+    height: 18px;
 
-    Text {
-        text: root.label;
-        color: Theme.text-muted;
-        font-size: root.value-font-size;
-        min-width: 72px;
-    }
+    TooltipArea {
+        width: 100%;
+        height: 100%;
+        text: root.tooltip != "" ? root.tooltip : root.path-value;
+        tooltip-enabled: root.tooltip != "" || root.path-value != "-";
 
-    LeftElidedText {
-        text: root.path-value;
-        text-color: root.value-color;
-        font-size: root.value-font-size;
-        bg-color: Theme.background;
+        HorizontalLayout {
+            spacing: 4px;
+
+            Text {
+                text: root.label;
+                color: Theme.text-muted;
+                font-size: root.value-font-size;
+                min-width: 68px;
+                vertical-alignment: center;
+            }
+
+            LeftElidedText {
+                text: root.path-value;
+                text-color: root.value-color;
+                font-size: root.value-font-size;
+                bg-color: Theme.background;
+            }
+        }
     }
 }
 
+/// Fully modular, collapsible Metadata Inspector panel component with smooth height animation and tooltip support.
 export component MetadataInspector inherits Rectangle {
-    height: 160px;
+    in property <string> filename: "-";
+    in property <string> filename-tooltip: "";
+    in property <string> path-label: "Path:";
+    in property <string> path-value: "-";
+    in property <string> path-tooltip: "";
+    in property <string> filesize: "-";
+    in property <string> filesize-tooltip: "";
+    in property <string> dimensions: "-";
+    in property <string> format-name: "-";
+    in property <string> hash-or-rating: "-";
+    in property <string> hash-tooltip: "";
+    in property <int> selection-count: 0;
+
+    in-out property <bool> is-collapsed: false;
+    callback collapsed-toggled(bool);
+
+    property <length> header-height: 24px;
+    property <length> body-content-height: 130px;
+
+    height: root.is-collapsed ? root.header-height : (root.header-height + root.body-content-height);
+    animate height { duration: 180ms; easing: ease-in-out; }
+
     background: Theme.background;
     border-radius: 4px;
     border-width: 1px;
     border-color: Theme.border;
-
-    in property <string> filename: "-";
-    in property <string> path-label: "Path:";
-    in property <string> path-value: "-";
-    in property <string> filesize: "-";
-    in property <string> dimensions: "-";
-    in property <string> format-name: "-";
-    in property <string> hash-or-rating: "-";
-    in property <int> selection-count: 0;
+    clip: true;
 
     VerticalLayout {
-        padding: 8px;
-        spacing: 4px;
+        padding: 0px;
+        spacing: 0px;
 
-        // Header Title with Selection Count Suffix
-        Text {
-            text: "INFO / METADATA" + (root.selection-count > 1 ? (" (" + root.selection-count + " Files)") : "");
-            font-size: 10px;
-            font-weight: 700;
-            color: Theme.primary;
+        // Collapsible Interactive Header Bar
+        header-bar := Rectangle {
+            height: root.header-height;
+            background: header-touch.has-hover ? Theme.surface-hover : Theme.surface-variant;
+            border-radius: root.is-collapsed ? 4px : 0px;
+
+            animate background { duration: 100ms; }
+
+            header-touch := TouchArea {
+                width: 100%;
+                height: 100%;
+                mouse-cursor: pointer;
+                clicked => {
+                    root.is-collapsed = !root.is-collapsed;
+                    root.collapsed-toggled(root.is-collapsed);
+                }
+            }
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                alignment: space-between;
+
+                Text {
+                    text: "INFO / METADATA" + (root.selection-count > 1 ? (" (" + root.selection-count + " Files)") : "");
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                    vertical-alignment: center;
+                }
+
+                // Toggle Chevron Icon (Switches dynamically between arrow-down-s-line and arrow-right-s-line)
+                AppIcon {
+                    icon: root.is-collapsed ? Icons.arrow-right-s-line : Icons.arrow-down-s-line;
+                    size: 11px;
+                    allow-tint: true;
+                    color: header-touch.has-hover ? Theme.primary : Theme.text-muted;
+                    y: (parent.height - self.height) / 2;
+                }
+            }
+
+            // Bottom separator line when expanded
+            if !root.is-collapsed : Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
         }
 
-        // Modular Inspector Rows
-        MetadataRow {
-            label: "File:";
-            value: root.filename;
-            value-color: Theme.text;
-        }
+        // Collapsible Body Container with Height Animation & Clipping
+        body-container := Rectangle {
+            height: root.is-collapsed ? 0px : root.body-content-height;
+            animate height { duration: 180ms; easing: ease-in-out; }
+            clip: true;
 
-        MetadataPathRow {
-            label: root.path-label;
-            path-value: root.path-value;
-            value-color: Theme.text-muted;
-        }
+            VerticalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 3px;
+                alignment: center;
 
-        MetadataRow {
-            label: "Size:";
-            value: root.filesize;
-        }
+                MetadataRow {
+                    label: "File:";
+                    value: root.filename;
+                    value-color: Theme.text;
+                    tooltip: root.filename-tooltip;
+                }
 
-        MetadataRow {
-            label: "Dimensions:";
-            value: root.dimensions;
-        }
+                MetadataPathRow {
+                    label: root.path-label;
+                    path-value: root.path-value;
+                    value-color: Theme.text-muted;
+                    tooltip: root.path-tooltip;
+                }
 
-        MetadataRow {
-            label: "Format:";
-            value: root.format-name;
-        }
+                MetadataRow {
+                    label: "Size:";
+                    value: root.filesize;
+                    tooltip: root.filesize-tooltip;
+                }
 
-        MetadataRow {
-            label: root.selection-count > 1 ? "Details:" : "MD5:";
-            value: root.hash-or-rating;
-            value-font-size: 10px;
+                MetadataRow {
+                    label: "Dimensions:";
+                    value: root.dimensions;
+                }
+
+                MetadataRow {
+                    label: "Format:";
+                    value: root.format-name;
+                }
+
+                MetadataRow {
+                    label: root.selection-count > 1 ? "Details:" : "MD5:";
+                    value: root.hash-or-rating;
+                    value-font-size: 10px;
+                    tooltip: root.hash-tooltip;
+                }
+            }
         }
     }
 }

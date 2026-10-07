@@ -15,6 +15,8 @@ pub enum IconAsset {
     Minus,
     CaretUp,
     CaretDown,
+    ChevronDown,
+    ChevronRight,
     Regex,
     QueryFolder,
     QueryFolderAndSubfolders,
@@ -142,6 +144,22 @@ impl IconAsset {
                 relative_path: "ui/icons/caret-down.svg",
                 allow_tint: true,
                 description: "Descending sort direction caret",
+            },
+            Self::ChevronDown => IconMetadata {
+                asset: *self,
+                name: "arrow-down-s-line",
+                file_name: "arrow-down-s-line.svg",
+                relative_path: "ui/icons/arrow-down-s-line.svg",
+                allow_tint: true,
+                description: "Collapsible panel expanded state chevron indicator pointing down",
+            },
+            Self::ChevronRight => IconMetadata {
+                asset: *self,
+                name: "arrow-right-s-line",
+                file_name: "arrow-right-s-line.svg",
+                relative_path: "ui/icons/arrow-right-s-line.svg",
+                allow_tint: true,
+                description: "Collapsible panel collapsed state chevron indicator pointing right",
             },
             Self::Regex => IconMetadata {
                 asset: *self,
@@ -333,9 +351,10 @@ impl IconAsset {
             "settings" => Some(Self::Settings),
             "refresh" | "reload" => Some(Self::Refresh),
             "loader" | "throbber" | "spinner" => Some(Self::Loader),
-            "folder_tree_nodes_fold" | "folder_tree_fold" | "fold_nodes" | "collapse_all_folders" => {
-                Some(Self::FolderTreeNodesFold)
-            }
+            "folder_tree_nodes_fold"
+            | "folder_tree_fold"
+            | "fold_nodes"
+            | "collapse_all_folders" => Some(Self::FolderTreeNodesFold),
             "hidden-folders-invisible" | "hidden_folders_invisible" | "hidden_invisible" => {
                 Some(Self::HiddenFoldersInvisible)
             }
@@ -348,6 +367,8 @@ impl IconAsset {
             "minus" | "collapse" => Some(Self::Minus),
             "caret-up" | "sort_asc" => Some(Self::CaretUp),
             "caret-down" | "sort_desc" => Some(Self::CaretDown),
+            "arrow-down-s-line" | "chevron_down" | "collapse_panel" => Some(Self::ChevronDown),
+            "arrow-right-s-line" | "chevron_right" | "expand_panel" => Some(Self::ChevronRight),
             "regex" => Some(Self::Regex),
             "folder" | "query_folder" => Some(Self::QueryFolder),
             "folders" | "query_subfolders" | "subfolders" => Some(Self::QueryFolderAndSubfolders),
@@ -393,6 +414,8 @@ impl IconAsset {
             Self::Minus,
             Self::CaretUp,
             Self::CaretDown,
+            Self::ChevronDown,
+            Self::ChevronRight,
             Self::Regex,
             Self::QueryFolder,
             Self::QueryFolderAndSubfolders,

@@ -112,6 +112,28 @@ impl MediaFormat {
         }
     }
 
+    /// Returns the standardized, capitalized uppercase display name for the media format (e.g. "JPEG", "PNG", "MP4").
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Jpeg => "JPEG",
+            Self::Png => "PNG",
+            Self::Webp => "WEBP",
+            Self::Avif => "AVIF",
+            Self::Gif => "GIF",
+            Self::Bmp => "BMP",
+            Self::Tiff => "TIFF",
+            Self::Psd => "PSD",
+            Self::Mp4 => "MP4",
+            Self::Mkv => "MKV",
+            Self::Webm => "WEBM",
+            Self::Mov => "MOV",
+            Self::Avi => "AVI",
+            Self::Mpeg => "MPEG",
+            Self::Flv => "FLV",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+
     pub fn is_supported(&self) -> bool {
         !matches!(self, Self::Unknown)
     }

@@ -1,5 +1,10 @@
 pub use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
+use num_format::{Locale, SystemLocale, ToFormattedString};
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
+use std::sync::LazyLock;
+
+static SYSTEM_LOCALE: LazyLock<Option<SystemLocale>> =
+    LazyLock::new(|| SystemLocale::default().ok());
 
 pub fn format_filesize(size_bytes: u64) -> String {
     if size_bytes == 0 {
@@ -10,6 +15,21 @@ pub fn format_filesize(size_bytes: u64) -> String {
     let p = 1024_f64.powi(i as i32);
     let s = (size_bytes as f64) / p;
     format!("{:.2} {}", s, units[i.min(units.len() - 1)])
+}
+
+/// Formats exact byte count with locale-sensitive thousands grouping separators using the `num-format` crate.
+pub fn format_bytes_with_locale(bytes: u64) -> String {
+    let formatted_number = if let Some(ref locale) = *SYSTEM_LOCALE {
+        bytes.to_formatted_string(locale)
+    } else {
+        bytes.to_formatted_string(&Locale::en)
+    };
+
+    if bytes == 1 {
+        format!("{} Byte", formatted_number)
+    } else {
+        format!("{} Bytes", formatted_number)
+    }
 }
 
 /// Formats a UNIX epoch timestamp into human-readable `YYYY-MM-DD HH:MM:SS` string.

@@ -66,8 +66,8 @@ impl DndFolderTreeAutoScroller {
         }
 
         let sidebar_w = window.get_sidebar_left_width();
-        let window_h = window.window().size().height as f32;
-        let tree_bottom_y = window_h - 36.0;
+        let tree_container_h = window.get_folder_tree_container_height();
+        let tree_bottom_y = FOLDER_TREE_TOP_OFFSET_PX + tree_container_h;
 
         let in_sidebar_x = cursor_x >= 0.0 && cursor_x <= sidebar_w;
         let in_tree_y = cursor_y >= FOLDER_TREE_TOP_OFFSET_PX && cursor_y <= tree_bottom_y;

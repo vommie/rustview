@@ -4,8 +4,8 @@ use crate::library::models::{FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{
-    DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER,
-    DEFAULT_TAB_GRID_AUTO_COLUMNS, DEFAULT_TAB_GRID_COLUMNS,
+    DEFAULT_IS_INSPECTOR_COLLAPSED, DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB, DEFAULT_SORT_COLUMN,
+    DEFAULT_SORT_ORDER, DEFAULT_TAB_GRID_AUTO_COLUMNS, DEFAULT_TAB_GRID_COLUMNS,
 };
 use crate::system::DesktopApp;
 use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
@@ -187,6 +187,7 @@ pub struct UiState {
     pub active_tab_dnd_session: Option<TabDndSession>,
     pub active_sidebar_panel_tab: String,
     pub active_sidebar_panel_tab_dnd_session: Option<SidebarPanelTabDndSession>,
+    pub is_inspector_collapsed: bool,
     pub media_row_map: HashMap<MediaId, usize>,
     pub filter: QueryFilter,
     pub last_executed_query: String,
@@ -253,6 +254,7 @@ impl Default for UiState {
             active_tab_dnd_session: None,
             active_sidebar_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
             active_sidebar_panel_tab_dnd_session: None,
+            is_inspector_collapsed: DEFAULT_IS_INSPECTOR_COLLAPSED,
             media_row_map: HashMap::new(),
             filter: QueryFilter::default(),
             last_executed_query: String::new(),

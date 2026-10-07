@@ -68,6 +68,7 @@ pub const DEFAULT_IS_TABLE_VIEW: bool = false;
 pub const DEFAULT_SORT_COLUMN: &str = "Filename";
 pub const DEFAULT_SORT_ORDER: &str = "Ascending";
 pub const DEFAULT_MEDIA_TYPE_FILTER: &str = "Videos & Images";
+pub const DEFAULT_IS_INSPECTOR_COLLAPSED: bool = false;
 
 // Tab Grid View Defaults
 pub const DEFAULT_TAB_GRID_COLUMNS: usize = 3;
@@ -374,6 +375,7 @@ pub struct ViewSettings {
     pub sort_column: String,
     pub sort_order: String,
     pub media_type_filter: String,
+    pub is_inspector_collapsed: bool,
 
     // Tab Grid Settings
     pub tab_grid_columns: usize,
@@ -409,6 +411,7 @@ impl Default for ViewSettings {
             sort_column: DEFAULT_SORT_COLUMN.to_string(),
             sort_order: DEFAULT_SORT_ORDER.to_string(),
             media_type_filter: DEFAULT_MEDIA_TYPE_FILTER.to_string(),
+            is_inspector_collapsed: DEFAULT_IS_INSPECTOR_COLLAPSED,
 
             tab_grid_columns: DEFAULT_TAB_GRID_COLUMNS,
             tab_grid_auto_columns: DEFAULT_TAB_GRID_AUTO_COLUMNS,

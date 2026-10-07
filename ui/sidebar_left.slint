@@ -3,9 +3,11 @@ import { FolderNodeView, FavoriteItemView, SidebarPanelTabModel } from "types.sl
 import { FavoritesPanel } from "favorites_panel.slint";
 import { FolderPanel } from "folder_panel.slint";
 import { SidebarPanelTabBar } from "sidebar_panel_tab_bar.slint";
+import { MetadataInspector } from "metadata_inspector.slint";
 
 export { FavoritesPanel } from "favorites_panel.slint";
 export { FolderPanel } from "folder_panel.slint";
+export { MetadataInspector } from "metadata_inspector.slint";
 
 export component SidebarLeft inherits Rectangle {
     in-out property <length> sidebar-width: 260px;
@@ -34,6 +36,7 @@ export component SidebarLeft inherits Rectangle {
     in-out property <bool> show-hidden-folders: false;
     in property <int> drop-target-folder-id: -1;
     out property <length> folder-tree-scroll-y: folder-panel.scroll-offset-y;
+    out property <length> folder-tree-container-height: stacked-container.height;
 
     callback folder-clicked(int /* id */, string /* path */);
     callback folder-toggle-expand(int /* id */);
@@ -46,6 +49,22 @@ export component SidebarLeft inherits Rectangle {
     callback toggle-hidden-folders(bool /* show_hidden */);
     callback folder-row-hovered(int /* folder_id */);
     callback folder-row-unhovered(int /* folder_id */);
+
+    // Metadata Inspector properties
+    in property <string> info-filename: "-";
+    in property <string> info-filename-tooltip: "";
+    in property <string> info-path-label: "Path:";
+    in property <string> info-path: "-";
+    in property <string> info-path-tooltip: "";
+    in property <string> info-size: "-";
+    in property <string> info-size-tooltip: "";
+    in property <string> info-dimensions: "-";
+    in property <string> info-format: "-";
+    in property <string> info-hash: "-";
+    in property <string> info-hash-tooltip: "";
+    in property <int> info-selection-count: 0;
+    in-out property <bool> info-is-collapsed: false;
+    callback info-collapsed-toggled(bool);
 
     /// Programmatically scrolls the folder tree by a delta in pixels
     public function scroll-folder-tree-by(dy: length) {
@@ -77,7 +96,7 @@ export component SidebarLeft inherits Rectangle {
             tab-drag-cancelled(id) => { root.panel-tab-drag-cancelled(id); }
         }
 
-        // 2. Stacked Active Panel Area: Fills 100% of remaining vertical height without splitting
+        // 2. Stacked Active Panel Area: Fills available vertical space above inspector
         stacked-container := Rectangle {
             vertical-stretch: 1;
 
@@ -113,6 +132,25 @@ export component SidebarLeft inherits Rectangle {
                     root.favorite-context-menu(path, alias, stacked-container.x + x, stacked-container.y + y);
                 }
             }
+        }
+
+        // 3. Collapsible Metadata Inspector (Docked permanently at the bottom of the left sidebar)
+        metadata-inspector := MetadataInspector {
+            vertical-stretch: 0;
+            filename: root.info-filename;
+            filename-tooltip: root.info-filename-tooltip;
+            path-label: root.info-path-label;
+            path-value: root.info-path;
+            path-tooltip: root.info-path-tooltip;
+            filesize: root.info-size;
+            filesize-tooltip: root.info-size-tooltip;
+            dimensions: root.info-dimensions;
+            format-name: root.info-format;
+            hash-or-rating: root.info-hash;
+            hash-tooltip: root.info-hash-tooltip;
+            selection-count: root.info-selection-count;
+            is-collapsed <=> root.info-is-collapsed;
+            collapsed-toggled(c) => { root.info-collapsed-toggled(c); }
         }
     }
 }

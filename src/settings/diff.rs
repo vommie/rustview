@@ -386,6 +386,13 @@ impl SettingsDiff {
             ));
         }
 
+        if old.view.is_inspector_collapsed != new.view.is_inspector_collapsed {
+            changes.push(format!(
+                "View: is_inspector_collapsed ({} -> {})",
+                old.view.is_inspector_collapsed, new.view.is_inspector_collapsed
+            ));
+        }
+
         if old.view.tab_grid_columns != new.view.tab_grid_columns {
             changes.push(format!(
                 "View: tab_grid_columns ({} -> {})",

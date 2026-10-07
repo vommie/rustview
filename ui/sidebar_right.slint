@@ -1,10 +1,8 @@
 import { Theme } from "styles.slint";
 import { TagColumnView } from "types.slint";
 import { TagPanel } from "tag_panel.slint";
-import { MetadataInspector } from "metadata_inspector.slint";
 
 export { TagPanel } from "tag_panel.slint";
-export { MetadataInspector } from "metadata_inspector.slint";
 export { RatingBar } from "rating_bar.slint";
 
 export component SidebarRight inherits Rectangle {
@@ -26,15 +24,6 @@ export component SidebarRight inherits Rectangle {
 
     out property <bool> tag-filter-has-focus: tag-panel.filter-has-focus;
 
-    in property <string> info-filename: "-";
-    in property <string> info-path-label: "Path:";
-    in property <string> info-path: "-";
-    in property <string> info-size: "-";
-    in property <string> info-dimensions: "-";
-    in property <string> info-format: "-";
-    in property <string> info-hash: "-";
-    in property <int> info-selection-count: 0;
-
     callback mode-toggled(bool);
     callback rating-selected(int);
     callback tag-clicked(int);
@@ -52,8 +41,9 @@ export component SidebarRight inherits Rectangle {
         padding: 8px;
         spacing: 8px;
 
-        // Tagging and Rating Management Subsystem
+        // Tagging and Rating Management Subsystem (Expands to fill the entire sidebar height)
         tag-panel := TagPanel {
+            vertical-stretch: 1;
             is-assign-mode <=> root.is-assign-mode;
             match-mode-idx <=> root.match-mode-idx;
             scope-mode-idx <=> root.scope-mode-idx;
@@ -78,18 +68,6 @@ export component SidebarRight inherits Rectangle {
             tag-context-menu(id, x, y) => { root.tag-context-menu(id, tag-panel.x + x, tag-panel.y + y); }
             root-context-menu(x, y) => { root.root-context-menu(tag-panel.x + x, tag-panel.y + y); }
             tree-geometry-changed(h) => { root.tag-tree-geometry-changed(h); }
-        }
-
-        // Media Metadata Inspector Subsystem
-        MetadataInspector {
-            filename: root.info-filename;
-            path-label: root.info-path-label;
-            path-value: root.info-path;
-            filesize: root.info-size;
-            dimensions: root.info-dimensions;
-            format-name: root.info-format;
-            hash-or-rating: root.info-hash;
-            selection-count: root.info-selection-count;
         }
     }
 }
