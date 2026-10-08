@@ -40,8 +40,9 @@ pub fn run_api_with_library(cmd: ApiCommand, library: &Library) -> Result<i32, A
             rating,
             tags,
             hash,
+            source,
             json,
-        } => ApiHandler::set_media(library, &path, rating, tags, hash, json),
+        } => ApiHandler::set_media(library, &path, rating, tags, hash, source, json),
         ApiCommand::DeleteMedia { path, json } => {
             ApiHandler::delete_media(library, &path, json)
         }
@@ -60,7 +61,7 @@ pub fn run_api_with_library(cmd: ApiCommand, library: &Library) -> Result<i32, A
 pub fn print_api_help() {
     println!();
     println!("RustView Headless CLI-API Suite");
-    println!("High-performance headless command-line interface for external tool integration (e.g. PyCut, remove_dups)");
+    println!("High-performance headless command-line interface for external tool integration (e.g. PyCutRv, remove_dups)");
     println!();
     println!("Usage:");
     println!("  rustview api <COMMAND> [OPTIONS]");
@@ -78,6 +79,7 @@ pub fn print_api_help() {
     println!("  -p, --path <PATH>          Absolute path to the target media file");
     println!("  -r, --rating <0-5>         Star rating (0 = unrated, 1..=5 stars)");
     println!("  -t, --tags <ID,ID,...>     Comma-separated list of Tag IDs");
+    println!("  -s, --source <APP_NAME>    Application identifier creating this entry (e.g. PyCutRv; Default: 'CLI-API')");
     println!("      --hash <MD5_HEX>       32-character hexadecimal MD5 hash string");
     println!("  -H, --hashes <MD5,MD5...>  Comma- or space-separated list of MD5 hash strings");
     println!("  -f, --hashes-file <FILE>   Path to file containing MD5 hashes (one per line)");
@@ -88,7 +90,7 @@ pub fn print_api_help() {
     println!("Examples:");
     println!("  rustview api tag-tree --json");
     println!("  rustview api get-media --path /media/clip.mp4 --json");
-    println!("  rustview api set-media --path /media/clip.mp4 --rating 5 --tags 1,4,7 --json");
+    println!("  rustview api set-media --path /media/clip.mp4 --rating 5 --tags 1,4,7 --source PyCutRv --json");
     println!("  rustview api check-hash --hash d5dd11d265f453dee9d51a40ba717efb --json");
     println!("  rustview api check-hashes --hashes d5dd11d265f453dee9d51a40ba717efb,e4d909c290d0fb1ca068ffaddf22cbd0 --json");
     println!("  rustview api check-hashes --hashes-file /tmp/hashes_list.txt --json");

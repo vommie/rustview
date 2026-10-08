@@ -212,6 +212,11 @@ pub const DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE: bool = false;
 pub const DEFAULT_FULLSCREEN_FALLBACK_TARGET: &str = "same"; // "same" or "different"
 
 // =============================================================================
+// SECTION 12: API & External Tools Settings - Single Point of Truth Constants
+// =============================================================================
+pub const DEFAULT_AUTO_COMPLETE_EXTERNAL_STUBS: bool = true;
+
+// =============================================================================
 // Enums & Domain Data Models
 // =============================================================================
 
@@ -604,6 +609,20 @@ impl Default for TagSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct ApiSettings {
+    pub auto_complete_external_stubs: bool,
+}
+
+impl Default for ApiSettings {
+    fn default() -> Self {
+        Self {
+            auto_complete_external_stubs: DEFAULT_AUTO_COMPLETE_EXTERNAL_STUBS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DebugSettings {
     pub obfuscate_logs: bool,
 }
@@ -659,6 +678,8 @@ pub struct AppSettings {
     pub fullscreen: FullscreenSettings,
     #[serde(default)]
     pub tags: TagSettings,
+    #[serde(default)]
+    pub api: ApiSettings,
     #[serde(default)]
     pub debug: DebugSettings,
     #[serde(default)]

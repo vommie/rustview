@@ -8,6 +8,7 @@ import { SettingsPageFormats } from "settings_page_formats.slint";
 import { SettingsPageViewer } from "settings_page_viewer.slint";
 import { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
 import { SettingsPageTags } from "settings_page_tags.slint";
+import { SettingsPageApi } from "settings_page_api.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
 import { ButtonBar } from "button_bar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
@@ -21,6 +22,7 @@ export { SettingsPageFormats } from "settings_page_formats.slint";
 export { SettingsPageViewer } from "settings_page_viewer.slint";
 export { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
 export { SettingsPageTags } from "settings_page_tags.slint";
+export { SettingsPageApi } from "settings_page_api.slint";
 export { SettingsPageDebug } from "settings_page_debug.slint";
 export { SettingsCard } from "settings_card.slint";
 export { ButtonBar } from "button_bar.slint";
@@ -106,6 +108,9 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-enable-fallback: false;
     in-out property <int> fullscreen-fallback-target-idx: 0;
     callback refresh-displays();
+
+    // API options
+    in-out property <bool> auto-complete-external-stubs: true;
 
     // Debug options
     in-out property <bool> obfuscate-logs: true;
@@ -232,7 +237,11 @@ export component SettingsWindow inherits Window {
 
                         if root.active-category == 7 : SettingsPageTags {}
 
-                        if root.active-category == 8 : SettingsPageDebug {
+                        if root.active-category == 8 : SettingsPageApi {
+                            auto-complete-external-stubs <=> root.auto-complete-external-stubs;
+                        }
+
+                        if root.active-category == 9 : SettingsPageDebug {
                             obfuscate-logs <=> root.obfuscate-logs;
                         }
                     }

@@ -5,12 +5,15 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
+use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::{FolderNodeView, MainWindow};
 use crate::library::dot_hidden::DotHiddenCache;
 use crate::library::folders::normalize_path;
 use crate::library::models::{FolderId, FolderRecord, MediaId, MediaRecord};
 use crate::library::refresh::RefreshReport;
 use crate::library::Library;
+use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
+use crate::media::MediaType;
 use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::telemetry::FolderLoadBenchmark;
 use crate::thumbnails::{PreparedTarget, ThumbnailConfig, ThumbnailManager};
@@ -1005,7 +1008,128 @@ impl BridgeFolders {
         StatusBarBridge::update_metrics(ctx.window, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
+        // Fast path check: If not scanning, check for pending external stubs (PyCutRv queue)
         if !should_scan_and_generate {
+            if ctx.settings.get().api.auto_complete_external_stubs {
+                let (ready_stubs, still_pending, sources) = ctx
+                    .library
+                    .external_media_completer()
+                    .find_pending_stubs_by_folder_ids(&target_folder_ids);
+
+                if !ready_stubs.is_empty() {
+                    let stubs_count = ready_stubs.len();
+                    tracing::info!(
+                        folder_id = folder_id,
+                        stubs_count,
+                        sources = ?sources,
+                        still_pending,
+                        "[FolderNavigation: StubsDetected] Auto-completing external stubs on folder access..."
+                    );
+
+                    // Lock the Refresh button and mark system as busy during completion
+                    {
+                        let mut st = ctx.state.write();
+                        st.is_refreshing_media = true;
+                    }
+                    ctx.window.set_is_system_busy(true);
+
+                    // Activate ONLY Thumbnail generation progress indicator (prevent double progress bar display)
+                    ctx.thumbnails.tracker().set_generate_total(stubs_count);
+                    StatusBarBridge::info(ctx.window, format!("Auto-completing {} external file(s)...", stubs_count));
+
+                    let w_weak = ctx.window.as_weak();
+                    let lib_arc = ctx.library.clone();
+                    let thumb_arc = ctx.thumbnails.clone();
+                    let set_arc = ctx.settings.clone();
+                    let st_arc = ctx.state.clone();
+                    let config = ThumbnailConfig::from_performance_settings(&ctx.settings.get().performance);
+
+                    std::thread::Builder::new()
+                        .name(format!("folder-stubs-completer-{}", folder_id))
+                        .spawn(move || {
+                            let w_weak_progress = w_weak.clone();
+                            let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
+                            let tracker_ref = thumb_arc.tracker();
+
+                            let progress_cb = Arc::new(move |cur: usize, tot: usize| {
+                                tracker_ref.increment_generate_done();
+                                let snap = tracker_ref.snapshot();
+                                let mut last = last_progress_report.lock();
+                                if last.elapsed().as_millis() >= 35 || cur == tot {
+                                    *last = Instant::now();
+                                    let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
+                                        StatusBarBridge::update_thumbnail_progress(&w, &snap);
+                                    });
+                                }
+                            });
+
+                            let store = thumb_arc.store();
+                            let (report, completed_items) = lib_arc
+                                .external_media_completer()
+                                .complete_candidates(
+                                    ready_stubs,
+                                    &config,
+                                    store,
+                                    Some(move |cur, tot| progress_cb(cur, tot)),
+                                );
+
+                            let _ = w_weak.upgrade_in_event_loop(move |w| {
+                                {
+                                    let mut st = st_arc.write();
+                                    st.is_refreshing_media = false;
+
+                                    for item in &completed_items {
+                                        if item.primary_width > 0 && item.primary_height > 0 && !item.primary_pixels.is_empty() {
+                                            let shared_buf = rgb8_to_shared_buffer(
+                                                &item.primary_pixels,
+                                                item.primary_width,
+                                                item.primary_height,
+                                            );
+                                            st.folder_thumbnails.insert(item.media_id, shared_buf);
+                                            let _ = thumb_arc.cache().insert(
+                                                item.media_id,
+                                                item.primary_width,
+                                                item.primary_height,
+                                                &item.primary_pixels,
+                                            );
+                                        }
+
+                                        if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.record.id == item.media_id) {
+                                            target_indexed.record = item.updated_record.clone();
+                                            target_indexed.width_str = if item.updated_record.width > 0 { item.updated_record.width.to_string().into() } else { "-".into() };
+                                            target_indexed.height_str = if item.updated_record.height > 0 { item.updated_record.height.to_string().into() } else { "-".into() };
+                                            target_indexed.ar_str = approximate_aspect_ratio(item.updated_record.width, item.updated_record.height).into();
+                                            target_indexed.ar_value = if item.updated_record.height > 0 { item.updated_record.width as f32 / item.updated_record.height as f32 } else { 0.0 };
+                                            let is_video = matches!(item.updated_record.media_type, MediaType::Video);
+                                            target_indexed.duration_str = format_duration_hms_ms(item.updated_record.duration_ms, is_video).into();
+                                            target_indexed.filesize_mb_str = format_filesize_mb(item.updated_record.file_size).into();
+                                            target_indexed.modified_date_str = format_timestamp(item.updated_record.modification_time).into();
+                                            target_indexed.created_date_str = format_timestamp(item.updated_record.creation_time).into();
+                                            target_indexed.format_str = item.updated_record.format.default_extension().to_ascii_lowercase().into();
+                                            target_indexed.is_corrupted = item.updated_record.is_corrupted;
+                                            target_indexed.is_deleted = item.updated_record.is_deleted;
+                                            target_indexed.is_pending = false;
+                                            target_indexed.flags_str = if item.updated_record.is_deleted { "Deleted".into() } else if item.updated_record.is_corrupted { "Corrupted".into() } else { "OK".into() };
+                                        }
+                                    }
+                                }
+
+                                thumb_arc.tracker().reset();
+
+                                BridgeMedia::reload(&w, &lib_arc, &thumb_arc, &set_arc, &st_arc, false, false);
+                                BridgeInspector::update(&w, &st_arc);
+                                BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
+                                let busy = BridgeMedia::is_system_busy(&w, &thumb_arc, &st_arc);
+                                w.set_is_system_busy(busy);
+                                StatusBarBridge::update_metrics(&w, &st_arc);
+                                StatusBarBridge::success(&w, format!("Auto-completed {} external media item(s).", report.completed_count));
+                            });
+                        })
+                        .ok();
+                    return;
+                }
+            }
+
             tracing::info!(
                 folder_id = folder_id,
                 folder_name = %folder_name,
@@ -1146,7 +1270,7 @@ impl BridgeFolders {
 
                 let all_targets: Vec<PreparedTarget> = indexed_media
                     .iter()
-                    .filter(|item| !item.is_deleted)
+                    .filter(|item| !item.is_deleted && !item.is_pending)
                     .map(|item| PreparedTarget {
                         pipeline_id: 0,
                         folder_id: item.record.folder_id,

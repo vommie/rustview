@@ -32,6 +32,8 @@ pub struct ApiMediaDetails {
     pub format: String,
     pub is_deleted: bool,
     pub is_corrupted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +56,8 @@ pub struct ApiSetMediaResponse {
     pub rating: u8,
     pub tags: Vec<u32>,
     pub file_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     pub message: String,
 }
 

@@ -16,6 +16,7 @@ pub enum ApiCommand {
         rating: Option<u8>,
         tags: Option<Vec<u32>>,
         hash: Option<String>,
+        source: Option<String>,
         json: bool,
     },
     DeleteMedia {
@@ -66,6 +67,7 @@ pub fn parse_api_args(args: &[String]) -> Result<ApiCommand, ApiError> {
     let mut rating: Option<u8> = None;
     let mut tags: Option<Vec<u32>> = None;
     let mut hash: Option<String> = None;
+    let mut source: Option<String> = None;
     let mut hashes_list: Vec<String> = Vec::new();
     let mut hashes_file: Option<PathBuf> = None;
     let mut from_stdin = false;
@@ -151,6 +153,20 @@ pub fn parse_api_args(args: &[String]) -> Result<ApiCommand, ApiError> {
             }
         } else if let Some(val) = arg.strip_prefix("--hash=") {
             hash = Some(val.trim().to_lowercase());
+            continue;
+        }
+
+        if arg == "--source" || arg == "--source-app" || arg == "-s" {
+            if let Some(val) = args.get(i + 1) {
+                source = Some(val.trim().to_string());
+                skip_next = true;
+                continue;
+            }
+        } else if let Some(val) = arg.strip_prefix("--source=") {
+            source = Some(val.trim().to_string());
+            continue;
+        } else if let Some(val) = arg.strip_prefix("--source-app=") {
+            source = Some(val.trim().to_string());
             continue;
         }
 
@@ -271,6 +287,7 @@ pub fn parse_api_args(args: &[String]) -> Result<ApiCommand, ApiError> {
                 rating,
                 tags,
                 hash,
+                source,
                 json,
             })
         }

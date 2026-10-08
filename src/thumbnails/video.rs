@@ -397,6 +397,7 @@ impl FfmpegVideoThumbnailer {
     }
 
     /// Single Linear Forward Sweep for videos <= 30.0s (or unknown duration).
+    /// Features hard packet/frame limits to prevent hangs on truncated or in-flight renders.
     fn extract_targeted_sequential(
         &self,
         params: SequentialExtractionParams<'_>,
@@ -437,11 +438,13 @@ impl FfmpegVideoThumbnailer {
         let mut all_scaled_reservoir: Vec<DecodedThumbnailFrame> = Vec::with_capacity(32);
         let mut decoded_video_frame = ffmpeg_next::frame::Video::empty();
         let mut frame_idx = 0usize;
+        let mut packets_scanned = 0usize;
 
         for (stream, packet) in ictx.packets() {
             if stream.index() != stream_ctx.video_stream_index {
                 continue;
             }
+            packets_scanned += 1;
             let _ = decoder.send_packet(&packet);
 
             while decoder.receive_frame(&mut decoded_video_frame).is_ok() {
@@ -458,7 +461,7 @@ impl FfmpegVideoThumbnailer {
                 let is_primary_hit = if target_preview_secs.is_some() {
                     primary_frame.is_none() && (pts_sec >= target_primary_sec || (primary_offset_pct == 0.0 && frame_idx == 1))
                 } else {
-                    false
+                    primary_frame.is_none()
                 };
 
                 let matching_preview_slots: Vec<usize> = if let Some(ref prev_targets) = target_preview_secs {
@@ -469,7 +472,7 @@ impl FfmpegVideoThumbnailer {
                     Vec::new()
                 };
 
-                if (is_primary_hit || !matching_preview_slots.is_empty() || (target_preview_secs.is_none() && all_scaled_reservoir.len() < 100) || first_decoded_frame.is_none())
+                if (is_primary_hit || !matching_preview_slots.is_empty() || (target_preview_secs.is_none() && all_scaled_reservoir.len() < num_previews) || first_decoded_frame.is_none())
                     && let Ok(raw_rgb) = scaler.scale_frame(&decoded_video_frame)
                 {
                     let (w, h, rot_pixels) = apply_rotation_if_needed(
@@ -490,7 +493,7 @@ impl FfmpegVideoThumbnailer {
                         first_decoded_frame = Some(frame.clone());
                     }
 
-                    if is_primary_hit {
+                    if is_primary_hit && primary_frame.is_none() {
                         primary_frame = Some(frame.clone());
                     }
 
@@ -498,28 +501,46 @@ impl FfmpegVideoThumbnailer {
                         preview_frames[slot] = Some(frame.clone());
                     }
 
-                    if target_preview_secs.is_none() && all_scaled_reservoir.len() < 100 {
+                    if target_preview_secs.is_none() && all_scaled_reservoir.len() < num_previews {
                         all_scaled_reservoir.push(frame);
                     }
                 }
 
-                if target_preview_secs.is_some()
-                    && primary_frame.is_some()
-                    && preview_frames.iter().all(|f| f.is_some())
-                {
+                // Circuit breaker: If we have all required frames, stop immediately!
+                let has_all_previews = if target_preview_secs.is_some() {
+                    preview_frames.iter().all(|f| f.is_some())
+                } else {
+                    all_scaled_reservoir.len() >= num_previews
+                };
+
+                if primary_frame.is_some() && has_all_previews {
                     break;
                 }
             }
 
-            if target_preview_secs.is_some()
-                && primary_frame.is_some()
-                && preview_frames.iter().all(|f| f.is_some())
-            {
+            // Circuit breaker: stop packet decoding loop as soon as frames are gathered
+            let has_all_previews = if target_preview_secs.is_some() {
+                preview_frames.iter().all(|f| f.is_some())
+            } else {
+                all_scaled_reservoir.len() >= num_previews
+            };
+
+            if primary_frame.is_some() && has_all_previews {
+                break;
+            }
+
+            // Hard safety bailout: Never read indefinitely across incomplete/corrupt stream
+            if frame_idx >= 150 || packets_scanned >= 300 {
+                tracing::debug!(
+                    frame_idx,
+                    packets_scanned,
+                    "[VideoThumbnailer: CircuitBreaker] Reached maximum sequential scan limit, concluding extraction"
+                );
                 break;
             }
         }
 
-        // Flush decoder EOF if needed
+        // Flush decoder EOF if primary frame still missing
         if primary_frame.is_none() || preview_frames.iter().any(|f| f.is_none()) {
             let _ = decoder.send_eof();
             while decoder.receive_frame(&mut decoded_video_frame).is_ok() {
@@ -569,8 +590,8 @@ impl FfmpegVideoThumbnailer {
             let total = all_scaled_reservoir.len();
             for k in 0..num_previews {
                 let idx = if num_previews > 1 {
-                    let start_idx = if total <= 4 { 0 } else { (total as f64 * 0.05).round() as usize };
-                    let end_idx = if total <= 4 { total - 1 } else { ((total as f64 * 0.95).round() as usize).min(total - 1) };
+                    let start_idx = 0;
+                    let end_idx = total.saturating_sub(1);
                     start_idx + (((end_idx - start_idx) as f64) * (k as f64 / (num_previews - 1) as f64)).round() as usize
                 } else {
                     0

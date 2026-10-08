@@ -100,17 +100,40 @@ impl BridgeInspector {
         window.set_info_size(format_filesize(item.record.file_size).into());
         window.set_info_size_tooltip(format_bytes_with_locale(item.record.file_size).into());
 
-        let dim_str = if item.record.width > 0 && item.record.height > 0 {
+        let dim_str = if item.is_pending {
+            "Pending (Render Queue)".to_string()
+        } else if item.record.width > 0 && item.record.height > 0 {
             format!("{} × {}", item.record.width, item.record.height)
         } else {
             "-".to_string()
         };
         window.set_info_dimensions(dim_str.into());
-        window.set_info_format(item.record.format.display_name().into());
 
-        let hash_hex = MediaHasher::to_hex(&item.record.file_hash);
-        window.set_info_hash(hash_hex.clone().into());
-        window.set_info_hash_tooltip(hash_hex.into());
+        let format_display = if item.is_pending {
+            format!("{} (Pending)", item.record.format.display_name())
+        } else {
+            item.record.format.display_name().to_string()
+        };
+        window.set_info_format(format_display.into());
+
+        let (hash_str, tooltip_str) = if item.is_pending {
+            let src_text = if let Some(ref src) = item.record.source {
+                format!("Pending [Source: {}]", src)
+            } else {
+                "Pending (External API Queue)".to_string()
+            };
+            (src_text.clone(), src_text)
+        } else {
+            let hash_hex = MediaHasher::to_hex(&item.record.file_hash);
+            let mut tt = hash_hex.clone();
+            if let Some(ref src) = item.record.source {
+                tt = format!("MD5: {}\nSource: {}", hash_hex, src);
+            }
+            (hash_hex, tt)
+        };
+
+        window.set_info_hash(hash_str.into());
+        window.set_info_hash_tooltip(tooltip_str.into());
         window.set_info_selection_count(1);
     }
 

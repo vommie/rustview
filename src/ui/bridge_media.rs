@@ -98,7 +98,7 @@ impl BridgeMedia {
         state: Arc<RwLock<UiState>>,
         _fullscreen_controller: ImageFullscreenDialogController,
     ) {
-        // 1. Search Query Filter Callback (Quick-Fullscreen is not dismissed on search input)
+        // 1. Search Query Filter Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -625,7 +625,6 @@ impl BridgeMedia {
     }
 
     /// Evaluates whether any intensive background operation is running (Single-Operation Guard).
-    /// Uses `try_read()` on `state` to prevent re-entrant lock deadlocks.
     pub fn is_system_busy(
         window: &MainWindow,
         thumbnails: &ThumbnailManager,
@@ -763,6 +762,7 @@ impl BridgeMedia {
                         item.flags_str.clone(),
                         item.is_corrupted,
                         item.is_deleted,
+                        item.is_pending,
                         item.has_tags,
                         matches!(item.record.media_type, MediaType::Video),
                     )
@@ -787,6 +787,7 @@ impl BridgeMedia {
                     flags_str,
                     is_corrupted,
                     is_deleted,
+                    is_pending,
                     has_tags,
                     is_video,
                 )) = item_info_opt {
@@ -826,6 +827,7 @@ impl BridgeMedia {
                         is_video,
                         is_corrupted,
                         is_deleted,
+                        is_pending,
                     });
                 }
             }
@@ -1000,6 +1002,7 @@ impl BridgeMedia {
                             last_seen: 1,
                             is_deleted: false,
                             is_corrupted,
+                            source: old_record.source.clone(),
                         };
 
                         let cur_count = progress_counter_ref.fetch_add(1, Ordering::Relaxed) + 1;
@@ -1084,7 +1087,10 @@ impl BridgeMedia {
                             let created_date_str: slint::SharedString = format_timestamp(item.updated_record.creation_time).into();
                             let format_str: slint::SharedString = item.updated_record.format.default_extension().to_ascii_lowercase().into();
 
-                            let flags_str: slint::SharedString = if item.updated_record.is_deleted {
+                            let is_pending = item.updated_record.source.is_some() && (item.updated_record.file_size == 0 || item.updated_record.width == 0 || item.updated_record.height == 0);
+                            let flags_str: slint::SharedString = if is_pending {
+                                "Pending".into()
+                            } else if item.updated_record.is_deleted {
                                 "Deleted".into()
                             } else if item.updated_record.is_corrupted {
                                 "Corrupted".into()
@@ -1106,6 +1112,7 @@ impl BridgeMedia {
                                 target_indexed.flags_str = flags_str;
                                 target_indexed.is_corrupted = item.updated_record.is_corrupted;
                                 target_indexed.is_deleted = item.updated_record.is_deleted;
+                                target_indexed.is_pending = is_pending;
                                 target_indexed.tags_count = item.tags_count;
                                 target_indexed.tags_count_str = item.tags_count.to_string().into();
                                 target_indexed.has_tags = item.tags_count > 0;
@@ -1149,6 +1156,7 @@ impl BridgeMedia {
                                         view.flags_str = indexed.flags_str.clone();
                                         view.is_corrupted = indexed.is_corrupted;
                                         view.is_deleted = indexed.is_deleted;
+                                        view.is_pending = indexed.is_pending;
                                         view.tags_count = indexed.tags_count as i32;
                                         view.tags_str = indexed.tags_count_str.clone();
                                         view.has_tags = indexed.has_tags;
@@ -1295,7 +1303,7 @@ impl BridgeMedia {
         );
     }
 
-    /// Unified, modular multi-threaded media refresh & thumbnail regeneration engine (zero redundancy).
+    /// Unified, modular multi-threaded media refresh & thumbnail regeneration engine.
     fn execute_media_refresh(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -1455,16 +1463,8 @@ impl BridgeMedia {
                         let format = MediaFormat::from_path(&file_path);
                         let is_video = format.media_type() == Some(MediaType::Video);
 
-                        // If random offset requested and item is a video, dynamically generate a randomized percentage (1..=99%)
                         let (item_cfg, chosen_rand_pct) = if random_video_offset && is_video {
                             let rand_pct = generate_random_video_offset_percent();
-                            tracing::info!(
-                                media_id,
-                                random_offset_percent = rand_pct,
-                                file = %LogObscurer::path(&file_path),
-                                "[Thumbnail: RandomRegen] Rolled new thumbnail position at {}% for video",
-                                rand_pct
-                            );
                             (cfg_ref.with_video_offset_percent(rand_pct), Some(rand_pct))
                         } else {
                             (cfg_ref.clone(), None)
@@ -1562,6 +1562,7 @@ impl BridgeMedia {
                             last_seen: 1,
                             is_deleted: false,
                             is_corrupted,
+                            source: old_record.source.clone(),
                         };
 
                         let cur_count = progress_counter_ref.fetch_add(1, Ordering::Relaxed) + 1;
@@ -1722,7 +1723,10 @@ impl BridgeMedia {
                             let created_date_str: slint::SharedString = format_timestamp(item.updated_record.creation_time).into();
                             let format_str: slint::SharedString = item.updated_record.format.default_extension().to_ascii_lowercase().into();
 
-                            let flags_str: slint::SharedString = if item.updated_record.is_deleted {
+                            let is_pending = item.updated_record.source.is_some() && (item.updated_record.file_size == 0 || item.updated_record.width == 0 || item.updated_record.height == 0);
+                            let flags_str: slint::SharedString = if is_pending {
+                                "Pending".into()
+                            } else if item.updated_record.is_deleted {
                                 "Deleted".into()
                             } else if item.updated_record.is_corrupted {
                                 "Corrupted".into()
@@ -1744,6 +1748,7 @@ impl BridgeMedia {
                                 target_indexed.flags_str = flags_str;
                                 target_indexed.is_corrupted = item.updated_record.is_corrupted;
                                 target_indexed.is_deleted = item.updated_record.is_deleted;
+                                target_indexed.is_pending = is_pending;
                                 target_indexed.tags_count = item.tags_count;
                                 target_indexed.tags_count_str = item.tags_count.to_string().into();
                                 target_indexed.has_tags = item.tags_count > 0;
@@ -1782,31 +1787,14 @@ impl BridgeMedia {
                             let load_res = HighResImageLoader::load_full_resolution(&full_file_path);
                             let _ = w_weak_tab.upgrade_in_event_loop(move |w_ui| {
                                 if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
-                                    tracing::debug!(
-                                        media_id,
-                                        tab_id,
-                                        "[BridgeMedia: DiscardStale] Discarding stale decoded image buffer because tab navigated away"
-                                    );
                                     return;
                                 }
 
                                 match load_res {
                                     Ok((w_px, h_px, pixel_buffer)) => {
-                                        tracing::info!(
-                                            media_id,
-                                            tab_id,
-                                            dimensions = format!("{}x{}", w_px, h_px),
-                                            "[BridgeMedia: RefreshTabSync] Reloaded full-resolution image buffer for open tab"
-                                        );
                                         tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
                                     }
                                     Err(err) => {
-                                        tracing::warn!(
-                                            media_id,
-                                            tab_id,
-                                            error = %err,
-                                            "[BridgeViewerTabs: RefreshTabSync] Failed to reload image buffer for open tab"
-                                        );
                                         tm_async.set_tab_error(tab_id, err.to_string());
                                     }
                                 }
@@ -1850,6 +1838,7 @@ impl BridgeMedia {
                                         view.flags_str = indexed.flags_str.clone();
                                         view.is_corrupted = indexed.is_corrupted;
                                         view.is_deleted = indexed.is_deleted;
+                                        view.is_pending = indexed.is_pending;
                                         view.tags_count = indexed.tags_count as i32;
                                         view.tags_str = indexed.tags_count_str.clone();
                                         view.has_tags = indexed.has_tags;
@@ -1986,7 +1975,11 @@ impl BridgeMedia {
                 let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
                 let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
 
-                let flags_str: slint::SharedString = if r.is_deleted {
+                let is_pending = r.source.is_some() && (r.file_size == 0 || r.width == 0 || r.height == 0 || r.is_corrupted);
+
+                let flags_str: slint::SharedString = if is_pending {
+                    "Pending".into()
+                } else if r.is_deleted {
                     "Deleted".into()
                 } else if r.is_corrupted {
                     "Corrupted".into()
@@ -2019,8 +2012,9 @@ impl BridgeMedia {
                     duration_str,
                     format_str,
                     flags_str,
-                    is_corrupted: r.is_corrupted,
+                    is_corrupted: if is_pending { false } else { r.is_corrupted },
                     is_deleted: r.is_deleted,
+                    is_pending,
                     has_tags,
                 }
             })
@@ -2078,7 +2072,11 @@ impl BridgeMedia {
                 let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
                 let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
 
-                let flags_str: slint::SharedString = if r.is_deleted {
+                let is_pending = r.source.is_some() && (r.file_size == 0 || r.width == 0 || r.height == 0 || r.is_corrupted);
+
+                let flags_str: slint::SharedString = if is_pending {
+                    "Pending".into()
+                } else if r.is_deleted {
                     "Deleted".into()
                 } else if r.is_corrupted {
                     "Corrupted".into()
@@ -2124,8 +2122,9 @@ impl BridgeMedia {
                     duration_str,
                     format_str,
                     flags_str,
-                    is_corrupted: r.is_corrupted,
+                    is_corrupted: if is_pending { false } else { r.is_corrupted },
                     is_deleted: r.is_deleted,
+                    is_pending,
                     has_tags,
                 }
             })
@@ -2301,6 +2300,7 @@ impl BridgeMedia {
                 is_video: matches!(item.record.media_type, MediaType::Video),
                 is_corrupted: item.is_corrupted,
                 is_deleted: item.is_deleted,
+                is_pending: item.is_pending,
             });
         }
 
@@ -2387,7 +2387,7 @@ impl BridgeMedia {
                 let all_targets: Vec<PreparedTarget> = st_read
                     .all_folder_media
                     .iter()
-                    .filter(|item| !item.is_deleted)
+                    .filter(|item| !item.is_deleted && !item.is_pending)
                     .map(|item| PreparedTarget {
                         pipeline_id: 0,
                         folder_id: item.record.folder_id,

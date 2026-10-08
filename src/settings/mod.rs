@@ -10,10 +10,11 @@ pub use diff::SettingsDiff;
 pub use obscurer::LogObscurer;
 pub use registry::{SettingsChangeHook, SettingsManager};
 pub use schema::{
-    default_worker_threads, AppSettings, AppearanceSettings, DebugSettings, DeletionMode,
-    FolderSettings, FormatsSettings, FullscreenSettings, GeneralSettings, GridAspectRatio,
-    PerformanceSettings, TagSettings, ViewSettings, ViewerImageSettings, ViewerSettings,
-    ViewerTabSettings, ViewerVideoSettings, WindowState, DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA,
+    default_worker_threads, ApiSettings, AppSettings, AppearanceSettings, DebugSettings,
+    DeletionMode, FolderSettings, FormatsSettings, FullscreenSettings, GeneralSettings,
+    GridAspectRatio, PerformanceSettings, TagSettings, ViewSettings, ViewerImageSettings,
+    ViewerSettings, ViewerTabSettings, ViewerVideoSettings, WindowState,
+    DEFAULT_AUTO_COMPLETE_EXTERNAL_STUBS, DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA,
     DEFAULT_AUTO_REVEAL_REMEMBERED_FOLDER, DEFAULT_BATCH_COMMIT_SIZE, DEFAULT_COL_AR_WIDTH,
     DEFAULT_COL_CREATED_DATE_WIDTH, DEFAULT_COL_DURATION_WIDTH, DEFAULT_COL_FILENAME_WIDTH,
     DEFAULT_COL_FLAGS_WIDTH, DEFAULT_COL_FORMAT_WIDTH, DEFAULT_COL_HEIGHT_WIDTH,

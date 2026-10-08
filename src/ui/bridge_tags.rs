@@ -6,13 +6,16 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::{MainWindow, TagColumnView, TagNodeView};
 use crate::ctx_menu::CtxMenuActionId;
 use crate::library::models::{MediaId, MediaSearchParams, TagId, TagRecord};
 use crate::library::Library;
+use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
+use crate::media::MediaType;
 use crate::query::{MatchMode, ScopeMode};
 use crate::settings::{LogObscurer, SettingsManager};
-use crate::thumbnails::ThumbnailManager;
+use crate::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use regex::{Regex, RegexBuilder};
@@ -859,7 +862,7 @@ impl TagActionHandler {
         let result_count = search_results.len();
 
         let t_preindex = Instant::now();
-        let indexed_results = BridgeMedia::preindex_records(ctx.library, search_results);
+        let indexed_results = BridgeMedia::preindex_records(ctx.library, search_results.clone());
         let preindex_us = t_preindex.elapsed().as_micros();
 
         let valid_ids: HashSet<MediaId> = indexed_results.iter().map(|m| m.record.id).collect();
@@ -917,8 +920,129 @@ impl TagActionHandler {
             preindex_us = preindex_us,
             view_reload_us = reload_us,
             total_flow_us = total_flow_us,
-            "[Benchmark: QueryFlow] Complete query evaluation pipeline finished"
+            "[Benchmark: QueryFlow] Query evaluation completed and rendered"
         );
+
+        // Automatic External Stubs completion during Query execution
+        if ctx.settings.get().api.auto_complete_external_stubs {
+            let (ready_stubs, still_pending, sources) = ctx
+                .library
+                .external_media_completer()
+                .find_pending_stubs_in_records(&search_results);
+
+            if !ready_stubs.is_empty() {
+                let stubs_count = ready_stubs.len();
+                tracing::info!(
+                    stubs_count,
+                    sources = ?sources,
+                    still_pending,
+                    "[QueryFlow: StubsDetected] Auto-completing external stubs matching active query in background..."
+                );
+
+                {
+                    let mut st = ctx.state.write();
+                    st.is_refreshing_media = true;
+                }
+                ctx.window.set_is_system_busy(true);
+
+                // Activate ONLY ThumbnailPipelineProgress (prevent dual progress bar anomaly)
+                ctx.thumbnails.tracker().set_generate_total(stubs_count);
+                StatusBarBridge::info(
+                    ctx.window,
+                    format!("Auto-completing {} external file(s)...", stubs_count),
+                );
+
+                let w_weak = ctx.window.as_weak();
+                let lib_arc = ctx.library.clone();
+                let thumb_arc = ctx.thumbnails.clone();
+                let st_arc = ctx.state.clone();
+                let set_arc = ctx.settings.clone();
+                let config = ThumbnailConfig::from_performance_settings(&ctx.settings.get().performance);
+
+                std::thread::Builder::new()
+                    .name("query-stubs-completer".into())
+                    .spawn(move || {
+                        let w_weak_progress = w_weak.clone();
+                        let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
+                        let tracker_ref = thumb_arc.tracker();
+
+                        let progress_cb = Arc::new(move |cur: usize, tot: usize| {
+                            tracker_ref.increment_generate_done();
+                            let snap = tracker_ref.snapshot();
+                            let mut last = last_progress_report.lock();
+                            if last.elapsed().as_millis() >= 35 || cur == tot {
+                                *last = Instant::now();
+                                let _ = w_weak_progress.upgrade_in_event_loop(move |w| {
+                                    StatusBarBridge::update_thumbnail_progress(&w, &snap);
+                                });
+                            }
+                        });
+
+                        let store = thumb_arc.store();
+                        let (report, completed_items) = lib_arc
+                            .external_media_completer()
+                            .complete_candidates(
+                                ready_stubs,
+                                &config,
+                                store,
+                                Some(move |cur, tot| progress_cb(cur, tot)),
+                            );
+
+                        let _ = w_weak.upgrade_in_event_loop(move |w| {
+                            {
+                                let mut st = st_arc.write();
+                                st.is_refreshing_media = false;
+
+                                for item in &completed_items {
+                                    if item.primary_width > 0 && item.primary_height > 0 && !item.primary_pixels.is_empty() {
+                                        let shared_buf = rgb8_to_shared_buffer(
+                                            &item.primary_pixels,
+                                            item.primary_width,
+                                            item.primary_height,
+                                        );
+                                        st.folder_thumbnails.insert(item.media_id, shared_buf);
+                                        let _ = thumb_arc.cache().insert(
+                                            item.media_id,
+                                            item.primary_width,
+                                            item.primary_height,
+                                            &item.primary_pixels,
+                                        );
+                                    }
+
+                                    if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.record.id == item.media_id) {
+                                        target_indexed.record = item.updated_record.clone();
+                                        target_indexed.width_str = if item.updated_record.width > 0 { item.updated_record.width.to_string().into() } else { "-".into() };
+                                        target_indexed.height_str = if item.updated_record.height > 0 { item.updated_record.height.to_string().into() } else { "-".into() };
+                                        target_indexed.ar_str = approximate_aspect_ratio(item.updated_record.width, item.updated_record.height).into();
+                                        target_indexed.ar_value = if item.updated_record.height > 0 { item.updated_record.width as f32 / item.updated_record.height as f32 } else { 0.0 };
+                                        let is_video = matches!(item.updated_record.media_type, MediaType::Video);
+                                        target_indexed.duration_str = format_duration_hms_ms(item.updated_record.duration_ms, is_video).into();
+                                        target_indexed.filesize_mb_str = format_filesize_mb(item.updated_record.file_size).into();
+                                        target_indexed.modified_date_str = format_timestamp(item.updated_record.modification_time).into();
+                                        target_indexed.created_date_str = format_timestamp(item.updated_record.creation_time).into();
+                                        target_indexed.format_str = item.updated_record.format.default_extension().to_ascii_lowercase().into();
+                                        target_indexed.is_corrupted = item.updated_record.is_corrupted;
+                                        target_indexed.is_deleted = item.updated_record.is_deleted;
+                                        target_indexed.is_pending = false;
+                                        target_indexed.flags_str = if item.updated_record.is_deleted { "Deleted".into() } else if item.updated_record.is_corrupted { "Corrupted".into() } else { "OK".into() };
+                                    }
+                                }
+                            }
+
+                            thumb_arc.tracker().reset();
+
+                            BridgeMedia::reload(&w, &lib_arc, &thumb_arc, &set_arc, &st_arc, false, false);
+                            BridgeInspector::update(&w, &st_arc);
+                            BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
+                            let busy = BridgeMedia::is_system_busy(&w, &thumb_arc, &st_arc);
+                            w.set_is_system_busy(busy);
+                            StatusBarBridge::update_metrics(&w, &st_arc);
+                            StatusBarBridge::success(&w, format!("Auto-completed {} external media item(s).", report.completed_count));
+                        });
+                    })
+                    .ok();
+            }
+        }
     }
 }
 
@@ -940,7 +1064,6 @@ impl BridgeTags {
         let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
-        // Rating applied from RatingBar does NOT dismiss Quick-Fullscreen
         window.on_rating_applied(move |rating| {
             Self::apply_rating(
                 if rating < 0 { None } else { Some(rating as u8) },
@@ -961,7 +1084,6 @@ impl BridgeTags {
         let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
-        // Tag toggle from TagTree does NOT dismiss Quick-Fullscreen
         window.on_tag_toggled(move |tag_id| {
             Self::toggle_tag(
                 tag_id as u32,

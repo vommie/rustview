@@ -56,11 +56,11 @@ export component MainWindow inherits Window {
     // Sidebar Panel Tabs Properties (Left Sidebar dock panels: Folders & Favorites)
     in property <[SidebarPanelTabModel]> sidebar-panel-tabs: [];
     in-out property <string> active-sidebar-panel-tab: "folders";
-    in-out property <bool> is-dragging-sidebar-panel-tab: false;
-    in-out property <length> sidebar-panel-tab-drag-ghost-x: 0px;
-    in-out property <length> sidebar-panel-tab-drag-ghost-width: 100px;
-    in-out property <string> sidebar-panel-tab-drag-ghost-title: "";
-    in-out property <string> sidebar-panel-tab-drag-ghost-icon: "";
+    in-out property <bool> is-dragging-panel-tab: false;
+    in-out property <length> panel-tab-drag-ghost-x: 0px;
+    in-out property <length> panel-tab-drag-ghost-width: 100px;
+    in-out property <string> panel-tab-drag-ghost-title: "";
+    in-out property <string> panel-tab-drag-ghost-icon: "";
 
     callback sidebar-panel-tab-selected(string /* tab_id */);
     callback sidebar-panel-tab-drag-started(string /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
@@ -492,7 +492,7 @@ export component MainWindow inherits Window {
                 return reject;
             }
 
-            if root.is-dragging-media || root.is-dragging-tab || root.is-dragging-sidebar-panel-tab || root.rubberband-active {
+            if root.is-dragging-media || root.is-dragging-tab || root.is-dragging-panel-tab || root.rubberband-active {
                 return reject;
             }
 
@@ -627,11 +627,11 @@ export component MainWindow inherits Window {
                 visible: root.active-view-mode == 0;
                 panel-tabs: root.sidebar-panel-tabs;
                 active-panel-tab: root.active-sidebar-panel-tab;
-                is-dragging-panel-tab: root.is-dragging-sidebar-panel-tab;
-                panel-tab-drag-ghost-x: root.sidebar-panel-tab-drag-ghost-x;
-                panel-tab-drag-ghost-width: root.sidebar-panel-tab-drag-ghost-width;
-                panel-tab-drag-ghost-title: root.sidebar-panel-tab-drag-ghost-title;
-                panel-tab-drag-ghost-icon: root.sidebar-panel-tab-drag-ghost-icon;
+                is-dragging-panel-tab: root.is-dragging-panel-tab;
+                panel-tab-drag-ghost-x: root.panel-tab-drag-ghost-x;
+                panel-tab-drag-ghost-width: root.panel-tab-drag-ghost-width;
+                panel-tab-drag-ghost-title: root.panel-tab-drag-ghost-title;
+                panel-tab-drag-ghost-icon: root.panel-tab-drag-ghost-icon;
                 panel-tab-selected(id) => { root.sidebar-panel-tab-selected(id); }
                 panel-tab-drag-started(id, idx, mx, tw) => { root.sidebar-panel-tab-drag-started(id, idx, mx, tw); }
                 panel-tab-drag-moved(mx, vw) => { root.sidebar-panel-tab-drag-moved(mx, vw); }

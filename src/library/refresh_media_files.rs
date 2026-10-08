@@ -27,7 +27,7 @@ impl<'a> MediaItemRefresher<'a> {
     }
 
     /// Re-reads the media file from disk, recalculates its MD5 checksum and container metadata,
-    /// and updates the database record while strictly preserving ratings and tag associations.
+    /// and updates the database record while strictly preserving ratings, source, and tag associations.
     pub fn refresh_media(&self, media_id: MediaId) -> Result<MediaRecord, LibraryError> {
         let mut wtxn = self.db.env.write_txn()?;
 
@@ -46,6 +46,7 @@ impl<'a> MediaItemRefresher<'a> {
             height = updated_record.height,
             duration_ms = updated_record.duration_ms,
             rating = updated_record.rating,
+            source = ?updated_record.source,
             is_corrupted = updated_record.is_corrupted,
             "Committed media metadata refresh to LMDB storage successfully"
         );

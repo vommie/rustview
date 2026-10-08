@@ -40,6 +40,9 @@ pub struct SettingsDiff {
     pub tags_settings_changed: bool,
     pub tag_expansion_changed: bool,
 
+    // API Subsystem
+    pub api_settings_changed: bool,
+
     // Debug & Logging Subsystem
     pub debug_settings_changed: bool,
 
@@ -109,6 +112,7 @@ impl SettingsDiff {
         let tags_settings_changed = old.tags.default_match_mode != new.tags.default_match_mode
             || old.tags.default_scope_mode != new.tags.default_scope_mode;
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
+        let api_settings_changed = old.api != new.api;
         let debug_settings_changed = old.debug != new.debug;
         let window_geometry_changed = old.window != new.window;
 
@@ -128,6 +132,7 @@ impl SettingsDiff {
             || fullscreen_settings_changed
             || tags_settings_changed
             || tag_expansion_changed
+            || api_settings_changed
             || debug_settings_changed
             || window_geometry_changed;
 
@@ -149,6 +154,7 @@ impl SettingsDiff {
             fullscreen_settings_changed,
             tags_settings_changed,
             tag_expansion_changed,
+            api_settings_changed,
             debug_settings_changed,
             window_geometry_changed,
         }
@@ -491,6 +497,13 @@ impl SettingsDiff {
                 new.fullscreen.specific_monitor,
                 new.fullscreen.enable_fallback_rule,
                 new.fullscreen.fallback_target
+            ));
+        }
+
+        if old.api.auto_complete_external_stubs != new.api.auto_complete_external_stubs {
+            changes.push(format!(
+                "API: auto_complete_external_stubs ({} -> {})",
+                old.api.auto_complete_external_stubs, new.api.auto_complete_external_stubs
             ));
         }
 

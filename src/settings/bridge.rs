@@ -228,6 +228,9 @@ impl SettingsDialogController {
         };
         window.set_fullscreen_fallback_target_idx(fallback_idx);
 
+        // API settings
+        window.set_auto_complete_external_stubs(settings.api.auto_complete_external_stubs);
+
         // Debug properties
         window.set_obfuscate_logs(settings.debug.obfuscate_logs);
     }
@@ -408,6 +411,9 @@ impl SettingsDialogController {
                 } else {
                     "same".to_string()
                 };
+
+                // Save API Parameters
+                current.api.auto_complete_external_stubs = w.get_auto_complete_external_stubs();
 
                 // Save Debug Parameters
                 current.debug.obfuscate_logs = w.get_obfuscate_logs();

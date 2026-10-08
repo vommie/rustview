@@ -832,6 +832,7 @@ impl<'a> FileOperations<'a> {
             last_seen: 1,
             is_deleted: false,
             is_corrupted: source_record.is_corrupted,
+            source: source_record.source.clone(),
         };
 
         self.db.media.put(&mut wtxn, &new_media_id, &new_record)?;

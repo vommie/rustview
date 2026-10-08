@@ -187,6 +187,7 @@ pub struct IndexedMediaRecord {
     pub flags_str: SharedString,
     pub is_corrupted: bool,
     pub is_deleted: bool,
+    pub is_pending: bool,
     pub has_tags: bool,
 }
 

@@ -157,6 +157,10 @@ impl ThumbnailScheduler {
         &self.tracker
     }
 
+    pub fn tracker_arc(&self) -> Arc<ThumbnailProgressTracker> {
+        self.tracker.clone()
+    }
+
     pub fn storage_stats(&self) -> ThumbnailStorageStats {
         self.store.storage_stats(&self.library)
     }

@@ -69,6 +69,7 @@ enum ProcessedResult {
         raw_meta: RawMetadata,
         filename: String,
         preserved_rating: u8,
+        preserved_source: Option<String>,
         is_corrupted: bool,
         was_deleted: bool,
     },
@@ -356,6 +357,7 @@ impl<'a> FolderRefresher<'a> {
                                 raw_meta,
                                 filename: scanned.filename,
                                 preserved_rating: existing_record.rating,
+                                preserved_source: existing_record.source.clone(),
                                 is_corrupted,
                                 was_deleted,
                             }
@@ -501,6 +503,7 @@ impl<'a> FolderRefresher<'a> {
                     raw_meta,
                     filename,
                     preserved_rating,
+                    preserved_source,
                     is_corrupted,
                     was_deleted,
                 } => {
@@ -523,6 +526,7 @@ impl<'a> FolderRefresher<'a> {
                         last_seen: current_generation,
                         is_deleted: false,
                         is_corrupted,
+                        source: preserved_source,
                     };
 
                     self.db.media.put(&mut wtxn, &existing_id, &updated_record)?;
@@ -563,6 +567,7 @@ impl<'a> FolderRefresher<'a> {
                         last_seen: current_generation,
                         is_deleted: false,
                         is_corrupted,
+                        source: None,
                     };
 
                     self.db.media.put(&mut wtxn, &new_media_id, &new_record)?;
@@ -578,11 +583,30 @@ impl<'a> FolderRefresher<'a> {
             }
         }
 
-        // 5. Zero-Data-Loss Soft Deletion with absolute deduplication
+        // 5. Zero-Data-Loss Soft Deletion with absolute deduplication & External Pending Stub Preservation
         let mut all_folder_media_ids = active_media_ids.clone();
 
         for (deleted_id, mut deleted_record) in existing_map.into_values() {
-            if !deleted_record.is_deleted {
+            // Check whether this record is an external pending stub (e.g. from PyCutRv) that has not finished rendering yet
+            let is_external_stub = deleted_record.source.is_some()
+                && (deleted_record.file_size == 0
+                    || deleted_record.width == 0
+                    || deleted_record.height == 0
+                    || self.db.thumbnails.get(&wtxn, &deleted_id)?.is_none());
+
+            if is_external_stub {
+                // DO NOT mark pending external stubs as deleted! Preserve them as active pending stubs.
+                deleted_record.is_deleted = false;
+                deleted_record.last_seen = current_generation;
+                self.db.media.put(&mut wtxn, &deleted_id, &deleted_record)?;
+                active_media_ids.push(deleted_id);
+                tracing::debug!(
+                    media_id = deleted_id,
+                    filename = %LogObscurer::filename(&deleted_record.filename),
+                    source = ?deleted_record.source,
+                    "[FolderRefresh: PreserveStub] Preserved pending external stub during folder scan"
+                );
+            } else if !deleted_record.is_deleted {
                 deleted_record.is_deleted = true;
                 self.db.media.put(&mut wtxn, &deleted_id, &deleted_record)?;
                 report.deleted_media += 1;

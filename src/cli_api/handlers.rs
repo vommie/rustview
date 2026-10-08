@@ -99,6 +99,7 @@ impl ApiHandler {
                         format: format!("{:?}", rec.format),
                         is_deleted: rec.is_deleted,
                         is_corrupted: rec.is_corrupted,
+                        source: rec.source.clone(),
                     })
                 } else {
                     None
@@ -133,6 +134,9 @@ impl ApiHandler {
             println!("  • Hash (MD5): {}", m.file_hash);
             println!("  • Dimensions: {}x{}", m.width, m.height);
             println!("  • Size      : {} bytes", m.file_size);
+            if let Some(ref src) = m.source {
+                println!("  • Source    : {}", src);
+            }
             println!("  • Corrupted : {}", m.is_corrupted);
             println!("  • Deleted   : {}", m.is_deleted);
         } else {
@@ -145,13 +149,16 @@ impl ApiHandler {
         Ok(if found { 0 } else { 2 })
     }
 
-    /// Atomically sets/upserts media record, updates rating, tags, and ensures folder registration.
+    /// Atomically sets/upserts media record, updates rating, tags, source application, and ensures folder registration.
+    /// If the file does not yet exist on disk (render queued/in-progress), it initializes mtime to the current timestamp
+    /// so that it appears at the top when sorting by newest, and sets is_corrupted = false so it displays as a valid pending stub.
     pub fn set_media(
         lib: &Library,
         path: &Path,
         rating_opt: Option<u8>,
         tags_opt: Option<Vec<u32>>,
         hash_opt: Option<String>,
+        source_opt: Option<String>,
         json: bool,
     ) -> Result<i32, ApiError> {
         let (folder_path, filename) = split_folder_and_filename(path)?;
@@ -184,6 +191,11 @@ impl ApiHandler {
         let mut wtxn = lib.raw_db().env.write_txn()?;
         let current_gen = lib.raw_db().next_generation(&mut wtxn)?;
 
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
         let (action, final_record, target_media_id) = match existing_record {
             Some(mut rec) => {
                 let mid = rec.id;
@@ -191,6 +203,10 @@ impl ApiHandler {
 
                 if let Some(r) = rating_opt {
                     rec.rating = r.min(5);
+                }
+
+                if let Some(ref s) = source_opt {
+                    rec.source = Some(s.clone());
                 }
 
                 if let Some(ref h_str) = hash_opt
@@ -206,7 +222,7 @@ impl ApiHandler {
                     rec.file_hash = new_hash;
                 }
 
-                let mut is_corrupted = false;
+                let is_corrupted = false;
 
                 if path.exists() {
                     if let Ok(meta) = std::fs::metadata(path) {
@@ -224,21 +240,17 @@ impl ApiHandler {
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(rec.modification_time);
-
-                        if rec.file_size == 0 {
-                            is_corrupted = true;
-                        }
                     }
-                    if let Ok(raw_meta) = MetadataExtractor::extract(path) {
+                    if rec.file_size > 0
+                        && let Ok(raw_meta) = MetadataExtractor::extract(path)
+                    {
                         rec.width = raw_meta.width;
                         rec.height = raw_meta.height;
                         rec.duration_ms = raw_meta.duration_ms;
-                        if raw_meta.width == 0 && raw_meta.height == 0 {
-                            is_corrupted = true;
-                        }
-                    } else {
-                        is_corrupted = true;
                     }
+                } else if rec.modification_time == 0 {
+                    rec.modification_time = now_secs;
+                    rec.creation_time = now_secs;
                 }
 
                 rec.last_seen = current_gen;
@@ -257,12 +269,12 @@ impl ApiHandler {
                     .unwrap_or(crate::media::MediaType::Image);
 
                 let mut file_size = 0u64;
-                let mut mtime = 0i64;
-                let mut ctime = 0i64;
+                let mut mtime = now_secs; // Default to current time so newest sort places it at top
+                let mut ctime = now_secs;
                 let mut width = 0u32;
                 let mut height = 0u32;
                 let mut duration_ms = 0u64;
-                let mut is_corrupted = false;
+                let is_corrupted = false; // Fresh stub is pending, not corrupted
 
                 if path.exists() {
                     if let Ok(meta) = std::fs::metadata(path) {
@@ -272,27 +284,20 @@ impl ApiHandler {
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                             .map(|d| d.as_secs() as i64)
-                            .unwrap_or(0);
+                            .unwrap_or(now_secs);
                         ctime = meta
                             .created()
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(mtime);
-
-                        if file_size == 0 {
-                            is_corrupted = true;
-                        }
                     }
-                    if let Ok(raw_meta) = MetadataExtractor::extract(path) {
+                    if file_size > 0
+                        && let Ok(raw_meta) = MetadataExtractor::extract(path)
+                    {
                         width = raw_meta.width;
                         height = raw_meta.height;
                         duration_ms = raw_meta.duration_ms;
-                        if raw_meta.width == 0 && raw_meta.height == 0 {
-                            is_corrupted = true;
-                        }
-                    } else {
-                        is_corrupted = true;
                     }
                 }
 
@@ -300,13 +305,15 @@ impl ApiHandler {
                     && let Ok(parsed) = MediaHasher::from_hex(h_str)
                 {
                     parsed
-                } else if path.exists() {
+                } else if path.exists() && file_size > 0 {
                     MediaHasher::hash_file(path).unwrap_or_else(|_| {
                         MediaHasher::hash_bytes(path.to_string_lossy().as_bytes())
                     })
                 } else {
                     MediaHasher::hash_bytes(format!("{}/{}", folder.id, filename).as_bytes())
                 };
+
+                let assigned_source = source_opt.or_else(|| Some("CLI-API".to_string()));
 
                 let new_rec = MediaRecord {
                     id: new_id,
@@ -325,6 +332,7 @@ impl ApiHandler {
                     last_seen: current_gen,
                     is_deleted: false,
                     is_corrupted,
+                    source: assigned_source,
                 };
 
                 lib.raw_db().media.put(&mut wtxn, &new_id, &new_rec)?;
@@ -419,6 +427,7 @@ impl ApiHandler {
             rating: final_record.rating,
             tags: final_tags,
             file_hash: hash_hex,
+            source: final_record.source.clone(),
             message: format!("Media record successfully {} in LMDB.", action),
         };
 
@@ -433,6 +442,9 @@ impl ApiHandler {
             println!("  • Rating    : {} ★", response.rating);
             println!("  • Tags      : {:?}", response.tags);
             println!("  • Hash (MD5): {}", response.file_hash);
+            if let Some(ref src) = response.source {
+                println!("  • Source    : {}", src);
+            }
             println!("  • Corrupted : {}", final_record.is_corrupted);
         }
 

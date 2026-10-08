@@ -147,8 +147,12 @@ impl ThumbnailManager {
         self.scheduler.snapshot_progress()
     }
 
+    pub fn tracker(&self) -> Arc<ThumbnailProgressTracker> {
+        self.scheduler.tracker_arc()
+    }
+
     pub fn storage_stats(&self) -> ThumbnailStorageStats {
-        self.scheduler.storage_stats()
+        self.store.storage_stats(&self.scheduler.library)
     }
 
     pub fn get_or_load_sync(

@@ -24,22 +24,26 @@ export component MediaTile inherits Rectangle {
     width: root.tile-width;
     height: root.tile-height;
 
-    // Strict State Priority: Selected > Deleted > Corrupted > Normal
+    // Strict State Priority: Selected > Pending External Stub > Deleted > Corrupted > Normal
     background: item.is-selected ? Theme.surface-selected : (
         tile-touch.has-hover ? Theme.surface-hover : (
-            item.is-deleted ? #31324440 : (
-                item.is-corrupted ? #f38ba812 : Theme.surface
+            item.is-pending ? #89dceb15 : (
+                item.is-deleted ? #31324440 : (
+                    item.is-corrupted ? #f38ba812 : Theme.surface
+                )
             )
         )
     );
 
     border-width: item.is-selected ? Math.max(2px, root.border-width-val + 1px) : (
-        (item.is-deleted || item.is-corrupted) ? Math.max(1.5px, root.border-width-val) : root.border-width-val
+        (item.is-pending || item.is-deleted || item.is-corrupted) ? Math.max(1.5px, root.border-width-val) : root.border-width-val
     );
 
     border-color: item.is-selected ? Theme.primary : (
-        item.is-deleted ? #6c7086 : (
-            item.is-corrupted ? #f38ba8 : (root.border-width-val > 0px ? Theme.border : transparent)
+        item.is-pending ? #89dceb : (
+            item.is-deleted ? #6c7086 : (
+                item.is-corrupted ? #f38ba8 : (root.border-width-val > 0px ? Theme.border : transparent)
+            )
         )
     );
 
@@ -125,7 +129,7 @@ export component MediaTile inherits Rectangle {
         Rectangle {
             width: root.item-thumb-w;
             height: root.item-thumb-h;
-            background: item.is-deleted ? #1e1e2e : (item.is-corrupted ? #2d161d : #000000);
+            background: item.is-pending ? #182232 : (item.is-deleted ? #1e1e2e : (item.is-corrupted ? #2d161d : #000000));
             border-radius: Math.max(0px, root.corner-radius-val - 2px);
             clip: true;
 
@@ -134,16 +138,24 @@ export component MediaTile inherits Rectangle {
                 width: 100%;
                 height: 100%;
                 image-fit: contain;
-                opacity: item.is-deleted ? 0.45 : (item.is-corrupted ? 0.70 : 1.0);
+                opacity: item.is-deleted ? 0.45 : (item.is-corrupted ? 0.70 : (item.is-pending ? 0.85 : 1.0));
             }
 
-            // Fallback Vector SVG icon when no thumbnail image exists (Priority: Deleted > Corrupted > Default)
+            // Fallback Vector SVG icon when no thumbnail image exists (Priority: Pending Stub > Deleted > Corrupted > Default)
             if item.thumbnail.width == 0 : Rectangle {
                 width: 100%;
                 height: 100%;
                 background: transparent;
 
-                if item.is-deleted : AppIcon {
+                if item.is-pending : Text {
+                    text: "⏳";
+                    font-size: 28px;
+                    color: #89dceb;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                if !item.is-pending && item.is-deleted : AppIcon {
                     icon: Icons.media-file-missing;
                     allow-tint: true;
                     color: #6c7086;
@@ -152,7 +164,7 @@ export component MediaTile inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                 }
 
-                if !item.is-deleted && item.is-corrupted : AppIcon {
+                if !item.is-pending && !item.is-deleted && item.is-corrupted : AppIcon {
                     icon: Icons.media-file-corrupted;
                     allow-tint: true;
                     color: #f38ba8;
@@ -161,7 +173,7 @@ export component MediaTile inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                 }
 
-                if !item.is-deleted && !item.is-corrupted : Text {
+                if !item.is-pending && !item.is-deleted && !item.is-corrupted : Text {
                     text: "📄";
                     font-size: 32px;
                     color: Theme.text-muted;
@@ -203,26 +215,28 @@ export component MediaTile inherits Rectangle {
                 }
             }
 
-            // Bottom Media Type / Status Badges (Strictly guarded by show_media_type_badges, Priority: Deleted > Corrupted > Type)
+            // Bottom Media Type / Status Badges (Priority: Pending Stub > Deleted > Corrupted > Type)
             if root.show-media-type-badges : Rectangle {
                 x: 4px;
                 y: parent.height - 18px;
-                width: (item.is-deleted || item.is-corrupted) ? 48px : ((item.format-str == "gif") ? 28px : 32px);
+                width: item.is-pending ? 48px : ((item.is-deleted || item.is-corrupted) ? 48px : ((item.format-str == "gif") ? 28px : 32px));
                 height: 14px;
-                background: item.is-deleted ? #6c7086cc : (item.is-corrupted ? #f38ba8cc : #000000aa);
+                background: item.is-pending ? #89dcebcc : (item.is-deleted ? #6c7086cc : (item.is-corrupted ? #f38ba8cc : #000000aa));
                 border-radius: 2px;
 
                 Text {
-                    text: item.is-deleted ? "DELETED" : (
-                        item.is-corrupted ? "CORRUPT" : (
-                            item.is-video ? "VIDEO" : (
-                                item.format-str == "gif" ? "GIF" : "IMAGE"
+                    text: item.is-pending ? "PENDING" : (
+                        item.is-deleted ? "DELETED" : (
+                            item.is-corrupted ? "CORRUPT" : (
+                                item.is-video ? "VIDEO" : (
+                                    item.format-str == "gif" ? "GIF" : "IMAGE"
+                                )
                             )
                         )
                     );
                     font-size: 8px;
                     font-weight: 700;
-                    color: (item.is-deleted || !item.is-corrupted) ? #ffffff : #11111b;
+                    color: (item.is-pending || item.is-corrupted) ? #11111b : #ffffff;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
@@ -232,13 +246,15 @@ export component MediaTile inherits Rectangle {
         Text {
             text: item.filename;
             color: item.is-selected ? Theme.primary : (
-                item.is-deleted ? #6c7086 : (
-                    item.is-corrupted ? #f38ba8 : Theme.text
+                item.is-pending ? #89dceb : (
+                    item.is-deleted ? #6c7086 : (
+                        item.is-corrupted ? #f38ba8 : Theme.text
+                    )
                 )
             );
             font-size: 11px;
             font-weight: item.is-selected ? 700 : 400;
-            font-italic: item.is-deleted;
+            font-italic: item.is-pending || item.is-deleted;
             horizontal-alignment: center;
             overflow: elide;
             height: 18px;

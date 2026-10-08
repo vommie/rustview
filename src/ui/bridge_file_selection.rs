@@ -459,22 +459,48 @@ impl BridgeFileSelection {
         tab_manager: &Arc<ViewerTabManager>,
         window: &MainWindow,
     ) {
-        let (is_image, is_video) = {
+        let (is_image, is_video, is_pending, filename) = {
             let st = state.read();
             if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
                 (
                     matches!(item.record.media_type, MediaType::Image),
                     matches!(item.record.media_type, MediaType::Video),
+                    item.is_pending,
+                    item.record.filename.clone(),
                 )
             } else if let Ok(Some(record)) = library.media().get(media_id) {
                 (
                     matches!(record.media_type, MediaType::Image),
                     matches!(record.media_type, MediaType::Video),
+                    record.source.is_some() && (record.file_size == 0 || record.width == 0),
+                    record.filename,
                 )
             } else {
-                (false, false)
+                (false, false, false, String::new())
             }
         };
+
+        if is_pending {
+            let file_exists_and_ready = library
+                .resolve_media_path(media_id)
+                .ok()
+                .and_then(|p| std::fs::metadata(&p).ok())
+                .map(|m| m.is_file() && m.len() > 0)
+                .unwrap_or(false);
+
+            if !file_exists_and_ready {
+                tracing::info!(
+                    media_id,
+                    filename = %LogObscurer::filename(&filename),
+                    "[FileSelection: DoubleClickPending] Double-click on pending media stub; file not yet ready on disk"
+                );
+                StatusBarBridge::info(
+                    window,
+                    format!("'{}' is currently in the external render queue and not yet ready on disk.", filename),
+                );
+                return;
+            }
+        }
 
         let open_images_in_tab = settings.get().viewer.images.open_in_tab;
         let open_videos_in_tab = settings.get().viewer.videos.open_in_tab;
@@ -519,22 +545,48 @@ impl BridgeFileSelection {
         tab_manager: &Arc<ViewerTabManager>,
         window: &MainWindow,
     ) {
-        let (is_image, is_video) = {
+        let (is_image, is_video, is_pending, filename) = {
             let st = state.read();
             if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
                 (
                     matches!(item.record.media_type, MediaType::Image),
                     matches!(item.record.media_type, MediaType::Video),
+                    item.is_pending,
+                    item.record.filename.clone(),
                 )
             } else if let Ok(Some(record)) = library.media().get(media_id) {
                 (
                     matches!(record.media_type, MediaType::Image),
                     matches!(record.media_type, MediaType::Video),
+                    record.source.is_some() && (record.file_size == 0 || record.width == 0),
+                    record.filename,
                 )
             } else {
-                (false, false)
+                (false, false, false, String::new())
             }
         };
+
+        if is_pending {
+            let file_exists_and_ready = library
+                .resolve_media_path(media_id)
+                .ok()
+                .and_then(|p| std::fs::metadata(&p).ok())
+                .map(|m| m.is_file() && m.len() > 0)
+                .unwrap_or(false);
+
+            if !file_exists_and_ready {
+                tracing::info!(
+                    media_id,
+                    filename = %LogObscurer::filename(&filename),
+                    "[FileSelection: CtrlDoubleClickPending] Ctrl+Double-click on pending media stub; file not yet ready on disk"
+                );
+                StatusBarBridge::info(
+                    window,
+                    format!("'{}' is currently in the external render queue and not yet ready on disk.", filename),
+                );
+                return;
+            }
+        }
 
         {
             let mut st = state.write();

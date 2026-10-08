@@ -1,6 +1,7 @@
 pub mod db;
 pub mod dot_hidden;
 pub mod error;
+pub mod external_media_completer;
 pub mod file_operations;
 pub mod folder_operations;
 pub mod folders;
@@ -15,6 +16,9 @@ pub mod tags;
 pub use db::LibraryDatabase;
 pub use dot_hidden::DotHiddenCache;
 pub use error::LibraryError;
+pub use external_media_completer::{
+    ExternalMediaCompleter, ExternalMediaCompletionReport, ProcessedCompletionItem,
+};
 pub use file_operations::{is_same_file_path, robust_move_file, FileOperations, FilenameValidator};
 pub use folder_operations::{
     FolderDeleteReport, FolderMoveReport, FolderOperations, FolderSubtreeMetrics, FolderValidator,
@@ -63,6 +67,10 @@ impl Library {
 
     pub fn media_refresher(&self) -> MediaItemRefresher<'_> {
         MediaItemRefresher::new(&self.db)
+    }
+
+    pub fn external_media_completer(&self) -> ExternalMediaCompleter<'_> {
+        ExternalMediaCompleter::new(&self.db)
     }
 
     pub fn tags(&self) -> TagManager<'_> {

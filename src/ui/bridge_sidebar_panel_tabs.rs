@@ -146,11 +146,11 @@ impl BridgeSidebarPanelTabs {
                 other => (other.to_string(), "folder".to_string()),
             };
 
-            win_dstart.set_is_dragging_sidebar_panel_tab(true);
-            win_dstart.set_sidebar_panel_tab_drag_ghost_x(ghost_x);
-            win_dstart.set_sidebar_panel_tab_drag_ghost_width(ghost_w);
-            win_dstart.set_sidebar_panel_tab_drag_ghost_title(ghost_title.into());
-            win_dstart.set_sidebar_panel_tab_drag_ghost_icon(ghost_icon.into());
+            win_dstart.set_is_dragging_panel_tab(true);
+            win_dstart.set_panel_tab_drag_ghost_x(ghost_x);
+            win_dstart.set_panel_tab_drag_ghost_width(ghost_w);
+            win_dstart.set_panel_tab_drag_ghost_title(ghost_title.into());
+            win_dstart.set_panel_tab_drag_ghost_icon(ghost_icon.into());
 
             let tab_models = win_dstart.get_sidebar_panel_tabs();
             for i in 0..tab_models.row_count() {
@@ -209,7 +209,7 @@ impl BridgeSidebarPanelTabs {
                 )
             };
 
-            win_dmove.set_sidebar_panel_tab_drag_ghost_x(ghost_x);
+            win_dmove.set_panel_tab_drag_ghost_x(ghost_x);
 
             let tab_models = win_dmove.get_sidebar_panel_tabs();
             for i in 0..tab_models.row_count() {
@@ -240,7 +240,7 @@ impl BridgeSidebarPanelTabs {
         let st_dend = state.clone();
         window.on_sidebar_panel_tab_drag_ended(move |tab_id, _target_idx| {
             let session_opt = st_dend.write().active_sidebar_panel_tab_dnd_session.take();
-            win_dend.set_is_dragging_sidebar_panel_tab(false);
+            win_dend.set_is_dragging_panel_tab(false);
 
             if let Some(session) = session_opt {
                 let source_idx = session.source_index;
@@ -274,7 +274,7 @@ impl BridgeSidebarPanelTabs {
         let st_dcancel = state;
         window.on_sidebar_panel_tab_drag_cancelled(move |_tab_id| {
             st_dcancel.write().active_sidebar_panel_tab_dnd_session = None;
-            win_dcancel.set_is_dragging_sidebar_panel_tab(false);
+            win_dcancel.set_is_dragging_panel_tab(false);
             Self::sync_ui(&win_dcancel, &set_dcancel, &st_dcancel);
         });
     }

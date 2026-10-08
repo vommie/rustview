@@ -32,11 +32,13 @@ export component MediaTableRow inherits Rectangle {
     callback ensure-focus();
 
     height: root.row-height;
-    // Strict Priority: Selected > Deleted > Corrupted > Normal
+    // Strict Priority: Selected > Pending External Stub > Deleted > Corrupted > Normal
     background: item.is-selected ? Theme.surface-selected : (
         row-touch.has-hover ? Theme.surface-hover : (
-            item.is-deleted ? #31324450 : (
-                item.is-corrupted ? #f38ba818 : transparent
+            item.is-pending ? #89dceb15 : (
+                item.is-deleted ? #31324450 : (
+                    item.is-corrupted ? #f38ba818 : transparent
+                )
             )
         )
     );
@@ -121,12 +123,14 @@ export component MediaTableRow inherits Rectangle {
                 Text {
                     text: item.filename;
                     color: item.is-selected ? Theme.primary : (
-                        item.is-deleted ? #6c7086 : (
-                            item.is-corrupted ? #f38ba8 : Theme.text
+                        item.is-pending ? #89dceb : (
+                            item.is-deleted ? #6c7086 : (
+                                item.is-corrupted ? #f38ba8 : Theme.text
+                            )
                         )
                     );
                     font-size: 11px;
-                    font-italic: item.is-deleted;
+                    font-italic: item.is-pending || item.is-deleted;
                     vertical-alignment: center;
                     overflow: elide;
                 }
@@ -367,8 +371,12 @@ export component MediaTableRow inherits Rectangle {
 
                 Text {
                     text: item.flags_str;
-                    color: item.is-deleted ? #6c7086 : (item.is-corrupted ? #f38ba8 : #a6e3a1);
-                    font-weight: (item.is-deleted || item.is-corrupted) ? 700 : 400;
+                    color: item.is-pending ? #89dceb : (
+                        item.is-deleted ? #6c7086 : (
+                            item.is-corrupted ? #f38ba8 : #a6e3a1
+                        )
+                    );
+                    font-weight: (item.is-pending || item.is-deleted || item.is-corrupted) ? 700 : 400;
                     font-size: 11px;
                     vertical-alignment: center;
                     overflow: elide;

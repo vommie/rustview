@@ -382,6 +382,7 @@ impl XnViewMapper {
                 last_seen: 1,
                 is_deleted: false,
                 is_corrupted,
+                source: None,
             };
 
             media_by_folder
