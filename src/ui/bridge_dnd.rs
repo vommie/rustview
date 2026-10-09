@@ -280,49 +280,55 @@ impl BridgeDnd {
             return;
         }
 
-        if target_folder_id > 0 {
-            if let Ok(Some(target_folder_rec)) = library.folders().get_folder(target_folder_id as FolderId) {
-                let target_folder_path = PathBuf::from(&target_folder_rec.path);
-                let target_name = target_folder_path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| target_folder_rec.path.clone());
+        if target_folder_id > 0
+            && let Ok(Some(target_folder_rec)) = library.folders().get_folder(target_folder_id as FolderId)
+        {
+            let target_folder_path = PathBuf::from(&target_folder_rec.path);
+            let target_name = target_folder_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| target_folder_rec.path.clone());
 
-                let selected_count = state.read().file_selection.count();
-                let sidebar_w = window.get_sidebar_left_width();
+            let selected_count = state.read().file_selection.count();
+            let sidebar_w = window.get_sidebar_left_width();
 
-                let popup_x = (sidebar_w + 4.0).min(release_x.max(8.0));
-                let popup_y = release_y.max(48.0);
+            let popup_x = (sidebar_w + 4.0).min(release_x.max(8.0));
+            let popup_y = release_y.max(48.0);
 
-                tracing::info!(
-                    target_folder_id = target_folder_id,
-                    target_name = %target_name,
-                    items_count = selected_count,
-                    popup_x = popup_x,
-                    popup_y = popup_y,
-                    "[DndChoicePopup: Show] Presenting Floating Choice Popup at drop target folder"
-                );
+            tracing::info!(
+                target_folder_id = target_folder_id,
+                target_name = %target_name,
+                items_count = selected_count,
+                popup_x = popup_x,
+                popup_y = popup_y,
+                "[DndChoicePopup: Show] Presenting Floating Choice Popup at drop target folder"
+            );
 
-                window.set_choice_target_folder_id(target_folder_id);
-                window.set_choice_target_folder_name(target_name.into());
-                window.set_choice_item_count(selected_count as i32);
-                window.set_choice_popup_x(popup_x);
-                window.set_choice_popup_y(popup_y);
-                window.set_is_choice_popup_open(true);
-            }
+            window.set_choice_target_folder_id(target_folder_id);
+            window.set_choice_target_folder_name(target_name.into());
+            window.set_choice_item_count(selected_count as i32);
+            window.set_choice_popup_x(popup_x);
+            window.set_choice_popup_y(popup_y);
+            window.set_is_choice_popup_open(true);
         } else {
             let ordered_paths = state.read().get_selected_paths_ordered();
-            if !ordered_paths.is_empty() {
+            let existing_paths: Vec<PathBuf> = ordered_paths.into_iter().filter(|p| p.exists()).collect();
+
+            if !existing_paths.is_empty() {
                 tracing::info!(
-                    files_count = ordered_paths.len(),
+                    files_count = existing_paths.len(),
                     "[MediaDrag: ExternalDrop] Dropped outside RustView folder tree. Triggering external application XDND drop..."
                 );
-                SystemDndHandler::execute_external_drop_async(&ordered_paths);
+                SystemDndHandler::execute_external_drop_async(&existing_paths);
+            } else {
+                tracing::info!(
+                    "[MediaDrag: ExternalDrop] Dropped pending/non-existing file(s) outside. External drop skipped as files are not yet on disk."
+                );
             }
         }
     }
 
-    /// Orchestrates the batch transfer operation (Copy or Move).
+    /// Orchestrates the batch transfer operation (Copy or Move), seamlessly supporting pending stubs.
     pub fn start_batch_transfer(params: BatchTransferParams<'_>) {
         let t_start = Instant::now();
 

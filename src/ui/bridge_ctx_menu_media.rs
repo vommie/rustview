@@ -53,6 +53,9 @@ pub struct MediaSelectionMeta {
     pub selected_count: usize,
     pub is_single_image: bool,
     pub has_video: bool,
+    pub target_file_exists: bool,
+    pub is_single_pending: bool,
+    pub single_filename: String,
     pub associated_apps: Vec<DesktopApp>,
 }
 
@@ -93,7 +96,7 @@ impl MediaContextMenu {
             .copied()
             .unwrap_or(media_id);
 
-        let (has_video, is_single_image, all_selected_deleted, target_path_opt) = {
+        let (has_video, is_single_image, all_selected_deleted, target_path_opt, is_single_pending, single_filename) = {
             let st = state.read();
             let selected_ids = st.file_selection.selected_ids();
 
@@ -121,16 +124,21 @@ impl MediaContextMenu {
                 }
             }
 
-            let is_single_img = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
-                matches!(item.record.media_type, MediaType::Image)
+            let (is_single_img, is_pending, fname) = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
+                (
+                    matches!(item.record.media_type, MediaType::Image),
+                    item.is_pending,
+                    item.record.filename.clone(),
+                )
+            } else if let Ok(Some(m)) = library.media().get(single_id) {
+                let pending = m.source.is_some() && (m.file_size == 0 || m.width == 0);
+                (
+                    matches!(m.media_type, MediaType::Image),
+                    pending,
+                    m.filename.clone(),
+                )
             } else {
-                library
-                    .media()
-                    .get(single_id)
-                    .ok()
-                    .flatten()
-                    .map(|m| matches!(m.media_type, MediaType::Image))
-                    .unwrap_or(false)
+                (false, false, String::new())
             };
 
             let path = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
@@ -139,10 +147,21 @@ impl MediaContextMenu {
                 library.resolve_media_path(single_id).ok()
             };
 
-            (contains_video, is_single_img, all_deleted, path)
+            (contains_video, is_single_img, all_deleted, path, is_single && is_pending, fname)
         };
 
-        let associated_apps = if let Some(ref path) = target_path_opt {
+        // Instant filesystem readiness check: verify whether the target file actually exists on physical disk
+        let target_file_exists = if is_single {
+            target_path_opt
+                .as_ref()
+                .map(|p| p.is_file() && p.metadata().map(|m| m.len() > 0).unwrap_or(false))
+                .unwrap_or(false)
+        } else {
+            // For multiple files, enable open actions as long as not all of them are missing/deleted
+            !all_selected_deleted
+        };
+
+        let associated_apps = if target_file_exists && let Some(ref path) = target_path_opt {
             DesktopIntegration::get_associated_apps(path)
         } else {
             Vec::new()
@@ -155,6 +174,9 @@ impl MediaContextMenu {
             selected_count,
             is_single_image: is_single && is_single_image,
             has_video,
+            target_file_exists,
+            is_single_pending,
+            single_filename,
             associated_apps,
         }
     }
@@ -179,7 +201,7 @@ impl MediaContextMenu {
             can_open,
         );
 
-        if can_open {
+        if can_open && !associated_apps.is_empty() {
             let apps = associated_apps.to_vec();
             builder = builder.submenu("Open With...", None, true, move |mut sub| {
                 for (idx, app) in apps.iter().enumerate() {
@@ -205,6 +227,14 @@ impl MediaContextMenu {
                     true,
                 )
             });
+        } else {
+            builder = builder.action(
+                CTX_ACTION_OPEN_WITH_OTHER,
+                "Open With...",
+                None,
+                None,
+                can_open,
+            );
         }
 
         builder = builder.action(
@@ -230,6 +260,7 @@ impl MediaContextMenu {
         is_single: bool,
         is_single_image: bool,
         all_selected_deleted: bool,
+        target_file_exists: bool,
         is_busy: bool,
     ) -> CtxMenuBuilder {
         let can_rename = is_single && !is_busy;
@@ -287,7 +318,7 @@ impl MediaContextMenu {
                         "Image Content",
                         None,
                         None,
-                        true,
+                        target_file_exists,
                     );
                 }
                 sub_builder
@@ -303,28 +334,26 @@ impl MediaContextMenu {
         builder
     }
 
+    /// Builds the complete media context menu using the prepared selection metadata.
     pub fn build_menu(
-        selected_count: usize,
-        is_single_image: bool,
-        has_video: bool,
-        all_selected_deleted: bool,
+        meta: &MediaSelectionMeta,
         is_busy: bool,
-        associated_apps: &[DesktopApp],
     ) -> CtxMenu {
-        let is_single = selected_count == 1;
-        let can_open = selected_count > 0;
+        let is_single = meta.selected_count == 1;
+        // Strict guard: Opening actions are disabled if the file does not physically exist on disk
+        let can_open = meta.selected_count > 0 && meta.target_file_exists;
 
         let open_in_tab_text = if is_single {
             "Open in Tab".to_string()
         } else {
-            format!("Open in Tabs ({} Files)", selected_count)
+            format!("Open in Tabs ({} Files)", meta.selected_count)
         };
         let open_in_tab_shortcut = if is_single { Some("DoubleClick") } else { None };
 
         let open_in_bg_tab_text = if is_single {
             "Open in Background-Tab".to_string()
         } else {
-            format!("Open in Background-Tabs ({} Files)", selected_count)
+            format!("Open in Background-Tabs ({} Files)", meta.selected_count)
         };
         let open_in_bg_tab_shortcut = if is_single { Some("Ctrl+MiddleClick") } else { None };
 
@@ -335,41 +364,50 @@ impl MediaContextMenu {
         let refresh_full_text = if is_single {
             "File (Full)".to_string()
         } else {
-            format!("Files (Full) ({} Files)", selected_count)
+            format!("Files (Full) ({} Files)", meta.selected_count)
         };
 
         let refresh_meta_text = if is_single {
             "File (Metadata)".to_string()
         } else {
-            format!("Files (Metadata) ({} Files)", selected_count)
+            format!("Files (Metadata) ({} Files)", meta.selected_count)
         };
 
-        // Context-sensitive naming: videos specify Random Pos., pure image selections use Thumbnail
         let regen_thumb_text = if is_single {
-            if has_video {
+            if meta.has_video {
                 "Thumbnail (Random Pos.)".to_string()
             } else {
                 "Thumbnail".to_string()
             }
-        } else if has_video {
-            format!("Thumbnails (Random Pos.) ({} Files)", selected_count)
+        } else if meta.has_video {
+            format!("Thumbnails (Random Pos.) ({} Files)", meta.selected_count)
         } else {
-            format!("Thumbnails ({} Files)", selected_count)
+            format!("Thumbnails ({} Files)", meta.selected_count)
         };
 
-        let can_refresh = selected_count > 0 && !is_busy;
+        let can_refresh = meta.selected_count > 0 && !is_busy;
 
-        let mut builder = CtxMenuBuilder::new()
-            .header(if is_single {
-                "Selected File"
+        // Context-aware Header formatting
+        let mut builder = CtxMenuBuilder::new();
+        if is_single {
+            let prefix = if meta.is_single_pending {
+                "Pending File: "
+            } else if meta.all_selected_deleted {
+                "Missing File: "
             } else {
-                "Selected Files"
-            });
+                "File: "
+            };
+            let (header_title, header_tooltip) =
+                CtxMenuBuilder::format_header_title(prefix, &meta.single_filename, 24);
+            builder = builder.header_with_tooltip(header_title, header_tooltip);
+        } else {
+            builder = builder.header(format!("Selected Files ({})", meta.selected_count));
+        }
 
         // 1. Shared File Open Actions (Open, Open With..., Open in File Manager)
-        builder = Self::append_file_open_entries(builder, is_single, can_open, associated_apps);
+        builder = Self::append_file_open_entries(builder, is_single, can_open, &meta.associated_apps);
 
-        // 2. Tab Navigation Actions
+        // 2. Tab Navigation Actions (Disabled if physical file does not exist on disk)
         builder = builder
             .action(
                 CTX_ACTION_OPEN_IN_TAB,
@@ -398,8 +436,9 @@ impl MediaContextMenu {
         builder = Self::append_file_management_entries(
             builder,
             is_single,
-            is_single_image,
-            all_selected_deleted,
+            meta.is_single_image,
+            meta.all_selected_deleted,
+            meta.target_file_exists,
             is_busy,
         );
 
@@ -409,7 +448,7 @@ impl MediaContextMenu {
             .submenu(
                 "Rate Selection",
                 None,
-                selected_count > 0,
+                meta.selected_count > 0,
                 |sub| {
                     sub.action(CTX_ACTION_RATE_5, "5 Stars (★★★★★)", None, None, true)
                         .action(CTX_ACTION_RATE_4, "4 Stars (★★★★☆)", None, None, true)
@@ -462,7 +501,7 @@ impl MediaContextMenu {
                 "Clear Selection",
                 Some("Esc"),
                 None,
-                selected_count > 0,
+                meta.selected_count > 0,
             );
 
         builder.build()

@@ -54,13 +54,14 @@ pub struct FileRenameDialogController;
 
 impl FileRenameDialogController {
     /// Opens the modern smart rename dialog with real-time conflict checking, automatic suggestion filling, and conflict delegation.
+    /// Supports pending stubs even if their physical file is not yet ready on disk.
     pub fn open(params: RenameDialogParams<'_>) {
         let dialog_ref = params.dialog_ref;
         let window = params.window;
         let media_id = params.media_id;
         let ctx = params.ctx;
         let conflict_dialog = params.conflict_dialog;
-        let missing_dialog = params.missing_dialog;
+        let _missing_dialog = params.missing_dialog;
         let fullscreen_controller = params.fullscreen_controller;
 
         let current_target = {
@@ -84,18 +85,6 @@ impl FileRenameDialogController {
             tracing::warn!(media_id, "[FileRenameController: Open] Failed to resolve target media path");
             return;
         };
-
-        if !full_path.exists() {
-            missing_dialog.show(
-                window,
-                "Rename File",
-                vec![MissingFileItem {
-                    filename: current_name,
-                    path: full_path,
-                }],
-            );
-            return;
-        }
 
         window.set_is_context_menu_open(false);
         let mut d_ref = dialog_ref.borrow_mut();
@@ -418,6 +407,8 @@ impl FileRenameDialogController {
             item.is_deleted = updated_record.is_deleted;
             item.flags_str = if updated_record.is_deleted {
                 "Deleted".into()
+            } else if item.is_pending {
+                "Pending".into()
             } else if updated_record.is_corrupted {
                 "Corrupted".into()
             } else {

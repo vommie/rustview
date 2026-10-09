@@ -387,14 +387,7 @@ impl BridgeContextMenu {
         ctx.state.write().active_tab_dialog_target = None;
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let sel_meta = MediaContextMenu::prepare_selection(ctx.window, ctx.library, ctx.state, media_id);
-        let menu = MediaContextMenu::build_menu(
-            sel_meta.selected_count,
-            sel_meta.is_single_image,
-            sel_meta.has_video,
-            sel_meta.all_selected_deleted,
-            is_busy,
-            &sel_meta.associated_apps,
-        );
+        let menu = MediaContextMenu::build_menu(&sel_meta, is_busy);
         Self::open_custom_menu(ctx.window, ctx.state, ctx.tab_manager, menu, x, y);
     }
 

@@ -451,6 +451,7 @@ impl BridgeFileSelection {
     }
 
     /// Handles standard double-click on a media tile: opens images and videos in foreground Viewer Tabs if enabled in Settings.
+    /// Resilient: Pending stubs that have not finished rendering display an informative message instead of throwing an error.
     pub fn handle_double_click(
         media_id: MediaId,
         state: &Arc<RwLock<UiState>>,
@@ -537,6 +538,7 @@ impl BridgeFileSelection {
     }
 
     /// Handles Ctrl + double-click on a media tile: restores original selection state and opens in a background viewer tab.
+    /// Resilient: Pending stubs that have not finished rendering display an informative message instead of throwing an error.
     pub fn handle_ctrl_double_click(
         media_id: MediaId,
         state: &Arc<RwLock<UiState>>,

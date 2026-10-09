@@ -1120,9 +1120,10 @@ impl BridgeMedia {
                         }
 
                         for missing in &missing_files {
-                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path) {
+                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path)
+                                && !target_indexed.is_pending
+                            {
                                 target_indexed.record.is_deleted = true;
-                                target_indexed.is_deleted = true;
                                 target_indexed.flags_str = "Deleted".into();
                             }
                         }
@@ -1597,7 +1598,13 @@ impl BridgeMedia {
                     match res {
                         Ok(item) => successful_items.push(item),
                         Err((id, path, _err)) => {
-                            let _ = lib_arc.media().set_deleted(id, true);
+                            let rec_opt = lib_arc.media().get(id).ok().flatten();
+                            let is_pending_stub = rec_opt.as_ref().map(|r| r.source.is_some() && (r.file_size == 0 || r.width == 0)).unwrap_or(false);
+
+                            if !is_pending_stub {
+                                let _ = lib_arc.media().set_deleted(id, true);
+                            }
+
                             let fname = path
                                 .file_name()
                                 .map(|n| n.to_string_lossy().to_string())
@@ -1758,9 +1765,10 @@ impl BridgeMedia {
                         }
 
                         for missing in &missing_files {
-                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path) {
+                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path)
+                                && !target_indexed.is_pending
+                            {
                                 target_indexed.record.is_deleted = true;
-                                target_indexed.is_deleted = true;
                                 target_indexed.flags_str = "Deleted".into();
                             }
                         }
@@ -1859,7 +1867,7 @@ impl BridgeMedia {
                         StatusBarBridge::warn(
                             &w,
                             format!(
-                                "Refreshed {} file(s). ({} missing)",
+                                "Refreshed {} file(s). ({} missing / pending)",
                                 refreshed_count, missing_count
                             ),
                         );

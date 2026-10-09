@@ -130,11 +130,14 @@ impl TabContextMenu {
             );
 
         // Section 2: Shared File Open Actions (Open, Open With..., Open in File Manager)
+        let target_file_exists = tab.file_path.is_file()
+            && tab.file_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
+
         builder = builder.separator();
         builder = MediaContextMenu::append_file_open_entries(
             builder,
             true, // is_single
-            true, // can_open
+            target_file_exists,
             associated_apps,
         );
 
@@ -149,6 +152,7 @@ impl TabContextMenu {
             true,     // is_single
             is_image, // is_single_image
             is_deleted,
+            target_file_exists,
             is_busy,
         );
 

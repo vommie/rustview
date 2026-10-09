@@ -1,7 +1,7 @@
 # Maintainer: Your Name <your.email@example.com>
 
 pkgname=rustview
-pkgver=0.3.33
+pkgver=0.3.34
 pkgrel=1
 pkgdesc="Image and video viewer with hierarchical tagging and metadata inspection"
 arch=('x86_64')

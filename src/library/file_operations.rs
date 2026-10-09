@@ -1,8 +1,8 @@
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{
-    FileConflictItemDetails, FileConflictReport, FileTransferKind, FolderId, FolderRecord, MediaId,
-    MediaRecord,
+    FileConflictItemDetails, FileConflictReport, FileTransferKind, FolderId, FolderRecord,
+    MediaId, MediaRecord,
 };
 use super::refresh_media_files::MediaItemRefresher;
 use super::schema::SEQ_MEDIA_ID;
@@ -121,7 +121,7 @@ impl<'a> FileOperations<'a> {
         Self { db }
     }
 
-    /// Atomically renames a media file on the physical filesystem and updates its LMDB record.
+    /// Atomically renames a media file on the physical filesystem (if present) and updates its LMDB record.
     #[inline]
     pub fn rename_media(
         &self,
@@ -131,7 +131,8 @@ impl<'a> FileOperations<'a> {
         self.rename_media_with_overwrite(media_id, new_filename, false)
     }
 
-    /// Renames a media file physically on disk and updates LMDB storage, optionally overwriting an existing destination file.
+    /// Renames a media file physically on disk (if it exists) and updates LMDB storage,
+    /// seamlessly supporting pending stubs that are not yet written to disk.
     pub fn rename_media_with_overwrite(
         &self,
         media_id: MediaId,
@@ -201,38 +202,48 @@ impl<'a> FileOperations<'a> {
             }
         }
 
-        tracing::info!(
-            media = %LogObscurer::media(Some(media_id), &record.filename),
-            old_path = %LogObscurer::path(&paths.old_path),
-            new_path = %LogObscurer::path(&paths.new_path),
-            overwrite = overwrite_existing,
-            "Executing physical file rename operation..."
-        );
+        let old_file_physically_exists = paths.old_path.exists();
 
-        robust_move_file(&paths.old_path, &paths.new_path)?;
+        if old_file_physically_exists {
+            tracing::info!(
+                media = %LogObscurer::media(Some(media_id), &record.filename),
+                old_path = %LogObscurer::path(&paths.old_path),
+                new_path = %LogObscurer::path(&paths.new_path),
+                overwrite = overwrite_existing,
+                "Executing physical file rename operation..."
+            );
+            robust_move_file(&paths.old_path, &paths.new_path)?;
 
-        let fs_meta = std::fs::metadata(&paths.new_path)?;
-        let mtime = fs_meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(record.modification_time);
+            if let Ok(fs_meta) = std::fs::metadata(&paths.new_path) {
+                record.modification_time = fs_meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(record.modification_time);
 
-        let ctime = fs_meta
-            .created()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(record.creation_time);
+                record.creation_time = fs_meta
+                    .created()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(record.creation_time);
+
+                record.file_size = fs_meta.len();
+            }
+        } else {
+            tracing::info!(
+                media_id = media_id,
+                old_filename = %LogObscurer::filename(&record.filename),
+                new_filename = %LogObscurer::filename(&paths.validated_name),
+                "[FileOperations: Rename] Physical file not on disk yet (pending stub); updating LMDB record only"
+            );
+        }
 
         let format = MediaFormat::from_path(&paths.new_path);
         let media_type = format.media_type().unwrap_or(record.media_type);
 
         record.filename = paths.validated_name.clone();
-        record.modification_time = mtime;
-        record.creation_time = ctime;
-        record.file_size = fs_meta.len();
         record.format = format;
         record.media_type = media_type;
         record.is_deleted = false;
@@ -244,6 +255,7 @@ impl<'a> FileOperations<'a> {
         tracing::info!(
             media_id = media_id,
             new_filename = %LogObscurer::filename(&paths.validated_name),
+            physically_renamed = old_file_physically_exists,
             elapsed_us = t0.elapsed().as_micros(),
             "Committed file rename operation to LMDB storage successfully"
         );
@@ -366,6 +378,7 @@ impl<'a> FileOperations<'a> {
     }
 
     /// Probes full file metadata, checksum, dimensions, duration, and rating for conflict comparison.
+    /// Resilient: Falls back to database record values if the physical file does not exist on disk yet.
     pub fn probe_file_details(
         &self,
         path: &Path,
@@ -385,29 +398,38 @@ impl<'a> FileOperations<'a> {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
 
-        let fs_meta = std::fs::metadata(path)?;
-        let file_size = fs_meta.len();
-        let modification_time = fs_meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+        let db_record_opt = if let Some(m_id) = media_id {
+            self.db.media.get(&rtxn, &m_id).ok().flatten()
+        } else {
+            None
+        };
 
-        let creation_time = fs_meta
-            .created()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(modification_time);
+        let (file_size, modification_time, creation_time) = if let Ok(fs_meta) = std::fs::metadata(path) {
+            let size = fs_meta.len();
+            let mtime = fs_meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let ctime = fs_meta
+                .created()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(mtime);
+            (size, mtime, ctime)
+        } else if let Some(ref rec) = db_record_opt {
+            (rec.file_size, rec.modification_time, rec.creation_time)
+        } else {
+            (0, 0, 0)
+        };
 
         let format = MediaFormat::from_path(path);
 
-        let (width, height, duration_ms, rating, file_hash) = if let Some(m_id) = media_id
-            && let Ok(Some(rec)) = self.db.media.get(&rtxn, &m_id)
-        {
+        let (width, height, duration_ms, rating, file_hash) = if let Some(ref rec) = db_record_opt {
             (rec.width, rec.height, rec.duration_ms, rec.rating, rec.file_hash)
-        } else {
+        } else if path.exists() {
             let (w, h, dur) = if let Ok(meta) = MetadataExtractor::extract(path) {
                 (meta.width, meta.height, meta.duration_ms)
             } else {
@@ -415,6 +437,8 @@ impl<'a> FileOperations<'a> {
             };
             let hash = MediaHasher::hash_file(path).unwrap_or_default();
             (w, h, dur, 0, hash)
+        } else {
+            (0, 0, 0, 0, [0u8; 16])
         };
 
         tracing::debug!(
@@ -536,7 +560,8 @@ impl<'a> FileOperations<'a> {
         }
     }
 
-    /// Moves a media file physically to a target folder, updating LMDB indices, with support for custom renamed filenames and overwrite replacement.
+    /// Moves a media file physically to a target folder (if present on disk) and updates LMDB indices.
+    /// Supports pending stubs that are not yet rendered: relocates database associations cleanly.
     pub fn move_single_media(
         &self,
         media_id: MediaId,
@@ -572,16 +597,10 @@ impl<'a> FileOperations<'a> {
         let src_path = Path::new(&source_folder.path).join(&source_record.filename);
         let dst_path = Path::new(&target_folder.path).join(&validated_name);
 
-        if !src_path.exists() {
-            return Err(LibraryError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Source media file not found on disk: {:?}", src_path),
-            )));
-        }
+        let src_file_exists = src_path.exists();
 
         let is_same_file = is_same_file_path(&src_path, &dst_path);
-
-        if is_same_file {
+        if is_same_file && old_folder_id == target_folder_id {
             tracing::debug!(
                 media_id = media_id,
                 file = %LogObscurer::path(&src_path),
@@ -594,29 +613,42 @@ impl<'a> FileOperations<'a> {
             return Err(LibraryError::FileOperationAlreadyExists(validated_name));
         }
 
-        tracing::info!(
-            media = %LogObscurer::media(Some(media_id), &source_record.filename),
-            src = %LogObscurer::path(&src_path),
-            dst = %LogObscurer::path(&dst_path),
-            overwrite = overwrite_existing,
-            "Moving media file physically on disk..."
-        );
-        robust_move_file(&src_path, &dst_path)?;
+        if src_file_exists {
+            tracing::info!(
+                media = %LogObscurer::media(Some(media_id), &source_record.filename),
+                src = %LogObscurer::path(&src_path),
+                dst = %LogObscurer::path(&dst_path),
+                overwrite = overwrite_existing,
+                "Moving media file physically on disk..."
+            );
+            robust_move_file(&src_path, &dst_path)?;
 
-        let fs_meta = std::fs::metadata(&dst_path)?;
-        let mtime = fs_meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(source_record.modification_time);
+            if let Ok(fs_meta) = std::fs::metadata(&dst_path) {
+                source_record.modification_time = fs_meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(source_record.modification_time);
 
-        let ctime = fs_meta
-            .created()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(source_record.creation_time);
+                source_record.creation_time = fs_meta
+                    .created()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(source_record.creation_time);
+
+                source_record.file_size = fs_meta.len();
+            }
+        } else {
+            tracing::info!(
+                media_id = media_id,
+                from_folder = %source_folder.path,
+                to_folder = %target_folder.path,
+                filename = %validated_name,
+                "[FileOperations: Move] Physical file does not exist on disk yet (pending stub); relocating LMDB association only"
+            );
+        }
 
         if overwrite_existing {
             let mut target_media_ids = self
@@ -655,9 +687,6 @@ impl<'a> FileOperations<'a> {
 
         source_record.folder_id = target_folder_id;
         source_record.filename = validated_name.clone();
-        source_record.modification_time = mtime;
-        source_record.creation_time = ctime;
-        source_record.file_size = fs_meta.len();
         source_record.is_deleted = false;
         self.db.media.put(&mut wtxn, &media_id, &source_record)?;
 
@@ -692,7 +721,8 @@ impl<'a> FileOperations<'a> {
         Ok(source_record)
     }
 
-    /// Copies a media file physically to a target folder, creating a new LMDB media instance with cloned tags, ratings, and shared packfile thumbnail pointers.
+    /// Copies a media file physically to a target folder (if present on disk) and creates a new LMDB media instance.
+    /// Supports pending stubs that are not yet rendered: duplicates the database stub entry into the target folder.
     pub fn copy_single_media(
         &self,
         media_id: MediaId,
@@ -727,12 +757,7 @@ impl<'a> FileOperations<'a> {
         let src_path = Path::new(&source_folder.path).join(&source_record.filename);
         let dst_path = Path::new(&target_folder.path).join(&validated_name);
 
-        if !src_path.exists() {
-            return Err(LibraryError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Source media file not found on disk: {:?}", src_path),
-            )));
-        }
+        let src_file_exists = src_path.exists();
 
         let is_same_file = is_same_file_path(&src_path, &dst_path);
 
@@ -756,29 +781,42 @@ impl<'a> FileOperations<'a> {
             return Err(LibraryError::FileOperationAlreadyExists(validated_name));
         }
 
-        tracing::info!(
-            media = %LogObscurer::media(Some(media_id), &source_record.filename),
-            src = %LogObscurer::path(&src_path),
-            dst = %LogObscurer::path(&dst_path),
-            overwrite = overwrite_existing,
-            "Copying media file physically on disk..."
-        );
-        std::fs::copy(&src_path, &dst_path)?;
+        let mut file_size = source_record.file_size;
+        let mut mtime = source_record.modification_time;
+        let mut ctime = source_record.creation_time;
 
-        let fs_meta = std::fs::metadata(&dst_path)?;
-        let mtime = fs_meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(source_record.modification_time);
+        if src_file_exists {
+            tracing::info!(
+                media = %LogObscurer::media(Some(media_id), &source_record.filename),
+                src = %LogObscurer::path(&src_path),
+                dst = %LogObscurer::path(&dst_path),
+                overwrite = overwrite_existing,
+                "Copying media file physically on disk..."
+            );
+            std::fs::copy(&src_path, &dst_path)?;
 
-        let ctime = fs_meta
-            .created()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(source_record.creation_time);
+            if let Ok(fs_meta) = std::fs::metadata(&dst_path) {
+                file_size = fs_meta.len();
+                mtime = fs_meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(source_record.modification_time);
+
+                ctime = fs_meta
+                    .created()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(source_record.creation_time);
+            }
+        } else {
+            tracing::info!(
+                media_id = media_id,
+                "[FileOperations: Copy] Source file not on disk yet (pending stub); cloning LMDB stub record into target folder only"
+            );
+        }
 
         let mut target_media_ids = self
             .db
@@ -820,7 +858,7 @@ impl<'a> FileOperations<'a> {
             folder_id: target_folder_id,
             filename: validated_name.clone(),
             file_hash: source_record.file_hash,
-            file_size: fs_meta.len(),
+            file_size,
             modification_time: mtime,
             creation_time: ctime,
             duration_ms: source_record.duration_ms,
@@ -870,7 +908,7 @@ impl<'a> FileOperations<'a> {
             to_folder = %LogObscurer::folder(Some(target_folder_id), &target_folder.path),
             filename = %LogObscurer::filename(&validated_name),
             elapsed_ms = t0.elapsed().as_millis(),
-            "[FileOperations: Copy] Cloned media instance with tags, ratings, and shared packfile thumbnails committed to LMDB"
+            "[FileOperations: Copy] Cloned media instance committed to LMDB"
         );
 
         Ok(new_record)
