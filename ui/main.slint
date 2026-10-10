@@ -332,6 +332,10 @@ export component MainWindow inherits Window {
     callback modal-dismiss-requested();
     callback request-rename();
 
+    // Global Media Selection Callbacks (Ctrl+A & Ctrl+Shift+A)
+    callback select-all-media();
+    callback clear-media-selection();
+
     callback folder-selected(int, string);
     callback folder-toggle-expand(int);
     callback folder-context-menu(int /* id */, length /* x */, length /* y */);
@@ -449,14 +453,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    pure public function get-media-page-rows() -> int {
-        if root.is-table-view {
-            return table-view.get-page-rows();
-        } else {
-            return grid-view.get-page-rows();
-        }
-    }
-
     public function scroll-media-item-into-view(item-idx: int) {
         if root.is-table-view {
             table-view.scroll-item-into-view(item-idx);
@@ -528,10 +524,29 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Keyboard navigation in Browse View
+            // Selection & Keyboard navigation in Browse View (Disabled while editing text input fields)
             if root.active-view-mode == 0 && !root.is-text-input-focused {
+                // 1. Deselect All: Ctrl+Shift+A (prioritized over Ctrl+A)
+                if (event.modifiers.control || event.modifiers.meta) && event.modifiers.shift && (event.text == "a" || event.text == "A" || event.text == "\u{01}") {
+                    root.clear-media-selection();
+                    return accept;
+                }
+
+                // 2. Select All: Ctrl+A
+                if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.shift && (event.text == "a" || event.text == "A" || event.text == "\u{01}") {
+                    root.select-all-media();
+                    return accept;
+                }
+
+                // 3. Quick Escape in Browse View clears selection if no popups or dialogs are active
+                if event.text == Key.Escape {
+                    root.clear-media-selection();
+                    return accept;
+                }
+
+                // 4. Directional Keyboard Navigation (Page rows queried directly from active view)
                 let is-shift = event.modifiers.shift;
-                let page-rows = root.get-media-page-rows();
+                let page-rows = root.is-table-view ? table-view.get-page-rows() : grid-view.get-page-rows();
 
                 if event.text == Key.UpArrow {
                     root.media-navigate(0 /* Up */, is-shift, page-rows);

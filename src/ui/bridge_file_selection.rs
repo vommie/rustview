@@ -59,7 +59,7 @@ pub struct LastClickRecord {
 pub struct BridgeFileSelection;
 
 impl BridgeFileSelection {
-    /// Registers media click, middle click, background click, and selection callbacks onto MainWindow.
+    /// Registers media click, middle click, background click, and global selection hotkey callbacks onto MainWindow.
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
@@ -108,14 +108,32 @@ impl BridgeFileSelection {
         });
 
         let win_bg = window.clone_strong();
-        let lib_bg = library;
-        let st_bg = state;
+        let lib_bg = library.clone();
+        let st_bg = state.clone();
         window.on_background_clicked(move || {
             tracing::info!(
                 "[FileSelection: BackgroundClick] Background free space clicked, clearing active file selection"
             );
             st_bg.write().last_active_panel = LastActivePanel::Media;
             Self::clear_selection(&win_bg, &lib_bg, &st_bg);
+        });
+
+        // Global Select All (Ctrl+A) Callback in Browse View
+        let win_sel_all = window.clone_strong();
+        let lib_sel_all = library.clone();
+        let st_sel_all = state.clone();
+        window.on_select_all_media(move || {
+            tracing::info!("[FileSelection: Shortcut] Ctrl+A shortcut received in Browse View: selecting all media");
+            Self::select_all(&win_sel_all, &lib_sel_all, &st_sel_all);
+        });
+
+        // Global Clear Selection (Ctrl+Shift+A / Esc) Callback in Browse View
+        let win_clr_sel = window.clone_strong();
+        let lib_clr_sel = library;
+        let st_clr_sel = state;
+        window.on_clear_media_selection(move || {
+            tracing::info!("[FileSelection: Shortcut] Ctrl+Shift+A / Esc shortcut received in Browse View: clearing selection");
+            Self::clear_selection(&win_clr_sel, &lib_clr_sel, &st_clr_sel);
         });
     }
 
@@ -362,6 +380,8 @@ impl BridgeFileSelection {
     }
 
     /// Surgically modifies only changed rows in the Slint Model translating global indices to local viewport offsets.
+    /// Employs an O(Viewport) threshold optimization when changed_ids is large (e.g. Select All / Deselect All)
+    /// to eliminate CPU freezes on large datasets.
     pub fn sync_selection_diff(
         window: &MainWindow,
         state: &RwLock<UiState>,
@@ -375,6 +395,23 @@ impl BridgeFileSelection {
         let start_window = window.get_visible_start_index() as usize;
         let visible_count = media_model.row_count();
         let st = state.read();
+
+        // O(Viewport) Optimization:
+        // If changed_ids contains many elements (Select All or Clear Selection across 1k-100k items),
+        // iterating directly over the visible rows in media_model (~60 to ~160 rows) is orders of magnitude
+        // faster than running tens of thousands of hashmap lookups.
+        if changed_ids.len() > visible_count * 2 {
+            for local_idx in 0..visible_count {
+                if let Some(mut item) = media_model.row_data(local_idx) {
+                    let is_selected = st.file_selection.is_selected(item.id as u64);
+                    if item.is_selected != is_selected {
+                        item.is_selected = is_selected;
+                        media_model.set_row_data(local_idx, item);
+                    }
+                }
+            }
+            return;
+        }
 
         for &id in changed_ids {
             if let Some(&global_row_idx) = st.media_row_map.get(&id)
@@ -395,21 +432,32 @@ impl BridgeFileSelection {
         }
     }
 
+    /// Selects all visible media items in the current Browse View (Ctrl+A).
     pub fn select_all(window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
         let t_start = Instant::now();
-        let changed_ids = {
+        let (changed_ids, total_count) = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;
             let prev_selected = st.file_selection.selected_ids().clone();
-            let visible_ids: Vec<MediaId> = st
-                .active_indices
-                .iter()
-                .filter_map(|&idx| st.all_folder_media.get(idx))
-                .map(|m| m.record.id)
-                .collect();
+
+            let visible_ids: Vec<MediaId> = if !st.active_indices.is_empty() {
+                st.active_indices
+                    .iter()
+                    .filter_map(|&idx| st.all_folder_media.get(idx))
+                    .map(|m| m.record.id)
+                    .collect()
+            } else if st.is_query_active || !st.filter.is_empty() {
+                // Active filter/query returned zero results; do not select inactive items
+                Vec::new()
+            } else {
+                st.all_folder_media.iter().map(|m| m.record.id).collect()
+            };
+
             st.file_selection.select_all(&visible_ids);
             let newly_selected = st.file_selection.selected_ids();
-            FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected)
+            let diff = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
+            let count = st.file_selection.count();
+            (diff, count)
         };
 
         Self::sync_selection_diff(window, state, &changed_ids);
@@ -417,36 +465,49 @@ impl BridgeFileSelection {
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
 
-        tracing::debug!(
+        if total_count > 0 {
+            StatusBarBridge::info(window, format!("Selected all {} media file(s).", total_count));
+        } else {
+            StatusBarBridge::info(window, "No media files to select.");
+        }
+
+        tracing::info!(
+            selected_count = total_count,
             changed_rows = changed_ids.len(),
             elapsed_us = t_start.elapsed().as_micros(),
-            "[FileSelection: SelectAll] Fast in-place select all executed"
+            "[FileSelection: SelectAll] Selected all visible media items in Browse view"
         );
     }
 
+    /// Deselects all media items in the current Browse View (Ctrl+Shift+A / Esc).
     pub fn clear_selection(
         window: &MainWindow,
         library: &Arc<Library>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let t_start = Instant::now();
-        let prev_selected = {
+        let (changed_ids, prev_count) = {
             let mut st = state.write();
+            st.last_active_panel = LastActivePanel::Media;
             let prev = st.file_selection.selected_ids().clone();
+            let prev_count = prev.len();
             st.file_selection.clear();
-            prev
+            (prev.into_iter().collect::<Vec<MediaId>>(), prev_count)
         };
 
-        let changed_ids: Vec<MediaId> = prev_selected.into_iter().collect();
         Self::sync_selection_diff(window, state, &changed_ids);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
 
-        tracing::debug!(
-            cleared_rows = changed_ids.len(),
+        if prev_count > 0 {
+            StatusBarBridge::info(window, format!("Deselected {} media file(s).", prev_count));
+        }
+
+        tracing::info!(
+            cleared_count = prev_count,
             elapsed_us = t_start.elapsed().as_micros(),
-            "[FileSelection: ClearSelection] Fast in-place clear selection executed"
+            "[FileSelection: ClearSelection] Cleared media selection in Browse view"
         );
     }
 

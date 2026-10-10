@@ -58,12 +58,12 @@ impl FileSelectionModel {
     pub fn deselect_many(&mut self, ids: &HashSet<MediaId>) {
         self.selected_ids.retain(|id| !ids.contains(id));
         if let Some(anchor) = self.anchor_id
-            && ids.contains(&anchor)
+            && !ids.contains(&anchor)
         {
             self.anchor_id = None;
         }
         if let Some(last) = self.last_clicked_id
-            && ids.contains(&last)
+            && !ids.contains(&last)
         {
             self.last_clicked_id = None;
         }
@@ -110,9 +110,18 @@ impl FileSelectionModel {
         self.last_clicked_id = Some(target_id);
     }
 
-    /// Selects all visible media items.
+    /// Selects all visible media items and establishes predictable navigation boundaries.
     pub fn select_all(&mut self, visible_ids: &[MediaId]) {
         self.selected_ids = visible_ids.iter().copied().collect();
+        if !visible_ids.is_empty() {
+            if self.anchor_id.is_none_or(|id| !self.selected_ids.contains(&id)) {
+                self.anchor_id = visible_ids.first().copied();
+            }
+            self.last_clicked_id = visible_ids.last().copied();
+        } else {
+            self.anchor_id = None;
+            self.last_clicked_id = None;
+        }
     }
 
     /// Inverts selection across visible items.
@@ -359,7 +368,7 @@ impl FileSelectionSummary {
                 format_breakdown,
                 avg_rating: single.rating as f32,
                 rated_count: if single.rating > 0 { 1 } else { 0 },
-                single_record: Some(single),
+                single_record: None,
             };
         }
 

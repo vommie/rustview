@@ -499,7 +499,7 @@ impl MediaContextMenu {
             .action(
                 CTX_ACTION_CLEAR_SELECTION,
                 "Clear Selection",
-                Some("Esc"),
+                Some("Ctrl+Shift+A"),
                 None,
                 meta.selected_count > 0,
             );
