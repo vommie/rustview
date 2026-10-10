@@ -4,8 +4,10 @@ use crate::library::models::{FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{
-    DEFAULT_IS_INSPECTOR_COLLAPSED, DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB, DEFAULT_SORT_COLUMN,
+    DEFAULT_IS_INSPECTOR_COLLAPSED, DEFAULT_IS_TAG_HISTORY_COLLAPSED,
+    DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB, DEFAULT_MAX_HISTORY_TAGS, DEFAULT_SORT_COLUMN,
     DEFAULT_SORT_ORDER, DEFAULT_TAB_GRID_AUTO_COLUMNS, DEFAULT_TAB_GRID_COLUMNS,
+    DEFAULT_TAG_HISTORY_HEIGHT,
 };
 use crate::system::DesktopApp;
 use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
@@ -231,6 +233,13 @@ pub struct UiState {
     pub active_context_menu: Option<CtxMenu>,
     pub tag_tree_available_height: f32,
     pub tag_tree_rows_per_column: usize,
+
+    // Assigned Tags History State & Dynamic Flow Layout Cache
+    pub tag_history_ids: Vec<TagId>,
+    pub max_history_tags: usize,
+    pub is_tag_history_collapsed: bool,
+    pub tag_history_height: f32,
+    pub tag_history_available_width: f32,
 }
 
 impl Default for UiState {
@@ -290,6 +299,11 @@ impl Default for UiState {
             active_context_menu: None,
             tag_tree_available_height: 450.0,
             tag_tree_rows_per_column: 18,
+            tag_history_ids: Vec::new(),
+            max_history_tags: DEFAULT_MAX_HISTORY_TAGS,
+            is_tag_history_collapsed: DEFAULT_IS_TAG_HISTORY_COLLAPSED,
+            tag_history_height: DEFAULT_TAG_HISTORY_HEIGHT,
+            tag_history_available_width: 260.0,
         }
     }
 }

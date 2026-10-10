@@ -34,6 +34,7 @@ pub mod bridge_state;
 pub mod bridge_status_bar;
 pub mod bridge_tab_grid;
 pub mod bridge_tag_dialogs;
+pub mod bridge_tag_history;
 pub mod bridge_tags;
 pub mod bridge_thumbnails;
 pub mod bridge_viewer_tabs;
@@ -48,6 +49,7 @@ pub mod rubberband_selection;
 pub mod sidebar_panel_tab_dnd;
 pub mod tab_dnd;
 pub mod tab_grid;
+pub mod tag_history;
 pub mod video_preview_animator;
 
 pub use bridge::{RenameActionParams, UiBridge};
@@ -87,6 +89,7 @@ pub use bridge_state::*;
 pub use bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
 pub use bridge_tab_grid::BridgeTabGrid;
 pub use bridge_tag_dialogs::TagDialogController;
+pub use bridge_tag_history::BridgeTagHistory;
 pub use bridge_tags::{BridgeTags, TagActionContext};
 pub use bridge_viewer_tabs::{BridgeViewerTabs, TabDragEndParams};
 pub use dnd_foldertree_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
@@ -108,4 +111,7 @@ pub use tab_dnd::{
     TabAutoScrollDirection, TabDndAutoScroller, TabDndGeometry, TabDndSession, TabSlotInfo,
 };
 pub use tab_grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
+pub use tag_history::{
+    TagHistoryItem, TagHistoryLayoutEngine, TagHistoryManager, TagHistoryRow,
+};
 pub use video_preview_animator::{VideoPreviewAnimator, DEFAULT_PREVIEW_INTERVAL_MS};

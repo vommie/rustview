@@ -1,6 +1,7 @@
 import { Theme } from "styles.slint";
 import { SidebarPanelTabModel } from "types.slint";
 import { TooltipHost } from "tooltips.slint";
+import { Icons, AppIcon } from "icons.slint";
 
 export component SidebarPanelTabItem inherits Rectangle {
     in property <SidebarPanelTabModel> tab;
@@ -13,7 +14,6 @@ export component SidebarPanelTabItem inherits Rectangle {
     callback drag-ended();
     callback drag-cancelled();
 
-    // Dynamische Inhaltsbreite: Mindestens 60px, maximal 110px (ohne unzulässigen min-width/max-width Konflikt)
     width: Math.min(110px, Math.max(60px, content-layout.preferred-width));
     height: 26px;
     background: transparent;
@@ -110,6 +110,13 @@ export component SidebarPanelTabItem inherits Rectangle {
                 vertical-alignment: center;
             }
 
+            if root.tab.icon_name == "tag" : AppIcon {
+                icon: Icons.tag;
+                size: 12px;
+                allow-tint: false;
+                y: (parent.height - self.height) / 2;
+            }
+
             Text {
                 text: root.tab.title;
                 font-size: 11px;
@@ -157,6 +164,13 @@ export component SidebarPanelTabGhost inherits Rectangle {
             font-size: 11px;
             color: Theme.accent;
             vertical-alignment: center;
+        }
+
+        if root.icon-name == "tag" : AppIcon {
+            icon: Icons.tag;
+            size: 12px;
+            allow-tint: false;
+            y: (parent.height - self.height) / 2;
         }
 
         Text {

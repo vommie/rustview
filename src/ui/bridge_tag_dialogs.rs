@@ -1,6 +1,7 @@
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
+use super::bridge_tag_history::BridgeTagHistory;
 use super::bridge_tags::{BridgeTags, TagActionDialogs};
 use super::{AddTagDialog, DeleteTagDialog, MainWindow, RenameTagDialog};
 use crate::library::models::TagId;
@@ -10,6 +11,7 @@ use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -285,6 +287,7 @@ impl TagDialogController {
                 self.close_rename(window);
                 window.set_status_text(format!("Renamed tag to '{}'", updated.name).into());
                 BridgeTags::reload_tags(window, library, state);
+                BridgeTagHistory::sync_ui(window, library, state);
             }
             Err(e) => {
                 tracing::warn!(error = %e, "[TagManager: Rename Error] Failed to rename tag");
@@ -368,6 +371,8 @@ impl TagDialogController {
 
         match library.tags().delete_tag_subtree(tag_id) {
             Ok(deleted) => {
+                let deleted_ids_set: HashSet<TagId> = deleted.iter().map(|d| d.id).collect();
+
                 {
                     let mut st = state.write();
                     for d in &deleted {
@@ -376,10 +381,15 @@ impl TagDialogController {
                     }
                     BridgeTags::persist_expanded_tags(settings, &st.expanded_tag_ids);
                 }
+
+                // Automatically clean up deleted tags from history
+                BridgeTagHistory::prune_deleted_tags(&deleted_ids_set, settings, state);
+
                 self.close_delete(window);
                 window.set_status_text(format!("Deleted {} tag(s)", deleted.len()).into());
 
                 BridgeTags::reload_tags(window, library, state);
+                BridgeTagHistory::sync_ui(window, library, state);
                 BridgeInspector::update(window, state);
                 BridgeMedia::reload(window, library, thumbnails, settings, state, false, true);
             }

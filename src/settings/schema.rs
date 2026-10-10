@@ -174,10 +174,18 @@ pub const DEFAULT_SUPPORTED_IMAGE_FORMATS: &str =
 pub const DEFAULT_SUPPORTED_VIDEO_FORMATS: &str = "mp4, m4v, mkv, webm, mov, avi, mpg, mpeg, flv";
 
 // =============================================================================
-// SECTION 7: Tags & Categorization - Single Point of Truth Constants
+// SECTION 7: Tags, Categorization & History - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_TAG_MATCH_MODE: &str = "ALL";
 pub const DEFAULT_TAG_SCOPE_MODE: &str = "Global";
+
+pub const DEFAULT_MAX_HISTORY_TAGS: usize = 20;
+pub const MIN_MAX_HISTORY_TAGS: usize = 5;
+pub const MAX_MAX_HISTORY_TAGS: usize = 100;
+pub const DEFAULT_IS_TAG_HISTORY_COLLAPSED: bool = false;
+pub const DEFAULT_TAG_HISTORY_HEIGHT: f32 = 96.0;
+pub const MIN_TAG_HISTORY_HEIGHT: f32 = 40.0;
+pub const MAX_TAG_HISTORY_HEIGHT: f32 = 500.0;
 
 // =============================================================================
 // SECTION 8: Window Geometry - Single Point of Truth Constants
@@ -589,12 +597,16 @@ impl Default for FullscreenSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TagSettings {
     pub default_match_mode: String,
     pub default_scope_mode: String,
     pub expanded_tag_ids: Vec<u32>,
+    pub history_tag_ids: Vec<u32>,
+    pub max_history_tags: usize,
+    pub is_history_collapsed: bool,
+    pub history_height: f32,
 }
 
 impl Default for TagSettings {
@@ -603,6 +615,10 @@ impl Default for TagSettings {
             default_match_mode: DEFAULT_TAG_MATCH_MODE.to_string(),
             default_scope_mode: DEFAULT_TAG_SCOPE_MODE.to_string(),
             expanded_tag_ids: Vec::new(),
+            history_tag_ids: Vec::new(),
+            max_history_tags: DEFAULT_MAX_HISTORY_TAGS,
+            is_history_collapsed: DEFAULT_IS_TAG_HISTORY_COLLAPSED,
+            history_height: DEFAULT_TAG_HISTORY_HEIGHT,
         }
     }
 }

@@ -23,7 +23,7 @@ export component ResizerBar inherits Rectangle {
     callback drag-finished();
 
     // Internal State Tracking
-    property <bool> is-dragging: touch-area.pressed;
+    out property <bool> is-dragging: touch-area.pressed;
     property <bool> is-active-hover: touch-area.has-hover || root.is-dragging;
 
     preferred-width: root.is-horizontal ? root.thickness : 10000px;

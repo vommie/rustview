@@ -7,7 +7,7 @@ import { SettingsPagePerformance } from "settings_page_performance.slint";
 import { SettingsPageFormats } from "settings_page_formats.slint";
 import { SettingsPageViewer } from "settings_page_viewer.slint";
 import { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
-import { SettingsPageTags } from "settings_page_tags.slint";
+import { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
 import { SettingsPageApi } from "settings_page_api.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
 import { ButtonBar } from "button_bar.slint";
@@ -21,7 +21,7 @@ export { SettingsPagePerformance } from "settings_page_performance.slint";
 export { SettingsPageFormats } from "settings_page_formats.slint";
 export { SettingsPageViewer } from "settings_page_viewer.slint";
 export { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
-export { SettingsPageTags } from "settings_page_tags.slint";
+export { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
 export { SettingsPageApi } from "settings_page_api.slint";
 export { SettingsPageDebug } from "settings_page_debug.slint";
 export { SettingsCard } from "settings_card.slint";
@@ -108,6 +108,9 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-enable-fallback: false;
     in-out property <int> fullscreen-fallback-target-idx: 0;
     callback refresh-displays();
+
+    // Tags & Ratings options
+    in-out property <int> max-history-tags: 20;
 
     // API options
     in-out property <bool> auto-complete-external-stubs: true;
@@ -235,7 +238,9 @@ export component SettingsWindow inherits Window {
                             refresh-displays => { root.refresh-displays(); }
                         }
 
-                        if root.active-category == 7 : SettingsPageTags {}
+                        if root.active-category == 7 : SettingsPageTagsRatings {
+                            max-history-tags <=> root.max-history-tags;
+                        }
 
                         if root.active-category == 8 : SettingsPageApi {
                             auto-complete-external-stubs <=> root.auto-complete-external-stubs;

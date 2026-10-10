@@ -1,6 +1,7 @@
 use super::registry::SettingsManager;
 use super::schema::{
     AppSettings, GridAspectRatio, DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS,
+    MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
 };
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::{MainWindow, SettingsWindow};
@@ -228,6 +229,9 @@ impl SettingsDialogController {
         };
         window.set_fullscreen_fallback_target_idx(fallback_idx);
 
+        // Tags & Ratings properties
+        window.set_max_history_tags(settings.tags.max_history_tags as i32);
+
         // API settings
         window.set_auto_complete_external_stubs(settings.api.auto_complete_external_stubs);
 
@@ -411,6 +415,11 @@ impl SettingsDialogController {
                 } else {
                     "same".to_string()
                 };
+
+                // Save Tag History Configuration
+                let new_max_history = (w.get_max_history_tags() as usize).clamp(MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS);
+                current.tags.max_history_tags = new_max_history;
+                current.tags.history_tag_ids.truncate(new_max_history);
 
                 // Save API Parameters
                 current.api.auto_complete_external_stubs = w.get_auto_complete_external_stubs();

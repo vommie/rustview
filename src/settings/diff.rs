@@ -110,7 +110,11 @@ impl SettingsDiff {
         let viewer_settings_changed = old.viewer != new.viewer;
         let fullscreen_settings_changed = old.fullscreen != new.fullscreen;
         let tags_settings_changed = old.tags.default_match_mode != new.tags.default_match_mode
-            || old.tags.default_scope_mode != new.tags.default_scope_mode;
+            || old.tags.default_scope_mode != new.tags.default_scope_mode
+            || old.tags.max_history_tags != new.tags.max_history_tags
+            || old.tags.is_history_collapsed != new.tags.is_history_collapsed
+            || old.tags.history_tag_ids != new.tags.history_tag_ids
+            || (old.tags.history_height - new.tags.history_height).abs() > 0.05;
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
         let api_settings_changed = old.api != new.api;
         let debug_settings_changed = old.debug != new.debug;
@@ -497,6 +501,27 @@ impl SettingsDiff {
                 new.fullscreen.specific_monitor,
                 new.fullscreen.enable_fallback_rule,
                 new.fullscreen.fallback_target
+            ));
+        }
+
+        if old.tags.max_history_tags != new.tags.max_history_tags {
+            changes.push(format!(
+                "Tags: max_history_tags ({} -> {})",
+                old.tags.max_history_tags, new.tags.max_history_tags
+            ));
+        }
+
+        if old.tags.is_history_collapsed != new.tags.is_history_collapsed {
+            changes.push(format!(
+                "Tags: is_history_collapsed ({} -> {})",
+                old.tags.is_history_collapsed, new.tags.is_history_collapsed
+            ));
+        }
+
+        if (old.tags.history_height - new.tags.history_height).abs() > 0.05 {
+            changes.push(format!(
+                "Tags: history_height ({:.1}px -> {:.1}px)",
+                old.tags.history_height, new.tags.history_height
             ));
         }
 

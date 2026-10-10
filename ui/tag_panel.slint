@@ -1,38 +1,13 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
-import { TagNodeView, TagColumnView } from "types.slint";
+import { TagNodeView, TagColumnView, TagHistoryRowModel } from "types.slint";
 import { RatingBar } from "rating_bar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { NodeButton } from "node_button.slint";
 import { TagPanelToolbar } from "tag_panel_toolbar.slint";
 import { TagSearchFilter } from "tag_search_filter.slint";
-
-export component TagDockHeader inherits Rectangle {
-    height: 22px;
-    callback root-context-menu(length, length);
-
-    header-touch := TouchArea {
-        pointer-event(event) => {
-            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
-                root.root-context-menu(header-touch.mouse-x, header-touch.mouse-y);
-            }
-        }
-    }
-
-    HorizontalLayout {
-        padding-left: 2px;
-        padding-right: 2px;
-
-        Text {
-            text: "TAG & RATE";
-            font-size: 11px;
-            font-weight: 700;
-            color: Theme.primary;
-            vertical-alignment: center;
-            horizontal-stretch: 1;
-        }
-    }
-}
+import { TagHistoryPanel } from "tag_history_panel.slint";
+import { ResizerBar } from "resizer_bar.slint";
 
 export component TagTreeItem inherits Rectangle {
     in property <TagNodeView> tag;
@@ -49,17 +24,22 @@ export component TagTreeItem inherits Rectangle {
 
     property <bool> is-item-enabled: !root.is-assign-mode || root.has-selection;
 
-    background: root.tag.is-selected ? Theme.surface-selected :
-                (root.tag.is-assigned ? (root.tag.is-dimmed ? #a6e3a118 : #a6e3a128) :
-                (root.tag.is-partial ? (root.tag.is-dimmed ? #f9e2af15 : #f9e2af22) :
-                (tag-touch.has-hover ? Theme.surface-hover : (root.tag.is-dimmed ? #1e1e2e66 : Theme.surface-variant))));
+    background: root.tag.is-selected ? Theme.surface-selected : (
+        root.tag.is-assigned ? (root.tag.is-dimmed ? #a6e3a118 : #a6e3a128) : (
+            root.tag.is-partial ? (root.tag.is-dimmed ? #f9e2af15 : #f9e2af22) : (
+                tag-touch.has-hover ? Theme.surface-hover : (root.tag.is-dimmed ? #1e1e2e66 : Theme.surface-variant)
+            )
+        )
+    );
 
     border-radius: 3px;
     border-width: 1px;
 
-    border-color: root.tag.is-selected ? Theme.primary :
-                 (root.tag.is-assigned ? (root.tag.is-dimmed ? #a6e3a188 : #a6e3a1) :
-                 (root.tag.is-partial ? (root.tag.is-dimmed ? #f9e2af88 : #f9e2af) : Theme.border));
+    border-color: root.tag.is-selected ? Theme.primary : (
+        root.tag.is-assigned ? (root.tag.is-dimmed ? #a6e3a188 : #a6e3a1) : (
+            root.tag.is-partial ? (root.tag.is-dimmed ? #f9e2af88 : #f9e2af) : Theme.border
+        )
+    );
 
     opacity: root.is-item-enabled ? 1.0 : 0.45;
 
@@ -118,9 +98,11 @@ export component TagTreeItem inherits Rectangle {
 
         Text {
             text: root.tag.name;
-            color: root.tag.is-selected ? Theme.primary :
-                   (root.tag.is-assigned ? #a6e3a1 :
-                   (root.tag.is-partial ? #f9e2af : Theme.text));
+            color: root.tag.is-selected ? Theme.primary : (
+                root.tag.is-assigned ? #a6e3a1 : (
+                    root.tag.is-partial ? #f9e2af : Theme.text
+                )
+            );
 
             font-weight: (root.tag.is-selected || root.tag.is-assigned || root.tag.depth == 0) ? 700 : 400;
             font-italic: root.tag.is-partial;
@@ -237,6 +219,12 @@ export component TagPanel inherits VerticalLayout {
     in-out property <bool> tag-filter-is-regex: false;
     in property <[TagColumnView]> tag-columns: [];
 
+    // Tag History properties
+    in property <[TagHistoryRowModel]> tag-history-rows: [];
+    in property <int> tag-history-count: 0;
+    in-out property <bool> tag-history-is-collapsed: false;
+    in-out property <length> tag-history-height: 96px;
+
     out property <bool> filter-has-focus: filter-input.has-focus;
 
     callback mode-toggled(bool);
@@ -252,12 +240,14 @@ export component TagPanel inherits VerticalLayout {
     callback root-context-menu(length, length);
     callback tree-geometry-changed(length /* available_height */);
 
-    // 1. Clean Dock Header
-    header := TagDockHeader {
-        root-context-menu(x, y) => { root.root-context-menu(header.x + x, header.y + y); }
-    }
+    // Tag History callbacks
+    callback tag-history-collapsed-toggled(bool);
+    callback tag-history-tag-clicked(int /* tag_id */);
+    callback tag-history-geometry-changed(length /* available_width */);
+    callback tag-history-resized(length /* new_height */);
+    callback tag-history-resize-finished(length /* final_height */);
 
-    // 2. Modular Tag Panel Toolbar (Mode, Match, Scope Dropdown, Sensitive Reset)
+    // a. Controls: Modular Tag Panel Toolbar (Mode, Match, Scope Dropdown, Sensitive Reset)
     TagPanelToolbar {
         is-assign-mode <=> root.is-assign-mode;
         match-mode-idx <=> root.match-mode-idx;
@@ -270,7 +260,7 @@ export component TagPanel inherits VerticalLayout {
         reset-clicked => { root.reset-clicked(); }
     }
 
-    // 3. Rating Selector Bar
+    // b. Rating-Buttons: Rating Selector Bar
     RatingBar {
         selected-rating <=> root.selected-rating;
         is-assign-mode: root.is-tab-view ? true : root.is-assign-mode;
@@ -279,7 +269,7 @@ export component TagPanel inherits VerticalLayout {
         rating-selected(r) => { root.rating-selected(r); }
     }
 
-    // 4. Tag Filter Input with integrated regex toggle & clear button
+    // c. Filter Search: Tag Filter Input with integrated regex toggle & clear button
     filter-input := TagSearchFilter {
         text <=> root.filter-text;
         is-regex <=> root.tag-filter-is-regex;
@@ -288,8 +278,9 @@ export component TagPanel inherits VerticalLayout {
         regex-toggled(r) => { root.tag-regex-toggled(r); }
     }
 
-    // 5. Tag Hierarchical Tree View (Native Slint Dynamic Column Layout)
+    // d. Tags Tree: Hierarchical Tree View (stretches vertically to fill main panel area)
     tree-list := TagTreeList {
+        vertical-stretch: 1;
         columns: root.tag-columns;
         is-assign-mode: root.is-tab-view ? true : root.is-assign-mode;
         has-selection: root.has-selection;
@@ -298,5 +289,39 @@ export component TagPanel inherits VerticalLayout {
         tag-toggle-expand(id) => { root.tag-toggle-expand(id); }
         tag-context-menu(id, x, y) => { root.tag-context-menu(id, tree-list.x + x, tree-list.y + y); }
         root-context-menu(x, y) => { root.root-context-menu(tree-list.x + x, tree-list.y + y); }
+    }
+
+    // Horizontal Resizer Bar positioned between Tag Tree and Tag History
+    history-resizer := ResizerBar {
+        is-horizontal: false;
+        height: (!root.tag-history-is-collapsed) ? self.thickness : 0px;
+        visible: !root.tag-history-is-collapsed;
+
+        property <length> start-h: 96px;
+        drag-started => {
+            self.start-h = root.tag-history-height;
+        }
+        dragged(delta) => {
+            // Tag History is bottom-anchored: dragging UP (negative delta) expands, dragging DOWN (positive delta) shrinks
+            root.tag-history-height = Math.max(40px, Math.min(500px, self.start-h - delta));
+            root.tag-history-resized(root.tag-history-height);
+        }
+        drag-finished => {
+            root.tag-history-resize-finished(root.tag-history-height);
+        }
+    }
+
+    // e. Tags History: Collapsible panel at the bottom with resizable body height
+    history-panel := TagHistoryPanel {
+        vertical-stretch: 0;
+        body-height: root.tag-history-height;
+        is-dragging: history-resizer.is-dragging;
+        rows: root.tag-history-rows;
+        tag-count: root.tag-history-count;
+        is-collapsed <=> root.tag-history-is-collapsed;
+        has-selection: root.has-selection;
+        collapsed-toggled(c) => { root.tag-history-collapsed-toggled(c); }
+        tag-clicked(id) => { root.tag-history-tag-clicked(id); }
+        geometry-changed(w) => { root.tag-history-geometry-changed(w); }
     }
 }

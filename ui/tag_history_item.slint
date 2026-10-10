@@ -1,0 +1,120 @@
+import { Theme } from "styles.slint";
+import { TagHistoryItemModel } from "types.slint";
+import { TooltipHost } from "tooltips.slint";
+
+export component TagHistoryItemView inherits Rectangle {
+    in property <TagHistoryItemModel> item;
+    in property <bool> is-enabled: true;
+    callback clicked();
+
+    width: content-layout.preferred-width;
+    height: 22px;
+    border-radius: 4px;
+    clip: true;
+
+    background: root.item.is-assigned ? (
+        touch-area.has-hover ? #a6e3a133 : #a6e3a122
+    ) : (
+        root.item.is-partial ? (
+            touch-area.has-hover ? #f9e2af33 : #f9e2af22
+        ) : (
+            touch-area.has-hover ? Theme.surface-hover : Theme.surface-variant
+        )
+    );
+
+    border-width: 1px;
+    border-color: root.item.is-assigned ? (
+        touch-area.has-hover ? #a6e3a1 : #a6e3a1aa
+    ) : (
+        root.item.is-partial ? (
+            touch-area.has-hover ? #f9e2af : #f9e2afaa
+        ) : (
+            touch-area.has-hover ? Theme.primary : Theme.border
+        )
+    );
+
+    // Clean hierarchical tooltip without action text
+    tooltip-host := TooltipHost {
+        text: root.item.tooltip != "" ? root.item.tooltip : root.item.display-text;
+        is-enabled: root.is-enabled;
+    }
+
+    touch-area := TouchArea {
+        enabled: root.is-enabled;
+        mouse-cursor: root.is-enabled ? pointer : default;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                tooltip-host.on-hover-leave();
+            }
+        }
+        clicked => {
+            tooltip-host.on-hover-leave();
+            root.clicked();
+        }
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: touch-area.has-hover;
+    changed is-hovered => {
+        if self.is-hovered {
+            tooltip-host.on-hover-enter(touch-area.mouse-x, touch-area.mouse-y);
+        } else {
+            tooltip-host.on-hover-leave();
+        }
+    }
+
+    content-layout := HorizontalLayout {
+        padding-left: 5px;
+        padding-right: 5px;
+        spacing: 3px;
+        alignment: start;
+
+        // Tree-identical status icons
+        if root.item.is-assigned || root.item.is-partial : Rectangle {
+            width: 11px;
+            height: 11px;
+            y: (parent.height - self.height) / 2;
+
+            Text {
+                text: root.item.is-assigned ? "✓" : "◐";
+                font-size: 9px;
+                font-weight: 700;
+                color: root.item.is-assigned ? #a6e3a1 : #f9e2af;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Zero-jitter bold text measurement box
+        text-box := Rectangle {
+            width: measure-text.preferred-width;
+
+            measure-text := Text {
+                text: root.item.display-text;
+                font-size: 11px;
+                font-weight: 700;
+                font-italic: root.item.is-italic;
+                visible: false;
+            }
+
+            label := Text {
+                width: 100%;
+                height: 100%;
+                text: root.item.display-text;
+                font-size: 11px;
+                font-weight: root.item.is-bold ? 700 : 400;
+                font-italic: root.item.is-italic;
+                color: root.item.is-assigned ? #a6e3a1 : (
+                    root.item.is-partial ? #f9e2af : (
+                        touch-area.has-hover ? Theme.primary : Theme.text
+                    )
+                );
+                vertical-alignment: center;
+                horizontal-alignment: left;
+                overflow: elide;
+            }
+        }
+    }
+}

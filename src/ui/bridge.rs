@@ -21,6 +21,7 @@ use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tag_dialogs::TagDialogController;
+use super::bridge_tag_history::BridgeTagHistory;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_thumbnails::BridgeThumbnails;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
@@ -130,6 +131,12 @@ impl UiBridge {
         };
         initial_state.expanded_folder_ids = restored_expanded_folders.into_iter().collect();
 
+        // Restore Tag History persistent state
+        initial_state.tag_history_ids = settings.get().tags.history_tag_ids.clone();
+        initial_state.max_history_tags = settings.get().tags.max_history_tags;
+        initial_state.is_tag_history_collapsed = settings.get().tags.is_history_collapsed;
+        initial_state.tag_history_height = settings.get().tags.history_height;
+
         let v_settings = settings.get().view;
         window.set_is_table_view(v_settings.is_table_view);
 
@@ -184,6 +191,10 @@ impl UiBridge {
         window.set_enable_tooltips(app_settings.appearance.enable_tooltips);
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
+
+        // Synchronize initial Tag History properties
+        window.set_tag_history_height(initial_state.tag_history_height);
+        window.set_tag_history_is_collapsed(initial_state.is_tag_history_collapsed);
 
         StatusBarBridge::info(&window, "Initializing RustView...");
 
@@ -323,6 +334,14 @@ impl UiBridge {
             &bridge.state,
         );
 
+        // Initialize Assigned Tags History module
+        BridgeTagHistory::init(
+            &bridge.window,
+            &bridge.library,
+            &bridge.settings,
+            &bridge.state,
+        );
+
         let w_weak = bridge.window.as_weak();
         let lib = bridge.library.clone();
         let thumb = bridge.thumbnails.clone();
@@ -442,6 +461,19 @@ impl UiBridge {
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
                 }
 
+                if diff_clone.tags_settings_changed {
+                    {
+                        let mut st = state.write();
+                        st.max_history_tags = new_clone.tags.max_history_tags;
+                        st.is_tag_history_collapsed = new_clone.tags.is_history_collapsed;
+                        st.tag_history_ids = new_clone.tags.history_tag_ids.clone();
+                        st.tag_history_height = new_clone.tags.history_height;
+                    }
+                    window.set_tag_history_height(new_clone.tags.history_height);
+                    window.set_tag_history_is_collapsed(new_clone.tags.is_history_collapsed);
+                    BridgeTagHistory::sync_ui(&window, &library, &state);
+                }
+
                 // Sync sidebar panel tabs if their settings changed
                 BridgeSidebarPanelTabs::sync_ui(&window, &settings, &state);
 
@@ -518,6 +550,86 @@ impl UiBridge {
             self.state.clone(),
             self.fullscreen_controller.clone(),
         );
+
+        // Assigned Tags History Callbacks
+        let set_th_col = self.settings.clone();
+        let st_th_col = self.state.clone();
+        self.window.on_tag_history_collapsed_toggled(move |collapsed| {
+            BridgeTagHistory::handle_collapsed_toggled(collapsed, &set_th_col, &st_th_col);
+        });
+
+        let win_th_click = self.window.clone_strong();
+        let lib_th_click = self.library.clone();
+        let thumb_th_click = self.thumbnails.clone();
+        let tm_th_click = self.tab_manager.clone();
+        let set_th_click = self.settings.clone();
+        let st_th_click = self.state.clone();
+        self.window.on_tag_history_tag_clicked(move |tag_id| {
+            BridgeTagHistory::handle_tag_history_clicked(
+                tag_id as u32,
+                &win_th_click,
+                &lib_th_click,
+                &thumb_th_click,
+                &tm_th_click,
+                &set_th_click,
+                &st_th_click,
+            );
+        });
+
+        let win_th_geom = self.window.clone_strong();
+        let lib_th_geom = self.library.clone();
+        let st_th_geom = self.state.clone();
+        self.window.on_tag_history_geometry_changed(move |avail_w| {
+            BridgeTagHistory::handle_geometry_changed(
+                avail_w,
+                &win_th_geom,
+                &lib_th_geom,
+                &st_th_geom,
+            );
+        });
+
+        // High-FPS Tag History Height Resizing Callbacks
+        let last_th_resize = Arc::new(Mutex::new(Instant::now()));
+        let th_resize_count = Arc::new(AtomicUsize::new(0));
+        let last_th_clone = last_th_resize;
+        let th_count_clone = th_resize_count;
+        let st_th_resize = self.state.clone();
+
+        self.window.on_tag_history_resized(move |new_height| {
+            let count = th_count_clone.fetch_add(1, Ordering::Relaxed) + 1;
+            st_th_resize.write().tag_history_height = new_height;
+
+            let mut last_log = last_th_clone.lock();
+            let elapsed = last_log.elapsed();
+            if elapsed.as_millis() >= 100 {
+                let hz = if elapsed.as_secs_f64() > 0.0 {
+                    (count as f64) / elapsed.as_secs_f64()
+                } else {
+                    0.0
+                };
+                tracing::debug!(
+                    height = new_height,
+                    event_rate_hz = format!("{:.1}", hz),
+                    total_events = count,
+                    "[Benchmark: TagHistory Drag] Smooth high-FPS Tag History height resize active"
+                );
+                *last_log = Instant::now();
+                th_count_clone.store(0, Ordering::Relaxed);
+            }
+        });
+
+        let set_th_fin = self.settings.clone();
+        let st_th_fin = self.state.clone();
+        self.window.on_tag_history_resize_finished(move |final_height| {
+            tracing::info!(
+                final_height,
+                "[UiBridge: TagHistory] Tag History height resize finished and persisted"
+            );
+            st_th_fin.write().tag_history_height = final_height;
+            let mut app_settings = set_th_fin.get();
+            app_settings.tags.history_height = final_height;
+            set_th_fin.save_quiet_async(&app_settings);
+        });
 
         BridgeMedia::register_query_callbacks(
             &self.window,

@@ -5,6 +5,7 @@ use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_tag_history::BridgeTagHistory;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::{MainWindow, TagColumnView, TagNodeView};
@@ -336,61 +337,62 @@ impl TagTreeSync {
             window.set_selected_rating(query_rating as i32);
         }
 
-        if col_count == 0 {
-            return;
-        }
+        if col_count > 0 {
+            let mut modified_rows = 0;
+            let mut total_rows = 0;
 
-        let mut modified_rows = 0;
-        let mut total_rows = 0;
+            for col_idx in 0..col_count {
+                if let Some(col_view) = current_columns.row_data(col_idx) {
+                    let col_model = col_view.tags;
+                    let rows_in_col = col_model.row_count();
+                    total_rows += rows_in_col;
 
-        for col_idx in 0..col_count {
-            if let Some(col_view) = current_columns.row_data(col_idx) {
-                let col_model = col_view.tags;
-                let rows_in_col = col_model.row_count();
-                total_rows += rows_in_col;
+                    for row_idx in 0..rows_in_col {
+                        if let Some(mut row) = col_model.row_data(row_idx) {
+                            let tag_id = row.id as TagId;
+                            let is_assigned = is_assign && stats.is_fully_assigned(tag_id);
+                            let is_partial = is_assign && stats.is_partially_assigned(tag_id);
+                            let is_selected = !is_assign && selected_query_tags.contains(&tag_id);
 
-                for row_idx in 0..rows_in_col {
-                    if let Some(mut row) = col_model.row_data(row_idx) {
-                        let tag_id = row.id as TagId;
-                        let is_assigned = is_assign && stats.is_fully_assigned(tag_id);
-                        let is_partial = is_assign && stats.is_partially_assigned(tag_id);
-                        let is_selected = !is_assign && selected_query_tags.contains(&tag_id);
+                            let raw_name = Self::strip_count_suffix(row.name.as_str());
+                            let formatted_name = if is_assign {
+                                stats.format_display_name(raw_name, tag_id)
+                            } else {
+                                raw_name.to_string()
+                            };
 
-                        let raw_name = Self::strip_count_suffix(row.name.as_str());
-                        let formatted_name = if is_assign {
-                            stats.format_display_name(raw_name, tag_id)
-                        } else {
-                            raw_name.to_string()
-                        };
-
-                        let formatted_slint: slint::SharedString = formatted_name.into();
-                        if row.name != formatted_slint
-                            || row.is_assigned != is_assigned
-                            || row.is_partial != is_partial
-                            || row.is_selected != is_selected
-                        {
-                            row.name = formatted_slint;
-                            row.is_assigned = is_assigned;
-                            row.is_partial = is_partial;
-                            row.is_selected = is_selected;
-                            col_model.set_row_data(row_idx, row);
-                            modified_rows += 1;
+                            let formatted_slint: slint::SharedString = formatted_name.into();
+                            if row.name != formatted_slint
+                                || row.is_assigned != is_assigned
+                                || row.is_partial != is_partial
+                                || row.is_selected != is_selected
+                            {
+                                row.name = formatted_slint;
+                                row.is_assigned = is_assigned;
+                                row.is_partial = is_partial;
+                                row.is_selected = is_selected;
+                                col_model.set_row_data(row_idx, row);
+                                modified_rows += 1;
+                            }
                         }
                     }
                 }
             }
+
+            tracing::debug!(
+                mode = if is_assign { "ASSIGN" } else { "QUERY" },
+                is_tab_mode = is_tab_mode,
+                total_columns = col_count,
+                total_rows = total_rows,
+                modified_rows = modified_rows,
+                selected_files = stats.selected_files_count,
+                elapsed_us = t0.elapsed().as_micros(),
+                "[TagTree: InPlace Selection Sync] Tag & Rating panel state synchronized in-place with native column layouts"
+            );
         }
 
-        tracing::debug!(
-            mode = if is_assign { "ASSIGN" } else { "QUERY" },
-            is_tab_mode = is_tab_mode,
-            total_columns = col_count,
-            total_rows = total_rows,
-            modified_rows = modified_rows,
-            selected_files = stats.selected_files_count,
-            elapsed_us = t0.elapsed().as_micros(),
-            "[TagTree: InPlace Selection Sync] Tag & Rating panel state synchronized in-place with native column layouts"
-        );
+        // Keep Assigned Tags History panel synchronized in-place
+        BridgeTagHistory::sync_ui(window, library, state);
     }
 }
 
@@ -490,6 +492,9 @@ impl TagActionHandler {
                 ctx.window,
                 format!("Assigned tag '{}' to {} file(s)", tag_name, total_selected),
             );
+
+            // Record tag assignment in history: automatically push to position 0
+            BridgeTagHistory::record_tag_assigned(tag_id, ctx.settings, ctx.state);
         }
 
         Self::update_grid_tag_badges(selected_ids, ctx.window, ctx.library, ctx.state);
@@ -503,6 +508,7 @@ impl TagActionHandler {
             ctx.state,
         );
         StatusBarBridge::update_metrics(ctx.window, ctx.state);
+        BridgeTagHistory::sync_ui(ctx.window, ctx.library, ctx.state);
     }
 
     fn handle_query_mode_toggle(
@@ -521,7 +527,7 @@ impl TagActionHandler {
         Self::execute_query_flow(ctx);
     }
 
-    fn update_grid_tag_badges(
+    pub fn update_grid_tag_badges(
         selected_ids: &HashSet<MediaId>,
         window: &MainWindow,
         library: &Library,

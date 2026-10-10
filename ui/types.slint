@@ -61,6 +61,22 @@ export struct TagColumnView {
     tags: [TagNodeView],
 }
 
+export struct TagHistoryItemModel {
+    id: int,
+    name: string,
+    display_text: string,
+    is_assigned: bool,
+    is_partial: bool,
+    is_bold: bool,
+    is_italic: bool,
+    width: length,
+    tooltip: string,
+}
+
+export struct TagHistoryRowModel {
+    items: [TagHistoryItemModel],
+}
+
 export struct ContextMenuItemModel {
     id: int,
     text: string,

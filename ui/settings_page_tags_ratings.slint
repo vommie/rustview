@@ -1,0 +1,51 @@
+import { Slider } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+
+export component SettingsPageTagsRatings inherits VerticalLayout {
+    spacing: 12px;
+
+    in-out property <int> max-history-tags: 20;
+
+    SettingsCard {
+        title: "Hierarchical Categorization Defaults";
+        description: "Default combinatorial query mode and search scope.";
+    }
+
+    SettingsCard {
+        title: "Tag History";
+        description: "Configure the recently assigned tags history cache.";
+
+        HorizontalLayout {
+            Text {
+                text: "Maximum History Tags to Display:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Slider {
+                width: 150px;
+                minimum: 5;
+                maximum: 50;
+                value: root.max-history-tags;
+                changed(v) => { root.max-history-tags = Math.round(v); }
+            }
+
+            Text {
+                text: root.max-history-tags + " tags";
+                color: Theme.primary;
+                width: 60px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        Text {
+            text: "Tags are automatically added to the history whenever they are assigned. If the limit is decreased, the oldest entries are trimmed upon saving.";
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+}

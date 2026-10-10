@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
-import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, ContextMenuItemModel, ConflictFileView, TabItemModel, TabGridItemModel, SidebarPanelTabModel } from "types.slint";
+import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, TagHistoryRowModel, ContextMenuItemModel, ConflictFileView, TabItemModel, TabGridItemModel, SidebarPanelTabModel } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
 import { SidebarRight } from "sidebar_right.slint";
@@ -221,6 +221,18 @@ export component MainWindow inherits Window {
     in-out property <bool> has-active-query: false;
     in-out property <string> tag-filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
+
+    // Assigned Tags History Properties
+    in property <[TagHistoryRowModel]> tag-history-rows: [];
+    in property <int> tag-history-count: 0;
+    in-out property <bool> tag-history-is-collapsed: false;
+    in-out property <length> tag-history-height: 96px;
+
+    callback tag-history-collapsed-toggled(bool);
+    callback tag-history-tag-clicked(int /* tag_id */);
+    callback tag-history-geometry-changed(length /* available_width */);
+    callback tag-history-resized(length /* new_height */);
+    callback tag-history-resize-finished(length /* final_height */);
 
     property <bool> is-text-input-focused: media-toolbar.search-has-focus || sidebar_right.tag-filter-has-focus;
 
@@ -684,6 +696,7 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-left-width;
                 }
                 dragged(delta) => {
+                    // Left-anchored sidebar: dragging left shrinks, dragging right expands
                     root.sidebar-left-width = Math.max(150px, Math.min(700px, self.start-w + delta));
                     root.sidebar-left-resized(root.sidebar-left-width);
                 }
@@ -905,7 +918,8 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-right-width;
                 }
                 dragged(delta) => {
-                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w + delta));
+                    // Right-anchored sidebar: dragging left (negative delta) expands, dragging right shrinks
+                    root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w - delta));
                     root.sidebar-right-resized(root.sidebar-right-width);
                 }
                 drag-finished => {
@@ -927,6 +941,17 @@ export component MainWindow inherits Window {
                 is-tab-view: root.active-view-mode == 1;
                 tag-filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
+
+                // Bind Tag History properties
+                tag-history-rows: root.tag-history-rows;
+                tag-history-count: root.tag-history-count;
+                tag-history-is-collapsed <=> root.tag-history-is-collapsed;
+                tag-history-height <=> root.tag-history-height;
+                tag-history-collapsed-toggled(c) => { root.tag-history-collapsed-toggled(c); }
+                tag-history-tag-clicked(id) => { root.tag-history-tag-clicked(id); }
+                tag-history-geometry-changed(w) => { root.tag-history-geometry-changed(w); }
+                tag-history-resized(h) => { root.tag-history-resized(h); }
+                tag-history-resize-finished(h) => { root.tag-history-resize-finished(h); }
 
                 mode-toggled(assign) => { root.tag-mode-toggled(assign); }
                 rating-selected(r) => { root.rating-applied(r); }
