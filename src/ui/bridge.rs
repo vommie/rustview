@@ -67,6 +67,20 @@ pub struct RenameActionParams<'a> {
     pub fullscreen_controller: &'a ImageFullscreenDialogController,
 }
 
+/// Parameter struct grouping delete trigger dependencies.
+pub struct DeleteActionParams<'a> {
+    pub window: &'a MainWindow,
+    pub library: &'a Arc<Library>,
+    pub thumbnails: &'a Arc<ThumbnailManager>,
+    pub tab_manager: &'a Arc<ViewerTabManager>,
+    pub settings: &'a Arc<SettingsManager>,
+    pub state: &'a Arc<RwLock<UiState>>,
+    pub favorites: &'a Arc<RwLock<FavoriteManager>>,
+    pub delete_file_dialog: &'a DeleteFileDialogController,
+    pub remove_orphaned_file_dialog: &'a RemoveOrphanedFileDialogController,
+    pub folder_dialogs: &'a FolderDialogController,
+}
+
 pub struct UiBridge {
     window: MainWindow,
     library: Arc<Library>,
@@ -674,6 +688,7 @@ impl UiBridge {
         });
 
         self.register_rename_callbacks();
+        self.register_delete_callbacks();
         self.register_keyboard_navigation_callbacks();
         self.register_tab_grid_callbacks();
         self.register_dnd_callbacks();
@@ -774,6 +789,217 @@ impl UiBridge {
                 fullscreen_controller: &fs_ctrl,
             });
         });
+    }
+
+    fn register_delete_callbacks(&self) {
+        let win = self.window.clone_strong();
+        let lib = self.library.clone();
+        let thumb = self.thumbnails.clone();
+        let tm = self.tab_manager.clone();
+        let set = self.settings.clone();
+        let st = self.state.clone();
+        let favs = self.favorites.clone();
+        let del_file_dlg = self.delete_file_dialog.clone();
+        let orph_file_dlg = self.remove_orphaned_dialog.clone();
+        let fld_dlg = self.folder_dialogs.clone();
+
+        self.window.on_request_delete(move || {
+            Self::trigger_delete_action(DeleteActionParams {
+                window: &win,
+                library: &lib,
+                thumbnails: &thumb,
+                tab_manager: &tm,
+                settings: &set,
+                state: &st,
+                favorites: &favs,
+                delete_file_dialog: &del_file_dlg,
+                remove_orphaned_file_dialog: &orph_file_dlg,
+                folder_dialogs: &fld_dlg,
+            });
+        });
+    }
+
+    /// Handles DEL key trigger in Browse-View: delegates contextually to media files or folder deletion.
+    /// Completely ignores tags if a tag was selected or active.
+    pub fn trigger_delete_action(params: DeleteActionParams<'_>) {
+        let window = params.window;
+        let active_mode = window.get_active_view_mode();
+
+        // 1. Gating: DEL delete shortcut operates exclusively in Browse-View (mode 0)
+        if active_mode != 0 {
+            tracing::debug!(
+                active_mode,
+                "[UiBridge: DeleteAction] DEL key pressed outside Browse View (mode != 0); operation safely bypassed"
+            );
+            return;
+        }
+
+        // 2. System Busy Guard
+        if BridgeMedia::is_system_busy(window, params.thumbnails, params.state) {
+            StatusBarBridge::warn(
+                window,
+                "Cannot delete: an active operation is in progress.",
+            );
+            return;
+        }
+
+        // 3. Context-sensitive focus resolution
+        let last_panel = params.state.read().last_active_panel;
+        let active_sidebar_tab = window.get_active_sidebar_panel_tab();
+        let is_folders_tab = active_sidebar_tab.as_str() == "folders";
+        let is_favorites_tab = active_sidebar_tab.as_str() == "favorites";
+
+        let effective_panel = match last_panel {
+            LastActivePanel::Media => LastActivePanel::Media,
+            LastActivePanel::Folder => {
+                if is_favorites_tab {
+                    LastActivePanel::Favorite
+                } else {
+                    LastActivePanel::Folder
+                }
+            }
+            LastActivePanel::Favorite => {
+                if is_folders_tab {
+                    LastActivePanel::Folder
+                } else {
+                    LastActivePanel::Favorite
+                }
+            }
+        };
+
+        // FAVORITES FOCUS: Remove focused favorite
+        if effective_panel == LastActivePanel::Favorite {
+            let selected_fav_path = params.state.read().selected_favorite_path.clone();
+            let path_to_remove = selected_fav_path.or_else(|| {
+                params.state.read().current_folder_path.clone()
+            });
+
+            if let Some(path) = path_to_remove
+                && let Some(entry) = params.favorites.read().get_by_path(&path)
+            {
+                tracing::info!(
+                    path = %LogObscurer::path(&path),
+                    alias = %entry.alias,
+                    "[UiBridge: DeleteAction] DEL pressed on Favorite focus: Removing favorite"
+                );
+                BridgeFavorites::remove_favorite(window, params.favorites, &path);
+                return;
+            }
+
+            StatusBarBridge::info(window, "Select a favorite to remove (Del).");
+            return;
+        }
+
+        // FOLDER TREE FOCUS: Delete focused folder
+        if effective_panel == LastActivePanel::Folder {
+            let current_folder_id = params.state.read().current_folder_id;
+            let Some(folder_id) = current_folder_id else {
+                StatusBarBridge::info(window, "No folder selected to delete (Del).");
+                return;
+            };
+
+            // Protect root directory from deletion
+            let is_root = {
+                let app_settings = params.settings.get();
+                if let Some(ref root_p) = app_settings.general.root_folder
+                    && let Ok(Some(folder_rec)) = params.library.folders().get_folder(folder_id)
+                {
+                    normalize_path(Path::new(&folder_rec.path)) == normalize_path(root_p)
+                } else {
+                    false
+                }
+            };
+
+            if is_root {
+                StatusBarBridge::info(window, "Cannot delete the library root directory.");
+                return;
+            }
+
+            let folder_rec_opt = params.library.folders().get_folder(folder_id).ok().flatten();
+            let Some(folder_rec) = folder_rec_opt else {
+                StatusBarBridge::error(window, "Folder record not found in database.");
+                return;
+            };
+
+            let folder_name = Path::new(&folder_rec.path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| folder_rec.path.clone());
+
+            let folder_ctx = FolderDialogContext {
+                library: params.library.clone(),
+                thumbnails: params.thumbnails.clone(),
+                settings: params.settings.clone(),
+                state: params.state.clone(),
+            };
+
+            if folder_rec.is_deleted {
+                tracing::info!(
+                    folder_id,
+                    folder_name = %folder_name,
+                    "[UiBridge: DeleteAction] DEL key pressed on missing folder: opening remove_orphaned folder dialog"
+                );
+                params.folder_dialogs.show_remove_orphaned(
+                    window,
+                    folder_id,
+                    &folder_name,
+                    folder_ctx,
+                );
+            } else {
+                tracing::info!(
+                    folder_id,
+                    folder_name = %folder_name,
+                    "[UiBridge: DeleteAction] DEL key pressed on active folder: opening delete folder dialog"
+                );
+                params.folder_dialogs.show_delete(
+                    window,
+                    folder_id,
+                    &folder_name,
+                    folder_ctx,
+                );
+            }
+            return;
+        }
+
+        // MEDIA FOCUS: Delete selected files
+        let selected_ids = params.state.read().get_selected_ids_ordered();
+        if selected_ids.is_empty() {
+            StatusBarBridge::info(window, "Select one or more files to delete (Del).");
+            return;
+        }
+
+        let all_selected_deleted = {
+            let st = params.state.read();
+            selected_ids.iter().all(|&id| {
+                st.all_folder_media
+                    .iter()
+                    .find(|m| m.record.id == id)
+                    .map(|m| m.record.is_deleted)
+                    .unwrap_or(false)
+            })
+        };
+
+        let dialog_ctx = FileDialogContext {
+            library: params.library.clone(),
+            thumbnails: params.thumbnails.clone(),
+            tab_manager: params.tab_manager.clone(),
+            settings: params.settings.clone(),
+            state: params.state.clone(),
+        };
+
+        if all_selected_deleted {
+            tracing::info!(
+                count = selected_ids.len(),
+                "[UiBridge: DeleteAction] DEL pressed on media selection (all missing): opening remove_orphaned files dialog"
+            );
+            params.remove_orphaned_file_dialog.show(window, selected_ids, dialog_ctx);
+        } else {
+            tracing::info!(
+                count = selected_ids.len(),
+                "[UiBridge: DeleteAction] DEL pressed on media selection: opening delete files dialog"
+            );
+            params.delete_file_dialog.show(window, selected_ids, dialog_ctx);
+        }
     }
 
     pub fn trigger_rename_action(params: RenameActionParams<'_>) {

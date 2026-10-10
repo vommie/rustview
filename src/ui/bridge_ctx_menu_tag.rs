@@ -69,7 +69,7 @@ impl TagContextMenu {
             .action(
                 CTX_TAG_DELETE,
                 "Delete Tag...",
-                Some("Del"),
+                None,
                 Some("trash"),
                 true,
             )

@@ -331,6 +331,7 @@ export component MainWindow inherits Window {
 
     callback modal-dismiss-requested();
     callback request-rename();
+    callback request-delete();
 
     // Global Media Selection Callbacks (Ctrl+A & Ctrl+Shift+A)
     callback select-all-media();
@@ -508,6 +509,14 @@ export component MainWindow inherits Window {
             if event.text == Key.F2 && !root.is-text-input-focused {
                 root.request-rename();
                 return accept;
+            }
+
+            // DEL Shortcut for media file or folder deletion in Browse mode (Disabled while editing text inputs)
+            if event.text == Key.Delete && !root.is-text-input-focused {
+                if root.active-view-mode == 0 {
+                    root.request-delete();
+                    return accept;
+                }
             }
 
             if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
