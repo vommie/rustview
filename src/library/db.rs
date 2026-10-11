@@ -18,6 +18,7 @@ pub struct LibraryDatabase {
     pub sequences: Database<Str, U64<BE>>,
     pub folders: Database<U64<BE>, FolderRecordCodec>,
     pub folders_by_path: Database<Str, U64<BE>>,
+    pub folders_by_parent: Database<U64<BE>, SerdeBincode<Vec<FolderId>>>,
     pub media: Database<U64<BE>, MediaRecordCodec>,
     pub media_by_folder: Database<U64<BE>, SerdeBincode<Vec<MediaId>>>,
     pub media_by_hash: Database<Bytes, SerdeBincode<Vec<MediaId>>>,
@@ -51,6 +52,8 @@ impl LibraryDatabase {
             env.create_database(&mut wtxn, Some(DB_FOLDERS))?;
         let folders_by_path: Database<Str, U64<BE>> =
             env.create_database(&mut wtxn, Some(DB_FOLDERS_BY_PATH))?;
+        let folders_by_parent: Database<U64<BE>, SerdeBincode<Vec<FolderId>>> =
+            env.create_database(&mut wtxn, Some(DB_FOLDERS_BY_PARENT))?;
         let media: Database<U64<BE>, MediaRecordCodec> =
             env.create_database(&mut wtxn, Some(DB_MEDIA))?;
         let media_by_folder: Database<U64<BE>, SerdeBincode<Vec<MediaId>>> =
@@ -103,6 +106,7 @@ impl LibraryDatabase {
             sequences,
             folders,
             folders_by_path,
+            folders_by_parent,
             media,
             media_by_folder,
             media_by_hash,
@@ -128,7 +132,6 @@ impl LibraryDatabase {
     }
 
     /// Atomically updates the secondary `media_by_hash` index for a given `media_id`.
-    /// Handles unregistering from an old hash bucket and registering into a new hash bucket.
     pub fn update_media_hash_index(
         &self,
         wtxn: &mut heed::RwTxn,

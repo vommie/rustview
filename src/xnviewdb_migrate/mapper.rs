@@ -32,6 +32,7 @@ struct TagReindexContext<'a> {
 pub struct MappedData {
     pub folders: Vec<FolderRecord>,
     pub folder_id_map: HashMap<i64, FolderId>,
+    pub folders_by_parent: HashMap<FolderId, Vec<FolderId>>,
     pub tags: Vec<TagRecord>,
     pub tag_id_map: HashMap<i64, TagId>,
     pub media: Vec<MediaRecord>,
@@ -104,10 +105,16 @@ impl XnViewMapper {
         let mut folder_id_map: HashMap<i64, FolderId> = HashMap::with_capacity(raw.folders.len());
         let mut folder_path_map: HashMap<FolderId, PathBuf> =
             HashMap::with_capacity(raw.folders.len());
+        let mut path_to_folder_id: HashMap<PathBuf, FolderId> =
+            HashMap::with_capacity(raw.folders.len());
         let mut folder_dir_entries_cache: HashMap<FolderId, HashMap<String, DirItemInfo>> =
             HashMap::new();
 
         let mut next_folder_id = 1u64;
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
 
         for f in raw.folders {
             let normalized_path_buf = normalize_path(Path::new(f.pathname.trim()));
@@ -119,12 +126,6 @@ impl XnViewMapper {
                 if !is_under_root {
                     stats.skipped_folders_outside_root += 1;
                     logger.log_folder_outside_root(f.folder_id, &normalized_path_buf, root_path);
-                    tracing::debug!(
-                        old_folder_id = f.folder_id,
-                        path = %LogObscurer::path(&normalized_path_buf),
-                        root = %LogObscurer::path(root_path),
-                        "[XnViewMapper: Skip] Folder is outside configured base root directory."
-                    );
                     continue;
                 }
             }
@@ -137,11 +138,6 @@ impl XnViewMapper {
                     &normalized_path_buf,
                     "Directory does not exist on disk",
                 );
-                tracing::debug!(
-                    old_folder_id = f.folder_id,
-                    path = %LogObscurer::path(&normalized_path_buf),
-                    "[XnViewMapper: Skip] Folder does not exist on disk. Skipping folder and all child entries."
-                );
                 continue;
             }
 
@@ -149,8 +145,16 @@ impl XnViewMapper {
             next_folder_id += 1;
 
             let normalized_path_str = normalized_path_buf.to_string_lossy().to_string();
+            let folder_name = normalized_path_buf
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| normalized_path_str.clone());
+
+            let is_hidden = folder_name.starts_with('.');
+
             folder_id_map.insert(f.folder_id, new_folder_id);
             folder_path_map.insert(new_folder_id, normalized_path_buf.clone());
+            path_to_folder_id.insert(normalized_path_buf.clone(), new_folder_id);
 
             logger.log_folder_migrated(f.folder_id, new_folder_id, &normalized_path_str);
 
@@ -207,15 +211,48 @@ impl XnViewMapper {
 
             folders.push(FolderRecord {
                 id: new_folder_id,
+                parent_id: None,
+                name: folder_name,
                 path: normalized_path_str,
-                added_at: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0),
+                depth: 0,
+                is_hidden,
                 is_deleted: false,
+                subfolder_count: 0,
+                media_count: 0,
+                recursive_media_count: 0,
+                added_at: now_secs,
+                last_scanned_at: now_secs,
             });
         }
-        stats.total_folders = folders.len();
+
+        // Resolve relational parent linkage and depth
+        for folder in &mut folders {
+            let path_buf = PathBuf::from(&folder.path);
+            if let Some(parent_p) = path_buf.parent() {
+                let norm_parent = normalize_path(parent_p);
+                if let Some(&pid) = path_to_folder_id.get(&norm_parent) {
+                    folder.parent_id = Some(pid);
+                }
+            }
+        }
+
+        // Calculate depth accurately from root down
+        let mut depth_map: HashMap<FolderId, u32> = HashMap::new();
+        for folder in &folders {
+            let mut depth = 0u32;
+            let mut curr = folder.parent_id;
+            while let Some(pid) = curr {
+                depth += 1;
+                curr = folders.iter().find(|f| f.id == pid).and_then(|f| f.parent_id);
+            }
+            depth_map.insert(folder.id, depth);
+        }
+
+        for folder in &mut folders {
+            if let Some(&d) = depth_map.get(&folder.id) {
+                folder.depth = d;
+            }
+        }
 
         // 3. Hierarchical Tag Ordering, Re-indexing & Visual Tree Logging
         let (tags, tag_id_map, tag_tree_roots) = Self::reindex_tags(raw.tags, logger);
@@ -223,11 +260,6 @@ impl XnViewMapper {
 
         logger.log_tag_tree(&tag_tree_roots);
 
-        tracing::info!(
-            tags_count = tags.len(),
-            root_tags_count = tag_tree_roots.len(),
-            "[XnViewMapper] Hierarchical tag tree re-indexed and logged to audit trail"
-        );
         // 4. Media Filtering & Resolving via in-memory O(1) Cache
         let mut media = Vec::with_capacity(raw.images.len());
         let mut media_id_map: HashMap<i64, MediaId> = HashMap::with_capacity(raw.images.len());
@@ -399,7 +431,55 @@ impl XnViewMapper {
         }
         stats.total_media = media.len();
 
-        // 5. Relational Tag Associations (TagsTree) Mapping
+        // 5. Build Folders Children Map & Roll Up Aggregate Metrics
+        let mut folders_by_parent: HashMap<FolderId, Vec<FolderId>> = HashMap::new();
+        for folder in &folders {
+            if let Some(pid) = folder.parent_id {
+                folders_by_parent.entry(pid).or_default().push(folder.id);
+            }
+        }
+
+        for list in folders_by_parent.values_mut() {
+            list.sort();
+        }
+
+        // Direct media counts
+        for folder in &mut folders {
+            folder.media_count = media_by_folder
+                .get(&folder.id)
+                .map(|v| v.len() as u32)
+                .unwrap_or(0);
+            folder.subfolder_count = folders_by_parent
+                .get(&folder.id)
+                .map(|v| v.len() as u32)
+                .unwrap_or(0);
+        }
+
+        // Recursive roll-up from deepest to shallowest
+        let mut folder_index_by_id: HashMap<FolderId, usize> = HashMap::new();
+        for (idx, f) in folders.iter().enumerate() {
+            folder_index_by_id.insert(f.id, idx);
+        }
+
+        let mut depth_sorted_indices: Vec<usize> = (0..folders.len()).collect();
+        depth_sorted_indices.sort_by(|&a, &b| folders[b].depth.cmp(&folders[a].depth));
+
+        for idx in depth_sorted_indices {
+            let fid = folders[idx].id;
+            let mut total_rec = folders[idx].media_count;
+            if let Some(children) = folders_by_parent.get(&fid) {
+                for &cid in children {
+                    if let Some(&c_idx) = folder_index_by_id.get(&cid) {
+                        total_rec += folders[c_idx].recursive_media_count;
+                    }
+                }
+            }
+            folders[idx].recursive_media_count = total_rec;
+        }
+
+        stats.total_folders = folders.len();
+
+        // 6. Relational Tag Associations (TagsTree) Mapping
         let mut tags_by_media: HashMap<MediaId, Vec<TagId>> = HashMap::new();
         let mut media_by_tag: HashMap<TagId, Vec<MediaId>> = HashMap::new();
         let mut mapped_link_count = 0usize;
@@ -455,6 +535,7 @@ impl XnViewMapper {
         MappedData {
             folders,
             folder_id_map,
+            folders_by_parent,
             tags,
             tag_id_map,
             media,

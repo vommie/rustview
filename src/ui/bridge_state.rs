@@ -1,6 +1,5 @@
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId};
-use crate::library::dot_hidden::DotHiddenCache;
-use crate::library::models::{FolderId, MediaId, TagId};
+use crate::library::models::{FolderHierarchySnapshot, FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{
@@ -11,7 +10,6 @@ use crate::settings::{
 };
 use crate::system::DesktopApp;
 use crate::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
-use crate::ui::bridge_folders::FolderTreeNode;
 use crate::ui::file_selection::FileSelectionModel;
 use crate::ui::rubberband_selection::RubberbandSession;
 use crate::ui::sidebar_panel_tab_dnd::SidebarPanelTabDndSession;
@@ -76,6 +74,10 @@ pub const CTX_FOLDER_REFRESH_TREE_RELATIVE: CtxMenuActionId = 3007;
 pub const CTX_FOLDER_ADD_TO_FAVORITES: CtxMenuActionId = 3008;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
+// Media Batch Destination Action IDs
+pub const CTX_ACTION_COPY_TO_BASE: CtxMenuActionId = 500_000;
+pub const CTX_ACTION_MOVE_TO_BASE: CtxMenuActionId = 600_000;
+
 // Tab Context Menu Action IDs
 pub const CTX_TAB_DUPLICATE: CtxMenuActionId = 4001;
 pub const CTX_TAB_MOVE_TO_START: CtxMenuActionId = 4002;
@@ -92,7 +94,6 @@ pub const CTX_FAVORITE_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 5001;
 pub const CTX_FAVORITE_RENAME: CtxMenuActionId = 5002;
 pub const CTX_FAVORITE_REMOVE: CtxMenuActionId = 5003;
 
-/// Identifies the last active UI panel/target clicked by the user for context-aware actions like F2 renaming.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LastActivePanel {
     #[default]
@@ -101,7 +102,6 @@ pub enum LastActivePanel {
     Favorite,
 }
 
-/// High-performance LRU-managed bounded in-memory thumbnail store preventing RAM bloat on 100k+ datasets.
 #[derive(Debug, Clone)]
 pub struct LruThumbnailStore {
     capacity: usize,
@@ -124,7 +124,6 @@ impl LruThumbnailStore {
         }
     }
 
-    /// Inserts a thumbnail and returns the evicted MediaId if capacity was exceeded.
     #[inline]
     pub fn insert(&mut self, id: MediaId, buffer: SharedPixelBuffer<Rgb8Pixel>) -> Option<MediaId> {
         let mut evicted = None;
@@ -157,19 +156,8 @@ impl LruThumbnailStore {
         self.map.clear();
         self.order.clear();
     }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.map.len()
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
 }
 
-/// Central persistent state for UI bridges, tree expansions, virtualization windowing, tab grid and caching.
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
     pub current_folder_path: Option<PathBuf>,
@@ -205,27 +193,25 @@ pub struct UiState {
     pub active_favorite_target: Option<(String, PathBuf)>,
     pub selected_favorite_path: Option<PathBuf>,
 
-    // Tab Grid Masonry State & Real-Time Layout Cache
+    // Tab Grid Masonry State
     pub tab_grid_columns: usize,
     pub tab_grid_auto_columns: bool,
     pub cached_tab_grid_rects: Vec<MasonryRect>,
     pub cached_tab_grid_total_h: f32,
 
-    // Viewport Windowing & Hysteresis Paging State
+    // Viewport Windowing State
     pub loaded_slice_start: usize,
     pub loaded_slice_len: usize,
     pub loaded_slice_valid: bool,
 
-    // Hierarchical Folder Tree State & Fast In-Memory Cache
+    // Hierarchical Folder Tree SPoT & State
+    pub folder_hierarchy: Option<Arc<FolderHierarchySnapshot>>,
     pub expanded_folder_ids: HashSet<FolderId>,
     pub is_refreshing_folders: bool,
     pub folder_scan_count: usize,
     pub active_folder_dialog_target: Option<FolderId>,
-    pub cached_folder_tree: Option<Vec<FolderTreeNode>>,
-    pub cached_media_counts: HashMap<FolderId, usize>,
-    pub dot_hidden_cache: DotHiddenCache,
 
-    // Hierarchical Tag Tree State & Dynamic Layout
+    // Hierarchical Tag Tree State
     pub expanded_tag_ids: HashSet<TagId>,
     pub tag_filter_query: String,
     pub tag_filter_is_regex: bool,
@@ -234,7 +220,7 @@ pub struct UiState {
     pub tag_tree_available_height: f32,
     pub tag_tree_rows_per_column: usize,
 
-    // Assigned Tags History State & Dynamic Flow Layout Cache
+    // Assigned Tags History State
     pub tag_history_ids: Vec<TagId>,
     pub max_history_tags: usize,
     pub is_tag_history_collapsed: bool,
@@ -285,13 +271,11 @@ impl Default for UiState {
             loaded_slice_start: 0,
             loaded_slice_len: 0,
             loaded_slice_valid: false,
+            folder_hierarchy: None,
             expanded_folder_ids: HashSet::new(),
             is_refreshing_folders: false,
             folder_scan_count: 0,
             active_folder_dialog_target: None,
-            cached_folder_tree: None,
-            cached_media_counts: HashMap::new(),
-            dot_hidden_cache: DotHiddenCache::default(),
             expanded_tag_ids: HashSet::new(),
             tag_filter_query: String::new(),
             tag_filter_is_regex: false,
@@ -309,7 +293,6 @@ impl Default for UiState {
 }
 
 impl UiState {
-    /// Returns selected media items in the exact visual sorted order of the active view (top-to-bottom).
     pub fn get_selected_media_ordered(&self) -> Vec<&IndexedMediaRecord> {
         let selected_ids = self.file_selection.selected_ids();
         if selected_ids.is_empty() || self.active_indices.is_empty() {
@@ -317,7 +300,6 @@ impl UiState {
         }
 
         let mut ordered = Vec::with_capacity(selected_ids.len());
-
         for &idx in &self.active_indices {
             if let Some(item) = self.all_folder_media.get(idx)
                 && selected_ids.contains(&item.record.id)
@@ -325,11 +307,9 @@ impl UiState {
                 ordered.push(item);
             }
         }
-
         ordered
     }
 
-    /// Returns selected file paths in the exact visual sorted order of the active view (top-to-bottom).
     pub fn get_selected_paths_ordered(&self) -> Vec<PathBuf> {
         self.get_selected_media_ordered()
             .into_iter()
@@ -337,7 +317,6 @@ impl UiState {
             .collect()
     }
 
-    /// Returns selected media IDs in the exact visual sorted order of the active view (top-to-bottom).
     pub fn get_selected_ids_ordered(&self) -> Vec<MediaId> {
         self.get_selected_media_ordered()
             .into_iter()
@@ -345,7 +324,6 @@ impl UiState {
             .collect()
     }
 
-    /// Single Point of Truth determining whether there is an active query/filter state that can be reset.
     #[inline]
     pub fn is_query_resettable(&self) -> bool {
         !self.is_assign_mode
@@ -354,7 +332,6 @@ impl UiState {
                 || self.is_query_active)
     }
 
-    /// Invalidates the loaded slice window forcing an immediate refresh on the next chunk update.
     #[inline]
     pub fn invalidate_loaded_slice(&mut self) {
         self.loaded_slice_valid = false;
@@ -362,32 +339,13 @@ impl UiState {
         self.loaded_slice_len = 0;
     }
 
-    /// Invalidates the in-memory cached FolderTree hierarchy forcing a fresh topological build.
     #[inline]
-    pub fn invalidate_folder_tree_cache(&mut self) {
-        self.cached_folder_tree = None;
-        self.cached_media_counts.clear();
-        self.dot_hidden_cache.clear();
+    pub fn invalidate_folder_hierarchy(&mut self) {
+        self.folder_hierarchy = None;
     }
 
-    /// Updates media count of a single folder in-place without rebuilding the entire hierarchy.
-    pub fn update_folder_media_count_in_cache(&mut self, folder_id: FolderId, count: usize) {
-        self.cached_media_counts.insert(folder_id, count);
-        if let Some(ref mut tree) = self.cached_folder_tree {
-            Self::update_tree_node_count(tree, folder_id, count);
-        }
-    }
-
-    fn update_tree_node_count(nodes: &mut [FolderTreeNode], folder_id: FolderId, count: usize) -> bool {
-        for node in nodes.iter_mut() {
-            if node.record.id == folder_id {
-                node.media_files_count = count;
-                return true;
-            }
-            if Self::update_tree_node_count(&mut node.children, folder_id, count) {
-                return true;
-            }
-        }
-        false
+    #[inline]
+    pub fn set_folder_hierarchy(&mut self, snapshot: FolderHierarchySnapshot) {
+        self.folder_hierarchy = Some(Arc::new(snapshot));
     }
 }

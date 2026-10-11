@@ -31,7 +31,6 @@ impl XnViewDbWriter {
             "[XnViewWriter] Destructive wipe: Removing existing RustView databases and thumbnail caches..."
         );
 
-        // 1. Wipe existing databases
         if db_path.exists() {
             fs::remove_dir_all(&db_path)?;
         }
@@ -47,7 +46,7 @@ impl XnViewDbWriter {
 
         let mut wtxn = db.env.write_txn()?;
 
-        // 2. Write Database Metadata
+        // 1. Write Database Metadata
         let meta_record = DatabaseMeta {
             schema_version: CURRENT_SCHEMA_VERSION,
             hash_algorithm: HASH_ALGORITHM.to_string(),
@@ -62,7 +61,7 @@ impl XnViewDbWriter {
         };
         db.meta.put(&mut wtxn, "meta", &meta_record)?;
 
-        // 3. Write Folders & Folders-by-Path
+        // 2. Write Folders, Folders-by-Path, and Folders-by-Parent
         for folder in &mapped.folders {
             db.folders.put(&mut wtxn, &folder.id, folder)?;
             db.folders_by_path
@@ -76,10 +75,15 @@ impl XnViewDbWriter {
             db.media_by_folder
                 .put(&mut wtxn, &folder.id, &folder_media)?;
         }
+
+        for (parent_id, children) in &mapped.folders_by_parent {
+            db.folders_by_parent.put(&mut wtxn, parent_id, children)?;
+        }
+
         db.sequences
             .put(&mut wtxn, SEQ_FOLDER_ID, &mapped.max_folder_id)?;
 
-        // 4. Write Tags & Tags-by-Parent-Name
+        // 3. Write Tags & Tags-by-Parent-Name
         for tag in &mapped.tags {
             db.tags.put(&mut wtxn, &tag.id, tag)?;
             let key = format!("{}:{}", tag.parent_id.unwrap_or(0), tag.name.to_lowercase());
@@ -95,7 +99,7 @@ impl XnViewDbWriter {
         db.sequences
             .put(&mut wtxn, SEQ_TAG_ID, &(mapped.max_tag_id as u64))?;
 
-        // 5. Write Media, Hash Index, and Tag Associations
+        // 4. Write Media, Hash Index, and Tag Associations
         for item in &mapped.media {
             db.media.put(&mut wtxn, &item.id, item)?;
 
@@ -112,7 +116,7 @@ impl XnViewDbWriter {
             .put(&mut wtxn, SEQ_MEDIA_ID, &mapped.max_media_id)?;
         db.sequences.put(&mut wtxn, SEQ_REFRESH_GEN, &1u64)?;
 
-        // 6. Write Dedicated External Hashes Schema
+        // 5. Write Dedicated External Hashes Schema
         for ext_hash in &mapped.external_hashes {
             db.external_hashes
                 .put(&mut wtxn, &ext_hash.hash_id, ext_hash)?;
@@ -120,7 +124,7 @@ impl XnViewDbWriter {
         db.sequences
             .put(&mut wtxn, SEQ_EXTERNAL_HASH_ID, &mapped.max_external_hash_id)?;
 
-        // 7. Atomic Transaction Commit
+        // 6. Atomic Transaction Commit
         wtxn.commit()?;
         stats.write_time_ms = t0.elapsed().as_millis();
 

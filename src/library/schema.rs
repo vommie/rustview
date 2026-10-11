@@ -7,6 +7,7 @@ pub const DB_META: &str = "meta";
 pub const DB_SEQUENCES: &str = "sequences";
 pub const DB_FOLDERS: &str = "folders";
 pub const DB_FOLDERS_BY_PATH: &str = "folders_by_path";
+pub const DB_FOLDERS_BY_PARENT: &str = "folders_by_parent";
 pub const DB_MEDIA: &str = "media";
 pub const DB_MEDIA_BY_FOLDER: &str = "media_by_folder";
 pub const DB_MEDIA_BY_HASH: &str = "media_by_hash";

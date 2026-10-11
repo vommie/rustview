@@ -31,7 +31,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Parameter struct grouping drag initiation arguments.
 pub struct DragStartParams<'a> {
     pub media_id: MediaId,
     pub start_x: f32,
@@ -43,7 +42,6 @@ pub struct DragStartParams<'a> {
     pub autoscroller: &'a DndFolderTreeAutoScroller,
 }
 
-/// Parameter struct grouping batch transfer arguments.
 pub struct BatchTransferParams<'a> {
     pub window: &'a MainWindow,
     pub library: &'a Arc<Library>,
@@ -55,12 +53,9 @@ pub struct BatchTransferParams<'a> {
     pub transfer_kind: FileTransferKind,
 }
 
-/// Encapsulated coordinator managing media drag gestures, flying ghost overlays, drop hit-testing,
-/// floating choice popups, internal batched folder relocations, and external Drag & Drop exports to 3rd-party applications.
 pub struct BridgeDnd;
 
 impl BridgeDnd {
-    /// Handles drag initiation from media grid tiles or table rows, strictly preserving the visual sorted order of selected items.
     pub fn handle_drag_started(params: DragStartParams<'_>) {
         let t0 = Instant::now();
         params.autoscroller.stop();
@@ -84,7 +79,6 @@ impl BridgeDnd {
             StatusBarBridge::update_metrics(params.window, params.state);
         }
 
-        // Collect all selected items in exact visual sorted order with instant zero-cost thumbnail lookup
         let (drag_count, title, thumbnail_img, ordered_file_paths, thumb_path_opt) = {
             let st = params.state.read();
             let ordered_selected = st.get_selected_media_ordered();
@@ -152,7 +146,6 @@ impl BridgeDnd {
         SystemDndHandler::start_ghost_overlay(&title, drag_count, thumb_opt);
     }
 
-    /// Handles pointer movement during active media dragging with continuous auto-scroller updates and FolderTree hit-testing.
     pub fn handle_drag_moved(
         current_x: f32,
         current_y: f32,
@@ -164,11 +157,9 @@ impl BridgeDnd {
         window.set_drag_x(current_x);
         window.set_drag_y(current_y);
 
-        // Update auto-scroll physics and hotzone evaluation
         autoscroller.update_cursor(window, current_x, current_y);
 
         if !autoscroller.is_active() {
-            // Guard: Only test folder tree drop target if "folders" tab is currently active
             let active_panel_tab = window.get_active_sidebar_panel_tab();
             if active_panel_tab.as_str() != "folders" {
                 if window.get_drop_target_folder_id() != -1 {
@@ -194,14 +185,6 @@ impl BridgeDnd {
                 {
                     let target_id = row.id as u64;
                     if window.get_drop_target_folder_id() != target_id as i32 {
-                        tracing::info!(
-                            target_folder_id = target_id,
-                            folder_name = %row.name,
-                            row_index = row_idx,
-                            cursor_x = current_x,
-                            cursor_y = current_y,
-                            "[MediaDrag: TargetHover] Cursor entered valid folder drop target in tree"
-                        );
                         window.set_drop_target_folder_id(target_id as i32);
                     }
                     return;
@@ -209,56 +192,42 @@ impl BridgeDnd {
             }
 
             if window.get_drop_target_folder_id() != -1 {
-                tracing::debug!(
-                    cursor_x = current_x,
-                    cursor_y = current_y,
-                    "[MediaDrag: TargetLeave] Cursor moved outside folder tree drop zone"
-                );
                 window.set_drop_target_folder_id(-1);
             }
         }
     }
 
-    /// Handles hover entry over a folder tree row during an active drag.
     pub fn handle_folder_hovered(folder_id: FolderId, window: &MainWindow, state: &Arc<RwLock<UiState>>) {
         let is_dragging = window.get_is_dragging_media();
         if !is_dragging {
             return;
         }
 
-        // Guard: Only highlight if Folders tab is active
         let active_panel_tab = window.get_active_sidebar_panel_tab();
         if active_panel_tab.as_str() != "folders" {
             return;
         }
 
-        let is_valid_target = {
+        let is_valid = {
             let st = state.read();
-            if let Some(ref tree) = st.cached_folder_tree {
-                Self::is_folder_valid_in_tree(tree, folder_id)
-            } else {
-                true
-            }
+            st.folder_hierarchy
+                .as_ref()
+                .and_then(|snap| snap.get_node(folder_id))
+                .map(|n| !n.is_deleted)
+                .unwrap_or(true)
         };
 
-        if is_valid_target && window.get_drop_target_folder_id() != folder_id as i32 {
-            tracing::info!(
-                target_folder_id = folder_id,
-                "[MediaDrag: TargetHover] Row hover callback activated for folder"
-            );
+        if is_valid && window.get_drop_target_folder_id() != folder_id as i32 {
             window.set_drop_target_folder_id(folder_id as i32);
         }
     }
 
-    /// Handles hover leave from a folder tree row.
     pub fn handle_folder_unhovered(folder_id: FolderId, window: &MainWindow) {
         if window.get_drop_target_folder_id() == folder_id as i32 {
             window.set_drop_target_folder_id(-1);
         }
     }
 
-    /// Handles drag release: if dropped on an internal folder, opens Choice Popup.
-    /// If dropped outside internal folders, executes direct XDND drop transaction.
     pub fn handle_drag_ended(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -283,26 +252,12 @@ impl BridgeDnd {
         if target_folder_id > 0
             && let Ok(Some(target_folder_rec)) = library.folders().get_folder(target_folder_id as FolderId)
         {
-            let target_folder_path = PathBuf::from(&target_folder_rec.path);
-            let target_name = target_folder_path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| target_folder_rec.path.clone());
-
+            let target_name = target_folder_rec.name.clone();
             let selected_count = state.read().file_selection.count();
             let sidebar_w = window.get_sidebar_left_width();
 
             let popup_x = (sidebar_w + 4.0).min(release_x.max(8.0));
             let popup_y = release_y.max(48.0);
-
-            tracing::info!(
-                target_folder_id = target_folder_id,
-                target_name = %target_name,
-                items_count = selected_count,
-                popup_x = popup_x,
-                popup_y = popup_y,
-                "[DndChoicePopup: Show] Presenting Floating Choice Popup at drop target folder"
-            );
 
             window.set_choice_target_folder_id(target_folder_id);
             window.set_choice_target_folder_name(target_name.into());
@@ -315,43 +270,25 @@ impl BridgeDnd {
             let existing_paths: Vec<PathBuf> = ordered_paths.into_iter().filter(|p| p.exists()).collect();
 
             if !existing_paths.is_empty() {
-                tracing::info!(
-                    files_count = existing_paths.len(),
-                    "[MediaDrag: ExternalDrop] Dropped outside RustView folder tree. Triggering external application XDND drop..."
-                );
                 SystemDndHandler::execute_external_drop_async(&existing_paths);
-            } else {
-                tracing::info!(
-                    "[MediaDrag: ExternalDrop] Dropped pending/non-existing file(s) outside. External drop skipped as files are not yet on disk."
-                );
             }
         }
     }
 
-    /// Orchestrates the batch transfer operation (Copy or Move), seamlessly supporting pending stubs.
     pub fn start_batch_transfer(params: BatchTransferParams<'_>) {
         let t_start = Instant::now();
 
         let Ok(Some(target_folder_rec)) = params.library.folders().get_folder(params.target_folder_id) else {
-            tracing::warn!(target_folder_id = params.target_folder_id, "[BatchTransfer] Target folder not found in database");
             return;
         };
 
         let target_folder_path = PathBuf::from(&target_folder_rec.path);
         if !target_folder_path.exists() {
-            tracing::warn!(
-                target_folder = %LogObscurer::folder(Some(params.target_folder_id), &target_folder_path),
-                "[BatchTransfer] Target folder no longer exists on physical storage"
-            );
             StatusBarBridge::warn(params.window, "Target folder no longer exists on physical disk.");
             return;
         }
 
-        let target_folder_name = target_folder_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| target_folder_rec.path.clone());
-
+        let target_folder_name = target_folder_rec.name.clone();
         let ordered_selected_ids = params.state.read().get_selected_ids_ordered();
         if ordered_selected_ids.is_empty() {
             return;
@@ -375,24 +312,12 @@ impl BridgeDnd {
         }
 
         if items_to_transfer.is_empty() {
-            tracing::info!(
-                target_folder = %LogObscurer::folder(Some(params.target_folder_id), &target_folder_path),
-                total_selected = ordered_selected_ids.len(),
-                "[BatchTransfer] All selected media files already reside in the target directory. No-op."
-            );
             StatusBarBridge::info(
                 params.window,
                 format!("All selected files are already in '{}'", target_folder_name),
             );
             return;
         }
-
-        tracing::info!(
-            target_folder = %LogObscurer::folder(Some(params.target_folder_id), &target_folder_path),
-            transfer_kind = ?params.transfer_kind,
-            total_items = items_to_transfer.len(),
-            "[BatchTransfer: Init] Starting batch file transfer workflow..."
-        );
 
         let runner = BatchTransferRunner {
             window: params.window.clone_strong(),
@@ -416,21 +341,8 @@ impl BridgeDnd {
 
         runner.step();
     }
-
-    fn is_folder_valid_in_tree(nodes: &[super::bridge_folders::FolderTreeNode], target_id: FolderId) -> bool {
-        for node in nodes {
-            if node.record.id == target_id {
-                return !node.record.is_deleted;
-            }
-            if Self::is_folder_valid_in_tree(&node.children, target_id) {
-                return true;
-            }
-        }
-        false
-    }
 }
 
-/// Sequential asynchronous step runner managing conflict dialog popups and atomic transfers across a batch of media items.
 struct BatchTransferRunner {
     window: MainWindow,
     library: Arc<Library>,
@@ -461,11 +373,6 @@ impl BatchTransferRunner {
         let media_id = self.items[self.current_index];
 
         if self.library.media().get(media_id).ok().flatten().is_none() {
-            tracing::info!(
-                media_id = media_id,
-                "[BatchTransfer: SkipOverwritten] Media #{} was consumed/overwritten by a preceding item in this batch. Skipping.",
-                media_id
-            );
             self.current_index += 1;
             Timer::single_shot(std::time::Duration::from_millis(1), move || self.step());
             return;
@@ -481,11 +388,6 @@ impl BatchTransferRunner {
         ) {
             Ok(Some(conflict_report)) => {
                 if let Some(res) = self.remembered_resolution {
-                    tracing::debug!(
-                        media_id = media_id,
-                        remembered_action = ?res,
-                        "[BatchTransfer: AutoApply] Applying remembered collision decision to remaining conflict"
-                    );
                     self.apply_resolution(media_id, &conflict_report, res);
                 } else {
                     let conflict_for_show = conflict_report.clone();
@@ -501,15 +403,6 @@ impl BatchTransferRunner {
                     let total_items = runner_rc.borrow().as_ref().unwrap().items.len();
                     let current_idx = runner_rc.borrow().as_ref().unwrap().current_index;
 
-                    tracing::info!(
-                        media_id = media_id,
-                        transfer_kind = ?kind,
-                        source_filename = %LogObscurer::filename(&conflict_for_show.source.filename),
-                        item_index = current_idx + 1,
-                        total_items = total_items,
-                        "[BatchTransfer: Prompt] Prompting user with side-by-side Conflict Dialog..."
-                    );
-
                     dlg.show(
                         ConflictDialogParams {
                             window: &win,
@@ -523,10 +416,6 @@ impl BatchTransferRunner {
                         move |resolution, apply_to_all| {
                             if let Some(mut runner) = runner_for_resolve.borrow_mut().take() {
                                 if apply_to_all {
-                                    tracing::info!(
-                                        chosen_resolution = ?resolution,
-                                        "[BatchTransfer: ApplyToAll] Remembered collision action for all remaining items in batch"
-                                    );
                                     runner.remembered_resolution = Some(resolution);
                                 }
                                 runner.apply_resolution(media_id, &conflict_for_closure, resolution);
@@ -567,11 +456,6 @@ impl BatchTransferRunner {
                     Err(LibraryError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
                         self.summary.failed_count += 1;
                         let missing_path = self.resolve_media_path(media_id);
-                        tracing::warn!(
-                            media_id = media_id,
-                            missing_path = %LogObscurer::path(&missing_path),
-                            "[BatchTransfer: MissingFile] Source media file was not found on physical disk"
-                        );
                         self.missing_dialog.show(
                             &self.window,
                             if self.transfer_kind == FileTransferKind::Move { "Move File" } else { "Copy File" },
@@ -622,13 +506,6 @@ impl BatchTransferRunner {
                     &self.target_folder_path,
                     &conflict.source.filename,
                 );
-                tracing::info!(
-                    media_id = media_id,
-                    transfer_kind = ?self.transfer_kind,
-                    original = %LogObscurer::filename(&conflict.source.filename),
-                    auto_rename = %LogObscurer::filename(&auto_name),
-                    "[BatchTransfer: Resolution] Action: AUTO-RENAME. Transferring file with generated unique suffix..."
-                );
                 let exec_res = match self.transfer_kind {
                     FileTransferKind::Move => self.library.file_operations().move_single_media(
                         media_id,
@@ -651,12 +528,6 @@ impl BatchTransferRunner {
                         if self.transfer_kind == FileTransferKind::Move {
                             self.moved_media_ids.insert(media_id);
                         }
-                        tracing::info!(
-                            media_id = media_id,
-                            resolved_name = %LogObscurer::filename(&auto_name),
-                            elapsed_ms = t_res.elapsed().as_millis(),
-                            "[BatchTransfer: Resolution] Successfully transferred and auto-renamed file"
-                        );
                     }
                     Err(e) => {
                         tracing::error!(media_id = media_id, error = %e, "[BatchTransfer: AutoRename Error] Failed to transfer auto-renamed file");
@@ -667,12 +538,6 @@ impl BatchTransferRunner {
                 Timer::single_shot(std::time::Duration::from_millis(1), move || self.step());
             }
             FileConflictResolution::Overwrite => {
-                tracing::info!(
-                    media_id = media_id,
-                    transfer_kind = ?self.transfer_kind,
-                    target_file = %LogObscurer::filename(&conflict.destination.filename),
-                    "[BatchTransfer: Resolution] Action: OVERWRITE. Overwriting conflicting destination file..."
-                );
                 let exec_res = match self.transfer_kind {
                     FileTransferKind::Move => self.library.file_operations().move_single_media(
                         media_id,
@@ -695,11 +560,6 @@ impl BatchTransferRunner {
                         if self.transfer_kind == FileTransferKind::Move {
                             self.moved_media_ids.insert(media_id);
                         }
-                        tracing::info!(
-                            media_id = media_id,
-                            elapsed_ms = t_res.elapsed().as_millis(),
-                            "[BatchTransfer: Resolution] Successfully overwritten destination file and updated LMDB"
-                        );
                     }
                     Err(e) => {
                         tracing::error!(media_id = media_id, error = %e, "[BatchTransfer: Overwrite Error] Failed to overwrite destination file");
@@ -710,11 +570,6 @@ impl BatchTransferRunner {
                 Timer::single_shot(std::time::Duration::from_millis(1), move || self.step());
             }
             FileConflictResolution::Cancel => {
-                tracing::info!(
-                    processed = self.current_index,
-                    total = self.items.len(),
-                    "[BatchTransfer: Resolution] Action: CANCEL. Batch operation cancelled by user. Aborting remaining items."
-                );
                 self.finish();
             }
         }
@@ -737,7 +592,7 @@ impl BatchTransferRunner {
 
         {
             let mut st = self.state.write();
-            st.invalidate_folder_tree_cache();
+            st.invalidate_folder_hierarchy();
             if self.transfer_kind == FileTransferKind::Move {
                 st.file_selection.deselect_many(&self.moved_media_ids);
             }
@@ -781,19 +636,6 @@ impl BatchTransferRunner {
         let msg = format!(
             "{} {} file(s) to '{}' in {}ms{}",
             verb_past, self.summary.moved_count, self.target_folder_name, elapsed_ms, detail_str
-        );
-
-        tracing::info!(
-            action = verb_past,
-            total_requested = self.summary.total_requested,
-            transferred = self.summary.moved_count,
-            renamed = self.summary.auto_renamed_count,
-            overwritten = self.summary.overwritten_count,
-            skipped = self.summary.skipped_count,
-            failed = self.summary.failed_count,
-            target_folder = %LogObscurer::folder(Some(self.target_folder_id), &self.target_folder_path),
-            total_batch_time_ms = elapsed_ms,
-            "[Benchmark: BatchTransfer] Complete batch operation finished and committed to LMDB storage"
         );
 
         StatusBarBridge::success(&self.window, msg);

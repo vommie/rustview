@@ -220,7 +220,6 @@ impl RenameFolderDialogController {
             st.current_folder_path = Some(new_path.clone());
         }
 
-        // Update all in-memory media full paths belonging to this renamed folder subtree
         for item in st.all_folder_media.iter_mut() {
             if item.record.folder_id == folder_id {
                 item.full_path = new_path.join(&item.record.filename);
@@ -229,7 +228,7 @@ impl RenameFolderDialogController {
             }
         }
 
-        st.invalidate_folder_tree_cache();
+        st.invalidate_folder_hierarchy();
         is_active
     }
 }

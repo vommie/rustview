@@ -1,5 +1,6 @@
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
+use super::folders::FolderManager;
 use super::models::{
     FileConflictItemDetails, FileConflictReport, FileTransferKind, FolderId, FolderRecord,
     MediaId, MediaRecord,
@@ -11,11 +12,9 @@ use crate::settings::LogObscurer;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-/// POSIX Linux media filename validator ensuring safety and filesystem compliance.
 pub struct FilenameValidator;
 
 impl FilenameValidator {
-    /// Validates and trims a filename according to Linux POSIX naming rules.
     pub fn validate(name: &str) -> Result<String, LibraryError> {
         let trimmed = name.trim();
 
@@ -53,7 +52,6 @@ impl FilenameValidator {
     }
 }
 
-/// Resolved filesystem paths for a file rename operation.
 #[derive(Debug, Clone)]
 struct RenamePaths {
     old_path: PathBuf,
@@ -61,7 +59,6 @@ struct RenamePaths {
     validated_name: String,
 }
 
-/// Robust filesystem mover supporting both standard renames and cross-filesystem copy+remove fallbacks.
 pub fn robust_move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
     if is_same_file_path(src, dst) {
         return Ok(());
@@ -82,7 +79,7 @@ pub fn robust_move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
                 src = %LogObscurer::path(src),
                 dst = %LogObscurer::path(dst),
                 error = %err,
-                "[FileOperations: FS Move] Physical rename failed (cross-device/EXDEV detected). Executing copy + remove fallback..."
+                "[FileOperations: FS Move] Physical rename failed (EXDEV). Executing copy + remove fallback..."
             );
             let t_copy = Instant::now();
             let bytes = std::fs::copy(src, dst)?;
@@ -99,7 +96,6 @@ pub fn robust_move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
 }
 
-/// Checks if two path references point to the exact same physical filesystem location.
 #[inline]
 pub fn is_same_file_path(p1: &Path, p2: &Path) -> bool {
     if p1 == p2 {
@@ -111,7 +107,6 @@ pub fn is_same_file_path(p1: &Path, p2: &Path) -> bool {
     }
 }
 
-/// High-level file management operations subsystem for the media library.
 pub struct FileOperations<'a> {
     db: &'a LibraryDatabase,
 }
@@ -121,7 +116,6 @@ impl<'a> FileOperations<'a> {
         Self { db }
     }
 
-    /// Atomically renames a media file on the physical filesystem (if present) and updates its LMDB record.
     #[inline]
     pub fn rename_media(
         &self,
@@ -131,8 +125,6 @@ impl<'a> FileOperations<'a> {
         self.rename_media_with_overwrite(media_id, new_filename, false)
     }
 
-    /// Renames a media file physically on disk (if it exists) and updates LMDB storage,
-    /// seamlessly supporting pending stubs that are not yet written to disk.
     pub fn rename_media_with_overwrite(
         &self,
         media_id: MediaId,
@@ -166,7 +158,6 @@ impl<'a> FileOperations<'a> {
             return Err(LibraryError::FileOperationAlreadyExists(paths.validated_name));
         }
 
-        // If overwriting, purge the existing destination record from LMDB (media, thumbnails, tags, hash index)
         if overwrite_existing && paths.new_path.exists() {
             let mut target_media_ids = self
                 .db
@@ -186,11 +177,6 @@ impl<'a> FileOperations<'a> {
             }
 
             if let Some((old_dst_id, old_hash)) = overwritten_id_opt {
-                tracing::info!(
-                    overwritten_media_id = old_dst_id,
-                    folder_id = folder.id,
-                    "[FileOperations: Rename Overwrite] Purging overwritten record from LMDB"
-                );
                 self.db.update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
                 self.db.media.delete(&mut wtxn, &old_dst_id)?;
                 self.db.thumbnails.delete(&mut wtxn, &old_dst_id)?;
@@ -199,19 +185,15 @@ impl<'a> FileOperations<'a> {
 
                 target_media_ids.retain(|&id| id != old_dst_id);
                 self.db.media_by_folder.put(&mut wtxn, &folder.id, &target_media_ids)?;
+
+                // Deduct overwritten media count from folder
+                FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, folder.id, -1)?;
             }
         }
 
         let old_file_physically_exists = paths.old_path.exists();
 
         if old_file_physically_exists {
-            tracing::info!(
-                media = %LogObscurer::media(Some(media_id), &record.filename),
-                old_path = %LogObscurer::path(&paths.old_path),
-                new_path = %LogObscurer::path(&paths.new_path),
-                overwrite = overwrite_existing,
-                "Executing physical file rename operation..."
-            );
             robust_move_file(&paths.old_path, &paths.new_path)?;
 
             if let Ok(fs_meta) = std::fs::metadata(&paths.new_path) {
@@ -231,13 +213,6 @@ impl<'a> FileOperations<'a> {
 
                 record.file_size = fs_meta.len();
             }
-        } else {
-            tracing::info!(
-                media_id = media_id,
-                old_filename = %LogObscurer::filename(&record.filename),
-                new_filename = %LogObscurer::filename(&paths.validated_name),
-                "[FileOperations: Rename] Physical file not on disk yet (pending stub); updating LMDB record only"
-            );
         }
 
         let format = MediaFormat::from_path(&paths.new_path);
@@ -249,13 +224,11 @@ impl<'a> FileOperations<'a> {
         record.is_deleted = false;
 
         self.db.media.put(&mut wtxn, &media_id, &record)?;
-
         wtxn.commit()?;
 
         tracing::info!(
             media_id = media_id,
             new_filename = %LogObscurer::filename(&paths.validated_name),
-            physically_renamed = old_file_physically_exists,
             elapsed_us = t0.elapsed().as_micros(),
             "Committed file rename operation to LMDB storage successfully"
         );
@@ -263,7 +236,6 @@ impl<'a> FileOperations<'a> {
         Ok(record)
     }
 
-    /// Probes whether renaming `media_id` to `new_filename` causes a collision with an existing file in the same directory.
     pub fn check_rename_conflict(
         &self,
         media_id: MediaId,
@@ -287,7 +259,6 @@ impl<'a> FileOperations<'a> {
         let src_path = Path::new(&folder.path).join(&source_record.filename);
         let dst_path = Path::new(&folder.path).join(&validated_name);
 
-        // Same file on disk: not a conflict
         if is_same_file_path(&src_path, &dst_path) {
             return Ok(None);
         }
@@ -323,9 +294,7 @@ impl<'a> FileOperations<'a> {
         }
     }
 
-    /// Generates a unique, collision-free filename in the target folder by appending sequential counter suffixes like `(1)`, `(2)`.
     pub fn generate_unique_filename(target_folder_path: &Path, original_name: &str) -> String {
-        let t0 = Instant::now();
         let path = Path::new(original_name);
         let stem = path
             .file_stem()
@@ -345,14 +314,6 @@ impl<'a> FileOperations<'a> {
             };
 
             if !target_folder_path.join(&candidate).exists() {
-                tracing::debug!(
-                    original = %LogObscurer::filename(original_name),
-                    resolved_unique = %LogObscurer::filename(&candidate),
-                    iterations = counter,
-                    target_dir = %LogObscurer::path(target_folder_path),
-                    elapsed_us = t0.elapsed().as_micros(),
-                    "[FileOperations: AutoRename] Found available unique candidate filename"
-                );
                 return candidate;
             }
 
@@ -362,30 +323,21 @@ impl<'a> FileOperations<'a> {
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
-                let fallback = if ext.is_empty() {
+                return if ext.is_empty() {
                     format!("{}_{}", stem, timestamp)
                 } else {
                     format!("{}_{}.{}", stem, timestamp, ext)
                 };
-                tracing::warn!(
-                    original = %LogObscurer::filename(original_name),
-                    fallback = %LogObscurer::filename(&fallback),
-                    "[FileOperations: AutoRename] Exceeded 100,000 iterations limit. Using timestamp fallback"
-                );
-                return fallback;
             }
         }
     }
 
-    /// Probes full file metadata, checksum, dimensions, duration, and rating for conflict comparison.
-    /// Resilient: Falls back to database record values if the physical file does not exist on disk yet.
     pub fn probe_file_details(
         &self,
         path: &Path,
         folder_id: FolderId,
         media_id: Option<MediaId>,
     ) -> Result<FileConflictItemDetails, LibraryError> {
-        let t0 = Instant::now();
         let rtxn = self.db.env.read_txn()?;
         let folder = self
             .db
@@ -441,16 +393,6 @@ impl<'a> FileOperations<'a> {
             (0, 0, 0, 0, [0u8; 16])
         };
 
-        tracing::debug!(
-            file = %LogObscurer::path(path),
-            size_bytes = file_size,
-            dimensions = format!("{}x{}", width, height),
-            duration_ms = duration_ms,
-            hash = %MediaHasher::to_hex(&file_hash),
-            elapsed_us = t0.elapsed().as_micros(),
-            "[FileOperations: Probe] File attributes inspected for conflict check"
-        );
-
         Ok(FileConflictItemDetails {
             media_id,
             folder_id,
@@ -469,14 +411,12 @@ impl<'a> FileOperations<'a> {
         })
     }
 
-    /// Checks whether copying or moving a media file into `target_folder_id` causes a filename collision or self-collision.
     pub fn check_transfer_conflict(
         &self,
         media_id: MediaId,
         target_folder_id: FolderId,
         transfer_kind: FileTransferKind,
     ) -> Result<Option<FileConflictReport>, LibraryError> {
-        let t0 = Instant::now();
         let rtxn = self.db.env.read_txn()?;
 
         let source_record = self
@@ -500,7 +440,6 @@ impl<'a> FileOperations<'a> {
         let src_path = Path::new(&source_folder.path).join(&source_record.filename);
         let dst_path = Path::new(&target_folder.path).join(&source_record.filename);
 
-        // Self-Move: Moving a file to the exact same directory is a safe no-op
         if transfer_kind == FileTransferKind::Move && (source_record.folder_id == target_folder_id || is_same_file_path(&src_path, &dst_path)) {
             return Ok(None);
         }
@@ -524,18 +463,6 @@ impl<'a> FileOperations<'a> {
 
         if dst_path.exists() || existing_target_media_id.is_some() {
             let is_self_collision = is_same_file_path(&src_path, &dst_path);
-            tracing::info!(
-                media_id = media_id,
-                transfer_kind = ?transfer_kind,
-                is_self_collision = is_self_collision,
-                filename = %LogObscurer::filename(&source_record.filename),
-                target_folder = %LogObscurer::folder(Some(target_folder_id), &target_folder.path),
-                destination_exists_on_disk = dst_path.exists(),
-                destination_indexed_in_db = existing_target_media_id.is_some(),
-                elapsed_us = t0.elapsed().as_micros(),
-                "[FileOperations: ConflictCheck] Collision detected in destination folder"
-            );
-
             let source_details = self.probe_file_details(&src_path, source_folder.id, Some(media_id))?;
             let dest_details = if is_self_collision {
                 source_details.clone()
@@ -548,20 +475,11 @@ impl<'a> FileOperations<'a> {
                 destination: dest_details,
             }))
         } else {
-            tracing::debug!(
-                media_id = media_id,
-                transfer_kind = ?transfer_kind,
-                filename = %LogObscurer::filename(&source_record.filename),
-                target_folder = %LogObscurer::folder(Some(target_folder_id), &target_folder.path),
-                elapsed_us = t0.elapsed().as_micros(),
-                "[FileOperations: ConflictCheck] Target is clean, no conflict"
-            );
             Ok(None)
         }
     }
 
-    /// Moves a media file physically to a target folder (if present on disk) and updates LMDB indices.
-    /// Supports pending stubs that are not yet rendered: relocates database associations cleanly.
+    /// Moves a media file physically to a target folder and rolls delta adjustments up through LMDB ancestor chains.
     pub fn move_single_media(
         &self,
         media_id: MediaId,
@@ -597,15 +515,8 @@ impl<'a> FileOperations<'a> {
         let src_path = Path::new(&source_folder.path).join(&source_record.filename);
         let dst_path = Path::new(&target_folder.path).join(&validated_name);
 
-        let src_file_exists = src_path.exists();
-
         let is_same_file = is_same_file_path(&src_path, &dst_path);
         if is_same_file && old_folder_id == target_folder_id {
-            tracing::debug!(
-                media_id = media_id,
-                file = %LogObscurer::path(&src_path),
-                "[FileOperations: Move Self-Check] File is already at destination path. Operation bypassed."
-            );
             return Ok(source_record);
         }
 
@@ -613,14 +524,7 @@ impl<'a> FileOperations<'a> {
             return Err(LibraryError::FileOperationAlreadyExists(validated_name));
         }
 
-        if src_file_exists {
-            tracing::info!(
-                media = %LogObscurer::media(Some(media_id), &source_record.filename),
-                src = %LogObscurer::path(&src_path),
-                dst = %LogObscurer::path(&dst_path),
-                overwrite = overwrite_existing,
-                "Moving media file physically on disk..."
-            );
+        if src_path.exists() {
             robust_move_file(&src_path, &dst_path)?;
 
             if let Ok(fs_meta) = std::fs::metadata(&dst_path) {
@@ -640,14 +544,6 @@ impl<'a> FileOperations<'a> {
 
                 source_record.file_size = fs_meta.len();
             }
-        } else {
-            tracing::info!(
-                media_id = media_id,
-                from_folder = %source_folder.path,
-                to_folder = %target_folder.path,
-                filename = %validated_name,
-                "[FileOperations: Move] Physical file does not exist on disk yet (pending stub); relocating LMDB association only"
-            );
         }
 
         if overwrite_existing {
@@ -669,11 +565,6 @@ impl<'a> FileOperations<'a> {
             }
 
             if let Some((old_dst_id, old_hash)) = overwritten_id_opt {
-                tracing::info!(
-                    overwritten_media_id = old_dst_id,
-                    target_folder_id = target_folder_id,
-                    "[FileOperations: Overwrite] Removing overwritten media record from LMDB"
-                );
                 self.db.update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
                 self.db.media.delete(&mut wtxn, &old_dst_id)?;
                 self.db.thumbnails.delete(&mut wtxn, &old_dst_id)?;
@@ -682,6 +573,9 @@ impl<'a> FileOperations<'a> {
 
                 target_media_ids.retain(|&id| id != old_dst_id);
                 self.db.media_by_folder.put(&mut wtxn, &target_folder_id, &target_media_ids)?;
+
+                // Overwritten file in target folder is removed
+                FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, target_folder_id, -1)?;
             }
         }
 
@@ -705,6 +599,10 @@ impl<'a> FileOperations<'a> {
                 new_list.push(media_id);
                 self.db.media_by_folder.put(&mut wtxn, &target_folder_id, &new_list)?;
             }
+
+            // Atomic delta adjustments: -1 for source folder chain, +1 for target folder chain
+            FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, old_folder_id, -1)?;
+            FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, target_folder_id, 1)?;
         }
 
         wtxn.commit()?;
@@ -721,8 +619,7 @@ impl<'a> FileOperations<'a> {
         Ok(source_record)
     }
 
-    /// Copies a media file physically to a target folder (if present on disk) and creates a new LMDB media instance.
-    /// Supports pending stubs that are not yet rendered: duplicates the database stub entry into the target folder.
+    /// Copies a media file physically to a target folder and rolls delta adjustments up through LMDB ancestor chains.
     pub fn copy_single_media(
         &self,
         media_id: MediaId,
@@ -757,17 +654,9 @@ impl<'a> FileOperations<'a> {
         let src_path = Path::new(&source_folder.path).join(&source_record.filename);
         let dst_path = Path::new(&target_folder.path).join(&validated_name);
 
-        let src_file_exists = src_path.exists();
-
         let is_same_file = is_same_file_path(&src_path, &dst_path);
-
         if is_same_file {
             if overwrite_existing {
-                tracing::warn!(
-                    media_id = media_id,
-                    file = %LogObscurer::path(&src_path),
-                    "[FileOperations: SelfTransferGuard] Copying file onto itself with overwrite is a safe identity no-op. Truncation prevented."
-                );
                 return Ok(source_record);
             } else {
                 return Err(LibraryError::FileOperationAlreadyExists(format!(
@@ -785,14 +674,7 @@ impl<'a> FileOperations<'a> {
         let mut mtime = source_record.modification_time;
         let mut ctime = source_record.creation_time;
 
-        if src_file_exists {
-            tracing::info!(
-                media = %LogObscurer::media(Some(media_id), &source_record.filename),
-                src = %LogObscurer::path(&src_path),
-                dst = %LogObscurer::path(&dst_path),
-                overwrite = overwrite_existing,
-                "Copying media file physically on disk..."
-            );
+        if src_path.exists() {
             std::fs::copy(&src_path, &dst_path)?;
 
             if let Ok(fs_meta) = std::fs::metadata(&dst_path) {
@@ -811,11 +693,6 @@ impl<'a> FileOperations<'a> {
                     .map(|d| d.as_secs() as i64)
                     .unwrap_or(source_record.creation_time);
             }
-        } else {
-            tracing::info!(
-                media_id = media_id,
-                "[FileOperations: Copy] Source file not on disk yet (pending stub); cloning LMDB stub record into target folder only"
-            );
         }
 
         let mut target_media_ids = self
@@ -824,6 +701,7 @@ impl<'a> FileOperations<'a> {
             .get(&wtxn, &target_folder_id)?
             .unwrap_or_default();
 
+        let mut overwritten_existing_file = false;
         if overwrite_existing && dst_path.exists() {
             let mut overwritten_id_opt = None;
             for &t_id in &target_media_ids {
@@ -837,11 +715,6 @@ impl<'a> FileOperations<'a> {
             }
 
             if let Some((old_dst_id, old_hash)) = overwritten_id_opt {
-                tracing::info!(
-                    overwritten_media_id = old_dst_id,
-                    target_folder_id = target_folder_id,
-                    "[FileOperations: Copy Overwrite] Removing overwritten media record from LMDB"
-                );
                 self.db.update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
                 self.db.media.delete(&mut wtxn, &old_dst_id)?;
                 self.db.thumbnails.delete(&mut wtxn, &old_dst_id)?;
@@ -849,6 +722,7 @@ impl<'a> FileOperations<'a> {
                 self.db.tags_by_media.delete(&mut wtxn, &old_dst_id)?;
 
                 target_media_ids.retain(|&id| id != old_dst_id);
+                overwritten_existing_file = true;
             }
         }
 
@@ -899,6 +773,11 @@ impl<'a> FileOperations<'a> {
             self.db.video_previews.put(&mut wtxn, &new_media_id, &prev_rec)?;
         }
 
+        // If not overwriting, target folder gains +1 media file rolled up through ancestors
+        if !overwritten_existing_file {
+            FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, target_folder_id, 1)?;
+        }
+
         wtxn.commit()?;
 
         tracing::info!(
@@ -914,10 +793,11 @@ impl<'a> FileOperations<'a> {
         Ok(new_record)
     }
 
-    /// Purges media records completely from LMDB storage (database-only cleanup without deleting files on disk).
+    /// Purges media records completely from LMDB storage and adjusts folder count rollups.
     pub fn purge_media_from_db(&self, media_ids: &[MediaId]) -> Result<usize, LibraryError> {
         let mut wtxn = self.db.env.write_txn()?;
         let mut purged_count = 0;
+        let mut folder_deltas: std::collections::HashMap<FolderId, i64> = std::collections::HashMap::new();
 
         for &mid in media_ids {
             if let Some(rec) = self.db.media.get(&wtxn, &mid)? {
@@ -945,16 +825,21 @@ impl<'a> FileOperations<'a> {
                     self.db.media_by_folder.put(&mut wtxn, &rec.folder_id, &folder_media)?;
                 }
 
+                *folder_deltas.entry(rec.folder_id).or_insert(0) -= 1;
                 purged_count += 1;
             }
         }
 
+        // Adjust counts and roll up through ancestors in the same transaction
+        for (fid, delta) in folder_deltas {
+            FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, fid, delta)?;
+        }
+
         wtxn.commit()?;
-        tracing::info!(purged_count, "[FileOperations: PurgeMedia] Purged media records from LMDB storage");
+        tracing::info!(purged_count, "[FileOperations: PurgeMedia] Purged media records and adjusted folder rollups in LMDB");
         Ok(purged_count)
     }
 
-    /// Delegates media refresh to the dedicated `MediaItemRefresher` subsystem.
     pub fn refresh_media(&self, media_id: MediaId) -> Result<MediaRecord, LibraryError> {
         let refresher = MediaItemRefresher::new(self.db);
         refresher.refresh_media(media_id)

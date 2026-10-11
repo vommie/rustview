@@ -1,100 +1,77 @@
 use super::MainWindow;
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
-use super::bridge_folders::{BridgeFolders, FolderTreeNode};
+use super::bridge_folders::BridgeFolders;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
-use crate::library::dot_hidden::DotHiddenCache;
-use crate::library::models::{FolderId, FolderRecord};
+use crate::library::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use crate::settings::LogObscurer;
 use crate::system::SystemFileHandler;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
-
-/// Parameter context bundle for traversing cached tree nodes without exceeding argument limits.
-struct MoveMenuTraverseContext<'a> {
-    target_folder_id: FolderId,
-    show_hidden_folders: bool,
-    support_dot_hidden_files: bool,
-    dot_hidden_cache: &'a mut DotHiddenCache,
-    valid_destinations: usize,
-    hidden_excluded: usize,
-}
-
-/// Parameter bundle for constructing the folder context menu.
-pub struct FolderMenuBuildParams<'a> {
-    pub target_folder: &'a FolderRecord,
-    pub cached_tree: &'a [FolderTreeNode],
-    pub is_root: bool,
-    pub show_hidden_folders: bool,
-    pub support_dot_hidden_files: bool,
-    pub dot_hidden_cache: &'a mut DotHiddenCache,
-    pub is_busy: bool,
-    pub is_favorite: bool,
-}
 
 /// Domain context menu builder and action handler for folder tree nodes.
 pub struct FolderContextMenu;
 
 impl FolderContextMenu {
-    /// Builds the declarative context menu for a folder item directly from the in-memory cached FolderTree hierarchy with zero disk I/O.
-    /// Places "Add to Favorites" above "Delete Folder" with standalone separators, visibly disabled if already a favorite.
-    pub fn build_menu_from_cached_tree(params: FolderMenuBuildParams<'_>) -> CtxMenu {
-        let t0 = Instant::now();
-        let target_path = Path::new(&params.target_folder.path);
-        let folder_name = target_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| params.target_folder.path.clone());
+    /// Builds the declarative context menu for a folder node directly from the in-memory SPoT snapshot with zero disk I/O.
+    pub fn build_menu(
+        target_node: &CachedFolderNode,
+        snapshot: &FolderHierarchySnapshot,
+        is_root: bool,
+        show_hidden_folders: bool,
+        is_busy: bool,
+        is_favorite: bool,
+    ) -> CtxMenu {
+        tracing::debug!(
+            folder = %LogObscurer::folder(Some(target_node.id), &target_node.path),
+            "[FolderContextMenu: Build] Building context menu from SPoT hierarchy"
+        );
 
-        let (prefix, max_chars) = if params.target_folder.is_deleted {
+        let (prefix, max_chars) = if target_node.is_deleted {
             ("Missing Folder: ", 18usize)
         } else {
             ("Folder: ", 24usize)
         };
 
-        let (header_title, _) = CtxMenuBuilder::format_header_title(prefix, &folder_name, max_chars);
+        let (header_title, _) = CtxMenuBuilder::format_header_title(prefix, &target_node.name, max_chars);
         let header_tooltip = format!(
             "{}{}",
-            if params.target_folder.is_deleted { "Missing Folder: " } else { "Folder: " },
-            params.target_folder.path
+            if target_node.is_deleted { "Missing Folder: " } else { "Folder: " },
+            target_node.path.display()
         );
 
         let mut builder = CtxMenuBuilder::new().header_with_tooltip(header_title, header_tooltip);
 
-        // Open in File Manager right at the top
+        // Open in File Manager
         builder = builder.action(
             CTX_FOLDER_OPEN_IN_FILE_MANAGER,
             "Open in File Manager",
             None,
             Some("folder"),
-            !params.target_folder.is_deleted,
+            !target_node.is_deleted,
         );
         builder = builder.separator();
 
-        if !params.is_root {
+        if !is_root {
             builder = builder.action(
                 CTX_FOLDER_RENAME,
                 "Rename Folder...",
                 Some("F2"),
                 Some("edit"),
-                !params.target_folder.is_deleted,
+                !target_node.is_deleted,
             );
 
-            let move_submenu = Self::build_reparent_submenu_from_tree(
-                params.target_folder,
-                params.cached_tree,
-                params.show_hidden_folders,
-                params.support_dot_hidden_files,
-                params.dot_hidden_cache,
-                t0,
+            let move_submenu = Self::build_reparent_submenu(
+                target_node.id,
+                snapshot,
+                show_hidden_folders,
             );
             builder = builder.item(move_submenu);
         }
 
-        // Modular "Refresh..." submenu containing files and tree refreshes
-        let can_refresh = !params.target_folder.is_deleted && !params.is_busy;
+        // Refresh submenu
+        let can_refresh = !target_node.is_deleted && !is_busy;
         builder = builder.separator();
         builder = builder.submenu("Refresh...", Some("refresh"), can_refresh, |sub| {
             sub.action(
@@ -117,7 +94,7 @@ impl FolderContextMenu {
                 "Refresh Tree (Full)",
                 None,
                 Some("refresh"),
-                !params.is_busy,
+                !is_busy,
             )
             .action(
                 CTX_FOLDER_REFRESH_TREE_RELATIVE,
@@ -128,19 +105,19 @@ impl FolderContextMenu {
             )
         });
 
-        // Standalone Add to Favorites action above Delete Folder
+        // Add to Favorites
         builder = builder.separator();
         builder = builder.action(
             CTX_FOLDER_ADD_TO_FAVORITES,
             "Add to Favorites",
             None,
             Some("favorite"),
-            !params.is_favorite && !params.target_folder.is_deleted,
+            !is_favorite && !target_node.is_deleted,
         );
         builder = builder.separator();
 
-        if !params.is_root {
-            if params.target_folder.is_deleted {
+        if !is_root {
+            if target_node.is_deleted {
                 builder = builder.action(
                     CTX_FOLDER_PURGE_DB,
                     "Remove from Database...",
@@ -162,146 +139,23 @@ impl FolderContextMenu {
         builder.build()
     }
 
-    /// Traverses the cached in-memory tree to build the "Move to..." submenu with zero disk I/O and zero redundant allocations.
-    fn build_reparent_submenu_from_tree(
-        current_folder: &FolderRecord,
-        cached_tree: &[FolderTreeNode],
-        show_hidden_folders: bool,
-        support_dot_hidden_files: bool,
-        dot_hidden_cache: &mut DotHiddenCache,
-        t_start: Instant,
+    /// Recursively builds the "Move to..." reparenting submenu directly from the in-memory SPoT snapshot with zero disk I/O.
+    fn build_reparent_submenu(
+        target_folder_id: FolderId,
+        snapshot: &FolderHierarchySnapshot,
+        show_hidden: bool,
     ) -> CtxMenuItem {
-        if current_folder.is_deleted {
-            return CtxMenuItem::new_submenu("Move to...", Some("move"), false, Vec::new());
-        }
-
-        let Some(root_node) = cached_tree.first() else {
-            return CtxMenuItem::new_submenu("Move to...", Some("move"), false, Vec::new());
-        };
-
-        let is_root_itself = current_folder.id == root_node.record.id;
-        let is_direct_child_of_root = root_node
-            .children
-            .iter()
-            .any(|child| child.record.id == current_folder.id);
-
-        let mut sub_items = Vec::new();
-
-        // 1. Root destination (only if not root itself and not already directly in root)
-        if !is_root_itself && !is_direct_child_of_root {
-            let root_display_name = Path::new(&root_node.record.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "Root".to_string());
-
-            sub_items.push(CtxMenuItem::new_action(
-                CTX_FOLDER_MOVE_BASE + (root_node.record.id as CtxMenuActionId),
-                format!("📁 Root ({})", root_display_name),
-            ));
-        }
-
-        // 2. Recursively traverse children of root in-memory
-        let mut child_items = Vec::new();
-        let mut ctx = MoveMenuTraverseContext {
-            target_folder_id: current_folder.id,
-            show_hidden_folders,
-            support_dot_hidden_files,
-            dot_hidden_cache,
-            valid_destinations: 0,
-            hidden_excluded: 0,
-        };
-
-        Self::traverse_tree_for_move_menu(&root_node.children, &mut ctx, &mut child_items);
-
-        if !is_root_itself && !is_direct_child_of_root {
-            ctx.valid_destinations += 1;
-        }
-
-        if !child_items.is_empty() {
-            if !sub_items.is_empty() {
-                sub_items.push(CtxMenuItem::new_separator());
-            }
-            sub_items.extend(child_items);
-        }
-
-        let build_time_us = t_start.elapsed().as_micros() as u64;
-
-        tracing::info!(
-            folder_id = current_folder.id,
-            target_folder = %LogObscurer::folder(Some(current_folder.id), &current_folder.path),
-            valid_destinations = ctx.valid_destinations,
-            hidden_excluded = ctx.hidden_excluded,
-            build_time_us = build_time_us,
-            build_time_ms = format!("{:.3} ms", build_time_us as f64 / 1000.0),
-            "[Benchmark: FolderContextMenu] Folder context menu built directly from in-memory cache"
+        let sub_items = snapshot.project_target_folder_menu(
+            CTX_FOLDER_MOVE_BASE,
+            Some(target_folder_id),
+            snapshot.get_node(target_folder_id).and_then(|n| n.parent_id),
+            show_hidden,
         );
 
         let is_enabled = !sub_items.is_empty();
         CtxMenuItem::new_submenu("Move to...", Some("move"), is_enabled, sub_items)
     }
 
-    /// Fast recursive traversal of `FolderTreeNode` in memory with pruning of target folder descendants and hidden branches.
-    fn traverse_tree_for_move_menu(
-        nodes: &[FolderTreeNode],
-        ctx: &mut MoveMenuTraverseContext<'_>,
-        output: &mut Vec<CtxMenuItem>,
-    ) {
-        for node in nodes {
-            if node.record.id == ctx.target_folder_id {
-                continue;
-            }
-
-            if node.record.is_deleted {
-                continue;
-            }
-
-            let path_obj = Path::new(&node.record.path);
-            let raw_name = path_obj
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| node.record.path.clone());
-
-            if !ctx.show_hidden_folders
-                && ctx
-                    .dot_hidden_cache
-                    .is_hidden(path_obj, &raw_name, ctx.support_dot_hidden_files)
-            {
-                ctx.hidden_excluded += 1;
-                continue;
-            }
-
-            ctx.valid_destinations += 1;
-
-            let mut child_items = Vec::new();
-            if !node.children.is_empty() {
-                Self::traverse_tree_for_move_menu(&node.children, ctx, &mut child_items);
-            }
-
-            if !child_items.is_empty() {
-                let mut menu_items = Vec::with_capacity(child_items.len() + 2);
-                menu_items.push(CtxMenuItem::new_action(
-                    CTX_FOLDER_MOVE_BASE + (node.record.id as CtxMenuActionId),
-                    format!("Move directly into '{}'", raw_name),
-                ));
-                menu_items.push(CtxMenuItem::new_separator());
-                menu_items.extend(child_items);
-
-                output.push(CtxMenuItem::new_submenu(
-                    format!("📁 {}", raw_name),
-                    None,
-                    true,
-                    menu_items,
-                ));
-            } else {
-                output.push(CtxMenuItem::new_action(
-                    CTX_FOLDER_MOVE_BASE + (node.record.id as CtxMenuActionId),
-                    format!("📁 {}", raw_name),
-                ));
-            }
-        }
-    }
-
-    /// Handles folder context menu action routing with full single-refreshment guards.
     pub fn handle_action(
         action_id: CtxMenuActionId,
         window: &MainWindow,
@@ -309,7 +163,6 @@ impl FolderContextMenu {
         ctx: FolderDialogContext,
         target_folder_id: Option<FolderId>,
     ) {
-        // 1. Move folder under selected target parent
         if action_id >= CTX_FOLDER_MOVE_BASE {
             let target_parent_id = (action_id - CTX_FOLDER_MOVE_BASE) as FolderId;
             if let Some(src_id) = target_folder_id {
@@ -318,7 +171,6 @@ impl FolderContextMenu {
             return;
         }
 
-        // 2. Refreshment Actions: Check single-operation busy guard
         let is_refresh_action = action_id == CTX_FOLDER_REFRESH
             || action_id == CTX_FOLDER_REFRESH_FILES_FULL
             || action_id == CTX_FOLDER_REFRESH_METADATA
@@ -334,11 +186,7 @@ impl FolderContextMenu {
             return;
         }
 
-        // 3. Full Tree Refresh
         if action_id == CTX_FOLDER_REFRESH_TREE_FULL {
-            tracing::info!(
-                "[FolderContextMenu: Refresh Tree Full] Full tree scan triggered from folder context menu"
-            );
             BridgeFolders::refresh_folder_tree(
                 window,
                 &ctx.library,
@@ -349,23 +197,20 @@ impl FolderContextMenu {
             return;
         }
 
-        // 4. Folder-Specific Actions
         if let Some(fid) = target_folder_id
             && let Ok(Some(rec)) = ctx.library.folders().get_folder(fid)
         {
-            let name = Path::new(&rec.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| rec.path.clone());
+            let name = rec.name.clone();
 
             if action_id == CTX_FOLDER_OPEN_IN_FILE_MANAGER {
                 tracing::info!(
-                    folder = %LogObscurer::folder(Some(fid), &rec.path),
+                    folder = %LogObscurer::folder(Some(fid), Path::new(&rec.path)),
                     "[FolderContextMenu] Open in File Manager triggered"
                 );
                 if let Err(e) = SystemFileHandler::open_folder(&rec.path) {
                     tracing::error!(
                         error = %e,
+                        folder = %LogObscurer::folder(Some(fid), Path::new(&rec.path)),
                         "[FolderContextMenu] Failed to open folder in File Manager"
                     );
                     StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
@@ -376,10 +221,6 @@ impl FolderContextMenu {
                     );
                 }
             } else if action_id == CTX_FOLDER_REFRESH || action_id == CTX_FOLDER_REFRESH_FILES_FULL {
-                tracing::info!(
-                    folder = %LogObscurer::folder(Some(fid), &rec.path),
-                    "[FolderContextMenu: Refresh Files Full] Explicit Refresh Files (Full) triggered via context menu"
-                );
                 BridgeFolders::refresh_folder_explicit(
                     fid,
                     PathBuf::from(&rec.path),
@@ -390,10 +231,6 @@ impl FolderContextMenu {
                     &ctx.state,
                 );
             } else if action_id == CTX_FOLDER_REFRESH_METADATA || action_id == CTX_FOLDER_REFRESH_FILES_META {
-                tracing::info!(
-                    folder = %LogObscurer::folder(Some(fid), &rec.path),
-                    "[FolderContextMenu: Refresh Files Meta] Explicit Refresh Files (Meta) triggered via context menu"
-                );
                 BridgeFolders::refresh_folder_metadata_only(
                     fid,
                     PathBuf::from(&rec.path),
@@ -403,10 +240,6 @@ impl FolderContextMenu {
                     &ctx.state,
                 );
             } else if action_id == CTX_FOLDER_REFRESH_TREE_RELATIVE {
-                tracing::info!(
-                    folder = %LogObscurer::folder(Some(fid), &rec.path),
-                    "[FolderContextMenu: Refresh Tree Relative] Targeted relative tree scan triggered via context menu"
-                );
                 BridgeFolders::refresh_folder_subtree(
                     fid,
                     PathBuf::from(&rec.path),

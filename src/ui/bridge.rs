@@ -50,7 +50,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Parameter struct grouping rename trigger dependencies.
 pub struct RenameActionParams<'a> {
     pub window: &'a MainWindow,
     pub library: &'a Arc<Library>,
@@ -67,7 +66,6 @@ pub struct RenameActionParams<'a> {
     pub fullscreen_controller: &'a ImageFullscreenDialogController,
 }
 
-/// Parameter struct grouping delete trigger dependencies.
 pub struct DeleteActionParams<'a> {
     pub window: &'a MainWindow,
     pub library: &'a Arc<Library>,
@@ -145,7 +143,6 @@ impl UiBridge {
         };
         initial_state.expanded_folder_ids = restored_expanded_folders.into_iter().collect();
 
-        // Restore Tag History persistent state
         initial_state.tag_history_ids = settings.get().tags.history_tag_ids.clone();
         initial_state.max_history_tags = settings.get().tags.max_history_tags;
         initial_state.is_tag_history_collapsed = settings.get().tags.is_history_collapsed;
@@ -206,7 +203,6 @@ impl UiBridge {
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 
-        // Synchronize initial Tag History properties
         window.set_tag_history_height(initial_state.tag_history_height);
         window.set_tag_history_is_collapsed(initial_state.is_tag_history_collapsed);
 
@@ -241,7 +237,6 @@ impl UiBridge {
         let ctx_menu_dispatcher = Arc::new(CtxMenuDispatcher::new());
         let last_click = Arc::new(Mutex::new(None));
 
-        // Initialize Left Sidebar Panel Tabs from persisted settings
         BridgeSidebarPanelTabs::init(&window, &settings, &state);
 
         let win_fs_close = window.as_weak();
@@ -266,13 +261,6 @@ impl UiBridge {
                 w.set_active_view_mode(origin_mode);
                 w.set_is_browse_active(origin_mode == 0);
                 w.set_is_tab_grid_active(origin_mode == 2);
-
-                tracing::info!(
-                    origin_mode,
-                    target_tab_id = ?tab_id_opt,
-                    standalone_media_id = ?standalone_media_id_opt,
-                    "[FullscreenViewer: RestoreOrigin] Restoring UI and video subwindows to originating view mode"
-                );
 
                 if origin_mode == 2 {
                     tm.set_all_videos_view_active(false);
@@ -338,7 +326,6 @@ impl UiBridge {
         bridge.register_subsystem_callbacks();
         bridge.register_settings_subscriber();
 
-        // Initialize surgical Favorites model
         BridgeFavorites::init(&bridge.window, &bridge.favorites);
         bridge.reload_tags();
         BridgeFolders::reload_tree(
@@ -348,7 +335,6 @@ impl UiBridge {
             &bridge.state,
         );
 
-        // Initialize Assigned Tags History module
         BridgeTagHistory::init(
             &bridge.window,
             &bridge.library,
@@ -370,11 +356,7 @@ impl UiBridge {
                     let sz = win.window().size();
                     tm_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
                     fs_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
-                    tracing::info!(main_xid, "[UiBridge: PostMount] Verified and cached main window XID");
                 }
-                tracing::info!(
-                    "[UiBridge: PostMount] Slint UI event loop ready. Mounting root folder..."
-                );
                 BridgeFolders::sync_root(&win, &lib, &thumb, &set, &st);
                 BridgeMedia::update_virtual_folder_button_state(&win, &lib, &st);
                 StatusBarBridge::update_metrics(&win, &st);
@@ -441,8 +423,6 @@ impl UiBridge {
                     window.set_show_media_type_badges(new_clone.appearance.show_media_type_badges);
                     window.set_grid_item_padding_h(new_clone.appearance.grid_item_padding_horizontal as i32);
                     window.set_grid_item_padding_v(new_clone.appearance.grid_item_padding_vertical as i32);
-                    window.set_grid_spacing(new_clone.appearance.grid_spacing as i32);
-                    window.set_grid_padding(new_clone.appearance.grid_padding as i32);
                     window.set_grid_item_border_width(new_clone.appearance.grid_item_border_width as i32);
                     window.set_grid_item_corner_radius(new_clone.appearance.grid_item_corner_radius as i32);
 
@@ -471,7 +451,7 @@ impl UiBridge {
                 }
 
                 if diff_clone.root_folder_changed {
-                    state.write().invalidate_folder_tree_cache();
+                    state.write().invalidate_folder_hierarchy();
                     BridgeFolders::sync_root(&window, &library, &thumbnails, &settings, &state);
                 }
 
@@ -488,7 +468,6 @@ impl UiBridge {
                     BridgeTagHistory::sync_ui(&window, &library, &state);
                 }
 
-                // Sync sidebar panel tabs if their settings changed
                 BridgeSidebarPanelTabs::sync_ui(&window, &settings, &state);
 
                 StatusBarBridge::update_metrics(&window, &state);
@@ -565,7 +544,6 @@ impl UiBridge {
             self.fullscreen_controller.clone(),
         );
 
-        // Assigned Tags History Callbacks
         let set_th_col = self.settings.clone();
         let st_th_col = self.state.clone();
         self.window.on_tag_history_collapsed_toggled(move |collapsed| {
@@ -602,7 +580,6 @@ impl UiBridge {
             );
         });
 
-        // High-FPS Tag History Height Resizing Callbacks
         let last_th_resize = Arc::new(Mutex::new(Instant::now()));
         let th_resize_count = Arc::new(AtomicUsize::new(0));
         let last_th_clone = last_th_resize;
@@ -655,7 +632,6 @@ impl UiBridge {
             self.fullscreen_controller.clone(),
         );
 
-        // Favorites Navigation Handler
         let win_fav = self.window.clone_strong();
         let lib_fav = self.library.clone();
         let thumb_fav = self.thumbnails.clone();
@@ -673,7 +649,6 @@ impl UiBridge {
             );
         });
 
-        // Inspector Collapsed State Persistence Callback
         let set_collapse = self.settings.clone();
         let st_collapse = self.state.clone();
         self.window.on_info_collapsed_toggled(move |collapsed| {
@@ -698,7 +673,6 @@ impl UiBridge {
         self.register_modal_dismiss_callback();
     }
 
-    /// Universal handler for dismissing modal dialogs and fullscreen when backdrop is clicked or Escape is pressed.
     fn register_modal_dismiss_callback(&self) {
         let fs_ctrl = self.fullscreen_controller.clone();
         let ren_dlg = self.rename_dialog.clone();
@@ -819,13 +793,10 @@ impl UiBridge {
         });
     }
 
-    /// Handles DEL key trigger in Browse-View: delegates contextually to media files or folder deletion.
-    /// Completely ignores tags if a tag was selected or active.
     pub fn trigger_delete_action(params: DeleteActionParams<'_>) {
         let window = params.window;
         let active_mode = window.get_active_view_mode();
 
-        // 1. Gating: DEL delete shortcut operates exclusively in Browse-View (mode 0)
         if active_mode != 0 {
             tracing::debug!(
                 active_mode,
@@ -834,7 +805,6 @@ impl UiBridge {
             return;
         }
 
-        // 2. System Busy Guard
         if BridgeMedia::is_system_busy(window, params.thumbnails, params.state) {
             StatusBarBridge::warn(
                 window,
@@ -843,7 +813,6 @@ impl UiBridge {
             return;
         }
 
-        // 3. Context-sensitive focus resolution
         let last_panel = params.state.read().last_active_panel;
         let active_sidebar_tab = window.get_active_sidebar_panel_tab();
         let is_folders_tab = active_sidebar_tab.as_str() == "folders";
@@ -867,7 +836,6 @@ impl UiBridge {
             }
         };
 
-        // FAVORITES FOCUS: Remove focused favorite
         if effective_panel == LastActivePanel::Favorite {
             let selected_fav_path = params.state.read().selected_favorite_path.clone();
             let path_to_remove = selected_fav_path.or_else(|| {
@@ -890,7 +858,6 @@ impl UiBridge {
             return;
         }
 
-        // FOLDER TREE FOCUS: Delete focused folder
         if effective_panel == LastActivePanel::Folder {
             let current_folder_id = params.state.read().current_folder_id;
             let Some(folder_id) = current_folder_id else {
@@ -898,7 +865,6 @@ impl UiBridge {
                 return;
             };
 
-            // Protect root directory from deletion
             let is_root = {
                 let app_settings = params.settings.get();
                 if let Some(ref root_p) = app_settings.general.root_folder
@@ -921,10 +887,7 @@ impl UiBridge {
                 return;
             };
 
-            let folder_name = Path::new(&folder_rec.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| folder_rec.path.clone());
+            let folder_name = folder_rec.name.clone();
 
             let folder_ctx = FolderDialogContext {
                 library: params.library.clone(),
@@ -961,7 +924,6 @@ impl UiBridge {
             return;
         }
 
-        // MEDIA FOCUS: Delete selected files
         let selected_ids = params.state.read().get_selected_ids_ordered();
         if selected_ids.is_empty() {
             StatusBarBridge::info(window, "Select one or more files to delete (Del).");
@@ -1007,7 +969,6 @@ impl UiBridge {
         let active_mode = window.get_active_view_mode();
         let is_fs = params.fullscreen_controller.is_open();
 
-        // 1. Fullscreen mode: Always rename the media item in fullscreen
         if is_fs {
             if let Some(media_id) = params.fullscreen_controller.get_active_media_id() {
                 Self::open_media_rename(media_id, &params);
@@ -1015,7 +976,6 @@ impl UiBridge {
             return;
         }
 
-        // 2. Tab Viewer mode (mode 1): Always rename the active tab's media item
         if active_mode == 1 {
             if let Some(media_id) = params.tab_manager.get_active_media_id() {
                 Self::open_media_rename(media_id, &params);
@@ -1023,7 +983,6 @@ impl UiBridge {
             return;
         }
 
-        // 3. Browse mode (mode 0) / Tab Grid (mode 2): Context-sensitive based on active panel tab & focus
         let last_panel = params.state.read().last_active_panel;
         let active_sidebar_tab = window.get_active_sidebar_panel_tab();
         let is_folders_tab = active_sidebar_tab.as_str() == "folders";
@@ -1047,7 +1006,6 @@ impl UiBridge {
             }
         };
 
-        // FAVORITES FOCUS: Rename selected favorite
         if effective_panel == LastActivePanel::Favorite {
             let selected_fav_path = params.state.read().selected_favorite_path.clone();
             let path_to_rename = selected_fav_path.or_else(|| {
@@ -1075,7 +1033,6 @@ impl UiBridge {
             return;
         }
 
-        // FOLDER TREE FOCUS: Rename selected folder
         if effective_panel == LastActivePanel::Folder {
             let current_folder_id = params.state.read().current_folder_id;
             let Some(folder_id) = current_folder_id else {
@@ -1083,7 +1040,6 @@ impl UiBridge {
                 return;
             };
 
-            // Protect root directory from renaming
             let is_root = {
                 let app_settings = params.settings.get();
                 if let Some(ref root_p) = app_settings.general.root_folder
@@ -1106,10 +1062,7 @@ impl UiBridge {
                 return;
             };
 
-            let folder_name = Path::new(&folder_rec.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| folder_rec.path.clone());
+            let folder_name = folder_rec.name.clone();
 
             let folder_ctx = FolderDialogContext {
                 library: params.library.clone(),
@@ -1133,7 +1086,6 @@ impl UiBridge {
             return;
         }
 
-        // 4. Media panel focus: Check single selection
         let sel_ids = params.state.read().file_selection.selected_ids().clone();
         if sel_ids.len() == 1 {
             let media_id = *sel_ids.iter().next().unwrap();
@@ -1598,7 +1550,7 @@ impl UiBridge {
     }
 
     pub fn sync_root_folder(&self) {
-        self.state.write().invalidate_folder_tree_cache();
+        self.state.write().invalidate_folder_hierarchy();
         BridgeFolders::sync_root(
             &self.window,
             &self.library,
@@ -1712,6 +1664,7 @@ impl UiBridge {
                 thumbnails: &self.thumbnails,
                 tab_manager: &self.tab_manager,
                 state: &self.state,
+                settings: &self.settings,
             },
             media_id,
             x,

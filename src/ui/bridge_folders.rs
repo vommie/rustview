@@ -6,10 +6,9 @@ use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
-use super::{FolderNodeView, MainWindow};
-use crate::library::dot_hidden::DotHiddenCache;
+use super::MainWindow;
 use crate::library::folders::normalize_path;
-use crate::library::models::{FolderId, FolderRecord, MediaId, MediaRecord};
+use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::refresh::RefreshReport;
 use crate::library::Library;
 use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
@@ -20,184 +19,19 @@ use crate::thumbnails::{PreparedTarget, ThumbnailConfig, ThumbnailManager};
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-#[derive(Debug, Clone)]
-pub struct FolderTreeNode {
-    pub record: FolderRecord,
-    pub subfolders_count: usize,
-    pub media_files_count: usize,
-    pub children: Vec<FolderTreeNode>,
-}
-
-/// Context parameters passed during the recursive tree flattening pass.
-pub struct FolderFlattenContext<'a> {
-    pub expanded_ids: &'a HashSet<FolderId>,
-    pub selected_id: Option<FolderId>,
-    pub show_deleted: bool,
-    pub show_metrics: bool,
-    pub show_hidden: bool,
-    pub support_dot_hidden: bool,
-    pub dot_hidden_cache: &'a mut DotHiddenCache,
-}
-
-/// Grouped dependencies bundle for folder navigation and selection workflows.
 pub struct FolderNavigationContext<'a> {
     pub window: &'a MainWindow,
     pub library: &'a Arc<Library>,
     pub thumbnails: &'a Arc<ThumbnailManager>,
     pub settings: &'a Arc<SettingsManager>,
     pub state: &'a Arc<RwLock<UiState>>,
-}
-
-struct ParentNodeInfo<'a> {
-    parent: &'a FolderTreeNode,
-    deleted_child_idx: usize,
-}
-
-pub struct FolderTreeBuilder;
-
-impl FolderTreeBuilder {
-    /// Builds the hierarchical tree structure in O(N) using SIMD path splitting and sibling-only sorting with zero disk syscalls.
-    pub fn build_hierarchy(
-        root_dir: &Path,
-        folders: &[FolderRecord],
-        media_counts: &HashMap<FolderId, usize>,
-    ) -> Vec<FolderTreeNode> {
-        let canonical_root_str = root_dir.to_string_lossy().trim_end_matches(['/', '\\']).to_string();
-
-        let mut subfolder_map: HashMap<&str, Vec<usize>> = HashMap::with_capacity(folders.len());
-        let mut root_idx = None;
-
-        for (idx, f) in folders.iter().enumerate() {
-            let p_str = f.path.trim_end_matches(['/', '\\']);
-            if p_str == canonical_root_str {
-                root_idx = Some(idx);
-            }
-
-            if let Some(pos) = memchr::memrchr2(b'/', b'\\', p_str.as_bytes()) {
-                let parent_str = if pos == 0 { "/" } else { &p_str[..pos] };
-                subfolder_map.entry(parent_str).or_default().push(idx);
-            }
-        }
-
-        match root_idx {
-            Some(r_idx) => {
-                let root_rec = &folders[r_idx];
-                let children = Self::build_subtrees(&root_rec.path, folders, &subfolder_map, media_counts);
-                let subfolders_count = children.len();
-                let media_files_count = media_counts.get(&root_rec.id).copied().unwrap_or(0);
-
-                vec![FolderTreeNode {
-                    record: root_rec.clone(),
-                    subfolders_count,
-                    media_files_count,
-                    children,
-                }]
-            }
-            None => Vec::new(),
-        }
-    }
-
-    fn build_subtrees(
-        current_path_str: &str,
-        folders: &[FolderRecord],
-        subfolder_map: &HashMap<&str, Vec<usize>>,
-        media_counts: &HashMap<FolderId, usize>,
-    ) -> Vec<FolderTreeNode> {
-        let clean_path = current_path_str.trim_end_matches(['/', '\\']);
-        let mut nodes = Vec::new();
-
-        if let Some(child_indices) = subfolder_map.get(clean_path) {
-            let mut sorted_indices = child_indices.clone();
-            if sorted_indices.len() > 1 {
-                sorted_indices.sort_unstable_by(|&a, &b| folders[a].path.cmp(&folders[b].path));
-            }
-
-            nodes.reserve(sorted_indices.len());
-            for idx in sorted_indices {
-                let child_rec = &folders[idx];
-                let sub_children = Self::build_subtrees(&child_rec.path, folders, subfolder_map, media_counts);
-                let subfolders_count = sub_children.len();
-                let media_files_count = media_counts.get(&child_rec.id).copied().unwrap_or(0);
-
-                nodes.push(FolderTreeNode {
-                    record: child_rec.clone(),
-                    subfolders_count,
-                    media_files_count,
-                    children: sub_children,
-                });
-            }
-        }
-
-        nodes
-    }
-
-    /// Fast in-memory flattening of expanded tree nodes for Slint ModelRc rendering with dot-folder and Linux .hidden file support.
-    pub fn flatten(
-        nodes: &[FolderTreeNode],
-        depth: i32,
-        ctx: &mut FolderFlattenContext<'_>,
-        output: &mut Vec<FolderNodeView>,
-    ) {
-        for node in nodes {
-            if node.record.is_deleted && !ctx.show_deleted {
-                continue;
-            }
-
-            let path_obj = Path::new(&node.record.path);
-            let raw_name = path_obj
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| node.record.path.clone());
-
-            let is_hidden_folder = ctx.dot_hidden_cache.is_hidden(path_obj, &raw_name, ctx.support_dot_hidden);
-
-            if is_hidden_folder && !ctx.show_hidden {
-                continue;
-            }
-
-            let has_children = !node.children.is_empty();
-            let is_expanded = ctx.expanded_ids.contains(&node.record.id);
-            let is_selected = ctx.selected_id == Some(node.record.id);
-
-            let formatted_name = if ctx.show_metrics {
-                format!(
-                    "{} ({}, {})",
-                    raw_name, node.subfolders_count, node.media_files_count
-                )
-            } else {
-                raw_name
-            };
-
-            output.push(FolderNodeView {
-                id: node.record.id as i32,
-                name: formatted_name.into(),
-                depth,
-                path: node.record.path.clone().into(),
-                has_children,
-                is_expanded,
-                is_selected,
-                is_deleted: node.record.is_deleted,
-                subfolder_count: node.subfolders_count as i32,
-                file_count: node.media_files_count as i32,
-            });
-
-            if has_children && is_expanded {
-                Self::flatten(
-                    &node.children,
-                    depth + 1,
-                    ctx,
-                    output,
-                );
-            }
-        }
-    }
 }
 
 pub struct BridgeFolders;
@@ -218,7 +52,6 @@ impl BridgeFolders {
         let st = state.clone();
         let win = window.clone_strong();
 
-        // 1. Toolbar Refresh Media Button (Single-Operation Guard)
         window.on_refresh_folder(move || {
             if BridgeMedia::is_system_busy(&win, &thumb, &st) {
                 StatusBarBridge::warn(&win, "Cannot refresh: another operation is already in progress.");
@@ -233,8 +66,7 @@ impl BridgeFolders {
                 tracing::info!(
                     folder_id = id,
                     path = %LogObscurer::path(&path),
-                    is_virtual_folder = st.read().is_virtual_folder_mode,
-                    "[FolderRefresh: Toolbar] Executing explicit full media refresh & thumbnail generation."
+                    "[FolderRefresh: Toolbar] Executing explicit full media refresh."
                 );
                 Self::refresh_folder_explicit(id, path, &win, &lib, &thumb, &set, &st);
             }
@@ -272,7 +104,6 @@ impl BridgeFolders {
             Self::toggle_expand(id as u64, &win, &lib, &set, &st);
         });
 
-        // 2. Folder Tree Combo-Button: Option 0 = Entire Tree Scan
         let lib_all = library.clone();
         let thumb_all = thumbnails.clone();
         let set_all = settings.clone();
@@ -287,7 +118,6 @@ impl BridgeFolders {
             Self::refresh_folder_tree(&win_all, &lib_all, &thumb_all, &set_all, &st_all);
         });
 
-        // 3. Folder Tree Combo-Button: Option 1 = Relative Subtree Scan
         let lib_rel = library.clone();
         let thumb_rel = thumbnails.clone();
         let set_rel = settings.clone();
@@ -345,7 +175,6 @@ impl BridgeFolders {
         state: &RwLock<UiState>,
     ) {
         let target_path_opt = state.read().current_folder_path.clone();
-
         let app_settings = settings.get();
         let root_path_opt = app_settings.general.root_folder.as_ref().map(|p| normalize_path(p));
 
@@ -381,7 +210,7 @@ impl BridgeFolders {
                 st.expanded_folder_ids.insert(*id);
             }
             Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
-        };
+        }
 
         Self::reload_tree(window, library, settings, state);
         Self::scroll_to_selected(window);
@@ -449,8 +278,7 @@ impl BridgeFolders {
                 let mut current_ancestor = target_folder.1.parent();
                 while let Some(parent_p) = current_ancestor {
                     if parent_p.starts_with(&normalized_root) {
-                        if let Ok(Some(parent_rec)) = library.folders().get_folder_by_path(parent_p)
-                        {
+                        if let Ok(Some(parent_rec)) = library.folders().get_folder_by_path(parent_p) {
                             st.expanded_folder_ids.insert(parent_rec.id);
                         }
                         if parent_p == normalized_root {
@@ -486,7 +314,8 @@ impl BridgeFolders {
         });
     }
 
-    /// Full recursive scan starting from the library root folder.
+    /// Full root scan: scans the complete directory tree starting from configured root path on disk,
+    /// persists all relational records, and updates the in-memory SPoT snapshot.
     pub fn refresh_folder_tree(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -530,13 +359,12 @@ impl BridgeFolders {
         let st = state.clone();
 
         std::thread::Builder::new()
-            .name("folder-tree-refresher".into())
+            .name("folder-tree-scanner".into())
             .spawn(move || {
-                let refresher = lib.folder_tree_refresher();
                 let w_weak_progress = w_weak.clone();
                 let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
 
-                let report_res = refresher.refresh_tree(
+                let snapshot_res = lib.folders().scan_directory_tree(
                     &normalized_root,
                     Some(move |count| {
                         let mut last = last_progress_report.lock();
@@ -556,53 +384,32 @@ impl BridgeFolders {
                     }
                     StatusBarBridge::update_folder_scan_progress(&w, false, 0);
 
-                    match report_res {
-                        Ok(report) => {
+                    match snapshot_res {
+                        Ok(snapshot) => {
                             let elapsed_ms = t_start.elapsed().as_millis();
-                            if !report.has_changes() {
-                                tracing::info!(
-                                    scanned = report.total_scanned_dirs,
-                                    elapsed_ms,
-                                    "[FolderTreeRefresh] Full scan verified: No changes detected in tree. Tree re-render bypassed."
-                                );
-                                StatusBarBridge::info(
-                                    &w,
-                                    format!(
-                                        "Tree verified in {}ms: No changes detected ({} dirs checked).",
-                                        elapsed_ms, report.total_scanned_dirs
-                                    ),
-                                );
-                            } else {
-                                {
-                                    let mut s = st.write();
-                                    s.invalidate_folder_tree_cache();
-                                }
-                                let status_msg = format!(
-                                    "Tree scan completed in {}ms: {} total dirs ({} new added, {} removed, {} restored).",
-                                    elapsed_ms,
-                                    report.total_scanned_dirs,
-                                    report.new_folders_added,
-                                    report.folders_marked_deleted,
-                                    report.folders_restored
-                                );
-                                StatusBarBridge::success(&w, status_msg);
-                                Self::reload_tree(&w, &lib, &set, &st);
-                                Self::scroll_to_selected(&w);
-                                BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
-                                StatusBarBridge::update_metrics(&w, &st);
-                            }
+                            let total_dirs = snapshot.nodes.len();
+                            st.write().set_folder_hierarchy(snapshot);
+
+                            StatusBarBridge::success(
+                                &w,
+                                format!("Tree scan completed in {}ms: {} total dirs updated.", elapsed_ms, total_dirs),
+                            );
+
+                            Self::reload_tree(&w, &lib, &set, &st);
+                            Self::scroll_to_selected(&w);
+                            BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
+                            StatusBarBridge::update_metrics(&w, &st);
                         }
                         Err(e) => {
-                            tracing::error!(error = %e, "[FolderTreeRefreshError] Failed to refresh folder tree");
-                            StatusBarBridge::error(&w, format!("Folder scan failed: {}", e));
+                            tracing::error!(error = %e, "[FolderTreeScanError] Failed to scan folder tree");
+                            StatusBarBridge::error(&w, format!("Folder tree scan failed: {}", e));
                         }
                     }
                 });
             })
-            .expect("Failed to spawn folder tree refresher background thread");
+            .expect("Failed to spawn folder tree scanner thread");
     }
 
-    /// Triggers a relative scan on the currently selected folder in the tree.
     pub fn refresh_selected_folder_subtree(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -610,22 +417,20 @@ impl BridgeFolders {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        let (target_fid, target_path) = {
+        let (current_id_opt, current_path_opt) = {
             let st = state.read();
             (st.current_folder_id, st.current_folder_path.clone())
         };
 
-        if let (Some(fid), Some(path)) = (target_fid, target_path) {
+        if let (Some(fid), Some(path)) = (current_id_opt, current_path_opt) {
             Self::refresh_folder_subtree(fid, path, window, library, thumbnails, settings, state);
         } else {
-            StatusBarBridge::warn(
-                window,
-                "No folder selected for relative tree refresh. Please select a folder first.",
-            );
+            Self::refresh_folder_tree(window, library, thumbnails, settings, state);
         }
     }
 
-    /// Highly optimized, targeted recursive scan restricted to a specific subfolder subtree.
+    /// Surgical targeted scan: Scans ONLY the selected subtree physically on disk,
+    /// reconciles counts and records, rolls deltas up through ancestors in LMDB, and updates the in-memory SPoT snapshot.
     pub fn refresh_folder_subtree(
         folder_id: FolderId,
         path: PathBuf,
@@ -638,21 +443,15 @@ impl BridgeFolders {
         if BridgeMedia::is_system_busy(window, thumbnails, state) {
             StatusBarBridge::warn(
                 window,
-                "Cannot refresh folder tree: another operation is already in progress.",
+                "Cannot refresh folder: another operation is already in progress.",
             );
             return;
         }
 
-        let normalized_path = normalize_path(&path);
-        if !normalized_path.is_dir() {
-            StatusBarBridge::error(window, "Selected folder directory not found on filesystem.");
-            return;
-        }
-
-        let folder_name = normalized_path
+        let folder_name = path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
+            .unwrap_or_else(|| path.to_string_lossy().to_string());
 
         {
             let mut st = state.write();
@@ -663,7 +462,7 @@ impl BridgeFolders {
         StatusBarBridge::update_folder_scan_progress(window, true, 0);
         StatusBarBridge::info(
             window,
-            format!("Scanning subfolder tree under '{}' on filesystem...", folder_name),
+            format!("Surgically rescanning subtree under '{}'...", folder_name),
         );
 
         let t_start = Instant::now();
@@ -671,17 +470,15 @@ impl BridgeFolders {
         let lib = library.clone();
         let set = settings.clone();
         let st = state.clone();
-        let f_name_owned = folder_name.clone();
 
         std::thread::Builder::new()
-            .name(format!("folder-subtree-refresher-{}", folder_id))
+            .name(format!("folder-subtree-scanner-{}", folder_id))
             .spawn(move || {
-                let refresher = lib.folder_tree_refresher();
                 let w_weak_progress = w_weak.clone();
                 let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
 
-                let report_res = refresher.refresh_subtree(
-                    &normalized_path,
+                let snapshot_res = lib.folders().scan_subtree(
+                    folder_id,
                     Some(move |count| {
                         let mut last = last_progress_report.lock();
                         if last.elapsed().as_millis() >= 35 {
@@ -700,62 +497,29 @@ impl BridgeFolders {
                     }
                     StatusBarBridge::update_folder_scan_progress(&w, false, 0);
 
-                    match report_res {
-                        Ok(report) => {
+                    match snapshot_res {
+                        Ok(snapshot) => {
                             let elapsed_ms = t_start.elapsed().as_millis();
-                            if !report.has_changes() {
-                                tracing::info!(
-                                    folder_id,
-                                    folder_name = %f_name_owned,
-                                    scanned = report.total_scanned_dirs,
-                                    elapsed_ms,
-                                    "[FolderTreeSubtree] Relative scan verified: No changes detected in subtree. Tree re-render bypassed."
-                                );
-                                StatusBarBridge::info(
-                                    &w,
-                                    format!(
-                                        "Subtree verified in {}ms: No changes in '{}' ({} subdirs checked).",
-                                        elapsed_ms, f_name_owned, report.total_scanned_dirs
-                                    ),
-                                );
-                            } else {
-                                {
-                                    let mut s = st.write();
-                                    s.invalidate_folder_tree_cache();
-                                }
-                                tracing::info!(
-                                    folder_id,
-                                    folder_name = %f_name_owned,
-                                    new_added = report.new_folders_added,
-                                    deleted = report.folders_marked_deleted,
-                                    restored = report.folders_restored,
-                                    elapsed_ms,
-                                    "[FolderTreeSubtree] Relative scan completed with changes. Synchronizing tree view."
-                                );
-                                let status_msg = format!(
-                                    "Subtree scan completed in {}ms for '{}': {} dirs scanned ({} new added, {} removed, {} restored).",
-                                    elapsed_ms,
-                                    f_name_owned,
-                                    report.total_scanned_dirs,
-                                    report.new_folders_added,
-                                    report.folders_marked_deleted,
-                                    report.folders_restored
-                                );
-                                StatusBarBridge::success(&w, status_msg);
-                                Self::reload_tree(&w, &lib, &set, &st);
-                                Self::scroll_to_selected(&w);
-                                BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
-                                StatusBarBridge::update_metrics(&w, &st);
-                            }
+                            st.write().set_folder_hierarchy(snapshot);
+
+                            StatusBarBridge::success(
+                                &w,
+                                format!("Subtree '{}' rescanned in {}ms.", folder_name, elapsed_ms),
+                            );
+
+                            Self::reload_tree(&w, &lib, &set, &st);
+                            Self::scroll_to_selected(&w);
+                            BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
+                            StatusBarBridge::update_metrics(&w, &st);
                         }
                         Err(e) => {
-                            tracing::error!(folder_id, error = %e, "[FolderSubtreeRefreshError] Failed to refresh subtree");
+                            tracing::error!(folder_id, error = %e, "[SubtreeScanError] Failed to scan subtree");
                             StatusBarBridge::error(&w, format!("Subtree scan failed: {}", e));
                         }
                     }
                 });
             })
-            .expect("Failed to spawn folder subtree refresher background thread");
+            .expect("Failed to spawn folder subtree scanner thread");
     }
 
     pub fn select_folder(
@@ -851,13 +615,6 @@ impl BridgeFolders {
             })
             .collect();
 
-        tracing::info!(
-            folder_id = folder_id,
-            folder_name = %folder_name,
-            total_items = targets.len(),
-            "[FolderMetadataRefresh] Starting fast metadata-only refresh for folder..."
-        );
-
         BridgeMedia::execute_metadata_only_refresh(
             targets,
             window,
@@ -940,10 +697,8 @@ impl BridgeFolders {
         Self::reload_tree(ctx.window, ctx.library, ctx.settings, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
-        // Synchronize surgical selection indicator in Favorites panel
         BridgeFavorites::set_selected_path(Some(&normalized_path));
 
-        // Collect target folder IDs
         let target_folder_ids = if is_virtual_folder {
             ctx.library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
         } else {
@@ -957,7 +712,6 @@ impl BridgeFolders {
         }
         StatusBarBridge::update_virtual_folder(ctx.window, is_virtual_folder, virtual_count);
 
-        // Immediate Zero-Delay Database Fetch
         let t_id_start = Instant::now();
         let mut media_ids = Vec::new();
         if let Ok(rtxn) = ctx.library.raw_db().env.read_txn() {
@@ -1008,7 +762,6 @@ impl BridgeFolders {
         StatusBarBridge::update_metrics(ctx.window, ctx.state);
         Self::scroll_to_selected(ctx.window);
 
-        // Fast path check: If not scanning, check for pending external stubs (PyCutRv queue)
         if !should_scan_and_generate {
             if ctx.settings.get().api.auto_complete_external_stubs {
                 let (ready_stubs, still_pending, sources) = ctx
@@ -1026,14 +779,12 @@ impl BridgeFolders {
                         "[FolderNavigation: StubsDetected] Auto-completing external stubs on folder access..."
                     );
 
-                    // Lock the Refresh button and mark system as busy during completion
                     {
                         let mut st = ctx.state.write();
                         st.is_refreshing_media = true;
                     }
                     ctx.window.set_is_system_busy(true);
 
-                    // Activate ONLY Thumbnail generation progress indicator (prevent double progress bar display)
                     ctx.thumbnails.tracker().set_generate_total(stubs_count);
                     StatusBarBridge::info(ctx.window, format!("Auto-completing {} external file(s)...", stubs_count));
 
@@ -1115,7 +866,6 @@ impl BridgeFolders {
                                 }
 
                                 thumb_arc.tracker().reset();
-
                                 BridgeMedia::reload(&w, &lib_arc, &thumb_arc, &set_arc, &st_arc, false, false);
                                 BridgeInspector::update(&w, &st_arc);
                                 BridgeTags::sync_tag_selection(&w, &lib_arc, &st_arc);
@@ -1130,26 +880,10 @@ impl BridgeFolders {
                 }
             }
 
-            tracing::info!(
-                folder_id = folder_id,
-                folder_name = %folder_name,
-                is_virtual_folder = is_virtual_folder,
-                known_items = ctx.state.read().all_folder_media.len(),
-                "[FolderNavigation: Zero-FS Load] Folder opened from LMDB cache with 0ms disk scan."
-            );
             StatusBarBridge::update_media_index_progress(ctx.window, false, 0, 0);
             StatusBarBridge::info(ctx.window, "Ready.");
             return;
         }
-
-        tracing::info!(
-            folder_id = folder_id,
-            folder_name = %folder_name,
-            is_virtual_folder = is_virtual_folder,
-            is_explicit_refresh = is_explicit_refresh,
-            is_empty_in_db = is_empty_in_db,
-            "[FolderRefresh: Execute] Executing filesystem scan and dedicated thumbnail generation..."
-        );
 
         StatusBarBridge::update_media_index_progress(ctx.window, true, 0, 0);
         StatusBarBridge::info(
@@ -1178,10 +912,6 @@ impl BridgeFolders {
 
                 let t_scan = Instant::now();
                 let auto_detect = set_scanner.get().formats.auto_detect_extensionless_media;
-
-                if is_virtual_folder {
-                    let _ = lib_scanner.folder_tree_refresher().refresh_tree(&target_p_scanner, None::<fn(usize)>);
-                }
 
                 let scan_folder_ids = if is_virtual_folder {
                     lib_scanner.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
@@ -1261,7 +991,6 @@ impl BridgeFolders {
                     }
                 }
 
-                let active_count = known.iter().filter(|m| !m.is_deleted).count();
                 let indexed_media = if is_virtual_folder {
                     BridgeMedia::preindex_records(&lib_scanner, known)
                 } else {
@@ -1289,7 +1018,6 @@ impl BridgeFolders {
                         {
                             let mut s = st_scanner.write();
                             s.all_folder_media = indexed_media;
-                            s.update_folder_media_count_in_cache(folder_id, active_count);
                         }
 
                         BridgeMedia::reload(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, false, false);
@@ -1304,11 +1032,6 @@ impl BridgeFolders {
 
                         if !all_targets.is_empty() {
                             let config = ThumbnailConfig::from_performance_settings(&set_scanner.get().performance);
-                            tracing::info!(
-                                folder_id = folder_id,
-                                total_targets = all_targets.len(),
-                                "[ThumbnailPipeline: Launch] Launching thumbnail pipeline for refreshed items"
-                            );
                             thumb_scanner.start_pipeline(folder_id, all_targets, config);
                         }
                     }
@@ -1344,13 +1067,14 @@ impl BridgeFolders {
                 st.expanded_folder_ids.remove(&folder_id);
             } else {
                 st.expanded_folder_ids.insert(folder_id);
-            };
+            }
             Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
-        };
+        }
 
         Self::reload_tree(window, library, settings, state);
     }
 
+    /// Renders the folder tree directly from the in-memory Single Point of Truth snapshot with zero filesystem I/O.
     pub fn reload_tree(
         window: &MainWindow,
         library: &Library,
@@ -1358,56 +1082,29 @@ impl BridgeFolders {
         state: &RwLock<UiState>,
     ) {
         let app_settings = settings.get();
-        let root_setting = app_settings.general.root_folder;
 
-        let Some(ref root_dir) = root_setting else {
-            window.set_folders(ModelRc::new(VecModel::from(vec![])));
-            return;
-        };
-
-        let (current_sel, expanded_ids, cached_tree_opt) = {
-            let st = state.read();
-            (
-                st.current_folder_id,
-                st.expanded_folder_ids.clone(),
-                st.cached_folder_tree.clone(),
-            )
-        };
-
-        let tree = match cached_tree_opt {
-            Some(cached) => cached,
-            None => {
-                let folders = library.folders().list_folders().unwrap_or_default();
-                let media_counts = library.folders().get_all_media_counts().unwrap_or_default();
-                let built_tree = FolderTreeBuilder::build_hierarchy(root_dir, &folders, &media_counts);
-
-                {
-                    let mut st = state.write();
-                    st.cached_folder_tree = Some(built_tree.clone());
-                    st.cached_media_counts = media_counts;
+        let snapshot = {
+            let existing_opt = state.read().folder_hierarchy.clone();
+            match existing_opt {
+                Some(snap) => snap,
+                None => {
+                    let loaded = library.folders().load_hierarchy_snapshot().unwrap_or_default();
+                    let arc_snap = Arc::new(loaded);
+                    state.write().folder_hierarchy = Some(arc_snap.clone());
+                    arc_snap
                 }
-
-                built_tree
             }
         };
 
-        let mut st_guard = state.write();
-        let mut ctx = FolderFlattenContext {
-            expanded_ids: &expanded_ids,
-            selected_id: current_sel,
-            show_deleted: app_settings.folders.show_deleted_folders,
-            show_metrics: app_settings.folders.show_folder_metrics,
-            show_hidden: app_settings.folders.show_hidden_folders,
-            support_dot_hidden: app_settings.folders.support_dot_hidden_files,
-            dot_hidden_cache: &mut st_guard.dot_hidden_cache,
-        };
+        let current_sel = state.read().current_folder_id;
+        let expanded_ids = state.read().expanded_folder_ids.clone();
 
-        let mut folder_views = Vec::with_capacity(tree.len() * 4);
-        FolderTreeBuilder::flatten(
-            &tree,
-            0,
-            &mut ctx,
-            &mut folder_views,
+        let folder_views = snapshot.project_tree(
+            &expanded_ids,
+            current_sel,
+            app_settings.folders.show_deleted_folders,
+            app_settings.folders.show_folder_metrics,
+            app_settings.folders.show_hidden_folders,
         );
 
         window.set_folders(ModelRc::new(VecModel::from(folder_views)));
@@ -1425,7 +1122,7 @@ impl BridgeFolders {
             st.media_row_map.clear();
             st.last_executed_query.clear();
             st.expanded_folder_ids.clear();
-            st.invalidate_folder_tree_cache();
+            st.invalidate_folder_hierarchy();
             st.is_query_active = false;
             st.selected_rating = 0;
             st.filter.rating = None;
@@ -1448,7 +1145,6 @@ impl BridgeFolders {
         window.set_empty_state_icon("settings".into());
 
         BridgeFavorites::set_selected_path(None);
-
         StatusBarBridge::info(window, status_msg);
         StatusBarBridge::update_metrics(window, state);
         BridgeInspector::update(window, state);
@@ -1463,28 +1159,8 @@ impl BridgeFolders {
         for id in deleted_ids {
             st.expanded_folder_ids.remove(id);
         }
-        st.invalidate_folder_tree_cache();
+        st.invalidate_folder_hierarchy();
         Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
-    }
-
-    fn find_parent_in_tree<'a>(
-        nodes: &'a [FolderTreeNode],
-        target_id: FolderId,
-    ) -> Option<ParentNodeInfo<'a>> {
-        for node in nodes {
-            for (idx, child) in node.children.iter().enumerate() {
-                if child.record.id == target_id {
-                    return Some(ParentNodeInfo {
-                        parent: node,
-                        deleted_child_idx: idx,
-                    });
-                }
-            }
-            if let Some(info) = Self::find_parent_in_tree(&node.children, target_id) {
-                return Some(info);
-            }
-        }
-        None
     }
 
     pub fn find_visible_successor_folder(
@@ -1494,113 +1170,56 @@ impl BridgeFolders {
         settings: &SettingsManager,
         state: &RwLock<UiState>,
     ) -> Option<(FolderId, PathBuf)> {
-        let t0 = Instant::now();
+        let snapshot = {
+            let existing = state.read().folder_hierarchy.clone();
+            match existing {
+                Some(s) => s,
+                None => Arc::new(library.folders().load_hierarchy_snapshot().unwrap_or_default()),
+            }
+        };
+
+        let affected_set: HashSet<FolderId> = affected_subtree_ids.iter().copied().collect();
+        let target_node = snapshot.get_node(deleted_id)?;
+        let parent_id = target_node.parent_id;
+
+        let siblings = snapshot.get_children(parent_id);
+        let current_pos = siblings.iter().position(|&id| id == deleted_id)?;
+
+        for &sib_id in siblings.iter().skip(current_pos + 1) {
+            if !affected_set.contains(&sib_id)
+                && let Some(node) = snapshot.get_node(sib_id)
+                && !node.is_deleted
+            {
+                return Some((node.id, node.path.clone()));
+            }
+        }
+
+        for &sib_id in siblings[..current_pos].iter().rev() {
+            if !affected_set.contains(&sib_id)
+                && let Some(node) = snapshot.get_node(sib_id)
+                && !node.is_deleted
+            {
+                return Some((node.id, node.path.clone()));
+            }
+        }
+
+        if let Some(pid) = parent_id
+            && !affected_set.contains(&pid)
+            && let Some(node) = snapshot.get_node(pid)
+        {
+            return Some((node.id, node.path.clone()));
+        }
+
         let app_settings = settings.get();
         let root_setting = app_settings.general.root_folder.as_ref()?;
         let normalized_root = normalize_path(root_setting);
 
-        let cached_tree_opt = state.read().cached_folder_tree.clone();
-
-        let tree = match cached_tree_opt {
-            Some(cached) => cached,
-            None => {
-                let folders = library.folders().list_folders().unwrap_or_default();
-                let media_counts = library.folders().get_all_media_counts().unwrap_or_default();
-                FolderTreeBuilder::build_hierarchy(&normalized_root, &folders, &media_counts)
-            }
-        };
-
-        if tree.is_empty() {
-            return None;
-        }
-
-        let affected_set: HashSet<FolderId> = affected_subtree_ids.iter().copied().collect();
-        let mut st_guard = state.write();
-        let dot_hidden_cache = &mut st_guard.dot_hidden_cache;
-
-        let show_deleted = app_settings.folders.show_deleted_folders;
-        let show_hidden = app_settings.folders.show_hidden_folders;
-        let support_dot_hidden = app_settings.folders.support_dot_hidden_files;
-
-        let is_valid_sibling = |child: &FolderTreeNode, cache: &mut DotHiddenCache| -> bool {
-            if affected_set.contains(&child.record.id) {
-                return false;
-            }
-            if child.record.is_deleted && !show_deleted {
-                return false;
-            }
-            let path_obj = Path::new(&child.record.path);
-            let raw_name = path_obj
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| child.record.path.clone());
-            if !show_hidden && cache.is_hidden(path_obj, &raw_name, support_dot_hidden) {
-                return false;
-            }
-            true
-        };
-
-        if let Some(parent_info) = Self::find_parent_in_tree(&tree, deleted_id) {
-            for child in parent_info.parent.children.iter().skip(parent_info.deleted_child_idx + 1) {
-                if is_valid_sibling(child, dot_hidden_cache) {
-                    let succ_id = child.record.id;
-                    let succ_path = PathBuf::from(&child.record.path);
-                    tracing::info!(
-                        deleted_id = deleted_id,
-                        successor_id = succ_id,
-                        successor_path = %LogObscurer::path(&succ_path),
-                        strategy = "NextSiblingInNode",
-                        elapsed_us = t0.elapsed().as_micros(),
-                        "[FolderSuccessor: Resolved] Selected next visible sibling in parent node"
-                    );
-                    return Some((succ_id, succ_path));
-                }
-            }
-
-            for child in parent_info.parent.children[..parent_info.deleted_child_idx].iter().rev() {
-                if is_valid_sibling(child, dot_hidden_cache) {
-                    let succ_id = child.record.id;
-                    let succ_path = PathBuf::from(&child.record.path);
-                    tracing::info!(
-                        deleted_id = deleted_id,
-                        successor_id = succ_id,
-                        successor_path = %LogObscurer::path(&succ_path),
-                        strategy = "PrecedingSiblingInNode",
-                        elapsed_us = t0.elapsed().as_micros(),
-                        "[FolderSuccessor: Resolved] Selected preceding visible sibling in parent node"
-                    );
-                    return Some((succ_id, succ_path));
-                }
-            }
-
-            let parent_id = parent_info.parent.record.id;
-            let parent_path = PathBuf::from(&parent_info.parent.record.path);
-            tracing::info!(
-                deleted_id = deleted_id,
-                successor_id = parent_id,
-                successor_path = %LogObscurer::path(&parent_path),
-                strategy = "ParentNode",
-                elapsed_us = t0.elapsed().as_micros(),
-                "[FolderSuccessor: Resolved] No siblings left in node. Selected parent node."
-            );
-            return Some((parent_id, parent_path));
-        }
-
-        let root_fallback = library
+        library
             .folders()
             .get_folder_by_path(&normalized_root)
             .ok()
             .flatten()
-            .map(|f| (f.id, normalize_path(Path::new(&f.path))));
-
-        tracing::info!(
-            deleted_id = deleted_id,
-            strategy = "RootFallback",
-            elapsed_us = t0.elapsed().as_micros(),
-            "[FolderSuccessor: Resolved] Reached root level. Falling back to root directory."
-        );
-
-        root_fallback
+            .map(|f| (f.id, normalize_path(Path::new(&f.path))))
     }
 
     pub fn navigate_to_successor_if_affected(
@@ -1645,9 +1264,6 @@ impl BridgeFolders {
                 );
             }
         } else {
-            tracing::debug!(
-                "[FolderNavigation: Successor] Active folder was not in deleted subtree. Maintaining active selection."
-            );
             Self::reload_tree(window, library, settings, state);
             Self::scroll_to_selected(window);
             StatusBarBridge::update_metrics(window, state);
@@ -1678,6 +1294,10 @@ impl BridgeFolders {
         };
 
         if let Ok(Some(root_rec)) = library.folders().get_folder_by_path(root_p) {
+            tracing::info!(
+                root_path = %LogObscurer::path(root_p),
+                "[FolderNavigation: RootFallback] Falling back to root directory after deletion"
+            );
             Self::select_folder(
                 root_rec.id,
                 normalize_path(root_p),

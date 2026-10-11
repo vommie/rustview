@@ -1,5 +1,5 @@
 pub use super::bridge_ctx_menu_favorite::FavoriteContextMenu;
-pub use super::bridge_ctx_menu_folder::{FolderContextMenu, FolderMenuBuildParams};
+pub use super::bridge_ctx_menu_folder::FolderContextMenu;
 pub use super::bridge_ctx_menu_media::{MediaActionContext, MediaContextMenu, MediaSelectionMeta};
 pub use super::bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use super::bridge_ctx_menu_tab::{TabActionContext, TabContextMenu};
@@ -13,7 +13,6 @@ pub use super::bridge_file_dialogs::{FileDialogContext, FileRenameContext, FileR
 use super::bridge_favorite_dialog_rename::FavoriteRenameDialogController;
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
-use super::bridge_folders::{FolderTreeBuilder, FolderTreeNode};
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
@@ -21,7 +20,7 @@ use super::bridge_tag_dialogs::TagDialogController;
 use super::favorites::FavoriteManager;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{CtxMenu, CtxMenuItem, CtxMenuItemKind, CtxMenuDispatcher};
-use crate::library::models::{FolderId, FolderRecord, MediaId};
+use crate::library::models::{FolderId, MediaId};
 use crate::library::Library;
 use crate::settings::SettingsManager;
 use crate::system::DesktopIntegration;
@@ -31,20 +30,18 @@ use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Context parameter bundle for opening media file context menus.
 pub struct MediaMenuContext<'a> {
     pub window: &'a MainWindow,
     pub library: &'a Library,
     pub thumbnails: &'a ThumbnailManager,
     pub tab_manager: &'a ViewerTabManager,
     pub state: &'a Arc<RwLock<UiState>>,
+    pub settings: &'a SettingsManager,
 }
 
-/// Context parameter bundle for opening folder tree context menus.
 pub struct FolderMenuContext<'a> {
     pub window: &'a MainWindow,
     pub library: &'a Library,
@@ -78,7 +75,7 @@ pub struct BridgeContextMenu;
 
 impl BridgeContextMenu {
     pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
-        Self::register_media_menu(window, &reg.library, &reg.thumbnails, &reg.tab_manager, &reg.state);
+        Self::register_media_menu(window, &reg.library, &reg.thumbnails, &reg.tab_manager, &reg.settings, &reg.state);
         Self::register_folder_menu(window, &reg.library, &reg.thumbnails, &reg.settings, &reg.favorites, &reg.tab_manager, &reg.state);
         Self::register_tab_menu(window, &reg.tab_manager, &reg.thumbnails, &reg.state);
         Self::register_favorite_menu(window, &reg.tab_manager, &reg.state);
@@ -91,12 +88,14 @@ impl BridgeContextMenu {
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
         tab_manager: &Arc<ViewerTabManager>,
+        settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
         let th = thumbnails.clone();
         let tm = tab_manager.clone();
+        let set = settings.clone();
         let st = state.clone();
         window.on_media_context_menu(move |id, x, y| {
             st.write().last_active_panel = LastActivePanel::Media;
@@ -106,6 +105,7 @@ impl BridgeContextMenu {
                     library: &lib,
                     thumbnails: &th,
                     tab_manager: &tm,
+                    settings: &set,
                     state: &st,
                 },
                 id as u64,
@@ -259,7 +259,7 @@ impl BridgeContextMenu {
             tab_mgr.clear_menu_cutouts();
             let action_u64 = action_id as u64;
 
-            // 1. Favorites Action Handling (5000..6000)
+            // 1. Favorites Action Handling
             if (5000..6000).contains(&action_u64) {
                 let target_fav = st.write().active_favorite_target.take();
                 FavoriteContextMenu::handle_action(
@@ -284,7 +284,7 @@ impl BridgeContextMenu {
                 return;
             }
 
-            if action_u64 >= CTX_FOLDER_MOVE_BASE || (3000..4000).contains(&action_u64) {
+            if (CTX_FOLDER_MOVE_BASE..CTX_ACTION_COPY_TO_BASE).contains(&action_u64) {
                 let target_folder_id = st.write().active_folder_dialog_target.take();
                 let ctx = FolderDialogContext {
                     library: lib.clone(),
@@ -297,13 +297,13 @@ impl BridgeContextMenu {
             }
 
             // 3. Tag Actions
-            if action_u64 >= CTX_TAG_MOVE_TARGET_BASE || (2000..3000).contains(&action_u64) {
+            if (CTX_TAG_MOVE_TARGET_BASE..CTX_FOLDER_MOVE_BASE).contains(&action_u64) {
                 let bundle = tag_dlg.create_action_bundle(&win, &lib, &thumb, &set, &st);
                 TagContextMenu::handle_action(action_u64, &win, &lib, &set, &st, bundle);
                 return;
             }
 
-            // 4. Tab Context Menu Invocations (Both tab lifecycle and unified file actions)
+            // 4. Tab Context Menu Invocations
             let active_tab_target = st.write().active_tab_dialog_target.take();
             if let Some(target_tab_id) = active_tab_target {
                 if (4000..5000).contains(&action_u64) {
@@ -322,7 +322,6 @@ impl BridgeContextMenu {
                     return;
                 }
 
-                // If a unified file action was clicked on a tab context menu:
                 if let Some(tab) = tab_mgr.get_tab(target_tab_id) {
                     let media_action_ctx = MediaActionContext {
                         library: &lib,
@@ -339,13 +338,6 @@ impl BridgeContextMenu {
                         fullscreen_controller: &fs_ctrl,
                     };
 
-                    tracing::info!(
-                        target_tab_id,
-                        media_id = tab.media_id,
-                        action_id = action_u64,
-                        "[BridgeContextMenu] Routing unified file action from tab context menu to shared handler"
-                    );
-
                     MediaContextMenu::handle_file_action_for_ids(
                         action_u64,
                         &win,
@@ -356,7 +348,7 @@ impl BridgeContextMenu {
                 }
             }
 
-            // 5. Standard Media Grid / Table Selection Actions
+            // 5. Media Grid / Table Selection Actions (including Copy To / Move To)
             MediaContextMenu::handle_action(
                 action_u64,
                 &win,
@@ -386,8 +378,23 @@ impl BridgeContextMenu {
     ) {
         ctx.state.write().active_tab_dialog_target = None;
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
+        let show_hidden = ctx.settings.get().folders.show_hidden_folders;
         let sel_meta = MediaContextMenu::prepare_selection(ctx.window, ctx.library, ctx.state, media_id);
-        let menu = MediaContextMenu::build_menu(&sel_meta, is_busy);
+
+        let snapshot = {
+            let existing = ctx.state.read().folder_hierarchy.clone();
+            match existing {
+                Some(s) => s,
+                None => {
+                    let loaded = ctx.library.folders().load_hierarchy_snapshot().unwrap_or_default();
+                    let arc_snap = Arc::new(loaded);
+                    ctx.state.write().folder_hierarchy = Some(arc_snap.clone());
+                    arc_snap
+                }
+            }
+        };
+
+        let menu = MediaContextMenu::build_menu(&sel_meta, is_busy, Some(&snapshot), show_hidden);
         Self::open_custom_menu(ctx.window, ctx.state, ctx.tab_manager, menu, x, y);
     }
 
@@ -398,60 +405,50 @@ impl BridgeContextMenu {
         y: f32,
     ) {
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
-
         let app_settings = ctx.settings.get();
         let root_setting = app_settings.general.root_folder;
         let show_hidden_folders = app_settings.folders.show_hidden_folders;
-        let support_dot_hidden_files = app_settings.folders.support_dot_hidden_files;
 
-        let mut st = ctx.state.write();
-        st.active_folder_dialog_target = Some(folder_id);
-        st.active_tab_dialog_target = None;
+        let snapshot = {
+            let existing = ctx.state.read().folder_hierarchy.clone();
+            match existing {
+                Some(s) => s,
+                None => {
+                    let loaded = ctx.library.folders().load_hierarchy_snapshot().unwrap_or_default();
+                    let arc_snap = Arc::new(loaded);
+                    ctx.state.write().folder_hierarchy = Some(arc_snap.clone());
+                    arc_snap
+                }
+            }
+        };
 
-        if st.cached_folder_tree.is_none()
-            && let Some(ref root_dir) = root_setting
+        let Some(target_node) = snapshot.get_node(folder_id).cloned() else {
+            tracing::warn!(folder_id, "[ContextMenu: Folder] Folder node not found in snapshot");
+            return;
+        };
+
         {
-            let folders = ctx.library.folders().list_folders().unwrap_or_default();
-            let media_counts = ctx.library.folders().get_all_media_counts().unwrap_or_default();
-            let built_tree = FolderTreeBuilder::build_hierarchy(root_dir, &folders, &media_counts);
-            st.cached_folder_tree = Some(built_tree);
-            st.cached_media_counts = media_counts;
+            let mut st = ctx.state.write();
+            st.active_folder_dialog_target = Some(folder_id);
+            st.active_tab_dialog_target = None;
         }
-
-        let UiState {
-            cached_folder_tree: ref tree_opt,
-            ref mut dot_hidden_cache,
-            ..
-        } = *st;
-
-        let Some(tree) = tree_opt.as_ref() else {
-            return;
-        };
-
-        let target_record = Self::find_record_in_tree(tree, folder_id);
-        let Some(folder_rec) = target_record else {
-            return;
-        };
 
         let is_root = root_setting
             .as_ref()
-            .map(|r| Path::new(&folder_rec.path) == r)
+            .map(|r| target_node.path == *r)
             .unwrap_or(false);
 
-        let is_favorite = ctx.favorites.read().has_path(Path::new(&folder_rec.path));
+        let is_favorite = ctx.favorites.read().has_path(&target_node.path);
 
-        let menu = FolderContextMenu::build_menu_from_cached_tree(FolderMenuBuildParams {
-            target_folder: &folder_rec,
-            cached_tree: tree,
+        let menu = FolderContextMenu::build_menu(
+            &target_node,
+            &snapshot,
             is_root,
             show_hidden_folders,
-            support_dot_hidden_files,
-            dot_hidden_cache,
             is_busy,
             is_favorite,
-        });
+        );
 
-        drop(st);
         Self::open_custom_menu(ctx.window, ctx.state, ctx.tab_manager, menu, x, y);
     }
 
@@ -467,7 +464,6 @@ impl BridgeContextMenu {
         let tabs = tab_manager.list_tabs();
         let total_tabs = tabs.len();
         let Some(tab_idx) = tabs.iter().position(|t| t.id == tab_id) else {
-            tracing::warn!(tab_id, "[ContextMenu] Tab not found for context menu");
             return;
         };
 
@@ -520,18 +516,6 @@ impl BridgeContextMenu {
         Self::open_custom_menu(window, state, tab_manager, menu, x, y);
     }
 
-    fn find_record_in_tree(nodes: &[FolderTreeNode], target_id: FolderId) -> Option<FolderRecord> {
-        for node in nodes {
-            if node.record.id == target_id {
-                return Some(node.record.clone());
-            }
-            if let Some(rec) = Self::find_record_in_tree(&node.children, target_id) {
-                return Some(rec);
-            }
-        }
-        None
-    }
-
     #[inline]
     pub fn open_custom_menu(
         window: &MainWindow,
@@ -557,7 +541,6 @@ impl BridgeContextMenu {
     }
 }
 
-/// Computes cutout rectangles for the base menu and all currently active submenu levels (Depths 1 through 5).
 pub fn calculate_all_active_menu_cutouts(
     window: &MainWindow,
     menu_opt: Option<&CtxMenu>,
@@ -603,7 +586,6 @@ pub fn calculate_all_active_menu_cutouts(
     all_cutouts
 }
 
-/// Dynamically calculates the exact pixel dimensions of a menu from its items to eliminate black overhangs.
 pub fn calculate_menu_dimensions(items: &[CtxMenuItem]) -> (f32, f32) {
     let width = 230.0;
     let mut height = 8.0;
@@ -620,7 +602,6 @@ pub fn calculate_menu_dimensions(items: &[CtxMenuItem]) -> (f32, f32) {
     (width, height)
 }
 
-/// Calculates the exact vertical offset of an item with `menu_index` within its parent menu box.
 pub fn calculate_item_y_offset(items: &[CtxMenuItem], target_menu_idx: usize) -> f32 {
     let mut offset_y = 4.0;
     for (i, item) in items.iter().enumerate() {
@@ -639,7 +620,6 @@ pub fn calculate_item_y_offset(items: &[CtxMenuItem], target_menu_idx: usize) ->
     0.0
 }
 
-/// Constructs 4 precise overlapping horizontal bands matching Slint's 6px rounded rectangle border radius.
 pub fn make_rounded_cutout_rectangles(
     x: f32,
     y: f32,

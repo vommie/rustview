@@ -55,7 +55,7 @@ pub mod video_preview_animator;
 pub use bridge::{RenameActionParams, UiBridge};
 pub use bridge_ctx_menu::{FolderMenuContext, MediaMenuContext};
 pub use bridge_ctx_menu_favorite::FavoriteContextMenu;
-pub use bridge_ctx_menu_folder::{FolderContextMenu, FolderMenuBuildParams};
+pub use bridge_ctx_menu_folder::FolderContextMenu;
 pub use bridge_ctx_menu_media::MediaContextMenu;
 pub use bridge_ctx_menu_presenter::CtxMenuPresenter;
 pub use bridge_ctx_menu_tab::{TabActionContext, TabContextMenu};

@@ -38,7 +38,6 @@ thread_local! {
     static ACTIVE_HOVER_MEDIA_ID: RefCell<Option<u64>> = const { RefCell::new(None) };
 }
 
-/// Parameter configuration for reloading and slicing the media dataset.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MediaReloadOptions {
     pub start_pipeline: bool,
@@ -64,7 +63,6 @@ impl MediaReloadOptions {
     }
 }
 
-/// Container holding processed results from parallel multi-threaded media item full refreshes.
 struct ProcessedRefreshedItem {
     media_id: MediaId,
     old_hash: crate::media::FileHash,
@@ -79,7 +77,6 @@ struct ProcessedRefreshedItem {
     random_offset_pct: Option<u8>,
 }
 
-/// Container holding processed results from parallel lightweight metadata-only refreshes.
 struct RefreshedMetadataOnlyItem {
     media_id: MediaId,
     updated_record: MediaRecord,
@@ -98,47 +95,36 @@ impl BridgeMedia {
         state: Arc<RwLock<UiState>>,
         _fullscreen_controller: ImageFullscreenDialogController,
     ) {
-        // 1. Search Query Filter Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
         window.on_search_query_changed(move |query| {
-            st.write().last_active_panel = LastActivePanel::Media;
-            let (is_query, dataset_count) = {
-                let s = st.read();
-                (s.is_query_active, s.all_folder_media.len())
-            };
             tracing::info!(
                 query = %LogObscurer::query(&query),
-                is_query_active = is_query,
-                dataset_count = dataset_count,
-                "[SearchFilter: Input] Search filter query changed via UI input"
+                "[SearchFilter: QueryChanged] User modified search filter query"
             );
+            st.write().last_active_panel = LastActivePanel::Media;
             st.write().filter.search_query = query.to_string();
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 2. Regular Expression Mode Toggle Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
         window.on_regex_mode_toggled(move |enabled| {
-            st.write().last_active_panel = LastActivePanel::Media;
-            let is_query = st.read().is_query_active;
             tracing::info!(
-                regex_enabled = enabled,
-                is_query_active = is_query,
-                "[SearchFilter: Regex] Regex mode toggled via UI input"
+                enabled,
+                "[SearchFilter: RegexToggle] Regular expression filter mode toggled"
             );
+            st.write().last_active_panel = LastActivePanel::Media;
             st.write().filter.is_regex = enabled;
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 3. Virtual Folder / Recursive Subfolders View Toggle Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -150,7 +136,6 @@ impl BridgeMedia {
             Self::toggle_virtual_folder_mode(&win, &lib, &thumb, &tm, &set, &st);
         });
 
-        // 4. Media Type Filter Selector Callback (Videos / Images / Both)
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -158,8 +143,11 @@ impl BridgeMedia {
         let set = settings.clone();
         let st = state.clone();
         window.on_media_type_filter_changed(move |idx| {
-            let t0 = Instant::now();
             let new_filter = MediaTypeFilter::from_index(idx);
+            tracing::info!(
+                media_type = ?new_filter,
+                "[MediaTypeFilter: Changed] Media type view filter updated"
+            );
 
             {
                 let mut s = st.write();
@@ -172,12 +160,6 @@ impl BridgeMedia {
                 app_settings.view.media_type_filter = new_filter.as_str().to_string();
                 set.save_quiet_async(&app_settings);
             }
-
-            tracing::info!(
-                media_type_filter = ?new_filter,
-                elapsed_us = t0.elapsed().as_micros(),
-                "[MediaPanelToolbar: MediaTypeFilter] Media type filter changed and persisted"
-            );
 
             if st.read().is_query_active {
                 BridgeTags::execute_query_flow(&TagActionContext {
@@ -193,7 +175,6 @@ impl BridgeMedia {
             }
         });
 
-        // 5. Sort Column Click Callback
         let win = window.clone_strong();
         let lib = library.clone();
         let thumb = thumbnails.clone();
@@ -226,7 +207,6 @@ impl BridgeMedia {
             Self::reload(&win, &lib, &thumb, &set, &st, false, false);
         });
 
-        // 6. Hover Video & Animated GIF Preview Animation Callback
         let win = window.clone_strong();
         let thumb = thumbnails.clone();
         let set = settings.clone();
@@ -255,7 +235,9 @@ impl BridgeMedia {
                 let win_w = win_hover.as_weak();
                 let st_c = st.clone();
 
-                if format == MediaFormat::Gif && let Some(file_path) = full_path_opt {
+                if format == MediaFormat::Gif
+                    && let Some(file_path) = full_path_opt
+                {
                     if let Some(preview) = thumb.try_get_animated_preview(media_id) {
                         let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
                         let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
@@ -370,7 +352,6 @@ impl BridgeMedia {
             }
         });
 
-        // 7. High-FPS Virtualization Chunk Update Callback
         let thumb_stream = thumbnails.clone();
         let set_stream = settings.clone();
         let st_stream = state.clone();
@@ -387,7 +368,6 @@ impl BridgeMedia {
             );
         });
 
-        // 8. Table Column Resizing Callbacks
         let last_resize_time = Arc::new(parking_lot::Mutex::new(Instant::now()));
         let resize_events_count = Arc::new(AtomicUsize::new(0));
 
@@ -428,7 +408,6 @@ impl BridgeMedia {
             set_res.save_quiet(&app_settings);
         });
 
-        // 9. View Mode Switcher Callback (Grid <-> Table)
         let set_mode = settings;
         let win_mode = window.clone_strong();
         let lib_mode = library;
@@ -449,7 +428,6 @@ impl BridgeMedia {
         });
     }
 
-    /// Evaluates and updates whether the Virtual Folder toggle button should be enabled or disabled in the UI.
     pub fn update_virtual_folder_button_state(
         window: &MainWindow,
         library: &Library,
@@ -481,17 +459,10 @@ impl BridgeMedia {
 
         drop(st);
 
-        tracing::debug!(
-            is_enabled = is_enabled,
-            tooltip = %tooltip,
-            "[BridgeMedia: VirtualFolderBtn] Updated Virtual Folder button enablement and tooltip"
-        );
-
         window.set_is_virtual_folder_btn_enabled(is_enabled);
         window.set_virtual_folder_tooltip(tooltip.into());
     }
 
-    /// Toggles virtual recursive folder view mode for the currently active folder and subfolders.
     pub fn toggle_virtual_folder_mode(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -527,14 +498,15 @@ impl BridgeMedia {
             (st.current_folder_id, st.current_folder_path.clone(), st.is_virtual_folder_mode)
         };
 
-        tracing::info!(
-            is_virtual_folder_mode = new_mode,
-            "[BridgeMedia: VirtualFolder] Toggled Virtual Folder / Recursive Subfolders View (Zero-FS Pure LMDB Load)"
-        );
-
         window.set_is_virtual_folder(new_mode);
 
         if let (Some(folder_id), Some(path)) = (current_f_id, current_p_opt) {
+            tracing::info!(
+                folder_id,
+                path = %LogObscurer::path(&path),
+                is_virtual = new_mode,
+                "[BridgeMedia: VirtualFolder] Toggled virtual recursive folder mode"
+            );
             if state.read().is_query_active {
                 BridgeTags::execute_query_flow(&TagActionContext {
                     window,
@@ -624,7 +596,6 @@ impl BridgeMedia {
         }
     }
 
-    /// Evaluates whether any intensive background operation is running (Single-Operation Guard).
     pub fn is_system_busy(
         window: &MainWindow,
         thumbnails: &ThumbnailManager,
@@ -842,16 +813,6 @@ impl BridgeMedia {
 
         let slice_us = t_reload_start.elapsed().as_micros() as u64;
         scroll_bench.record_slice_reload(slice_us);
-
-        tracing::debug!(
-            is_table = is_table,
-            first_idx = first_idx,
-            last_idx = last_idx,
-            start_window = start_window,
-            window_len = window_len,
-            slice_time_us = slice_us,
-            "[Virtualization: HysteresisSlice] Reloaded buffer slice around visible range"
-        );
     }
 
     pub fn execute_metadata_only_refresh(
@@ -919,12 +880,25 @@ impl BridgeMedia {
                     .into_par_iter()
                     .map(|(media_id, file_path, old_record)| {
                         if !file_path.exists() {
+                            tracing::warn!(
+                                media_id,
+                                path = %LogObscurer::path(&file_path),
+                                "[BridgeMedia: MetadataRefresh] File missing on disk"
+                            );
                             return Err((media_id, file_path, "File not found on disk".to_string()));
                         }
 
                         let fs_meta = match std::fs::metadata(&file_path) {
                             Ok(m) => m,
-                            Err(e) => return Err((media_id, file_path, e.to_string())),
+                            Err(e) => {
+                                tracing::error!(
+                                    media_id,
+                                    path = %LogObscurer::path(&file_path),
+                                    error = %e,
+                                    "[BridgeMedia: MetadataRefresh] Failed to read metadata"
+                                );
+                                return Err((media_id, file_path, e.to_string()));
+                            }
                         };
 
                         let file_size = fs_meta.len();
@@ -961,19 +935,27 @@ impl BridgeMedia {
                         } else {
                             match MetadataExtractor::extract(&file_path) {
                                 Ok(m) => (m, true),
-                                Err(_) => (
-                                    crate::media::RawMetadata {
-                                        file_size,
-                                        modification_time: mtime,
-                                        creation_time: ctime,
-                                        duration_ms: 0,
-                                        width: 0,
-                                        height: 0,
-                                        media_type: old_record.format.media_type().unwrap_or(MediaType::Image),
-                                        format: old_record.format,
-                                    },
-                                    false,
-                                ),
+                                Err(e) => {
+                                    tracing::warn!(
+                                        media_id,
+                                        path = %LogObscurer::path(&file_path),
+                                        error = %e,
+                                        "[BridgeMedia: MetadataExtract] Extraction fallback"
+                                    );
+                                    (
+                                        crate::media::RawMetadata {
+                                            file_size,
+                                            modification_time: mtime,
+                                            creation_time: ctime,
+                                            duration_ms: 0,
+                                            width: 0,
+                                            height: 0,
+                                            media_type: old_record.format.media_type().unwrap_or(MediaType::Image),
+                                            format: old_record.format,
+                                        },
+                                        false,
+                                    )
+                                }
                             }
                         };
 
@@ -1264,7 +1246,6 @@ impl BridgeMedia {
         );
     }
 
-    /// Full media refresh: re-extracts file metadata, recalculates hash, and regenerates thumbnails and previews.
     pub fn refresh_selected_media(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -1284,7 +1265,6 @@ impl BridgeMedia {
         );
     }
 
-    /// Random thumbnail regeneration: re-extracts media and, for videos, generates a new thumbnail at a randomized position (1..=99%).
     pub fn regenerate_selected_thumbnails_random(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -1304,7 +1284,6 @@ impl BridgeMedia {
         );
     }
 
-    /// Unified, modular multi-threaded media refresh & thumbnail regeneration engine.
     fn execute_media_refresh(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -1427,12 +1406,25 @@ impl BridgeMedia {
                     .into_par_iter()
                     .map(|(media_id, file_path, old_record)| {
                         if !file_path.exists() {
+                            tracing::warn!(
+                                media_id,
+                                path = %LogObscurer::path(&file_path),
+                                "[BridgeMedia: Refresh] File does not exist on disk"
+                            );
                             return Err((media_id, file_path, "File not found on disk".to_string()));
                         }
 
                         let fs_meta = match std::fs::metadata(&file_path) {
                             Ok(m) => m,
-                            Err(e) => return Err((media_id, file_path, e.to_string())),
+                            Err(e) => {
+                                tracing::error!(
+                                    media_id,
+                                    path = %LogObscurer::path(&file_path),
+                                    error = %e,
+                                    "[BridgeMedia: Refresh] Failed to read metadata"
+                                );
+                                return Err((media_id, file_path, e.to_string()));
+                            }
                         };
 
                         let file_size = fs_meta.len();
@@ -1509,7 +1501,10 @@ impl BridgeMedia {
 
                                     (Some(primary), preview_rec, video_res.orig_width, video_res.orig_height, video_res.duration_ms, true)
                                 }
-                                Err(_) => (None, None, 0, 0, 0, false),
+                                Err(e) => {
+                                    tracing::warn!(media_id, error = %e, "[BridgeMedia: VideoThumbnail] Video extraction failed");
+                                    (None, None, 0, 0, 0, false)
+                                }
                             }
                         } else {
                             match gen_ref.generate_image_thumbnail(
@@ -1518,7 +1513,10 @@ impl BridgeMedia {
                                 item_cfg.scaling_algorithm,
                             ) {
                                 Ok(frame) => (Some(frame.clone()), None, frame.orig_width, frame.orig_height, 0u64, true),
-                                Err(_) => (None, None, 0, 0, 0, false),
+                                Err(e) => {
+                                    tracing::warn!(media_id, error = %e, "[BridgeMedia: ImageThumbnail] Image generation failed");
+                                    (None, None, 0, 0, 0, false)
+                                }
                             }
                         };
 
@@ -1656,14 +1654,15 @@ impl BridgeMedia {
 
                 let mut image_tabs_to_reload: Vec<(MediaId, u64, PathBuf)> = Vec::new();
                 for item in &successful_items {
-                    if matches!(item.updated_record.media_type, MediaType::Image) {
-                        let open_tabs = tab_mgr_arc.get_tabs_by_media_id(item.media_id);
-                        for tab in open_tabs {
-                            let full_file_path = lib_arc
-                                .resolve_media_path(item.media_id)
-                                .unwrap_or_else(|_| PathBuf::from(&item.updated_record.filename));
-                            image_tabs_to_reload.push((item.media_id, tab.id, full_file_path));
-                        }
+                    if matches!(item.updated_record.media_type, MediaType::Video) {
+                        continue;
+                    }
+                    let open_tabs = tab_mgr_arc.get_tabs_by_media_id(item.media_id);
+                    for tab in open_tabs {
+                        let full_file_path = lib_arc
+                            .resolve_media_path(item.media_id)
+                            .unwrap_or_else(|_| PathBuf::from(&item.updated_record.filename));
+                        image_tabs_to_reload.push((item.media_id, tab.id, full_file_path));
                     }
                 }
 
@@ -1774,14 +1773,14 @@ impl BridgeMedia {
                         }
                     }
 
-                    if let Some(ref v_path) = active_video_reload_path {
+                    if let Some(ref v_path) = active_video_reload_path
+                        && let Some(player) = tab_mgr_arc.get_active_player()
+                    {
                         tracing::info!(
                             path = %LogObscurer::path(v_path),
                             "[BridgeMedia: VideoReload] Re-loading modified video file in MPV"
                         );
-                        if let Some(player) = tab_mgr_arc.get_active_player() {
-                            let _ = player.load_file(v_path);
-                        }
+                        let _ = player.load_file(v_path);
                     }
 
                     for (media_id, tab_id, full_file_path) in image_tabs_to_reload {
@@ -2334,12 +2333,6 @@ impl BridgeMedia {
                 let new_sel_count = st_write.file_selection.count();
                 if new_sel_count != prev_sel_count {
                     selection_pruned = true;
-                    tracing::info!(
-                        previous_selected = prev_sel_count,
-                        remaining_selected = new_sel_count,
-                        pruned_hidden_items = prev_sel_count - new_sel_count,
-                        "[FileSelection: FilterPrune] Deselected hidden items no longer matching active filter"
-                    );
                 }
             }
 

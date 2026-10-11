@@ -9,7 +9,6 @@ use std::time::Instant;
 pub struct FolderValidator;
 
 impl FolderValidator {
-    /// Validates directory name according to Linux POSIX naming rules.
     pub fn validate(name: &str) -> Result<String, LibraryError> {
         let trimmed = name.trim();
         if trimmed.is_empty() {
@@ -69,7 +68,7 @@ pub struct FolderMoveReport {
     pub affected_media_count: usize,
 }
 
-/// Subsystem managing atomic physical & database folder operations (Rename, Trash, Permanent Delete, Relocate, Orphan Purge).
+/// Subsystem managing atomic physical & database folder operations.
 pub struct FolderOperations<'a> {
     db: &'a LibraryDatabase,
 }
@@ -79,7 +78,7 @@ impl<'a> FolderOperations<'a> {
         Self { db }
     }
 
-    /// Computes subtree metrics (subfolders and total active media files) for confirmation dialogs.
+    /// Computes subtree metrics using relational parent indices.
     pub fn get_metrics(&self, folder_id: FolderId) -> Result<FolderSubtreeMetrics, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let folder = self
@@ -89,21 +88,26 @@ impl<'a> FolderOperations<'a> {
             .ok_or(LibraryError::FolderNotFound(folder_id))?;
 
         let folder_path = PathBuf::from(&folder.path);
-        let mut affected_folders = Vec::new();
-        let mut total_media = 0;
+        let mut affected_folders = vec![folder_id];
+        let mut queue = vec![folder_id];
 
-        for entry in self.db.folders.iter(&rtxn)? {
-            let (id, rec) = entry?;
-            let rec_path = Path::new(&rec.path);
-            if rec_path.starts_with(&folder_path) {
-                affected_folders.push(id);
-                if let Some(media_ids) = self.db.media_by_folder.get(&rtxn, &id)? {
-                    for media_id in media_ids {
-                        if let Some(media_rec) = self.db.media.get(&rtxn, &media_id)?
-                            && !media_rec.is_deleted
-                        {
-                            total_media += 1;
-                        }
+        while let Some(current) = queue.pop() {
+            if let Some(children) = self.db.folders_by_parent.get(&rtxn, &current)? {
+                for cid in children {
+                    affected_folders.push(cid);
+                    queue.push(cid);
+                }
+            }
+        }
+
+        let mut total_media = 0;
+        for &id in &affected_folders {
+            if let Some(media_ids) = self.db.media_by_folder.get(&rtxn, &id)? {
+                for media_id in media_ids {
+                    if let Some(media_rec) = self.db.media.get(&rtxn, &media_id)?
+                        && !media_rec.is_deleted
+                    {
+                        total_media += 1;
                     }
                 }
             }
@@ -120,7 +124,6 @@ impl<'a> FolderOperations<'a> {
         })
     }
 
-    /// Probes whether renaming `folder_id` to `new_name` causes a collision in the parent directory.
     pub fn check_rename_conflict(
         &self,
         folder_id: FolderId,
@@ -157,7 +160,6 @@ impl<'a> FolderOperations<'a> {
         }
     }
 
-    /// Generates a unique, collision-free folder name in the target parent directory by appending sequential counter suffixes like `(1)`, `(2)`.
     pub fn generate_unique_folder_name(parent_path: &Path, original_name: &str) -> String {
         let trimmed = original_name.trim();
         let mut counter = 1u32;
@@ -177,7 +179,7 @@ impl<'a> FolderOperations<'a> {
         }
     }
 
-    /// Atomically renames a folder physically on disk and updates all LMDB path indices recursively.
+    /// Atomically renames a folder physically and updates all descendant path indices in LMDB.
     pub fn rename_folder(
         &self,
         folder_id: FolderId,
@@ -210,7 +212,6 @@ impl<'a> FolderOperations<'a> {
         }
 
         let new_path_str = new_path.to_string_lossy().to_string();
-
         if self.db.folders_by_path.get(&wtxn, &new_path_str)?.is_some() {
             return Err(LibraryError::DuplicateFolder(new_path_str));
         }
@@ -218,13 +219,11 @@ impl<'a> FolderOperations<'a> {
         tracing::info!(
             folder = %LogObscurer::folder(Some(folder_id), &old_path),
             new_path = %LogObscurer::path(&new_path),
-            "Executing physical folder rename operation..."
+            "[FolderOperations: Rename] Executing physical folder rename operation..."
         );
 
-        // 1. Filesystem rename
         std::fs::rename(&old_path, &new_path)?;
 
-        // 2. Collect all descendant folders to rewrite paths in LMDB
         let mut affected = Vec::new();
         for entry in self.db.folders.iter(&wtxn)? {
             let (id, rec) = entry?;
@@ -250,11 +249,11 @@ impl<'a> FolderOperations<'a> {
                 .put(&mut wtxn, &updated_p_str, &id)?;
 
             rec.path = updated_p_str;
-            self.db.folders.put(&mut wtxn, &id, &rec)?;
-
             if id == folder_id {
-                record = rec;
+                rec.name = valid_name.clone();
+                record = rec.clone();
             }
+            self.db.folders.put(&mut wtxn, &id, &rec)?;
         }
 
         wtxn.commit()?;
@@ -262,13 +261,12 @@ impl<'a> FolderOperations<'a> {
         tracing::info!(
             folder = %LogObscurer::folder(Some(folder_id), &record.path),
             elapsed_us = t0.elapsed().as_micros(),
-            "Folder rename committed successfully to LMDB"
+            "[FolderOperations: Rename] Folder rename committed successfully to LMDB"
         );
 
         Ok(record)
     }
 
-    /// Moves a folder and all its contents to the system Trash using FreeDesktop spec (or permanent delete).
     pub fn delete_folder(
         &self,
         folder_id: FolderId,
@@ -278,14 +276,14 @@ impl<'a> FolderOperations<'a> {
         let folder_path = metrics.path;
 
         tracing::info!(
-            folder = %LogObscurer::folder(Some(folder_id), &folder_path),
-            to_trash = to_trash,
+            folder_id,
+            path = %LogObscurer::path(&folder_path),
+            to_trash,
             subfolders = metrics.subfolders_count,
-            files = metrics.media_files_count,
-            "Deleting directory and contents..."
+            media = metrics.media_files_count,
+            "[FolderOperations: Delete] Deleting folder and cleaning records..."
         );
 
-        // 1. Physical Filesystem Operation
         if folder_path.exists() {
             if to_trash {
                 trash::delete(&folder_path).map_err(|e| {
@@ -299,9 +297,17 @@ impl<'a> FolderOperations<'a> {
             }
         }
 
-        // 2. Atomic Database Cleanup (Purge from LMDB)
         let mut wtxn = self.db.env.write_txn()?;
         let mut deleted_media_count = 0;
+
+        // Unlink from parent's children list
+        if let Some(rec) = self.db.folders.get(&wtxn, &folder_id)?
+            && let Some(pid) = rec.parent_id
+            && let Some(mut siblings) = self.db.folders_by_parent.get(&wtxn, &pid)?
+        {
+            siblings.retain(|&x| x != folder_id);
+            self.db.folders_by_parent.put(&mut wtxn, &pid, &siblings)?;
+        }
 
         for id in &metrics.affected_folder_ids {
             if let Some(folder_rec) = self.db.folders.get(&wtxn, id)? {
@@ -324,6 +330,7 @@ impl<'a> FolderOperations<'a> {
                 }
 
                 self.db.media_by_folder.delete(&mut wtxn, id)?;
+                self.db.folders_by_parent.delete(&mut wtxn, id)?;
                 self.db
                     .folders_by_path
                     .delete(&mut wtxn, &folder_rec.path)?;
@@ -334,10 +341,10 @@ impl<'a> FolderOperations<'a> {
         wtxn.commit()?;
 
         tracing::info!(
-            folder_id = folder_id,
+            folder_id,
             deleted_folders = metrics.affected_folder_ids.len(),
-            deleted_media = deleted_media_count,
-            "Committed full folder deletion from LMDB"
+            deleted_media_count,
+            "[FolderOperations: Delete] Folder deletion committed to LMDB"
         );
 
         Ok(FolderDeleteReport {
@@ -347,7 +354,6 @@ impl<'a> FolderOperations<'a> {
         })
     }
 
-    /// Checks if a folder exists on physical storage. If it exists, atomically restores `is_deleted = false` in LMDB.
     pub fn check_and_restore_if_exists(&self, folder_id: FolderId) -> Result<bool, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let folder = self
@@ -368,8 +374,9 @@ impl<'a> FolderOperations<'a> {
                 self.db.folders.put(&mut wtxn, &folder_id, &rec)?;
                 wtxn.commit()?;
                 tracing::info!(
-                    folder = %LogObscurer::folder(Some(folder_id), &path),
-                    "[FolderOperations: Reborn Safety Check] Missing folder was detected on disk. Restored is_deleted = false in LMDB."
+                    folder_id,
+                    path = %LogObscurer::path(&path),
+                    "[FolderOperations: Reborn] Restored missing folder to active status"
                 );
             }
             return Ok(true);
@@ -378,22 +385,22 @@ impl<'a> FolderOperations<'a> {
         Ok(false)
     }
 
-    /// Purges an orphaned/missing folder and all its descendant metadata from LMDB completely.
     pub fn purge_folder_from_db(
         &self,
         folder_id: FolderId,
     ) -> Result<FolderDeleteReport, LibraryError> {
         let metrics = self.get_metrics(folder_id)?;
 
-        tracing::info!(
-            folder = %LogObscurer::folder(Some(folder_id), &metrics.path),
-            subfolders = metrics.subfolders_count,
-            files = metrics.media_files_count,
-            "Purging orphaned folder and all descendant metadata from LMDB..."
-        );
-
         let mut wtxn = self.db.env.write_txn()?;
         let mut deleted_media_count = 0;
+
+        if let Some(rec) = self.db.folders.get(&wtxn, &folder_id)?
+            && let Some(pid) = rec.parent_id
+            && let Some(mut siblings) = self.db.folders_by_parent.get(&wtxn, &pid)?
+        {
+            siblings.retain(|&x| x != folder_id);
+            self.db.folders_by_parent.put(&mut wtxn, &pid, &siblings)?;
+        }
 
         for id in &metrics.affected_folder_ids {
             if let Some(folder_rec) = self.db.folders.get(&wtxn, id)? {
@@ -416,6 +423,7 @@ impl<'a> FolderOperations<'a> {
                 }
 
                 self.db.media_by_folder.delete(&mut wtxn, id)?;
+                self.db.folders_by_parent.delete(&mut wtxn, id)?;
                 self.db
                     .folders_by_path
                     .delete(&mut wtxn, &folder_rec.path)?;
@@ -426,10 +434,10 @@ impl<'a> FolderOperations<'a> {
         wtxn.commit()?;
 
         tracing::info!(
-            folder_id = folder_id,
+            folder_id,
             purged_folders = metrics.affected_folder_ids.len(),
-            purged_media = deleted_media_count,
-            "Committed database purge of orphaned folder subtree"
+            deleted_media_count,
+            "[FolderOperations: Purge] Purged folder records from LMDB"
         );
 
         Ok(FolderDeleteReport {
@@ -439,7 +447,6 @@ impl<'a> FolderOperations<'a> {
         })
     }
 
-    /// Moves a folder physically under a new parent directory and updates LMDB path indices recursively.
     pub fn move_folder(
         &self,
         folder_id: FolderId,
@@ -487,14 +494,37 @@ impl<'a> FolderOperations<'a> {
 
         tracing::info!(
             folder = %LogObscurer::folder(Some(folder_id), &src_path),
-            dst = %LogObscurer::path(&dst_path),
-            "Relocating folder directory on physical filesystem..."
+            new_parent = %LogObscurer::folder(Some(new_parent_id), &dst_parent_path),
+            "[FolderOperations: Move] Relocating folder on filesystem..."
         );
 
-        // 1. Filesystem move
         std::fs::rename(&src_path, &dst_path)?;
 
-        // 2. Collect affected descendants
+        // Update old parent
+        if let Some(old_pid) = record.parent_id
+            && let Some(mut siblings) = self.db.folders_by_parent.get(&wtxn, &old_pid)?
+        {
+            siblings.retain(|&x| x != folder_id);
+            self.db.folders_by_parent.put(&mut wtxn, &old_pid, &siblings)?;
+        }
+
+        // Update new parent
+        let mut new_siblings = self
+            .db
+            .folders_by_parent
+            .get(&wtxn, &new_parent_id)?
+            .unwrap_or_default();
+        if !new_siblings.contains(&folder_id) {
+            new_siblings.push(folder_id);
+            self.db
+                .folders_by_parent
+                .put(&mut wtxn, &new_parent_id, &new_siblings)?;
+        }
+
+        let old_depth = record.depth;
+        let new_depth = parent_record.depth + 1;
+        let depth_delta = new_depth as i32 - old_depth as i32;
+
         let mut affected = Vec::new();
         for entry in self.db.folders.iter(&wtxn)? {
             let (id, rec) = entry?;
@@ -522,6 +552,12 @@ impl<'a> FolderOperations<'a> {
                 .put(&mut wtxn, &updated_p_str, &id)?;
 
             rec.path = updated_p_str;
+            rec.depth = (rec.depth as i32 + depth_delta).max(0) as u32;
+
+            if id == folder_id {
+                rec.parent_id = Some(new_parent_id);
+            }
+
             self.db.folders.put(&mut wtxn, &id, &rec)?;
 
             if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, &id)? {
@@ -532,9 +568,10 @@ impl<'a> FolderOperations<'a> {
         wtxn.commit()?;
 
         tracing::info!(
-            folder_id = folder_id,
+            folder_id,
             new_path = %LogObscurer::path(&dst_path),
-            "Committed folder relocation to LMDB"
+            affected_media_count,
+            "[FolderOperations: Move] Folder reparenting committed to LMDB"
         );
 
         Ok(FolderMoveReport {

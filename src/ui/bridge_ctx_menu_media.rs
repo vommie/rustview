@@ -16,7 +16,7 @@ use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{
     CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuContext, CtxMenuDispatcher,
 };
-use crate::library::models::MediaId;
+use crate::library::models::{FileTransferKind, FolderHierarchySnapshot, FolderId, MediaId};
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
@@ -30,7 +30,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Grouped dependencies bundle for media context menu actions.
 pub struct MediaActionContext<'a> {
     pub library: &'a Arc<Library>,
     pub thumbnails: &'a Arc<ThumbnailManager>,
@@ -46,7 +45,6 @@ pub struct MediaActionContext<'a> {
     pub fullscreen_controller: &'a ImageFullscreenDialogController,
 }
 
-/// Metadata describing active selection state for context menu construction.
 #[derive(Debug, Clone)]
 pub struct MediaSelectionMeta {
     pub all_selected_deleted: bool,
@@ -56,6 +54,7 @@ pub struct MediaSelectionMeta {
     pub target_file_exists: bool,
     pub is_single_pending: bool,
     pub single_filename: String,
+    pub current_folder_id: Option<FolderId>,
     pub associated_apps: Vec<DesktopApp>,
 }
 
@@ -96,7 +95,7 @@ impl MediaContextMenu {
             .copied()
             .unwrap_or(media_id);
 
-        let (has_video, is_single_image, all_selected_deleted, target_path_opt, is_single_pending, single_filename) = {
+        let (has_video, is_single_image, all_selected_deleted, target_path_opt, is_single_pending, single_filename, cur_folder_id) = {
             let st = state.read();
             let selected_ids = st.file_selection.selected_ids();
 
@@ -124,11 +123,12 @@ impl MediaContextMenu {
                 }
             }
 
-            let (is_single_img, is_pending, fname) = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
+            let (is_single_img, is_pending, fname, f_id) = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
                 (
                     matches!(item.record.media_type, MediaType::Image),
                     item.is_pending,
                     item.record.filename.clone(),
+                    Some(item.record.folder_id),
                 )
             } else if let Ok(Some(m)) = library.media().get(single_id) {
                 let pending = m.source.is_some() && (m.file_size == 0 || m.width == 0);
@@ -136,9 +136,10 @@ impl MediaContextMenu {
                     matches!(m.media_type, MediaType::Image),
                     pending,
                     m.filename.clone(),
+                    Some(m.folder_id),
                 )
             } else {
-                (false, false, String::new())
+                (false, false, String::new(), st.current_folder_id)
             };
 
             let path = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
@@ -147,17 +148,15 @@ impl MediaContextMenu {
                 library.resolve_media_path(single_id).ok()
             };
 
-            (contains_video, is_single_img, all_deleted, path, is_single && is_pending, fname)
+            (contains_video, is_single_img, all_deleted, path, is_single && is_pending, fname, f_id)
         };
 
-        // Instant filesystem readiness check: verify whether the target file actually exists on physical disk
         let target_file_exists = if is_single {
             target_path_opt
                 .as_ref()
                 .map(|p| p.is_file() && p.metadata().map(|m| m.len() > 0).unwrap_or(false))
                 .unwrap_or(false)
         } else {
-            // For multiple files, enable open actions as long as not all of them are missing/deleted
             !all_selected_deleted
         };
 
@@ -169,6 +168,14 @@ impl MediaContextMenu {
 
         state.write().active_associated_apps = associated_apps.clone();
 
+        tracing::debug!(
+            selected_count,
+            single_media_id = single_id,
+            target_file_exists,
+            apps_count = associated_apps.len(),
+            "[MediaContextMenu: Prepare] Media context menu selection metadata calculated"
+        );
+
         MediaSelectionMeta {
             all_selected_deleted,
             selected_count,
@@ -177,12 +184,11 @@ impl MediaContextMenu {
             target_file_exists,
             is_single_pending,
             single_filename,
+            current_folder_id: cur_folder_id,
             associated_apps,
         }
     }
 
-    /// Single Point of Truth (SPoT): Reusable builder appending the file open actions:
-    /// "Open", "Open With..." (desktop application icons + Other Application...), and "Open in File Manager".
     pub fn append_file_open_entries(
         mut builder: CtxMenuBuilder,
         is_single: bool,
@@ -252,9 +258,6 @@ impl MediaContextMenu {
         builder
     }
 
-    /// Single Point of Truth (SPoT): Reusable builder appending file management actions:
-    /// "Rename...", "Copy..." (File Name, File Path, and Image Content if single image),
-    /// and "Delete File..." / "Remove from Database...".
     pub fn append_file_management_entries(
         mut builder: CtxMenuBuilder,
         is_single: bool,
@@ -334,13 +337,14 @@ impl MediaContextMenu {
         builder
     }
 
-    /// Builds the complete media context menu using the prepared selection metadata.
+    /// Builds the complete media context menu using SPoT in-memory hierarchy projections for "Copy to..." and "Move to..." submenus.
     pub fn build_menu(
         meta: &MediaSelectionMeta,
         is_busy: bool,
+        snapshot: Option<&FolderHierarchySnapshot>,
+        show_hidden: bool,
     ) -> CtxMenu {
         let is_single = meta.selected_count == 1;
-        // Strict guard: Opening actions are disabled if the file does not physically exist on disk
         let can_open = meta.selected_count > 0 && meta.target_file_exists;
 
         let open_in_tab_text = if is_single {
@@ -360,7 +364,6 @@ impl MediaContextMenu {
         let open_in_fullscreen_text = "Open in Fullscreen".to_string();
         let open_in_fullscreen_shortcut = if is_single { Some("MiddleClick") } else { None };
 
-        // Submenu: Refresh -> File (Full), File (Metadata), Thumbnail (Random Pos.) / Thumbnail
         let refresh_full_text = if is_single {
             "File (Full)".to_string()
         } else {
@@ -387,7 +390,6 @@ impl MediaContextMenu {
 
         let can_refresh = meta.selected_count > 0 && !is_busy;
 
-        // Context-aware Header formatting
         let mut builder = CtxMenuBuilder::new();
         if is_single {
             let prefix = if meta.is_single_pending {
@@ -404,10 +406,10 @@ impl MediaContextMenu {
             builder = builder.header(format!("Selected Files ({})", meta.selected_count));
         }
 
-        // 1. Shared File Open Actions (Open, Open With..., Open in File Manager)
+        // 1. File Open Actions
         builder = Self::append_file_open_entries(builder, is_single, can_open, &meta.associated_apps);
 
-        // 2. Tab Navigation Actions (Disabled if physical file does not exist on disk)
+        // 2. Tab Navigation Actions
         builder = builder
             .action(
                 CTX_ACTION_OPEN_IN_TAB,
@@ -432,7 +434,43 @@ impl MediaContextMenu {
             )
             .separator();
 
-        // 3. Shared File Management Actions (Rename, Copy, Delete File / Remove from DB)
+        // 3. Move To... / Copy To... Submenus Projected directly from SPoT with zero disk I/O
+        if let Some(snap) = snapshot {
+            let copy_menu_items = snap.project_target_folder_menu(
+                CTX_ACTION_COPY_TO_BASE,
+                None,
+                meta.current_folder_id,
+                show_hidden,
+            );
+            if !copy_menu_items.is_empty() {
+                builder = builder.submenu("Copy to...", Some("copy"), true, move |sub| {
+                    let mut s = sub;
+                    for item in copy_menu_items {
+                        s = s.item(item);
+                    }
+                    s
+                });
+            }
+
+            let move_menu_items = snap.project_target_folder_menu(
+                CTX_ACTION_MOVE_TO_BASE,
+                None,
+                meta.current_folder_id,
+                show_hidden,
+            );
+            if !move_menu_items.is_empty() {
+                builder = builder.submenu("Move to...", Some("move"), !is_busy, move |sub| {
+                    let mut s = sub;
+                    for item in move_menu_items {
+                        s = s.item(item);
+                    }
+                    s
+                });
+            }
+            builder = builder.separator();
+        }
+
+        // 4. Shared File Management Actions
         builder = Self::append_file_management_entries(
             builder,
             is_single,
@@ -442,7 +480,7 @@ impl MediaContextMenu {
             is_busy,
         );
 
-        // 4. Rating, Modular Refresh Submenu & Selection Utilities
+        // 5. Ratings, Refresh & Selection Utilities
         builder = builder
             .separator()
             .submenu(
@@ -507,7 +545,6 @@ impl MediaContextMenu {
         builder.build()
     }
 
-    /// Primary action handler executing media file context actions on active browser selections.
     pub fn handle_action(
         action_id: CtxMenuActionId,
         window: &MainWindow,
@@ -523,7 +560,6 @@ impl MediaContextMenu {
         Self::handle_file_action_for_ids(action_id, window, ctx, &fallback_ids);
     }
 
-    /// Single Point of Truth (SPoT): Shared execution logic for file operations across both Media and Tab context menus.
     pub fn handle_file_action_for_ids(
         action_id: CtxMenuActionId,
         window: &MainWindow,
@@ -537,6 +573,49 @@ impl MediaContextMenu {
             target_ids: target_ids.to_vec(),
         };
 
+        // 1. Move to... Folder destination clicked
+        if action_id >= CTX_ACTION_MOVE_TO_BASE {
+            let target_folder_id = action_id - CTX_ACTION_MOVE_TO_BASE;
+            tracing::info!(
+                target_folder_id,
+                items_count = target_ids.len(),
+                "[MediaContextMenu: MoveTo] Context menu Move To triggered"
+            );
+            super::bridge_dnd::BridgeDnd::start_batch_transfer(super::bridge_dnd::BatchTransferParams {
+                window,
+                library: ctx.library,
+                thumbnails: ctx.thumbnails,
+                settings: ctx.settings,
+                state: ctx.state,
+                conflict_dialog: ctx.conflict_dialog,
+                target_folder_id,
+                transfer_kind: FileTransferKind::Move,
+            });
+            return;
+        }
+
+        // 2. Copy to... Folder destination clicked
+        if action_id >= CTX_ACTION_COPY_TO_BASE {
+            let target_folder_id = action_id - CTX_ACTION_COPY_TO_BASE;
+            tracing::info!(
+                target_folder_id,
+                items_count = target_ids.len(),
+                "[MediaContextMenu: CopyTo] Context menu Copy To triggered"
+            );
+            super::bridge_dnd::BridgeDnd::start_batch_transfer(super::bridge_dnd::BatchTransferParams {
+                window,
+                library: ctx.library,
+                thumbnails: ctx.thumbnails,
+                settings: ctx.settings,
+                state: ctx.state,
+                conflict_dialog: ctx.conflict_dialog,
+                target_folder_id,
+                transfer_kind: FileTransferKind::Copy,
+            });
+            return;
+        }
+
+        // 3. Open With Desktop App clicked
         if (CTX_ACTION_OPEN_WITH_APP_BASE..CTX_ACTION_OPEN_WITH_APP_BASE + 500).contains(&action_id) {
             let app_idx = (action_id - CTX_ACTION_OPEN_WITH_APP_BASE) as usize;
             Self::handle_open_with_specific_app(window, ctx, target_ids, app_idx);
@@ -789,12 +868,14 @@ impl MediaContextMenu {
 
         let paths = Self::collect_paths_for_ids(ctx, target_ids);
         if paths.is_empty() {
+            tracing::warn!(app = %app.name, "[MediaContextMenu] No file paths found to open with app");
             return;
         }
 
         tracing::info!(
             app = %app.name,
             paths_count = paths.len(),
+            first_path = %LogObscurer::path(&paths[0]),
             "[MediaContextMenu] Launching selected file(s) with specific desktop app"
         );
 
@@ -816,6 +897,7 @@ impl MediaContextMenu {
     ) {
         let paths = Self::collect_paths_for_ids(ctx, target_ids);
         let Some(first_path) = paths.first() else {
+            tracing::warn!("[MediaContextMenu] No valid file path found for application chooser");
             return;
         };
 
@@ -856,10 +938,17 @@ impl MediaContextMenu {
     ) {
         let paths = Self::collect_paths_for_ids(ctx, target_ids);
         if paths.is_empty() {
+            tracing::warn!("[MediaContextMenu] No file paths found to reveal in File Manager");
             return;
         }
 
         let count = paths.len();
+        tracing::info!(
+            count,
+            first_path = %LogObscurer::path(&paths[0]),
+            "[MediaContextMenu] Revealing file(s) in File Manager"
+        );
+
         match SystemFileHandler::reveal_in_file_manager(&paths) {
             Ok(()) => {
                 if count == 1 {
@@ -912,18 +1001,23 @@ impl MediaContextMenu {
         drop(st);
 
         if names.is_empty() {
+            tracing::warn!("[MediaContextMenu] No valid names resolved for copy name action");
             return;
         }
 
         let count = names.len();
+        tracing::info!(
+            count,
+            first_name = %LogObscurer::filename(&names[0]),
+            "[MediaContextMenu] Copying file name(s) to system clipboard"
+        );
+
         if let Err(e) = SystemClipboard::copy_file_names(&names) {
             tracing::error!(error = %e, "[MediaContextMenu] Failed to copy file names to clipboard");
             StatusBarBridge::error(window, format!("Failed to copy to clipboard: {}", e));
         } else if count == 1 {
-            tracing::info!(name = %LogObscurer::filename(&names[0]), "[MediaContextMenu] Copied single file name to clipboard");
             StatusBarBridge::success(window, format!("Copied file name to clipboard: '{}'", names[0]));
         } else {
-            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file names to clipboard");
             StatusBarBridge::success(window, format!("Copied {} file names to clipboard.", count));
         }
     }
@@ -935,19 +1029,24 @@ impl MediaContextMenu {
     ) {
         let paths = Self::collect_paths_for_ids(ctx, target_ids);
         if paths.is_empty() {
+            tracing::warn!("[MediaContextMenu] No valid paths resolved for copy path action");
             return;
         }
 
         let count = paths.len();
+        tracing::info!(
+            count,
+            first_path = %LogObscurer::path(&paths[0]),
+            "[MediaContextMenu] Copying file path(s) to system clipboard"
+        );
+
         if let Err(e) = SystemClipboard::copy_file_paths(&paths) {
             tracing::error!(error = %e, "[MediaContextMenu] Failed to copy file paths to clipboard");
             StatusBarBridge::error(window, format!("Failed to copy to clipboard: {}", e));
         } else if count == 1 {
             let path_str = paths[0].display().to_string();
-            tracing::info!(path = %LogObscurer::path(&paths[0]), "[MediaContextMenu] Copied single file path to clipboard");
             StatusBarBridge::success(window, format!("Copied file path to clipboard: '{}'", path_str));
         } else {
-            tracing::info!(count = count, "[MediaContextMenu] Copied multiple file paths to clipboard");
             StatusBarBridge::success(window, format!("Copied {} file paths to clipboard.", count));
         }
     }
@@ -983,6 +1082,11 @@ impl MediaContextMenu {
         };
 
         if !full_path.exists() {
+            tracing::warn!(
+                single_id,
+                path = %LogObscurer::path(&full_path),
+                "[MediaContextMenu] Image file not found on disk for copy image content"
+            );
             ctx.missing_file_dialog.show(
                 window,
                 "Copy Image Content",
@@ -993,6 +1097,12 @@ impl MediaContextMenu {
             );
             return;
         }
+
+        tracing::info!(
+            single_id,
+            path = %LogObscurer::path(&full_path),
+            "[MediaContextMenu] Copying raw image content asynchronously to clipboard"
+        );
 
         StatusBarBridge::info(
             window,
@@ -1017,7 +1127,7 @@ impl MediaContextMenu {
                 Err(e) => {
                     tracing::error!(
                         error = %e,
-                        "[MediaContextMenu] Failed to copy image content to clipboard in worker"
+                        "[MediaContextMenu] Failed to copy image content to clipboard"
                     );
                     StatusBarBridge::error(&w, format!("Failed to copy image to clipboard: {}", e));
                 }
@@ -1033,6 +1143,8 @@ impl MediaContextMenu {
         if let Some(&target_id) = target_ids.first()
             && target_ids.len() == 1
         {
+            tracing::info!(target_id, "[MediaContextMenu] Opening rename dialog for single media item");
+
             let dialog_ctx = FileDialogContext {
                 library: ctx.library.clone(),
                 thumbnails: ctx.thumbnails.clone(),
