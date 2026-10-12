@@ -6,10 +6,10 @@ use super::{ConflictFileView, FileOpsConflictDialog, MainWindow};
 use crate::library::models::{
     FileConflictItemDetails, FileConflictReport, FileConflictResolution, FileTransferKind, MediaId,
 };
-use crate::media::{MediaFormat, MediaHasher};
+use crate::media::{MediaFormat, MediaHasher, MediaType};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::system::SystemFileHandler;
-use crate::thumbnails::{ScalingAlgorithm, ThumbnailConfig, ThumbnailGenerator, ThumbnailManager};
+use crate::thumbnails::{ThumbnailConfig, ThumbnailGenerator, ThumbnailManager};
 use slint::{CloseRequestResponse, ComponentHandle, Image, Timer};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -77,8 +77,9 @@ impl FileOpsConflictDialogController {
 
         if let Some(ref win) = *self.dialog.borrow() {
             let t_thumb = Instant::now();
-            let src_thumb = load_conflict_thumbnail(params.thumbnails, &params.report.source.full_path, params.report.source.media_id);
-            let dst_thumb = load_conflict_thumbnail(params.thumbnails, &params.report.destination.full_path, params.report.destination.media_id);
+            let thumb_config = ThumbnailConfig::from_performance_settings(&params.settings.get().performance);
+            let src_thumb = load_conflict_thumbnail(params.thumbnails, &thumb_config, &params.report.source.full_path, params.report.source.media_id);
+            let dst_thumb = load_conflict_thumbnail(params.thumbnails, &thumb_config, &params.report.destination.full_path, params.report.destination.media_id);
             let thumb_load_us = t_thumb.elapsed().as_micros();
 
             let src_view = convert_details_to_view(&params.report.source, src_thumb.clone());
@@ -472,22 +473,54 @@ fn convert_details_to_view(details: &FileConflictItemDetails, thumb: Image) -> C
     }
 }
 
+/// Cover for a conflict card: the stored thumbnail (L1 cache, then database) whenever one exists. Only if there is
+/// none, it is generated with the user's thumbnail settings (including the video position option). Files that are
+/// not in the library get a transient thumbnail that is never stored.
 fn load_conflict_thumbnail(
     thumbnails: &ThumbnailManager,
+    config: &ThumbnailConfig,
     path: &Path,
     media_id: Option<crate::library::models::MediaId>,
 ) -> Image {
-    let config = ThumbnailConfig::default();
-    if let Some(id) = media_id
-        && let Ok(cached) = thumbnails.get_or_load_sync(id, path, config)
-    {
-        return rgb8_to_slint_image(&cached.pixels, cached.width, cached.height);
+    if let Some(id) = media_id {
+        match thumbnails.get_or_load_sync(id, path, config.clone()) {
+            Ok(cached) => return rgb8_to_slint_image(&cached.pixels, cached.width, cached.height),
+            Err(e) => tracing::warn!(media_id = id, error = %e, "[ConflictDialog: Thumbnail] Stored/generated thumbnail unavailable, using transient fallback"),
+        }
     }
+    generate_transient_thumbnail(config, path)
+}
 
+fn generate_transient_thumbnail(config: &ThumbnailConfig, path: &Path) -> Image {
     let generator = ThumbnailGenerator::new();
-    if let Ok(frame) = generator.generate_image_thumbnail(path, 256, ScalingAlgorithm::CatmullRom) {
-        return rgb8_to_slint_image(&frame.rgb_pixels, frame.width, frame.height);
-    }
+    let is_video = MediaFormat::from_path(path).media_type() == Some(MediaType::Video);
+    let frame = if is_video {
+        generator.generate_video_thumbnails(path, config).map(|r| r.primary_frame)
+    } else {
+        generator.generate_image_thumbnail(path, config.max_bound, config.scaling_algorithm)
+    };
 
-    Image::default()
+    match frame {
+        Ok(f) => rgb8_to_slint_image(&f.rgb_pixels, f.width, f.height),
+        Err(e) => {
+            tracing::warn!(error = %e, "[ConflictDialog: Thumbnail] Transient thumbnail generation failed");
+            Image::default()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transient_thumbnail_is_generated_for_images_and_empty_for_missing_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("c.png");
+        image::RgbImage::from_pixel(64, 48, image::Rgb([10, 120, 200])).save(&file).expect("write png");
+        let config = ThumbnailConfig::default();
+
+        assert!(generate_transient_thumbnail(&config, &file).size().width > 0);
+        assert_eq!(generate_transient_thumbnail(&config, &dir.path().join("none.png")).size().width, 0);
+    }
 }
