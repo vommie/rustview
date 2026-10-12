@@ -61,8 +61,10 @@ mod tests {
 
     #[test]
     fn wrap_setting_and_unknown_values_are_mapped_safely() {
-        let mut appearance = AppearanceSettings::default();
-        appearance.thumbnail_badge_overflow = "wrap".into();
+        let mut appearance = AppearanceSettings {
+            thumbnail_badge_overflow: "wrap".into(),
+            ..Default::default()
+        };
         assert_eq!(ThumbnailBadgeBridge::config_from_settings(&appearance).overflow_mode, ThumbnailBadgeOverflowMode::Wrap);
         appearance.thumbnail_badge_overflow = "bogus".into();
         assert_eq!(ThumbnailBadgeBridge::config_from_settings(&appearance).overflow_mode, ThumbnailBadgeOverflowMode::Hide);
