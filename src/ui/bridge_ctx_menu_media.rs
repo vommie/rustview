@@ -12,6 +12,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::file_selection::FileSelectionModel;
+use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{
     CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuContext, CtxMenuDispatcher,
@@ -377,17 +378,7 @@ impl MediaContextMenu {
             format!("Files (Metadata) ({} Files)", meta.selected_count)
         };
 
-        let regen_thumb_text = if is_single {
-            if meta.has_video {
-                "Thumbnail (Random Pos.)".to_string()
-            } else {
-                "Thumbnail".to_string()
-            }
-        } else if meta.has_video {
-            format!("Thumbnails (Random Pos.) ({} Files)", meta.selected_count)
-        } else {
-            format!("Thumbnails ({} Files)", meta.selected_count)
-        };
+        let regen_thumb_text = ThumbnailRegeneration::menu_label(meta.selected_count, meta.has_video);
 
         let can_refresh = meta.selected_count > 0 && !is_busy;
 
@@ -522,7 +513,7 @@ impl MediaContextMenu {
                         CTX_ACTION_REGENERATE_THUMB_RANDOM,
                         regen_thumb_text,
                         None,
-                        Some(Icon::Refresh),
+                        Some(Icon::RegenerateThumbnail),
                         can_refresh,
                     )
                 },
@@ -730,13 +721,6 @@ impl MediaContextMenu {
                 );
             }
             CTX_ACTION_REGENERATE_THUMB_RANDOM => {
-                if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
-                    StatusBarBridge::warn(
-                        window,
-                        "Cannot regenerate thumbnail: another operation is already in progress.",
-                    );
-                    return;
-                }
                 BridgeMedia::regenerate_selected_thumbnails_random(
                     window,
                     ctx.library,

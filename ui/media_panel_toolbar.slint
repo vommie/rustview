@@ -5,7 +5,7 @@ import { ToolbarThumbWidthControl } from "toolbar_thumb_width_control.slint";
 import { ToolbarSearchField } from "toolbar_search_field.slint";
 
 /// Persistent, unified toolbar for the central Media Area.
-/// Houses the Thumbnail Width Slider (visible in Grid View), Virtual Folder Toggle, Media Type Selector,
+/// Houses the Thumbnail Width Slider (visible in Grid View), Regenerate Thumbnails button, Virtual Folder Toggle, Media Type Selector,
 /// Filter Search (with embedded Regex & Clear), Refresh button, and instant View Mode Switcher.
 export component MediaPanelToolbar inherits PanelToolbar {
     in-out property <int> thumb-width: 190;
@@ -16,6 +16,8 @@ export component MediaPanelToolbar inherits PanelToolbar {
     in-out property <bool> is-virtual-folder: false;
     in property <bool> is-virtual-folder-enabled: true;
     in property <string> virtual-folder-tooltip: "";
+    in property <bool> is-regenerate-thumbs-enabled: false;
+    in property <string> regenerate-thumbs-tooltip: "";
     in-out property <int> media-type-filter-idx: 2;
 
     out property <bool> search-has-focus: search-field.has-focus;
@@ -26,6 +28,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
     callback virtual-folder-toggled(bool);
     callback media-type-filter-changed(int);
     callback refresh-clicked();
+    callback regenerate-thumbs-clicked();
     callback view-mode-toggled(bool /* target_is_table */);
 
     forward-focus: search-field;
@@ -45,7 +48,17 @@ export component MediaPanelToolbar inherits PanelToolbar {
     // 2. Expander / Spacer (Pushes search & view actions to the right)
     ToolbarSpacer {}
 
-    // 3. Virtual Folder / Recursive Subfolders View Toggle Button
+    // 3a. Regenerate Thumbnail(s) of the selection (videos at a random position)
+    ToolbarButton {
+        icon: IconId.regenerate-thumbnail;
+        tooltip: root.regenerate-thumbs-tooltip;
+        is-enabled: root.is-regenerate-thumbs-enabled && !root.is-busy;
+        clicked => { root.regenerate-thumbs-clicked(); }
+    }
+
+    ToolbarSeparator {}
+
+    // 3b. Virtual Folder / Recursive Subfolders View Toggle Button
     ToolbarButton {
         icon: root.is-virtual-folder ? IconId.virtual-folder-off : IconId.virtual-folder-on;
         tooltip: root.virtual-folder-tooltip != "" ? root.virtual-folder-tooltip : (

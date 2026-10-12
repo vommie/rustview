@@ -1,4 +1,5 @@
 use super::models::format_filesize;
+use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::MainWindow;
 use crate::thumbnails::ThumbnailProgressSnapshot;
 use crate::ui::bridge_state::UiState;
@@ -131,6 +132,8 @@ impl StatusBarBridge {
         window.set_status_selection_size(sel_size_str.into());
         window.set_is_virtual_folder(is_virtual);
         window.set_virtual_folder_count(virtual_count as i32);
+
+        ThumbnailRegeneration::sync_toolbar_state(window, state);
     }
 
     /// Updates the folder structure scan progress section.

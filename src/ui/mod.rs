@@ -52,6 +52,7 @@ pub mod tab_dnd;
 pub mod tab_grid;
 pub mod tag_history;
 pub mod thumbnail_badges;
+pub mod thumbnail_regeneration;
 pub mod video_preview_animator;
 
 pub use bridge::{RenameActionParams, UiBridge};

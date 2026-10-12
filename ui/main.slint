@@ -111,6 +111,8 @@ export component MainWindow inherits Window {
     in-out property <bool> is-virtual-folder: false;
     in property <bool> is-virtual-folder-btn-enabled: false;
     in property <string> virtual-folder-tooltip: "";
+    in property <bool> is-regenerate-thumbs-enabled: false;
+    in property <string> regenerate-thumbs-tooltip: "";
     in-out property <int> virtual-folder-count: 0;
     in-out property <int> media-type-filter-idx: 2;
 
@@ -299,6 +301,7 @@ export component MainWindow inherits Window {
     }
 
     callback refresh-folder();
+    callback regenerate-thumbs-clicked();
     callback open-settings();
     callback browse-clicked();
     callback tab-grid-clicked();
@@ -750,6 +753,8 @@ export component MainWindow inherits Window {
                         is-virtual-folder <=> root.is-virtual-folder;
                         is-virtual-folder-enabled: root.is-virtual-folder-btn-enabled;
                         virtual-folder-tooltip: root.virtual-folder-tooltip;
+                        is-regenerate-thumbs-enabled: root.is-regenerate-thumbs-enabled;
+                        regenerate-thumbs-tooltip: root.regenerate-thumbs-tooltip;
                         media-type-filter-idx <=> root.media-type-filter-idx;
                         thumb-width-changed(w) => { }
                         search-changed(t) => { root.search-query-changed(t); }
@@ -757,6 +762,7 @@ export component MainWindow inherits Window {
                         virtual-folder-toggled(v) => { root.virtual-folder-toggled(v); }
                         media-type-filter-changed(m) => { root.media-type-filter-changed(m); }
                         refresh-clicked => { root.refresh-folder(); }
+                        regenerate-thumbs-clicked => { root.regenerate-thumbs-clicked(); }
                         view-mode-toggled(new-is-table) => {
                             let anchor-top-idx = new-is-table ? grid-view.get-top-visible-index() : table-view.get-top-visible-index();
                             root.is-table-view = new-is-table;
