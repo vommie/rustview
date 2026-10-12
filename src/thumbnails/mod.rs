@@ -7,6 +7,7 @@ pub mod gif;
 pub mod image;
 pub mod loader;
 pub mod progress;
+pub mod regeneration;
 pub mod store;
 pub mod types;
 pub mod video;

@@ -20,8 +20,7 @@ use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
-    generate_random_video_offset_percent, PreparedTarget, ThumbnailConfig, ThumbnailGenerator,
-    ThumbnailLocation, ThumbnailManager, VideoPreviewRecord,
+    PreparedTarget, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager, VideoPreviewRecord,
 };
 use crate::viewer::{HighResImageLoader, ViewerTabManager};
 use parking_lot::RwLock;
@@ -75,7 +74,6 @@ struct ProcessedRefreshedItem {
     primary_width: u32,
     primary_height: u32,
     tags_count: usize,
-    random_offset_pct: Option<u8>,
 }
 
 struct RefreshedMetadataOnlyItem {
@@ -130,7 +128,6 @@ impl BridgeMedia {
             window,
             library.clone(),
             thumbnails.clone(),
-            tab_manager.clone(),
             settings.clone(),
             state.clone(),
         );
@@ -1280,26 +1277,6 @@ impl BridgeMedia {
             tab_manager,
             settings,
             state,
-            false,
-        );
-    }
-
-    pub fn regenerate_selected_thumbnails_random(
-        window: &MainWindow,
-        library: &Arc<Library>,
-        thumbnails: &Arc<ThumbnailManager>,
-        tab_manager: &Arc<ViewerTabManager>,
-        settings: &Arc<SettingsManager>,
-        state: &Arc<RwLock<UiState>>,
-    ) {
-        Self::execute_media_refresh(
-            window,
-            library,
-            thumbnails,
-            tab_manager,
-            settings,
-            state,
-            true,
         );
     }
 
@@ -1310,13 +1287,11 @@ impl BridgeMedia {
         tab_manager: &Arc<ViewerTabManager>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        random_video_offset: bool,
     ) {
         if Self::is_system_busy(window, thumbnails, state) {
-            let op_name = if random_video_offset { "regenerate thumbnail" } else { "start refresh" };
             StatusBarBridge::warn(
                 window,
-                format!("Cannot {}: another operation is already in progress.", op_name),
+                "Cannot start refresh: another operation is already in progress.",
             );
             return;
         }
@@ -1365,26 +1340,10 @@ impl BridgeMedia {
         }
         window.set_is_system_busy(true);
 
-        if random_video_offset {
-            // Thumbnail regeneration reports through the "Gen" bar of the thumbnail pipeline.
-            thumbnails.tracker().set_generate_total(total_items);
-            StatusBarBridge::update_thumbnail_progress(window, &thumbnails.progress());
-            tracing::info!(
-                total_items,
-                "[ThumbnailRegeneration: Start] Regenerating thumbnails (videos at random positions)"
-            );
-        } else {
-            StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
-        }
+        StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
 
         let is_tab_mode_initial = window.get_active_view_mode() == 1;
-        let start_msg = if random_video_offset {
-            if total_items == 1 {
-                "Regenerating thumbnail...".to_string()
-            } else {
-                format!("Regenerating thumbnails for {} selected files...", total_items)
-            }
-        } else if total_items == 1 {
+        let start_msg = if total_items == 1 {
             if is_tab_mode_initial {
                 "Refreshing the file (Full)...".to_string()
             } else {
@@ -1415,13 +1374,7 @@ impl BridgeMedia {
                 let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
                 let w_weak_progress = w_weak.clone();
 
-                let gen_tracker = thumb_arc.tracker();
                 let progress_cb = Arc::new(move |cur: usize, tot: usize| {
-                    if random_video_offset {
-                        // The drain timer mirrors the tracker into the "Gen" bar.
-                        gen_tracker.increment_generate_done();
-                        return;
-                    }
                     let mut last = last_progress_report.lock();
                     if last.elapsed().as_millis() >= 35 || cur == tot {
                         *last = Instant::now();
@@ -1431,15 +1384,8 @@ impl BridgeMedia {
                     }
                 });
 
-                // Every target counts as processed, including failed ones, so the bar always completes.
-                let report_item_done = {
-                    let counter = progress_counter.clone();
-                    let cb = progress_cb.clone();
-                    move || {
-                        let cur_count = counter.fetch_add(1, Ordering::Relaxed) + 1;
-                        cb(cur_count, total_items);
-                    }
-                };
+                let progress_counter_ref = progress_counter.clone();
+                let progress_cb_ref = progress_cb.clone();
                 let lib_ref = lib_arc.clone();
                 let gen_ref = generator.clone();
                 let cfg_ref = config.clone();
@@ -1453,7 +1399,6 @@ impl BridgeMedia {
                                 path = %LogObscurer::path(&file_path),
                                 "[BridgeMedia: Refresh] File does not exist on disk"
                             );
-                            report_item_done();
                             return Err((media_id, file_path, "File not found on disk".to_string()));
                         }
 
@@ -1466,7 +1411,6 @@ impl BridgeMedia {
                                     error = %e,
                                     "[BridgeMedia: Refresh] Failed to read metadata"
                                 );
-                                report_item_done();
                                 return Err((media_id, file_path, e.to_string()));
                             }
                         };
@@ -1500,17 +1444,12 @@ impl BridgeMedia {
                         let format = MediaFormat::from_path(&file_path);
                         let is_video = format.media_type() == Some(MediaType::Video);
 
-                        let (item_cfg, chosen_rand_pct) = if random_video_offset && is_video {
-                            let rand_pct = generate_random_video_offset_percent();
-                            (cfg_ref.with_video_offset_percent(rand_pct), Some(rand_pct))
-                        } else {
-                            (cfg_ref.clone(), None)
-                        };
+                        let item_cfg = &cfg_ref;
 
                         let (primary_frame_opt, preview_rec, orig_w, orig_h, duration_ms, gen_ok) = if is_zero_byte {
                             (None, None, 0, 0, 0, false)
                         } else if is_video {
-                            match gen_ref.generate_video_thumbnails(&file_path, &item_cfg) {
+                            match gen_ref.generate_video_thumbnails(&file_path, item_cfg) {
                                 Ok(video_res) => {
                                     let primary = video_res.primary_frame;
                                     let mut preview_rec = None;
@@ -1608,7 +1547,8 @@ impl BridgeMedia {
                             source: old_record.source.clone(),
                         };
 
-                        report_item_done();
+                        let cur_count = progress_counter_ref.fetch_add(1, Ordering::Relaxed) + 1;
+                        progress_cb_ref(cur_count, total_items);
 
                         let (pixels, pw, ph) = if let Some(f) = primary_frame_opt {
                             (f.rgb_pixels, f.width, f.height)
@@ -1627,7 +1567,6 @@ impl BridgeMedia {
                             primary_width: pw,
                             primary_height: ph,
                             tags_count: assigned_tags_count,
-                            random_offset_pct: chosen_rand_pct,
                         })
                     })
                     .collect();
@@ -1725,11 +1664,6 @@ impl BridgeMedia {
                     {
                         let mut st = st_arc.write();
                         st.is_refreshing_media = false;
-
-                        if random_video_offset {
-                            thumb_arc.tracker().reset();
-                            StatusBarBridge::update_thumbnail_progress(&w, &thumb_arc.progress());
-                        }
 
                         for item in &successful_items {
                             if item.primary_width > 0 && item.primary_height > 0 && !item.primary_pixels.is_empty() {
@@ -1924,30 +1858,6 @@ impl BridgeMedia {
                                 refreshed_count, missing_count
                             ),
                         );
-                    } else if random_video_offset {
-                        let success_msg = if total_items == 1 {
-                            if let Some(pct) = successful_items[0].random_offset_pct {
-                                format!(
-                                    "Regenerated thumbnail at {}% for '{}' in {}ms.",
-                                    pct,
-                                    successful_items[0].updated_record.filename,
-                                    t_start.elapsed().as_millis()
-                                )
-                            } else {
-                                format!(
-                                    "Regenerated thumbnail for '{}' in {}ms.",
-                                    successful_items[0].updated_record.filename,
-                                    t_start.elapsed().as_millis()
-                                )
-                            }
-                        } else {
-                            format!(
-                                "Regenerated {} thumbnails in {}ms.",
-                                refreshed_count,
-                                t_start.elapsed().as_millis()
-                            )
-                        };
-                        StatusBarBridge::success(&w, success_msg);
                     } else {
                         let is_tab_view = w.get_active_view_mode() == 1;
                         let success_msg = if total_items == 1 {

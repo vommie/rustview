@@ -721,11 +721,10 @@ impl MediaContextMenu {
                 );
             }
             CTX_ACTION_REGENERATE_THUMB_RANDOM => {
-                BridgeMedia::regenerate_selected_thumbnails_random(
+                ThumbnailRegeneration::regenerate_selected(
                     window,
                     ctx.library,
                     ctx.thumbnails,
-                    ctx.tab_manager,
                     ctx.settings,
                     ctx.state,
                 );
