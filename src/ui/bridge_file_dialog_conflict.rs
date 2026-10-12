@@ -456,7 +456,7 @@ impl FileOpsConflictDialogController {
 
 fn convert_details_to_view(details: &FileConflictItemDetails, thumb: Image) -> ConflictFileView {
     let dim_str = if details.width > 0 && details.height > 0 {
-        format!("{} × {}", details.width, details.height)
+        format!("{} x {}", details.width, details.height)
     } else {
         "-".to_string()
     };

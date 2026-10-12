@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 
 /// Standalone, reusable single column header component with title, sort indicator, and drag resizer handle.
 /// Supports both fixed-width mode (TableView) and automatic content-based dynamic width mode (GridView).
@@ -52,13 +53,11 @@ export component MediaHeaderColumn inherits Rectangle {
             overflow: elide;
         }
 
-        // Directional Sort Indicator Caret (Ascending ▲ / Descending ▼)
-        if root.is-sorted : Text {
-            text: root.active-sort-order == 0 ? "▲" : "▼";
-            font-size: 8px;
+        // Directional Sort Indicator Caret (ascending / descending)
+        if root.is-sorted : IconSlot {
+            icon: root.active-sort-order == 0 ? IconId.sort-ascending : IconId.sort-descending;
+            size: IconSize.sm;
             color: Theme.primary;
-            vertical-alignment: center;
-            horizontal-alignment: left;
         }
     }
 

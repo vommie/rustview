@@ -33,9 +33,12 @@ rusqlite = { version = "0", features = ["bundled"] }
 webp = "0.3"
 arboard = "3"
 num-format = { version = "0.4", features = ["with-system-locale"] }
+# SVG rasterizer (already used by Slint); renders icons for native helper windows outside of Slint.
+resvg = { version = "0.47", default-features = false }
 
 [build-dependencies]
 slint-build = "1"
+toml = "1"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

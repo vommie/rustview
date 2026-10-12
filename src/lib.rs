@@ -1,6 +1,7 @@
 pub mod app;
 pub mod cli_api;
 pub mod ctx_menu;
+pub mod icons;
 pub mod library;
 pub mod media;
 pub mod query;

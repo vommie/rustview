@@ -1,3 +1,5 @@
+import { IconId } from "icons.slint";
+
 export struct MediaItemView {
     id: int,
     filename: string,
@@ -82,8 +84,10 @@ export struct ContextMenuItemModel {
     id: int,
     text: string,
     shortcut: string,
-    icon_name: string,
-    icon: image,
+    /// Library icon shown in the leading icon slot (`IconId.none` = empty slot).
+    icon: IconId,
+    /// Image of an external application (system icon theme, e.g. "Open With" entries). Takes precedence over `icon`.
+    app_icon: image,
     kind: int, // 0 = Action, 1 = Checkable, 2 = Radio, 3 = Separator, 4 = Header, 5 = Submenu
     is_checked: bool,
     is_enabled: bool,
@@ -150,7 +154,7 @@ export struct TabGridItemModel {
 export struct SidebarPanelTabModel {
     id: string,
     title: string,
-    icon_name: string,
+    icon: IconId,
     is_active: bool,
     shift_x: length,
     is_placeholder: bool,

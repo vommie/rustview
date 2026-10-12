@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconLookup, IconSize, IconSlot } from "icons.slint";
 import { TabGridItemModel } from "types.slint";
 
 /// Standalone Masonry Tile item for the TabGridView.
@@ -68,12 +68,10 @@ export component TabGridItemView inherits Rectangle {
                     alignment: start;
                     horizontal-stretch: 1;
 
-                    AppIcon {
-                        icon: root.item.is-video ? Icons.video : Icons.image;
-                        size: 13px;
-                        allow-tint: true;
+                    IconSlot {
+                        icon: root.item.is-video ? IconId.media-video : IconId.media-image;
+                        size: IconSize.md;
                         color: Theme.primary;
-                        y: (parent.height - self.height) / 2;
                     }
 
                     Text {
@@ -92,11 +90,9 @@ export component TabGridItemView inherits Rectangle {
                     alignment: end;
                     horizontal-stretch: 0;
 
-                    if root.item.rating > 0 : AppIcon {
-                        icon: Icons.rating-icon(root.item.rating);
-                        size: 13px;
-                        allow-tint: false;
-                        y: (parent.height - self.height) / 2;
+                    if root.item.rating > 0 : IconSlot {
+                        icon: IconLookup.rating(root.item.rating);
+                        size: IconSize.md;
                     }
 
                     Rectangle {
@@ -113,13 +109,12 @@ export component TabGridItemView inherits Rectangle {
                             }
                         }
 
-                        Text {
-                            text: "✕";
-                            font-size: 10px;
-                            font-weight: 700;
+                        AppIcon {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            icon: IconId.close;
+                            size: IconSize.xs;
                             color: close-touch.has-hover ? #f38ba8 : Theme.text-muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
                         }
                     }
                 }
@@ -149,9 +144,8 @@ export component TabGridItemView inherits Rectangle {
                         border-color: #f38ba844;
 
                         AppIcon {
-                            icon: Icons.media-file-corrupted;
-                            size: 24px;
-                            allow-tint: true;
+                            icon: IconId.status-warning;
+                            size: IconSize.xl;
                             color: Theme.status-corrupt;
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
@@ -185,11 +179,12 @@ export component TabGridItemView inherits Rectangle {
                 image-fit: contain;
             }
 
-            if !root.item.is-video && root.item.image.width == 0 && root.item.error-message == "" : Text {
-                text: "🖼";
-                font-size: 28px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+            if !root.item.is-video && root.item.image.width == 0 && root.item.error-message == "" : AppIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                icon: IconId.media-image;
+                size: IconSize.xl;
+                color: Theme.text-muted;
             }
 
             // Video Viewport Area: Solid black background ensures Slint's canvas is 100% opaque.
@@ -208,12 +203,12 @@ export component TabGridItemView inherits Rectangle {
                     background: #000000bb;
                     border-radius: 2px;
 
-                    Text {
-                        text: "⏸";
-                        font-size: 9px;
+                    AppIcon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        icon: IconId.pause;
+                        size: IconSize.xs;
                         color: #ffffff;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
                     }
                 }
             }

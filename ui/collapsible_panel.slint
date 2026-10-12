@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 
 /// Generic, modular, and reusable collapsible container for sidebar panels and docks.
 /// Encapsulates consistent theme styling, interactive header bar, title, optional count badge,
@@ -63,13 +63,11 @@ export component CollapsiblePanel inherits Rectangle {
                     }
                 }
 
-                // Toggle Chevron Icon (Switches dynamically between arrow-down-s-line and arrow-right-s-line)
-                AppIcon {
-                    icon: root.is-collapsed ? Icons.arrow-right-s-line : Icons.arrow-down-s-line;
-                    size: 11px;
-                    allow-tint: true;
+                // Toggle Chevron Icon (switches between chevron-down and chevron-right)
+                IconSlot {
+                    icon: root.is-collapsed ? IconId.chevron-right : IconId.chevron-down;
+                    size: IconSize.sm;
                     color: header-touch.has-hover ? Theme.primary : Theme.text-muted;
-                    y: (parent.height - self.height) / 2;
                 }
             }
 

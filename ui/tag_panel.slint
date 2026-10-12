@@ -1,5 +1,6 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 import { TagNodeView, TagColumnView, TagHistoryRowModel } from "types.slint";
 import { RatingBar } from "rating_bar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
@@ -81,19 +82,10 @@ export component TagTreeItem inherits Rectangle {
             }
         }
 
-        if root.tag.is-assigned || root.tag.is-partial : Rectangle {
-            width: 12px;
-            height: 12px;
-            y: (parent.height - self.height) / 2;
-
-            Text {
-                text: root.tag.is-assigned ? "✓" : "◐";
-                font-size: 10px;
-                font-weight: 700;
-                color: root.tag.is-assigned ? #a6e3a1 : #f9e2af;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+        if root.tag.is-assigned || root.tag.is-partial : IconSlot {
+            icon: root.tag.is-assigned ? IconId.check : IconId.partial;
+            size: IconSize.sm;
+            color: root.tag.is-assigned ? #a6e3a1 : #f9e2af;
         }
 
         Text {

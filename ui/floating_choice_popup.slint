@@ -1,4 +1,5 @@
 import { Button } from "std-widgets.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 import { Theme } from "styles.slint";
 
 /// Compact, generic, modular Floating Choice Popup anchored at drop targets.
@@ -65,14 +66,28 @@ export component FloatingChoicePopup inherits Rectangle {
                 spacing: 6px;
                 alignment: start;
 
-                Text {
-                    text: "📁";
-                    font-size: 13px;
-                    vertical-alignment: center;
+                IconSlot {
+                    icon: IconId.folder;
+                    size: IconSize.md;
+                    color: Theme.primary;
                 }
 
                 Text {
-                    text: (root.item-count > 1 ? (root.item-count + " Files ➔ ") : "1 File ➔ ") + root.target-folder-name;
+                    text: root.item-count > 1 ? (root.item-count + " Files") : "1 File";
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                    vertical-alignment: center;
+                }
+
+                IconSlot {
+                    icon: IconId.arrow-right;
+                    size: IconSize.sm;
+                    color: Theme.primary;
+                }
+
+                Text {
+                    text: root.target-folder-name;
                     font-size: 11px;
                     font-weight: 700;
                     color: Theme.primary;

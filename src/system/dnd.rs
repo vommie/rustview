@@ -1,10 +1,16 @@
 use super::error::SystemHandlerError;
+use crate::icons::Icon;
 use crate::settings::LogObscurer;
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::LazyLock;
 use std::time::Instant;
+
+/// Edge length of the ghost window's thumbnail/icon slot (matches the scaling in the helper script below).
+const GHOST_ICON_SIZE_PX: u32 = 24;
+/// Color of the ghost fallback icon; equals `Theme.text` in `ui/styles.slint` (the helper window cannot read the theme).
+const GHOST_ICON_COLOR: &str = "#cdd6f4";
 
 static ACTIVE_GHOST_CHILD: LazyLock<Mutex<Option<Child>>> = LazyLock::new(|| Mutex::new(None));
 
@@ -89,12 +95,36 @@ impl SystemDndHandler {
             .join("\n")
     }
 
+    /// Renders (once) and returns the generic file icon PNG used by the ghost window when no thumbnail exists.
+    fn fallback_icon_path() -> Option<PathBuf> {
+        let dest = std::env::temp_dir()
+            .join("rustview")
+            .join("icons")
+            .join(format!("ghost-file-{GHOST_ICON_SIZE_PX}.png"));
+        if !dest.is_file()
+            && let Err(e) = crate::icons::raster::render_png(
+                Icon::File,
+                GHOST_ICON_SIZE_PX,
+                GHOST_ICON_COLOR,
+                &dest,
+            )
+        {
+            tracing::warn!(error = %e, "[SystemDnd] Cannot render ghost fallback icon");
+            return None;
+        }
+        Some(dest)
+    }
+
     /// Starts the standalone, click-through OS-wide floating ghost window styled with RustView's theme palette and instant cursor tracking.
     pub fn start_ghost_overlay(title: &str, count: usize, thumb_path: Option<&Path>) {
         Self::cancel_ghost_overlay();
 
         let title_owned = title.to_string();
+        // Without a real thumbnail the ghost shows the generic file icon (rendered from the icon library),
+        // so the native helper window never needs an emoji or font glyph as icon.
         let thumb_arg = thumb_path
+            .map(Path::to_path_buf)
+            .or_else(Self::fallback_icon_path)
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
 
@@ -179,9 +209,6 @@ try:
                 img = Gtk.Image.new_from_pixbuf(pixbuf)
                 img.get_style_context().add_class("thumb")
                 box.pack_start(img, False, False, 0)
-            else:
-                icon_lbl = Gtk.Label(label="📄")
-                box.pack_start(icon_lbl, False, False, 0)
 
             # 2. File Title
             lbl = Gtk.Label(label=title)
@@ -306,9 +333,6 @@ try:
         pm = QPixmap(thumb_path).scaled(24, 24, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         thumb_lbl.setPixmap(pm)
         layout.addWidget(thumb_lbl)
-    else:
-        doc_lbl = QLabel("📄")
-        layout.addWidget(doc_lbl)
 
     title_lbl = QLabel(title)
     layout.addWidget(title_lbl)

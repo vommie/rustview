@@ -1,5 +1,6 @@
 import { CheckBox } from "std-widgets.slint";
 import { Theme } from "styles.slint";
+import { BulletItem } from "bullet_item.slint";
 import { SettingsCard } from "settings_card.slint";
 
 export component SettingsPageApi inherits VerticalLayout {
@@ -28,11 +29,14 @@ export component SettingsPageApi inherits VerticalLayout {
         title: "Queue & Render Job Safety";
         description: "Files currently rendering or pending in an external export queue are handled safely without marking them corrupted.";
 
-        Text {
-            text: "• If an external file has not yet been rendered to disk (0 bytes or missing), it remains safely in 'Pending' status and will be seamlessly completed upon subsequent folder visits.\n• The media panel refresh action is temporarily disabled during completion to guarantee atomic transaction integrity.";
-            font-size: 11px;
+        BulletItem {
+            text: "If an external file has not yet been rendered to disk (0 bytes or missing), it remains safely in 'Pending' status and will be seamlessly completed upon subsequent folder visits.";
             color: Theme.text-muted;
-            wrap: word-wrap;
+        }
+
+        BulletItem {
+            text: "The media panel refresh action is temporarily disabled during completion to guarantee atomic transaction integrity.";
+            color: Theme.text-muted;
         }
     }
 }

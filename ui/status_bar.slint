@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 import { ThumbnailPipelineProgress } from "thumbnail_progress.slint";
 import { FolderRefreshProgress } from "progressbar_folders.slint";
 import { MediaIndexProgress } from "progressbar_media.slint";
@@ -87,34 +88,25 @@ export component StatusBar inherits Rectangle {
                 horizontal-stretch: 0;
 
                 Rectangle {
-                    width: 14px;
-                    height: 14px;
+                    width: IconSize.md;
+                    height: IconSize.md;
 
-                    if root.status-level == 1 : Text {
-                        text: "✓";
-                        font-size: 11px;
-                        font-weight: 700;
+                    if root.status-level == 1 : AppIcon {
+                        icon: IconId.status-ok;
+                        size: IconSize.md;
                         color: Theme.status-ok;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
                     }
 
-                    if root.status-level == 2 : Text {
-                        text: "⚠";
-                        font-size: 11px;
-                        font-weight: 700;
+                    if root.status-level == 2 : AppIcon {
+                        icon: IconId.status-warning;
+                        size: IconSize.md;
                         color: Theme.accent;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
                     }
 
-                    if root.status-level == 3 : Text {
-                        text: "✖";
-                        font-size: 11px;
-                        font-weight: 700;
+                    if root.status-level == 3 : AppIcon {
+                        icon: IconId.status-error;
+                        size: IconSize.md;
                         color: Theme.status-corrupt;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
                     }
 
                     if root.status-level == 0 : Rectangle {

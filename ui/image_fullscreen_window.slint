@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 
 /// Standalone, ultra-minimalistic, frameless fullscreen media viewer window.
 /// Displays high-resolution images or seamlessly embedded MPV videos fitted to the display.
@@ -118,9 +118,8 @@ export component ImageFullscreenWindow inherits Window {
             HorizontalLayout {
                 alignment: center;
                 AppIcon {
-                    icon: Icons.loader;
-                    size: 36px;
-                    allow-tint: true;
+                    icon: IconId.loader;
+                    size: IconSize.xxl;
                     color: Theme.primary;
                 }
             }
@@ -149,9 +148,8 @@ export component ImageFullscreenWindow inherits Window {
                     border-color: #f38ba844;
 
                     AppIcon {
-                        icon: Icons.media-file-corrupted;
-                        size: 48px;
-                        allow-tint: true;
+                        icon: IconId.status-warning;
+                        size: IconSize.xxl;
                         color: Theme.status-corrupt;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;

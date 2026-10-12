@@ -1,6 +1,7 @@
 import { ComboBox, CheckBox } from "std-widgets.slint";
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { BulletItem } from "bullet_item.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 import { SettingsCard } from "settings_card.slint";
 import { TooltipHost } from "tooltips.slint";
 
@@ -86,9 +87,8 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                     }
 
                     AppIcon {
-                        icon: Icons.refresh;
-                        size: 14px;
-                        allow-tint: true;
+                        icon: IconId.refresh;
+                        size: IconSize.md;
                         color: refresh-touch.has-hover ? Theme.primary : Theme.text;
                         x: (parent.width - self.width) / 2;
                         y: (parent.height - self.height) / 2;
@@ -146,15 +146,13 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                     color: Theme.primary;
                 }
 
-                Text {
+                BulletItem {
                     text: root.enable-specific-monitor
-                        ? ("• Fullscreen will target the chosen monitor. If unavailable: " + (root.enable-fallback-rule ? (root.fallback-target-idx == 1 ? "opens on another available display." : "opens on Main UI display.") : "defaults to Main UI display."))
+                        ? ("Fullscreen will target the chosen monitor. If unavailable: " + (root.enable-fallback-rule ? (root.fallback-target-idx == 1 ? "opens on another available display." : "opens on Main UI display.") : "defaults to Main UI display."))
                         : (root.enable-fallback-rule
-                            ? (root.fallback-target-idx == 1 ? "• Fullscreen opens on a different display than Main UI (if multi-monitor setup exists)." : "• Fullscreen opens on the same display as Main UI.")
-                            : "• Standard mode: Fullscreen always opens on the same display as Main UI.");
-                    font-size: 11px;
+                            ? (root.fallback-target-idx == 1 ? "Fullscreen opens on a different display than Main UI (if multi-monitor setup exists)." : "Fullscreen opens on the same display as Main UI.")
+                            : "Standard mode: Fullscreen always opens on the same display as Main UI.");
                     color: Theme.text-muted;
-                    wrap: word-wrap;
                 }
             }
         }

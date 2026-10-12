@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons } from "icons.slint";
+import { IconId } from "icons.slint";
 import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
 
 /// Dedicated modular panel toolbar for active Image Viewer tabs.
@@ -17,14 +17,17 @@ export component ImageTabPanelToolbar inherits PanelToolbar {
 
     // 1. Navigation Buttons (Previous / Next image in dataset)
     ToolbarButton {
-        text: "◀ Prev";
+        icon: IconId.chevron-left;
+        text: "Prev";
         tooltip: "Previous image in list (Left Arrow)";
         is-enabled: root.has-previous;
         clicked => { root.previous-clicked(); }
     }
 
     ToolbarButton {
-        text: "Next ▶";
+        icon: IconId.chevron-right;
+        icon-trailing: true;
+        text: "Next";
         tooltip: "Next image in list (Right Arrow)";
         is-enabled: root.has-next;
         clicked => { root.next-clicked(); }
@@ -52,9 +55,9 @@ export component ImageTabPanelToolbar inherits PanelToolbar {
 
     ToolbarSpacer {}
 
-    // 3. Refresh Image Action Button (using standardized Icons.refresh)
+    // 3. Refresh Image Action Button (using standardized IconId.refresh)
     ToolbarButton {
-        icon: Icons.refresh;
+        icon: IconId.refresh;
         tooltip: "Refresh image and reload from disk (F5)";
         clicked => { root.refresh-clicked(); }
     }

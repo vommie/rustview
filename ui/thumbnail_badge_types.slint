@@ -1,4 +1,5 @@
 import { MediaItemView } from "types.slint";
+import { IconId } from "icons.slint";
 
 // Shared data contract between the Slint UI and the Rust thumbnail badge engine
 // (src/ui/thumbnail_badges). Enums are defined here once and used on both sides.
@@ -62,7 +63,7 @@ export struct ThumbnailBadgeView {
     kind: ThumbnailBadgeKind,
     tone: ThumbnailBadgeTone,
     text: string,
-    icon_name: string,
+    icon: IconId,
     has_custom_color: bool,
     custom_color: color,
     custom_text_color: color,

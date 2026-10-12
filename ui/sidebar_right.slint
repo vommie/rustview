@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { IconId } from "icons.slint";
 import { TagColumnView, TagHistoryRowModel } from "types.slint";
 import { TagPanel } from "tag_panel.slint";
 import { SidebarPanelTabBar } from "sidebar_panel_tab_bar.slint";
@@ -61,7 +62,7 @@ export component SidebarRight inherits Rectangle {
                 {
                     id: "tags_rate",
                     title: "Tag & Rate",
-                    icon_name: "tag",
+                    icon: IconId.tag,
                     is_active: true,
                     shift_x: 0px,
                     is_placeholder: false

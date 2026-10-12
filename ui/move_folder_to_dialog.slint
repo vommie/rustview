@@ -1,4 +1,7 @@
 import { Theme } from "styles.slint";
+import { BulletItem } from "bullet_item.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
 
 export component MoveFolderToDialog inherits Window {
@@ -39,10 +42,9 @@ export component MoveFolderToDialog inherits Window {
                 spacing: 12px;
                 vertical-stretch: 1;
 
-                Text {
-                    text: "📦 Move Directory";
-                    font-size: 15px;
-                    font-weight: 700;
+                DialogHeading {
+                    icon: IconId.move-to;
+                    text: "Move Directory";
                     color: Theme.primary;
                 }
 
@@ -70,9 +72,13 @@ export component MoveFolderToDialog inherits Window {
                             color: Theme.primary;
                         }
 
-                        Text {
-                            text: "• " + root.subfolders-count + " subfolder(s)\n• " + root.files-count + " media file(s)";
-                            font-size: 11px;
+                        BulletItem {
+                            text: root.subfolders-count + " subfolder(s)";
+                            color: Theme.text;
+                        }
+
+                        BulletItem {
+                            text: root.files-count + " media file(s)";
                             color: Theme.text;
                         }
                     }

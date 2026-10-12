@@ -1,6 +1,6 @@
 import { Theme } from "styles.slint";
 import { TabItemModel } from "types.slint";
-import { AppIcon, Icons } from "icons.slint";
+import { AppIcon, IconId, IconLookup, IconSize, IconSlot } from "icons.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { TooltipHost } from "tooltips.slint";
 
@@ -120,13 +120,11 @@ export component TabItemView inherits Rectangle {
             spacing: 6px;
             alignment: center;
 
-            // 1. Media Type Vector Icon (SVG: image.svg / video.svg)
-            AppIcon {
-                icon: root.tab.is-video ? Icons.video : Icons.image;
-                size: 13px;
-                allow-tint: true;
+            // 1. Media Type Vector Icon (image / video)
+            IconSlot {
+                icon: root.tab.is-video ? IconId.media-video : IconId.media-image;
+                size: IconSize.md;
                 color: root.tab.is-active ? Theme.primary : (tab-touch.has-hover ? Theme.text : Theme.text-muted);
-                y: (parent.height - self.height) / 2;
             }
 
             // 2. Title: Uniform regular weight (400) preventing tab width jitter
@@ -141,14 +139,12 @@ export component TabItemView inherits Rectangle {
             }
 
             // 3. Dedicated Rating SVG Icon Badge (Icons API)
-            if root.show-rating-badge && root.tab.rating > 0 : AppIcon {
-                icon: Icons.rating-icon(root.tab.rating);
-                size: 14px;
-                allow-tint: false;
-                y: (parent.height - self.height) / 2;
+            if root.show-rating-badge && root.tab.rating > 0 : IconSlot {
+                icon: IconLookup.rating(root.tab.rating);
+                size: IconSize.md;
             }
 
-            // 4. Vertically Centered Close Button (✕)
+            // 4. Vertically Centered Close Button
             Rectangle {
                 width: 18px;
                 height: 18px;
@@ -169,13 +165,12 @@ export component TabItemView inherits Rectangle {
                     }
                 }
 
-                Text {
-                    text: "✕";
-                    font-size: 11px;
-                    font-weight: 700;
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: IconId.close;
+                    size: IconSize.sm;
                     color: close-touch.has-hover ? #f38ba8 : Theme.text-muted;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
                 }
             }
         }
@@ -207,12 +202,10 @@ export component GhostTabPreview inherits Rectangle {
         spacing: 6px;
         alignment: center;
 
-        AppIcon {
-            icon: root.is-video ? Icons.video : Icons.image;
-            size: 13px;
-            allow-tint: true;
+        IconSlot {
+            icon: root.is-video ? IconId.media-video : IconId.media-image;
+            size: IconSize.md;
             color: Theme.primary;
-            y: (parent.height - self.height) / 2;
         }
 
         Text {
@@ -225,11 +218,9 @@ export component GhostTabPreview inherits Rectangle {
             max-width: 180px;
         }
 
-        if root.show-rating-badge && root.rating > 0 : AppIcon {
-            icon: Icons.rating-icon(root.rating);
-            size: 14px;
-            allow-tint: false;
-            y: (parent.height - self.height) / 2;
+        if root.show-rating-badge && root.rating > 0 : IconSlot {
+            icon: IconLookup.rating(root.rating);
+            size: IconSize.md;
         }
     }
 }

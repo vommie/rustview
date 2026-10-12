@@ -16,6 +16,7 @@ use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{
     CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuContext, CtxMenuDispatcher,
 };
+use crate::icons::Icon;
 use crate::library::models::{FileTransferKind, FolderHierarchySnapshot, FolderId, MediaId};
 use crate::library::Library;
 use crate::media::MediaType;
@@ -203,13 +204,13 @@ impl MediaContextMenu {
                 "Open Selected Files".to_string()
             },
             None,
-            None,
+            Some(Icon::Open),
             can_open,
         );
 
         if can_open && !associated_apps.is_empty() {
             let apps = associated_apps.to_vec();
-            builder = builder.submenu("Open With...", None, true, move |mut sub| {
+            builder = builder.submenu("Open With...", Some(Icon::OpenWith), true, move |mut sub| {
                 for (idx, app) in apps.iter().enumerate() {
                     let action_id = CTX_ACTION_OPEN_WITH_APP_BASE + (idx as CtxMenuActionId);
                     sub = sub.action_with_icon_path(
@@ -229,7 +230,7 @@ impl MediaContextMenu {
                     CTX_ACTION_OPEN_WITH_OTHER,
                     "Other Application...",
                     None,
-                    None,
+                    Some(Icon::OpenWith),
                     true,
                 )
             });
@@ -238,7 +239,7 @@ impl MediaContextMenu {
                 CTX_ACTION_OPEN_WITH_OTHER,
                 "Open With...",
                 None,
-                None,
+                Some(Icon::OpenWith),
                 can_open,
             );
         }
@@ -251,7 +252,7 @@ impl MediaContextMenu {
                 "Open in File Manager (Multiple Files)".to_string()
             },
             None,
-            None,
+            Some(Icon::FolderOpen),
             can_open,
         );
 
@@ -292,10 +293,10 @@ impl MediaContextMenu {
             "Delete Files...".to_string()
         };
 
-        let delete_action_id = if all_selected_deleted {
-            CTX_ACTION_REMOVE_FROM_DB
+        let (delete_action_id, delete_icon) = if all_selected_deleted {
+            (CTX_ACTION_REMOVE_FROM_DB, Some(Icon::DatabaseClean))
         } else {
-            CTX_ACTION_DELETE_MEDIA
+            (CTX_ACTION_DELETE_MEDIA, Some(Icon::Delete))
         };
 
         builder = builder
@@ -307,20 +308,20 @@ impl MediaContextMenu {
                     "Rename (Single File Only)".to_string()
                 },
                 Some("F2"),
-                None,
+                Some(Icon::Rename),
                 can_rename,
             )
-            .submenu("Copy...", None, true, move |sub| {
+            .submenu("Copy...", Some(Icon::Copy), true, move |sub| {
                 let mut sub_builder = sub
-                    .action(CTX_ACTION_COPY_NAME, copy_name_text, None, None, true)
-                    .action(CTX_ACTION_COPY_PATH, copy_path_text, None, None, true);
+                    .action(CTX_ACTION_COPY_NAME, copy_name_text, None, Some(Icon::CopyName), true)
+                    .action(CTX_ACTION_COPY_PATH, copy_path_text, None, Some(Icon::CopyPath), true);
 
                 if is_single_image {
                     sub_builder = sub_builder.action(
                         CTX_ACTION_COPY_IMAGE,
                         "Image Content",
                         None,
-                        None,
+                        Some(Icon::MediaImage),
                         target_file_exists,
                     );
                 }
@@ -330,7 +331,7 @@ impl MediaContextMenu {
                 delete_action_id,
                 delete_action_text,
                 Some("Del"),
-                Some("trash"),
+                delete_icon,
                 !is_busy,
             );
 
@@ -415,21 +416,21 @@ impl MediaContextMenu {
                 CTX_ACTION_OPEN_IN_TAB,
                 open_in_tab_text,
                 open_in_tab_shortcut,
-                None,
+                Some(Icon::OpenInTab),
                 can_open,
             )
             .action(
                 CTX_ACTION_OPEN_IN_BG_TAB,
                 open_in_bg_tab_text,
                 open_in_bg_tab_shortcut,
-                None,
+                Some(Icon::OpenInBackgroundTab),
                 can_open,
             )
             .action(
                 CTX_ACTION_OPEN_IN_FULLSCREEN,
                 open_in_fullscreen_text,
                 open_in_fullscreen_shortcut,
-                None,
+                Some(Icon::OpenFullscreen),
                 can_open,
             )
             .separator();
@@ -443,7 +444,7 @@ impl MediaContextMenu {
                 show_hidden,
             );
             if !copy_menu_items.is_empty() {
-                builder = builder.submenu("Copy to...", Some("copy"), true, move |sub| {
+                builder = builder.submenu("Copy to...", Some(Icon::Copy), true, move |sub| {
                     let mut s = sub;
                     for item in copy_menu_items {
                         s = s.item(item);
@@ -459,7 +460,7 @@ impl MediaContextMenu {
                 show_hidden,
             );
             if !move_menu_items.is_empty() {
-                builder = builder.submenu("Move to...", Some("move"), !is_busy, move |sub| {
+                builder = builder.submenu("Move to...", Some(Icon::MoveTo), !is_busy, move |sub| {
                     let mut s = sub;
                     for item in move_menu_items {
                         s = s.item(item);
@@ -485,43 +486,43 @@ impl MediaContextMenu {
             .separator()
             .submenu(
                 "Rate Selection",
-                None,
+                Some(Icon::Rate),
                 meta.selected_count > 0,
                 |sub| {
-                    sub.action(CTX_ACTION_RATE_5, "5 Stars (★★★★★)", None, None, true)
-                        .action(CTX_ACTION_RATE_4, "4 Stars (★★★★☆)", None, None, true)
-                        .action(CTX_ACTION_RATE_3, "3 Stars (★★★☆☆)", None, None, true)
-                        .action(CTX_ACTION_RATE_2, "2 Stars (★★☆☆☆)", None, None, true)
-                        .action(CTX_ACTION_RATE_1, "1 Star  (★☆☆☆☆)", None, None, true)
+                    sub.action(CTX_ACTION_RATE_5, "5 Stars", None, Some(Icon::Rating5), true)
+                        .action(CTX_ACTION_RATE_4, "4 Stars", None, Some(Icon::Rating4), true)
+                        .action(CTX_ACTION_RATE_3, "3 Stars", None, Some(Icon::Rating3), true)
+                        .action(CTX_ACTION_RATE_2, "2 Stars", None, Some(Icon::Rating2), true)
+                        .action(CTX_ACTION_RATE_1, "1 Star", None, Some(Icon::Rating1), true)
                         .separator()
-                        .action(CTX_ACTION_RATE_0, "Clear Rating", None, None, true)
+                        .action(CTX_ACTION_RATE_0, "Clear Rating", None, Some(Icon::RatingClear), true)
                 },
             )
             .separator()
             .submenu(
                 "Refresh",
-                Some("refresh"),
+                Some(Icon::Refresh),
                 can_refresh,
                 |sub| {
                     sub.action(
                         CTX_ACTION_REFRESH_FILES,
                         refresh_full_text,
                         Some("F5"),
-                        Some("refresh"),
+                        Some(Icon::Refresh),
                         can_refresh,
                     )
                     .action(
                         CTX_ACTION_REFRESH_METADATA,
                         refresh_meta_text,
                         None,
-                        Some("refresh"),
+                        Some(Icon::RefreshMetadata),
                         can_refresh,
                     )
                     .action(
                         CTX_ACTION_REGENERATE_THUMB_RANDOM,
                         regen_thumb_text,
                         None,
-                        Some("refresh"),
+                        Some(Icon::RegenerateThumbnail),
                         can_refresh,
                     )
                 },
@@ -531,14 +532,14 @@ impl MediaContextMenu {
                 CTX_ACTION_SELECT_ALL,
                 "Select All",
                 Some("Ctrl+A"),
-                None,
+                Some(Icon::SelectAll),
                 true,
             )
             .action(
                 CTX_ACTION_CLEAR_SELECTION,
                 "Clear Selection",
                 Some("Ctrl+Shift+A"),
-                None,
+                Some(Icon::ClearSelection),
                 meta.selected_count > 0,
             );
 
@@ -1119,7 +1120,7 @@ impl MediaContextMenu {
                     StatusBarBridge::success(
                         &w,
                         format!(
-                            "Copied image content ({} × {}) to clipboard in {}ms: '{}'",
+                            "Copied image content ({} x {}) to clipboard in {}ms: '{}'",
                             width, height, total_ms, fname_clone
                         ),
                     );
@@ -1163,5 +1164,69 @@ impl MediaContextMenu {
                 fullscreen_controller: ctx.fullscreen_controller,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn meta(selected_count: usize, deleted: bool) -> MediaSelectionMeta {
+        MediaSelectionMeta {
+            all_selected_deleted: deleted,
+            selected_count,
+            is_single_image: selected_count == 1,
+            has_video: false,
+            target_file_exists: true,
+            is_single_pending: false,
+            single_filename: "image.jpg".to_string(),
+            current_folder_id: None,
+            associated_apps: vec![DesktopApp {
+                id: "viewer.desktop".to_string(),
+                name: "Viewer".to_string(),
+                icon_name: "viewer".to_string(),
+                icon_path: None,
+                exec: "viewer %f".to_string(),
+            }],
+        }
+    }
+
+    #[test]
+    fn every_media_menu_entry_has_an_icon() {
+        for (count, deleted) in [(1, false), (3, false), (1, true)] {
+            let menu = MediaContextMenu::build_menu(&meta(count, deleted), false, None, false);
+            assert!(
+                menu.entries_without_icon().is_empty(),
+                "entries without icon (count={count}, deleted={deleted}): {:?}",
+                menu.entries_without_icon()
+            );
+        }
+    }
+
+    #[test]
+    fn open_with_entries_fall_back_to_the_generic_application_icon() {
+        let menu = MediaContextMenu::build_menu(&meta(1, false), false, None, false);
+        let open_with = menu.items.iter().find(|i| i.text == "Open With...").expect("submenu");
+        let app_entry = open_with.children.iter().find(|i| i.text == "Viewer").expect("app entry");
+        assert_eq!(app_entry.icon, Some(Icon::AppWindow));
+    }
+
+    #[test]
+    fn rating_entries_use_the_colored_rating_icons() {
+        let menu = MediaContextMenu::build_menu(&meta(1, false), false, None, false);
+        let rate = menu.items.iter().find(|i| i.text == "Rate Selection").expect("submenu");
+        let icons: Vec<Option<Icon>> = rate.children.iter().filter(|i| i.id != 0).map(|i| i.icon).collect();
+        assert_eq!(
+            icons,
+            vec![
+                Some(Icon::Rating5),
+                Some(Icon::Rating4),
+                Some(Icon::Rating3),
+                Some(Icon::Rating2),
+                Some(Icon::Rating1),
+                Some(Icon::RatingClear)
+            ]
+        );
+        assert!(rate.children.iter().all(|i| !i.text.contains('*')));
     }
 }

@@ -1,11 +1,11 @@
 import { Theme } from "styles.slint";
-import { AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 import { TooltipHost } from "tooltips.slint";
 
 export struct ToolbarSelectItem {
     id: int,
     text: string,
-    icon: image,
+    icon: IconId,
 }
 
 /// Compact, modular select/dropdown button tailored for panel toolbars.
@@ -14,7 +14,6 @@ export component ToolbarSelectButton inherits Rectangle {
     in property <[ToolbarSelectItem]> model: [];
     in-out property <int> current-index: 0;
     in property <bool> is-enabled: true;
-    in property <bool> allow-icon-tint: true;
     in property <string> tooltip: "";
     in property <duration> tooltip-delay: 0ms;
     in property <bool> popup-align-right: false;
@@ -22,16 +21,16 @@ export component ToolbarSelectButton inherits Rectangle {
     // Display modes: 0 = Icon Only, 1 = Text Only, 2 = Icon + Text
     in property <int> button-display-mode: 0;
     in property <int> popup-display-mode: 2;
-    in property <length> icon-size: 13px;
+    in property <length> icon-size: IconSize.md;
     in property <length> font-size: 11px;
     in property <length> button-width: 0px;
 
     callback selected(int /* index */);
 
     property <int> safe-index: Math.max(0, Math.min(root.model.length - 1, root.current-index));
-    property <ToolbarSelectItem> active-item: root.model.length > 0 ? root.model[root.safe-index] : { id: 0, text: "", icon: @image-url("") };
+    property <ToolbarSelectItem> active-item: root.model.length > 0 ? root.model[root.safe-index] : { id: 0, text: "", icon: IconId.none };
 
-    property <bool> btn-has-icon: (root.button-display-mode == 0 || root.button-display-mode == 2) && root.active-item.icon.width > 0;
+    property <bool> btn-has-icon: (root.button-display-mode == 0 || root.button-display-mode == 2) && root.active-item.icon != IconId.none;
     property <bool> btn-has-text: (root.button-display-mode == 1 || root.button-display-mode == 2) && root.active-item.text != "";
 
     width: root.button-width > 0px
@@ -51,7 +50,6 @@ export component ToolbarSelectButton inherits Rectangle {
 
     border-width: (touch-area.has-hover && root.is-enabled) ? 1px : 0px;
     border-color: !root.is-enabled ? transparent : Theme.border;
-    opacity: !root.is-enabled ? 0.38 : 1.0;
 
     tooltip-host := TooltipHost {
         text: root.tooltip;
@@ -87,6 +85,11 @@ export component ToolbarSelectButton inherits Rectangle {
         }
     }
 
+    // Disabled state dims through the color alpha, never through `opacity` (an opacity layer would resample the icon).
+    property <color> content-color: !root.is-enabled ? Theme.text-muted.transparentize(0.6) : (
+        touch-area.has-hover ? Theme.text : Theme.text-muted
+    );
+
     content-layout := HorizontalLayout {
         width: 100%;
         height: 100%;
@@ -95,24 +98,17 @@ export component ToolbarSelectButton inherits Rectangle {
         spacing: 3px;
         alignment: center;
 
-        if root.btn-has-icon : AppIcon {
+        if root.btn-has-icon : IconSlot {
             icon: root.active-item.icon;
             size: root.icon-size;
-            allow-tint: root.allow-icon-tint;
-            color: !root.is-enabled ? Theme.text-muted : (
-                touch-area.has-hover ? Theme.text : Theme.text-muted
-            );
-            y: (parent.height - self.height) / 2;
-            opacity: root.is-enabled ? (touch-area.has-hover ? 1.0 : 0.85) : 0.4;
+            color: root.content-color;
         }
 
         if root.btn-has-text : Text {
             text: root.active-item.text;
             font-size: root.font-size;
             font-weight: 400;
-            color: !root.is-enabled ? Theme.text-muted : (
-                touch-area.has-hover ? Theme.text : Theme.text-muted
-            );
+            color: root.content-color;
             vertical-alignment: center;
             horizontal-alignment: center;
             overflow: elide;
@@ -160,12 +156,10 @@ export component ToolbarSelectButton inherits Rectangle {
                         spacing: 6px;
                         alignment: start;
 
-                        if (root.popup-display-mode == 0 || root.popup-display-mode == 2) && item.icon.width > 0 : AppIcon {
+                        if (root.popup-display-mode == 0 || root.popup-display-mode == 2) && item.icon != IconId.none : IconSlot {
                             icon: item.icon;
                             size: root.icon-size;
-                            allow-tint: root.allow-icon-tint;
                             color: (idx == root.current-index) ? Theme.primary : Theme.text;
-                            y: (parent.height - self.height) / 2;
                         }
 
                         if root.popup-display-mode == 1 || root.popup-display-mode == 2 : Text {

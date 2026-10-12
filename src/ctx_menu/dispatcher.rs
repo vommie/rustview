@@ -46,36 +46,44 @@ impl CtxMenuDispatcher {
         }
     }
 
-    /// Converts a slice of CtxMenuItems into a Slint Model for any depth level with native image and tooltip support.
+    /// Converts one menu item into its Slint row model. External application icons (`icon_path`) are loaded
+    /// as images; library icons are passed as the typed `IconId` and drawn in the leading icon slot.
+    fn to_slint_item(item: &CtxMenuItem, depth: i32) -> ContextMenuItemModel {
+        let app_icon = item
+            .icon_path
+            .as_ref()
+            .and_then(|path| match Image::load_from_path(path) {
+                Ok(image) => Some(image),
+                Err(e) => {
+                    tracing::debug!(path = %path.display(), error = ?e, "[CtxMenu] Cannot load application icon");
+                    None
+                }
+            })
+            .unwrap_or_default();
+
+        ContextMenuItemModel {
+            id: item.id as i32,
+            text: item.text.clone().into(),
+            shortcut: item.shortcut.clone().unwrap_or_default().into(),
+            icon: crate::icons::to_slint(item.icon),
+            app_icon,
+            kind: item.kind as i32,
+            is_checked: item.is_checked,
+            is_enabled: item.is_enabled,
+            has_submenu: !item.children.is_empty(),
+            submenu_depth: depth,
+            menu_index: item.menu_index as i32,
+            tooltip: item.tooltip.clone().unwrap_or_default().into(),
+        }
+    }
+
+    /// Converts a slice of CtxMenuItems into a Slint Model for any depth level with native icon and tooltip support.
     pub fn items_to_slint_model(
         items: &[CtxMenuItem],
         depth: i32,
     ) -> ModelRc<ContextMenuItemModel> {
-        let models: Vec<ContextMenuItemModel> = items
-            .iter()
-            .map(|item| {
-                let slint_icon = if let Some(ref path) = item.icon_path {
-                    Image::load_from_path(path).unwrap_or_default()
-                } else {
-                    Image::default()
-                };
-
-                ContextMenuItemModel {
-                    id: item.id as i32,
-                    text: item.text.clone().into(),
-                    shortcut: item.shortcut.clone().unwrap_or_default().into(),
-                    icon_name: item.icon_name.clone().unwrap_or_default().into(),
-                    icon: slint_icon,
-                    kind: item.kind as i32,
-                    is_checked: item.is_checked,
-                    is_enabled: item.is_enabled,
-                    has_submenu: !item.children.is_empty(),
-                    submenu_depth: depth,
-                    menu_index: item.menu_index as i32,
-                    tooltip: item.tooltip.clone().unwrap_or_default().into(),
-                }
-            })
-            .collect();
+        let models: Vec<ContextMenuItemModel> =
+            items.iter().map(|item| Self::to_slint_item(item, depth)).collect();
         ModelRc::new(VecModel::from(models))
     }
 
@@ -85,33 +93,12 @@ impl CtxMenuDispatcher {
     ) -> (ModelRc<ContextMenuItemModel>, ModelRc<ContextMenuItemModel>) {
         let top_model = Self::items_to_slint_model(&menu.items, 0);
 
-        let mut sub_items = Vec::new();
-        for item in &menu.items {
-            if !item.children.is_empty() {
-                for child in &item.children {
-                    let slint_icon = if let Some(ref path) = child.icon_path {
-                        Image::load_from_path(path).unwrap_or_default()
-                    } else {
-                        Image::default()
-                    };
-
-                    sub_items.push(ContextMenuItemModel {
-                        id: child.id as i32,
-                        text: child.text.clone().into(),
-                        shortcut: child.shortcut.clone().unwrap_or_default().into(),
-                        icon_name: child.icon_name.clone().unwrap_or_default().into(),
-                        icon: slint_icon,
-                        kind: child.kind as i32,
-                        is_checked: child.is_checked,
-                        is_enabled: child.is_enabled,
-                        has_submenu: !child.children.is_empty(),
-                        submenu_depth: 1,
-                        menu_index: child.menu_index as i32,
-                        tooltip: child.tooltip.clone().unwrap_or_default().into(),
-                    });
-                }
-            }
-        }
+        let sub_items: Vec<ContextMenuItemModel> = menu
+            .items
+            .iter()
+            .flat_map(|item| item.children.iter())
+            .map(|child| Self::to_slint_item(child, 1))
+            .collect();
 
         (top_model, ModelRc::new(VecModel::from(sub_items)))
     }

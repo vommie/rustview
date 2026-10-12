@@ -2387,7 +2387,7 @@ impl BridgeMedia {
         window.set_empty_state_active(fallback_state.is_active);
         window.set_empty_state_title(fallback_state.title.into());
         window.set_empty_state_description(fallback_state.description.into());
-        window.set_empty_state_icon(fallback_state.icon_name.into());
+        window.set_empty_state_icon(crate::icons::to_slint(fallback_state.icon));
 
         let commit_us = t_slint_start.elapsed().as_micros() as u64;
         if let Some(ref bench) = bench_opt {

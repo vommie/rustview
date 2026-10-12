@@ -1,5 +1,6 @@
 use super::sidebar_panel_tab_dnd::{SidebarPanelTabDndGeometry, SidebarPanelTabDndSession};
 use super::{MainWindow, SidebarPanelTabModel};
+use crate::icons::Icon;
 use crate::settings::SettingsManager;
 use crate::ui::bridge_state::{LastActivePanel, UiState};
 use parking_lot::RwLock;
@@ -11,6 +12,22 @@ use std::sync::Arc;
 pub struct BridgeSidebarPanelTabs;
 
 impl BridgeSidebarPanelTabs {
+    /// Single point of truth for the title and icon of a sidebar panel tab id.
+    fn tab_presentation(id: &str) -> (String, Icon) {
+        match id {
+            "folders" => ("Folders".to_string(), Icon::Folder),
+            "favorites" => ("Favorites".to_string(), Icon::Favorite),
+            other => {
+                let mut chars = other.chars();
+                let title = chars
+                    .next()
+                    .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+                    .unwrap_or_default();
+                (title, Icon::Folder)
+            }
+        }
+    }
+
     /// Initializes sidebar panel tabs from persisted settings and synchronizes with the UI.
     pub fn init(
         window: &MainWindow,
@@ -39,19 +56,12 @@ impl BridgeSidebarPanelTabs {
         let models: Vec<SidebarPanelTabModel> = tab_ids
             .iter()
             .map(|id| {
-                let (title, icon_name) = match id.as_str() {
-                    "folders" => ("Folders".to_string(), "folder".to_string()),
-                    "favorites" => ("Favorites".to_string(), "favorite".to_string()),
-                    other => (
-                        format!("{}{}", other[..1].to_uppercase(), &other[1..]),
-                        "folder".to_string(),
-                    ),
-                };
+                let (title, icon) = Self::tab_presentation(id);
                 let is_active = id == active_tab;
                 SidebarPanelTabModel {
                     id: id.clone().into(),
                     title: title.into(),
-                    icon_name: icon_name.into(),
+                    icon: icon.to_slint(),
                     is_active,
                     shift_x: 0.0,
                     is_placeholder: false,
@@ -140,17 +150,13 @@ impl BridgeSidebarPanelTabs {
 
             let ghost_x = session.ghost_left_x();
             let ghost_w = session.current_slot_width();
-            let (ghost_title, ghost_icon) = match id_str.as_str() {
-                "folders" => ("Folders".to_string(), "folder".to_string()),
-                "favorites" => ("Favorites".to_string(), "favorite".to_string()),
-                other => (other.to_string(), "folder".to_string()),
-            };
+            let (ghost_title, ghost_icon) = Self::tab_presentation(&id_str);
 
             win_dstart.set_is_dragging_panel_tab(true);
             win_dstart.set_panel_tab_drag_ghost_x(ghost_x);
             win_dstart.set_panel_tab_drag_ghost_width(ghost_w);
             win_dstart.set_panel_tab_drag_ghost_title(ghost_title.into());
-            win_dstart.set_panel_tab_drag_ghost_icon(ghost_icon.into());
+            win_dstart.set_panel_tab_drag_ghost_icon(ghost_icon.to_slint());
 
             let tab_models = win_dstart.get_sidebar_panel_tabs();
             for i in 0..tab_models.row_count() {

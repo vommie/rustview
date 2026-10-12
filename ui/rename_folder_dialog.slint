@@ -1,5 +1,8 @@
 import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
+import { InlineNotice } from "inline_notice.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
 
 export component RenameFolderDialog inherits Window {
@@ -50,11 +53,11 @@ export component RenameFolderDialog inherits Window {
                 spacing: 10px;
                 vertical-stretch: 1;
 
-                Text {
-                    text: "📁 Rename Directory";
-                    font-size: 14px;
-                    font-weight: 700;
+                DialogHeading {
+                    icon: IconId.folder;
+                    text: "Rename Directory";
                     color: Theme.primary;
+                    font-size: 14px;
                 }
 
                 Text {
@@ -96,12 +99,9 @@ export component RenameFolderDialog inherits Window {
                         padding: 8px;
                         spacing: 6px;
 
-                        Text {
-                            text: "⚠ " + root.conflict-message;
-                            font-size: 11px;
-                            font-weight: 700;
+                        InlineNotice {
+                            text: root.conflict-message;
                             color: #f9e2af;
-                            wrap: word-wrap;
                         }
 
                         HorizontalLayout {

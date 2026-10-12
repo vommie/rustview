@@ -1,4 +1,7 @@
 import { Theme } from "styles.slint";
+import { BulletItem } from "bullet_item.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
 
 export component RemoveOrphanedFolderDialog inherits Window {
@@ -39,10 +42,9 @@ export component RemoveOrphanedFolderDialog inherits Window {
                 spacing: 12px;
                 vertical-stretch: 1;
 
-                Text {
-                    text: "🗄 Clean Missing Folder from Database";
-                    font-size: 15px;
-                    font-weight: 700;
+                DialogHeading {
+                    icon: IconId.database-clean;
+                    text: "Clean Missing Folder from Database";
                     color: #fab387;
                 }
 
@@ -78,9 +80,13 @@ export component RemoveOrphanedFolderDialog inherits Window {
                             color: #fab387;
                         }
 
-                        Text {
-                            text: "• " + root.subfolders-count + " missing subfolder record(s)\n• " + root.files-count + " media metadata & thumbnail record(s)";
-                            font-size: 11px;
+                        BulletItem {
+                            text: root.subfolders-count + " missing subfolder record(s)";
+                            color: Theme.text;
+                        }
+
+                        BulletItem {
+                            text: root.files-count + " media metadata & thumbnail record(s)";
                             color: Theme.text;
                         }
                     }

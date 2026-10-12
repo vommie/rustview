@@ -1,25 +1,26 @@
 import { Theme } from "styles.slint";
-import { AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 import { TooltipHost } from "tooltips.slint";
 
 /// Compact, versatile button component designed specifically for panel toolbars.
 /// Supports Icon-only, Text-only, and Icon+Text modes with automatic sizing, disabled states, theme-adaptive icon colorization, and integrated hover tooltips.
+/// The icon may be placed before (default) or after the text via `icon-trailing`.
 export component ToolbarButton inherits Rectangle {
-    in property <image> icon;
+    in property <IconId> icon: IconId.none;
+    in property <bool> icon-trailing: false;
     in property <string> text: "";
     in property <string> tooltip: "";
     in property <string> tooltip-shortcut: "";
     in property <bool> is-enabled: true;
     in property <bool> is-active: false;
-    in property <bool> allow-icon-tint: true;
-    in property <length> icon-size: 13px;
+    in property <length> icon-size: IconSize.md;
     in property <length> font-size: 11px;
     in property <length> button-width: 0px;
     in property <duration> tooltip-delay: 0ms;
 
     callback clicked();
 
-    property <bool> has-icon: root.icon.width > 0 && root.icon.height > 0;
+    property <bool> has-icon: root.icon != IconId.none;
     property <bool> has-text: root.text != "";
 
     width: root.button-width > 0px
@@ -41,7 +42,6 @@ export component ToolbarButton inherits Rectangle {
 
     border-width: (root.is-active || (touch-area.has-hover && root.is-enabled)) ? 1px : 0px;
     border-color: !root.is-enabled ? transparent : (root.is-active ? Theme.primary : Theme.border);
-    opacity: !root.is-enabled ? 0.38 : 1.0;
 
     tooltip-host := TooltipHost {
         text: root.tooltip;
@@ -76,6 +76,13 @@ export component ToolbarButton inherits Rectangle {
         }
     }
 
+    // Disabled state dims through the color alpha, never through `opacity` (an opacity layer would resample the icon).
+    property <color> content-color: !root.is-enabled ? Theme.text-muted.transparentize(0.6) : (
+        root.is-active ? Theme.primary : (
+            touch-area.has-hover ? Theme.text : Theme.text-muted
+        )
+    );
+
     content-layout := HorizontalLayout {
         width: 100%;
         height: 100%;
@@ -84,31 +91,26 @@ export component ToolbarButton inherits Rectangle {
         spacing: 4px;
         alignment: center;
 
-        if root.has-icon : AppIcon {
+        if root.has-icon && !root.icon-trailing : IconSlot {
             icon: root.icon;
             size: root.icon-size;
-            allow-tint: root.allow-icon-tint;
-            color: !root.is-enabled ? Theme.text-muted : (
-                root.is-active ? Theme.primary : (
-                    touch-area.has-hover ? Theme.text : Theme.text-muted
-                )
-            );
-            y: (parent.height - self.height) / 2;
-            opacity: root.is-enabled ? (touch-area.has-hover ? 1.0 : 0.85) : 0.4;
+            color: root.content-color;
         }
 
         if root.has-text : Text {
             text: root.text;
             font-size: root.font-size;
             font-weight: root.is-active ? 700 : 400;
-            color: !root.is-enabled ? Theme.text-muted : (
-                root.is-active ? Theme.primary : (
-                    touch-area.has-hover ? Theme.text : Theme.text-muted
-                )
-            );
+            color: root.content-color;
             vertical-alignment: center;
             horizontal-alignment: center;
             overflow: elide;
+        }
+
+        if root.has-icon && root.icon-trailing : IconSlot {
+            icon: root.icon;
+            size: root.icon-size;
+            color: root.content-color;
         }
     }
 }

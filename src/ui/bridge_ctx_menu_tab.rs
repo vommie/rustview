@@ -6,6 +6,7 @@ use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::MainWindow;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
+use crate::icons::Icon;
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
@@ -63,61 +64,61 @@ impl TabContextMenu {
                 CTX_TAB_DUPLICATE,
                 "Duplicate Tab",
                 None,
-                None,
+                Some(Icon::Copy),
                 true,
             )
             .separator()
-            .submenu("Move Tab...", None, has_multiple_tabs, move |sub| {
+            .submenu("Move Tab...", Some(Icon::TabMove), has_multiple_tabs, move |sub| {
                 sub.action(
                     CTX_TAB_MOVE_TO_START,
                     "To the Beginning",
                     None,
-                    None,
+                    Some(Icon::TabMoveStart),
                     can_move_left,
                 )
                 .action(
                     CTX_TAB_MOVE_LEFT,
                     "Move Left",
                     None,
-                    None,
+                    Some(Icon::ArrowLeft),
                     can_move_left,
                 )
                 .action(
                     CTX_TAB_MOVE_RIGHT,
                     "Move Right",
                     None,
-                    None,
+                    Some(Icon::ArrowRight),
                     can_move_right,
                 )
                 .action(
                     CTX_TAB_MOVE_TO_END,
                     "To the End",
                     None,
-                    None,
+                    Some(Icon::TabMoveEnd),
                     can_move_right,
                 )
             })
             .separator()
-            .submenu("Close Tabs...", None, has_other_tabs, move |sub| {
+            .submenu("Close Tabs...", Some(Icon::Close), has_other_tabs, move |sub| {
                 sub.action(
                     CTX_TAB_CLOSE_TO_LEFT,
                     "Left of selected tab",
                     None,
-                    None,
+                    Some(Icon::TabCloseLeft),
                     has_tabs_to_left,
                 )
                 .action(
                     CTX_TAB_CLOSE_TO_RIGHT,
                     "Right of selected tab",
                     None,
-                    None,
+                    Some(Icon::TabCloseRight),
                     has_tabs_to_right,
                 )
                 .action(
                     CTX_TAB_CLOSE_OTHERS,
                     "All other tabs",
                     None,
-                    None,
+                    Some(Icon::TabCloseOthers),
                     has_other_tabs,
                 )
             })
@@ -125,7 +126,7 @@ impl TabContextMenu {
                 CTX_TAB_CLOSE,
                 "Close Tab",
                 Some("Ctrl+W"),
-                None,
+                Some(Icon::Close),
                 true,
             );
 

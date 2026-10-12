@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 import { Throbber } from "throbber.slint";
 
 export component ImageViewer inherits Rectangle {
@@ -118,9 +118,8 @@ export component ImageViewer inherits Rectangle {
                 border-color: #f38ba844;
 
                 AppIcon {
-                    icon: Icons.media-file-corrupted;
-                    size: 36px;
-                    allow-tint: true;
+                    icon: IconId.status-warning;
+                    size: IconSize.xxl;
                     color: Theme.status-corrupt;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;

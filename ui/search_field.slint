@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 import { TooltipHost } from "tooltips.slint";
 
 /// Generic, modular, and feature-rich Search & Filter Field component API for Slint.
@@ -20,13 +20,12 @@ export component SearchField inherits Rectangle {
     in property <bool> enable-clear-button: true;
     in property <bool> enable-escape-clear: true;
     in property <bool> show-search-icon: false;
-    in property <image> search-icon;
 
     // Dimension & Typography API
     in property <length> field-width: 160px;
     in property <length> field-height: 24px;
     in property <length> font-size: 11px;
-    in property <length> icon-size: 12px;
+    in property <length> icon-size: IconSize.xs;
     in property <length> corner-radius: 4px;
 
     // Theme & Styling Overrides (falls back to Theme defaults when transparent)
@@ -93,25 +92,10 @@ export component SearchField inherits Rectangle {
             alignment: center;
             horizontal-stretch: 0;
 
-            Rectangle {
-                width: root.icon-size;
-                height: root.icon-size;
-
-                if root.search-icon.width > 0 : AppIcon {
-                    icon: root.search-icon;
-                    size: root.icon-size;
-                    allow-tint: true;
-                    color: input.has-focus ? Theme.primary : Theme.text-muted;
-                }
-
-                if root.search-icon.width == 0 : Text {
-                    text: "🔍";
-                    font-size: root.font-size - 1px;
-                    color: input.has-focus ? Theme.primary : Theme.text-muted;
-                    vertical-alignment: center;
-                    horizontal-alignment: center;
-                    opacity: input.has-focus ? 0.9 : 0.6;
-                }
+            AppIcon {
+                icon: IconId.search;
+                size: root.icon-size;
+                color: input.has-focus ? Theme.primary : Theme.text-muted;
             }
         }
 
@@ -225,15 +209,14 @@ export component SearchField inherits Rectangle {
                     }
                 }
 
-                Text {
-                    text: ".*";
-                    font-size: 10px;
-                    font-weight: root.is-regex ? 700 : 400;
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: IconId.regex;
+                    size: IconSize.sm;
                     color: root.is-regex
                         ? Theme.primary
                         : (regex-touch.has-hover ? Theme.text : Theme.text-muted);
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
                 }
             }
         }
@@ -284,13 +267,12 @@ export component SearchField inherits Rectangle {
                     }
                 }
 
-                Text {
-                    text: "✕";
-                    font-size: 9px;
-                    font-weight: 700;
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: IconId.close;
+                    size: IconSize.xs;
                     color: clear-touch.has-hover ? Theme.text : Theme.text-muted;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
                 }
             }
         }

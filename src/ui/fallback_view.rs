@@ -1,3 +1,4 @@
+use crate::icons::Icon;
 use crate::query::filters::{MediaTypeFilter, QueryFilter};
 use crate::query::ScopeMode;
 
@@ -7,7 +8,8 @@ pub struct FallbackViewState {
     pub is_active: bool,
     pub title: String,
     pub description: String,
-    pub icon_name: String,
+    /// Icon shown above the title; `None` renders no icon.
+    pub icon: Option<Icon>,
 }
 
 /// Parameters passed to the Fallback View decision engine.
@@ -34,7 +36,7 @@ impl FallbackViewEvaluator {
                 is_active: false,
                 title: String::new(),
                 description: String::new(),
-                icon_name: String::new(),
+                icon: None,
             };
         }
 
@@ -44,7 +46,7 @@ impl FallbackViewEvaluator {
                 is_active: true,
                 title: "No Root Directory".to_string(),
                 description: "Configure a media root folder in Settings to browse your library.".to_string(),
-                icon_name: "settings".to_string(),
+                icon: Some(Icon::Settings),
             };
         }
 
@@ -54,7 +56,7 @@ impl FallbackViewEvaluator {
                 is_active: true,
                 title: "Directory Not Found".to_string(),
                 description: "The configured root folder does not exist on physical storage.".to_string(),
-                icon_name: "folder".to_string(),
+                icon: Some(Icon::Folder),
             };
         }
 
@@ -89,7 +91,7 @@ impl FallbackViewEvaluator {
                 is_active: true,
                 title,
                 description,
-                icon_name: "tag".to_string(),
+                icon: Some(Icon::Tag),
             };
         }
 
@@ -100,7 +102,7 @@ impl FallbackViewEvaluator {
                     is_active: true,
                     title: "Empty Folder".to_string(),
                     description: "This folder contains no supported media files.".to_string(),
-                    icon_name: "folder".to_string(),
+                    icon: Some(Icon::Folder),
                 };
             }
 
@@ -123,27 +125,27 @@ impl FallbackViewEvaluator {
                 is_active: true,
                 title,
                 description,
-                icon_name: if params.filter.is_regex { "regex".to_string() } else { "search".to_string() },
+                icon: Some(if params.filter.is_regex { Icon::Regex } else { Icon::Search }),
             };
         }
 
         // State 5: Media Type Filter Mismatch (Folder contains files, but none of the chosen type)
         if params.total_in_dataset > 0 && media_type != MediaTypeFilter::All {
-            let (title, description, icon_name) = match media_type {
+            let (title, description, icon) = match media_type {
                 MediaTypeFilter::Videos => (
                     "No Videos in Folder".to_string(),
                     "This folder contains image files, but no videos.".to_string(),
-                    "media_filter_videos".to_string(),
+                    Some(Icon::MediaVideo),
                 ),
                 MediaTypeFilter::Images => (
                     "No Images in Folder".to_string(),
                     "This folder contains video files, but no images.".to_string(),
-                    "media_filter_images".to_string(),
+                    Some(Icon::MediaImage),
                 ),
                 MediaTypeFilter::All => (
                     "Empty Folder".to_string(),
                     "This folder contains no supported media files.".to_string(),
-                    "folder".to_string(),
+                    Some(Icon::Folder),
                 ),
             };
 
@@ -151,7 +153,7 @@ impl FallbackViewEvaluator {
                 is_active: true,
                 title,
                 description,
-                icon_name,
+                icon,
             };
         }
 
@@ -161,7 +163,7 @@ impl FallbackViewEvaluator {
             is_active: true,
             title: "Empty Folder".to_string(),
             description: format!("'{}' contains no supported media files.", folder_name),
-            icon_name: "folder".to_string(),
+            icon: Some(Icon::Folder),
         }
     }
 }
@@ -201,7 +203,7 @@ mod tests {
 
         assert!(state.is_active);
         assert_eq!(state.title, "No Root Directory");
-        assert_eq!(state.icon_name, "settings");
+        assert_eq!(state.icon, Some(Icon::Settings));
     }
 
     #[test]
@@ -225,7 +227,7 @@ mod tests {
         assert!(state.is_active);
         assert_eq!(state.title, "No Matching Videos");
         assert!(state.description.contains("sunset"));
-        assert_eq!(state.icon_name, "search");
+        assert_eq!(state.icon, Some(Icon::Search));
     }
 
     #[test]
@@ -247,6 +249,6 @@ mod tests {
 
         assert!(state.is_active);
         assert_eq!(state.title, "No Videos in Folder");
-        assert_eq!(state.icon_name, "media_filter_videos");
+        assert_eq!(state.icon, Some(Icon::MediaVideo));
     }
 }

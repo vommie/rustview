@@ -1,0 +1,33 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+
+/// Wrapping notice line with a leading library icon (e.g. a conflict warning). The icon stays aligned to the
+/// first text line.
+export component InlineNotice inherits HorizontalLayout {
+    in property <IconId> icon: IconId.status-warning;
+    in property <string> text: "";
+    in property <color> color: Theme.accent;
+
+    spacing: 6px;
+    alignment: start;
+
+    VerticalLayout {
+        alignment: start;
+        horizontal-stretch: 0;
+
+        AppIcon {
+            icon: root.icon;
+            size: IconSize.md;
+            color: root.color;
+        }
+    }
+
+    Text {
+        text: root.text;
+        font-size: 11px;
+        font-weight: 700;
+        color: root.color;
+        wrap: word-wrap;
+        horizontal-stretch: 1;
+    }
+}

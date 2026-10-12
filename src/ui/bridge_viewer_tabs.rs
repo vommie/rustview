@@ -1606,7 +1606,7 @@ impl BridgeViewerTabs {
 
             let res_str = if active_tab.record.width > 0 && active_tab.record.height > 0 {
                 format!(
-                    "{} × {}",
+                    "{} x {}",
                     active_tab.record.width, active_tab.record.height
                 )
             } else {

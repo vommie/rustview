@@ -47,10 +47,10 @@ fn zone_model(badges: Vec<ThumbnailBadge>) -> ModelRc<ThumbnailBadgeView> {
 
 /// Converts a badge spec to the Slint view struct.
 fn to_view(badge: &ThumbnailBadge) -> ThumbnailBadgeView {
-    let (kind, text, icon_name) = match &badge.content {
-        BadgeContent::Text(t) => (ThumbnailBadgeKind::Text, t.as_str(), ""),
-        BadgeContent::Round(t) => (ThumbnailBadgeKind::Round, t.as_str(), ""),
-        BadgeContent::Icon(name) => (ThumbnailBadgeKind::Icon, "", name.as_str()),
+    let (kind, text, icon) = match &badge.content {
+        BadgeContent::Text(t) => (ThumbnailBadgeKind::Text, t.as_str(), None),
+        BadgeContent::Round(t) => (ThumbnailBadgeKind::Round, t.as_str(), None),
+        BadgeContent::Icon(icon) => (ThumbnailBadgeKind::Icon, "", Some(*icon)),
     };
     let transparent = Color::from_argb_u8(0, 0, 0, 0);
 
@@ -60,7 +60,7 @@ fn to_view(badge: &ThumbnailBadge) -> ThumbnailBadgeView {
         kind,
         tone: badge.tone,
         text: SharedString::from(text),
-        icon_name: SharedString::from(icon_name),
+        icon: crate::icons::to_slint(icon),
         has_custom_color: badge.color.is_some(),
         custom_color: badge.color.map(|c| c.to_slint()).unwrap_or(transparent),
         custom_text_color: badge.color.map(|c| c.contrast_text()).unwrap_or(transparent),

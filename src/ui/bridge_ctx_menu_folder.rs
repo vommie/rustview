@@ -5,6 +5,7 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
+use crate::icons::Icon;
 use crate::library::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use crate::settings::LogObscurer;
 use crate::system::SystemFileHandler;
@@ -50,7 +51,7 @@ impl FolderContextMenu {
                 CTX_FOLDER_OPEN_IN_FILE_MANAGER,
                 "Open in File Manager",
                 None,
-                Some("folder"),
+                Some(Icon::FolderOpen),
                 false,
                 "Disabled: Folder does not exist on physical disk",
             )
@@ -59,7 +60,7 @@ impl FolderContextMenu {
                 CTX_FOLDER_OPEN_IN_FILE_MANAGER,
                 "Open in File Manager",
                 None,
-                Some("folder"),
+                Some(Icon::FolderOpen),
                 true,
             )
         };
@@ -71,7 +72,7 @@ impl FolderContextMenu {
                     CTX_FOLDER_RENAME,
                     "Rename Folder...",
                     Some("F2"),
-                    Some("edit"),
+                    Some(Icon::Rename),
                     false,
                     "Disabled: Cannot rename a folder that does not exist on physical disk",
                 )
@@ -80,7 +81,7 @@ impl FolderContextMenu {
                     CTX_FOLDER_RENAME,
                     "Rename Folder...",
                     Some("F2"),
-                    Some("edit"),
+                    Some(Icon::Rename),
                     true,
                 )
             };
@@ -96,7 +97,7 @@ impl FolderContextMenu {
         // 2. Refresh submenu (with disabled reason tooltips when busy or missing)
         let can_refresh = !target_node.is_deleted && !is_busy;
         builder = builder.separator();
-        builder = builder.submenu("Refresh...", Some("refresh"), can_refresh, |sub| {
+        builder = builder.submenu("Refresh...", Some(Icon::Refresh), can_refresh, |sub| {
             let disabled_busy_tip = "Disabled: Another scan or refresh operation is currently in progress";
             let disabled_missing_tip = "Disabled: Folder does not exist on physical disk";
 
@@ -118,7 +119,7 @@ impl FolderContextMenu {
                 CTX_FOLDER_REFRESH_FILES_FULL,
                 "Refresh Files (Full)",
                 None,
-                Some("refresh"),
+                Some(Icon::Refresh),
                 can_refresh,
                 refresh_file_tip,
             )
@@ -126,7 +127,7 @@ impl FolderContextMenu {
                 CTX_FOLDER_REFRESH_FILES_META,
                 "Refresh Files (Meta)",
                 None,
-                Some("refresh"),
+                Some(Icon::RefreshMetadata),
                 can_refresh,
                 if can_refresh { "Refresh metadata and file sizes without re-generating thumbnails" } else { refresh_file_tip },
             )
@@ -135,7 +136,7 @@ impl FolderContextMenu {
                 CTX_FOLDER_REFRESH_TREE_FULL,
                 "Refresh Tree (Full)",
                 None,
-                Some("refresh"),
+                Some(Icon::Refresh),
                 !is_busy,
                 refresh_tree_tip,
             )
@@ -143,7 +144,7 @@ impl FolderContextMenu {
                 CTX_FOLDER_REFRESH_TREE_RELATIVE,
                 "Refresh Tree (Relative)",
                 None,
-                Some("refresh"),
+                Some(Icon::Refresh),
                 can_refresh,
                 if can_refresh { "Rescan this folder and its subdirectories only" } else { refresh_file_tip },
             )
@@ -164,7 +165,7 @@ impl FolderContextMenu {
             CTX_FOLDER_ADD_TO_FAVORITES,
             "Add to Favorites",
             None,
-            Some("favorite"),
+            Some(Icon::FavoriteAdd),
             can_favorite,
             favorite_tip,
         );
@@ -176,7 +177,7 @@ impl FolderContextMenu {
                     CTX_FOLDER_PURGE_DB,
                     "Remove from Database...",
                     Some("Del"),
-                    Some("trash"),
+                    Some(Icon::DatabaseClean),
                     true,
                 );
             } else {
@@ -184,7 +185,7 @@ impl FolderContextMenu {
                     CTX_FOLDER_DELETE,
                     "Delete Folder...",
                     Some("Del"),
-                    Some("trash"),
+                    Some(Icon::Delete),
                     true,
                 );
             }
@@ -207,7 +208,7 @@ impl FolderContextMenu {
         );
 
         let is_enabled = !sub_items.is_empty();
-        CtxMenuItem::new_submenu("Move to...", Some("move"), is_enabled, sub_items)
+        CtxMenuItem::new_submenu("Move to...", Some(Icon::MoveTo), is_enabled, sub_items)
     }
 
     pub fn handle_action(

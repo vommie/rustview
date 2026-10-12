@@ -6,6 +6,7 @@
 //! same base design no matter who creates them.
 
 use super::color::BadgeColor;
+use crate::icons::Icon;
 use crate::ui::{ThumbnailBadgeOrientation, ThumbnailBadgeTone};
 
 /// What a badge displays.
@@ -15,8 +16,8 @@ pub enum BadgeContent {
     Text(String),
     /// Circular label with a short glyph (e.g. a rating number).
     Round(String),
-    /// Bare icon looked up by name in the Slint icon registry (`Icons.by-name`).
-    Icon(String),
+    /// Bare icon from the icon library.
+    Icon(Icon),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,9 +55,9 @@ impl ThumbnailBadge {
         Self::new(id, BadgeContent::Round(glyph.into()))
     }
 
-    /// Icon badge; `icon_name` is resolved by `Icons.by-name` in Slint.
-    pub fn icon(id: &'static str, icon_name: impl Into<String>) -> Self {
-        Self::new(id, BadgeContent::Icon(icon_name.into()))
+    /// Icon badge. Colored icons (tag) keep their colors, monochrome icons are tinted by the badge color.
+    pub fn icon(id: &'static str, icon: Icon) -> Self {
+        Self::new(id, BadgeContent::Icon(icon))
     }
 
     /// Anchors the badge to a thumbnail corner. Left corners are the primary (left-aligned) area,
@@ -114,7 +115,7 @@ mod tests {
 
     #[test]
     fn invalid_hex_keeps_badge_without_color() {
-        let badge = ThumbnailBadge::icon("demo", "tag").color_hex("not-a-color");
+        let badge = ThumbnailBadge::icon("demo", Icon::Tag).color_hex("not-a-color");
         assert_eq!(badge.color, None);
     }
 }

@@ -5,6 +5,7 @@
 //! the automatic order of the badges inside their area.
 
 use super::badge::ThumbnailBadge;
+use crate::icons::Icon;
 use crate::ui::{MediaItemView, ThumbnailBadgeConfig, ThumbnailBadgeOrientation, ThumbnailBadgeTone};
 
 type BadgeProvider = fn(&MediaItemView, &ThumbnailBadgeConfig) -> Option<ThumbnailBadge>;
@@ -19,7 +20,7 @@ pub fn collect_badges(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Ve
 
 /// Tag indicator icon (top-left) for items with assigned tags.
 fn tag_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
-    (config.show_tag && item.has_tags).then(|| ThumbnailBadge::icon("tag", "tag").at(ThumbnailBadgeOrientation::TopLeft))
+    (config.show_tag && item.has_tags).then(|| ThumbnailBadge::icon("tag", Icon::Tag).at(ThumbnailBadgeOrientation::TopLeft))
 }
 
 /// Colored rating circle (top-right) for rated items.

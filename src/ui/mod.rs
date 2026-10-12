@@ -44,7 +44,6 @@ pub mod dnd_foldertree_autoscroller;
 pub mod fallback_view;
 pub mod favorites;
 pub mod file_selection;
-pub mod icons;
 pub mod keyboard_navigation;
 pub mod models;
 pub mod rubberband_selection;
@@ -101,7 +100,6 @@ pub use dnd_foldertree_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoS
 pub use fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, FallbackViewState};
 pub use favorites::{FavoriteEntry, FavoriteManager};
 pub use file_selection::{FileSelectionModel, FileSelectionSummary};
-pub use icons::{IconAsset, IconManager, IconMetadata};
 pub use keyboard_navigation::{
     calculate_target_index, handle_keyboard_navigate, KeyboardNavigateParams, NavigationDirection,
 };

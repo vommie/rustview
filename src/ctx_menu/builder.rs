@@ -1,4 +1,5 @@
 use super::types::{CtxMenu, CtxMenuActionId, CtxMenuItem, CtxMenuItemKind};
+use crate::icons::Icon;
 use std::path::PathBuf;
 
 /// Fluent, declarative builder for constructing multi-level context menus.
@@ -33,7 +34,7 @@ impl CtxMenuBuilder {
         self
     }
 
-    /// Single Point of Truth (SPoT): Formats a dynamic header with a sticky prefix and left-side ellipsis (…filename.ext)
+    /// Single Point of Truth (SPoT): Formats a dynamic header with a sticky prefix and left-side ellipsis (...filename.ext)
     /// to prevent visual overflow in context menus while preserving the category prefix and the file extension.
     /// Returns `(display_text, full_tooltip_text)`.
     pub fn format_header_title(
@@ -52,7 +53,7 @@ impl CtxMenuBuilder {
             let chars: Vec<char> = trimmed_name.chars().collect();
             let start_idx = char_count.saturating_sub(keep_count);
             let suffix: String = chars[start_idx..].iter().collect();
-            let display_text = format!("{}…{}", prefix, suffix);
+            let display_text = format!("{}...{}", prefix, suffix);
             (display_text, full_text)
         }
     }
@@ -67,14 +68,14 @@ impl CtxMenuBuilder {
         id: CtxMenuActionId,
         text: impl Into<String>,
         shortcut: Option<&str>,
-        icon_name: Option<&str>,
+        icon: Option<Icon>,
         is_enabled: bool,
     ) -> Self {
         self.items.push(CtxMenuItem {
             id,
             text: text.into(),
             shortcut: shortcut.map(|s| s.to_string()),
-            icon_name: icon_name.map(|s| s.to_string()),
+            icon,
             icon_path: None,
             kind: CtxMenuItemKind::Action,
             is_checked: false,
@@ -91,7 +92,7 @@ impl CtxMenuBuilder {
         id: CtxMenuActionId,
         text: impl Into<String>,
         shortcut: Option<&str>,
-        icon_name: Option<&str>,
+        icon: Option<Icon>,
         is_enabled: bool,
         tooltip: impl Into<String>,
     ) -> Self {
@@ -99,7 +100,7 @@ impl CtxMenuBuilder {
             id,
             text: text.into(),
             shortcut: shortcut.map(|s| s.to_string()),
-            icon_name: icon_name.map(|s| s.to_string()),
+            icon,
             icon_path: None,
             kind: CtxMenuItemKind::Action,
             is_checked: false,
@@ -111,6 +112,8 @@ impl CtxMenuBuilder {
         self
     }
 
+    /// External application entry: shows the application's own icon image when available; otherwise (missing or
+    /// unreadable file) the generic application icon from the icon library is used.
     pub fn action_with_icon_path(
         mut self,
         id: CtxMenuActionId,
@@ -123,7 +126,7 @@ impl CtxMenuBuilder {
             id,
             text: text.into(),
             shortcut: shortcut.map(|s| s.to_string()),
-            icon_name: None,
+            icon: Some(Icon::AppWindow),
             icon_path,
             kind: CtxMenuItemKind::Action,
             is_checked: false,
@@ -141,14 +144,14 @@ impl CtxMenuBuilder {
         text: impl Into<String>,
         is_checked: bool,
         shortcut: Option<&str>,
-        icon_name: Option<&str>,
+        icon: Option<Icon>,
         is_enabled: bool,
     ) -> Self {
         self.items.push(CtxMenuItem {
             id,
             text: text.into(),
             shortcut: shortcut.map(|s| s.to_string()),
-            icon_name: icon_name.map(|s| s.to_string()),
+            icon,
             icon_path: None,
             kind: CtxMenuItemKind::Checkable,
             is_checked,
@@ -166,14 +169,14 @@ impl CtxMenuBuilder {
         text: impl Into<String>,
         is_checked: bool,
         shortcut: Option<&str>,
-        icon_name: Option<&str>,
+        icon: Option<Icon>,
         is_enabled: bool,
     ) -> Self {
         self.items.push(CtxMenuItem {
             id,
             text: text.into(),
             shortcut: shortcut.map(|s| s.to_string()),
-            icon_name: icon_name.map(|s| s.to_string()),
+            icon,
             icon_path: None,
             kind: CtxMenuItemKind::Radio,
             is_checked,
@@ -188,7 +191,7 @@ impl CtxMenuBuilder {
     pub fn submenu<F>(
         mut self,
         text: impl Into<String>,
-        icon_name: Option<&str>,
+        icon: Option<Icon>,
         is_enabled: bool,
         builder_fn: F,
     ) -> Self
@@ -202,7 +205,7 @@ impl CtxMenuBuilder {
             id: 0,
             text: text.into(),
             shortcut: None,
-            icon_name: icon_name.map(|s| s.to_string()),
+            icon,
             icon_path: None,
             kind: CtxMenuItemKind::Submenu,
             is_checked: false,

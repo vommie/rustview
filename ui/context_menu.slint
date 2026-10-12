@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSlot, IconSize } from "icons.slint";
 import { ContextMenuItemModel, ContextMenuLevelModel } from "types.slint";
 import { TooltipArea, TooltipHost } from "tooltips.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
@@ -94,44 +94,43 @@ export component ContextMenuItemRow inherits Rectangle {
         }
     }
 
-    // Standard Action / Checkable / Submenu Row
+    // Mark shown in the leading slot of checked checkable/radio rows
+    property <bool> shows-mark: root.item.is-checked && (root.item.kind == 1 || root.item.kind == 2);
+    property <IconId> slot-icon: root.shows-mark
+        ? (root.item.kind == 1 ? IconId.check : IconId.point)
+        : root.item.icon;
+    property <color> slot-color: !root.item.is-enabled
+        ? Theme.text-muted.transparentize(0.55)
+        : (root.shows-mark ? Theme.primary : ((item-touch.has-hover || root.is-parent-active) ? Theme.text : Theme.text-muted));
+
+    // Standard Action / Checkable / Submenu Row: [icon slot] [label] [shortcut] [submenu chevron]
     if root.item.kind != 3 && root.item.kind != 4 : HorizontalLayout {
         padding-left: 10px;
         padding-right: 10px;
         spacing: 8px;
         alignment: start;
 
-        Rectangle {
-            width: 14px;
-            height: 14px;
-            y: (parent.height - self.height) / 2;
+        // Leading icon slot: reserved on EVERY row, so all labels start at the same x position.
+        // External application icons (system icon theme) take precedence over library icons.
+        if root.item.app_icon.width > 0 && !root.shows-mark : Rectangle {
+            width: IconSize.md;
+            horizontal-stretch: 0;
 
-            if root.item.kind == 1 && root.item.is-checked : Text {
-                text: "✓";
-                font-size: 11px;
-                font-weight: 700;
-                color: Theme.primary;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-
-            if root.item.kind == 2 && root.item.is-checked : Text {
-                text: "●";
-                font-size: 9px;
-                color: Theme.primary;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-
-            if root.item.kind != 1 && root.item.kind != 2 && root.item.icon.width > 0 : Image {
-                source: root.item.icon;
-                width: 14px;
-                height: 14px;
+            Image {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: IconSize.md;
+                height: IconSize.md;
+                source: root.item.app_icon;
                 image-fit: contain;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                opacity: root.item.is-enabled ? 1.0 : 0.4;
             }
+        }
+
+        if root.item.app_icon.width == 0 || root.shows-mark : IconSlot {
+            icon: root.slot-icon;
+            color: root.slot-color;
+            size: IconSize.md;
+            slot-width: IconSize.md;
         }
 
         Text {
@@ -152,11 +151,11 @@ export component ContextMenuItemRow inherits Rectangle {
             horizontal-alignment: right;
         }
 
-        if root.item.has-submenu : Text {
-            text: "▶";
-            font-size: 9px;
+        if root.item.has-submenu : IconSlot {
+            icon: IconId.chevron-right;
             color: Theme.text-muted;
-            vertical-alignment: center;
+            size: IconSize.sm;
+            slot-width: IconSize.sm;
         }
     }
 }
@@ -216,8 +215,9 @@ export component ContextMenuPopup inherits Rectangle {
     }
 
     for level[depth] in root.levels : Rectangle {
-        x: level.x;
-        y: level.y;
+        // Snap to whole physical pixels so borders, text and icons are never resampled
+        x: Math.round(level.x / 1phx) * 1phx;
+        y: Math.round(level.y / 1phx) * 1phx;
         width: level.width;
         height: Math.min(level.max_height, level-layout.preferred-height);
         background: Theme.surface;

@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 
 /// Centered, non-blocking Fallback Empty State overlay component.
 /// Displays context-sensitive guidance when no media items match the active filters or query.
@@ -7,7 +7,7 @@ export component EmptyStateView inherits Rectangle {
     in property <bool> is-active: false;
     in property <string> title: "No Media Files";
     in property <string> description: "This folder contains no supported media files.";
-    in property <string> icon-name: "folder";
+    in property <IconId> icon: IconId.folder;
 
     width: 100%;
     height: 100%;
@@ -30,61 +30,12 @@ export component EmptyStateView inherits Rectangle {
                 border-width: 1px;
                 border-color: #89b4fa28;
 
-                // 1. Settings Icon
-                if root.icon-name == "settings" : AppIcon {
-                    icon: Icons.settings;
-                    size: 26px;
-                    allow-tint: true;
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: root.icon;
+                    size: IconSize.xl;
                     color: Theme.primary;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                }
-
-                // 2. Tag Icon
-                if root.icon-name == "tag" : AppIcon {
-                    icon: Icons.tag;
-                    size: 26px;
-                    allow-tint: false;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                }
-
-                // 3. Regex Icon
-                if root.icon-name == "regex" : AppIcon {
-                    icon: Icons.regex;
-                    size: 26px;
-                    allow-tint: true;
-                    color: Theme.primary;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                }
-
-                // 4. Media Filter Videos Icon
-                if root.icon-name == "media_filter_videos" : AppIcon {
-                    icon: Icons.media-filter-videos;
-                    size: 26px;
-                    allow-tint: true;
-                    color: Theme.primary;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                }
-
-                // 5. Media Filter Images Icon
-                if root.icon-name == "media_filter_images" : AppIcon {
-                    icon: Icons.media-filter-images;
-                    size: 26px;
-                    allow-tint: true;
-                    color: Theme.primary;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                }
-
-                // 6. Generic Folder / Search Fallback Emoji
-                if root.icon-name != "settings" && root.icon-name != "tag" && root.icon-name != "regex" && root.icon-name != "media_filter_videos" && root.icon-name != "media_filter_images" : Text {
-                    text: (root.icon-name == "search") ? "🔍" : "📁";
-                    font-size: 24px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
                 }
             }
         }

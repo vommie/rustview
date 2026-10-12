@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons } from "icons.slint";
+import { AppIcon, IconId } from "icons.slint";
 import { TooltipHost } from "tooltips.slint";
 
 /// Fully encapsulated, standalone, reusable animated Throbber component for Slint.
@@ -91,14 +91,12 @@ export component Throbber inherits Rectangle {
         width: root.target-width;
         height: parent.height;
 
-        Image {
-            x: (parent.width - root.size) / 2;
-            y: (parent.height - root.size) / 2;
-            width: root.size;
-            height: root.size;
-            source: Icons.loader;
-            image-fit: contain;
-            colorize: root.throbber-color;
+        AppIcon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            icon: IconId.loader;
+            size: root.size;
+            color: root.throbber-color;
             transform-rotation: root.current-angle;
         }
     }

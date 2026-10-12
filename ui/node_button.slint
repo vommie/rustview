@@ -1,8 +1,9 @@
 import { Theme } from "styles.slint";
 import { TooltipHost } from "tooltips.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 
 /// Fully encapsulated, standalone, reusable tree node toggle button component.
-/// Provides pixel-perfect geometric vector rendering (+ / - / bullet) independent of font metrics and optional tooltip support.
+/// Renders library icons (plus / minus / bullet), independent of font metrics, with optional tooltip support.
 export component NodeButton inherits Rectangle {
     // State & Behavior Properties
     in-out property <bool> is-expanded: false;
@@ -13,9 +14,7 @@ export component NodeButton inherits Rectangle {
 
     // Dimension & Sizing API
     in property <length> button-size: 14px;
-    in property <length> icon-bar-length: 8px;
-    in property <length> icon-bar-thickness: 1.5px;
-    in property <length> leaf-bullet-size: 3px;
+    in property <length> icon-size: IconSize.xs;
     in property <length> btn-corner-radius: 2px;
     in property <length> btn-border-width: 1px;
 
@@ -79,34 +78,22 @@ export component NodeButton inherits Rectangle {
             }
         }
 
-        // Horizontal Bar (always visible for both + and -)
-        Rectangle {
-            width: root.icon-bar-length;
-            height: root.icon-bar-thickness;
+        // Plus when collapsed, minus when expanded
+        AppIcon {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            border-radius: 0.5px;
-            background: btn-touch.has-hover ? root.hover-icon-color : root.icon-color;
-        }
-
-        // Vertical Bar (rendered only when collapsed to form +)
-        if !root.is-expanded : Rectangle {
-            width: root.icon-bar-thickness;
-            height: root.icon-bar-length;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            border-radius: 0.5px;
-            background: btn-touch.has-hover ? root.hover-icon-color : root.icon-color;
+            icon: root.is-expanded ? IconId.minus : IconId.plus;
+            size: root.icon-size;
+            color: btn-touch.has-hover ? root.hover-icon-color : root.icon-color;
         }
     }
 
-    // 2. Leaf Node Bullet Point (Centered Dot indicator)
-    if !root.has-children && root.show-leaf-bullet : Rectangle {
-        width: root.leaf-bullet-size;
-        height: root.leaf-bullet-size;
-        border-radius: root.leaf-bullet-size / 2;
-        background: root.leaf-bullet-color;
+    // 2. Leaf Node Bullet Point (centered dot indicator)
+    if !root.has-children && root.show-leaf-bullet : AppIcon {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        icon: IconId.point;
+        size: root.icon-size;
+        color: root.leaf-bullet-color;
     }
 }

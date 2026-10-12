@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { IconId } from "icons.slint";
 import { FolderNodeView, FavoriteItemView, SidebarPanelTabModel } from "types.slint";
 import { FavoritesPanel } from "favorites_panel.slint";
 import { FolderPanel } from "folder_panel.slint";
@@ -21,7 +22,7 @@ export component SidebarLeft inherits Rectangle {
     in property <length> panel-tab-drag-ghost-x: 0px;
     in property <length> panel-tab-drag-ghost-width: 100px;
     in property <string> panel-tab-drag-ghost-title: "";
-    in property <string> panel-tab-drag-ghost-icon: "";
+    in property <IconId> panel-tab-drag-ghost-icon: IconId.none;
 
     callback panel-tab-selected(string /* tab_id */);
     callback panel-tab-drag-started(string /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);

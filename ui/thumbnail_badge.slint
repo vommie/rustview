@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon } from "icons.slint";
 import { MediaItemView } from "types.slint";
 import { ThumbnailBadgeOrientation, ThumbnailBadgeKind, ThumbnailBadgeTone, ThumbnailBadgeConfig, ThumbnailBadgeOverflowMode, ThumbnailBadgeView, ThumbnailBadgeZones, ThumbnailBadgeEngine } from "thumbnail_badge_types.slint";
 
@@ -82,10 +82,9 @@ export component ThumbnailBadge inherits Rectangle {
                 }
 
                 if root.is-icon : AppIcon {
-                    icon: Icons.by-name(root.view.icon-name);
-                    // Icons keep their original SVG colors unless a custom color is requested.
-                    allow-tint: root.view.has-custom-color;
-                    color: root.view.custom-color;
+                    icon: root.view.icon;
+                    // Colored icons (tag) keep their own colors; monochrome icons use the custom or badge text color.
+                    color: root.view.has-custom-color ? root.view.custom-color : Theme.badge-text;
                     size: ThumbnailBadgeMetrics.icon-size;
                 }
             }

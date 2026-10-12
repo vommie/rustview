@@ -4,6 +4,7 @@ import { TabGridItemView } from "tab_grid_item.slint";
 import { TabGridPanelToolbar } from "tab_grid_panel_toolbar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { EmptyStateView } from "empty_state_view.slint";
+import { IconId } from "icons.slint";
 
 export { TabGridItemView } from "tab_grid_item.slint";
 export { TabGridPanelToolbar } from "tab_grid_panel_toolbar.slint";
@@ -121,7 +122,7 @@ export component TabGridView inherits Rectangle {
                 is-active: true;
                 title: "No Open Tabs";
                 description: "Open images or videos from the browser to display them here in the tab grid.";
-                icon-name: "grid_view";
+                icon: IconId.view-grid;
             }
         }
     }

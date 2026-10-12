@@ -63,15 +63,13 @@ impl TagHistoryManager {
             ancestors.push(clean_name.to_string());
 
             let mut tree_repr = String::new();
-            let total = ancestors.len();
 
             for (idx, name) in ancestors.iter().enumerate() {
                 if idx == 0 {
-                    tree_repr.push_str(&format!("📁 {}", name));
+                    tree_repr.push_str(name);
                 } else {
                     let indent = "   ".repeat(idx.saturating_sub(1));
-                    let icon = if idx + 1 == total { "🏷" } else { "📁" };
-                    tree_repr.push_str(&format!("\n{}└── {} {}", indent, icon, name));
+                    tree_repr.push_str(&format!("\n{}`-- {}", indent, name));
                 }
             }
 

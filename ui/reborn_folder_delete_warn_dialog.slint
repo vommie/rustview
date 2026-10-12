@@ -1,4 +1,6 @@
 import { Theme } from "styles.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
 
 export component RebornFolderDeleteWarnDialog inherits Window {
@@ -35,10 +37,9 @@ export component RebornFolderDeleteWarnDialog inherits Window {
                 spacing: 12px;
                 vertical-stretch: 1;
 
-                Text {
-                    text: "⚠ Folder Re-detected on Disk";
-                    font-size: 15px;
-                    font-weight: 700;
+                DialogHeading {
+                    icon: IconId.status-warning;
+                    text: "Folder Re-detected on Disk";
                     color: #f9e2af;
                 }
 

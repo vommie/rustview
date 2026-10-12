@@ -2,6 +2,7 @@ use super::MainWindow;
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_status_bar::StatusBarBridge;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
+use crate::icons::Icon;
 use crate::settings::LogObscurer;
 use crate::system::SystemFileHandler;
 use crate::ui::bridge_favorite_dialog_rename::FavoriteRenameDialogController;
@@ -26,7 +27,7 @@ impl FavoriteContextMenu {
             crate::ui::bridge_state::CTX_FAVORITE_OPEN_IN_FILE_MANAGER,
             "Open in File Manager",
             None,
-            Some("folder"),
+            Some(Icon::FolderOpen),
             is_valid,
         );
 
@@ -37,7 +38,7 @@ impl FavoriteContextMenu {
             crate::ui::bridge_state::CTX_FAVORITE_RENAME,
             "Rename Favorite...",
             Some("F2"),
-            Some("edit"),
+            Some(Icon::Rename),
             true,
         );
 
@@ -48,7 +49,7 @@ impl FavoriteContextMenu {
             crate::ui::bridge_state::CTX_FAVORITE_REMOVE,
             "Remove from Favorites",
             Some("Del"),
-            Some("trash"),
+            Some(Icon::FavoriteRemove),
             true,
         );
 
@@ -109,6 +110,19 @@ impl FavoriteContextMenu {
                 BridgeFavorites::remove_favorite(window, favorites, &path);
             }
             _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_favorite_menu_entry_has_an_icon() {
+        for is_valid in [true, false] {
+            let menu = FavoriteContextMenu::build_menu("Photos", Path::new("/photos"), is_valid);
+            assert!(menu.entries_without_icon().is_empty(), "{:?}", menu.entries_without_icon());
         }
     }
 }

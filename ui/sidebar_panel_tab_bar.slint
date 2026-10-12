@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { SidebarPanelTabModel } from "types.slint";
 import { TooltipHost } from "tooltips.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 
 export component SidebarPanelTabItem inherits Rectangle {
     in property <SidebarPanelTabModel> tab;
@@ -97,24 +97,12 @@ export component SidebarPanelTabItem inherits Rectangle {
             spacing: 6px;
             alignment: center;
 
-            if root.tab.icon_name == "folder" : Text {
-                text: "📁";
-                font-size: 11px;
-                vertical-alignment: center;
-            }
-
-            if root.tab.icon_name == "favorite" || root.tab.icon_name == "star" : Text {
-                text: "★";
-                font-size: 11px;
-                color: Theme.accent;
-                vertical-alignment: center;
-            }
-
-            if root.tab.icon_name == "tag" : AppIcon {
-                icon: Icons.tag;
-                size: 12px;
-                allow-tint: false;
-                y: (parent.height - self.height) / 2;
+            IconSlot {
+                icon: root.tab.icon;
+                size: IconSize.md;
+                color: root.tab.icon == IconId.favorite
+                    ? Theme.accent
+                    : (root.tab.is_active ? Theme.primary : Theme.text-muted);
             }
 
             Text {
@@ -133,7 +121,7 @@ export component SidebarPanelTabItem inherits Rectangle {
 /// Floating visual ghost tab preview following the cursor during drag operations.
 export component SidebarPanelTabGhost inherits Rectangle {
     in property <string> title: "";
-    in property <string> icon-name: "";
+    in property <IconId> icon: IconId.none;
 
     height: 26px;
     border-radius: 4px;
@@ -153,24 +141,10 @@ export component SidebarPanelTabGhost inherits Rectangle {
         spacing: 6px;
         alignment: center;
 
-        if root.icon-name == "folder" : Text {
-            text: "📁";
-            font-size: 11px;
-            vertical-alignment: center;
-        }
-
-        if root.icon-name == "favorite" || root.icon-name == "star" : Text {
-            text: "★";
-            font-size: 11px;
-            color: Theme.accent;
-            vertical-alignment: center;
-        }
-
-        if root.icon-name == "tag" : AppIcon {
-            icon: Icons.tag;
-            size: 12px;
-            allow-tint: false;
-            y: (parent.height - self.height) / 2;
+        IconSlot {
+            icon: root.icon;
+            size: IconSize.md;
+            color: root.icon == IconId.favorite ? Theme.accent : Theme.primary;
         }
 
         Text {
@@ -195,7 +169,7 @@ export component SidebarPanelTabBar inherits Rectangle {
     in property <length> drag-ghost-x: 0px;
     in property <length> drag-ghost-width: 100px;
     in property <string> drag-ghost-title: "";
-    in property <string> drag-ghost-icon: "";
+    in property <IconId> drag-ghost-icon: IconId.none;
 
     callback tab-selected(string /* tab_id */);
     callback tab-drag-started(string /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
@@ -240,7 +214,7 @@ export component SidebarPanelTabBar inherits Rectangle {
         y: 1px;
         width: root.drag-ghost-width;
         title: root.drag-ghost-title;
-        icon-name: root.drag-ghost-icon;
+        icon: root.drag-ghost-icon;
         z: 60;
     }
 }

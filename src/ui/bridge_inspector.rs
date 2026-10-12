@@ -103,7 +103,7 @@ impl BridgeInspector {
         let dim_str = if item.is_pending {
             "Pending (Render Queue)".to_string()
         } else if item.record.width > 0 && item.record.height > 0 {
-            format!("{} × {}", item.record.width, item.record.height)
+            format!("{} x {}", item.record.width, item.record.height)
         } else {
             "-".to_string()
         };
@@ -194,12 +194,12 @@ impl BridgeInspector {
 
         let dim_str = if summary.is_uniform_dimensions {
             if let Some((w, h)) = summary.min_dimensions {
-                format!("{} × {} (Uniform)", w, h)
+                format!("{} x {} (Uniform)", w, h)
             } else {
                 "-".to_string()
             }
         } else if let (Some(min), Some(max)) = (summary.min_dimensions, summary.max_dimensions) {
-            format!("{} × {} – {} × {}", min.0, min.1, max.0, max.1)
+            format!("{} x {} - {} x {}", min.0, min.1, max.0, max.1)
         } else {
             "-".to_string()
         };
@@ -215,11 +215,11 @@ impl BridgeInspector {
 
         let detail_str = if summary.rated_count > 0 {
             format!(
-                "Avg Rating: {:.1} ★ ({} rated)",
+                "Avg Rating: {:.1} ({} rated)",
                 summary.avg_rating, summary.rated_count
             )
         } else {
-            "— (Multi-selection)".to_string()
+            "- (Multi-selection)".to_string()
         };
         window.set_info_hash(detail_str.clone().into());
         window.set_info_hash_tooltip(detail_str.into());

@@ -8,6 +8,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::MainWindow;
+use crate::icons::Icon;
 use crate::library::folders::{normalize_path, FolderScanOptions};
 use crate::library::models::{FolderHierarchySnapshot, FolderId, MediaId, MediaRecord};
 use crate::library::refresh::RefreshReport;
@@ -337,7 +338,7 @@ impl BridgeFolders {
                 state,
                 "Folder tree has not been scanned yet. Use Refresh > Refresh Tree (Full) in the Folders toolbar.",
                 "Folder Tree Not Scanned",
-                "refresh",
+                Icon::Refresh,
                 "Folder tree not scanned yet",
             );
             return;
@@ -1213,7 +1214,7 @@ impl BridgeFolders {
             state,
             status_msg,
             "No Root Directory",
-            "settings",
+            Icon::Settings,
             "No root directory selected",
         );
     }
@@ -1225,7 +1226,7 @@ impl BridgeFolders {
         state: &Arc<RwLock<UiState>>,
         status_msg: &str,
         empty_title: &str,
-        empty_icon: &str,
+        empty_icon: Icon,
         virtual_folder_tooltip: &str,
     ) {
         {
@@ -1258,7 +1259,7 @@ impl BridgeFolders {
         window.set_empty_state_active(true);
         window.set_empty_state_title(empty_title.into());
         window.set_empty_state_description(status_msg.into());
-        window.set_empty_state_icon(empty_icon.into());
+        window.set_empty_state_icon(empty_icon.to_slint());
 
         BridgeFavorites::set_selected_path(None);
         StatusBarBridge::info(window, status_msg);

@@ -1,5 +1,8 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
+import { BulletItem } from "bullet_item.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
 
 export component DeleteFolderDialog inherits Window {
     title: "RustView - Delete Folder";
@@ -39,10 +42,9 @@ export component DeleteFolderDialog inherits Window {
                 spacing: 12px;
                 vertical-stretch: 1;
 
-                Text {
-                    text: "⚠ Delete Folder";
-                    font-size: 15px;
-                    font-weight: 700;
+                DialogHeading {
+                    icon: IconId.status-warning;
+                    text: "Delete Folder";
                     color: #f38ba8;
                 }
 
@@ -70,9 +72,13 @@ export component DeleteFolderDialog inherits Window {
                             color: #f38ba8;
                         }
 
-                        Text {
-                            text: "• " + root.subfolders-count + " subfolder(s)\n• " + root.files-count + " media file(s)";
-                            font-size: 11px;
+                        BulletItem {
+                            text: root.subfolders-count + " subfolder(s)";
+                            color: Theme.text;
+                        }
+
+                        BulletItem {
+                            text: root.files-count + " media file(s)";
                             color: Theme.text;
                         }
                     }

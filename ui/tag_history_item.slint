@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 import { TagHistoryItemModel } from "types.slint";
 import { TooltipHost } from "tooltips.slint";
 
@@ -72,19 +73,10 @@ export component TagHistoryItemView inherits Rectangle {
         alignment: start;
 
         // Tree-identical status icons
-        if root.item.is-assigned || root.item.is-partial : Rectangle {
-            width: 11px;
-            height: 11px;
-            y: (parent.height - self.height) / 2;
-
-            Text {
-                text: root.item.is-assigned ? "✓" : "◐";
-                font-size: 9px;
-                font-weight: 700;
-                color: root.item.is-assigned ? #a6e3a1 : #f9e2af;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+        if root.item.is-assigned || root.item.is-partial : IconSlot {
+            icon: root.item.is-assigned ? IconId.check : IconId.partial;
+            size: IconSize.sm;
+            color: root.item.is-assigned ? #a6e3a1 : #f9e2af;
         }
 
         // Zero-jitter bold text measurement box

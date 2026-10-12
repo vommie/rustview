@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons } from "icons.slint";
+import { IconId } from "icons.slint";
 import { PanelToolbar, ToolbarSeparator, ToolbarSpacer, ToolbarToggleButton, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
 import { ToolbarTagResetButton } from "toolbar_tag_reset_button.slint";
 
@@ -69,17 +69,17 @@ export component TagPanelToolbar inherits PanelToolbar {
             {
                 id: 0,
                 text: "Folder",
-                icon: Icons.query-folder
+                icon: IconId.folder
             },
             {
                 id: 1,
                 text: "Folder & Subfolders",
-                icon: Icons.query-subfolders
+                icon: IconId.folders
             },
             {
                 id: 2,
                 text: "Global",
-                icon: Icons.query-global
+                icon: IconId.world
             }
         ];
 

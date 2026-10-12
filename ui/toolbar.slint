@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons } from "icons.slint";
+import { IconId } from "icons.slint";
 import { ToolbarButton } from "toolbar_button.slint";
 import { ToolbarSeparator, ToolbarSpacer } from "panel_toolbar.slint";
 import { MediaTabBar } from "tab_bar.slint";
@@ -59,7 +59,7 @@ export component TopToolbar inherits Rectangle {
         // 1. Permanent Browse button strictly on the far left
         ToolbarButton {
             text: "Browse";
-            icon: Icons.grid-view;
+            icon: IconId.view-grid;
             tooltip: "Switch to Library Media Browser";
             is-active: root.is-browse-active;
             height: 28px;
@@ -72,7 +72,7 @@ export component TopToolbar inherits Rectangle {
         // 2. Permanent Tab-Grid button to the right of Browse
         ToolbarButton {
             text: "Tab-Grid";
-            icon: Icons.list-view;
+            icon: IconId.view-table;
             tooltip: "Masonry overview of all open tabs (Left-click: Open tab, Middle-click: Fullscreen)";
             is-active: root.is-tab-grid-active;
             height: 28px;
@@ -122,7 +122,7 @@ export component TopToolbar inherits Rectangle {
         // 4. Settings Button strictly on the far right
         ToolbarButton {
             text: "Settings";
-            icon: Icons.settings;
+            icon: IconId.settings;
             tooltip: "Application configuration and settings";
             icon-size: 15px;
             font-size: 12px;

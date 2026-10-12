@@ -1,4 +1,7 @@
 import { Theme } from "styles.slint";
+import { BulletItem } from "bullet_item.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
 
 export component RemoveOrphanedFileDialog inherits Window {
@@ -37,10 +40,9 @@ export component RemoveOrphanedFileDialog inherits Window {
                 spacing: 12px;
                 vertical-stretch: 1;
 
-                Text {
-                    text: "🗄 Clean Missing File from Database";
-                    font-size: 15px;
-                    font-weight: 700;
+                DialogHeading {
+                    icon: IconId.database-clean;
+                    text: "Clean Missing File from Database";
                     color: #fab387;
                 }
 
@@ -70,11 +72,10 @@ export component RemoveOrphanedFileDialog inherits Window {
                             color: #fab387;
                         }
 
-                        Text {
+                        BulletItem {
                             text: root.files-count > 1
-                                ? ("• " + root.files-count + " missing media record(s), tag associations and thumbnail caches")
-                                : "• Missing media record, tag links and thumbnail cache";
-                            font-size: 11px;
+                                ? (root.files-count + " missing media record(s), tag associations and thumbnail caches")
+                                : "Missing media record, tag links and thumbnail cache";
                             color: Theme.text;
                         }
                     }

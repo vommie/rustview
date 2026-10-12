@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
@@ -149,38 +149,36 @@ export component MediaTile inherits Rectangle {
                 height: 100%;
                 background: transparent;
 
-                if item.is-pending : Text {
-                    text: "⏳";
-                    font-size: 28px;
+                if item.is-pending : AppIcon {
+                    icon: IconId.pending;
                     color: #89dceb;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    size: Math.min(IconSize.xxl, root.item-thumb-h - 16px);
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
                 }
 
                 if !item.is-pending && item.is-deleted : AppIcon {
-                    icon: Icons.media-file-missing;
-                    allow-tint: true;
+                    icon: IconId.file-missing;
                     color: #6c7086;
-                    size: Math.min(48px, root.item-thumb-h - 16px);
+                    size: Math.min(IconSize.xxl, root.item-thumb-h - 16px);
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
                 }
 
                 if !item.is-pending && !item.is-deleted && item.is-corrupted : AppIcon {
-                    icon: Icons.media-file-corrupted;
-                    allow-tint: true;
+                    icon: IconId.status-warning;
                     color: #f38ba8;
-                    size: Math.min(48px, root.item-thumb-h - 16px);
+                    size: Math.min(IconSize.xxl, root.item-thumb-h - 16px);
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
                 }
 
-                if !item.is-pending && !item.is-deleted && !item.is-corrupted : Text {
-                    text: "📄";
-                    font-size: 32px;
+                if !item.is-pending && !item.is-deleted && !item.is-corrupted : AppIcon {
+                    icon: IconId.file;
                     color: Theme.text-muted;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    size: Math.min(IconSize.xxl, root.item-thumb-h - 16px);
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
                 }
             }
 

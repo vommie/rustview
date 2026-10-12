@@ -1,0 +1,32 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+
+/// One entry of a bulleted list. The bullet is a library icon (never a text glyph), so it is tinted by the
+/// theme and aligned to the first text line; long text wraps next to the bullet.
+export component BulletItem inherits HorizontalLayout {
+    in property <string> text: "";
+    in property <color> color: Theme.text;
+    in property <length> font-size: 11px;
+
+    spacing: 4px;
+    alignment: start;
+
+    VerticalLayout {
+        alignment: start;
+        horizontal-stretch: 0;
+
+        AppIcon {
+            icon: IconId.point;
+            size: IconSize.xs;
+            color: root.color;
+        }
+    }
+
+    Text {
+        text: root.text;
+        font-size: root.font-size;
+        color: root.color;
+        wrap: word-wrap;
+        horizontal-stretch: 1;
+    }
+}

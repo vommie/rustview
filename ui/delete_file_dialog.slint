@@ -1,5 +1,8 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
+import { BulletItem } from "bullet_item.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
 
 export component DeleteFileDialog inherits Window {
     title: "RustView - Delete File";
@@ -39,10 +42,9 @@ export component DeleteFileDialog inherits Window {
                 spacing: 12px;
                 vertical-stretch: 1;
 
-                Text {
-                    text: "⚠ Delete File" + (root.files-count > 1 ? "s" : "");
-                    font-size: 15px;
-                    font-weight: 700;
+                DialogHeading {
+                    icon: IconId.status-warning;
+                    text: "Delete File" + (root.files-count > 1 ? "s" : "");
                     color: #f38ba8;
                 }
 
@@ -72,11 +74,10 @@ export component DeleteFileDialog inherits Window {
                             color: #f38ba8;
                         }
 
-                        Text {
+                        BulletItem {
                             text: root.files-count > 1
-                                ? ("• " + root.files-count + " media records, thumbnails and preview caches will be deleted")
-                                : "• Media record, thumbnail and preview cache will be removed from database";
-                            font-size: 11px;
+                                ? (root.files-count + " media records, thumbnails and preview caches will be deleted")
+                                : "Media record, thumbnail and preview cache will be removed from database";
                             color: Theme.text;
                         }
                     }

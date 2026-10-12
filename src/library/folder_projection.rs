@@ -3,6 +3,7 @@
 
 use super::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use crate::ctx_menu::{CtxMenuItem, CtxMenuItemKind};
+use crate::icons::Icon;
 use std::collections::HashSet;
 use std::time::Instant;
 
@@ -107,7 +108,7 @@ impl FolderHierarchySnapshot {
     }
 
     /// Single Point of Truth (SPoT): Generates the hierarchical target folder menu for "Move to..." and "Copy to...".
-    /// - Top level: Root action item (`📁 Root (<name>)`), separated by a divider line, followed by all children of Root.
+    /// - Top level: Root action item (`Root (<name>)` with a folder icon), separated by a divider line, followed by all children of Root.
     /// - Tooltips are strictly omitted on normal enabled folders and only generated when an item is disabled or requires explanation.
     /// - Submenu depth and children count are completely unconstrained (arbitrary hierarchy depth supported).
     pub fn project_target_folder_menu(
@@ -125,7 +126,7 @@ impl FolderHierarchySnapshot {
                 continue;
             };
 
-            // 1. Root action item as the very first entry of the menu (e.g. "📁 Root (vommie)")
+            // 1. Root action item as the very first entry of the menu (e.g. "Root (vommie)")
             let is_root_current = current_parent_id == Some(root_id);
             let root_tooltip = if is_root_current {
                 Some(format!(
@@ -138,9 +139,9 @@ impl FolderHierarchySnapshot {
 
             let root_action = CtxMenuItem {
                 id: base_action_id + root_id,
-                text: format!("📁 Root ({})", root_node.name),
+                text: format!("Root ({})", root_node.name),
                 shortcut: None,
-                icon_name: Some("folder".to_string()),
+                icon: Some(Icon::Folder),
                 icon_path: None,
                 kind: CtxMenuItemKind::Action,
                 is_checked: false,
@@ -217,8 +218,8 @@ impl FolderHierarchySnapshot {
     }
 
     /// Recursively builds a folder node item without depth limits.
-    /// - If it has no eligible subfolders: returns an Action item (`📁 <name>`).
-    /// - If it has subfolders: returns a Submenu item (`📁 <name> ▶`) containing a top action (`Move directly into '<name>'`),
+    /// - If it has no eligible subfolders: returns an Action item (`<name>` with a folder icon).
+    /// - If it has subfolders: returns a Submenu item (`<name>` with a folder icon) containing a top action (`Move directly into '<name>'`),
     ///   followed by a separator and all its subfolders.
     /// - Normal enabled folders have NO tooltip; disabled entries receive explicit explanations.
     fn build_target_folder_item(
@@ -232,10 +233,10 @@ impl FolderHierarchySnapshot {
         let node = self.get_node(folder_id)?;
         let is_current = current_parent_id == Some(folder_id);
 
-        let verb = if base_action_id == crate::ui::bridge_state::CTX_ACTION_COPY_TO_BASE {
-            "Copy"
+        let (verb, verb_icon) = if base_action_id == crate::ui::bridge_state::CTX_ACTION_COPY_TO_BASE {
+            ("Copy", Icon::Copy)
         } else {
-            "Move"
+            ("Move", Icon::MoveTo)
         };
 
         let children = self.get_children(Some(folder_id));
@@ -261,9 +262,9 @@ impl FolderHierarchySnapshot {
 
             return Some(CtxMenuItem {
                 id: base_action_id + node.id,
-                text: format!("📁 {}", node.name),
+                text: node.name.clone(),
                 shortcut: None,
-                icon_name: Some("folder".to_string()),
+                icon: Some(Icon::Folder),
                 icon_path: None,
                 kind: CtxMenuItemKind::Action,
                 is_checked: false,
@@ -290,7 +291,7 @@ impl FolderHierarchySnapshot {
             id: base_action_id + node.id,
             text: direct_action_text,
             shortcut: None,
-            icon_name: Some("folder".to_string()),
+            icon: Some(verb_icon),
             icon_path: None,
             kind: CtxMenuItemKind::Action,
             is_checked: false,
@@ -318,9 +319,9 @@ impl FolderHierarchySnapshot {
 
         Some(CtxMenuItem {
             id: 0,
-            text: format!("📁 {}", node.name),
+            text: node.name.clone(),
             shortcut: None,
-            icon_name: Some("folder".to_string()),
+            icon: Some(Icon::Folder),
             icon_path: None,
             kind: CtxMenuItemKind::Submenu,
             is_checked: false,

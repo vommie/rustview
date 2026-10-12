@@ -1,4 +1,6 @@
 import { Theme } from "styles.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
 
 export component DeleteTagDialog inherits Window {
@@ -38,10 +40,9 @@ export component DeleteTagDialog inherits Window {
                 spacing: 10px;
                 vertical-stretch: 1;
 
-                Text {
-                    text: "⚠ Delete Tag";
-                    font-size: 15px;
-                    font-weight: 700;
+                DialogHeading {
+                    icon: IconId.status-warning;
+                    text: "Delete Tag";
                     color: #f38ba8;
                 }
 

@@ -1,0 +1,29 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
+
+/// Heading line of a dialog: a library icon followed by the title text, both in the same accent color.
+/// Replaces emoji/symbol prefixes in titles so every dialog uses real vector icons.
+export component DialogHeading inherits HorizontalLayout {
+    in property <IconId> icon: IconId.none;
+    in property <string> text: "";
+    in property <color> color: Theme.text;
+    in property <length> font-size: 15px;
+
+    spacing: 8px;
+    alignment: start;
+
+    if root.icon != IconId.none : IconSlot {
+        icon: root.icon;
+        size: IconSize.lg;
+        color: root.color;
+    }
+
+    Text {
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: 700;
+        color: root.color;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}

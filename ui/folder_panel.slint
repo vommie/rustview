@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 import { FolderNodeView } from "types.slint";
 import { NodeButton } from "node_button.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
@@ -65,19 +66,14 @@ export component FolderItemRow inherits Rectangle {
         }
 
         // Folder Icon / Drop Target Indicator
-        if root.is-drop-target : Text {
-            text: "⬇";
-            font-size: 11px;
-            font-weight: 700;
-            color: Theme.accent;
-            vertical-alignment: center;
-        }
-
-        if !root.is-drop-target : Text {
-            text: "📁";
-            font-size: 11px;
-            vertical-alignment: center;
-            opacity: root.folder.is-deleted ? 0.4 : 1.0;
+        IconSlot {
+            icon: root.is-drop-target ? IconId.arrow-down : IconId.folder;
+            size: IconSize.md;
+            color: root.is-drop-target
+                ? Theme.accent
+                : (root.folder.is-deleted
+                    ? Theme.status-deleted
+                    : (root.folder.is-selected ? Theme.primary : Theme.text-muted));
         }
 
         // Strictly Left-Aligned Folder Name with Count Suffix

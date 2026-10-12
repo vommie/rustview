@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 import { FavoriteItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { TooltipHost } from "tooltips.slint";
@@ -135,11 +136,14 @@ export component FavoritesList inherits Rectangle {
         alignment: center;
         spacing: 6px;
 
-        Text {
-            text: "★";
-            font-size: 24px;
-            color: Theme.border;
-            horizontal-alignment: center;
+        HorizontalLayout {
+            alignment: center;
+
+            AppIcon {
+                icon: IconId.favorite;
+                size: IconSize.xl;
+                color: Theme.border;
+            }
         }
 
         Text {

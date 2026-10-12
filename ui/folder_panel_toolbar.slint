@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons } from "icons.slint";
+import { IconId } from "icons.slint";
 import { PanelToolbar, ToolbarButton, ToolbarSpacer, ToolbarSeparator, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
 import { Throbber } from "throbber.slint";
 
@@ -31,7 +31,7 @@ export component FolderPanelToolbar inherits PanelToolbar {
 
     // 3. Collapse All Non-Active Branches Action Button (Icon-only)
     ToolbarButton {
-        icon: Icons.folder-tree-nodes-fold;
+        icon: IconId.collapse-tree;
         tooltip: "Collapse all folders except active path";
         clicked => { root.collapse-all-clicked(); }
     }
@@ -40,7 +40,7 @@ export component FolderPanelToolbar inherits PanelToolbar {
 
     // 4. Toggle Hidden Folders Action Button (Icon-only)
     ToolbarButton {
-        icon: root.show-hidden ? Icons.hidden-folders-visible : Icons.hidden-folders-invisible;
+        icon: root.show-hidden ? IconId.hidden-shown : IconId.hidden-hidden;
         tooltip: root.show-hidden
             ? "Hide hidden folders (dot-folders and .hidden entries)"
             : "Show hidden folders (dot-folders and .hidden entries)";
@@ -66,12 +66,12 @@ export component FolderPanelToolbar inherits PanelToolbar {
             {
                 id: 0,
                 text: "Refresh Entire Tree (Full)",
-                icon: Icons.refresh
+                icon: IconId.refresh
             },
             {
                 id: 1,
                 text: "Refresh Selected Folder (Relative)",
-                icon: Icons.refresh
+                icon: IconId.refresh
             }
         ];
 

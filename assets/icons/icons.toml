@@ -1,0 +1,113 @@
+# RustView icon manifest - the single source of truth (SPoT) for every icon in the application.
+#
+# `build.rs` (see `build/icon_registry.rs`) validates this file against the SVG files on disk and generates
+#   * `icon_registry.slint` -> Slint enum `IconId` + `IconRegistry` lookup (used by `AppIcon` in `ui/icons.slint`)
+#   * `icon_registry.rs`    -> Rust enum `crate::icons::Icon` incl. metadata, name lookup and Slint conversion
+# so Rust and Slint can never drift apart. To add an icon: add ONE line below (and run
+# `scripts/sync-tabler-icons.sh` to fetch the SVG), then use `Icon::<PascalCase>` in Rust or
+# `IconId.<kebab-case>` in Slint.
+#
+# Entry format (key = icon id in snake_case):
+#   tabler = "<name>"    Tabler icon file name WITHOUT extension (file names are never renamed).
+#   style  = "outline"   Tabler variant: "outline" (default) or "filled".
+#   custom = "<file>"    Non-Tabler SVG below `assets/icons/custom/` (only tag and rating icons).
+#   color  = true        Icon keeps its own colors and is never tinted (default: false = monochrome).
+#   doc    = "..."       Short description (shown in the generated API docs).
+#   aliases = [...]      Additional names accepted by `Icon::from_name`.
+#
+# Rule: every icon is monochrome and tinted with the active theme color, except the tag and rating icons.
+
+[library]
+tabler_version = "3.49.0"
+tabler_integrity = "sha512-l+GnSkFETx0U26icxv1VUFnxxiTqXfCcVRiRAnyMwibupM2S2L/hSaZ9gmSgz01rkrsH/93NvLsxykqdanc6lw=="
+
+[icons]
+# --- Generic UI glyphs -------------------------------------------------------------------------------------------
+close = { tabler = "x", doc = "Close / dismiss / clear", aliases = ["x", "dismiss", "clear"] }
+check = { tabler = "check", doc = "Checked / assigned / confirmed mark" }
+point = { tabler = "point", style = "filled", doc = "Small filled dot (radio mark, list bullet, leaf marker)", aliases = ["bullet", "radio"] }
+search = { tabler = "search", doc = "Search / find" }
+plus = { tabler = "plus", doc = "Add a new item", aliases = ["add"] }
+minus = { tabler = "minus", doc = "Remove / collapse an item", aliases = ["remove"] }
+settings = { tabler = "settings", doc = "Application settings", aliases = ["gear", "preferences"] }
+refresh = { tabler = "refresh", doc = "Refresh / rescan / reload", aliases = ["reload"] }
+loader = { tabler = "loader-2", doc = "Busy indicator (rotated by the throbber)", aliases = ["spinner", "throbber"] }
+regex = { tabler = "regex", doc = "Regular expression search mode" }
+chevron_up = { tabler = "chevron-up", doc = "Chevron pointing up" }
+chevron_down = { tabler = "chevron-down", doc = "Chevron pointing down (expanded)" }
+chevron_left = { tabler = "chevron-left", doc = "Chevron pointing left (previous)" }
+chevron_right = { tabler = "chevron-right", doc = "Chevron pointing right (collapsed, submenu, next)" }
+arrow_left = { tabler = "arrow-left", doc = "Arrow pointing left" }
+arrow_right = { tabler = "arrow-right", doc = "Arrow pointing right (from -> to)" }
+arrow_down = { tabler = "arrow-down", doc = "Arrow pointing down" }
+sort_ascending = { tabler = "caret-up", style = "filled", doc = "Ascending sort direction" }
+sort_descending = { tabler = "caret-down", style = "filled", doc = "Descending sort direction" }
+pause = { tabler = "player-pause", style = "filled", doc = "Paused state" }
+pending = { tabler = "hourglass", doc = "Pending / waiting for completion" }
+favorite = { tabler = "star", style = "filled", doc = "Favorite marker (filled star)" }
+partial = { tabler = "circle-half-2", doc = "Partially assigned / mixed state" }
+
+# --- Status ------------------------------------------------------------------------------------------------------
+status_ok = { tabler = "circle-check", doc = "Success status" }
+status_warning = { tabler = "alert-triangle", doc = "Warning status / corrupted media", aliases = ["warning", "corrupted", "corrupt"] }
+status_error = { tabler = "circle-x", doc = "Error status" }
+status_info = { tabler = "info-circle", doc = "Informational status" }
+
+# --- Files, folders and media ------------------------------------------------------------------------------------
+folder = { tabler = "folder", doc = "Single folder (also: query scope 'current folder')" }
+folder_open = { tabler = "folder-open", doc = "Open folder / show in file manager" }
+folders = { tabler = "folders", doc = "Folder including its subfolders", aliases = ["subfolders"] }
+world = { tabler = "world", doc = "Global scope (all folders)", aliases = ["global"] }
+file = { tabler = "file", doc = "Generic file" }
+file_missing = { tabler = "file-x", doc = "Missing or deleted file", aliases = ["missing", "deleted"] }
+media_image = { tabler = "photo", doc = "Image media item", aliases = ["image", "photo", "picture"] }
+media_video = { tabler = "movie", doc = "Video media item", aliases = ["video", "movie", "clip"] }
+media_all = { tabler = "photo-video", doc = "Images and videos" }
+view_grid = { tabler = "layout-grid", doc = "Thumbnail grid view", aliases = ["grid"] }
+view_table = { tabler = "table", doc = "Detail table view", aliases = ["table", "list"] }
+hidden_shown = { tabler = "eye", doc = "Hidden entries are visible" }
+hidden_hidden = { tabler = "eye-off", doc = "Hidden entries are not shown" }
+collapse_tree = { tabler = "fold", doc = "Collapse the folder tree except the active path" }
+virtual_folder_on = { tabler = "sitemap", doc = "Include subfolders (virtual folder view)" }
+virtual_folder_off = { tabler = "sitemap-off", doc = "Current folder only" }
+database_clean = { tabler = "database-x", doc = "Remove records from the database" }
+app_window = { tabler = "app-window", doc = "External application / window" }
+
+# --- Context menu and dialog actions -----------------------------------------------------------------------------
+open = { tabler = "external-link", doc = "Open with the default application" }
+open_with = { tabler = "apps", doc = "Open with another application" }
+open_in_tab = { tabler = "tabs", doc = "Open in a viewer tab" }
+open_in_background_tab = { tabler = "browser-plus", doc = "Open in a background viewer tab" }
+open_fullscreen = { tabler = "arrows-maximize", doc = "Open in fullscreen" }
+copy = { tabler = "copy", doc = "Copy / duplicate" }
+move_to = { tabler = "arrow-move-right", doc = "Move to another location" }
+rename = { tabler = "pencil", doc = "Rename / edit", aliases = ["edit"] }
+delete = { tabler = "trash", doc = "Delete", aliases = ["trash"] }
+copy_name = { tabler = "typography", doc = "Copy the file name" }
+copy_path = { tabler = "route", doc = "Copy the file path" }
+rate = { tabler = "star", doc = "Rate a selection", aliases = ["star"] }
+rating_clear = { tabler = "star-off", doc = "Clear the rating" }
+refresh_metadata = { tabler = "file-info", doc = "Refresh file metadata" }
+regenerate_thumbnail = { tabler = "photo-cog", doc = "Regenerate thumbnails" }
+select_all = { tabler = "select-all", doc = "Select all items" }
+clear_selection = { tabler = "deselect", doc = "Clear the selection" }
+tab_move = { tabler = "arrows-left-right", doc = "Move a tab" }
+tab_move_start = { tabler = "arrow-bar-to-left", doc = "Move a tab to the beginning" }
+tab_move_end = { tabler = "arrow-bar-to-right", doc = "Move a tab to the end" }
+tab_close_left = { tabler = "chevrons-left", doc = "Close all tabs to the left" }
+tab_close_right = { tabler = "chevrons-right", doc = "Close all tabs to the right" }
+tab_close_others = { tabler = "circle-x", doc = "Close all other tabs" }
+expand_all = { tabler = "chevrons-down", doc = "Expand all tree nodes" }
+collapse_all = { tabler = "chevrons-up", doc = "Collapse all tree nodes" }
+favorite_add = { tabler = "star", doc = "Add to favorites" }
+favorite_remove = { tabler = "star-off", doc = "Remove from favorites" }
+tag_root = { tabler = "hierarchy-2", doc = "Top level of the tag tree" }
+
+# --- Colored icons (never tinted): tags and ratings ----------------------------------------------------------------
+tag = { custom = "tag.svg", color = true, doc = "Tag marker (keeps its orange colors)" }
+rating_0 = { custom = "rating_0.svg", color = true, doc = "Unrated badge" }
+rating_1 = { custom = "rating_1.svg", color = true, doc = "Rating 1 badge" }
+rating_2 = { custom = "rating_2.svg", color = true, doc = "Rating 2 badge" }
+rating_3 = { custom = "rating_3.svg", color = true, doc = "Rating 3 badge" }
+rating_4 = { custom = "rating_4.svg", color = true, doc = "Rating 4 badge" }
+rating_5 = { custom = "rating_5.svg", color = true, doc = "Rating 5 badge" }

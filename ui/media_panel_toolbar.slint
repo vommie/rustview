@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons } from "icons.slint";
+import { IconId } from "icons.slint";
 import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
 import { ToolbarThumbWidthControl } from "toolbar_thumb_width_control.slint";
 import { ToolbarSearchField } from "toolbar_search_field.slint";
@@ -47,7 +47,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
 
     // 3. Virtual Folder / Recursive Subfolders View Toggle Button
     ToolbarButton {
-        icon: root.is-virtual-folder ? Icons.virtual-folder-disable : Icons.virtual-folder-enable;
+        icon: root.is-virtual-folder ? IconId.virtual-folder-off : IconId.virtual-folder-on;
         tooltip: root.virtual-folder-tooltip != "" ? root.virtual-folder-tooltip : (
             !root.is-virtual-folder-enabled
                 ? "No subfolders available in current folder"
@@ -77,17 +77,17 @@ export component MediaPanelToolbar inherits PanelToolbar {
             {
                 id: 0,
                 text: "Videos",
-                icon: Icons.media-filter-videos
+                icon: IconId.media-video
             },
             {
                 id: 1,
                 text: "Images",
-                icon: Icons.media-filter-images
+                icon: IconId.media-image
             },
             {
                 id: 2,
                 text: "Videos & Images",
-                icon: Icons.media-filter-videos-images
+                icon: IconId.media-all
             }
         ];
 
@@ -113,7 +113,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
 
     // 7. Refresh Media Button
     ToolbarButton {
-        icon: Icons.refresh;
+        icon: IconId.refresh;
         tooltip: "Scan and refresh media in current folder";
         is-enabled: !root.is-busy;
         clicked => { root.refresh-clicked(); }
@@ -124,7 +124,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
 
     // 9. Persistent View Mode Switcher Button
     ToolbarButton {
-        icon: root.is-table-view ? Icons.grid-view : Icons.list-view;
+        icon: root.is-table-view ? IconId.view-grid : IconId.view-table;
         tooltip: root.is-table-view ? "Switch to Grid View" : "Switch to Table View";
         clicked => {
             root.view-mode-toggled(!root.is-table-view);

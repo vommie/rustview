@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { IconId, IconSize, IconSlot } from "icons.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, TagHistoryRowModel, ContextMenuItemModel, ContextMenuLevelModel, ConflictFileView, TabItemModel, TabGridItemModel, SidebarPanelTabModel } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
@@ -36,6 +36,7 @@ export { MissingFileDialog } from "missing_file_dialog.slint";
 export { ImageFullscreenWindow } from "image_fullscreen_window.slint";
 export { FavoriteRenameDialog } from "favorite_rename_dialog.slint";
 export { TooltipSettings, GlobalTooltip } from "tooltips.slint";
+export { IconId } from "icons.slint";
 export { ThumbnailBadgeEngine, ThumbnailBadgeConfig, ThumbnailBadgeView, ThumbnailBadgeZones, ThumbnailBadgeOrientation, ThumbnailBadgeKind, ThumbnailBadgeTone, ThumbnailBadgeOverflowMode } from "thumbnail_badge_types.slint";
 
 export component MainWindow inherits Window {
@@ -62,7 +63,7 @@ export component MainWindow inherits Window {
     in-out property <length> panel-tab-drag-ghost-x: 0px;
     in-out property <length> panel-tab-drag-ghost-width: 100px;
     in-out property <string> panel-tab-drag-ghost-title: "";
-    in-out property <string> panel-tab-drag-ghost-icon: "";
+    in-out property <IconId> panel-tab-drag-ghost-icon: IconId.none;
 
     callback sidebar-panel-tab-selected(string /* tab_id */);
     callback sidebar-panel-tab-drag-started(string /* tab_id */, int /* source_index */, length /* mouse_x */, length /* tab_width */);
@@ -117,7 +118,7 @@ export component MainWindow inherits Window {
     in-out property <bool> empty-state-active: false;
     in-out property <string> empty-state-title: "";
     in-out property <string> empty-state-description: "";
-    in-out property <string> empty-state-icon: "";
+    in-out property <IconId> empty-state-icon: IconId.none;
 
     // Image / Video Viewer properties
     in-out property <bool> viewer-is-video: false;
@@ -889,7 +890,7 @@ export component MainWindow inherits Window {
                         is-active: root.active-view-mode == 0 && root.empty-state-active;
                         title: root.empty-state-title;
                         description: root.empty-state-description;
-                        icon-name: root.empty-state-icon;
+                        icon: root.empty-state-icon;
                     }
 
                     image-viewer := ImageViewer {
@@ -1071,12 +1072,10 @@ export component MainWindow inherits Window {
                 spacing: 6px;
                 alignment: center;
 
-                if GlobalTooltip.icon.width > 0 : AppIcon {
+                if GlobalTooltip.icon != IconId.none : IconSlot {
                     icon: GlobalTooltip.icon;
-                    size: 13px;
-                    allow-tint: GlobalTooltip.allow-icon-tint;
+                    size: IconSize.sm;
                     color: TooltipSettings.default-text;
-                    y: (parent.height - self.height) / 2;
                 }
 
                 Text {

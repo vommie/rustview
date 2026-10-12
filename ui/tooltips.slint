@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { Icons, AppIcon } from "icons.slint";
+import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 
 /// Global configuration and state registry for the centralized Tooltip Subsystem.
 export global TooltipSettings {
@@ -27,23 +27,20 @@ export global GlobalTooltip {
     in-out property <bool> is-visible: false;
     in-out property <string> text: "";
     in-out property <string> shortcut: "";
-    in-out property <image> icon;
-    in-out property <bool> allow-icon-tint: true;
+    in-out property <IconId> icon: IconId.none;
     in-out property <length> pos-x: 0px;
     in-out property <length> pos-y: 0px;
 
     public function show(
         text: string,
         shortcut: string,
-        icon: image,
-        allow-tint: bool,
+        icon: IconId,
         x: length,
         y: length
     ) {
         root.text = text;
         root.shortcut = shortcut;
         root.icon = icon;
-        root.allow-icon-tint = allow-tint;
         root.pos-x = x;
         root.pos-y = y;
         root.is-visible = true;
@@ -58,9 +55,8 @@ export global GlobalTooltip {
 export component TooltipBubble inherits Rectangle {
     in property <string> text: "";
     in property <string> shortcut: "";
-    in property <image> icon;
-    in property <bool> has-icon: root.icon.width > 0 && root.icon.height > 0;
-    in property <bool> allow-icon-tint: true;
+    in property <IconId> icon: IconId.none;
+    property <bool> has-icon: root.icon != IconId.none;
 
     // Custom Style Overrides (falls back to TooltipSettings defaults if transparent / 0)
     in property <color> custom-bg: transparent;
@@ -84,12 +80,10 @@ export component TooltipBubble inherits Rectangle {
         spacing: 6px;
         alignment: center;
 
-        if root.has-icon : AppIcon {
+        if root.has-icon : IconSlot {
             icon: root.icon;
-            size: 13px;
-            allow-tint: root.allow-icon-tint;
+            size: IconSize.sm;
             color: (root.custom-text != transparent) ? root.custom-text : TooltipSettings.default-text;
-            y: (parent.height - self.height) / 2;
         }
 
         Text {
@@ -131,8 +125,7 @@ export component TooltipBubble inherits Rectangle {
 export component TooltipHost inherits Rectangle {
     in property <string> text: "";
     in property <string> shortcut: "";
-    in property <image> icon;
-    in property <bool> allow-icon-tint: true;
+    in property <IconId> icon: IconId.none;
     in property <bool> is-enabled: true;
 
     // Behavioral Options
@@ -162,7 +155,6 @@ export component TooltipHost inherits Rectangle {
                     root.text,
                     root.shortcut,
                     root.icon,
-                    root.allow-icon-tint,
                     target-x,
                     target-y
                 );
@@ -186,7 +178,6 @@ export component TooltipHost inherits Rectangle {
                     root.text,
                     root.shortcut,
                     root.icon,
-                    root.allow-icon-tint,
                     target-x,
                     target-y
                 );
@@ -216,8 +207,7 @@ export component TooltipHost inherits Rectangle {
 export component TooltipArea inherits Rectangle {
     in property <string> text: "";
     in property <string> shortcut: "";
-    in property <image> icon;
-    in property <bool> allow-icon-tint: true;
+    in property <IconId> icon: IconId.none;
     in property <bool> tooltip-enabled: true;
     in property <duration> delay: 0ms;
     in property <bool> follow-cursor: false;
@@ -230,7 +220,6 @@ export component TooltipArea inherits Rectangle {
         text: root.text;
         shortcut: root.shortcut;
         icon: root.icon;
-        allow-icon-tint: root.allow-icon-tint;
         is-enabled: root.tooltip-enabled;
         delay: root.delay;
         follow-cursor: root.follow-cursor;

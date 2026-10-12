@@ -1,5 +1,6 @@
 import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
+import { InlineNotice } from "inline_notice.slint";
 import { ButtonBar } from "button_bar.slint";
 
 export component FileRenameDialog inherits Window {
@@ -96,12 +97,9 @@ export component FileRenameDialog inherits Window {
                         padding: 8px;
                         spacing: 6px;
 
-                        Text {
-                            text: "⚠ " + root.conflict-message;
-                            font-size: 11px;
-                            font-weight: 700;
+                        InlineNotice {
+                            text: root.conflict-message;
                             color: #f9e2af;
-                            wrap: word-wrap;
                         }
 
                         HorizontalLayout {
