@@ -86,7 +86,7 @@ delete = { tabler = "trash", doc = "Delete", aliases = ["trash"] }
 copy_name = { tabler = "typography", doc = "Copy the file name" }
 copy_path = { tabler = "route", doc = "Copy the file path" }
 rate = { tabler = "star", doc = "Rate a selection", aliases = ["star"] }
-rating_clear = { tabler = "star-off", doc = "Clear the rating" }
+rating_clear = { custom = "rating_0.svg", doc = "Clear the rating" }
 refresh_relative = { tabler = "refresh-dot", doc = "Refresh relative to the selected folder" }
 refresh_metadata = { tabler = "file-info", doc = "Refresh file metadata" }
 regenerate_thumbnail = { tabler = "photo-cog", doc = "Regenerate thumbnails" }
