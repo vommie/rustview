@@ -6,12 +6,6 @@ use crate::ctx_menu::{CtxMenuItem, CtxMenuItemKind};
 use std::collections::HashSet;
 use std::time::Instant;
 
-/// Maximum number of folder entries displayed per submenu level to prevent screen overflow.
-pub const MAX_CHILDREN_PER_MENU_LEVEL: usize = 120;
-
-/// Maximum submenu depth supported by Slint's ContextMenuPopup (level 0 to level 5).
-pub const MAX_SUBMENU_DEPTH: usize = 4;
-
 /// Parameters passed during recursive tree flattening to Slint model items.
 pub struct FolderTreeFlattenFilter<'a> {
     pub expanded_ids: &'a HashSet<FolderId>,
@@ -113,11 +107,9 @@ impl FolderHierarchySnapshot {
     }
 
     /// Single Point of Truth (SPoT): Generates the hierarchical target folder menu for "Move to..." and "Copy to...".
-    /// - Top level: Root action item (`📁 Root (<name>)`), separated by a clean divider line, followed by all children of Root.
-    /// - Each child with subfolders is rendered as a submenu `📁 <name> ▶`.
-    /// - Opening any subfolder presents a top action item `Move directly into '<name>'`, followed by a separator and all its subfolders.
-    /// - Inactive/disabled entries receive explicit tooltips detailing the exact reason why moving is forbidden.
-    /// - The folder being moved and all of its descendants are strictly excluded from appearing as destinations.
+    /// - Top level: Root action item (`📁 Root (<name>)`), separated by a divider line, followed by all children of Root.
+    /// - Tooltips are strictly omitted on normal enabled folders and only generated when an item is disabled or requires explanation.
+    /// - Submenu depth and children count are completely unconstrained (arbitrary hierarchy depth supported).
     pub fn project_target_folder_menu(
         &self,
         base_action_id: u64,
@@ -128,12 +120,6 @@ impl FolderHierarchySnapshot {
         let t0 = Instant::now();
         let mut menu_items = Vec::new();
 
-        let verb = if base_action_id == crate::ui::bridge_state::CTX_ACTION_COPY_TO_BASE {
-            "Copy"
-        } else {
-            "Move"
-        };
-
         for &root_id in &self.root_ids {
             let Some(root_node) = self.get_node(root_id) else {
                 continue;
@@ -142,16 +128,12 @@ impl FolderHierarchySnapshot {
             // 1. Root action item as the very first entry of the menu (e.g. "📁 Root (vommie)")
             let is_root_current = current_parent_id == Some(root_id);
             let root_tooltip = if is_root_current {
-                format!(
+                Some(format!(
                     "Disabled: Item is already located in the Root directory (current location).\nPath: {}",
                     root_node.path.display()
-                )
+                ))
             } else {
-                format!(
-                    "{} directly into Root directory\nPath: {}",
-                    verb,
-                    root_node.path.display()
-                )
+                None // Tooltip completely omitted on normal enabled folder
             };
 
             let root_action = CtxMenuItem {
@@ -165,7 +147,7 @@ impl FolderHierarchySnapshot {
                 is_enabled: !is_root_current,
                 children: Vec::new(),
                 menu_index: 0,
-                tooltip: Some(root_tooltip),
+                tooltip: root_tooltip,
             };
             menu_items.push(root_action);
 
@@ -179,45 +161,21 @@ impl FolderHierarchySnapshot {
                 }
             }
 
-            // Divider separator under Root entry on the first level
+            // Divider separator under Root entry on the first level if subfolders exist
             if !eligible_children.is_empty() {
                 menu_items.push(CtxMenuItem::new_separator());
             }
 
-            let count = eligible_children.len();
-            let display_slice = &eligible_children[..count.min(MAX_CHILDREN_PER_MENU_LEVEL)];
-
-            for &child_id in display_slice {
+            for &child_id in &eligible_children {
                 if let Some(item) = self.build_target_folder_item(
                     child_id,
                     base_action_id,
                     exclude_subtree_id,
                     current_parent_id,
                     show_hidden,
-                    1,
                 ) {
                     menu_items.push(item);
                 }
-            }
-
-            if count > MAX_CHILDREN_PER_MENU_LEVEL {
-                let hidden_count = count - MAX_CHILDREN_PER_MENU_LEVEL;
-                menu_items.push(CtxMenuItem {
-                    id: 0,
-                    text: format!("... ({} more subfolders)", hidden_count),
-                    shortcut: None,
-                    icon_name: None,
-                    icon_path: None,
-                    kind: CtxMenuItemKind::Action,
-                    is_checked: false,
-                    is_enabled: false,
-                    children: Vec::new(),
-                    menu_index: 0,
-                    tooltip: Some(format!(
-                        "Notice: {} subfolders in Root are hidden to keep the menu responsive.\nPlease use the Folder Tree in the sidebar to navigate into deeper directories.",
-                        hidden_count
-                    )),
-                });
             }
         }
 
@@ -225,7 +183,7 @@ impl FolderHierarchySnapshot {
             items_count = menu_items.len(),
             snapshot_nodes = self.nodes.len(),
             elapsed_us = t0.elapsed().as_micros() as u64,
-            "[FolderTree: TargetMenu] Projected target folder menu from SPoT snapshot with Root separator"
+            "[FolderTree: TargetMenu] Projected target folder menu with Root divider and clean tooltips"
         );
 
         menu_items
@@ -258,11 +216,11 @@ impl FolderHierarchySnapshot {
         true
     }
 
-    /// Recursively builds a folder node item:
-    /// - If it has no eligible subfolders or has reached MAX_SUBMENU_DEPTH: returns an Action item (`📁 <name>`).
+    /// Recursively builds a folder node item without depth limits.
+    /// - If it has no eligible subfolders: returns an Action item (`📁 <name>`).
     /// - If it has subfolders: returns a Submenu item (`📁 <name> ▶`) containing a top action (`Move directly into '<name>'`),
     ///   followed by a separator and all its subfolders.
-    /// - Any disabled action item receives an explicit reason in its tooltip explaining why it cannot be selected.
+    /// - Normal enabled folders have NO tooltip; disabled entries receive explicit explanations.
     fn build_target_folder_item(
         &self,
         folder_id: FolderId,
@@ -270,7 +228,6 @@ impl FolderHierarchySnapshot {
         exclude_subtree_id: Option<FolderId>,
         current_parent_id: Option<FolderId>,
         show_hidden: bool,
-        current_depth: usize,
     ) -> Option<CtxMenuItem> {
         let node = self.get_node(folder_id)?;
         let is_current = current_parent_id == Some(folder_id);
@@ -290,29 +247,16 @@ impl FolderHierarchySnapshot {
             }
         }
 
-        // If no eligible subfolders or maximum submenu depth reached: Leaf Action item
-        if eligible_children.is_empty() || current_depth >= MAX_SUBMENU_DEPTH {
+        // If no eligible subfolders: Leaf Action item
+        if eligible_children.is_empty() {
             let tooltip = if is_current {
-                format!(
+                Some(format!(
                     "Disabled: Item is already located in '{}' (current location).\nPath: {}",
                     node.name,
                     node.path.display()
-                )
-            } else if current_depth >= MAX_SUBMENU_DEPTH && !eligible_children.is_empty() {
-                format!(
-                    "{} directly into '{}'\nPath: {}\n(Subfolders hidden due to maximum menu depth; you can still {} directly into this folder)",
-                    verb,
-                    node.name,
-                    node.path.display(),
-                    verb.to_lowercase()
-                )
+                ))
             } else {
-                format!(
-                    "{} directly into '{}'\nPath: {}",
-                    verb,
-                    node.name,
-                    node.path.display()
-                )
+                None // Tooltip completely omitted on normal enabled folder
             };
 
             return Some(CtxMenuItem {
@@ -326,25 +270,20 @@ impl FolderHierarchySnapshot {
                 is_enabled: !is_current,
                 children: Vec::new(),
                 menu_index: 0,
-                tooltip: Some(tooltip),
+                tooltip,
             });
         }
 
         // Has subfolders: Submenu with "Move directly into '<name>'" / "Copy directly into '<name>'"
         let direct_action_text = format!("{} directly into '{}'", verb, node.name);
         let direct_tooltip = if is_current {
-            format!(
+            Some(format!(
                 "Disabled: Item is already located in '{}' (current location).\nPath: {}",
                 node.name,
                 node.path.display()
-            )
+            ))
         } else {
-            format!(
-                "{} directly into '{}'\nPath: {}",
-                verb,
-                node.name,
-                node.path.display()
-            )
+            None // Tooltip completely omitted on normal direct action
         };
 
         let direct_action = CtxMenuItem {
@@ -358,48 +297,23 @@ impl FolderHierarchySnapshot {
             is_enabled: !is_current,
             children: Vec::new(),
             menu_index: 0,
-            tooltip: Some(direct_tooltip),
+            tooltip: direct_tooltip,
         };
 
-        let count = eligible_children.len();
-        let display_slice = &eligible_children[..count.min(MAX_CHILDREN_PER_MENU_LEVEL)];
-
-        let mut sub_elements = Vec::with_capacity(display_slice.len() + 3);
+        let mut sub_elements = Vec::with_capacity(eligible_children.len() + 2);
         sub_elements.push(direct_action);
         sub_elements.push(CtxMenuItem::new_separator());
 
-        for &child_id in display_slice {
+        for &child_id in &eligible_children {
             if let Some(child_item) = self.build_target_folder_item(
                 child_id,
                 base_action_id,
                 exclude_subtree_id,
                 current_parent_id,
                 show_hidden,
-                current_depth + 1,
             ) {
                 sub_elements.push(child_item);
             }
-        }
-
-        if count > MAX_CHILDREN_PER_MENU_LEVEL {
-            let hidden_count = count - MAX_CHILDREN_PER_MENU_LEVEL;
-            sub_elements.push(CtxMenuItem {
-                id: 0,
-                text: format!("... ({} more subfolders)", hidden_count),
-                shortcut: None,
-                icon_name: None,
-                icon_path: None,
-                kind: CtxMenuItemKind::Action,
-                is_checked: false,
-                is_enabled: false,
-                children: Vec::new(),
-                menu_index: 0,
-                tooltip: Some(format!(
-                    "Notice: {} subfolders in '{}' are hidden to keep the menu responsive.\nPlease use the Folder Tree in the sidebar to navigate into deeper directories.",
-                    hidden_count,
-                    node.name
-                )),
-            });
         }
 
         Some(CtxMenuItem {
@@ -413,7 +327,7 @@ impl FolderHierarchySnapshot {
             is_enabled: true,
             children: sub_elements,
             menu_index: 0,
-            tooltip: Some(node.path.to_string_lossy().to_string()),
+            tooltip: None,
         })
     }
 }

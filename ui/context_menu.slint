@@ -1,17 +1,20 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
-import { ContextMenuItemModel } from "types.slint";
+import { ContextMenuItemModel, ContextMenuLevelModel } from "types.slint";
 import { TooltipArea, TooltipHost } from "tooltips.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export component ContextMenuItemRow inherits Rectangle {
     in property <ContextMenuItemModel> item;
+    in property <bool> is-parent-active: false;
     callback clicked();
+    callback scrolled(length /* delta_x */, length /* delta_y */);
     callback row-hovered(bool /* is_hover */, length /* y_pos */, int /* menu_index */, bool /* has_sub */);
 
     height: (root.item.kind == 3) ? 7px : ((root.item.kind == 4) ? 22px : 28px);
     background: (!root.item.is-enabled || root.item.kind == 3 || root.item.kind == 4)
         ? transparent
-        : (item-touch.has-hover ? Theme.surface-hover : transparent);
+        : ((item-touch.has-hover || root.is-parent-active) ? Theme.surface-hover : transparent);
     border-radius: 4px;
 
     tooltip-host := TooltipHost {
@@ -21,15 +24,23 @@ export component ContextMenuItemRow inherits Rectangle {
     }
 
     item-touch := TouchArea {
-        enabled: root.item.kind != 3 && root.item.kind != 4;
-        mouse-cursor: !root.item.is-enabled ? not-allowed : pointer;
+        enabled: true;
+        mouse-cursor: (root.item.kind == 3 || root.item.kind == 4) ? default : (
+            !root.item.is-enabled ? not-allowed : pointer
+        );
+
+        scroll-event(event) => {
+            root.scrolled(event.delta-x, event.delta-y);
+            return accept;
+        }
+
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 tooltip-host.on-hover-leave();
             }
         }
         clicked => {
-            if root.item.is-enabled {
+            if root.item.is-enabled && root.item.kind != 3 && root.item.kind != 4 {
                 tooltip-host.on-hover-leave();
                 root.clicked();
             }
@@ -157,25 +168,28 @@ export component ContextMenuPopup inherits Rectangle {
     height: 100%;
     z: 160;
 
-    in property <[ContextMenuItemModel]> level0-items: [];
-    in property <[ContextMenuItemModel]> level1-items: [];
-    in property <[ContextMenuItemModel]> level2-items: [];
-    in property <[ContextMenuItemModel]> level3-items: [];
-    in property <[ContextMenuItemModel]> level4-items: [];
-    in property <[ContextMenuItemModel]> level5-items: [];
-
-    in property <length> pos-x: 0px;
-    in property <length> pos-y: 0px;
-
-    in-out property <length> sub1-y: 0px;
-    in-out property <length> sub2-y: 0px;
-    in-out property <length> sub3-y: 0px;
-    in-out property <length> sub4-y: 0px;
-    in-out property <length> sub5-y: 0px;
+    in property <[ContextMenuLevelModel]> levels: [];
 
     callback item-clicked(int);
-    callback request-submenu(int /* depth */, int /* menu_index */);
+    callback request-submenu(int /* depth */, length /* visible_row_y */, int /* menu_index */);
+    callback close-submenus-above(int /* depth */);
     callback dismissed();
+
+    property <int> pending-depth: -1;
+    property <length> pending-row-y: 0px;
+    property <int> pending-menu-idx: 0;
+
+    submenu-timer := Timer {
+        interval: 160ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            if root.pending-depth >= 0 {
+                root.request-submenu(root.pending-depth, root.pending-row-y, root.pending-menu-idx);
+                root.pending-depth = -1;
+            }
+        }
+    }
 
     forward-focus: popup-focus;
     popup-focus := FocusScope {
@@ -187,30 +201,6 @@ export component ContextMenuPopup inherits Rectangle {
             return reject;
         }
     }
-
-    property <length> menu-width: 230px;
-
-    property <length> l0-x: Math.max(8px, Math.min(root.width - root.menu-width - 8px, root.pos-x));
-
-    property <length> l1-x: (root.l0-x + root.menu-width + root.menu-width - 2px + 8px > root.width)
-        ? Math.max(8px, root.l0-x - root.menu-width + 2px)
-        : (root.l0-x + root.menu-width - 2px);
-
-    property <length> l2-x: (root.l1-x + root.menu-width + root.menu-width - 2px + 8px > root.width)
-        ? Math.max(8px, root.l1-x - root.menu-width + 2px)
-        : (root.l1-x + root.menu-width - 2px);
-
-    property <length> l3-x: (root.l2-x + root.menu-width + root.menu-width - 2px + 8px > root.width)
-        ? Math.max(8px, root.l2-x - root.menu-width + 2px)
-        : (root.l2-x + root.menu-width - 2px);
-
-    property <length> l4-x: (root.l3-x + root.menu-width + root.menu-width - 2px + 8px > root.width)
-        ? Math.max(8px, root.l3-x - root.menu-width + 2px)
-        : (root.l3-x + root.menu-width - 2px);
-
-    property <length> l5-x: (root.l4-x + root.menu-width + root.menu-width - 2px + 8px > root.width)
-        ? Math.max(8px, root.l4-x - root.menu-width + 2px)
-        : (root.l4-x + root.menu-width - 2px);
 
     backdrop-touch := TouchArea {
         x: 0px;
@@ -225,185 +215,70 @@ export component ContextMenuPopup inherits Rectangle {
         clicked => { root.dismissed(); }
     }
 
-    l0-rect := Rectangle {
-        width: root.menu-width;
-        height: layout0.preferred-height;
-        x: root.l0-x;
-        y: Math.max(8px, Math.min(root.height - self.height - 8px, root.pos-y));
+    for level[depth] in root.levels : Rectangle {
+        x: level.x;
+        y: level.y;
+        width: level.width;
+        height: Math.min(level.max_height, level-layout.preferred-height);
         background: Theme.surface;
         border-radius: 6px;
         border-width: 1px;
         border-color: Theme.border;
         drop-shadow-blur: 16px;
         drop-shadow-color: #000000bb;
+        clip: true;
 
-        layout0 := VerticalLayout {
-            padding: 4px;
-            spacing: 1px;
-            for item in root.level0-items: ContextMenuItemRow {
-                item: item;
-                row-hovered(is-hover, row-y, m-idx, has-sub) => {
-                    if is-hover {
-                        root.sub1-y = row-y;
-                        if has-sub || root.level1-items.length > 0 {
-                            root.request-submenu(0, has-sub ? m-idx : 0);
+        scroll-area := SmoothScrollArea {
+            width: 100%;
+            height: 100%;
+            enable-horizontal: false;
+            enable-vertical: true;
+            scrollbar-size: 5px;
+            scrollbar-padding: 2px;
+            content-width: self.width;
+            content-height: level-layout.preferred-height;
+
+            level-layout := VerticalLayout {
+                padding: 4px;
+                spacing: 1px;
+
+                for item in level.items : ContextMenuItemRow {
+                    item: item;
+                    is-parent-active: item.is-checked && item.has-submenu;
+
+                    scrolled(dx, dy) => {
+                        submenu-timer.running = false;
+                        root.pending-depth = -1;
+                        if root.levels.length > depth + 1 {
+                            root.request-submenu(depth, 0px, 0);
+                        }
+                        scroll-area.handle-scroll(dx, dy);
+                    }
+
+                    row-hovered(is-hover, row-y, m-idx, has-sub) => {
+                        if is-hover {
+                            if !has-sub {
+                                submenu-timer.running = false;
+                                root.pending-depth = -1;
+                                if root.levels.length > depth + 1 {
+                                    root.request-submenu(depth, 0px, 0);
+                                }
+                            } else {
+                                if !item.is-checked {
+                                    root.pending-depth = depth;
+                                    root.pending-row-y = row-y + scroll-area.clamped-y;
+                                    root.pending-menu-idx = m-idx;
+                                    submenu-timer.running = true;
+                                }
+                            }
                         }
                     }
-                }
-                clicked => {
-                    if !item.has-submenu { root.item-clicked(item.id); }
-                }
-            }
-        }
-    }
 
-    if root.level1-items.length > 0 : Rectangle {
-        width: root.menu-width;
-        height: layout1.preferred-height;
-        x: root.l1-x;
-        y: Math.max(8px, Math.min(root.height - self.height - 8px, l0-rect.y + root.sub1-y - 4px));
-        background: Theme.surface;
-        border-radius: 6px;
-        border-width: 1px;
-        border-color: Theme.border;
-        drop-shadow-blur: 16px;
-        drop-shadow-color: #000000bb;
-
-        layout1 := VerticalLayout {
-            padding: 4px;
-            spacing: 1px;
-            for item in root.level1-items: ContextMenuItemRow {
-                item: item;
-                row-hovered(is-hover, row-y, m-idx, has-sub) => {
-                    if is-hover {
-                        root.sub2-y = row-y;
-                        if has-sub || root.level2-items.length > 0 {
-                            root.request-submenu(1, has-sub ? m-idx : 0);
+                    clicked => {
+                        if !item.has-submenu {
+                            root.item-clicked(item.id);
                         }
                     }
-                }
-                clicked => {
-                    if !item.has-submenu { root.item-clicked(item.id); }
-                }
-            }
-        }
-    }
-
-    if root.level2-items.length > 0 : Rectangle {
-        width: root.menu-width;
-        height: layout2.preferred-height;
-        x: root.l2-x;
-        y: Math.max(8px, Math.min(root.height - self.height - 8px, l0-rect.y + root.sub1-y + root.sub2-y - 8px));
-        background: Theme.surface;
-        border-radius: 6px;
-        border-width: 1px;
-        border-color: Theme.border;
-        drop-shadow-blur: 16px;
-        drop-shadow-color: #000000bb;
-
-        layout2 := VerticalLayout {
-            padding: 4px;
-            spacing: 1px;
-            for item in root.level2-items: ContextMenuItemRow {
-                item: item;
-                row-hovered(is-hover, row-y, m-idx, has-sub) => {
-                    if is-hover {
-                        root.sub3-y = row-y;
-                        if has-sub || root.level3-items.length > 0 {
-                            root.request-submenu(2, has-sub ? m-idx : 0);
-                        }
-                    }
-                }
-                clicked => {
-                    if !item.has-submenu { root.item-clicked(item.id); }
-                }
-            }
-        }
-    }
-
-    if root.level3-items.length > 0 : Rectangle {
-        width: root.menu-width;
-        height: layout3.preferred-height;
-        x: root.l3-x;
-        y: Math.max(8px, Math.min(root.height - self.height - 8px, l0-rect.y + root.sub1-y + root.sub2-y + root.sub3-y - 12px));
-        background: Theme.surface;
-        border-radius: 6px;
-        border-width: 1px;
-        border-color: Theme.border;
-        drop-shadow-blur: 16px;
-        drop-shadow-color: #000000bb;
-
-        layout3 := VerticalLayout {
-            padding: 4px;
-            spacing: 1px;
-            for item in root.level3-items: ContextMenuItemRow {
-                item: item;
-                row-hovered(is-hover, row-y, m-idx, has-sub) => {
-                    if is-hover {
-                        root.sub4-y = row-y;
-                        if has-sub || root.level4-items.length > 0 {
-                            root.request-submenu(3, has-sub ? m-idx : 0);
-                        }
-                    }
-                }
-                clicked => {
-                    if !item.has-submenu { root.item-clicked(item.id); }
-                }
-            }
-        }
-    }
-
-    if root.level4-items.length > 0 : Rectangle {
-        width: root.menu-width;
-        height: layout4.preferred-height;
-        x: root.l4-x;
-        y: Math.max(8px, Math.min(root.height - self.height - 8px, l0-rect.y + root.sub1-y + root.sub2-y + root.sub3-y + root.sub4-y - 16px));
-        background: Theme.surface;
-        border-radius: 6px;
-        border-width: 1px;
-        border-color: Theme.border;
-        drop-shadow-blur: 16px;
-        drop-shadow-color: #000000bb;
-
-        layout4 := VerticalLayout {
-            padding: 4px;
-            spacing: 1px;
-            for item in root.level4-items: ContextMenuItemRow {
-                item: item;
-                row-hovered(is-hover, row-y, m-idx, has-sub) => {
-                    if is-hover {
-                        root.sub5-y = row-y;
-                        if has-sub || root.level5-items.length > 0 {
-                            root.request-submenu(4, has-sub ? m-idx : 0);
-                        }
-                    }
-                }
-                clicked => {
-                    if !item.has-submenu { root.item-clicked(item.id); }
-                }
-            }
-        }
-    }
-
-    if root.level5-items.length > 0 : Rectangle {
-        width: root.menu-width;
-        height: layout5.preferred-height;
-        x: root.l5-x;
-        y: Math.max(8px, Math.min(root.height - self.height - 8px, l0-rect.y + root.sub1-y + root.sub2-y + root.sub3-y + root.sub4-y + root.sub5-y - 20px));
-        background: Theme.surface;
-        border-radius: 6px;
-        border-width: 1px;
-        border-color: Theme.border;
-        drop-shadow-blur: 16px;
-        drop-shadow-color: #000000bb;
-
-        layout5 := VerticalLayout {
-            padding: 4px;
-            spacing: 1px;
-            for item in root.level5-items: ContextMenuItemRow {
-                item: item;
-                clicked => {
-                    root.item-clicked(item.id);
                 }
             }
         }

@@ -19,7 +19,7 @@ use super::bridge_state::*;
 use super::bridge_tag_dialogs::TagDialogController;
 use super::favorites::FavoriteManager;
 use super::{FileRenameDialog, MainWindow};
-use crate::ctx_menu::{CtxMenu, CtxMenuItem, CtxMenuItemKind, CtxMenuDispatcher};
+use crate::ctx_menu::{CtxMenu, CtxMenuDispatcher};
 use crate::library::models::{FolderId, MediaId};
 use crate::library::Library;
 use crate::settings::SettingsManager;
@@ -27,9 +27,8 @@ use crate::system::DesktopIntegration;
 use crate::thumbnails::ThumbnailManager;
 use crate::viewer::{TabId, ViewerTabManager, XRectangle};
 use parking_lot::RwLock;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -189,47 +188,21 @@ impl BridgeContextMenu {
     fn register_popup_events(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
-        state: &Arc<RwLock<UiState>>,
+        _state: &Arc<RwLock<UiState>>,
     ) {
         let win = window.clone_strong();
-        let st = state.clone();
         let tm_sub = tab_manager.clone();
-        let active_submenus: Arc<RwLock<HashMap<i32, usize>>> = Arc::new(RwLock::new(HashMap::new()));
-        let active_submenus_event = active_submenus.clone();
 
-        window.on_context_menu_request_submenu(move |depth, m_idx| {
-            let active = st.read().active_context_menu.clone();
-            CtxMenuPresenter::handle_submenu_request(&win, active.as_ref(), depth, m_idx as usize);
+        window.on_context_menu_request_submenu(move |depth, visible_row_y, m_idx| {
+            CtxMenuPresenter::handle_submenu_request(&win, None, depth as usize, visible_row_y, m_idx as usize);
 
-            {
-                let mut map = active_submenus_event.write();
-                if depth == 0 {
-                    if m_idx > 0 {
-                        map.clear();
-                        map.insert(1, m_idx as usize);
-                    } else {
-                        map.clear();
-                    }
-                } else if m_idx > 0 {
-                    let next_depth = depth + 1;
-                    map.retain(|&d, _| d < next_depth);
-                    map.insert(next_depth, m_idx as usize);
-                } else {
-                    let max_depth = depth;
-                    map.retain(|&d, _| d <= max_depth);
-                }
-            }
-
-            let sub_map = active_submenus_event.read().clone();
-            let all_cutouts = calculate_all_active_menu_cutouts(&win, active.as_ref(), &sub_map);
+            let all_cutouts = calculate_all_active_menu_cutouts(&win);
             tm_sub.set_menu_cutouts(all_cutouts);
         });
 
         let win = window.clone_strong();
         let tm = tab_manager.clone();
-        let active_submenus_dismiss = active_submenus;
         window.on_context_menu_dismissed(move || {
-            active_submenus_dismiss.write().clear();
             CtxMenuPresenter::dismiss(&win);
             tm.clear_menu_cutouts();
         });
@@ -284,8 +257,7 @@ impl BridgeContextMenu {
                 return;
             }
 
-            // 3. Folder Actions: Comprehensive routing for 3000..4000 (Open in FM, Rename, Delete, Purge, Refresh)
-            // as well as Folder Move actions (300_000..500_000)
+            // 3. Folder Actions: 3000..4000 (Open FM, Rename, Delete, Purge, Refresh) and Move (300_000..500_000)
             if (3000..4000).contains(&action_u64)
                 || (CTX_FOLDER_MOVE_BASE..CTX_ACTION_COPY_TO_BASE).contains(&action_u64)
             {
@@ -301,7 +273,7 @@ impl BridgeContextMenu {
                 return;
             }
 
-            // 4. Tag Actions: Root & Child CRUD (2000..3000) and Reparent (100_000..300_000)
+            // 4. Tag Actions: 2000..3000 and Reparent (100_000..300_000)
             if (2000..3000).contains(&action_u64)
                 || (CTX_TAG_MOVE_TARGET_BASE..CTX_FOLDER_MOVE_BASE).contains(&action_u64)
             {
@@ -532,99 +504,36 @@ impl BridgeContextMenu {
         x: f32,
         y: f32,
     ) {
-        let scale = window.window().scale_factor();
-        let win_w = window.window().size().width as f32 / scale;
-        let win_h = window.window().size().height as f32 / scale;
-
-        let (w, h) = calculate_menu_dimensions(&menu.items);
-        let l0_x = x.max(8.0).min(win_w - w - 8.0);
-        let l0_y = y.max(8.0).min(win_h - h - 8.0);
-
-        let cutouts = make_rounded_cutout_rectangles(l0_x, l0_y, w, h, scale);
-        tab_manager.set_menu_cutouts(cutouts);
-
         let mut st = state.write();
         CtxMenuPresenter::open(window, &mut st.active_context_menu, menu, x, y);
+        let cutouts = calculate_all_active_menu_cutouts(window);
+        tab_manager.set_menu_cutouts(cutouts);
     }
 }
 
+/// Computes MPV cutouts for all currently mapped menu level rectangles.
 pub fn calculate_all_active_menu_cutouts(
     window: &MainWindow,
-    menu_opt: Option<&CtxMenu>,
-    sub_map: &HashMap<i32, usize>,
 ) -> Vec<XRectangle> {
     let scale = window.window().scale_factor();
-    let win_w = window.window().size().width as f32 / scale;
-    let win_h = window.window().size().height as f32 / scale;
+    let levels = window.get_context_menu_levels();
+    let count = levels.row_count();
 
-    let Some(menu) = menu_opt else {
+    if count == 0 {
         return Vec::new();
-    };
+    }
 
-    let (w0, h0) = calculate_menu_dimensions(&menu.items);
-    let l0_x = window.get_context_menu_x().max(8.0).min(win_w - w0 - 8.0);
-    let l0_y = window.get_context_menu_y().max(8.0).min(win_h - h0 - 8.0);
+    let mut all_cutouts = Vec::new();
 
-    let mut all_cutouts = make_rounded_cutout_rectangles(l0_x, l0_y, w0, h0, scale);
-    let mut level_coords: HashMap<i32, (f32, f32, f32, f32)> = HashMap::new();
-    level_coords.insert(0, (l0_x, l0_y, w0, h0));
-
-    for depth in 1..=5 {
-        if let Some(&menu_idx) = sub_map.get(&depth)
-            && let Some(children) = menu.find_children_by_menu_index(menu_idx)
-            && let Some(&(prev_x, prev_y, prev_w, _prev_h)) = level_coords.get(&(depth - 1))
-        {
-            let (w_sub, h_sub) = calculate_menu_dimensions(children);
-            let x_sub = if prev_x + prev_w + w_sub - 2.0 + 8.0 > win_w {
-                (prev_x - w_sub + 2.0).max(8.0)
-            } else {
-                prev_x + prev_w - 2.0
-            };
-
-            let y_offset = calculate_item_y_offset(&menu.items, menu_idx);
-            let y_sub = (prev_y + y_offset - 4.0).max(8.0).min(win_h - h_sub - 8.0);
-
-            let sub_cutouts = make_rounded_cutout_rectangles(x_sub, y_sub, w_sub, h_sub, scale);
-            all_cutouts.extend(sub_cutouts);
-            level_coords.insert(depth, (x_sub, y_sub, w_sub, h_sub));
+    for i in 0..count {
+        if let Some(lvl) = levels.row_data(i) {
+            let h = lvl.max_height;
+            let cutouts = make_rounded_cutout_rectangles(lvl.x, lvl.y, lvl.width, h, scale);
+            all_cutouts.extend(cutouts);
         }
     }
 
     all_cutouts
-}
-
-pub fn calculate_menu_dimensions(items: &[CtxMenuItem]) -> (f32, f32) {
-    let width = 230.0;
-    let mut height = 8.0;
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
-            height += 1.0;
-        }
-        height += match item.kind {
-            CtxMenuItemKind::Separator => 7.0,
-            CtxMenuItemKind::Header => 22.0,
-            _ => 28.0,
-        };
-    }
-    (width, height)
-}
-
-pub fn calculate_item_y_offset(items: &[CtxMenuItem], target_menu_idx: usize) -> f32 {
-    let mut offset_y = 4.0;
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
-            offset_y += 1.0;
-        }
-        if item.menu_index == target_menu_idx {
-            return offset_y;
-        }
-        offset_y += match item.kind {
-            CtxMenuItemKind::Separator => 7.0,
-            CtxMenuItemKind::Header => 22.0,
-            _ => 28.0,
-        };
-    }
-    0.0
 }
 
 pub fn make_rounded_cutout_rectangles(

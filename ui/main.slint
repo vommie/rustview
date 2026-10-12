@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
-import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, TagHistoryRowModel, ContextMenuItemModel, ConflictFileView, TabItemModel, TabGridItemModel, SidebarPanelTabModel } from "types.slint";
+import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, TagHistoryRowModel, ContextMenuItemModel, ContextMenuLevelModel, ConflictFileView, TabItemModel, TabGridItemModel, SidebarPanelTabModel } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
 import { SidebarRight } from "sidebar_right.slint";
@@ -237,14 +237,7 @@ export component MainWindow inherits Window {
     property <bool> is-text-input-focused: media-toolbar.search-has-focus || sidebar_right.tag-filter-has-focus;
 
     in-out property <bool> is-context-menu-open: false;
-    in-out property <length> context-menu-x: 0px;
-    in-out property <length> context-menu-y: 0px;
-    in property <[ContextMenuItemModel]> level0-context-items: [];
-    in property <[ContextMenuItemModel]> level1-context-items: [];
-    in property <[ContextMenuItemModel]> level2-context-items: [];
-    in property <[ContextMenuItemModel]> level3-context-items: [];
-    in property <[ContextMenuItemModel]> level4-context-items: [];
-    in property <[ContextMenuItemModel]> level5-context-items: [];
+    in property <[ContextMenuLevelModel]> context-menu-levels: [];
 
     in property <[MediaItemView]> media-items: [];
     in property <[FolderNodeView]> folders: [];
@@ -374,7 +367,8 @@ export component MainWindow inherits Window {
     callback choice-popup-dismissed();
 
     callback context-menu-item-clicked(int /* action_id */);
-    callback context-menu-request-submenu(int /* depth */, int /* menu_index */);
+    callback context-menu-request-submenu(int /* depth */, length /* visible_row_y */, int /* menu_index */);
+    callback context-menu-close-submenus-above(int /* depth */);
     callback context-menu-dismissed();
 
     callback search-query-changed(string);
@@ -720,7 +714,6 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-left-width;
                 }
                 dragged(delta) => {
-                    // Left-anchored sidebar: dragging left shrinks, dragging right expands
                     root.sidebar-left-width = Math.max(150px, Math.min(700px, self.start-w + delta));
                     root.sidebar-left-resized(root.sidebar-left-width);
                 }
@@ -942,7 +935,6 @@ export component MainWindow inherits Window {
                     self.start-w = root.sidebar-right-width;
                 }
                 dragged(delta) => {
-                    // Right-anchored sidebar: dragging left (negative delta) expands, dragging right shrinks
                     root.sidebar-right-width = Math.max(150px, Math.min(700px, self.start-w - delta));
                     root.sidebar-right-resized(root.sidebar-right-width);
                 }
@@ -1020,16 +1012,10 @@ export component MainWindow inherits Window {
     }
 
     if root.is-context-menu-open : ContextMenuPopup {
-        level0-items: root.level0-context-items;
-        level1-items: root.level1-context-items;
-        level2-items: root.level2-context-items;
-        level3-items: root.level3-context-items;
-        level4-items: root.level4-context-items;
-        level5-items: root.level5-context-items;
-        pos-x: root.context-menu-x;
-        pos-y: root.context-menu-y;
+        levels: root.context-menu-levels;
         item-clicked(id) => { root.context-menu-item-clicked(id); }
-        request-submenu(depth, m-idx) => { root.context-menu-request-submenu(depth, m-idx); }
+        request-submenu(depth, row-y, m-idx) => { root.context-menu-request-submenu(depth, row-y, m-idx); }
+        close-submenus-above(depth) => { root.context-menu-close-submenus-above(depth); }
         dismissed => { root.context-menu-dismissed(); }
     }
 

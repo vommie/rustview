@@ -92,6 +92,16 @@ export struct ContextMenuItemModel {
     tooltip: string,
 }
 
+export struct ContextMenuLevelModel {
+    depth: int,
+    active_menu_index: int,
+    x: length,
+    y: length,
+    width: length,
+    max_height: length,
+    items: [ContextMenuItemModel],
+}
+
 export struct ConflictFileView {
     filename: string,
     folder_path: string,
