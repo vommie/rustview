@@ -10,12 +10,12 @@
 # Entry format (key = icon id in snake_case):
 #   tabler = "<name>"    Tabler icon file name WITHOUT extension (file names are never renamed).
 #   style  = "outline"   Tabler variant: "outline" (default) or "filled".
-#   custom = "<file>"    Non-Tabler SVG below `assets/icons/custom/` (only tag and rating icons).
+#   custom = "<file>"    Non-Tabler SVG below `assets/icons/custom/` (only rating icons).
 #   color  = true        Icon keeps its own colors and is never tinted (default: false = monochrome).
 #   doc    = "..."       Short description (shown in the generated API docs).
 #   aliases = [...]      Additional names accepted by `Icon::from_name`.
 #
-# Rule: every icon is monochrome and tinted with the active theme color, except the tag and rating icons.
+# Rule: every icon is monochrome and tinted with the active theme color, except the rating icons.
 
 [library]
 tabler_version = "3.49.0"
@@ -43,7 +43,7 @@ sort_ascending = { tabler = "caret-up", style = "filled", doc = "Ascending sort 
 sort_descending = { tabler = "caret-down", style = "filled", doc = "Descending sort direction" }
 pause = { tabler = "player-pause", style = "filled", doc = "Paused state" }
 pending = { tabler = "hourglass", doc = "Pending / waiting for completion" }
-favorite = { tabler = "star", style = "filled", doc = "Favorite marker (filled star)" }
+favorite = { tabler = "star", doc = "Favorite marker (outline star)" }
 partial = { tabler = "circle-half-2", doc = "Partially assigned / mixed state" }
 
 # --- Status ------------------------------------------------------------------------------------------------------
@@ -83,13 +83,9 @@ copy = { tabler = "copy", doc = "Copy / duplicate" }
 move_to = { tabler = "arrow-move-right", doc = "Move to another location" }
 rename = { tabler = "pencil", doc = "Rename / edit", aliases = ["edit"] }
 delete = { tabler = "trash", doc = "Delete", aliases = ["trash"] }
-copy_name = { tabler = "typography", doc = "Copy the file name" }
-copy_path = { tabler = "route", doc = "Copy the file path" }
 rate = { tabler = "star", doc = "Rate a selection", aliases = ["star"] }
 rating_clear = { custom = "rating_0.svg", doc = "Clear the rating" }
 refresh_relative = { tabler = "refresh-dot", doc = "Refresh relative to the selected folder" }
-refresh_metadata = { tabler = "file-info", doc = "Refresh file metadata" }
-regenerate_thumbnail = { tabler = "photo-cog", doc = "Regenerate thumbnails" }
 select_all = { tabler = "select-all", doc = "Select all items" }
 clear_selection = { tabler = "deselect", doc = "Clear the selection" }
 tab_move = { tabler = "arrows-left-right", doc = "Move a tab" }
@@ -102,10 +98,11 @@ expand_all = { tabler = "chevrons-down", doc = "Expand all tree nodes" }
 collapse_all = { tabler = "chevrons-up", doc = "Collapse all tree nodes" }
 favorite_add = { tabler = "star", doc = "Add to favorites" }
 favorite_remove = { tabler = "star-off", doc = "Remove from favorites" }
+tag = { tabler = "tag", doc = "Tag marker (outline)" }
+tag_filled = { tabler = "tag", style = "filled", doc = "Filled tag marker (thumbnail badges only)" }
 tag_root = { tabler = "hierarchy-2", doc = "Top level of the tag tree" }
 
-# --- Colored icons (never tinted): tags and ratings ----------------------------------------------------------------
-tag = { custom = "tag.svg", color = true, doc = "Tag marker (keeps its orange colors)" }
+# --- Colored icons (never tinted): ratings -------------------------------------------------------------------------
 rating_0 = { custom = "rating_0.svg", color = true, doc = "Unrated badge" }
 rating_1 = { custom = "rating_1.svg", color = true, doc = "Rating 1 badge" }
 rating_2 = { custom = "rating_2.svg", color = true, doc = "Rating 2 badge" }

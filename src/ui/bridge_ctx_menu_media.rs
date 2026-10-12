@@ -313,15 +313,15 @@ impl MediaContextMenu {
             )
             .submenu("Copy...", Some(Icon::Copy), true, move |sub| {
                 let mut sub_builder = sub
-                    .action(CTX_ACTION_COPY_NAME, copy_name_text, None, Some(Icon::CopyName), true)
-                    .action(CTX_ACTION_COPY_PATH, copy_path_text, None, Some(Icon::CopyPath), true);
+                    .action(CTX_ACTION_COPY_NAME, copy_name_text, None, Some(Icon::Copy), true)
+                    .action(CTX_ACTION_COPY_PATH, copy_path_text, None, Some(Icon::Copy), true);
 
                 if is_single_image {
                     sub_builder = sub_builder.action(
                         CTX_ACTION_COPY_IMAGE,
                         "Image Content",
                         None,
-                        Some(Icon::MediaImage),
+                        Some(Icon::Copy),
                         target_file_exists,
                     );
                 }
@@ -515,14 +515,14 @@ impl MediaContextMenu {
                         CTX_ACTION_REFRESH_METADATA,
                         refresh_meta_text,
                         None,
-                        Some(Icon::RefreshMetadata),
+                        Some(Icon::Refresh),
                         can_refresh,
                     )
                     .action(
                         CTX_ACTION_REGENERATE_THUMB_RANDOM,
                         regen_thumb_text,
                         None,
-                        Some(Icon::RegenerateThumbnail),
+                        Some(Icon::Refresh),
                         can_refresh,
                     )
                 },

@@ -31,7 +31,7 @@ impl fmt::Display for RasterError {
 impl std::error::Error for RasterError {}
 
 /// Returns the SVG source of an icon with `currentColor` replaced by `color` (`#rrggbb`).
-/// Colored icons (tag, ratings) are returned unchanged.
+/// Colored icons (ratings) are returned unchanged.
 pub fn recolor_svg(icon: Icon, color: &str) -> String {
     if icon.is_monochrome() {
         icon.svg().replace("currentColor", color)
@@ -80,7 +80,7 @@ mod tests {
     fn recolors_monochrome_icons_only() {
         assert!(recolor_svg(Icon::File, "#ff0000").contains("#ff0000"));
         assert!(!recolor_svg(Icon::File, "#ff0000").contains("currentColor"));
-        assert_eq!(recolor_svg(Icon::Tag, "#ff0000"), Icon::Tag.svg());
+        assert_eq!(recolor_svg(Icon::Rating0, "#ff0000"), Icon::Rating0.svg());
     }
 
     #[test]

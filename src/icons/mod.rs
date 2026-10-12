@@ -2,13 +2,13 @@
 //!
 //! The icon set is data driven. `assets/icons/icons.toml` is the single source of truth; `build.rs` generates
 //! the Rust enum [`Icon`] (this module) and the Slint enum `IconId` (see `ui/icons.slint`) from it, so both
-//! sides always agree. All icons are Tabler SVGs (`assets/icons/tabler/`), except for the colored tag and
+//! sides always agree. All icons are Tabler SVGs (`assets/icons/tabler/`), except for the colored
 //! rating icons (`assets/icons/custom/`).
 //!
 //! Rendering rules:
 //! - Monochrome icons are tinted with a theme color by `AppIcon` (Slint `colorize`), so they follow any
 //!   dark/light theme without extra assets.
-//! - Colored icons (tag, ratings) are never tinted, see [`Icon::is_monochrome`].
+//! - Colored icons (ratings) are never tinted, see [`Icon::is_monochrome`].
 //! - Rust code that needs pixels outside of Slint (e.g. the drag ghost) uses [`raster::render_png`].
 
 pub mod raster;
@@ -24,7 +24,7 @@ pub struct IconSpec {
     pub id: &'static str,
     /// SVG path relative to `assets/`, e.g. `icons/tabler/outline/folder.svg`.
     pub source: &'static str,
-    /// `false` for icons that keep their own colors (tag, ratings).
+    /// `false` for icons that keep their own colors (ratings).
     pub monochrome: bool,
     pub doc: &'static str,
     /// Additional names accepted by [`Icon::from_name`].
@@ -45,7 +45,7 @@ impl Icon {
         self.spec().id
     }
 
-    /// Whether the icon is tinted with the theme color (false for tag and rating icons).
+    /// Whether the icon is tinted with the theme color (false for rating icons).
     pub fn is_monochrome(self) -> bool {
         self.spec().monochrome
     }
@@ -114,11 +114,10 @@ mod tests {
     }
 
     #[test]
-    fn only_tag_and_ratings_are_colored() {
+    fn only_ratings_are_colored() {
         let colored: HashSet<Icon> =
             Icon::ALL.iter().copied().filter(|i| !i.is_monochrome()).collect();
         let expected: HashSet<Icon> = [
-            Icon::Tag,
             Icon::Rating0,
             Icon::Rating1,
             Icon::Rating2,

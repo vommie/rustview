@@ -83,7 +83,7 @@ export component ThumbnailBadge inherits Rectangle {
 
                 if root.is-icon : AppIcon {
                     icon: root.view.icon;
-                    // Colored icons (tag) keep their own colors; monochrome icons use the custom or badge text color.
+                    // Monochrome icons use the custom color (e.g. the orange tag) or the badge text color.
                     color: root.view.has-custom-color ? root.view.custom-color : Theme.badge-text;
                     size: ThumbnailBadgeMetrics.icon-size;
                 }

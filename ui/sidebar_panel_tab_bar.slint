@@ -100,9 +100,7 @@ export component SidebarPanelTabItem inherits Rectangle {
             IconSlot {
                 icon: root.tab.icon;
                 size: IconSize.md;
-                color: root.tab.icon == IconId.favorite
-                    ? Theme.accent
-                    : (root.tab.is_active ? Theme.primary : Theme.text-muted);
+                color: root.tab.is_active ? Theme.primary : Theme.text-muted;
             }
 
             Text {
@@ -144,7 +142,7 @@ export component SidebarPanelTabGhost inherits Rectangle {
         IconSlot {
             icon: root.icon;
             size: IconSize.md;
-            color: root.icon == IconId.favorite ? Theme.accent : Theme.primary;
+            color: Theme.primary;
         }
 
         Text {

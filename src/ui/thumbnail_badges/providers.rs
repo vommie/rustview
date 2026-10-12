@@ -5,6 +5,7 @@
 //! the automatic order of the badges inside their area.
 
 use super::badge::ThumbnailBadge;
+use super::color::BadgeColor;
 use crate::icons::Icon;
 use crate::ui::{MediaItemView, ThumbnailBadgeConfig, ThumbnailBadgeOrientation, ThumbnailBadgeTone};
 
@@ -18,9 +19,16 @@ pub fn collect_badges(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Ve
     PROVIDERS.iter().filter_map(|provider| provider(item, config)).collect()
 }
 
+/// Orange of the filled tag icon on thumbnails (the only place where the tag icon is filled and colored).
+const TAG_BADGE_COLOR: BadgeColor = BadgeColor::rgba(0xe8, 0x95, 0x00, 0xff);
+
 /// Tag indicator icon (top-left) for items with assigned tags.
 fn tag_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
-    (config.show_tag && item.has_tags).then(|| ThumbnailBadge::icon("tag", Icon::Tag).at(ThumbnailBadgeOrientation::TopLeft))
+    (config.show_tag && item.has_tags).then(|| {
+        ThumbnailBadge::icon("tag", Icon::TagFilled)
+            .at(ThumbnailBadgeOrientation::TopLeft)
+            .color(TAG_BADGE_COLOR)
+    })
 }
 
 /// Colored rating circle (top-right) for rated items.

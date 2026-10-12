@@ -127,7 +127,7 @@ impl FolderContextMenu {
                 CTX_FOLDER_REFRESH_FILES_META,
                 "Refresh Files (Meta)",
                 None,
-                Some(Icon::RefreshMetadata),
+                Some(Icon::Refresh),
                 can_refresh,
                 if can_refresh { "Refresh metadata and file sizes without re-generating thumbnails" } else { refresh_file_tip },
             )
