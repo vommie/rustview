@@ -3,12 +3,15 @@ use super::bridge_folder_dialogs::FolderDialogContext;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_tags::BridgeTags;
+use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::{DeleteFolderDialog, MainWindow};
 use crate::library::folder_operations::FolderSubtreeMetrics;
-use crate::library::models::FolderId;
+use crate::library::models::{FolderId, MediaId};
 use crate::settings::LogObscurer;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -81,7 +84,7 @@ impl DeleteFolderDialogController {
         window.set_is_modal_locked(false);
     }
 
-    /// Executes folder deletion (Trash or Permanent) and synchronizes storage and UI trees.
+    /// Executes folder deletion (Trash or Permanent) and synchronizes storage, media records, tabs, and UI trees.
     pub fn execute(
         &self,
         folder_id: FolderId,
@@ -110,6 +113,29 @@ impl DeleteFolderDialogController {
             .delete_folder(folder_id, to_trash)
         {
             Ok(report) => {
+                // 1. Notify tab manager for all affected media files
+                for &mid in &report.deleted_media_ids {
+                    ctx.tab_manager.notify_media_deleted(mid);
+                }
+
+                // 2. Update active in-memory state: flag affected media items as deleted
+                {
+                    let mut st = ctx.state.write();
+                    let deleted_fids_set: HashSet<FolderId> = report.deleted_folder_ids.iter().copied().collect();
+                    let deleted_mids_set: HashSet<MediaId> = report.deleted_media_ids.iter().copied().collect();
+
+                    for item in st.all_folder_media.iter_mut() {
+                        if deleted_fids_set.contains(&item.record.folder_id) || deleted_mids_set.contains(&item.record.id) {
+                            item.record.is_deleted = true;
+                            item.is_deleted = true;
+                            item.flags_str = "Deleted".into();
+                        }
+                    }
+                    st.file_selection.deselect_many(&deleted_mids_set);
+                    st.invalidate_folder_hierarchy();
+                }
+
+                // 3. Prune expanded folders state
                 BridgeFolders::prune_expanded_folders(
                     &report.deleted_folder_ids,
                     &ctx.settings,
@@ -124,13 +150,14 @@ impl DeleteFolderDialogController {
                     "Permanently deleted"
                 };
                 let msg = format!(
-                    "{} {} folder(s) and {} media file(s)",
+                    "{} {} folder(s) and flagged {} media file(s)",
                     action_str,
                     report.deleted_folder_ids.len(),
                     report.deleted_media_count
                 );
                 StatusBarBridge::success(window, msg);
 
+                // 4. Navigate to successor or refresh current view
                 BridgeFolders::navigate_to_successor_if_affected(
                     successor_target,
                     &report.deleted_folder_ids,
@@ -142,6 +169,14 @@ impl DeleteFolderDialogController {
                 );
 
                 BridgeInspector::update(window, &ctx.state);
+                BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
+                BridgeViewerTabs::sync_ui(
+                    window,
+                    &ctx.tab_manager,
+                    &ctx.library,
+                    &ctx.settings,
+                    &ctx.state,
+                );
                 StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {

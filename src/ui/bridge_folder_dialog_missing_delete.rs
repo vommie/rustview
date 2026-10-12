@@ -3,6 +3,8 @@ use super::bridge_folder_dialogs::FolderDialogContext;
 use super::bridge_folders::BridgeFolders;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_tags::BridgeTags;
+use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::{MainWindow, MissingFolderDeleteDialog};
 use crate::library::folder_operations::FolderSubtreeMetrics;
 use crate::library::models::FolderId;
@@ -131,6 +133,10 @@ impl MissingFolderDeleteDialogController {
             .purge_folder_from_db(folder_id)
         {
             Ok(report) => {
+                for &mid in &report.deleted_media_ids {
+                    ctx.tab_manager.notify_media_deleted(mid);
+                }
+
                 BridgeFolders::prune_expanded_folders(
                     &report.deleted_folder_ids,
                     &ctx.settings,
@@ -157,6 +163,14 @@ impl MissingFolderDeleteDialogController {
                 );
 
                 BridgeInspector::update(window, &ctx.state);
+                BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
+                BridgeViewerTabs::sync_ui(
+                    window,
+                    &ctx.tab_manager,
+                    &ctx.library,
+                    &ctx.settings,
+                    &ctx.state,
+                );
                 StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {

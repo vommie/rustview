@@ -259,7 +259,7 @@ impl BridgeContextMenu {
             tab_mgr.clear_menu_cutouts();
             let action_u64 = action_id as u64;
 
-            // 1. Favorites Action Handling
+            // 1. Favorites Action Handling (5000..6000)
             if (5000..6000).contains(&action_u64) {
                 let target_fav = st.write().active_favorite_target.take();
                 FavoriteContextMenu::handle_action(
@@ -272,7 +272,7 @@ impl BridgeContextMenu {
                 return;
             }
 
-            // 2. Folder Actions
+            // 2. Folder Actions: Add to Favorites
             if action_u64 == CTX_FOLDER_ADD_TO_FAVORITES {
                 let target_folder_id = st.write().active_folder_dialog_target.take();
                 if let Some(fid) = target_folder_id
@@ -284,11 +284,16 @@ impl BridgeContextMenu {
                 return;
             }
 
-            if (CTX_FOLDER_MOVE_BASE..CTX_ACTION_COPY_TO_BASE).contains(&action_u64) {
+            // 3. Folder Actions: Comprehensive routing for 3000..4000 (Open in FM, Rename, Delete, Purge, Refresh)
+            // as well as Folder Move actions (300_000..500_000)
+            if (3000..4000).contains(&action_u64)
+                || (CTX_FOLDER_MOVE_BASE..CTX_ACTION_COPY_TO_BASE).contains(&action_u64)
+            {
                 let target_folder_id = st.write().active_folder_dialog_target.take();
                 let ctx = FolderDialogContext {
                     library: lib.clone(),
                     thumbnails: thumb.clone(),
+                    tab_manager: tab_mgr.clone(),
                     settings: set.clone(),
                     state: st.clone(),
                 };
@@ -296,14 +301,16 @@ impl BridgeContextMenu {
                 return;
             }
 
-            // 3. Tag Actions
-            if (CTX_TAG_MOVE_TARGET_BASE..CTX_FOLDER_MOVE_BASE).contains(&action_u64) {
+            // 4. Tag Actions: Root & Child CRUD (2000..3000) and Reparent (100_000..300_000)
+            if (2000..3000).contains(&action_u64)
+                || (CTX_TAG_MOVE_TARGET_BASE..CTX_FOLDER_MOVE_BASE).contains(&action_u64)
+            {
                 let bundle = tag_dlg.create_action_bundle(&win, &lib, &thumb, &set, &st);
                 TagContextMenu::handle_action(action_u64, &win, &lib, &set, &st, bundle);
                 return;
             }
 
-            // 4. Tab Context Menu Invocations
+            // 5. Tab Context Menu Invocations (4000..5000)
             let active_tab_target = st.write().active_tab_dialog_target.take();
             if let Some(target_tab_id) = active_tab_target {
                 if (4000..5000).contains(&action_u64) {
@@ -348,7 +355,7 @@ impl BridgeContextMenu {
                 }
             }
 
-            // 5. Media Grid / Table Selection Actions (including Copy To / Move To)
+            // 6. Media Grid / Table Selection Actions (including Copy To / Move To)
             MediaContextMenu::handle_action(
                 action_u64,
                 &win,

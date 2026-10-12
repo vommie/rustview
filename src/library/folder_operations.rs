@@ -1,7 +1,8 @@
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::folder_move::FolderMoveExecutor;
-use super::models::{FolderId, FolderRecord};
+use super::folders::FolderManager;
+use super::models::{FolderId, FolderRecord, MediaId};
 use crate::settings::LogObscurer;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -60,6 +61,7 @@ pub struct FolderSubtreeMetrics {
 #[derive(Debug, Clone, Default)]
 pub struct FolderDeleteReport {
     pub deleted_folder_ids: Vec<FolderId>,
+    pub deleted_media_ids: Vec<MediaId>,
     pub deleted_media_count: usize,
     pub trashed: bool,
 }
@@ -263,6 +265,8 @@ impl<'a> FolderOperations<'a> {
         Ok(record)
     }
 
+    /// Deletes a folder physically on disk (Trash or Permanent Delete) and flags the folder and all
+    /// contained media records in the database with `is_deleted = true`, adjusting count rollups.
     pub fn delete_folder(
         &self,
         folder_id: FolderId,
@@ -277,7 +281,7 @@ impl<'a> FolderOperations<'a> {
             to_trash,
             subfolders = metrics.subfolders_count,
             media = metrics.media_files_count,
-            "[FolderOperations: Delete] Deleting folder and cleaning records..."
+            "[FolderOperations: Delete] Deleting folder on disk and flagging database records..."
         );
 
         if folder_path.exists() {
@@ -294,44 +298,43 @@ impl<'a> FolderOperations<'a> {
         }
 
         let mut wtxn = self.db.env.write_txn()?;
+        let mut deleted_media_ids = Vec::new();
         let mut deleted_media_count = 0;
 
-        // Unlink from parent's children list
-        if let Some(rec) = self.db.folders.get(&wtxn, &folder_id)?
-            && let Some(pid) = rec.parent_id
-            && let Some(mut siblings) = self.db.folders_by_parent.get(&wtxn, &pid)?
-        {
-            siblings.retain(|&x| x != folder_id);
-            self.db.folders_by_parent.put(&mut wtxn, &pid, &siblings)?;
+        let mut parent_id_opt = None;
+        if let Some(rec) = self.db.folders.get(&wtxn, &folder_id)? {
+            parent_id_opt = rec.parent_id;
         }
 
-        for id in &metrics.affected_folder_ids {
-            if let Some(folder_rec) = self.db.folders.get(&wtxn, id)? {
-                if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, id)? {
-                    deleted_media_count += media_ids.len();
-                    for media_id in media_ids {
-                        if let Some(media_record) = self.db.media.get(&wtxn, &media_id)? {
-                            self.db.update_media_hash_index(
-                                &mut wtxn,
-                                media_id,
-                                Some(&media_record.file_hash),
-                                None,
-                            )?;
+        for &id in &metrics.affected_folder_ids {
+            // Flag folder record as deleted
+            if let Some(mut folder_rec) = self.db.folders.get(&wtxn, &id)? {
+                folder_rec.is_deleted = true;
+                self.db.folders.put(&mut wtxn, &id, &folder_rec)?;
+            }
+
+            // Flag all associated media records in this folder as deleted
+            if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, &id)? {
+                for &media_id in &media_ids {
+                    if let Some(mut media_record) = self.db.media.get(&wtxn, &media_id)? {
+                        if !media_record.is_deleted {
+                            media_record.is_deleted = true;
+                            self.db.media.put(&mut wtxn, &media_id, &media_record)?;
+                            deleted_media_count += 1;
                         }
-                        self.db.media.delete(&mut wtxn, &media_id)?;
-                        self.db.tags_by_media.delete(&mut wtxn, &media_id)?;
-                        self.db.thumbnails.delete(&mut wtxn, &media_id)?;
-                        self.db.video_previews.delete(&mut wtxn, &media_id)?;
+                        deleted_media_ids.push(media_id);
                     }
                 }
-
-                self.db.media_by_folder.delete(&mut wtxn, id)?;
-                self.db.folders_by_parent.delete(&mut wtxn, id)?;
-                self.db
-                    .folders_by_path
-                    .delete(&mut wtxn, &folder_rec.path)?;
-                self.db.folders.delete(&mut wtxn, id)?;
             }
+        }
+
+        // Adjust parent direct subfolder count and roll up media delta through ancestors
+        if let Some(pid) = parent_id_opt {
+            if let Some(mut p_rec) = self.db.folders.get(&wtxn, &pid)? {
+                p_rec.subfolder_count = p_rec.subfolder_count.saturating_sub(1);
+                self.db.folders.put(&mut wtxn, &pid, &p_rec)?;
+            }
+            FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, pid, -(deleted_media_count as i64))?;
         }
 
         wtxn.commit()?;
@@ -340,11 +343,13 @@ impl<'a> FolderOperations<'a> {
             folder_id,
             deleted_folders = metrics.affected_folder_ids.len(),
             deleted_media_count,
-            "[FolderOperations: Delete] Folder deletion committed to LMDB"
+            trashed = to_trash,
+            "[FolderOperations: Delete] Folder deletion committed to LMDB (records flagged is_deleted = true)"
         );
 
         Ok(FolderDeleteReport {
             deleted_folder_ids: metrics.affected_folder_ids,
+            deleted_media_ids,
             deleted_media_count,
             trashed: to_trash,
         })
@@ -381,6 +386,7 @@ impl<'a> FolderOperations<'a> {
         Ok(false)
     }
 
+    /// Permanently purges folder records and media from LMDB tables when cleaning missing/orphaned folders.
     pub fn purge_folder_from_db(
         &self,
         folder_id: FolderId,
@@ -388,21 +394,26 @@ impl<'a> FolderOperations<'a> {
         let metrics = self.get_metrics(folder_id)?;
 
         let mut wtxn = self.db.env.write_txn()?;
+        let mut deleted_media_ids = Vec::new();
         let mut deleted_media_count = 0;
 
-        if let Some(rec) = self.db.folders.get(&wtxn, &folder_id)?
-            && let Some(pid) = rec.parent_id
-            && let Some(mut siblings) = self.db.folders_by_parent.get(&wtxn, &pid)?
-        {
-            siblings.retain(|&x| x != folder_id);
-            self.db.folders_by_parent.put(&mut wtxn, &pid, &siblings)?;
+        let mut parent_id_opt = None;
+        if let Some(rec) = self.db.folders.get(&wtxn, &folder_id)? {
+            parent_id_opt = rec.parent_id;
+            if let Some(pid) = rec.parent_id
+                && let Some(mut siblings) = self.db.folders_by_parent.get(&wtxn, &pid)?
+            {
+                siblings.retain(|&x| x != folder_id);
+                self.db.folders_by_parent.put(&mut wtxn, &pid, &siblings)?;
+            }
         }
 
-        for id in &metrics.affected_folder_ids {
-            if let Some(folder_rec) = self.db.folders.get(&wtxn, id)? {
-                if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, id)? {
-                    deleted_media_count += media_ids.len();
+        for &id in &metrics.affected_folder_ids {
+            if let Some(folder_rec) = self.db.folders.get(&wtxn, &id)? {
+                if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, &id)? {
                     for media_id in media_ids {
+                        deleted_media_ids.push(media_id);
+                        deleted_media_count += 1;
                         if let Some(media_record) = self.db.media.get(&wtxn, &media_id)? {
                             self.db.update_media_hash_index(
                                 &mut wtxn,
@@ -412,19 +423,40 @@ impl<'a> FolderOperations<'a> {
                             )?;
                         }
                         self.db.media.delete(&mut wtxn, &media_id)?;
-                        self.db.tags_by_media.delete(&mut wtxn, &media_id)?;
+
+                        if let Some(tags) = self.db.tags_by_media.get(&wtxn, &media_id)? {
+                            for tag_id in tags {
+                                if let Some(mut t_media) = self.db.media_by_tag.get(&wtxn, &tag_id)? {
+                                    t_media.retain(|&m| m != media_id);
+                                    if t_media.is_empty() {
+                                        self.db.media_by_tag.delete(&mut wtxn, &tag_id)?;
+                                    } else {
+                                        self.db.media_by_tag.put(&mut wtxn, &tag_id, &t_media)?;
+                                    }
+                                }
+                            }
+                            self.db.tags_by_media.delete(&mut wtxn, &media_id)?;
+                        }
+
                         self.db.thumbnails.delete(&mut wtxn, &media_id)?;
                         self.db.video_previews.delete(&mut wtxn, &media_id)?;
                     }
                 }
 
-                self.db.media_by_folder.delete(&mut wtxn, id)?;
-                self.db.folders_by_parent.delete(&mut wtxn, id)?;
+                self.db.media_by_folder.delete(&mut wtxn, &id)?;
+                self.db.folders_by_parent.delete(&mut wtxn, &id)?;
                 self.db
                     .folders_by_path
                     .delete(&mut wtxn, &folder_rec.path)?;
-                self.db.folders.delete(&mut wtxn, id)?;
+                self.db.folders.delete(&mut wtxn, &id)?;
             }
+        }
+
+        if let Some(pid) = parent_id_opt
+            && let Some(mut p_rec) = self.db.folders.get(&wtxn, &pid)?
+        {
+            p_rec.subfolder_count = p_rec.subfolder_count.saturating_sub(1);
+            self.db.folders.put(&mut wtxn, &pid, &p_rec)?;
         }
 
         wtxn.commit()?;
@@ -438,6 +470,7 @@ impl<'a> FolderOperations<'a> {
 
         Ok(FolderDeleteReport {
             deleted_folder_ids: metrics.affected_folder_ids,
+            deleted_media_ids,
             deleted_media_count,
             trashed: false,
         })

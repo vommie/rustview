@@ -11,6 +11,7 @@ use crate::library::Library;
 use crate::library::models::FolderId;
 use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
+use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -19,6 +20,7 @@ use std::sync::Arc;
 pub struct FolderDialogContext {
     pub library: Arc<Library>,
     pub thumbnails: Arc<ThumbnailManager>,
+    pub tab_manager: Arc<ViewerTabManager>,
     pub settings: Arc<SettingsManager>,
     pub state: Arc<RwLock<UiState>>,
 }

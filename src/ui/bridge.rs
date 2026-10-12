@@ -892,6 +892,7 @@ impl UiBridge {
             let folder_ctx = FolderDialogContext {
                 library: params.library.clone(),
                 thumbnails: params.thumbnails.clone(),
+                tab_manager: params.tab_manager.clone(),
                 settings: params.settings.clone(),
                 state: params.state.clone(),
             };
@@ -1067,6 +1068,7 @@ impl UiBridge {
             let folder_ctx = FolderDialogContext {
                 library: params.library.clone(),
                 thumbnails: params.thumbnails.clone(),
+                tab_manager: params.tab_manager.clone(),
                 settings: params.settings.clone(),
                 state: params.state.clone(),
             };

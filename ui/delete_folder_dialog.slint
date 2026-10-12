@@ -79,9 +79,10 @@ export component DeleteFolderDialog inherits Window {
                 }
 
                 Text {
-                    text: "This folder and its contents will be completely removed from the library database.";
+                    text: "This folder and its media contents will be deleted on disk and flagged in the library database.";
                     font-size: 11px;
                     color: Theme.text-muted;
+                    wrap: word-wrap;
                 }
 
                 if root.error-message != "" : Text {
