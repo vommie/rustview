@@ -118,6 +118,7 @@ mod tests {
         let colored: HashSet<Icon> =
             Icon::ALL.iter().copied().filter(|i| !i.is_monochrome()).collect();
         let expected: HashSet<Icon> = [
+            Icon::RatingClear,
             Icon::Rating0,
             Icon::Rating1,
             Icon::Rating2,
