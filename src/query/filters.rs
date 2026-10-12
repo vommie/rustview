@@ -183,6 +183,8 @@ pub struct IndexedMediaRecord {
     pub ar_str: SharedString,
     pub ar_value: f32,
     pub duration_str: SharedString,
+    /// Compact duration for thumbnail badges (e.g. "5s", "04:30"); empty when no badge applies.
+    pub duration_badge_str: SharedString,
     pub format_str: SharedString,
     pub flags_str: SharedString,
     pub is_corrupted: bool,

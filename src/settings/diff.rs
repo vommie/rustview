@@ -76,6 +76,8 @@ impl SettingsDiff {
             || old.appearance.show_ratings_overlay != new.appearance.show_ratings_overlay
             || old.appearance.show_tags_overlay != new.appearance.show_tags_overlay
             || old.appearance.show_media_type_badges != new.appearance.show_media_type_badges
+            || old.appearance.show_duration_badge != new.appearance.show_duration_badge
+            || old.appearance.thumbnail_badge_overflow != new.appearance.thumbnail_badge_overflow
             || old.appearance.dark_theme != new.appearance.dark_theme
             || old.appearance.grid_item_padding_horizontal != new.appearance.grid_item_padding_horizontal
             || old.appearance.grid_item_padding_vertical != new.appearance.grid_item_padding_vertical
@@ -254,6 +256,18 @@ impl SettingsDiff {
             changes.push(format!(
                 "Appearance: show_media_type_badges ({} -> {})",
                 old.appearance.show_media_type_badges, new.appearance.show_media_type_badges
+            ));
+        }
+        if old.appearance.show_duration_badge != new.appearance.show_duration_badge {
+            changes.push(format!(
+                "Appearance: show_duration_badge ({} -> {})",
+                old.appearance.show_duration_badge, new.appearance.show_duration_badge
+            ));
+        }
+        if old.appearance.thumbnail_badge_overflow != new.appearance.thumbnail_badge_overflow {
+            changes.push(format!(
+                "Appearance: thumbnail_badge_overflow ({} -> {})",
+                old.appearance.thumbnail_badge_overflow, new.appearance.thumbnail_badge_overflow
             ));
         }
         if old.appearance.grid_item_padding_horizontal != new.appearance.grid_item_padding_horizontal {

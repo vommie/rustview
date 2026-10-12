@@ -160,6 +160,46 @@ pub fn format_duration_hms_ms(duration_ms: u64, is_video: bool) -> String {
     format!("{:02}:{:02}:{:02}.{:03}", h, m, s, ms)
 }
 
+/// Formats a video duration compactly for thumbnail badges. Hours are the largest unit (no days).
+///
+/// - below one second: seconds with up to two decimals, e.g. `"0.5s"` or `"0.25s"`
+/// - below 60 seconds: `"5s"` (milliseconds are not shown from one second on)
+/// - below one hour: `"04:30"` (mm:ss, the clock format is unambiguous without a unit)
+/// - one hour or more: `"01:02:03"` (hh:mm:ss, hours grow beyond two digits if needed)
+///
+/// Returns an empty string for images and for videos without a known duration, so callers can
+/// treat "empty" as "no badge".
+pub fn format_duration_compact(duration_ms: u64, is_video: bool) -> String {
+    if !is_video || duration_ms == 0 {
+        return String::new();
+    }
+    if duration_ms < 1000 {
+        return format_sub_second(duration_ms);
+    }
+    let total_secs = duration_ms / 1000;
+    if total_secs < 60 {
+        return format!("{}s", total_secs);
+    }
+    let s = total_secs % 60;
+    let m = (total_secs / 60) % 60;
+    let h = total_secs / 3600;
+    if h == 0 {
+        format!("{:02}:{:02}", m, s)
+    } else {
+        format!("{:02}:{:02}:{:02}", h, m, s)
+    }
+}
+
+/// Formats 1..=999 ms as fractional seconds rounded to centiseconds (at least `0.01s`).
+fn format_sub_second(duration_ms: u64) -> String {
+    let centis = ((duration_ms + 5) / 10).max(1);
+    match centis {
+        100.. => "1s".to_string(),
+        c if c % 10 == 0 => format!("0.{}s", c / 10),
+        c => format!("0.{:02}s", c),
+    }
+}
+
 /// Approximates image/video dimensions to the closest standard Aspect Ratio bucket:
 /// 1:1, 5:4, 4:3, 16:9, 4:5, 3:4, 9:16.
 pub fn approximate_aspect_ratio(width: u32, height: u32) -> &'static str {
@@ -191,4 +231,59 @@ pub fn approximate_aspect_ratio(width: u32, height: u32) -> &'static str {
     }
 
     best_label
+}
+
+#[cfg(test)]
+mod duration_compact_tests {
+    use super::format_duration_compact;
+
+    #[test]
+    fn seconds_below_one_minute_use_unit() {
+        assert_eq!(format_duration_compact(5_000, true), "5s");
+        assert_eq!(format_duration_compact(59_999, true), "59s");
+    }
+
+    #[test]
+    fn minutes_use_clock_format_without_unit() {
+        assert_eq!(format_duration_compact(60_000, true), "01:00");
+        assert_eq!(format_duration_compact(270_000, true), "04:30");
+        assert_eq!(format_duration_compact(3_599_999, true), "59:59");
+    }
+
+    #[test]
+    fn hours_use_three_segments_and_never_days() {
+        assert_eq!(format_duration_compact(3_600_000, true), "01:00:00");
+        assert_eq!(format_duration_compact(3_723_000, true), "01:02:03");
+        assert_eq!(format_duration_compact(90_000_000, true), "25:00:00");
+        assert_eq!(format_duration_compact(360_000_000, true), "100:00:00");
+    }
+
+    #[test]
+    fn milliseconds_are_not_rendered_from_one_second_on() {
+        assert_eq!(format_duration_compact(5_999, true), "5s");
+        assert_eq!(format_duration_compact(61_999, true), "01:01");
+    }
+
+    #[test]
+    fn sub_second_clips_show_fractional_seconds() {
+        assert_eq!(format_duration_compact(500, true), "0.5s");
+        assert_eq!(format_duration_compact(250, true), "0.25s");
+        assert_eq!(format_duration_compact(40, true), "0.04s");
+        assert_eq!(format_duration_compact(100, true), "0.1s");
+    }
+
+    #[test]
+    fn sub_second_edge_cases_never_show_zero_or_overflow() {
+        assert_eq!(format_duration_compact(1, true), "0.01s");
+        assert_eq!(format_duration_compact(994, true), "0.99s");
+        assert_eq!(format_duration_compact(995, true), "1s");
+        assert_eq!(format_duration_compact(999, true), "1s");
+        assert_eq!(format_duration_compact(1000, true), "1s");
+    }
+
+    #[test]
+    fn unknown_duration_and_images_yield_empty_string() {
+        assert_eq!(format_duration_compact(0, true), "");
+        assert_eq!(format_duration_compact(5_000, false), "");
+    }
 }

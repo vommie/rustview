@@ -11,6 +11,8 @@ export component SettingsPageAppearance inherits VerticalLayout {
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
     in-out property <bool> show-media-type-badges: true;
+    in-out property <bool> show-duration-badge: true;
+    in-out property <int> thumbnail-badge-overflow-idx: 0; // 0=hide, 1=wrap
     in-out property <bool> enable-hover-previews: true;
     in-out property <bool> enable-tooltips: true;
     in-out property <int> tooltip-delay-ms: 750;
@@ -71,6 +73,16 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         CheckBox {
+            text: "Enable hover video preview animation (YouTube-style)";
+            checked <=> root.enable-hover-previews;
+        }
+    }
+
+    SettingsCard {
+        title: "Thumbnail Badges";
+        description: "Choose which badges are drawn on top of thumbnails and how they behave when a thumbnail is too small for all of them.";
+
+        CheckBox {
             text: "Show colored rating badge overlay";
             checked <=> root.show-rating-badge;
         }
@@ -86,8 +98,24 @@ export component SettingsPageAppearance inherits VerticalLayout {
         }
 
         CheckBox {
-            text: "Enable hover video preview animation (YouTube-style)";
-            checked <=> root.enable-hover-previews;
+            text: "Show duration badge on thumbnails (video)";
+            checked <=> root.show-duration-badge;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "When thumbnail space is insufficient:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            ComboBox {
+                width: 180px;
+                model: ["Hide badges", "Wrap badges"];
+                current-index <=> root.thumbnail-badge-overflow-idx;
+            }
         }
     }
 

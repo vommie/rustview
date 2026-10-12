@@ -6,6 +6,7 @@ import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
 import { SidebarRight } from "sidebar_right.slint";
 import { VirtualizedMediaGrid } from "media_grid.slint";
+import { ThumbnailBadgeConfig, ThumbnailBadgeOverflowMode } from "thumbnail_badge_types.slint";
 import { MediaTableView } from "media_table.slint";
 import { StatusBar } from "status_bar.slint";
 import { ContextMenuPopup } from "context_menu.slint";
@@ -35,6 +36,7 @@ export { MissingFileDialog } from "missing_file_dialog.slint";
 export { ImageFullscreenWindow } from "image_fullscreen_window.slint";
 export { FavoriteRenameDialog } from "favorite_rename_dialog.slint";
 export { TooltipSettings, GlobalTooltip } from "tooltips.slint";
+export { ThumbnailBadgeEngine, ThumbnailBadgeConfig, ThumbnailBadgeView, ThumbnailBadgeZones, ThumbnailBadgeOrientation, ThumbnailBadgeKind, ThumbnailBadgeTone, ThumbnailBadgeOverflowMode } from "thumbnail_badge_types.slint";
 
 export component MainWindow inherits Window {
     title: "RustView";
@@ -88,7 +90,13 @@ export component MainWindow inherits Window {
     in-out property <bool> is-modal-locked: false;
     in-out property <int> thumb-size: 190;
     in-out property <int> thumb-aspect-idx: 1;
-    in-out property <bool> show-media-type-badges: true;
+    in-out property <ThumbnailBadgeConfig> thumbnail-badge-config: {
+        show-rating: true,
+        show-tag: true,
+        show-media-type: true,
+        show-duration: true,
+        overflow-mode: ThumbnailBadgeOverflowMode.hide,
+    };
     in-out property <string> status-text: "Ready.";
     in-out property <int> status-level: 0;
     in-out property <string> items-metric-text: "Items: 0";
@@ -778,7 +786,7 @@ export component MainWindow inherits Window {
                         total-items-count: root.total-items-count;
                         thumb-size: root.thumb-size;
                         thumb-aspect-idx: root.thumb-aspect-idx;
-                        show-media-type-badges: root.show-media-type-badges;
+                        badge-config: root.thumbnail-badge-config;
                         grid-item-padding-h: root.grid-item-padding-h;
                         grid-item-padding-v: root.grid-item-padding-v;
                         grid-spacing-val: root.grid-spacing;

@@ -12,7 +12,7 @@ use crate::library::folders::{normalize_path, FolderScanOptions};
 use crate::library::models::{FolderHierarchySnapshot, FolderId, MediaId, MediaRecord};
 use crate::library::refresh::RefreshReport;
 use crate::library::Library;
-use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
+use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms, format_filesize_mb};
 use crate::media::MediaType;
 use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::telemetry::FolderLoadBenchmark;
@@ -971,6 +971,7 @@ impl BridgeFolders {
                                             target_indexed.ar_value = if item.updated_record.height > 0 { item.updated_record.width as f32 / item.updated_record.height as f32 } else { 0.0 };
                                             let is_video = matches!(item.updated_record.media_type, MediaType::Video);
                                             target_indexed.duration_str = format_duration_hms_ms(item.updated_record.duration_ms, is_video).into();
+                                            target_indexed.duration_badge_str = format_duration_compact(item.updated_record.duration_ms, is_video).into();
                                             target_indexed.filesize_mb_str = format_filesize_mb(item.updated_record.file_size).into();
                                             target_indexed.modified_date_str = format_timestamp(item.updated_record.modification_time).into();
                                             target_indexed.created_date_str = format_timestamp(item.updated_record.creation_time).into();

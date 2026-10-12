@@ -1,5 +1,5 @@
 use super::schema::{
-    AppSettings, GridAspectRatio, DEFAULT_COL_FLAGS_WIDTH, DEFAULT_COL_PATH_WIDTH,
+    AppSettings, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_COL_FLAGS_WIDTH, DEFAULT_COL_PATH_WIDTH,
     DEFAULT_FULLSCREEN_FALLBACK_TARGET, DEFAULT_GRID_SPACING, DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB,
     DEFAULT_LEFT_SIDEBAR_PANEL_TABS, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_PREVIEW_FORMAT,
     DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT,
@@ -93,6 +93,12 @@ impl SettingsStore {
             } else {
                 ratio.as_str().to_string()
             };
+
+        // Unknown overflow names (e.g. from hand-edited files) fall back to the default behavior.
+        settings.appearance.thumbnail_badge_overflow =
+            ThumbnailBadgeOverflow::from_str_name(&settings.appearance.thumbnail_badge_overflow)
+                .as_str()
+                .to_string();
 
         settings.appearance.tooltip_delay_ms = settings
             .appearance

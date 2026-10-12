@@ -12,7 +12,7 @@ use super::{MainWindow, TagColumnView, TagNodeView};
 use crate::ctx_menu::CtxMenuActionId;
 use crate::library::models::{MediaId, MediaSearchParams, TagId, TagRecord};
 use crate::library::Library;
-use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
+use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms, format_filesize_mb};
 use crate::media::MediaType;
 use crate::query::{MatchMode, ScopeMode};
 use crate::settings::{LogObscurer, SettingsManager};
@@ -1023,6 +1023,7 @@ impl TagActionHandler {
                                         target_indexed.ar_value = if item.updated_record.height > 0 { item.updated_record.width as f32 / item.updated_record.height as f32 } else { 0.0 };
                                         let is_video = matches!(item.updated_record.media_type, MediaType::Video);
                                         target_indexed.duration_str = format_duration_hms_ms(item.updated_record.duration_ms, is_video).into();
+                                        target_indexed.duration_badge_str = format_duration_compact(item.updated_record.duration_ms, is_video).into();
                                         target_indexed.filesize_mb_str = format_filesize_mb(item.updated_record.file_size).into();
                                         target_indexed.modified_date_str = format_timestamp(item.updated_record.modification_time).into();
                                         target_indexed.created_date_str = format_timestamp(item.updated_record.creation_time).into();

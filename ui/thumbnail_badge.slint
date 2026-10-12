@@ -1,0 +1,175 @@
+import { Theme } from "styles.slint";
+import { Icons, AppIcon } from "icons.slint";
+import { MediaItemView } from "types.slint";
+import { ThumbnailBadgeOrientation, ThumbnailBadgeKind, ThumbnailBadgeTone, ThumbnailBadgeConfig, ThumbnailBadgeOverflowMode, ThumbnailBadgeView, ThumbnailBadgeZones, ThumbnailBadgeEngine } from "thumbnail_badge_types.slint";
+
+/// Fixed geometry of thumbnail badges (single source of truth).
+global ThumbnailBadgeMetrics {
+    /// Distance between badges and the thumbnail edge.
+    out property <length> edge: 4px;
+    /// Distance between neighboring badges and between wrapped lines.
+    out property <length> gap: 2px;
+    /// Height of one badge line; every badge sits in a slot of this height so lines are uniform.
+    out property <length> slot-height: 16px;
+    out property <length> text-height: 14px;
+    out property <length> round-size: 16px;
+    out property <length> icon-size: 14px;
+    out property <length> text-padding: 3px;
+}
+
+/// Resolves the semantic badge tone to concrete theme colors.
+global ThumbnailBadgePalette {
+    pure public function background(tone: ThumbnailBadgeTone) -> color {
+        if tone == ThumbnailBadgeTone.info { return Theme.badge-info-bg; }
+        if tone == ThumbnailBadgeTone.muted { return Theme.badge-muted-bg; }
+        if tone == ThumbnailBadgeTone.danger { return Theme.badge-danger-bg; }
+        if tone == ThumbnailBadgeTone.rating-0 { return Theme.rating-color(0); }
+        if tone == ThumbnailBadgeTone.rating-1 { return Theme.rating-color(1); }
+        if tone == ThumbnailBadgeTone.rating-2 { return Theme.rating-color(2); }
+        if tone == ThumbnailBadgeTone.rating-3 { return Theme.rating-color(3); }
+        if tone == ThumbnailBadgeTone.rating-4 { return Theme.rating-color(4); }
+        if tone == ThumbnailBadgeTone.rating-5 { return Theme.rating-color(5); }
+        return Theme.badge-bg;
+    }
+
+    pure public function foreground(tone: ThumbnailBadgeTone) -> color {
+        if tone == ThumbnailBadgeTone.info || tone == ThumbnailBadgeTone.danger { return Theme.badge-text-on-light; }
+        if tone == ThumbnailBadgeTone.rating-0 || tone == ThumbnailBadgeTone.rating-1 || tone == ThumbnailBadgeTone.rating-2
+            || tone == ThumbnailBadgeTone.rating-3 || tone == ThumbnailBadgeTone.rating-4 || tone == ThumbnailBadgeTone.rating-5 {
+            return Theme.badge-text-on-rating;
+        }
+        return Theme.badge-text;
+    }
+}
+
+/// Single thumbnail badge. This is the only place that defines the base design (background,
+/// corner radius, typography) of thumbnail badges, so every badge looks consistent.
+/// The badge sizes itself from its real content; it occupies one uniform line slot and hugs
+/// the top or bottom of that slot depending on its orientation.
+export component ThumbnailBadge inherits Rectangle {
+    in property <ThumbnailBadgeView> view;
+
+    // Badges of the bottom corners hug the bottom of their line slot, all others the top.
+    property <bool> align-bottom: root.view.orientation == ThumbnailBadgeOrientation.bottom-left
+        || root.view.orientation == ThumbnailBadgeOrientation.bottom-right;
+    property <bool> is-icon: root.view.kind == ThumbnailBadgeKind.icon;
+    property <bool> is-round: root.view.kind == ThumbnailBadgeKind.round;
+
+    height: ThumbnailBadgeMetrics.slot-height;
+    min-width: root.is-round ? ThumbnailBadgeMetrics.round-size : 0px;
+
+    VerticalLayout {
+        alignment: root.align-bottom ? LayoutAlignment.end : LayoutAlignment.start;
+
+        Rectangle {
+            height: root.is-round ? ThumbnailBadgeMetrics.round-size : (root.is-icon ? ThumbnailBadgeMetrics.icon-size : ThumbnailBadgeMetrics.text-height);
+            background: root.is-icon ? transparent : (
+                root.view.has-custom-color ? root.view.custom-color : ThumbnailBadgePalette.background(root.view.tone)
+            );
+            border-radius: root.is-round ? self.height / 2 : (root.is-icon ? 0px : 2px);
+
+            HorizontalLayout {
+                padding-left: root.is-icon ? 0px : ThumbnailBadgeMetrics.text-padding;
+                padding-right: root.is-icon ? 0px : ThumbnailBadgeMetrics.text-padding;
+
+                if !root.is-icon : Text {
+                    text: root.view.text;
+                    font-size: root.is-round ? 10px : 8px;
+                    font-weight: 700;
+                    color: root.view.has-custom-color ? root.view.custom-text-color : ThumbnailBadgePalette.foreground(root.view.tone);
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                if root.is-icon : AppIcon {
+                    icon: Icons.by-name(root.view.icon-name);
+                    // Icons keep their original SVG colors unless a custom color is requested.
+                    allow-tint: root.view.has-custom-color;
+                    color: root.view.custom-color;
+                    size: ThumbnailBadgeMetrics.icon-size;
+                }
+            }
+        }
+    }
+}
+
+/// One badge area (a thumbnail corner): a CSS-like flex container that wraps badges onto
+/// further lines. Lines grow away from the thumbnail edge; anything beyond the zone height is clipped.
+component ThumbnailBadgeZone inherits Rectangle {
+    in property <[ThumbnailBadgeView]> badges;
+    in property <bool> align-right: false;
+    in property <bool> from-bottom: false;
+
+    clip: true;
+
+    FlexboxLayout {
+        spacing: ThumbnailBadgeMetrics.gap;
+        align-content: FlexboxLayoutAlignContent.start;
+        cross-axis-alignment: CrossAxisAlignment.start;
+        flex-wrap: root.from-bottom ? FlexboxLayoutWrap.wrap-reverse : FlexboxLayoutWrap.wrap;
+        alignment: root.align-right ? LayoutAlignment.end : LayoutAlignment.start;
+
+        for badge in root.badges : ThumbnailBadge {
+            view: badge;
+            flex-shrink: 0;
+            // A badge wider than its whole area can never be shown completely, so hide it.
+            visible: self.preferred-width <= root.width;
+        }
+    }
+}
+
+/// Transparent overlay that renders all badges of one media item on top of its thumbnail.
+/// The left and right badge areas each get half of the thumbnail width. Badge ordering comes from
+/// the Rust badge engine; measuring, wrapping and clipping are done by the Slint layout.
+export component ThumbnailBadgeLayer inherits Rectangle {
+    in property <MediaItemView> item;
+    in property <ThumbnailBadgeConfig> config;
+
+    property <ThumbnailBadgeZones> zones: ThumbnailBadgeEngine.collect(root.item, root.config);
+
+    // Each area gets half of the width; with `hide` only a single line is available.
+    property <length> zone-width: Math.max(0px, (root.width - 2 * ThumbnailBadgeMetrics.edge) / 2);
+    property <length> row-budget: Math.max(0px, (root.height - 2 * ThumbnailBadgeMetrics.edge - ThumbnailBadgeMetrics.gap) / 2);
+    property <int> max-lines: root.config.overflow-mode == ThumbnailBadgeOverflowMode.wrap
+        ? Math.max(1, Math.floor((root.row-budget + ThumbnailBadgeMetrics.gap) / (ThumbnailBadgeMetrics.slot-height + ThumbnailBadgeMetrics.gap)))
+        : 1;
+    property <length> zone-height: root.max-lines * ThumbnailBadgeMetrics.slot-height + (root.max-lines - 1) * ThumbnailBadgeMetrics.gap;
+
+    background: transparent;
+
+    ThumbnailBadgeZone {
+        x: ThumbnailBadgeMetrics.edge;
+        y: ThumbnailBadgeMetrics.edge;
+        width: root.zone-width;
+        height: root.zone-height;
+        badges: root.zones.top-left;
+    }
+
+    ThumbnailBadgeZone {
+        x: root.width - ThumbnailBadgeMetrics.edge - root.zone-width;
+        y: ThumbnailBadgeMetrics.edge;
+        width: root.zone-width;
+        height: root.zone-height;
+        badges: root.zones.top-right;
+        align-right: true;
+    }
+
+    ThumbnailBadgeZone {
+        x: ThumbnailBadgeMetrics.edge;
+        y: root.height - ThumbnailBadgeMetrics.edge - root.zone-height;
+        width: root.zone-width;
+        height: root.zone-height;
+        badges: root.zones.bottom-left;
+        from-bottom: true;
+    }
+
+    ThumbnailBadgeZone {
+        x: root.width - ThumbnailBadgeMetrics.edge - root.zone-width;
+        y: root.height - ThumbnailBadgeMetrics.edge - root.zone-height;
+        width: root.zone-width;
+        height: root.zone-height;
+        badges: root.zones.bottom-right;
+        align-right: true;
+        from-bottom: true;
+    }
+}

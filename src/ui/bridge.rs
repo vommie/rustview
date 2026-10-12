@@ -29,6 +29,7 @@ use super::dnd_foldertree_autoscroller::DndFolderTreeAutoScroller;
 use super::favorites::FavoriteManager;
 use super::keyboard_navigation::{handle_keyboard_navigate, KeyboardNavigateParams};
 use super::rubberband_selection::RubberbandAutoScroller;
+use super::thumbnail_badges::ThumbnailBadgeBridge;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
 use crate::library::folders::normalize_path;
@@ -192,7 +193,8 @@ impl UiBridge {
         window.set_thumb_size(app_settings.appearance.default_thumbnail_size as i32);
         let ratio = GridAspectRatio::from_str_name(&app_settings.appearance.thumbnail_aspect_ratio);
         window.set_thumb_aspect_idx(ratio.to_index());
-        window.set_show_media_type_badges(app_settings.appearance.show_media_type_badges);
+        ThumbnailBadgeBridge::register(&window);
+        ThumbnailBadgeBridge::apply_config(&window, &app_settings.appearance);
         window.set_grid_item_padding_h(app_settings.appearance.grid_item_padding_horizontal as i32);
         window.set_grid_item_padding_v(app_settings.appearance.grid_item_padding_vertical as i32);
         window.set_grid_spacing(app_settings.appearance.grid_spacing as i32);
@@ -420,7 +422,7 @@ impl UiBridge {
                     window.set_thumb_size(new_clone.appearance.default_thumbnail_size as i32);
                     let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
                     window.set_thumb_aspect_idx(ratio.to_index());
-                    window.set_show_media_type_badges(new_clone.appearance.show_media_type_badges);
+                    ThumbnailBadgeBridge::apply_config(&window, &new_clone.appearance);
                     window.set_grid_item_padding_h(new_clone.appearance.grid_item_padding_horizontal as i32);
                     window.set_grid_item_padding_v(new_clone.appearance.grid_item_padding_vertical as i32);
                     window.set_grid_item_border_width(new_clone.appearance.grid_item_border_width as i32);

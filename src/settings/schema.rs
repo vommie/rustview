@@ -31,6 +31,9 @@ pub const DEFAULT_SHOW_FILENAMES: bool = true;
 pub const DEFAULT_SHOW_RATINGS_OVERLAY: bool = true;
 pub const DEFAULT_SHOW_TAGS_OVERLAY: bool = true;
 pub const DEFAULT_SHOW_MEDIA_TYPE_BADGES: bool = true;
+pub const DEFAULT_SHOW_DURATION_BADGE: bool = true;
+/// Persisted name of the badge overflow behavior ("hide" or "wrap"), see `ThumbnailBadgeOverflow`.
+pub const DEFAULT_THUMBNAIL_BADGE_OVERFLOW: &str = "hide";
 pub const DEFAULT_ENABLE_HOVER_PREVIEWS: bool = true;
 pub const DEFAULT_DARK_THEME: bool = true;
 pub const DEFAULT_ENABLE_TOOLTIPS: bool = true;
@@ -283,6 +286,43 @@ impl GridAspectRatio {
     }
 }
 
+/// Behavior of thumbnail badges when a thumbnail is too small to show all of them.
+/// Persisted as a lowercase string so a hand-edited settings file can never break parsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ThumbnailBadgeOverflow {
+    /// Hide badges one by one: secondary (right) first, then primary (left).
+    Hide = 0,
+    /// Wrap badges onto additional lines.
+    Wrap = 1,
+}
+
+impl ThumbnailBadgeOverflow {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Hide => "hide",
+            Self::Wrap => "wrap",
+        }
+    }
+
+    pub fn from_str_name(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "wrap" => Self::Wrap,
+            _ => Self::Hide,
+        }
+    }
+
+    pub fn to_index(&self) -> i32 {
+        *self as i32
+    }
+
+    pub fn from_index(idx: i32) -> Self {
+        match idx {
+            1 => Self::Wrap,
+            _ => Self::Hide,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeletionMode {
     Trash,
@@ -349,6 +389,9 @@ pub struct AppearanceSettings {
     pub show_ratings_overlay: bool,
     pub show_tags_overlay: bool,
     pub show_media_type_badges: bool,
+    pub show_duration_badge: bool,
+    /// Overflow behavior of thumbnail badges: "hide" or "wrap" (see `ThumbnailBadgeOverflow`).
+    pub thumbnail_badge_overflow: String,
     pub enable_hover_previews: bool,
     pub dark_theme: bool,
     pub enable_tooltips: bool,
@@ -372,6 +415,8 @@ impl Default for AppearanceSettings {
             show_ratings_overlay: DEFAULT_SHOW_RATINGS_OVERLAY,
             show_tags_overlay: DEFAULT_SHOW_TAGS_OVERLAY,
             show_media_type_badges: DEFAULT_SHOW_MEDIA_TYPE_BADGES,
+            show_duration_badge: DEFAULT_SHOW_DURATION_BADGE,
+            thumbnail_badge_overflow: DEFAULT_THUMBNAIL_BADGE_OVERFLOW.to_string(),
             enable_hover_previews: DEFAULT_ENABLE_HOVER_PREVIEWS,
             dark_theme: DEFAULT_DARK_THEME,
             enable_tooltips: DEFAULT_ENABLE_TOOLTIPS,

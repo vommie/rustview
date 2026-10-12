@@ -4,12 +4,14 @@ import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
 import { RubberbandOverlay } from "rubberband_selection.slint";
+import { ThumbnailBadgeLayer } from "thumbnail_badge.slint";
+import { ThumbnailBadgeConfig } from "thumbnail_badge_types.slint";
 
 export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
     in property <int> thumb-width: 190;
     in property <int> thumb-aspect-idx: 1;
-    in property <bool> show-media-type-badges: true;
+    in property <ThumbnailBadgeConfig> badge-config;
     in property <length> padding-h: 8px;
     in property <length> padding-v: 6px;
     in property <length> border-width-val: 1px;
@@ -182,64 +184,12 @@ export component MediaTile inherits Rectangle {
                 }
             }
 
-            // Top-Right Rating Badge: Always visible whenever item has rating > 0
-            if item.rating > 0 : Rectangle {
-                x: parent.width - 20px;
-                y: 4px;
-                width: 16px;
-                height: 16px;
-                border-radius: 8px;
-                background: Theme.rating-color(item.rating);
-
-                Text {
-                    text: item.rating;
-                    font-size: 10px;
-                    font-weight: 700;
-                    color: #000000;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-
-            // Top-Left Tag Badge: Always visible whenever item has assigned tags
-            if item.has-tags : Rectangle {
-                x: 4px;
-                y: 4px;
-                width: 14px;
-                height: 14px;
-
-                AppIcon {
-                    icon: Icons.tag;
-                    allow-tint: false;
-                    size: 14px;
-                }
-            }
-
-            // Bottom Media Type / Status Badges (Priority: Pending Stub > Deleted > Corrupted > Type)
-            if root.show-media-type-badges : Rectangle {
-                x: 4px;
-                y: parent.height - 18px;
-                width: item.is-pending ? 48px : ((item.is-deleted || item.is-corrupted) ? 48px : ((item.format-str == "gif") ? 28px : 32px));
-                height: 14px;
-                background: item.is-pending ? #89dcebcc : (item.is-deleted ? #6c7086cc : (item.is-corrupted ? #f38ba8cc : #000000aa));
-                border-radius: 2px;
-
-                Text {
-                    text: item.is-pending ? "PENDING" : (
-                        item.is-deleted ? "DELETED" : (
-                            item.is-corrupted ? "CORRUPT" : (
-                                item.is-video ? "VIDEO" : (
-                                    item.format-str == "gif" ? "GIF" : "IMAGE"
-                                )
-                            )
-                        )
-                    );
-                    font-size: 8px;
-                    font-weight: 700;
-                    color: (item.is-pending || item.is-corrupted) ? #11111b : #ffffff;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+            // Thumbnail badges (rating, tags, media type, duration): layout is computed by the Rust badge engine
+            ThumbnailBadgeLayer {
+                width: 100%;
+                height: 100%;
+                item: root.item;
+                config: root.badge-config;
             }
         }
 
@@ -275,7 +225,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
     in property <int> sort-column: 0;
     in property <int> sort-order: 0;
 
-    in property <bool> show-media-type-badges: true;
+    in property <ThumbnailBadgeConfig> badge-config;
     in property <int> grid-item-padding-h: 8;
     in property <int> grid-item-padding-v: 6;
     in property <int> grid-spacing-val: 12;
@@ -497,7 +447,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     item: item;
                     thumb-width: root.thumb-size;
                     thumb-aspect-idx: root.thumb-aspect-idx;
-                    show-media-type-badges: root.show-media-type-badges;
+                    badge-config: root.badge-config;
                     padding-h: root.item-padding-h;
                     padding-v: root.item-padding-v;
                     border-width-val: root.border-w;

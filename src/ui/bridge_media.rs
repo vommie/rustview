@@ -12,7 +12,7 @@ use super::video_preview_animator::VideoPreviewAnimator;
 use super::{MainWindow, MediaItemView};
 use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::Library;
-use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
+use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms, format_filesize_mb};
 use crate::media::metadata::MetadataExtractor;
 use crate::media::{MediaFormat, MediaHasher, MediaType};
 use crate::query::filters::IndexedMediaRecord;
@@ -729,6 +729,7 @@ impl BridgeMedia {
                         item.height_str.clone(),
                         item.ar_str.clone(),
                         item.duration_str.clone(),
+                        item.duration_badge_str.clone(),
                         item.format_str.clone(),
                         item.flags_str.clone(),
                         item.is_corrupted,
@@ -754,6 +755,7 @@ impl BridgeMedia {
                     height_str,
                     ar_str,
                     duration_str,
+                    duration_badge_str,
                     format_str,
                     flags_str,
                     is_corrupted,
@@ -790,6 +792,7 @@ impl BridgeMedia {
                         height_str,
                         ar_str,
                         duration_str,
+                        duration_badge_str,
                         format_str,
                         flags_str,
                         has_tags,
@@ -1064,6 +1067,10 @@ impl BridgeMedia {
                                 item.updated_record.duration_ms,
                                 is_video,
                             ).into();
+                            let duration_badge_str: slint::SharedString = format_duration_compact(
+                                item.updated_record.duration_ms,
+                                is_video,
+                            ).into();
                             let filesize_mb_str: slint::SharedString = format_filesize_mb(item.updated_record.file_size).into();
                             let modified_date_str: slint::SharedString = format_timestamp(item.updated_record.modification_time).into();
                             let created_date_str: slint::SharedString = format_timestamp(item.updated_record.creation_time).into();
@@ -1087,6 +1094,7 @@ impl BridgeMedia {
                                 target_indexed.ar_str = ar_str;
                                 target_indexed.ar_value = ar_value;
                                 target_indexed.duration_str = duration_str;
+                                target_indexed.duration_badge_str = duration_badge_str;
                                 target_indexed.filesize_mb_str = filesize_mb_str;
                                 target_indexed.modified_date_str = modified_date_str;
                                 target_indexed.created_date_str = created_date_str;
@@ -1132,6 +1140,7 @@ impl BridgeMedia {
                                         view.height_str = indexed.height_str.clone();
                                         view.ar_str = indexed.ar_str.clone();
                                         view.duration_str = indexed.duration_str.clone();
+                                        view.duration_badge_str = indexed.duration_badge_str.clone();
                                         view.filesize_str = indexed.filesize_mb_str.clone();
                                         view.modified_date_str = indexed.modified_date_str.clone();
                                         view.created_date_str = indexed.created_date_str.clone();
@@ -1724,6 +1733,10 @@ impl BridgeMedia {
                                 item.updated_record.duration_ms,
                                 is_video,
                             ).into();
+                            let duration_badge_str: slint::SharedString = format_duration_compact(
+                                item.updated_record.duration_ms,
+                                is_video,
+                            ).into();
                             let filesize_mb_str: slint::SharedString = format_filesize_mb(item.updated_record.file_size).into();
                             let modified_date_str: slint::SharedString = format_timestamp(item.updated_record.modification_time).into();
                             let created_date_str: slint::SharedString = format_timestamp(item.updated_record.creation_time).into();
@@ -1747,6 +1760,7 @@ impl BridgeMedia {
                                 target_indexed.ar_str = ar_str;
                                 target_indexed.ar_value = ar_value;
                                 target_indexed.duration_str = duration_str;
+                                target_indexed.duration_badge_str = duration_badge_str;
                                 target_indexed.filesize_mb_str = filesize_mb_str.clone();
                                 target_indexed.modified_date_str = modified_date_str;
                                 target_indexed.created_date_str = created_date_str;
@@ -1838,6 +1852,7 @@ impl BridgeMedia {
                                         view.height_str = indexed.height_str.clone();
                                         view.ar_str = indexed.ar_str.clone();
                                         view.duration_str = indexed.duration_str.clone();
+                                        view.duration_badge_str = indexed.duration_badge_str.clone();
                                         view.filesize_str = indexed.filesize_mb_str.clone();
                                         view.modified_date_str = indexed.modified_date_str.clone();
                                         view.created_date_str = indexed.created_date_str.clone();
@@ -1980,6 +1995,7 @@ impl BridgeMedia {
 
                 let is_video = matches!(r.media_type, MediaType::Video);
                 let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
+                let duration_badge_str: slint::SharedString = format_duration_compact(r.duration_ms, is_video).into();
                 let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
 
                 let is_pending = r.source.is_some() && (r.file_size == 0 || r.width == 0 || r.height == 0 || r.is_corrupted);
@@ -2017,6 +2033,7 @@ impl BridgeMedia {
                     ar_str,
                     ar_value,
                     duration_str,
+                    duration_badge_str,
                     format_str,
                     flags_str,
                     is_corrupted: if is_pending { false } else { r.is_corrupted },
@@ -2077,6 +2094,7 @@ impl BridgeMedia {
 
                 let is_video = matches!(r.media_type, MediaType::Video);
                 let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
+                let duration_badge_str: slint::SharedString = format_duration_compact(r.duration_ms, is_video).into();
                 let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
 
                 let is_pending = r.source.is_some() && (r.file_size == 0 || r.width == 0 || r.height == 0 || r.is_corrupted);
@@ -2127,6 +2145,7 @@ impl BridgeMedia {
                     ar_str,
                     ar_value,
                     duration_str,
+                    duration_badge_str,
                     format_str,
                     flags_str,
                     is_corrupted: if is_pending { false } else { r.is_corrupted },
@@ -2299,6 +2318,7 @@ impl BridgeMedia {
                 height_str: item.height_str.clone(),
                 ar_str: item.ar_str.clone(),
                 duration_str: item.duration_str.clone(),
+                duration_badge_str: item.duration_badge_str.clone(),
                 format_str: item.format_str.clone(),
                 flags_str: item.flags_str.clone(),
                 has_tags: item.has_tags,

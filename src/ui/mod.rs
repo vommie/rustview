@@ -52,6 +52,7 @@ pub mod sidebar_panel_tab_dnd;
 pub mod tab_dnd;
 pub mod tab_grid;
 pub mod tag_history;
+pub mod thumbnail_badges;
 pub mod video_preview_animator;
 
 pub use bridge::{RenameActionParams, UiBridge};
@@ -104,6 +105,7 @@ pub use icons::{IconAsset, IconManager, IconMetadata};
 pub use keyboard_navigation::{
     calculate_target_index, handle_keyboard_navigate, KeyboardNavigateParams, NavigationDirection,
 };
+pub use thumbnail_badges::ThumbnailBadgeBridge;
 pub use rubberband_selection::{
     GridLayoutConfig, RectF32, RubberbandAutoScroller, RubberbandGeometry, RubberbandSession,
     RubberbandStartParams, TableLayoutConfig,

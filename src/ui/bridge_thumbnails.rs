@@ -2,7 +2,7 @@ use super::MainWindow;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
-use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms};
+use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms};
 use crate::media::MediaType;
 use crate::telemetry::BenchmarkReportFormatter;
 use crate::thumbnails::ThumbnailManager;
@@ -84,6 +84,7 @@ impl BridgeThumbnails {
                                 item.record.duration_ms = item_data.duration_ms;
                                 let is_video = matches!(item.record.media_type, MediaType::Video);
                                 item.duration_str = format_duration_hms_ms(item_data.duration_ms, is_video).into();
+                                item.duration_badge_str = format_duration_compact(item_data.duration_ms, is_video).into();
                                 meta_changed = true;
                             }
                             if item_data.is_corrupted != item.is_corrupted {
@@ -127,6 +128,7 @@ impl BridgeThumbnails {
                                     item.height_str = updated_rec.height_str.clone();
                                     item.ar_str = updated_rec.ar_str.clone();
                                     item.duration_str = updated_rec.duration_str.clone();
+                                    item.duration_badge_str = updated_rec.duration_badge_str.clone();
                                     item.flags_str = updated_rec.flags_str.clone();
                                     item.is_corrupted = updated_rec.is_corrupted;
                                     item.is_deleted = updated_rec.is_deleted;
