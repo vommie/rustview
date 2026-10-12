@@ -1,7 +1,5 @@
 use super::bridge_folder_dialogs::FolderDialogContext;
-use super::bridge_folders::BridgeFolders;
-use super::bridge_media::BridgeMedia;
-use super::bridge_status_bar::StatusBarBridge;
+use super::bridge_folder_move_sync::BridgeFolderMoveSync;
 use super::{MainWindow, MoveFolderToDialog};
 use crate::library::models::FolderId;
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -76,7 +74,8 @@ impl MoveFolderDialogController {
         window.set_is_modal_locked(false);
     }
 
-    /// Executes physical relocation on disk and rewrites LMDB folder path keys recursively.
+    /// Executes the physical relocation (atomic with the database update) and then applies the result to the
+    /// in-memory snapshot and the views surgically, without rebuilding the whole folder tree.
     pub fn execute(
         &self,
         src_folder_id: FolderId,
@@ -84,32 +83,33 @@ impl MoveFolderDialogController {
         ctx: &FolderDialogContext,
         window: &MainWindow,
     ) {
+        if let Some(reason) = Self::busy_reason(ctx) {
+            tracing::warn!(
+                src_folder_id,
+                dst_folder_id,
+                reason,
+                "[FolderMove: Rejected] Folder move rejected because another operation is running"
+            );
+            if let Some(ref win) = *self.dialog.borrow() {
+                win.set_error_message(reason.into());
+            }
+            return;
+        }
+
+        tracing::info!(
+            src_folder_id,
+            dst_folder_id,
+            "[FolderMove: Request] User confirmed folder move"
+        );
+
         match ctx
             .library
             .folder_operations()
             .move_folder(src_folder_id, dst_folder_id)
         {
-            Ok(_report) => {
-                {
-                    let mut st = ctx.state.write();
-                    st.expanded_folder_ids.insert(dst_folder_id);
-                    BridgeFolders::persist_expanded_folders(&ctx.settings, &st.expanded_folder_ids);
-                }
-
+            Ok(report) => {
                 self.close(window);
-                StatusBarBridge::success(window, "Folder moved successfully.");
-
-                BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
-                BridgeMedia::reload(
-                    window,
-                    &ctx.library,
-                    &ctx.thumbnails,
-                    &ctx.settings,
-                    &ctx.state,
-                    false,
-                    true,
-                );
-                StatusBarBridge::update_metrics(window, &ctx.state);
+                BridgeFolderMoveSync::apply(&report, window, ctx);
             }
             Err(e) => {
                 tracing::error!(error = %e, "Failed to move folder");
@@ -117,6 +117,18 @@ impl MoveFolderDialogController {
                     win.set_error_message(e.to_string().into());
                 }
             }
+        }
+    }
+
+    /// A folder move must not run while a folder tree scan or media refresh is changing the same data.
+    fn busy_reason(ctx: &FolderDialogContext) -> Option<&'static str> {
+        let st = ctx.state.read();
+        if st.is_refreshing_folders {
+            Some("A folder tree scan is currently running. Please wait until it has finished.")
+        } else if st.is_refreshing_media {
+            Some("A media refresh is currently running. Please wait until it has finished.")
+        } else {
+            None
         }
     }
 

@@ -1,9 +1,12 @@
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
+use super::folder_move::FolderMoveExecutor;
 use super::models::{FolderId, FolderRecord};
 use crate::settings::LogObscurer;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
+pub use super::folder_move::FolderMoveReport;
 
 /// POSIX Linux folder component name validator.
 pub struct FolderValidator;
@@ -59,13 +62,6 @@ pub struct FolderDeleteReport {
     pub deleted_folder_ids: Vec<FolderId>,
     pub deleted_media_count: usize,
     pub trashed: bool,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct FolderMoveReport {
-    pub moved_folder_id: FolderId,
-    pub affected_folders_count: usize,
-    pub affected_media_count: usize,
 }
 
 /// Subsystem managing atomic physical & database folder operations.
@@ -447,137 +443,13 @@ impl<'a> FolderOperations<'a> {
         })
     }
 
+    /// Moves a folder (including its subtree) below another folder, on disk and in LMDB.
+    /// Delegates to `FolderMoveExecutor`, which stages database changes, renames on disk and commits atomically.
     pub fn move_folder(
         &self,
         folder_id: FolderId,
         new_parent_id: FolderId,
     ) -> Result<FolderMoveReport, LibraryError> {
-        let mut wtxn = self.db.env.write_txn()?;
-
-        let record = self
-            .db
-            .folders
-            .get(&wtxn, &folder_id)?
-            .ok_or(LibraryError::FolderNotFound(folder_id))?;
-
-        let parent_record = self
-            .db
-            .folders
-            .get(&wtxn, &new_parent_id)?
-            .ok_or(LibraryError::FolderNotFound(new_parent_id))?;
-
-        let src_path = PathBuf::from(&record.path);
-        let dst_parent_path = PathBuf::from(&parent_record.path);
-
-        let folder_name = src_path.file_name().ok_or_else(|| {
-            LibraryError::FileOperationRenameFailed("Invalid source folder name".into())
-        })?;
-
-        let dst_path = dst_parent_path.join(folder_name);
-
-        if dst_parent_path.starts_with(&src_path) || src_path == dst_path {
-            return Err(LibraryError::FileOperationRenameFailed(
-                "Cannot move a folder into itself or its own subdirectories".into(),
-            ));
-        }
-
-        if dst_path.exists() {
-            return Err(LibraryError::FileOperationAlreadyExists(
-                folder_name.to_string_lossy().to_string(),
-            ));
-        }
-
-        let dst_path_str = dst_path.to_string_lossy().to_string();
-        if self.db.folders_by_path.get(&wtxn, &dst_path_str)?.is_some() {
-            return Err(LibraryError::DuplicateFolder(dst_path_str));
-        }
-
-        tracing::info!(
-            folder = %LogObscurer::folder(Some(folder_id), &src_path),
-            new_parent = %LogObscurer::folder(Some(new_parent_id), &dst_parent_path),
-            "[FolderOperations: Move] Relocating folder on filesystem..."
-        );
-
-        std::fs::rename(&src_path, &dst_path)?;
-
-        // Update old parent
-        if let Some(old_pid) = record.parent_id
-            && let Some(mut siblings) = self.db.folders_by_parent.get(&wtxn, &old_pid)?
-        {
-            siblings.retain(|&x| x != folder_id);
-            self.db.folders_by_parent.put(&mut wtxn, &old_pid, &siblings)?;
-        }
-
-        // Update new parent
-        let mut new_siblings = self
-            .db
-            .folders_by_parent
-            .get(&wtxn, &new_parent_id)?
-            .unwrap_or_default();
-        if !new_siblings.contains(&folder_id) {
-            new_siblings.push(folder_id);
-            self.db
-                .folders_by_parent
-                .put(&mut wtxn, &new_parent_id, &new_siblings)?;
-        }
-
-        let old_depth = record.depth;
-        let new_depth = parent_record.depth + 1;
-        let depth_delta = new_depth as i32 - old_depth as i32;
-
-        let mut affected = Vec::new();
-        for entry in self.db.folders.iter(&wtxn)? {
-            let (id, rec) = entry?;
-            let rec_p = PathBuf::from(&rec.path);
-            if rec_p.starts_with(&src_path) {
-                affected.push((id, rec));
-            }
-        }
-
-        let mut affected_media_count = 0;
-
-        for (id, mut rec) in affected {
-            let old_sub_p = PathBuf::from(&rec.path);
-            let suffix = old_sub_p.strip_prefix(&src_path).unwrap_or(Path::new(""));
-            let updated_p = if suffix.as_os_str().is_empty() {
-                dst_path.clone()
-            } else {
-                dst_path.join(suffix)
-            };
-            let updated_p_str = updated_p.to_string_lossy().to_string();
-
-            self.db.folders_by_path.delete(&mut wtxn, &rec.path)?;
-            self.db
-                .folders_by_path
-                .put(&mut wtxn, &updated_p_str, &id)?;
-
-            rec.path = updated_p_str;
-            rec.depth = (rec.depth as i32 + depth_delta).max(0) as u32;
-
-            if id == folder_id {
-                rec.parent_id = Some(new_parent_id);
-            }
-
-            self.db.folders.put(&mut wtxn, &id, &rec)?;
-
-            if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, &id)? {
-                affected_media_count += media_ids.len();
-            }
-        }
-
-        wtxn.commit()?;
-
-        tracing::info!(
-            folder_id,
-            new_path = %LogObscurer::path(&dst_path),
-            affected_media_count,
-            "[FolderOperations: Move] Folder reparenting committed to LMDB"
-        );
-
-        Ok(FolderMoveReport {
-            moved_folder_id: folder_id,
-            affected_folders_count: 1,
-            affected_media_count,
-        })
+        FolderMoveExecutor::new(self.db).execute(folder_id, new_parent_id)
     }
 }

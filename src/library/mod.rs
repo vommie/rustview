@@ -4,11 +4,13 @@ pub mod external_media_completer;
 pub mod file_operations;
 pub mod folder_diagnostics;
 pub mod folder_mount_filter;
+pub mod folder_move;
 pub mod folder_operations;
 pub mod folder_projection;
 // TEMPORARY DEBUG FEATURE: remove this module together with src/library/folder_reset.rs
 pub mod folder_reset;
 pub mod folder_snapshot;
+pub mod folder_snapshot_patch;
 pub mod folder_walker;
 pub mod folders;
 pub mod media;
@@ -26,6 +28,7 @@ pub use external_media_completer::{
 pub use file_operations::{is_same_file_path, robust_move_file, FileOperations, FilenameValidator};
 pub use folder_diagnostics::FolderDiagnostics;
 pub use folder_mount_filter::FolderMountFilter;
+pub use folder_move::{FolderMoveExecutor, FolderMovePatch};
 pub use folder_operations::{
     FolderDeleteReport, FolderMoveReport, FolderOperations, FolderSubtreeMetrics, FolderValidator,
 };

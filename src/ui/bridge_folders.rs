@@ -1,4 +1,5 @@
 use super::bridge_favorites::BridgeFavorites;
+use super::bridge_folder_tree_sync::FolderTreeSync;
 use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
@@ -1191,7 +1192,8 @@ impl BridgeFolders {
         Self::reload_tree(window, library, settings, state);
     }
 
-    /// Renders the folder tree directly from the in-memory Single Point of Truth snapshot with zero filesystem I/O.
+    /// Renders the folder tree from the in-memory Single Point of Truth snapshot with zero filesystem I/O.
+    /// The Slint model is updated surgically (row-level insert/remove/move/update) instead of being replaced.
     /// Without a configured/registered root the snapshot is empty and an empty tree is shown.
     pub fn reload_tree(
         window: &MainWindow,
@@ -1199,31 +1201,7 @@ impl BridgeFolders {
         settings: &SettingsManager,
         state: &RwLock<UiState>,
     ) {
-        let t0 = Instant::now();
-        let app_settings = settings.get();
-
-        let snapshot = Self::ensure_snapshot(library, state);
-
-        let current_sel = state.read().current_folder_id;
-        let expanded_ids = state.read().expanded_folder_ids.clone();
-
-        let folder_views = snapshot.project_tree(
-            &expanded_ids,
-            current_sel,
-            app_settings.folders.show_deleted_folders,
-            app_settings.folders.show_folder_metrics,
-            app_settings.folders.show_hidden_folders,
-        );
-
-        let row_count = folder_views.len();
-        window.set_folders(ModelRc::new(VecModel::from(folder_views)));
-
-        tracing::debug!(
-            rows = row_count,
-            snapshot_nodes = snapshot.nodes.len(),
-            elapsed_us = t0.elapsed().as_micros() as u64,
-            "[FolderTree: Reload] Folder tree model refreshed from SPoT snapshot"
-        );
+        FolderTreeSync::refresh(window, library, settings, state);
     }
 
     /// Clears the whole browsing view for the "no root directory" situation.

@@ -24,6 +24,8 @@ pub mod bridge_folder_dialog_reborn_warn;
 pub mod bridge_folder_dialog_remove_orphaned;
 pub mod bridge_folder_dialog_rename;
 pub mod bridge_folder_dialogs;
+pub mod bridge_folder_move_sync;
+pub mod bridge_folder_tree_sync;
 pub mod bridge_folders;
 pub mod bridge_image_fullscreen;
 pub mod bridge_inspector;
@@ -80,6 +82,8 @@ pub use bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
 pub use bridge_folder_dialog_remove_orphaned::RemoveOrphanedFolderDialogController;
 pub use bridge_folder_dialog_rename::RenameFolderDialogController;
 pub use bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
+pub use bridge_folder_move_sync::BridgeFolderMoveSync;
+pub use bridge_folder_tree_sync::FolderTreeSync;
 pub use bridge_image_fullscreen::ImageFullscreenDialogController;
 pub use bridge_rubberband::{
     BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams,

@@ -151,7 +151,7 @@ fn walk_dir(
 }
 
 /// Parses the optional local `.hidden` file (one entry name per line, `#` comments allowed).
-fn read_dot_hidden_entries(dir: &Path) -> HashSet<String> {
+pub(crate) fn read_dot_hidden_entries(dir: &Path) -> HashSet<String> {
     let mut hidden_set = HashSet::new();
     let dot_hidden_path = dir.join(".hidden");
 
