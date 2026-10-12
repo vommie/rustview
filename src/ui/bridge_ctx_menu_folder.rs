@@ -15,6 +15,7 @@ pub struct FolderContextMenu;
 
 impl FolderContextMenu {
     /// Builds the declarative context menu for a folder node directly from the in-memory SPoT snapshot with zero disk I/O.
+    /// Provides clear contextual tooltips on disabled options explaining why the action cannot be performed.
     pub fn build_menu(
         target_node: &CachedFolderNode,
         snapshot: &FolderHierarchySnapshot,
@@ -43,24 +44,46 @@ impl FolderContextMenu {
 
         let mut builder = CtxMenuBuilder::new().header_with_tooltip(header_title, header_tooltip);
 
-        // Open in File Manager
-        builder = builder.action(
-            CTX_FOLDER_OPEN_IN_FILE_MANAGER,
-            "Open in File Manager",
-            None,
-            Some("folder"),
-            !target_node.is_deleted,
-        );
+        // 1. Open in File Manager (with disabled reason tooltip)
+        builder = if target_node.is_deleted {
+            builder.action_with_tooltip(
+                CTX_FOLDER_OPEN_IN_FILE_MANAGER,
+                "Open in File Manager",
+                None,
+                Some("folder"),
+                false,
+                "Disabled: Folder does not exist on physical disk",
+            )
+        } else {
+            builder.action(
+                CTX_FOLDER_OPEN_IN_FILE_MANAGER,
+                "Open in File Manager",
+                None,
+                Some("folder"),
+                true,
+            )
+        };
         builder = builder.separator();
 
         if !is_root {
-            builder = builder.action(
-                CTX_FOLDER_RENAME,
-                "Rename Folder...",
-                Some("F2"),
-                Some("edit"),
-                !target_node.is_deleted,
-            );
+            builder = if target_node.is_deleted {
+                builder.action_with_tooltip(
+                    CTX_FOLDER_RENAME,
+                    "Rename Folder...",
+                    Some("F2"),
+                    Some("edit"),
+                    false,
+                    "Disabled: Cannot rename a folder that does not exist on physical disk",
+                )
+            } else {
+                builder.action(
+                    CTX_FOLDER_RENAME,
+                    "Rename Folder...",
+                    Some("F2"),
+                    Some("edit"),
+                    true,
+                )
+            };
 
             let move_submenu = Self::build_reparent_submenu(
                 target_node.id,
@@ -70,49 +93,80 @@ impl FolderContextMenu {
             builder = builder.item(move_submenu);
         }
 
-        // Refresh submenu
+        // 2. Refresh submenu (with disabled reason tooltips when busy or missing)
         let can_refresh = !target_node.is_deleted && !is_busy;
         builder = builder.separator();
         builder = builder.submenu("Refresh...", Some("refresh"), can_refresh, |sub| {
-            sub.action(
+            let disabled_busy_tip = "Disabled: Another scan or refresh operation is currently in progress";
+            let disabled_missing_tip = "Disabled: Folder does not exist on physical disk";
+
+            let refresh_file_tip = if target_node.is_deleted {
+                disabled_missing_tip
+            } else if is_busy {
+                disabled_busy_tip
+            } else {
+                "Scan and refresh all files in this folder (Full re-indexing)"
+            };
+
+            let refresh_tree_tip = if is_busy {
+                disabled_busy_tip
+            } else {
+                "Perform a complete scan of the entire directory tree on disk"
+            };
+
+            sub.action_with_tooltip(
                 CTX_FOLDER_REFRESH_FILES_FULL,
                 "Refresh Files (Full)",
                 None,
                 Some("refresh"),
                 can_refresh,
+                refresh_file_tip,
             )
-            .action(
+            .action_with_tooltip(
                 CTX_FOLDER_REFRESH_FILES_META,
                 "Refresh Files (Meta)",
                 None,
                 Some("refresh"),
                 can_refresh,
+                if can_refresh { "Refresh metadata and file sizes without re-generating thumbnails" } else { refresh_file_tip },
             )
             .separator()
-            .action(
+            .action_with_tooltip(
                 CTX_FOLDER_REFRESH_TREE_FULL,
                 "Refresh Tree (Full)",
                 None,
                 Some("refresh"),
                 !is_busy,
+                refresh_tree_tip,
             )
-            .action(
+            .action_with_tooltip(
                 CTX_FOLDER_REFRESH_TREE_RELATIVE,
                 "Refresh Tree (Relative)",
                 None,
                 Some("refresh"),
                 can_refresh,
+                if can_refresh { "Rescan this folder and its subdirectories only" } else { refresh_file_tip },
             )
         });
 
-        // Add to Favorites
+        // 3. Add to Favorites (with disabled reason tooltip)
         builder = builder.separator();
-        builder = builder.action(
+        let can_favorite = !is_favorite && !target_node.is_deleted;
+        let favorite_tip = if is_favorite {
+            "Disabled: Folder is already added to Favorites"
+        } else if target_node.is_deleted {
+            "Disabled: Cannot add a missing or deleted folder to Favorites"
+        } else {
+            "Bookmark this folder in the Favorites sidebar"
+        };
+
+        builder = builder.action_with_tooltip(
             CTX_FOLDER_ADD_TO_FAVORITES,
             "Add to Favorites",
             None,
             Some("favorite"),
-            !is_favorite && !target_node.is_deleted,
+            can_favorite,
+            favorite_tip,
         );
         builder = builder.separator();
 

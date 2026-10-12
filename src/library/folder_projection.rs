@@ -3,12 +3,14 @@
 
 use super::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use crate::ctx_menu::{CtxMenuItem, CtxMenuItemKind};
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::time::Instant;
 
-/// Maximum number of folder entries emitted into a single "Move to..." / "Copy to..." menu tree.
-/// Folders are included breadth-first (shallowest first), so deep node_modules-style trees cannot freeze the UI.
-pub const MAX_TARGET_MENU_NODES: usize = 2500;
+/// Maximum number of folder entries displayed per submenu level to prevent screen overflow.
+pub const MAX_CHILDREN_PER_MENU_LEVEL: usize = 120;
+
+/// Maximum submenu depth supported by Slint's ContextMenuPopup (level 0 to level 5).
+pub const MAX_SUBMENU_DEPTH: usize = 4;
 
 /// Parameters passed during recursive tree flattening to Slint model items.
 pub struct FolderTreeFlattenFilter<'a> {
@@ -17,12 +19,6 @@ pub struct FolderTreeFlattenFilter<'a> {
     pub show_deleted: bool,
     pub show_metrics: bool,
     pub show_hidden: bool,
-}
-
-/// Result of the breadth-first menu node selection.
-struct MenuSelection {
-    ids: HashSet<FolderId>,
-    truncated: bool,
 }
 
 #[inline]
@@ -116,9 +112,12 @@ impl FolderHierarchySnapshot {
         }
     }
 
-    /// Single Point of Truth (SPoT): Universal context menu generator for "Move to..." and "Copy to..." folder selection trees.
-    /// Operates purely in-memory with zero disk I/O, respecting hidden-folder settings, excluding invalid drop targets
-    /// and bounding the menu size to `MAX_TARGET_MENU_NODES` entries (breadth-first).
+    /// Single Point of Truth (SPoT): Generates the hierarchical target folder menu for "Move to..." and "Copy to...".
+    /// - Top level: Root action item (`📁 Root (<name>)`), separated by a clean divider line, followed by all children of Root.
+    /// - Each child with subfolders is rendered as a submenu `📁 <name> ▶`.
+    /// - Opening any subfolder presents a top action item `Move directly into '<name>'`, followed by a separator and all its subfolders.
+    /// - Inactive/disabled entries receive explicit tooltips detailing the exact reason why moving is forbidden.
+    /// - The folder being moved and all of its descendants are strictly excluded from appearing as destinations.
     pub fn project_target_folder_menu(
         &self,
         base_action_id: u64,
@@ -127,26 +126,266 @@ impl FolderHierarchySnapshot {
         show_hidden: bool,
     ) -> Vec<CtxMenuItem> {
         let t0 = Instant::now();
-        let selection =
-            self.select_menu_node_ids(exclude_subtree_id, show_hidden, MAX_TARGET_MENU_NODES);
-
         let mut menu_items = Vec::new();
+
+        let verb = if base_action_id == crate::ui::bridge_state::CTX_ACTION_COPY_TO_BASE {
+            "Copy"
+        } else {
+            "Move"
+        };
+
         for &root_id in &self.root_ids {
-            if let Some(item) = self.build_menu_item_recursive(
-                root_id,
-                base_action_id,
-                current_parent_id,
-                &selection.ids,
-                true,
-            ) {
-                menu_items.push(item);
+            let Some(root_node) = self.get_node(root_id) else {
+                continue;
+            };
+
+            // 1. Root action item as the very first entry of the menu (e.g. "📁 Root (vommie)")
+            let is_root_current = current_parent_id == Some(root_id);
+            let root_tooltip = if is_root_current {
+                format!(
+                    "Disabled: Item is already located in the Root directory (current location).\nPath: {}",
+                    root_node.path.display()
+                )
+            } else {
+                format!(
+                    "{} directly into Root directory\nPath: {}",
+                    verb,
+                    root_node.path.display()
+                )
+            };
+
+            let root_action = CtxMenuItem {
+                id: base_action_id + root_id,
+                text: format!("📁 Root ({})", root_node.name),
+                shortcut: None,
+                icon_name: Some("folder".to_string()),
+                icon_path: None,
+                kind: CtxMenuItemKind::Action,
+                is_checked: false,
+                is_enabled: !is_root_current,
+                children: Vec::new(),
+                menu_index: 0,
+                tooltip: Some(root_tooltip),
+            };
+            menu_items.push(root_action);
+
+            // 2. Direct child folders of Root
+            let children = self.get_children(Some(root_id));
+            let mut eligible_children = Vec::with_capacity(children.len());
+
+            for &child_id in children {
+                if self.is_target_eligible(child_id, exclude_subtree_id, show_hidden) {
+                    eligible_children.push(child_id);
+                }
+            }
+
+            // Divider separator under Root entry on the first level
+            if !eligible_children.is_empty() {
+                menu_items.push(CtxMenuItem::new_separator());
+            }
+
+            let count = eligible_children.len();
+            let display_slice = &eligible_children[..count.min(MAX_CHILDREN_PER_MENU_LEVEL)];
+
+            for &child_id in display_slice {
+                if let Some(item) = self.build_target_folder_item(
+                    child_id,
+                    base_action_id,
+                    exclude_subtree_id,
+                    current_parent_id,
+                    show_hidden,
+                    1,
+                ) {
+                    menu_items.push(item);
+                }
+            }
+
+            if count > MAX_CHILDREN_PER_MENU_LEVEL {
+                let hidden_count = count - MAX_CHILDREN_PER_MENU_LEVEL;
+                menu_items.push(CtxMenuItem {
+                    id: 0,
+                    text: format!("... ({} more subfolders)", hidden_count),
+                    shortcut: None,
+                    icon_name: None,
+                    icon_path: None,
+                    kind: CtxMenuItemKind::Action,
+                    is_checked: false,
+                    is_enabled: false,
+                    children: Vec::new(),
+                    menu_index: 0,
+                    tooltip: Some(format!(
+                        "Notice: {} subfolders in Root are hidden to keep the menu responsive.\nPlease use the Folder Tree in the sidebar to navigate into deeper directories.",
+                        hidden_count
+                    )),
+                });
             }
         }
 
-        if selection.truncated {
-            menu_items.push(CtxMenuItem {
+        tracing::debug!(
+            items_count = menu_items.len(),
+            snapshot_nodes = self.nodes.len(),
+            elapsed_us = t0.elapsed().as_micros() as u64,
+            "[FolderTree: TargetMenu] Projected target folder menu from SPoT snapshot with Root separator"
+        );
+
+        menu_items
+    }
+
+    /// Evaluates if a folder is an eligible move/copy target.
+    /// Strictly rejects deleted folders, hidden folders (if disabled), the excluded folder,
+    /// and ANY transitive descendant of the excluded folder.
+    fn is_target_eligible(
+        &self,
+        folder_id: FolderId,
+        exclude_subtree_id: Option<FolderId>,
+        show_hidden: bool,
+    ) -> bool {
+        let Some(node) = self.get_node(folder_id) else {
+            return false;
+        };
+
+        if node.is_deleted || (node.is_hidden && !show_hidden) {
+            return false;
+        }
+
+        // Prevent moving a folder into itself or ANY of its own subdirectories!
+        if let Some(excluded) = exclude_subtree_id
+            && (folder_id == excluded || self.is_descendant_of(folder_id, excluded))
+        {
+            return false;
+        }
+
+        true
+    }
+
+    /// Recursively builds a folder node item:
+    /// - If it has no eligible subfolders or has reached MAX_SUBMENU_DEPTH: returns an Action item (`📁 <name>`).
+    /// - If it has subfolders: returns a Submenu item (`📁 <name> ▶`) containing a top action (`Move directly into '<name>'`),
+    ///   followed by a separator and all its subfolders.
+    /// - Any disabled action item receives an explicit reason in its tooltip explaining why it cannot be selected.
+    fn build_target_folder_item(
+        &self,
+        folder_id: FolderId,
+        base_action_id: u64,
+        exclude_subtree_id: Option<FolderId>,
+        current_parent_id: Option<FolderId>,
+        show_hidden: bool,
+        current_depth: usize,
+    ) -> Option<CtxMenuItem> {
+        let node = self.get_node(folder_id)?;
+        let is_current = current_parent_id == Some(folder_id);
+
+        let verb = if base_action_id == crate::ui::bridge_state::CTX_ACTION_COPY_TO_BASE {
+            "Copy"
+        } else {
+            "Move"
+        };
+
+        let children = self.get_children(Some(folder_id));
+        let mut eligible_children = Vec::with_capacity(children.len());
+
+        for &child_id in children {
+            if self.is_target_eligible(child_id, exclude_subtree_id, show_hidden) {
+                eligible_children.push(child_id);
+            }
+        }
+
+        // If no eligible subfolders or maximum submenu depth reached: Leaf Action item
+        if eligible_children.is_empty() || current_depth >= MAX_SUBMENU_DEPTH {
+            let tooltip = if is_current {
+                format!(
+                    "Disabled: Item is already located in '{}' (current location).\nPath: {}",
+                    node.name,
+                    node.path.display()
+                )
+            } else if current_depth >= MAX_SUBMENU_DEPTH && !eligible_children.is_empty() {
+                format!(
+                    "{} directly into '{}'\nPath: {}\n(Subfolders hidden due to maximum menu depth; you can still {} directly into this folder)",
+                    verb,
+                    node.name,
+                    node.path.display(),
+                    verb.to_lowercase()
+                )
+            } else {
+                format!(
+                    "{} directly into '{}'\nPath: {}",
+                    verb,
+                    node.name,
+                    node.path.display()
+                )
+            };
+
+            return Some(CtxMenuItem {
+                id: base_action_id + node.id,
+                text: format!("📁 {}", node.name),
+                shortcut: None,
+                icon_name: Some("folder".to_string()),
+                icon_path: None,
+                kind: CtxMenuItemKind::Action,
+                is_checked: false,
+                is_enabled: !is_current,
+                children: Vec::new(),
+                menu_index: 0,
+                tooltip: Some(tooltip),
+            });
+        }
+
+        // Has subfolders: Submenu with "Move directly into '<name>'" / "Copy directly into '<name>'"
+        let direct_action_text = format!("{} directly into '{}'", verb, node.name);
+        let direct_tooltip = if is_current {
+            format!(
+                "Disabled: Item is already located in '{}' (current location).\nPath: {}",
+                node.name,
+                node.path.display()
+            )
+        } else {
+            format!(
+                "{} directly into '{}'\nPath: {}",
+                verb,
+                node.name,
+                node.path.display()
+            )
+        };
+
+        let direct_action = CtxMenuItem {
+            id: base_action_id + node.id,
+            text: direct_action_text,
+            shortcut: None,
+            icon_name: Some("folder".to_string()),
+            icon_path: None,
+            kind: CtxMenuItemKind::Action,
+            is_checked: false,
+            is_enabled: !is_current,
+            children: Vec::new(),
+            menu_index: 0,
+            tooltip: Some(direct_tooltip),
+        };
+
+        let count = eligible_children.len();
+        let display_slice = &eligible_children[..count.min(MAX_CHILDREN_PER_MENU_LEVEL)];
+
+        let mut sub_elements = Vec::with_capacity(display_slice.len() + 3);
+        sub_elements.push(direct_action);
+        sub_elements.push(CtxMenuItem::new_separator());
+
+        for &child_id in display_slice {
+            if let Some(child_item) = self.build_target_folder_item(
+                child_id,
+                base_action_id,
+                exclude_subtree_id,
+                current_parent_id,
+                show_hidden,
+                current_depth + 1,
+            ) {
+                sub_elements.push(child_item);
+            }
+        }
+
+        if count > MAX_CHILDREN_PER_MENU_LEVEL {
+            let hidden_count = count - MAX_CHILDREN_PER_MENU_LEVEL;
+            sub_elements.push(CtxMenuItem {
                 id: 0,
-                text: "... more folders not shown (menu limit reached)".to_string(),
+                text: format!("... ({} more subfolders)", hidden_count),
                 shortcut: None,
                 icon_name: None,
                 icon_path: None,
@@ -155,129 +394,17 @@ impl FolderHierarchySnapshot {
                 is_enabled: false,
                 children: Vec::new(),
                 menu_index: 0,
-                tooltip: Some("Use the folder tree to reach deeper folders".to_string()),
+                tooltip: Some(format!(
+                    "Notice: {} subfolders in '{}' are hidden to keep the menu responsive.\nPlease use the Folder Tree in the sidebar to navigate into deeper directories.",
+                    hidden_count,
+                    node.name
+                )),
             });
         }
 
-        tracing::debug!(
-            included_nodes = selection.ids.len(),
-            truncated = selection.truncated,
-            snapshot_nodes = self.nodes.len(),
-            elapsed_us = t0.elapsed().as_micros() as u64,
-            "[FolderTree: TargetMenu] Projected target folder menu from SPoT snapshot"
-        );
-
-        menu_items
-    }
-
-    /// Breadth-first selection of eligible menu nodes (shallowest folders first) up to `budget` entries.
-    fn select_menu_node_ids(
-        &self,
-        exclude_subtree_id: Option<FolderId>,
-        show_hidden: bool,
-        budget: usize,
-    ) -> MenuSelection {
-        let mut ids: HashSet<FolderId> = HashSet::new();
-        let mut queue: VecDeque<FolderId> = VecDeque::new();
-        let mut truncated = false;
-
-        for &root_id in &self.root_ids {
-            if self.is_menu_eligible(root_id, exclude_subtree_id, show_hidden) {
-                queue.push_back(root_id);
-            }
-        }
-
-        while let Some(id) = queue.pop_front() {
-            if ids.len() >= budget {
-                truncated = true;
-                break;
-            }
-            ids.insert(id);
-
-            for &child_id in self.get_children(Some(id)) {
-                if self.is_menu_eligible(child_id, exclude_subtree_id, show_hidden) {
-                    queue.push_back(child_id);
-                }
-            }
-        }
-
-        MenuSelection { ids, truncated }
-    }
-
-    /// A folder is a valid menu entry if it exists, is not deleted, is visible and is not the excluded subtree root
-    /// (which also prevents moving a folder into itself or its descendants).
-    fn is_menu_eligible(
-        &self,
-        node_id: FolderId,
-        exclude_subtree_id: Option<FolderId>,
-        show_hidden: bool,
-    ) -> bool {
-        let Some(node) = self.get_node(node_id) else {
-            return false;
-        };
-        if node.is_deleted || (node.is_hidden && !show_hidden) {
-            return false;
-        }
-        exclude_subtree_id != Some(node_id)
-    }
-
-    fn build_menu_item_recursive(
-        &self,
-        node_id: FolderId,
-        base_action_id: u64,
-        current_parent_id: Option<FolderId>,
-        included: &HashSet<FolderId>,
-        is_root: bool,
-    ) -> Option<CtxMenuItem> {
-        if !included.contains(&node_id) {
-            return None;
-        }
-        let node = self.get_node(node_id)?;
-
-        // Do not allow moving or copying to the current folder where files already reside
-        let is_current_location = current_parent_id == Some(node.id);
-
-        let mut valid_child_items = Vec::new();
-        for &child_id in self.get_children(Some(node.id)) {
-            if let Some(child_item) = self.build_menu_item_recursive(
-                child_id,
-                base_action_id,
-                current_parent_id,
-                included,
-                false,
-            ) {
-                valid_child_items.push(child_item);
-            }
-        }
-
-        let display_title = if is_root {
-            format!("📁 Root ({})", node.name)
-        } else {
-            format!("📁 {}", node.name)
-        };
-
-        if valid_child_items.is_empty() {
-            return Some(Self::build_action_item(
-                base_action_id,
-                node,
-                display_title,
-                is_current_location,
-            ));
-        }
-
-        let mut sub_elements = Vec::with_capacity(valid_child_items.len() + 2);
-        sub_elements.push(Self::build_action_item(
-            base_action_id,
-            node,
-            format!("Drop directly into '{}'", node.name),
-            is_current_location,
-        ));
-        sub_elements.push(CtxMenuItem::new_separator());
-        sub_elements.extend(valid_child_items);
-
         Some(CtxMenuItem {
             id: 0,
-            text: display_title,
+            text: format!("📁 {}", node.name),
             shortcut: None,
             icon_name: Some("folder".to_string()),
             icon_path: None,
@@ -288,30 +415,5 @@ impl FolderHierarchySnapshot {
             menu_index: 0,
             tooltip: Some(node.path.to_string_lossy().to_string()),
         })
-    }
-
-    fn build_action_item(
-        base_action_id: u64,
-        node: &CachedFolderNode,
-        text: String,
-        is_current_location: bool,
-    ) -> CtxMenuItem {
-        CtxMenuItem {
-            id: base_action_id + node.id,
-            text,
-            shortcut: None,
-            icon_name: Some("folder".to_string()),
-            icon_path: None,
-            kind: CtxMenuItemKind::Action,
-            is_checked: false,
-            is_enabled: !is_current_location,
-            children: Vec::new(),
-            menu_index: 0,
-            tooltip: if is_current_location {
-                Some("Current location".to_string())
-            } else {
-                Some(node.path.to_string_lossy().to_string())
-            },
-        }
     }
 }

@@ -1,7 +1,7 @@
 import { Theme } from "styles.slint";
 import { Icons, AppIcon } from "icons.slint";
 import { ContextMenuItemModel } from "types.slint";
-import { TooltipArea } from "tooltips.slint";
+import { TooltipArea, TooltipHost } from "tooltips.slint";
 
 export component ContextMenuItemRow inherits Rectangle {
     in property <ContextMenuItemModel> item;
@@ -14,16 +14,41 @@ export component ContextMenuItemRow inherits Rectangle {
         : (item-touch.has-hover ? Theme.surface-hover : transparent);
     border-radius: 4px;
 
-    property <bool> is-hovered: item-touch.has-hover;
-    changed is-hovered => {
-        if self.is-hovered {
-            root.row-hovered(true, root.y, root.item.menu-index, root.item.has-submenu);
-        }
+    tooltip-host := TooltipHost {
+        text: root.item.tooltip;
+        is-enabled: root.item.tooltip != "" && root.item.kind != 3;
+        delay: 350ms;
     }
 
     item-touch := TouchArea {
-        enabled: root.item.is-enabled && root.item.kind != 3 && root.item.kind != 4;
-        clicked => { root.clicked(); }
+        enabled: root.item.kind != 3 && root.item.kind != 4;
+        mouse-cursor: !root.item.is-enabled ? not-allowed : pointer;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                tooltip-host.on-hover-leave();
+            }
+        }
+        clicked => {
+            if root.item.is-enabled {
+                tooltip-host.on-hover-leave();
+                root.clicked();
+            }
+        }
+        moved => {
+            tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
+        }
+    }
+
+    property <bool> is-hovered: item-touch.has-hover;
+    changed is-hovered => {
+        if self.is-hovered {
+            if root.item.tooltip != "" && root.item.kind != 3 {
+                tooltip-host.on-hover-enter(item-touch.mouse-x, item-touch.mouse-y);
+            }
+            root.row-hovered(true, root.y, root.item.menu-index, root.item.has-submenu);
+        } else {
+            tooltip-host.on-hover-leave();
+        }
     }
 
     // Separator Line
@@ -220,7 +245,6 @@ export component ContextMenuPopup inherits Rectangle {
                 row-hovered(is-hover, row-y, m-idx, has-sub) => {
                     if is-hover {
                         root.sub1-y = row-y;
-                        // Avoid redundant backend trips if neither this item nor any open submenu exists
                         if has-sub || root.level1-items.length > 0 {
                             root.request-submenu(0, has-sub ? m-idx : 0);
                         }

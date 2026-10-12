@@ -86,6 +86,31 @@ impl CtxMenuBuilder {
         self
     }
 
+    pub fn action_with_tooltip(
+        mut self,
+        id: CtxMenuActionId,
+        text: impl Into<String>,
+        shortcut: Option<&str>,
+        icon_name: Option<&str>,
+        is_enabled: bool,
+        tooltip: impl Into<String>,
+    ) -> Self {
+        self.items.push(CtxMenuItem {
+            id,
+            text: text.into(),
+            shortcut: shortcut.map(|s| s.to_string()),
+            icon_name: icon_name.map(|s| s.to_string()),
+            icon_path: None,
+            kind: CtxMenuItemKind::Action,
+            is_checked: false,
+            is_enabled,
+            children: Vec::new(),
+            menu_index: 0,
+            tooltip: Some(tooltip.into()),
+        });
+        self
+    }
+
     pub fn action_with_icon_path(
         mut self,
         id: CtxMenuActionId,

@@ -4,7 +4,6 @@ use super::{MainWindow, MoveFolderToDialog};
 use crate::library::models::FolderId;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
-use std::path::Path;
 use std::rc::Rc;
 
 /// Specialized controller managing the Move/Reparent Folder modal dialog and execution.
@@ -32,21 +31,12 @@ impl MoveFolderDialogController {
             ctx.library.folders().get_folder(src_folder_id),
             ctx.library.folder_operations().get_metrics(src_folder_id),
         ) {
-            (Ok(Some(src)), Ok(m)) => {
-                let name = Path::new(&src.path)
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or(src.path);
-                (name, m)
-            }
+            (Ok(Some(src)), Ok(m)) => (src.name, m),
             _ => return,
         };
 
         let dst_name = match ctx.library.folders().get_folder(dst_folder_id) {
-            Ok(Some(dst)) => Path::new(&dst.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or(dst.path),
+            Ok(Some(dst)) => dst.name,
             _ => return,
         };
 
