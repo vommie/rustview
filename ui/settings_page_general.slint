@@ -6,6 +6,7 @@ export component SettingsPageGeneral inherits VerticalLayout {
     spacing: 12px;
 
     in-out property <string> root-folder-path: "";
+    in-out property <bool> ignore-nested-mounts: true;
     in-out property <bool> remember-last-folder: true;
     in-out property <bool> confirm-delete: true;
     in-out property <int> deletion-mode-idx: 0;
@@ -30,6 +31,11 @@ export component SettingsPageGeneral inherits VerticalLayout {
                 text: "Browse...";
                 clicked => { root.browse-root-folder(); }
             }
+        }
+
+        CheckBox {
+            text: "Ignore mount points inside the root directory during folder scans";
+            checked <=> root.ignore-nested-mounts;
         }
     }
 

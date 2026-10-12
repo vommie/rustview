@@ -57,7 +57,8 @@ impl SettingsDiff {
 
         let general_behavior_changed = old.general.remember_last_folder != new.general.remember_last_folder
             || old.general.confirm_on_file_delete != new.general.confirm_on_file_delete
-            || old.general.deletion_mode != new.general.deletion_mode;
+            || old.general.deletion_mode != new.general.deletion_mode
+            || old.general.ignore_nested_mounts != new.general.ignore_nested_mounts;
 
         let folder_tree_presentation_changed = old.folders.show_deleted_folders != new.folders.show_deleted_folders
             || old.folders.show_folder_metrics != new.folders.show_folder_metrics
@@ -185,6 +186,12 @@ impl SettingsDiff {
             changes.push(format!(
                 "General: confirm_on_file_delete ({} -> {})",
                 old.general.confirm_on_file_delete, new.general.confirm_on_file_delete
+            ));
+        }
+        if old.general.ignore_nested_mounts != new.general.ignore_nested_mounts {
+            changes.push(format!(
+                "General: ignore_nested_mounts ({} -> {})",
+                old.general.ignore_nested_mounts, new.general.ignore_nested_mounts
             ));
         }
 

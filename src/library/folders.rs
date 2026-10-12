@@ -1,12 +1,13 @@
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
-use super::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId, FolderRecord};
+use super::folder_mount_filter::FolderMountFilter;
+use super::folder_snapshot::FolderSnapshotBuilder;
+use super::folder_walker::{ScanProgressCallback, ScannedDirItem, walk_directory_tree};
+use super::models::{FolderHierarchySnapshot, FolderId, FolderRecord};
 use super::schema::SEQ_FOLDER_ID;
-use crate::media::MediaFormat;
-use crate::settings::LogObscurer;
-use std::collections::{HashMap, HashSet};
+use crate::settings::{DEFAULT_IGNORE_NESTED_MOUNTS, GeneralSettings, LogObscurer};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -33,6 +34,42 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     }
 }
 
+/// User-configurable options for a manual folder tree scan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FolderScanOptions {
+    /// Skip mount points located below the scan root (the system mount table is read on every scan).
+    pub ignore_nested_mounts: bool,
+}
+
+impl Default for FolderScanOptions {
+    fn default() -> Self {
+        Self {
+            ignore_nested_mounts: DEFAULT_IGNORE_NESTED_MOUNTS,
+        }
+    }
+}
+
+impl FolderScanOptions {
+    /// Derives the scan options from the general settings.
+    pub fn from_general(general: &GeneralSettings) -> Self {
+        Self {
+            ignore_nested_mounts: general.ignore_nested_mounts,
+        }
+    }
+}
+
+/// Describes how a scan root attaches to the existing hierarchy.
+/// Full root scans use `parent_id = None` / `base_depth = 0`; subtree scans keep the existing parent link and depth.
+struct ScanAnchor {
+    parent_id: Option<FolderId>,
+    base_depth: u32,
+}
+
+/// Outcome of the database reconciliation phase of a scan.
+struct ScanOutcome {
+    scanned_folders: usize,
+}
+
 pub struct FolderManager<'a> {
     db: &'a LibraryDatabase,
 }
@@ -42,340 +79,43 @@ impl<'a> FolderManager<'a> {
         Self { db }
     }
 
-    /// Loads the entire folder hierarchy into an immutable in-memory Single Point of Truth snapshot in one read transaction.
+    /// Loads the folder hierarchy of the configured root into an immutable in-memory Single Point of Truth snapshot.
+    /// Returns an empty snapshot if no root is configured or the root is not registered yet.
     pub fn load_hierarchy_snapshot(&self) -> Result<FolderHierarchySnapshot, LibraryError> {
-        let t0 = Instant::now();
-        let rtxn = self.db.env.read_txn()?;
-        let mut nodes = HashMap::new();
-        let mut children_map: HashMap<Option<FolderId>, Vec<FolderId>> = HashMap::new();
-        let mut path_index = HashMap::new();
-        let mut root_ids = Vec::new();
-
-        for entry in self.db.folders.iter(&rtxn)? {
-            let (id, rec) = entry?;
-            let path_buf = PathBuf::from(&rec.path);
-            path_index.insert(path_buf.clone(), id);
-
-            let children_ids = self
-                .db
-                .folders_by_parent
-                .get(&rtxn, &id)?
-                .unwrap_or_default();
-
-            let node = CachedFolderNode {
-                id,
-                parent_id: rec.parent_id,
-                name: rec.name,
-                path: path_buf,
-                depth: rec.depth,
-                is_hidden: rec.is_hidden,
-                is_deleted: rec.is_deleted,
-                subfolder_count: rec.subfolder_count,
-                media_count: rec.media_count,
-                recursive_media_count: rec.recursive_media_count,
-                children: children_ids.clone(),
-            };
-
-            if rec.parent_id.is_none() {
-                root_ids.push(id);
-            }
-
-            children_map
-                .entry(rec.parent_id)
-                .or_default()
-                .push(id);
-
-            nodes.insert(id, node);
-        }
-
-        // Sort children alphabetically by name
-        for list in children_map.values_mut() {
-            list.sort_by(|&a, &b| {
-                let name_a = nodes.get(&a).map(|n| n.name.as_str()).unwrap_or("");
-                let name_b = nodes.get(&b).map(|n| n.name.as_str()).unwrap_or("");
-                name_a.cmp(name_b)
-            });
-        }
-        root_ids.sort_by(|&a, &b| {
-            let name_a = nodes.get(&a).map(|n| n.name.as_str()).unwrap_or("");
-            let name_b = nodes.get(&b).map(|n| n.name.as_str()).unwrap_or("");
-            name_a.cmp(name_b)
-        });
-
-        tracing::debug!(
-            total_nodes = nodes.len(),
-            root_nodes = root_ids.len(),
-            elapsed_us = t0.elapsed().as_micros(),
-            "[FolderHierarchy: Snapshot] Loaded complete in-memory SPoT folder hierarchy snapshot"
-        );
-
-        Ok(FolderHierarchySnapshot {
-            nodes,
-            children_map,
-            path_index,
-            root_ids,
-        })
+        FolderSnapshotBuilder::new(self.db).build()
     }
 
     /// Full root directory scan: walks the entire folder tree, parses local `.hidden` files, counts supported media,
     /// performs bottom-up aggregation of counts, and updates LMDB with relational indices.
+    /// MANUAL ONLY: this must only be triggered by explicit user refresh actions, never automatically.
     pub fn scan_directory_tree<F>(
         &self,
         root_path: &Path,
+        options: FolderScanOptions,
         progress_callback: Option<F>,
     ) -> Result<FolderHierarchySnapshot, LibraryError>
     where
         F: Fn(usize) + Send + Sync + 'static,
     {
-        let t0 = Instant::now();
-        let canonical_root = normalize_path(root_path);
-        tracing::info!(
-            root_path = %LogObscurer::path(&canonical_root),
-            "[FolderScan: FullRoot] Starting full filesystem hierarchy scan..."
+        let anchor = ScanAnchor {
+            parent_id: None,
+            base_depth: 0,
+        };
+        let outcome = self.run_scan(root_path, anchor, options, progress_callback)?;
+        tracing::debug!(
+            scanned_folders = outcome.scanned_folders,
+            "[FolderScan: FullRootSnapshot] Reloading SPoT snapshot after full scan"
         );
-
-        let counter = Arc::new(AtomicUsize::new(1));
-        let cb_arc: Option<Arc<dyn Fn(usize) + Send + Sync>> = progress_callback.map(|cb| Arc::new(cb) as Arc<dyn Fn(usize) + Send + Sync>);
-
-        struct ScannedDirItem {
-            path: PathBuf,
-            name: String,
-            parent_path: Option<PathBuf>,
-            depth: u32,
-            is_hidden: bool,
-            media_files_count: u32,
-        }
-
-        fn walk_dir(
-            dir: &Path,
-            parent: Option<&Path>,
-            depth: u32,
-            is_parent_hidden: bool,
-            counter: &Arc<AtomicUsize>,
-            cb: Option<&Arc<dyn Fn(usize) + Send + Sync>>,
-            collector: &mut Vec<ScannedDirItem>,
-        ) {
-            let dir_name = dir
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-
-            let starts_with_dot = dir_name.starts_with('.');
-
-            let mut hidden_set = HashSet::new();
-            let dot_hidden_path = dir.join(".hidden");
-            if dot_hidden_path.is_file()
-                && let Ok(content) = std::fs::read_to_string(&dot_hidden_path)
-            {
-                for line in content.lines() {
-                    let trimmed = line.trim();
-                    if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                        hidden_set.insert(trimmed.to_string());
-                    }
-                }
-            }
-
-            let mut sub_dirs = Vec::new();
-            let mut media_count = 0u32;
-
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let file_type = entry.file_type();
-                    let is_dir = file_type.as_ref().map(|ft| ft.is_dir()).unwrap_or(false);
-                    let is_file = file_type.as_ref().map(|ft| ft.is_file()).unwrap_or(false);
-                    let entry_name = entry.file_name().to_string_lossy().to_string();
-
-                    if is_dir {
-                        let child_path = entry.path();
-                        let child_hidden = starts_with_dot
-                            || is_parent_hidden
-                            || entry_name.starts_with('.')
-                            || hidden_set.contains(&entry_name);
-                        sub_dirs.push((child_path, child_hidden));
-                    } else if is_file {
-                        let format = MediaFormat::from_path(Path::new(&entry_name));
-                        if format.is_supported() {
-                            media_count += 1;
-                        }
-                    }
-                }
-            } else {
-                tracing::warn!(
-                    dir = %LogObscurer::path(dir),
-                    "[FolderScan: Warning] Unable to read directory entries from filesystem"
-                );
-            }
-
-            collector.push(ScannedDirItem {
-                path: dir.to_path_buf(),
-                name: dir_name,
-                parent_path: parent.map(|p| p.to_path_buf()),
-                depth,
-                is_hidden: is_parent_hidden || starts_with_dot,
-                media_files_count: media_count,
-            });
-
-            let cur = counter.fetch_add(1, Ordering::Relaxed) + 1;
-            if let Some(callback) = cb
-                && (cur.is_multiple_of(32) || cur == 1)
-            {
-                callback(cur);
-            }
-
-            for (sub_p, sub_hidden) in sub_dirs {
-                walk_dir(
-                    &sub_p,
-                    Some(dir),
-                    depth + 1,
-                    sub_hidden,
-                    counter,
-                    cb,
-                    collector,
-                );
-            }
-        }
-
-        let mut scanned_items = Vec::with_capacity(1024);
-        walk_dir(
-            &canonical_root,
-            None,
-            0,
-            canonical_root
-                .file_name()
-                .map(|n| n.to_string_lossy().starts_with('.'))
-                .unwrap_or(false),
-            &counter,
-            cb_arc.as_ref(),
-            &mut scanned_items,
-        );
-
-        if let Some(ref cb) = cb_arc {
-            cb(counter.load(Ordering::Relaxed));
-        }
-
-        let mut wtxn = self.db.env.write_txn()?;
-
-        let mut existing_folders: HashMap<String, (FolderId, FolderRecord)> = HashMap::new();
-        for entry in self.db.folders.iter(&wtxn)? {
-            let (id, rec) = entry?;
-            let path_obj = Path::new(&rec.path);
-            if path_obj.starts_with(&canonical_root) {
-                existing_folders.insert(rec.path.clone(), (id, rec));
-            }
-        }
-
-        let mut path_to_id: HashMap<PathBuf, FolderId> = HashMap::new();
-        let mut new_records: Vec<FolderRecord> = Vec::with_capacity(scanned_items.len());
-
-        let now_secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-
-        for item in &scanned_items {
-            let p_str = item.path.to_string_lossy().to_string();
-            let folder_id = if let Some((id, _)) = existing_folders.remove(&p_str) {
-                id
-            } else {
-                let new_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
-                self.db.folders_by_path.put(&mut wtxn, &p_str, &new_id)?;
-                self.db.media_by_folder.put(&mut wtxn, &new_id, &Vec::new())?;
-                new_id
-            };
-
-            path_to_id.insert(item.path.clone(), folder_id);
-
-            new_records.push(FolderRecord {
-                id: folder_id,
-                parent_id: None,
-                name: item.name.clone(),
-                path: p_str,
-                depth: item.depth,
-                is_hidden: item.is_hidden,
-                is_deleted: false,
-                subfolder_count: 0,
-                media_count: item.media_files_count,
-                recursive_media_count: item.media_files_count,
-                added_at: now_secs,
-                last_scanned_at: now_secs,
-            });
-        }
-
-        for (id, mut missing_rec) in existing_folders.into_values() {
-            if !missing_rec.is_deleted {
-                tracing::info!(
-                    folder_id = id,
-                    path = %LogObscurer::path(Path::new(&missing_rec.path)),
-                    "[FolderScan: Missing] Folder missing from filesystem, marked is_deleted = true"
-                );
-                missing_rec.is_deleted = true;
-                self.db.folders.put(&mut wtxn, &id, &missing_rec)?;
-            }
-        }
-
-        let mut parent_to_children: HashMap<FolderId, Vec<FolderId>> = HashMap::new();
-
-        for (idx, item) in scanned_items.iter().enumerate() {
-            let folder_id = path_to_id[&item.path];
-            let parent_id = item
-                .parent_path
-                .as_ref()
-                .and_then(|p| path_to_id.get(p).copied());
-
-            new_records[idx].parent_id = parent_id;
-
-            if let Some(pid) = parent_id {
-                parent_to_children.entry(pid).or_default().push(folder_id);
-            }
-        }
-
-        let mut id_to_record_idx: HashMap<FolderId, usize> = HashMap::new();
-        for (idx, r) in new_records.iter().enumerate() {
-            id_to_record_idx.insert(r.id, idx);
-        }
-
-        let mut depth_sorted_indices: Vec<usize> = (0..new_records.len()).collect();
-        depth_sorted_indices.sort_by(|&a, &b| new_records[b].depth.cmp(&new_records[a].depth));
-
-        for idx in depth_sorted_indices {
-            let fid = new_records[idx].id;
-            let children = parent_to_children.get(&fid).cloned().unwrap_or_default();
-            new_records[idx].subfolder_count = children.len() as u32;
-
-            let mut rec_media = new_records[idx].media_count;
-            for child_id in children {
-                if let Some(&c_idx) = id_to_record_idx.get(&child_id) {
-                    rec_media += new_records[c_idx].recursive_media_count;
-                }
-            }
-            new_records[idx].recursive_media_count = rec_media;
-        }
-
-        for r in &new_records {
-            self.db.folders.put(&mut wtxn, &r.id, r)?;
-            let children = parent_to_children.get(&r.id).cloned().unwrap_or_default();
-            self.db
-                .folders_by_parent
-                .put(&mut wtxn, &r.id, &children)?;
-        }
-
-        wtxn.commit()?;
-
-        tracing::info!(
-            root_path = %LogObscurer::path(&canonical_root),
-            scanned_folders = new_records.len(),
-            elapsed_ms = t0.elapsed().as_millis(),
-            "[FolderScan: FullRootDone] Full directory scan committed to LMDB"
-        );
-
         self.load_hierarchy_snapshot()
     }
 
     /// Surgical targeted scan: Scans ONLY the given subfolder on disk, reconciles changes,
     /// computes deltas, and rolls them up through the parent chain up to root in LMDB.
+    /// MANUAL ONLY: this must only be triggered by explicit user refresh actions, never automatically.
     pub fn scan_subtree<F>(
         &self,
         subtree_root_id: FolderId,
+        options: FolderScanOptions,
         progress_callback: Option<F>,
     ) -> Result<FolderHierarchySnapshot, LibraryError>
     where
@@ -403,13 +143,19 @@ impl<'a> FolderManager<'a> {
         tracing::info!(
             subtree_root_id,
             path = %LogObscurer::path(&target_path),
+            parent_id = ?target_rec.parent_id,
+            depth = target_rec.depth,
             "[FolderScan: SubtreeStart] Executing surgical targeted subtree rescan..."
         );
 
         let old_recursive_media = target_rec.recursive_media_count as i64;
         let old_subfolders = target_rec.subfolder_count as i64;
 
-        let _ = self.scan_directory_tree(&target_path, progress_callback)?;
+        let anchor = ScanAnchor {
+            parent_id: target_rec.parent_id,
+            base_depth: target_rec.depth,
+        };
+        let outcome = self.run_scan(&target_path, anchor, options, progress_callback)?;
 
         let rtxn2 = self.db.env.read_txn()?;
         let updated_target = self
@@ -428,7 +174,8 @@ impl<'a> FolderManager<'a> {
 
             while let Some(pid) = current_pid {
                 if let Some(mut ancestor) = self.db.folders.get(&wtxn, &pid)? {
-                    let adjusted = (ancestor.recursive_media_count as i64 + delta_media).max(0) as u32;
+                    let adjusted =
+                        (ancestor.recursive_media_count as i64 + delta_media).max(0) as u32;
                     ancestor.recursive_media_count = adjusted;
                     self.db.folders.put(&mut wtxn, &pid, &ancestor)?;
                     current_pid = ancestor.parent_id;
@@ -448,11 +195,295 @@ impl<'a> FolderManager<'a> {
 
         tracing::info!(
             subtree_root_id,
+            scanned_folders = outcome.scanned_folders,
             elapsed_ms = t0.elapsed().as_millis(),
             "[FolderScan: SubtreeDone] Surgical subtree rescan completed successfully"
         );
 
         self.load_hierarchy_snapshot()
+    }
+
+    /// Core scan: filesystem walk followed by one atomic LMDB reconciliation transaction.
+    /// Existing folder ids are re-used by path so media records keep resolving to their folders.
+    fn run_scan<F>(
+        &self,
+        root_path: &Path,
+        anchor: ScanAnchor,
+        options: FolderScanOptions,
+        progress_callback: Option<F>,
+    ) -> Result<ScanOutcome, LibraryError>
+    where
+        F: Fn(usize) + Send + Sync + 'static,
+    {
+        let t0 = Instant::now();
+        let canonical_root = normalize_path(root_path);
+        tracing::info!(
+            root_path = %LogObscurer::path(&canonical_root),
+            anchor_parent_id = ?anchor.parent_id,
+            anchor_base_depth = anchor.base_depth,
+            ignore_nested_mounts = options.ignore_nested_mounts,
+            "[FolderScan: FullRoot] Starting manual filesystem hierarchy scan..."
+        );
+
+        let cb_arc: Option<ScanProgressCallback> =
+            progress_callback.map(|cb| Arc::new(cb) as ScanProgressCallback);
+
+        // The system mount table is read on every scan so changes (new/removed mounts) are always respected.
+        let ignored_mounts = FolderMountFilter::resolve_ignored_mounts(
+            &canonical_root,
+            options.ignore_nested_mounts,
+        );
+
+        let t_walk = Instant::now();
+        let walk = walk_directory_tree(&canonical_root, cb_arc.as_ref(), &ignored_mounts);
+        let walk_ms = t_walk.elapsed().as_millis();
+        let skipped_mounts = walk.skipped_mounts.len();
+        let scanned_items = walk.items;
+
+        tracing::info!(
+            scanned_folders = scanned_items.len(),
+            skipped_mounts,
+            walk_ms = walk_ms as u64,
+            "[FolderScan: WalkDone] Filesystem walk completed"
+        );
+
+        let t_db = Instant::now();
+        let mut wtxn = self.db.env.write_txn()?;
+
+        let existing_all = self.collect_existing_folders(&wtxn, &canonical_root)?;
+        let existing_in_scope = existing_all.len();
+
+        // Records at or below ignored mounts are detached/removed here and never marked as missing.
+        let (mount_cleanup, mut existing_folders) = FolderMountFilter::cleanup_ignored_records(
+            self.db,
+            &mut wtxn,
+            existing_all,
+            &ignored_mounts,
+        )?;
+
+        let mut path_to_id: HashMap<PathBuf, FolderId> =
+            HashMap::with_capacity(scanned_items.len());
+        let mut new_records: Vec<FolderRecord> = Vec::with_capacity(scanned_items.len());
+        let mut previous_root_parent: Option<FolderId> = None;
+        let mut created_folders = 0usize;
+        let mut reused_folders = 0usize;
+        let mut healed_path_entries = 0usize;
+
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        for (idx, item) in scanned_items.iter().enumerate() {
+            let p_str = item.path.to_string_lossy().to_string();
+
+            let (folder_id, added_at) = match existing_folders.remove(&p_str) {
+                Some((id, rec)) => {
+                    reused_folders += 1;
+                    if idx == 0 {
+                        previous_root_parent = rec.parent_id;
+                    }
+                    if self.db.folders_by_path.get(&wtxn, &p_str)? != Some(id) {
+                        self.db.folders_by_path.put(&mut wtxn, &p_str, &id)?;
+                        healed_path_entries += 1;
+                    }
+                    (id, rec.added_at)
+                }
+                None => {
+                    created_folders += 1;
+                    let new_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
+                    self.db.folders_by_path.put(&mut wtxn, &p_str, &new_id)?;
+                    self.db
+                        .media_by_folder
+                        .put(&mut wtxn, &new_id, &Vec::new())?;
+                    (new_id, now_secs)
+                }
+            };
+
+            path_to_id.insert(item.path.clone(), folder_id);
+
+            new_records.push(Self::build_scanned_record(
+                folder_id,
+                item,
+                p_str,
+                anchor.base_depth,
+                added_at,
+                now_secs,
+            ));
+        }
+
+        let mut marked_missing = 0usize;
+        for (id, mut missing_rec) in existing_folders.into_values() {
+            if !missing_rec.is_deleted {
+                tracing::info!(
+                    folder_id = id,
+                    path = %LogObscurer::path(Path::new(&missing_rec.path)),
+                    "[FolderScan: Missing] Folder missing from filesystem, marked is_deleted = true"
+                );
+                missing_rec.is_deleted = true;
+                self.db.folders.put(&mut wtxn, &id, &missing_rec)?;
+                marked_missing += 1;
+            }
+        }
+
+        let parent_to_children =
+            Self::link_parents(&scanned_items, &path_to_id, &anchor, &mut new_records);
+        Self::aggregate_counts(&mut new_records, &parent_to_children);
+
+        for r in &new_records {
+            self.db.folders.put(&mut wtxn, &r.id, r)?;
+            let children = parent_to_children.get(&r.id).cloned().unwrap_or_default();
+            self.db.folders_by_parent.put(&mut wtxn, &r.id, &children)?;
+        }
+
+        if anchor.parent_id.is_none()
+            && let (Some(old_pid), Some(root_rec)) = (previous_root_parent, new_records.first())
+        {
+            self.detach_from_old_parent(&mut wtxn, old_pid, root_rec.id)?;
+        }
+
+        wtxn.commit()?;
+
+        tracing::info!(
+            root_path = %LogObscurer::path(&canonical_root),
+            scanned_folders = new_records.len(),
+            existing_in_scope,
+            created_folders,
+            reused_folders,
+            marked_missing,
+            healed_path_entries,
+            skipped_mounts,
+            mount_records_detached = mount_cleanup.detached_with_media,
+            mount_records_removed = mount_cleanup.removed_empty,
+            walk_ms = walk_ms as u64,
+            db_ms = t_db.elapsed().as_millis() as u64,
+            elapsed_ms = t0.elapsed().as_millis() as u64,
+            "[FolderScan: FullRootDone] Directory scan committed to LMDB"
+        );
+
+        Ok(ScanOutcome {
+            scanned_folders: new_records.len(),
+        })
+    }
+
+    /// Collects all existing folder records located at or below `canonical_root`, keyed by their stored path.
+    fn collect_existing_folders(
+        &self,
+        wtxn: &heed::RwTxn,
+        canonical_root: &Path,
+    ) -> Result<HashMap<String, (FolderId, FolderRecord)>, LibraryError> {
+        let mut existing: HashMap<String, (FolderId, FolderRecord)> = HashMap::new();
+        for entry in self.db.folders.iter(wtxn)? {
+            let (id, rec) = entry?;
+            if Path::new(&rec.path).starts_with(canonical_root) {
+                existing.insert(rec.path.clone(), (id, rec));
+            }
+        }
+        Ok(existing)
+    }
+
+    fn build_scanned_record(
+        folder_id: FolderId,
+        item: &ScannedDirItem,
+        path: String,
+        base_depth: u32,
+        added_at: i64,
+        now_secs: i64,
+    ) -> FolderRecord {
+        FolderRecord {
+            id: folder_id,
+            parent_id: None,
+            name: item.name.clone(),
+            path,
+            depth: base_depth + item.depth,
+            is_hidden: item.is_hidden,
+            is_deleted: false,
+            subfolder_count: 0,
+            media_count: item.media_files_count,
+            recursive_media_count: item.media_files_count,
+            added_at,
+            last_scanned_at: now_secs,
+        }
+    }
+
+    /// Resolves `parent_id` for each scanned record. The scan root keeps the anchor parent.
+    fn link_parents(
+        scanned_items: &[ScannedDirItem],
+        path_to_id: &HashMap<PathBuf, FolderId>,
+        anchor: &ScanAnchor,
+        new_records: &mut [FolderRecord],
+    ) -> HashMap<FolderId, Vec<FolderId>> {
+        let mut parent_to_children: HashMap<FolderId, Vec<FolderId>> = HashMap::new();
+
+        for (idx, item) in scanned_items.iter().enumerate() {
+            let folder_id = new_records[idx].id;
+            let parent_id = match &item.parent_path {
+                Some(p) => path_to_id.get(p).copied(),
+                None => anchor.parent_id,
+            };
+
+            new_records[idx].parent_id = parent_id;
+
+            if item.parent_path.is_some()
+                && let Some(pid) = parent_id
+            {
+                parent_to_children.entry(pid).or_default().push(folder_id);
+            }
+        }
+
+        parent_to_children
+    }
+
+    /// Bottom-up aggregation of subfolder counts and recursive media counts (deepest folders first).
+    fn aggregate_counts(
+        new_records: &mut [FolderRecord],
+        parent_to_children: &HashMap<FolderId, Vec<FolderId>>,
+    ) {
+        let id_to_record_idx: HashMap<FolderId, usize> = new_records
+            .iter()
+            .enumerate()
+            .map(|(idx, r)| (r.id, idx))
+            .collect();
+
+        let mut depth_sorted_indices: Vec<usize> = (0..new_records.len()).collect();
+        depth_sorted_indices.sort_by(|&a, &b| new_records[b].depth.cmp(&new_records[a].depth));
+
+        for idx in depth_sorted_indices {
+            let fid = new_records[idx].id;
+            let children = parent_to_children.get(&fid).cloned().unwrap_or_default();
+            new_records[idx].subfolder_count = children.len() as u32;
+
+            let mut rec_media = new_records[idx].media_count;
+            for child_id in children {
+                if let Some(&c_idx) = id_to_record_idx.get(&child_id) {
+                    rec_media += new_records[c_idx].recursive_media_count;
+                }
+            }
+            new_records[idx].recursive_media_count = rec_media;
+        }
+    }
+
+    /// Removes a folder from a previous parent's persisted children list (used when a scanned root becomes the tree top).
+    fn detach_from_old_parent(
+        &self,
+        wtxn: &mut heed::RwTxn,
+        old_parent_id: FolderId,
+        folder_id: FolderId,
+    ) -> Result<(), LibraryError> {
+        if let Some(mut siblings) = self.db.folders_by_parent.get(wtxn, &old_parent_id)?
+            && siblings.contains(&folder_id)
+        {
+            siblings.retain(|&x| x != folder_id);
+            self.db
+                .folders_by_parent
+                .put(wtxn, &old_parent_id, &siblings)?;
+            tracing::info!(
+                folder_id,
+                old_parent_id,
+                "[FolderScan: Detach] Removed scanned root from its previous parent's children index"
+            );
+        }
+        Ok(())
     }
 
     /// Transaction helper: Adjusts direct media count for `folder_id` and rolls delta up the parent chain to root.
@@ -468,13 +499,15 @@ impl<'a> FolderManager<'a> {
 
         if let Some(mut folder_rec) = db.folders.get(wtxn, &folder_id)? {
             folder_rec.media_count = (folder_rec.media_count as i64 + delta).max(0) as u32;
-            folder_rec.recursive_media_count = (folder_rec.recursive_media_count as i64 + delta).max(0) as u32;
+            folder_rec.recursive_media_count =
+                (folder_rec.recursive_media_count as i64 + delta).max(0) as u32;
             db.folders.put(wtxn, &folder_id, &folder_rec)?;
 
             let mut current_pid = folder_rec.parent_id;
             while let Some(pid) = current_pid {
                 if let Some(mut ancestor) = db.folders.get(wtxn, &pid)? {
-                    ancestor.recursive_media_count = (ancestor.recursive_media_count as i64 + delta).max(0) as u32;
+                    ancestor.recursive_media_count =
+                        (ancestor.recursive_media_count as i64 + delta).max(0) as u32;
                     db.folders.put(wtxn, &pid, &ancestor)?;
                     current_pid = ancestor.parent_id;
                 } else {
@@ -528,7 +561,8 @@ impl<'a> FolderManager<'a> {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path_str.clone());
 
-        let is_hidden = name.starts_with('.') || parent_rec.as_ref().map(|p| p.is_hidden).unwrap_or(false);
+        let is_hidden =
+            name.starts_with('.') || parent_rec.as_ref().map(|p| p.is_hidden).unwrap_or(false);
 
         let folder_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
         let record = FolderRecord {
@@ -565,9 +599,7 @@ impl<'a> FolderManager<'a> {
                 .unwrap_or_default();
             if !siblings.contains(&folder_id) {
                 siblings.push(folder_id);
-                self.db
-                    .folders_by_parent
-                    .put(&mut wtxn, &pid, &siblings)?;
+                self.db.folders_by_parent.put(&mut wtxn, &pid, &siblings)?;
             }
 
             if let Some(mut p_rec) = self.db.folders.get(&wtxn, &pid)? {
@@ -577,6 +609,14 @@ impl<'a> FolderManager<'a> {
         }
 
         wtxn.commit()?;
+
+        tracing::debug!(
+            folder_id,
+            parent_id = ?parent_id,
+            path = %LogObscurer::path(&canonical_path),
+            "[FolderManager: AddFolder] Registered new folder record on demand (no filesystem scan)"
+        );
+
         Ok(record)
     }
 
@@ -598,7 +638,10 @@ impl<'a> FolderManager<'a> {
     }
 
     /// Recursively collects `folder_id` and all descendant IDs using relational parent indices.
-    pub fn get_descendant_folder_ids(&self, folder_id: FolderId) -> Result<Vec<FolderId>, LibraryError> {
+    pub fn get_descendant_folder_ids(
+        &self,
+        folder_id: FolderId,
+    ) -> Result<Vec<FolderId>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let mut ids = vec![folder_id];
         let mut queue = vec![folder_id];

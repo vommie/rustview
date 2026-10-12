@@ -7,8 +7,8 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::MainWindow;
-use crate::library::folders::normalize_path;
-use crate::library::models::{FolderId, MediaId, MediaRecord};
+use crate::library::folders::{normalize_path, FolderScanOptions};
+use crate::library::models::{FolderHierarchySnapshot, FolderId, MediaId, MediaRecord};
 use crate::library::refresh::RefreshReport;
 use crate::library::Library;
 use crate::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
@@ -115,6 +115,7 @@ impl BridgeFolders {
                 StatusBarBridge::warn(&win_all, "Cannot refresh folder tree: another operation is already in progress.");
                 return;
             }
+            tracing::info!("[FolderRefresh: Manual] Toolbar 'Refresh Tree (Full)' triggered by user");
             Self::refresh_folder_tree(&win_all, &lib_all, &thumb_all, &set_all, &st_all);
         });
 
@@ -129,6 +130,7 @@ impl BridgeFolders {
                 StatusBarBridge::warn(&win_rel, "Cannot refresh folder tree: another operation is already in progress.");
                 return;
             }
+            tracing::info!("[FolderRefresh: Manual] Toolbar 'Refresh Tree (Relative)' triggered by user");
             Self::refresh_selected_folder_subtree(&win_rel, &lib_rel, &thumb_rel, &set_rel, &st_rel);
         });
 
@@ -168,6 +170,80 @@ impl BridgeFolders {
         }
     }
 
+    /// Returns the cached SPoT snapshot or lazily loads it from the database (zero filesystem access).
+    /// A failed load is logged and yields an empty snapshot that is NOT cached, so the next call retries.
+    pub fn ensure_snapshot(
+        library: &Library,
+        state: &RwLock<UiState>,
+    ) -> Arc<FolderHierarchySnapshot> {
+        let existing = state.read().folder_hierarchy.clone();
+        if let Some(snap) = existing {
+            return snap;
+        }
+
+        let t0 = Instant::now();
+        match library.folders().load_hierarchy_snapshot() {
+            Ok(loaded) => {
+                let arc_snap = Arc::new(loaded);
+                state.write().folder_hierarchy = Some(arc_snap.clone());
+                tracing::debug!(
+                    nodes = arc_snap.nodes.len(),
+                    roots = arc_snap.root_ids.len(),
+                    elapsed_us = t0.elapsed().as_micros() as u64,
+                    "[FolderTree: SnapshotLazyLoad] Loaded SPoT snapshot into UI state"
+                );
+                arc_snap
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "[FolderTree: SnapshotLoadFailed] Failed to load folder hierarchy snapshot. Showing empty tree."
+                );
+                Arc::new(FolderHierarchySnapshot::default())
+            }
+        }
+    }
+
+    /// Collects the ids of all ancestors of `target` that lie at or below `root`, using the snapshot path index.
+    fn collect_ancestor_ids(
+        snapshot: &FolderHierarchySnapshot,
+        root: &Path,
+        target: &Path,
+    ) -> Vec<FolderId> {
+        let mut ids = Vec::new();
+        let mut current = target.parent();
+
+        while let Some(parent_p) = current {
+            if !parent_p.starts_with(root) {
+                break;
+            }
+            if let Some(&id) = snapshot.path_index.get(parent_p) {
+                ids.push(id);
+            }
+            if parent_p == root {
+                break;
+            }
+            current = parent_p.parent();
+        }
+
+        ids
+    }
+
+    /// Resolves the remembered last folder to a node of the snapshot (None if unknown or missing on disk).
+    fn resolve_remembered_folder(
+        snapshot: &FolderHierarchySnapshot,
+        last_path: &Path,
+    ) -> Option<(FolderId, PathBuf)> {
+        if !last_path.is_dir() {
+            return None;
+        }
+        let normalized = normalize_path(last_path);
+        snapshot
+            .path_index
+            .get(&normalized)
+            .map(|&id| (id, normalized.clone()))
+    }
+
     pub fn collapse_all_except_active(
         window: &MainWindow,
         library: &Library,
@@ -175,31 +251,21 @@ impl BridgeFolders {
         state: &RwLock<UiState>,
     ) {
         let target_path_opt = state.read().current_folder_path.clone();
-        let app_settings = settings.get();
-        let root_path_opt = app_settings.general.root_folder.as_ref().map(|p| normalize_path(p));
+        let snapshot = Self::ensure_snapshot(library, state);
 
         let mut keep_expanded_ids: HashSet<FolderId> = HashSet::new();
 
-        if let Some(ref root_p) = root_path_opt {
-            if let Ok(Some(root_rec)) = library.folders().get_folder_by_path(root_p) {
-                keep_expanded_ids.insert(root_rec.id);
-            }
+        if let Some(&root_id) = snapshot.root_ids.first() {
+            keep_expanded_ids.insert(root_id);
 
-            if let Some(ref target_p) = target_path_opt {
-                let mut curr_ancestor = target_p.parent();
-                while let Some(parent_p) = curr_ancestor {
-                    if parent_p.starts_with(root_p) {
-                        if let Ok(Some(parent_rec)) = library.folders().get_folder_by_path(parent_p) {
-                            keep_expanded_ids.insert(parent_rec.id);
-                        }
-                        if parent_p == root_p.as_path() {
-                            break;
-                        }
-                        curr_ancestor = parent_p.parent();
-                    } else {
-                        break;
-                    }
-                }
+            if let (Some(root_node), Some(target_p)) =
+                (snapshot.get_node(root_id), target_path_opt.as_ref())
+            {
+                keep_expanded_ids.extend(Self::collect_ancestor_ids(
+                    &snapshot,
+                    &root_node.path,
+                    target_p,
+                ));
             }
         }
 
@@ -230,6 +296,8 @@ impl BridgeFolders {
         window.set_show_hidden_folders(s.folders.show_hidden_folders);
 
         let Some(ref root_path) = s.general.root_folder else {
+            tracing::info!("[FolderTree: NoRoot] No root directory configured. Showing empty folder tree.");
+            library.set_folder_tree_root(None);
             Self::clear_view(
                 window,
                 state,
@@ -240,6 +308,11 @@ impl BridgeFolders {
 
         let normalized_root = normalize_path(root_path);
         if !normalized_root.is_dir() {
+            tracing::warn!(
+                root = %LogObscurer::path(&normalized_root),
+                "[FolderTree: RootMissing] Configured root directory does not exist on disk. Showing empty folder tree."
+            );
+            library.set_folder_tree_root(None);
             Self::clear_view(
                 window,
                 state,
@@ -248,49 +321,46 @@ impl BridgeFolders {
             return;
         }
 
-        let folder_record = match library.folders().get_folder_by_path(&normalized_root) {
-            Ok(Some(f)) => f,
-            _ => match library.folders().add_folder(&normalized_root) {
-                Ok(f) => f,
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to register root directory");
-                    return;
-                }
-            },
+        // Scope the SPoT snapshot to the configured root and rebuild it from the database only (no filesystem scan).
+        library.set_folder_tree_root(Some(normalized_root.clone()));
+        state.write().invalidate_folder_hierarchy();
+        let snapshot = Self::ensure_snapshot(library, state);
+
+        let Some(&root_id) = snapshot.root_ids.first() else {
+            tracing::info!(
+                root = %LogObscurer::path(&normalized_root),
+                "[FolderTree: Unscanned] Root directory is not in the folder database yet. Showing empty folder tree until a manual refresh."
+            );
+            Self::clear_view_with_empty_state(
+                window,
+                state,
+                "Folder tree has not been scanned yet. Use Refresh > Refresh Tree (Full) in the Folders toolbar.",
+                "Folder Tree Not Scanned",
+                "refresh",
+                "Folder tree not scanned yet",
+            );
+            return;
         };
 
-        let target_folder = if s.general.remember_last_folder
-            && let Some(ref last_path) = s.general.last_folder_path
-            && last_path.is_dir()
-            && normalize_path(last_path).starts_with(&normalized_root)
-            && let Ok(Some(f)) = library.folders().get_folder_by_path(last_path)
-        {
-            (f.id, normalize_path(last_path))
+        let target_folder = if s.general.remember_last_folder {
+            s.general
+                .last_folder_path
+                .as_deref()
+                .and_then(|p| Self::resolve_remembered_folder(&snapshot, p))
         } else {
-            (folder_record.id, normalized_root.clone())
-        };
+            None
+        }
+        .unwrap_or_else(|| (root_id, normalized_root.clone()));
 
         {
             let mut st = state.write();
             if s.folders.auto_reveal_remembered_folder {
-                st.expanded_folder_ids.insert(folder_record.id);
-
-                let mut current_ancestor = target_folder.1.parent();
-                while let Some(parent_p) = current_ancestor {
-                    if parent_p.starts_with(&normalized_root) {
-                        if let Ok(Some(parent_rec)) = library.folders().get_folder_by_path(parent_p) {
-                            st.expanded_folder_ids.insert(parent_rec.id);
-                        }
-                        if parent_p == normalized_root {
-                            break;
-                        }
-                        current_ancestor = parent_p.parent();
-                    } else {
-                        break;
-                    }
+                st.expanded_folder_ids.insert(root_id);
+                for id in Self::collect_ancestor_ids(&snapshot, &normalized_root, &target_folder.1) {
+                    st.expanded_folder_ids.insert(id);
                 }
             } else if st.expanded_folder_ids.is_empty() {
-                st.expanded_folder_ids.insert(folder_record.id);
+                st.expanded_folder_ids.insert(root_id);
             }
 
             Self::persist_expanded_folders(settings, &st.expanded_folder_ids);
@@ -316,6 +386,7 @@ impl BridgeFolders {
 
     /// Full root scan: scans the complete directory tree starting from configured root path on disk,
     /// persists all relational records, and updates the in-memory SPoT snapshot.
+    /// MANUAL ONLY: triggered by the toolbar refresh menu or folder context menu.
     pub fn refresh_folder_tree(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -331,7 +402,8 @@ impl BridgeFolders {
             return;
         }
 
-        let root_setting = settings.get().general.root_folder;
+        let app_settings = settings.get();
+        let root_setting = app_settings.general.root_folder.clone();
         let Some(ref root_dir) = root_setting else {
             StatusBarBridge::warn(window, "Cannot refresh folders: No root directory configured.");
             return;
@@ -343,6 +415,11 @@ impl BridgeFolders {
             return;
         }
 
+        // Ensure the snapshot built after the scan is scoped to the root being scanned.
+        library.set_folder_tree_root(Some(normalized_root.clone()));
+
+        let scan_options = FolderScanOptions::from_general(&app_settings.general);
+
         {
             let mut st = state.write();
             st.is_refreshing_folders = true;
@@ -352,9 +429,16 @@ impl BridgeFolders {
         StatusBarBridge::update_folder_scan_progress(window, true, 0);
         StatusBarBridge::info(window, "Scanning entire directory tree on filesystem...");
 
+        tracing::info!(
+            root = %LogObscurer::path(&normalized_root),
+            ignore_nested_mounts = scan_options.ignore_nested_mounts,
+            "[FolderRefresh: TreeFull] Starting manual full folder tree scan"
+        );
+
         let t_start = Instant::now();
         let w_weak = window.as_weak();
         let lib = library.clone();
+        let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
 
@@ -366,6 +450,7 @@ impl BridgeFolders {
 
                 let snapshot_res = lib.folders().scan_directory_tree(
                     &normalized_root,
+                    scan_options,
                     Some(move |count| {
                         let mut last = last_progress_report.lock();
                         if last.elapsed().as_millis() >= 35 {
@@ -383,6 +468,7 @@ impl BridgeFolders {
                         s.is_refreshing_folders = false;
                     }
                     StatusBarBridge::update_folder_scan_progress(&w, false, 0);
+                    w.set_is_system_busy(BridgeMedia::is_system_busy(&w, &thumb, &st));
 
                     match snapshot_res {
                         Ok(snapshot) => {
@@ -390,13 +476,25 @@ impl BridgeFolders {
                             let total_dirs = snapshot.nodes.len();
                             st.write().set_folder_hierarchy(snapshot);
 
+                            tracing::info!(
+                                total_dirs,
+                                elapsed_ms = elapsed_ms as u64,
+                                "[FolderRefresh: TreeApplied] Applied rebuilt SPoT snapshot to UI state"
+                            );
+
                             StatusBarBridge::success(
                                 &w,
                                 format!("Tree scan completed in {}ms: {} total dirs updated.", elapsed_ms, total_dirs),
                             );
 
-                            Self::reload_tree(&w, &lib, &set, &st);
-                            Self::scroll_to_selected(&w);
+                            let has_current_folder = st.read().current_folder_id.is_some();
+                            if has_current_folder {
+                                Self::reload_tree(&w, &lib, &set, &st);
+                                Self::scroll_to_selected(&w);
+                            } else {
+                                // First scan after an empty/unscanned tree: navigate to the (now known) root.
+                                Self::sync_root(&w, &lib, &thumb, &set, &st);
+                            }
                             BridgeMedia::update_virtual_folder_button_state(&w, &lib, &st);
                             StatusBarBridge::update_metrics(&w, &st);
                         }
@@ -431,6 +529,7 @@ impl BridgeFolders {
 
     /// Surgical targeted scan: Scans ONLY the selected subtree physically on disk,
     /// reconciles counts and records, rolls deltas up through ancestors in LMDB, and updates the in-memory SPoT snapshot.
+    /// MANUAL ONLY: triggered by the toolbar refresh menu or folder context menu.
     pub fn refresh_folder_subtree(
         folder_id: FolderId,
         path: PathBuf,
@@ -453,6 +552,8 @@ impl BridgeFolders {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path.to_string_lossy().to_string());
 
+        let scan_options = FolderScanOptions::from_general(&settings.get().general);
+
         {
             let mut st = state.write();
             st.is_refreshing_folders = true;
@@ -465,9 +566,17 @@ impl BridgeFolders {
             format!("Surgically rescanning subtree under '{}'...", folder_name),
         );
 
+        tracing::info!(
+            folder_id,
+            path = %LogObscurer::path(&path),
+            ignore_nested_mounts = scan_options.ignore_nested_mounts,
+            "[FolderRefresh: TreeRelative] Starting manual subtree scan"
+        );
+
         let t_start = Instant::now();
         let w_weak = window.as_weak();
         let lib = library.clone();
+        let thumb = thumbnails.clone();
         let set = settings.clone();
         let st = state.clone();
 
@@ -479,6 +588,7 @@ impl BridgeFolders {
 
                 let snapshot_res = lib.folders().scan_subtree(
                     folder_id,
+                    scan_options,
                     Some(move |count| {
                         let mut last = last_progress_report.lock();
                         if last.elapsed().as_millis() >= 35 {
@@ -496,10 +606,17 @@ impl BridgeFolders {
                         s.is_refreshing_folders = false;
                     }
                     StatusBarBridge::update_folder_scan_progress(&w, false, 0);
+                    w.set_is_system_busy(BridgeMedia::is_system_busy(&w, &thumb, &st));
 
                     match snapshot_res {
                         Ok(snapshot) => {
                             let elapsed_ms = t_start.elapsed().as_millis();
+                            tracing::info!(
+                                folder_id,
+                                total_nodes = snapshot.nodes.len(),
+                                elapsed_ms = elapsed_ms as u64,
+                                "[FolderRefresh: SubtreeApplied] Applied rebuilt SPoT snapshot to UI state"
+                            );
                             st.write().set_folder_hierarchy(snapshot);
 
                             StatusBarBridge::success(
@@ -1075,26 +1192,17 @@ impl BridgeFolders {
     }
 
     /// Renders the folder tree directly from the in-memory Single Point of Truth snapshot with zero filesystem I/O.
+    /// Without a configured/registered root the snapshot is empty and an empty tree is shown.
     pub fn reload_tree(
         window: &MainWindow,
         library: &Library,
         settings: &SettingsManager,
         state: &RwLock<UiState>,
     ) {
+        let t0 = Instant::now();
         let app_settings = settings.get();
 
-        let snapshot = {
-            let existing_opt = state.read().folder_hierarchy.clone();
-            match existing_opt {
-                Some(snap) => snap,
-                None => {
-                    let loaded = library.folders().load_hierarchy_snapshot().unwrap_or_default();
-                    let arc_snap = Arc::new(loaded);
-                    state.write().folder_hierarchy = Some(arc_snap.clone());
-                    arc_snap
-                }
-            }
-        };
+        let snapshot = Self::ensure_snapshot(library, state);
 
         let current_sel = state.read().current_folder_id;
         let expanded_ids = state.read().expanded_folder_ids.clone();
@@ -1107,10 +1215,40 @@ impl BridgeFolders {
             app_settings.folders.show_hidden_folders,
         );
 
+        let row_count = folder_views.len();
         window.set_folders(ModelRc::new(VecModel::from(folder_views)));
+
+        tracing::debug!(
+            rows = row_count,
+            snapshot_nodes = snapshot.nodes.len(),
+            elapsed_us = t0.elapsed().as_micros() as u64,
+            "[FolderTree: Reload] Folder tree model refreshed from SPoT snapshot"
+        );
     }
 
+    /// Clears the whole browsing view for the "no root directory" situation.
     pub fn clear_view(window: &MainWindow, state: &Arc<RwLock<UiState>>, status_msg: &str) {
+        state.write().invalidate_folder_hierarchy();
+        Self::clear_view_with_empty_state(
+            window,
+            state,
+            status_msg,
+            "No Root Directory",
+            "settings",
+            "No root directory selected",
+        );
+    }
+
+    /// Clears folder tree, media grid and selection state and shows an empty-state message.
+    /// Does not touch the cached SPoT snapshot.
+    pub fn clear_view_with_empty_state(
+        window: &MainWindow,
+        state: &Arc<RwLock<UiState>>,
+        status_msg: &str,
+        empty_title: &str,
+        empty_icon: &str,
+        virtual_folder_tooltip: &str,
+    ) {
         {
             let mut st = state.write();
             st.current_folder_id = None;
@@ -1122,7 +1260,6 @@ impl BridgeFolders {
             st.media_row_map.clear();
             st.last_executed_query.clear();
             st.expanded_folder_ids.clear();
-            st.invalidate_folder_hierarchy();
             st.is_query_active = false;
             st.selected_rating = 0;
             st.filter.rating = None;
@@ -1136,13 +1273,13 @@ impl BridgeFolders {
         window.set_tag_filter_text("".into());
         window.set_is_virtual_folder(false);
         window.set_is_virtual_folder_btn_enabled(false);
-        window.set_virtual_folder_tooltip("No root directory selected".into());
+        window.set_virtual_folder_tooltip(virtual_folder_tooltip.into());
         window.set_virtual_folder_count(0);
 
         window.set_empty_state_active(true);
-        window.set_empty_state_title("No Root Directory".into());
+        window.set_empty_state_title(empty_title.into());
         window.set_empty_state_description(status_msg.into());
-        window.set_empty_state_icon("settings".into());
+        window.set_empty_state_icon(empty_icon.into());
 
         BridgeFavorites::set_selected_path(None);
         StatusBarBridge::info(window, status_msg);
@@ -1170,13 +1307,7 @@ impl BridgeFolders {
         settings: &SettingsManager,
         state: &RwLock<UiState>,
     ) -> Option<(FolderId, PathBuf)> {
-        let snapshot = {
-            let existing = state.read().folder_hierarchy.clone();
-            match existing {
-                Some(s) => s,
-                None => Arc::new(library.folders().load_hierarchy_snapshot().unwrap_or_default()),
-            }
-        };
+        let snapshot = Self::ensure_snapshot(library, state);
 
         let affected_set: HashSet<FolderId> = affected_subtree_ids.iter().copied().collect();
         let target_node = snapshot.get_node(deleted_id)?;

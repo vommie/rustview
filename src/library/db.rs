@@ -5,8 +5,9 @@ use crate::media::{FileHash, MediaHasher};
 use heed::byteorder::BE;
 use heed::types::{Bytes, SerdeBincode, Str, U32, U64};
 use heed::{Database, Env, EnvOpenOptions};
+use parking_lot::RwLock;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -29,6 +30,10 @@ pub struct LibraryDatabase {
     pub thumbnails: Database<U64<BE>, SerdeBincode<ThumbnailLocation>>,
     pub video_previews: Database<U64<BE>, SerdeBincode<VideoPreviewRecord>>,
     pub external_hashes: Database<U64<BE>, SerdeBincode<ExternalHashRecord>>,
+
+    /// Runtime-only scope of the in-memory folder tree snapshot (the configured root directory).
+    /// `None` means no root is configured, which results in an empty folder tree.
+    tree_root: Arc<RwLock<Option<PathBuf>>>,
 }
 
 impl LibraryDatabase {
@@ -117,7 +122,23 @@ impl LibraryDatabase {
             thumbnails,
             video_previews,
             external_hashes,
+            tree_root: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Registers the root directory that scopes the in-memory folder tree snapshot.
+    /// Passing `None` results in an empty folder tree (e.g. first start without a configured root).
+    pub fn set_tree_root(&self, root: Option<PathBuf>) {
+        tracing::debug!(
+            root = ?root.as_ref().map(|p| crate::settings::LogObscurer::path(p).to_string()),
+            "[FolderTree: Scope] Folder tree root scope updated"
+        );
+        *self.tree_root.write() = root;
+    }
+
+    /// Returns the currently registered folder tree root scope.
+    pub fn tree_root(&self) -> Option<PathBuf> {
+        self.tree_root.read().clone()
     }
 
     pub fn next_id(&self, wtxn: &mut heed::RwTxn, seq_key: &str) -> Result<u64, LibraryError> {

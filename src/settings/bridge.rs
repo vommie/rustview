@@ -82,6 +82,7 @@ impl SettingsDialogController {
                 .unwrap_or_default()
                 .into(),
         );
+        window.set_ignore_nested_mounts(settings.general.ignore_nested_mounts);
         window.set_remember_last_folder(settings.general.remember_last_folder);
         window.set_confirm_delete(settings.general.confirm_on_file_delete);
 
@@ -312,6 +313,7 @@ impl SettingsDialogController {
 
                 current.general.remember_last_folder = w.get_remember_last_folder();
                 current.general.confirm_on_file_delete = w.get_confirm_delete();
+                current.general.ignore_nested_mounts = w.get_ignore_nested_mounts();
 
                 current.folders.auto_reveal_remembered_folder =
                     w.get_auto_reveal_remembered_folder();
@@ -447,9 +449,9 @@ impl SettingsDialogController {
             );
             if let Some(w) = w_weak_cancel.upgrade() {
                 if let Some(ref mw) = main_weak_cancel
-                    && let Some(main) = mw.upgrade()
+                    && let Some(mw) = mw.upgrade()
                 {
-                    main.set_is_modal_locked(false);
+                    mw.set_is_modal_locked(false);
                 }
                 let _ = w.hide();
             }

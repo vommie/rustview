@@ -7,6 +7,8 @@ use std::path::PathBuf;
 pub const DEFAULT_REMEMBER_LAST_FOLDER: bool = true;
 pub const DEFAULT_CONFIRM_ON_FILE_DELETE: bool = true;
 pub const DEFAULT_DELETION_MODE: DeletionMode = DeletionMode::Trash;
+/// Skip mount points located below the root directory during manual folder tree scans.
+pub const DEFAULT_IGNORE_NESTED_MOUNTS: bool = true;
 
 // =============================================================================
 // SECTION 2: Folder Tree Settings - Single Point of Truth Constants
@@ -295,6 +297,8 @@ pub struct GeneralSettings {
     pub last_folder_path: Option<PathBuf>,
     pub confirm_on_file_delete: bool,
     pub deletion_mode: DeletionMode,
+    /// If enabled, mount points located below the root directory are skipped by folder tree scans.
+    pub ignore_nested_mounts: bool,
 }
 
 impl Default for GeneralSettings {
@@ -305,6 +309,7 @@ impl Default for GeneralSettings {
             last_folder_path: None,
             confirm_on_file_delete: DEFAULT_CONFIRM_ON_FILE_DELETE,
             deletion_mode: DEFAULT_DELETION_MODE,
+            ignore_nested_mounts: DEFAULT_IGNORE_NESTED_MOUNTS,
         }
     }
 }

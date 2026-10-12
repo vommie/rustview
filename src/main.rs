@@ -84,6 +84,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize Core LMDB Storage
     let library = Arc::new(Library::open(&db_path)?);
 
+    // TEMPORARY DEBUG FEATURE (remove together with src/library/folder_reset.rs):
+    // `--reset-folder-tree` resets the folder tree (SPoT) once. Media records and their folder paths are preserved.
+    rustview::library::folder_reset::run_if_requested(&args, &library, &settings);
+
+    // Scope the in-memory folder tree snapshot to the configured root (None = empty tree, e.g. first start).
+    let configured_root = settings
+        .get()
+        .general
+        .root_folder
+        .as_ref()
+        .map(|p| rustview::library::folders::normalize_path(p));
+    tracing::info!(
+        has_root = configured_root.is_some(),
+        "[FolderTree: Scope] Registering configured root as folder tree scope (no filesystem scan)"
+    );
+    library.set_folder_tree_root(configured_root);
+
     // Initialize SIMD Thumbnail Manager
     let thumbnails = Arc::new(ThumbnailManager::new(
         library.clone(),
@@ -309,6 +326,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         CloseRequestResponse::HideWindow
     });
 
+    // Keep a handle for the background folder audit (the library is moved into the UI bridge below)
+    let audit_db = library.raw_db().clone();
+
     // Wire UI Bridge
     let _bridge = UiBridge::new(
         main_window.clone_strong(),
@@ -319,6 +339,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     tracing::info!("RustView UI & Storage Engine Ready.");
+
+    // Read-only folder schema + media path resolution audit on a background thread (never blocks the UI)
+    rustview::library::FolderDiagnostics::spawn_background_audit(audit_db, "startup");
+
     main_window.run()?;
 
     tracing::info!("[RustView: Shutdown] Event loop finished. Application exiting cleanly.");
