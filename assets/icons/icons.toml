@@ -33,7 +33,6 @@ settings = { tabler = "settings", doc = "Application settings", aliases = ["gear
 refresh = { tabler = "refresh", doc = "Refresh / rescan / reload", aliases = ["reload"] }
 loader = { tabler = "loader-2", doc = "Busy indicator (rotated by the throbber)", aliases = ["spinner", "throbber"] }
 regex = { tabler = "regex", doc = "Regular expression search mode" }
-chevron_up = { tabler = "chevron-up", doc = "Chevron pointing up" }
 chevron_down = { tabler = "chevron-down", doc = "Chevron pointing down (expanded)" }
 chevron_left = { tabler = "chevron-left", doc = "Chevron pointing left (previous)" }
 chevron_right = { tabler = "chevron-right", doc = "Chevron pointing right (collapsed, submenu, next)" }
@@ -51,7 +50,6 @@ partial = { tabler = "circle-half-2", doc = "Partially assigned / mixed state" }
 status_ok = { tabler = "circle-check", doc = "Success status" }
 status_warning = { tabler = "alert-triangle", doc = "Warning status / corrupted media", aliases = ["warning", "corrupted", "corrupt"] }
 status_error = { tabler = "circle-x", doc = "Error status" }
-status_info = { tabler = "info-circle", doc = "Informational status" }
 
 # --- Files, folders and media ------------------------------------------------------------------------------------
 folder = { tabler = "folder", doc = "Single folder (also: query scope 'current folder')" }
@@ -64,6 +62,8 @@ media_image = { tabler = "photo", doc = "Image media item", aliases = ["image", 
 media_video = { tabler = "movie", doc = "Video media item", aliases = ["video", "movie", "clip"] }
 media_all = { tabler = "photo-video", doc = "Images and videos" }
 view_grid = { tabler = "layout-grid", doc = "Thumbnail grid view", aliases = ["grid"] }
+library_browse = { tabler = "library-photo", doc = "Media library browser" }
+view_tab_grid = { tabler = "layout-collage", doc = "Masonry overview of all open tabs" }
 view_table = { tabler = "table", doc = "Detail table view", aliases = ["table", "list"] }
 hidden_shown = { tabler = "eye", doc = "Hidden entries are visible" }
 hidden_hidden = { tabler = "eye-off", doc = "Hidden entries are not shown" }
@@ -87,6 +87,7 @@ copy_name = { tabler = "typography", doc = "Copy the file name" }
 copy_path = { tabler = "route", doc = "Copy the file path" }
 rate = { tabler = "star", doc = "Rate a selection", aliases = ["star"] }
 rating_clear = { tabler = "star-off", doc = "Clear the rating" }
+refresh_relative = { tabler = "refresh-dot", doc = "Refresh relative to the selected folder" }
 refresh_metadata = { tabler = "file-info", doc = "Refresh file metadata" }
 regenerate_thumbnail = { tabler = "photo-cog", doc = "Regenerate thumbnails" }
 select_all = { tabler = "select-all", doc = "Select all items" }

@@ -59,7 +59,7 @@ export component TopToolbar inherits Rectangle {
         // 1. Permanent Browse button strictly on the far left
         ToolbarButton {
             text: "Browse";
-            icon: IconId.view-grid;
+            icon: IconId.library-browse;
             tooltip: "Switch to Library Media Browser";
             is-active: root.is-browse-active;
             height: 28px;
@@ -72,7 +72,7 @@ export component TopToolbar inherits Rectangle {
         // 2. Permanent Tab-Grid button to the right of Browse
         ToolbarButton {
             text: "Tab-Grid";
-            icon: IconId.view-table;
+            icon: IconId.view-tab-grid;
             tooltip: "Masonry overview of all open tabs (Left-click: Open tab, Middle-click: Fullscreen)";
             is-active: root.is-tab-grid-active;
             height: 28px;
@@ -124,7 +124,6 @@ export component TopToolbar inherits Rectangle {
             text: "Settings";
             icon: IconId.settings;
             tooltip: "Application configuration and settings";
-            icon-size: 15px;
             font-size: 12px;
             height: 28px;
             y: (parent.height - self.height) / 2;
