@@ -1,6 +1,7 @@
 import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconLookup, IconSize, IconSlot } from "icons.slint";
 import { TabGridItemModel } from "types.slint";
+import { MultiviewCanvas } from "multiview_canvas.slint";
 
 /// Standalone Masonry Tile item for the TabGridView.
 /// Displays live loaded image buffers or solid video subwindow placeholders with full aspect ratio preservation.
@@ -10,6 +11,7 @@ export component TabGridItemView inherits Rectangle {
     in property <length> padding-v: 6px;
     in property <length> border-width-val: 1px;
     in property <length> corner-radius-val: 4px;
+    in property <int> background-mode: 0;
 
     callback left-clicked(int /* tab_id */);
     callback middle-clicked(int /* tab_id */);
@@ -172,19 +174,32 @@ export component TabGridItemView inherits Rectangle {
                 }
             }
 
-            if !root.item.is-video && root.item.image.width > 0 && root.item.error-message == "" : Image {
+            if !root.item.is-video && !root.item.is-multiview && root.item.image.width > 0 && root.item.error-message == "" : Image {
                 source: root.item.image;
                 width: 100%;
                 height: 100%;
                 image-fit: contain;
             }
 
-            if !root.item.is-video && root.item.image.width == 0 && root.item.error-message == "" : AppIcon {
+            if !root.item.is-video && !root.item.is-multiview && root.item.image.width == 0 && root.item.error-message == "" : AppIcon {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 icon: IconId.media-image;
                 size: IconSize.xl;
                 color: Theme.text-muted;
+            }
+
+            // Multiview: the miniature of the fullscreen arrangement. Its video tiles are native mpv windows that Rust places
+            // on top; the canvas is a picture (no touch areas), so clicks reach the tile touch area below.
+            if root.item.is-multiview : MultiviewCanvas {
+                width: 100%;
+                height: 100%;
+                interactive: false;
+                tiles: root.item.mv-tiles;
+                gutters: root.item.mv-gutters;
+                screen: root.item.mv-screen;
+                background-mode: root.background-mode;
+                outer-color: #000000;
             }
 
             // Video Viewport Area: Solid black background ensures Slint's canvas is 100% opaque.

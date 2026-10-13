@@ -10,13 +10,10 @@ use super::router;
 use super::views::{self, ImageCache};
 use crate::library::models::MediaId;
 use crate::settings::schema::MULTIVIEW_TICK_MS;
-use crate::ui::{
-    MainWindow, MultiviewGutterView, MultiviewScreenView, MultiviewTabBus, MultiviewTileView,
-};
+use crate::ui::{MainWindow, MultiviewGutterView, MultiviewTabBus, MultiviewTileView};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
-use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
@@ -57,15 +54,6 @@ fn with_host<R>(f: impl FnOnce(&mut TabHost) -> R) -> Option<R> {
 
 fn current_instance() -> Option<SharedInstance> {
     with_host(|h| h.instance.upgrade()).flatten()
-}
-
-/// Logical area of the canvas in the window -> physical window pixels. Edges are rounded, not sizes, so neighbors stay
-/// seamless.
-fn physical_rect(area: &MultiviewScreenView, scale: f32) -> Rect {
-    let edge = |logical: f32| (logical * scale).round() as i32;
-    let (x0, y0) = (edge(area.x), edge(area.y));
-    let (x1, y1) = (edge(area.x + area.width), edge(area.y + area.height));
-    Rect::new(x0, y0, (x1 - x0).max(1), (y1 - y0).max(1))
 }
 
 /// Wires the canvas events once at startup.
@@ -133,7 +121,8 @@ pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &Shar
         return;
     };
     let scale = window.window().scale_factor();
-    let rect = physical_rect(&window.invoke_multiview_viewport(), scale);
+    let area = window.invoke_multiview_viewport();
+    let rect = views::physical_rect(area.x, area.y, area.width, area.height, scale);
     let cutouts = tab_manager.get_combined_cutouts();
     let surface = HostSurface::tab_view(main_xid, rect, scale, cutouts);
     let has_video = {
@@ -230,36 +219,4 @@ pub fn rename_target(tab_manager: &ViewerTabManager) -> Option<MediaId> {
     };
     let pointer = with_host(|h| h.probe.as_ref().and_then(|p| p.position_in(h.main_xid))).flatten();
     multiview.instance.lock().resolve_rename_target(pointer)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn area(x: f32, y: f32, width: f32, height: f32) -> MultiviewScreenView {
-        MultiviewScreenView {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
-    #[test]
-    fn the_viewer_area_converts_to_physical_pixels_by_rounding_edges() {
-        let rect = physical_rect(&area(0.0, 64.0, 960.0, 540.0), 1.0);
-        assert_eq!(rect, Rect::new(0, 64, 960, 540));
-
-        let rect = physical_rect(&area(0.0, 64.0, 801.5, 539.5), 1.25);
-        assert_eq!(rect.x, 0);
-        assert_eq!(rect.y, 80);
-        assert_eq!(rect.x + rect.w, (801.5f32 * 1.25).round() as i32);
-        assert_eq!(rect.y + rect.h, ((64.0f32 + 539.5) * 1.25).round() as i32);
-    }
-
-    #[test]
-    fn a_collapsed_area_never_yields_an_empty_rectangle() {
-        let rect = physical_rect(&area(10.0, 10.0, 0.0, 0.0), 2.0);
-        assert!(rect.w >= 1 && rect.h >= 1);
-    }
 }

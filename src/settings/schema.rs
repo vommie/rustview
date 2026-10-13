@@ -80,6 +80,13 @@ pub const DEFAULT_TAB_GRID_COLUMNS: usize = 3;
 pub const MIN_TAB_GRID_COLUMNS: usize = 1;
 pub const MAX_TAB_GRID_COLUMNS: usize = 10;
 pub const DEFAULT_TAB_GRID_AUTO_COLUMNS: bool = true;
+/// Window chrome above the tab grid items (top toolbar + grid panel toolbar) and below them (status bar), in logical pixels.
+pub const TAB_GRID_CONTENT_TOP_LOGICAL_PX: f32 = 64.0;
+pub const TAB_GRID_STATUS_BAR_LOGICAL_PX: f32 = 28.0;
+/// Header of a grid item (title row plus spacing) above its media canvas.
+pub const TAB_GRID_ITEM_HEADER_LOGICAL_PX: f32 = 26.0;
+/// Smallest media canvas of a grid item (X11 video containers are clamped to the same size).
+pub const TAB_GRID_MIN_CANVAS_LOGICAL_PX: f32 = 16.0;
 
 // All 13 Table Columns Defaults
 pub const DEFAULT_COL_FILENAME_WIDTH: f32 = 260.0;

@@ -93,6 +93,19 @@ pub fn badge_view(badge: Option<&BadgeView>, dpi: f32) -> MultiviewBadgeView {
     }
 }
 
+/// A logical rectangle in window pixels -> physical window pixels. Edges are rounded, not sizes, so neighbors stay seamless
+/// and the result is never empty.
+pub fn physical_rect(x: f32, y: f32, width: f32, height: f32, scale: f32) -> Rect {
+    let edge = |logical: f32| (logical * scale).round() as i32;
+    let (x0, y0) = (edge(x), edge(y));
+    Rect::new(
+        x0,
+        y0,
+        (edge(x + width) - x0).max(1),
+        (edge(y + height) - y0).max(1),
+    )
+}
+
 /// Where the projected container sits inside the canvas of the host.
 pub fn screen_view(view: &HostedView) -> MultiviewScreenView {
     let Rect { x, y, w, h } = view.screen;
@@ -104,6 +117,20 @@ pub fn screen_view(view: &HostedView) -> MultiviewScreenView {
     }
 }
 
+pub fn tile_views(view: &HostedView, images: &mut ImageCache) -> Vec<MultiviewTileView> {
+    view.tiles
+        .iter()
+        .map(|t| tile_view(t, view.dpi, images))
+        .collect()
+}
+
+pub fn gutter_views(view: &HostedView) -> Vec<MultiviewGutterView> {
+    view.gutters
+        .iter()
+        .map(|g| gutter_view(g, view.dpi))
+        .collect()
+}
+
 /// Updates the Slint models from the description of the instance.
 pub fn sync_models(
     tile_model: &VecModel<MultiviewTileView>,
@@ -112,18 +139,8 @@ pub fn sync_models(
     images: &mut ImageCache,
 ) {
     images.retain(&view.tiles);
-    let tiles = view
-        .tiles
-        .iter()
-        .map(|t| tile_view(t, view.dpi, images))
-        .collect();
-    sync_model(tile_model, tiles);
-    let gutters = view
-        .gutters
-        .iter()
-        .map(|g| gutter_view(g, view.dpi))
-        .collect();
-    sync_model(gutter_model, gutters);
+    sync_model(tile_model, tile_views(view, images));
+    sync_model(gutter_model, gutter_views(view));
 }
 
 /// Updates the rows in place when the row count is unchanged. Resetting the model would recreate the repeater items and
@@ -135,5 +152,29 @@ fn sync_model<T: Clone + 'static>(model: &VecModel<T>, items: Vec<T>) {
         }
     } else {
         model.set_vec(items);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_logical_area_converts_to_physical_pixels_by_rounding_edges() {
+        assert_eq!(
+            physical_rect(0.0, 64.0, 960.0, 540.0, 1.0),
+            Rect::new(0, 64, 960, 540)
+        );
+
+        let rect = physical_rect(0.0, 64.0, 801.5, 539.5, 1.25);
+        assert_eq!((rect.x, rect.y), (0, 80));
+        assert_eq!(rect.x + rect.w, (801.5f32 * 1.25).round() as i32);
+        assert_eq!(rect.y + rect.h, ((64.0f32 + 539.5) * 1.25).round() as i32);
+    }
+
+    #[test]
+    fn a_collapsed_area_never_yields_an_empty_rectangle() {
+        let rect = physical_rect(10.0, 10.0, 0.0, 0.0, 2.0);
+        assert!(rect.w >= 1 && rect.h >= 1);
     }
 }

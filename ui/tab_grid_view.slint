@@ -29,6 +29,7 @@ export component TabGridView inherits Rectangle {
     in property <int> grid-padding-val: 12;
     in property <int> grid-item-border-width: 1;
     in property <int> grid-item-corner-radius: 4;
+    in property <int> background-mode: 0;
 
     callback item-left-clicked(int /* tab_id */);
     callback item-middle-clicked(int /* tab_id */);
@@ -106,6 +107,7 @@ export component TabGridView inherits Rectangle {
                         padding-v: root.item-p-v;
                         border-width-val: root.border-w;
                         corner-radius-val: root.corner-r;
+                        background-mode: root.background-mode;
 
                         left-clicked(id) => { root.item-left-clicked(id); }
                         middle-clicked(id) => { root.item-middle-clicked(id); }

@@ -1,4 +1,5 @@
 import { IconId } from "icons.slint";
+import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "multiview_types.slint";
 
 export struct MediaItemView {
     id: int,
@@ -142,6 +143,10 @@ export struct TabGridItemModel {
     rating: int,
     has_tags: bool,
     image: image,
+    // Multiview items: the miniature drawn by MultiviewCanvas (coordinates relative to the media canvas of the item)
+    mv_tiles: [MultiviewTileView],
+    mv_gutters: [MultiviewGutterView],
+    mv_screen: MultiviewScreenView,
     is_loading: bool,
     error_message: string,
     orig_width: int,

@@ -5,6 +5,7 @@
 //! the application. The state and logic of a running Multiview live in `crate::viewer::multiview::instance`.
 
 pub mod eligibility;
+pub mod grid_host;
 pub mod handle;
 mod router;
 mod session;

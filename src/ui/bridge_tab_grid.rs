@@ -2,14 +2,17 @@ use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::multiview::grid_host::{GridHost, GridItemView};
+use super::tab_grid::canvas::canvas_rect;
 use super::tab_grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
 use super::tab_icon::tab_icon;
 use super::{MainWindow, TabGridItemModel};
 use crate::library::Library;
 use crate::settings::SettingsManager;
+use crate::settings::schema::TAB_GRID_ITEM_HEADER_LOGICAL_PX;
 use crate::viewer::{
-    get_slint_window_xid, HighResImageLoader, SubwindowGeometry, TabId, TabPayload,
-    ViewerTabManager, ViewportBounds, X11VideoSubwindow,
+    HighResImageLoader, SubwindowGeometry, TabId, TabPayload, ViewerTabManager,
+    X11VideoSubwindow,
 };
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, ModelRc, VecModel};
@@ -85,7 +88,7 @@ impl BridgeTabGrid {
             padding,
             spacing,
             p_v,
-            26.0,
+            TAB_GRID_ITEM_HEADER_LOGICAL_PX,
         );
 
         {
@@ -94,7 +97,9 @@ impl BridgeTabGrid {
             st.cached_tab_grid_total_h = total_h;
         }
 
-        // 3. Assemble Slint Models for image & video tabs
+        // 3. Assemble Slint Models for image, video and Multiview tabs
+        let scroll_y = window.get_tab_grid_scroll_y();
+        let grid_host = GridHost::new(window, tab_manager);
         let mut missing_image_tasks = Vec::new();
 
         let slint_items: Vec<TabGridItemModel> = sessions
@@ -104,6 +109,7 @@ impl BridgeTabGrid {
                 let r = &rects[idx];
                 let is_video = s.is_video();
 
+                let mut multiview_item: Option<GridItemView> = None;
                 let (slint_img, is_loading, err_msg, orig_w, orig_h) = match s.payload {
                     TabPayload::Image(ref img) => {
                         if !s.file_path.is_file() {
@@ -133,11 +139,19 @@ impl BridgeTabGrid {
                         };
                         (Image::default(), vid.is_loading, err_msg, s.record.width, s.record.height)
                     }
-                    TabPayload::Multiview(_) => {
+                    TabPayload::Multiview(ref mv) => {
                         let (width, height) = s.display_size();
+                        multiview_item = grid_host.as_ref().map(|host| {
+                            host.place(&mv.instance, canvas_rect(r, p_h, p_v, scroll_y))
+                        });
                         (Image::default(), false, String::new(), width, height)
                     }
                 };
+                let multiview_item = multiview_item.unwrap_or_else(|| GridItemView {
+                    tiles: Vec::new(),
+                    gutters: Vec::new(),
+                    screen: Default::default(),
+                });
 
                 TabGridItemModel {
                     id: s.id as i32,
@@ -154,6 +168,9 @@ impl BridgeTabGrid {
                     error_message: err_msg.into(),
                     orig_width: orig_w as i32,
                     orig_height: orig_h as i32,
+                    mv_tiles: ModelRc::new(VecModel::from(multiview_item.tiles)),
+                    mv_gutters: ModelRc::new(VecModel::from(multiview_item.gutters)),
+                    mv_screen: multiview_item.screen,
                     x: r.x,
                     y: r.y,
                     width: r.width,
@@ -166,7 +183,6 @@ impl BridgeTabGrid {
         window.set_tab_grid_content_height(total_h);
 
         // 4. Synchronize video subwindows directly on Masonry tiles
-        let scroll_y = window.get_tab_grid_scroll_y();
         Self::sync_video_subwindows(
             window,
             tab_manager,
@@ -238,9 +254,11 @@ impl BridgeTabGrid {
             return;
         }
 
-        let Some(main_xid) = get_slint_window_xid(window.window()) else {
+        let Some(grid_host) = GridHost::new(window, tab_manager) else {
             return;
         };
+        let main_xid = grid_host.main_xid();
+        let viewport = grid_host.viewport;
 
         let sessions = tab_manager.list_tabs();
         if sessions.is_empty() {
@@ -249,26 +267,17 @@ impl BridgeTabGrid {
         }
 
         let scale = window.window().scale_factor();
-        let win_size = window.window().size();
-
-        let toolbar_h = 38.0f32; // TopToolbar
-        let tab_grid_toolbar_h = 26.0f32; // TabGridPanelToolbar
-        let content_top_y = toolbar_h + tab_grid_toolbar_h; // 64px
-        let status_bar_h = 28.0f32;
-
-        // In Tab-Grid mode (mode 2), both sidebars are hidden -> full viewport width is available
-        let viewport_w = (win_size.width as f32 / scale).max(100.0);
-
-        let viewport = ViewportBounds {
-            x: 0,
-            y: (content_top_y * scale).round() as i32,
-            width: (viewport_w * scale).round().max(16.0) as u32,
-            height: (((win_size.height as f32 / scale) - (content_top_y + status_bar_h)) * scale)
-                .round()
-                .max(16.0) as u32,
-        };
 
         for (idx, session) in sessions.iter().enumerate() {
+            if let TabPayload::Multiview(ref mv) = session.payload {
+                match rects.get(idx) {
+                    Some(r) => {
+                        grid_host.place(&mv.instance, canvas_rect(r, padding_h, padding_v, scroll_y));
+                    }
+                    None => mv.instance.lock().deactivate(),
+                }
+                continue;
+            }
             if let TabPayload::Video(ref vid) = session.payload {
                 let Some(r) = rects.get(idx) else {
                     let mut sub_guard = vid.subwindow.lock();
@@ -287,17 +296,12 @@ impl BridgeTabGrid {
                     continue;
                 }
 
-                let header_h = 26.0f32;
-                let video_logical_x = r.x + padding_h;
-                let video_logical_y = content_top_y + r.y + header_h + padding_v + scroll_y;
-                let video_logical_w = (r.width - (padding_h * 2.0)).max(16.0);
-                let video_logical_h = (r.height - header_h - (padding_v * 2.0)).max(16.0);
-
+                let canvas = canvas_rect(r, padding_h, padding_v, scroll_y);
                 let geom = SubwindowGeometry {
-                    x: (video_logical_x * scale).round() as i32,
-                    y: (video_logical_y * scale).round() as i32,
-                    width: (video_logical_w * scale).round().max(16.0) as u32,
-                    height: (video_logical_h * scale).round().max(16.0) as u32,
+                    x: (canvas.x * scale).round() as i32,
+                    y: (canvas.y * scale).round() as i32,
+                    width: (canvas.width * scale).round().max(16.0) as u32,
+                    height: (canvas.height * scale).round().max(16.0) as u32,
                 };
 
                 // Wire TabGrid click and wheel traps on the video player
@@ -503,7 +507,7 @@ impl BridgeTabGrid {
                 padding,
                 spacing,
                 p_v,
-                26.0,
+                TAB_GRID_ITEM_HEADER_LOGICAL_PX,
             );
 
             {
