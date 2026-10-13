@@ -4,14 +4,14 @@
 //! is used (`is_deleted`, `is_pending`, `is_corrupted`, the loaded row map); the drive is never touched. The Multiview
 //! shows the first `MULTIVIEW_MAX_TILES` playable items in the current view order (the selection itself has no order).
 
-use super::model::{TileKind, aspect_from_size};
 use crate::library::models::MediaId;
 use crate::media::MediaType;
 use crate::query::filters::IndexedMediaRecord;
 use crate::settings::schema::{MULTIVIEW_FALLBACK_ASPECT, MULTIVIEW_MAX_TILES};
 use crate::ui::bridge_state::UiState;
 use crate::ui::thumbnail_regeneration::eligibility::loaded_item;
-use std::path::PathBuf;
+use crate::viewer::multiview::model::{TileKind, aspect_from_size};
+use crate::viewer::multiview::tile::TileSeed;
 
 /// What the context menu needs without resolving any tile (cheap, `Copy`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -67,20 +67,10 @@ impl OpenSummary {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PlannedTile {
-    pub media_id: MediaId,
-    pub kind: TileKind,
-    /// Aspect ratio from the library record; corrected from mpv's `video-params` once a video is playing.
-    pub aspect: f32,
-    pub path: PathBuf,
-    pub filename: String,
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct OpenPlan {
     pub summary: OpenSummary,
-    pub tiles: Vec<PlannedTile>,
+    pub tiles: Vec<TileSeed>,
 }
 
 fn is_playable(item: &IndexedMediaRecord) -> bool {
@@ -122,8 +112,8 @@ pub fn wanted_ids(st: &UiState) -> Vec<MediaId> {
         .collect()
 }
 
-pub fn plan_tile(item: &IndexedMediaRecord) -> PlannedTile {
-    PlannedTile {
+pub fn plan_tile(item: &IndexedMediaRecord) -> TileSeed {
+    TileSeed {
         media_id: item.record.id,
         kind: if matches!(item.record.media_type, MediaType::Video) {
             TileKind::Video
@@ -156,7 +146,7 @@ pub fn plan_open(st: &UiState) -> OpenPlan {
 }
 
 /// A single tile for an item that joined the selection later (live reconcile).
-pub fn plan_tile_for(st: &UiState, id: MediaId) -> Option<PlannedTile> {
+pub fn plan_tile_for(st: &UiState, id: MediaId) -> Option<TileSeed> {
     loaded_item(st, id)
         .filter(|item| is_playable(item))
         .map(plan_tile)

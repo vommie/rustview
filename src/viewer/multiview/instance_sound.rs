@@ -1,12 +1,13 @@
-//! Session behavior around sound: applying the audio rules to the players, noticing mute changes made inside mpv and the
+//! Instance behavior around sound: applying the audio rules to the players, noticing mute changes made inside mpv and the
 //! mute badge click.
 
 use super::audio::{AudioMode, AudioOrigin, TileAudio};
-use super::session::Session;
+use super::instance::MultiviewInstance;
 
-impl Session {
+impl MultiviewInstance {
     /// Pushes the mute state demanded by the audio rules to every video player whose actual state differs.
     pub(super) fn apply_audio(&mut self) {
+        let mut changed = false;
         for tile in &mut self.tiles {
             let (Some(video), Some(audio)) = (tile.video.as_mut(), tile.audio) else {
                 continue;
@@ -18,6 +19,7 @@ impl Session {
             match video.player.set_mute(target) {
                 Ok(()) => {
                     video.last_mute = target;
+                    changed = true;
                     tracing::debug!(
                         media_id = tile.media_id,
                         muted = target,
@@ -28,6 +30,9 @@ impl Session {
                     tracing::warn!(media_id = tile.media_id, error = %e, "[Multiview: Audio] Could not change the mute state")
                 }
             }
+        }
+        if changed {
+            self.bump();
         }
     }
 
@@ -63,7 +68,7 @@ impl Session {
         changed
     }
 
-    pub(super) fn toggle_badge_mute(&mut self) {
+    pub fn toggle_badge_mute(&mut self) {
         let Some((index, _)) = self.badge else { return };
         let Some(tile) = self.tiles.get_mut(index) else {
             return;
@@ -87,6 +92,6 @@ impl Session {
                 tracing::warn!(media_id = tile.media_id, error = %e, "[Multiview: Audio] Mute toggle failed")
             }
         }
-        self.push_badge();
+        self.bump();
     }
 }

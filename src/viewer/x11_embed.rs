@@ -927,6 +927,16 @@ impl PointerProbe {
 
     /// Pointer position in root window (screen) coordinates.
     pub fn position(&self) -> Option<(i32, i32)> {
+        self.query(self.root).map(|(root_x, root_y, _, _)| (root_x, root_y))
+    }
+
+    /// Pointer position relative to the top-left corner of `window_xid` (it does not have to contain the pointer).
+    pub fn position_in(&self, window_xid: u64) -> Option<(i32, i32)> {
+        self.query(window_xid).map(|(_, _, win_x, win_y)| (win_x, win_y))
+    }
+
+    /// Returns `(root_x, root_y, win_x, win_y)` of the pointer, the last two relative to `window`.
+    fn query(&self, window: WindowId) -> Option<(i32, i32, i32, i32)> {
         let mut root_ret: WindowId = 0;
         let mut child_ret: WindowId = 0;
         let (mut root_x, mut root_y, mut win_x, mut win_y): (c_int, c_int, c_int, c_int) =
@@ -935,7 +945,7 @@ impl PointerProbe {
         let on_screen = unsafe {
             (self.api.x_query_pointer)(
                 self.display,
-                self.root,
+                window,
                 &mut root_ret,
                 &mut child_ret,
                 &mut root_x,
@@ -945,7 +955,7 @@ impl PointerProbe {
                 &mut mask,
             )
         };
-        (on_screen != 0).then_some((root_x, root_y))
+        (on_screen != 0).then_some((root_x, root_y, win_x, win_y))
     }
 }
 

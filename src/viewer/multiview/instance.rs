@@ -1,0 +1,174 @@
+//! A running Multiview: the single source of truth for its tiles, arrangement, sound and interaction state.
+//!
+//! The instance knows nothing about Slint or tabs. A host (the fullscreen window, later a viewer tab or a tab-grid tile)
+//! shows it by calling `set_host` and drawing `view()`; asynchronous events (decoded images, mpv callbacks) reach it through
+//! the [`MultiviewEventSink`]. All methods run on the UI thread; the mutex only makes the handle `Send`, so callbacks on
+//! other threads can hold a `Weak` reference and drop their event once the instance is gone. Dropping the last reference
+//! tears the players down in the safe order, so nobody has to remember an explicit teardown.
+//!
+//! The behavior is split over `instance_host` (placement and projection), `instance_layout` (arrangement, gutters),
+//! `instance_tiles` (tile lifecycle, live selection), `instance_sound` (mute state) and `instance_hover` (pointer, mute
+//! badge, aspect probing).
+
+use super::click::{ClickDetector, ClickKind};
+use super::container::Container;
+use super::events::{MultiviewEventSink, NullSink};
+use super::instance_host::HostState;
+use super::instance_layout::{DragState, layout_params};
+use super::layout::{Layout, LayoutParams, Rect, Split};
+use super::route::{HostMode, OriginKind};
+use super::teardown::teardown_videos;
+use super::tile::{TileSeed, TileState, VideoTile};
+use crate::library::models::MediaId;
+use crate::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
+use parking_lot::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Weak};
+use std::time::{Duration, Instant};
+
+pub type SharedInstance = Arc<Mutex<MultiviewInstance>>;
+pub type WeakInstance = Weak<Mutex<MultiviewInstance>>;
+
+static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Size and scale of the virtual display used until a fullscreen host sets the real one.
+const PLACEHOLDER_CONTAINER: Container = Container {
+    width: 1920,
+    height: 1080,
+    dpi: 1.0,
+};
+
+pub struct MultiviewInstance {
+    pub(super) me: WeakInstance,
+    pub(super) id: u64,
+    pub(super) sink: Arc<dyn MultiviewEventSink>,
+    pub(super) origin: OriginKind,
+    pub(super) tiles: Vec<TileState>,
+    pub(super) split: Split,
+    pub(super) container: Container,
+    pub(super) params: LayoutParams,
+    /// Always solved in container pixels; hosts project it into their own rectangle.
+    pub(super) layout: Layout,
+    pub(super) host: HostState,
+    pub(super) drag: Option<DragState>,
+    pub(super) hovered: Option<usize>,
+    pub(super) last_hovered: Option<MediaId>,
+    /// Tile index and host rectangle of the visible mute badge.
+    pub(super) badge: Option<(usize, Rect)>,
+    pub(super) hole_pending: bool,
+    pub(super) ticks: u32,
+    pub(super) rename_target: Option<MediaId>,
+    pub(super) clicks: ClickDetector,
+    pub(super) revision: u64,
+}
+
+impl MultiviewInstance {
+    /// Creates an instance with one (not yet started) tile per seed.
+    pub fn create(sink: Arc<dyn MultiviewEventSink>, seeds: Vec<TileSeed>) -> SharedInstance {
+        let id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::SeqCst);
+        Arc::new_cyclic(|me| {
+            Mutex::new(Self {
+                me: me.clone(),
+                id,
+                sink,
+                origin: OriginKind::Browse,
+                tiles: seeds.into_iter().map(TileState::from_seed).collect(),
+                split: Split::Auto,
+                container: PLACEHOLDER_CONTAINER,
+                params: layout_params(&PLACEHOLDER_CONTAINER, 0),
+                layout: Layout::default(),
+                host: HostState::hidden(&PLACEHOLDER_CONTAINER),
+                drag: None,
+                hovered: None,
+                last_hovered: None,
+                badge: None,
+                hole_pending: false,
+                ticks: 0,
+                rename_target: None,
+                clicks: ClickDetector::default(),
+                revision: 0,
+            })
+        })
+    }
+
+    /// An instance without a UI and without native windows (tests).
+    pub fn detached(seeds: Vec<TileSeed>) -> SharedInstance {
+        Self::create(Arc::new(NullSink), seeds)
+    }
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
+    pub fn origin(&self) -> OriginKind {
+        self.origin
+    }
+
+    pub fn set_origin(&mut self, origin: OriginKind) {
+        self.origin = origin;
+    }
+
+    /// The media ids of the tiles in slot order.
+    pub fn member_ids(&self) -> Vec<MediaId> {
+        self.tiles.iter().map(|t| t.media_id).collect()
+    }
+
+    pub fn has_member(&self, id: MediaId) -> bool {
+        self.tiles.iter().any(|t| t.media_id == id)
+    }
+
+    pub fn tile_count(&self) -> usize {
+        self.tiles.len()
+    }
+
+    pub fn container(&self) -> Container {
+        self.container
+    }
+
+    pub fn host_mode(&self) -> HostMode {
+        self.host.surface.mode
+    }
+
+    pub fn has_video(&self) -> bool {
+        self.tiles.iter().any(|t| t.video.is_some())
+    }
+
+    /// The media an F2 rename acts on (the tile the user pressed F2 over, or the one reported by its player).
+    pub fn rename_target(&self) -> Option<MediaId> {
+        self.rename_target
+    }
+
+    pub fn note_rename_target(&mut self, id: MediaId) {
+        self.rename_target = Some(id);
+    }
+
+    /// One click inside the Multiview (Slint tile or background, or a Ctrl+click reported by an mpv player).
+    pub fn register_click(&mut self, is_ctrl: bool) -> ClickKind {
+        self.clicks.register(
+            Instant::now(),
+            is_ctrl,
+            Duration::from_millis(MULTIVIEW_DOUBLE_CLICK_MS),
+        )
+    }
+
+    /// Changes whenever something a host draws changed; presenters compare it to skip identical syncs.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub(super) fn bump(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
+    }
+}
+
+impl Drop for MultiviewInstance {
+    fn drop(&mut self) {
+        let videos: Vec<VideoTile> = self.tiles.drain(..).filter_map(|t| t.video).collect();
+        tracing::debug!(
+            instance = self.id,
+            players = videos.len(),
+            "[Multiview: Instance] Released; tearing down the players"
+        );
+        teardown_videos(videos);
+    }
+}

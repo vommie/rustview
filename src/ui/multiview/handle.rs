@@ -1,20 +1,18 @@
-//! Thread-safe face of the Multiview. The session itself (Slint window, tiles, timers) lives on the UI thread; this handle is
-//! what the rest of the application and the mpv observer threads hold: open/close requests, the F2 rename target and the
-//! "is a Multiview open" flag that the drag-and-drop lock, dialogs and the tab embedding already ask the fullscreen
-//! controller about.
+//! Thread-safe face of the Multiview. The session itself (Slint window, timers) lives on the UI thread; this handle is what
+//! the rest of the application holds: open/close requests, the F2 rename target and the "is a Multiview open" flag that the
+//! drag-and-drop lock, dialogs and the tab embedding already ask the fullscreen controller about.
 
 use super::eligibility;
 use super::session;
 use crate::library::models::MediaId;
 use crate::settings::SettingsManager;
-use crate::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
 use crate::ui::MainWindow;
 use crate::ui::bridge_image_fullscreen::FullscreenCloseCallback;
 use crate::ui::bridge_state::UiState;
+use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
 
 static OPEN: AtomicBool = AtomicBool::new(false);
 
@@ -23,10 +21,10 @@ pub(super) fn set_open(open: bool) {
 }
 
 struct Shared {
-    rename_target: Mutex<Option<MediaId>>,
     main_window: Mutex<Option<slint::Weak<MainWindow>>>,
     close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>,
-    last_ctrl_click: Mutex<Option<Instant>>,
+    /// The instance shown by the open fullscreen Multiview (it owns the rename target).
+    current: Mutex<WeakInstance>,
 }
 
 #[derive(Clone)]
@@ -46,10 +44,9 @@ impl MultiviewHandle {
     pub fn new(close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>) -> Self {
         Self {
             shared: Arc::new(Shared {
-                rename_target: Mutex::new(None),
                 main_window: Mutex::new(None),
                 close_handler,
-                last_ctrl_click: Mutex::new(None),
+                current: Mutex::new(WeakInstance::new()),
             }),
         }
     }
@@ -58,9 +55,17 @@ impl MultiviewHandle {
         OPEN.load(Ordering::SeqCst)
     }
 
-    /// The media an F2 rename acts on (the tile the user pressed F2 over).
+    /// The media an F2 rename acts on (the tile the user pressed F2 over) while the fullscreen Multiview is open.
     pub fn rename_target(&self) -> Option<MediaId> {
-        *self.shared.rename_target.lock()
+        if !self.is_open() {
+            return None;
+        }
+        let instance = self.shared.current.lock().upgrade()?;
+        instance.lock().rename_target()
+    }
+
+    pub(super) fn bind_instance(&self, instance: &SharedInstance) {
+        *self.shared.current.lock() = Arc::downgrade(instance);
     }
 
     /// Opens the Multiview with the playable items of the current selection. UI thread only. Returns `false` if the
@@ -104,26 +109,8 @@ impl MultiviewHandle {
         }
     }
 
-    /// Ctrl+click inside a video tile (mpv reports it as a window state change). Two of them within the double-click time
-    /// close the Multiview; a snapshot tab will hang off this gesture later. Callable from any thread.
-    pub fn video_ctrl_click(&self) {
-        let now = Instant::now();
-        let window = Duration::from_millis(MULTIVIEW_DOUBLE_CLICK_MS);
-        let is_double = {
-            let mut last = self.shared.last_ctrl_click.lock();
-            let double = last.is_some_and(|at| now.duration_since(at) < window);
-            *last = if double { None } else { Some(now) };
-            double
-        };
-        if is_double {
-            tracing::info!("[Multiview: Click] Ctrl+double click on a video closes the Multiview");
-            self.request_close();
-        }
-    }
-
-    /// F2 on a tile: remembers which media to rename and asks the main window for the regular rename dialog.
-    pub fn request_rename(&self, media_id: MediaId) {
-        *self.shared.rename_target.lock() = Some(media_id);
+    /// F2 on a tile: asks the main window for the regular rename dialog, which acts on `rename_target()`.
+    pub fn request_rename(&self) {
         if let Some(main_window) = self.shared.main_window.lock().clone() {
             let _ = main_window.upgrade_in_event_loop(|w| w.invoke_request_rename());
         }

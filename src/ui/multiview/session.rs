@@ -1,27 +1,25 @@
-//! The running Multiview: one persistent Slint window plus the session state, both living on the UI thread.
+//! The running fullscreen Multiview: one persistent Slint window plus the session state, both living on the UI thread.
 //!
-//! Every event (Slint callback, timer, finished image decode) goes through [`with_session`] / [`run`], which serializes
-//! access to the thread-local session and skips re-entrant calls instead of panicking. The behavior is split over
-//! `session_layout` (geometry, gutters), `session_tiles` (tile lifecycle, live selection), `session_sound` (mute state)
-//! and `session_hover` (pointer, mute badge, aspect probing); this file owns the lifecycle: open, close, window wiring.
+//! The Multiview itself (tiles, arrangement, sound, interaction) is a `MultiviewInstance`; the session is its presenter in
+//! the fullscreen window: it owns the Slint window and models, the timers and the pointer probe, and syncs the models
+//! whenever the instance changed. Every event (Slint callback, timer, finished image decode) goes through [`run`] /
+//! [`with_session`], which serialize access to the thread-local session and skip re-entrant calls instead of panicking.
+//! Input handling lives in `session_input`; this file owns the lifecycle: open, close, window wiring.
 
-use super::audio::{self, TileAudio};
 use super::eligibility::OpenPlan;
 use super::handle::{self, MultiviewHandle};
-use super::layout::{Layout, LayoutParams, Rect, Split};
-use super::session_layout::DragState;
-use super::tiles::{TileRuntime, VideoTile, teardown_videos};
-use super::views;
-use crate::library::models::MediaId;
+use super::router::{UiEventSink, execute};
+use super::views::{self, ImageCache};
 use crate::settings::SettingsManager;
 use crate::settings::schema::{
-    MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_COLUMN_LOGICAL_PX, MULTIVIEW_OPEN_POLL_MS,
-    MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS, MULTIVIEW_TICK_MS,
-    MULTIVIEW_WRAP_MIN_ASPECT,
+    MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS,
+    MULTIVIEW_TICK_MS,
 };
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::bridge_state::UiState;
 use crate::ui::{MainWindow, MultiviewFullscreenWindow, MultiviewGutterView, MultiviewTileView};
+use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
+use crate::viewer::multiview::route::UiAction;
 use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
 use parking_lot::RwLock;
 use slint::{
@@ -31,69 +29,53 @@ use slint::{
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 thread_local! {
     static WINDOW: RefCell<Option<MultiviewFullscreenWindow>> = const { RefCell::new(None) };
     static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
 }
 
-static GENERATION: AtomicU64 = AtomicU64::new(0);
-
-/// What to do after an event handler returns (closing needs the session borrow to be released first).
-pub(super) enum After {
-    Nothing,
-    Close,
-}
-
 pub(super) struct Session {
+    /// Id of the instance; timers that outlive a session compare it to notice that the session was replaced.
     pub(super) generation: u64,
     pub(super) handle: MultiviewHandle,
     pub(super) window: slint::Weak<MultiviewFullscreenWindow>,
     pub(super) state: Arc<RwLock<UiState>>,
     pub(super) monitor: MonitorInfo,
     pub(super) fs_xid: u64,
-    pub(super) scale: f32,
-    pub(super) params: LayoutParams,
-    pub(super) tiles: Vec<TileRuntime>,
-    pub(super) split: Split,
-    pub(super) layout: Layout,
-    pub(super) drag: Option<DragState>,
-    pub(super) hovered: Option<usize>,
-    pub(super) last_hovered: Option<MediaId>,
-    /// Tile index and window rectangle of the visible mute badge.
-    pub(super) badge: Option<(usize, Rect)>,
-    pub(super) hole_pending: bool,
+    pub(super) instance: SharedInstance,
     pub(super) probe: Option<PointerProbe>,
     pub(super) tile_model: Rc<VecModel<MultiviewTileView>>,
     pub(super) gutter_model: Rc<VecModel<MultiviewGutterView>>,
+    pub(super) images: ImageCache,
+    shown_revision: Option<u64>,
     pub(super) debounce: Timer,
     pub(super) tick: Timer,
-    pub(super) last_click: Option<(Instant, bool)>,
     pub(super) populated: bool,
-    pub(super) ticks: u32,
-    pending: Option<OpenPlan>,
 }
 
-/// Runs `f` on the session if there is one. Re-entrant calls are skipped instead of panicking.
-pub(super) fn run(f: impl FnOnce(&mut Session) -> After) {
-    let after = SESSION.with(|cell| match cell.try_borrow_mut() {
-        Ok(mut guard) => guard.as_mut().map(f),
+/// Runs `f` on the session if there is one. Re-entrant calls are skipped instead of panicking. The action `f` returns runs
+/// after the session borrow is released, so it may close the session.
+pub(super) fn run(f: impl FnOnce(&mut Session) -> UiAction) {
+    let outcome = SESSION.with(|cell| match cell.try_borrow_mut() {
+        Ok(mut guard) => guard
+            .as_mut()
+            .map(|session| (f(session), session.handle.clone())),
         Err(_) => {
             tracing::debug!("[Multiview: Session] Skipped a re-entrant event");
             None
         }
     });
-    if matches!(after, Some(After::Close)) {
-        close(true);
+    if let Some((action, handle)) = outcome {
+        execute(action, &handle);
     }
 }
 
 pub(super) fn with_session(f: impl FnOnce(&mut Session)) {
     run(|s| {
         f(s);
-        After::Nothing
+        UiAction::None
     });
 }
 
@@ -129,13 +111,13 @@ fn background_mode_index(mode: &str) -> i32 {
 fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     let win = MultiviewFullscreenWindow::new()?;
     win.on_request_close(|| close(true));
-    win.on_request_rename(|| with_session(|s| s.rename_hovered()));
+    win.on_request_rename(|| run(Session::rename_hovered));
     win.on_tile_clicked(|_, is_ctrl| run(|s| s.on_click(is_ctrl)));
     win.on_background_clicked(|is_ctrl| run(|s| s.on_click(is_ctrl)));
     win.on_middle_clicked(|| close(true));
     win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0) as usize)));
     win.on_gutter_dragged(|_, distance| with_session(|s| s.dragged(distance)));
-    win.on_gutter_drag_finished(|_| with_session(|s| s.drag = None));
+    win.on_gutter_drag_finished(|_| with_session(Session::drag_finished));
     win.on_gutter_reset(|| with_session(Session::reset_split));
     win.on_gutter_swap(|index| with_session(|s| s.swap(index.max(0) as usize)));
     win.on_badge_clicked(|| with_session(Session::toggle_badge_mute));
@@ -186,7 +168,7 @@ fn prepare_window(
     ));
     win.set_tiles(ModelRc::from(tile_model.clone()));
     win.set_gutters(ModelRc::from(gutter_model.clone()));
-    win.set_badge(views::badge_view(None, false, 1.0));
+    win.set_badge(views::badge_view(None, 1.0));
     win.window()
         .set_position(PhysicalPosition::new(monitor.x, monitor.y));
     win.window()
@@ -212,9 +194,9 @@ pub(super) fn open(
     };
 
     let monitor = resolve_monitor(&settings, &main_window);
-    let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let tile_count = plan.tiles.len();
-    let session = Session::new(generation, handle, window, state, monitor, plan);
+    let session = Session::new(handle, window, state, monitor, plan);
+    let generation = session.generation;
     prepare_window(
         &win,
         &settings,
@@ -300,20 +282,16 @@ pub(super) fn close(notify: bool) {
 
 impl Session {
     fn new(
-        generation: u64,
         handle: MultiviewHandle,
         window: slint::Weak<MultiviewFullscreenWindow>,
         state: Arc<RwLock<UiState>>,
         monitor: MonitorInfo,
         plan: OpenPlan,
     ) -> Self {
-        let params = LayoutParams {
-            width: monitor.width.max(1) as i32,
-            height: monitor.height.max(1) as i32,
-            gutter: MULTIVIEW_GUTTER_LOGICAL_PX.round() as i32,
-            min_column: MULTIVIEW_MIN_COLUMN_LOGICAL_PX.round() as i32,
-            min_wide_aspect: MULTIVIEW_WRAP_MIN_ASPECT,
-        };
+        let instance =
+            MultiviewInstance::create(Arc::new(UiEventSink::new(handle.clone())), plan.tiles);
+        handle.bind_instance(&instance);
+        let generation = instance.lock().id();
         Self {
             generation,
             handle,
@@ -321,54 +299,35 @@ impl Session {
             state,
             monitor,
             fs_xid: 0,
-            scale: 1.0,
-            params,
-            tiles: Vec::new(),
-            split: Split::Auto,
-            layout: Layout::default(),
-            drag: None,
-            hovered: None,
-            last_hovered: None,
-            badge: None,
-            hole_pending: false,
+            instance,
             probe: None,
             tile_model: Rc::new(VecModel::default()),
             gutter_model: Rc::new(VecModel::default()),
+            images: ImageCache::default(),
+            shown_revision: None,
             debounce: Timer::default(),
             tick: Timer::default(),
-            last_click: None,
             populated: false,
-            ticks: 0,
-            pending: Some(plan),
         }
     }
 
     /// Builds the tiles once the native window exists: positions it on the target monitor, lays the tiles out, starts
     /// every video (same recipe as the single quick fullscreen) and decodes the images in the background.
     pub(super) fn populate(&mut self, xid: u64) {
-        let Some(plan) = self.pending.take() else {
+        if self.populated {
             return;
-        };
+        }
         self.fs_xid = xid;
         let mon = &self.monitor;
         force_x11_fullscreen_on_monitor(xid, mon.index, mon.x, mon.y, mon.width, mon.height);
-        self.refresh_geometry();
-
-        for planned in plan.tiles {
-            let tile = self.new_tile(planned);
-            self.tiles.push(tile);
+        let Some(surface) = self.host_surface() else {
+            return;
+        };
+        {
+            let mut instance = self.instance.lock();
+            instance.set_host(&surface);
+            instance.start_all();
         }
-        let mut slots: Vec<Option<TileAudio>> = self.tiles.iter().map(|t| t.audio).collect();
-        audio::assign_on_open(&mut slots);
-        for (tile, slot) in self.tiles.iter_mut().zip(slots) {
-            tile.audio = slot;
-        }
-
-        self.apply_layout();
-        for index in 0..self.tiles.len() {
-            self.start_tile(index);
-        }
-        self.apply_audio();
 
         self.probe = match PointerProbe::new() {
             Ok(probe) => Some(probe),
@@ -378,6 +337,7 @@ impl Session {
             }
         };
         self.populated = true;
+        self.refresh();
         if let Some(win) = self.window.upgrade() {
             win.set_is_ready(true);
         }
@@ -388,27 +348,40 @@ impl Session {
         );
         tracing::info!(
             generation = self.generation,
-            tiles = self.tiles.len(),
-            width = self.params.width,
-            height = self.params.height,
-            scale = self.scale,
             monitor = self.monitor.index,
-            "[Multiview: Open] Tiles created"
+            "[Multiview: Open] Session populated"
         );
     }
 
-    fn shutdown(mut self) {
+    /// Brings the Slint models and the badge in line with the instance when it changed since the last sync.
+    pub(super) fn refresh(&mut self) {
+        let view = {
+            let instance = self.instance.lock();
+            if Some(instance.revision()) == self.shown_revision {
+                return;
+            }
+            instance.view()
+        };
+        self.shown_revision = Some(view.revision);
+        views::sync_models(
+            &self.tile_model,
+            &self.gutter_model,
+            &view,
+            &mut self.images,
+        );
+        if let Some(win) = self.window.upgrade() {
+            win.set_badge(views::badge_view(view.badge.as_ref(), view.dpi));
+        }
+    }
+
+    /// Hides the window; dropping the session then releases the instance, whose last reference shuts the players down
+    /// before their windows are destroyed.
+    fn shutdown(self) {
         self.debounce.stop();
         self.tick.stop();
-        let videos: Vec<VideoTile> = self
-            .tiles
-            .iter_mut()
-            .filter_map(|t| t.video.take())
-            .collect();
         if let Some(win) = self.window.upgrade() {
             win.set_is_ready(false);
             let _ = win.hide();
         }
-        teardown_videos(videos);
     }
 }
