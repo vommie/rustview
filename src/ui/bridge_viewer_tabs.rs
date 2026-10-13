@@ -817,13 +817,13 @@ impl BridgeViewerTabs {
             return;
         }
 
-        let active_media_id = match tab_manager.get_active_media_id() {
-            Some(id) => id,
-            None => return,
-        };
+        let active_media_ids = tab_manager.get_active_media_ids();
+        if active_media_ids.is_empty() {
+            return;
+        }
 
         tracing::info!(
-            media_id = active_media_id,
+            media_ids = ?active_media_ids,
             "[BridgeViewerTabs: RefreshActive] Executing unified full media refresh for active tab"
         );
 

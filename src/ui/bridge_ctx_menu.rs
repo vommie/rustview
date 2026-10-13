@@ -449,7 +449,7 @@ impl BridgeContextMenu {
         let tab = &tabs[tab_idx];
         let is_busy = BridgeMedia::is_system_busy(window, thumbnails, state);
 
-        let associated_apps = if tab.file_path.exists() {
+        let associated_apps = if !tab.is_multiview() && tab.file_path.exists() {
             DesktopIntegration::get_associated_apps(&tab.file_path)
         } else {
             Vec::new()
