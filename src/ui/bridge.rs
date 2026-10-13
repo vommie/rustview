@@ -1338,6 +1338,7 @@ impl UiBridge {
         let thumb_start = self.thumbnails.clone();
         let st_start = self.state.clone();
         let autoscroll_start = self.dnd_foldertree_autoscroller.clone();
+        let fs_start = self.fullscreen_controller.clone();
         self.window.on_media_drag_started(move |id, x, y| {
             BridgeDnd::handle_drag_started(DragStartParams {
                 media_id: id as u64,
@@ -1348,6 +1349,7 @@ impl UiBridge {
                 thumbnails: &thumb_start,
                 state: &st_start,
                 autoscroller: &autoscroll_start,
+                fullscreen_controller: &fs_start,
             });
         });
 

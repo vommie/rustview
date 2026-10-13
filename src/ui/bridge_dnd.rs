@@ -2,6 +2,7 @@ use super::bridge_file_dialog_conflict::{ConflictDialogParams, FileOpsConflictDi
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folders::BridgeFolders;
+use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
@@ -40,6 +41,7 @@ pub struct DragStartParams<'a> {
     pub thumbnails: &'a Arc<ThumbnailManager>,
     pub state: &'a Arc<RwLock<UiState>>,
     pub autoscroller: &'a DndFolderTreeAutoScroller,
+    pub fullscreen_controller: &'a ImageFullscreenDialogController,
 }
 
 pub struct BatchTransferParams<'a> {
@@ -59,6 +61,15 @@ impl BridgeDnd {
     pub fn handle_drag_started(params: DragStartParams<'_>) {
         let t0 = Instant::now();
         params.autoscroller.stop();
+
+        // While a fullscreen is open, a left click on a tile swaps the fullscreen content, so a drag must not start.
+        if params.fullscreen_controller.is_open() {
+            tracing::debug!(
+                media_id = params.media_id,
+                "[MediaDrag: Blocked] Drag & Drop disabled while fullscreen is open"
+            );
+            return;
+        }
 
         let (_drag_ids, changed_selection) = {
             let mut st = params.state.write();
@@ -154,6 +165,10 @@ impl BridgeDnd {
         _state: &Arc<RwLock<UiState>>,
         autoscroller: &DndFolderTreeAutoScroller,
     ) {
+        if !window.get_is_dragging_media() {
+            return;
+        }
+
         window.set_drag_x(current_x);
         window.set_drag_y(current_y);
 
