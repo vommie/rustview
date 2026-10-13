@@ -283,11 +283,7 @@ impl TagTreeSync {
         ) = {
             let s = state.read();
             let file_ids = if is_tab_mode {
-                if let Some(tab_media_id) = s.active_tab_media_id {
-                    HashSet::from([tab_media_id])
-                } else {
-                    HashSet::new()
-                }
+                s.active_tab_selection().unwrap_or_default()
             } else {
                 s.file_selection.selected_ids().clone()
             };
@@ -408,8 +404,8 @@ impl TagActionHandler {
         let (selected_ids, is_assign_raw) = {
             let s = ctx.state.read();
             let ids = if is_tab_active {
-                if let Some(tab_id) = s.active_tab_media_id {
-                    HashSet::from([tab_id])
+                if let Some(ids) = s.active_tab_selection() {
+                    ids
                 } else if let Some(m_id) = ctx.tab_manager.get_active_media_id() {
                     HashSet::from([m_id])
                 } else {
@@ -586,8 +582,8 @@ impl TagActionHandler {
         let (selected_ids, is_assign_raw) = {
             let s = ctx.state.read();
             let ids = if is_tab_active {
-                if let Some(tab_id) = s.active_tab_media_id {
-                    HashSet::from([tab_id])
+                if let Some(ids) = s.active_tab_selection() {
+                    ids
                 } else if let Some(m_id) = ctx.tab_manager.get_active_media_id() {
                     HashSet::from([m_id])
                 } else {
@@ -1295,11 +1291,7 @@ impl BridgeTags {
         let (is_assign_raw, expanded_set, selected_query_tags, filter_text, is_regex, selected_file_ids, available_h) = {
             let s = state.read();
             let file_ids = if is_tab_mode {
-                if let Some(tab_media_id) = s.active_tab_media_id {
-                    HashSet::from([tab_media_id])
-                } else {
-                    HashSet::new()
-                }
+                s.active_tab_selection().unwrap_or_default()
             } else {
                 s.file_selection.selected_ids().clone()
             };

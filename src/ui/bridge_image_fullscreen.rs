@@ -1227,6 +1227,11 @@ impl ImageFullscreenDialogController {
                 win.set_error_message(vid.error_message.clone().into());
                 win.set_source_image(Image::default());
             }
+            TabPayload::Multiview(_) => {
+                win.set_is_loading(false);
+                win.set_error_message("".into());
+                win.set_source_image(Image::default());
+            }
         }
     }
 }

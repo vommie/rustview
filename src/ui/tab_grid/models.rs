@@ -1,5 +1,5 @@
 use crate::library::models::MediaId;
-use crate::viewer::TabId;
+use crate::viewer::{MediaTabSession, TabId};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// High-level layout item for an individual tab inside the TabGridView.
@@ -25,6 +25,12 @@ pub struct TabGridTile {
 }
 
 impl TabGridTile {
+    /// Aspect ratio of the content area of a tab: its medium, or the virtual display of a Multiview.
+    pub fn aspect_of(tab: &MediaTabSession) -> f32 {
+        let (width, height) = tab.display_size();
+        Self::compute_aspect_ratio(width, height, tab.is_video())
+    }
+
     /// Computes safe aspect ratio (width / height) clamped to prevent extreme geometric distortion.
     pub fn compute_aspect_ratio(orig_w: u32, orig_h: u32, is_video: bool) -> f32 {
         if orig_w > 0 && orig_h > 0 {

@@ -17,13 +17,17 @@ impl BridgeInspector {
         let is_tab_mode = window.get_active_view_mode() == 1;
         let st = state.read();
 
-        // When in Tab Mode, inspect the active tab's media item directly without overwriting browse selection
-        if is_tab_mode
-            && let Some(media_id) = st.active_tab_media_id
-            && let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id)
-        {
-            Self::render_single(window, item);
-            return;
+        // When in Tab Mode, inspect the active tab's media (one item, or the tiles of a Multiview) directly without
+        // overwriting the browse selection
+        if is_tab_mode && !st.active_tab_media_ids.is_empty() {
+            let tab_items: Vec<&IndexedMediaRecord> = st
+                .all_folder_media
+                .iter()
+                .filter(|m| st.active_tab_media_ids.contains(&m.record.id))
+                .collect();
+            if Self::render_group(window, &st, &tab_items) {
+                return;
+            }
         }
 
         let selected_ids = st.file_selection.selected_ids();
@@ -59,13 +63,23 @@ impl BridgeInspector {
             return;
         }
 
-        let summary = FileSelectionSummary::from_indexed_records(selected_items.iter().copied());
-        Self::render_multiple(
-            window,
-            &summary,
-            &selected_items,
-            st.current_folder_path.as_deref(),
-        );
+        Self::render_group(window, &st, &selected_items);
+    }
+
+    /// Shows one item in detail or several as an aggregate. Returns `false` (and shows nothing) for an empty group.
+    fn render_group(window: &MainWindow, st: &UiState, items: &[&IndexedMediaRecord]) -> bool {
+        match items {
+            [] => false,
+            [item] => {
+                Self::render_single(window, item);
+                true
+            }
+            _ => {
+                let summary = FileSelectionSummary::from_indexed_records(items.iter().copied());
+                Self::render_multiple(window, &summary, items, st.current_folder_path.as_deref());
+                true
+            }
+        }
     }
 
     fn render_empty(window: &MainWindow) {

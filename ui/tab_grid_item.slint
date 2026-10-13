@@ -69,7 +69,7 @@ export component TabGridItemView inherits Rectangle {
                     horizontal-stretch: 1;
 
                     IconSlot {
-                        icon: root.item.is-video ? IconId.media-video : IconId.media-image;
+                        icon: root.item.icon;
                         size: IconSize.md;
                         color: Theme.primary;
                     }

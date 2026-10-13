@@ -3,6 +3,7 @@ use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::tab_grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
+use super::tab_icon::tab_icon;
 use super::{MainWindow, TabGridItemModel};
 use crate::library::Library;
 use crate::settings::SettingsManager;
@@ -67,17 +68,7 @@ impl BridgeTabGrid {
         }
 
         // 1. Collect aspect ratios for each open tab
-        let aspect_ratios: Vec<f32> = sessions
-            .iter()
-            .map(|s| {
-                let is_video = matches!(s.payload, TabPayload::Video(_));
-                let (w, h) = match s.payload {
-                    TabPayload::Image(ref img) => (img.orig_width, img.orig_height),
-                    TabPayload::Video(_) => (s.record.width, s.record.height),
-                };
-                TabGridTile::compute_aspect_ratio(w, h, is_video)
-            })
-            .collect();
+        let aspect_ratios: Vec<f32> = sessions.iter().map(TabGridTile::aspect_of).collect();
 
         // 2. Compute Masonry Coordinates
         let (p_h, p_v, spacing, padding) = (
@@ -111,7 +102,7 @@ impl BridgeTabGrid {
             .enumerate()
             .map(|(idx, s)| {
                 let r = &rects[idx];
-                let is_video = matches!(s.payload, TabPayload::Video(_));
+                let is_video = s.is_video();
 
                 let (slint_img, is_loading, err_msg, orig_w, orig_h) = match s.payload {
                     TabPayload::Image(ref img) => {
@@ -142,6 +133,10 @@ impl BridgeTabGrid {
                         };
                         (Image::default(), vid.is_loading, err_msg, s.record.width, s.record.height)
                     }
+                    TabPayload::Multiview(_) => {
+                        let (width, height) = s.display_size();
+                        (Image::default(), false, String::new(), width, height)
+                    }
                 };
 
                 TabGridItemModel {
@@ -150,6 +145,8 @@ impl BridgeTabGrid {
                     title: s.title.clone().into(),
                     format_str: s.format.default_extension().into(),
                     is_video,
+                    is_multiview: s.is_multiview(),
+                    icon: tab_icon(s),
                     rating: s.record.rating as i32,
                     has_tags: false,
                     image: slint_img,
@@ -492,17 +489,7 @@ impl BridgeTabGrid {
                 manual_cols
             };
 
-            let aspect_ratios: Vec<f32> = sessions
-                .iter()
-                .map(|s| {
-                    let is_video = matches!(s.payload, TabPayload::Video(_));
-                    let (w, h) = match s.payload {
-                        TabPayload::Image(ref img) => (img.orig_width, img.orig_height),
-                        TabPayload::Video(_) => (s.record.width, s.record.height),
-                    };
-                    TabGridTile::compute_aspect_ratio(w, h, is_video)
-                })
-                .collect();
+            let aspect_ratios: Vec<f32> = sessions.iter().map(TabGridTile::aspect_of).collect();
 
             let (spacing, padding) = (
                 app_settings.appearance.grid_spacing as f32,

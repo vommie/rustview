@@ -4,6 +4,7 @@ pub mod manager;
 pub mod mpv_engine;
 pub mod multiview;
 pub mod tab_item;
+mod tab_native;
 pub mod types;
 pub mod x11_embed;
 
@@ -13,8 +14,8 @@ pub use manager::{ViewerTabManager, MAX_CACHED_HIGH_RES_BUFFERS};
 pub use mpv_engine::{MpvEventCallback, MpvFullscreenCallback, MpvPlayer};
 pub use tab_item::{ImageBufferEvictor, TabCollection, TabSessionFactory, TabTitleFormatter};
 pub use types::{
-    ImageTabPayload, MediaTabSession, MpvPlaybackState, TabContentType, TabId, TabPayload,
-    VideoTabPayload, ViewerAction,
+    ImageTabPayload, MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, MpvPlaybackState,
+    MultiviewTabPayload, TabContentType, TabId, TabPayload, VideoTabPayload, ViewerAction,
 };
 pub use x11_embed::{
     find_window_by_pid_and_title, find_window_by_title, force_x11_fullscreen,

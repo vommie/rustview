@@ -88,11 +88,7 @@ impl BridgeTagHistory {
         ) = {
             let s = state.read();
             let file_ids = if is_tab_mode {
-                if let Some(tab_media_id) = s.active_tab_media_id {
-                    HashSet::from([tab_media_id])
-                } else {
-                    HashSet::new()
-                }
+                s.active_tab_selection().unwrap_or_default()
             } else {
                 s.file_selection.selected_ids().clone()
             };
@@ -231,8 +227,8 @@ impl BridgeTagHistory {
         let selected_ids = {
             let s = state.read();
             if is_tab_active {
-                if let Some(tab_id) = s.active_tab_media_id {
-                    HashSet::from([tab_id])
+                if let Some(ids) = s.active_tab_selection() {
+                    ids
                 } else if let Some(m_id) = tab_manager.get_active_media_id() {
                     HashSet::from([m_id])
                 } else {

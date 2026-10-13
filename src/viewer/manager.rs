@@ -1,12 +1,16 @@
 use super::error::ViewerError;
 use super::mpv_engine::MpvPlayer;
+use super::multiview::instance::SharedInstance;
 use super::tab_item::{ImageBufferEvictor, TabCollection, TabSessionFactory, TabTitleFormatter};
-use super::types::{ImageTabPayload, MediaTabSession, TabId, TabPayload, VideoTabPayload};
+use super::types::{
+    ImageTabPayload, MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, TabId, TabPayload, VideoTabPayload,
+};
 use super::x11_embed::{X11VideoSubwindow, XRectangle};
 use crate::library::models::{MediaId, MediaRecord};
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::LogObscurer;
+use crate::settings::schema::MULTIVIEW_TAB_TITLE;
 use parking_lot::{Mutex, RwLock};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashSet;
@@ -109,13 +113,7 @@ impl ViewerTabManager {
     pub fn hide_all_video_subwindows(&self) {
         let tabs = self.tabs.read();
         for tab in tabs.all() {
-            if let TabPayload::Video(ref vid) = tab.payload {
-                vid.player.set_view_active(false);
-                let mut sub_guard = vid.subwindow.lock();
-                if let Some(ref mut sub) = *sub_guard {
-                    sub.hide();
-                }
-            }
+            tab.payload.deactivate_native();
         }
     }
 
@@ -123,14 +121,8 @@ impl ViewerTabManager {
     pub fn hide_video_subwindows_except(&self, except_tab_id: Option<TabId>) {
         let tabs = self.tabs.read();
         for tab in tabs.all() {
-            if Some(tab.id) != except_tab_id
-                && let TabPayload::Video(ref vid) = tab.payload
-            {
-                vid.player.set_view_active(false);
-                let mut sub_guard = vid.subwindow.lock();
-                if let Some(ref mut sub) = *sub_guard {
-                    sub.hide();
-                }
+            if Some(tab.id) != except_tab_id {
+                tab.payload.deactivate_native();
             }
         }
     }
@@ -139,16 +131,7 @@ impl ViewerTabManager {
     pub fn set_all_videos_view_active(&self, active: bool) {
         let tabs = self.tabs.read();
         for tab in tabs.all() {
-            if let TabPayload::Video(ref vid) = tab.payload {
-                vid.player.set_tab_grid_mode(!active);
-                vid.player.set_view_active(active);
-                if !active {
-                    let mut sub_guard = vid.subwindow.lock();
-                    if let Some(ref mut sub) = *sub_guard {
-                        sub.hide();
-                    }
-                }
-            }
+            tab.payload.set_grid_view_active(active);
         }
     }
 
@@ -228,18 +211,7 @@ impl ViewerTabManager {
         let tabs = self.tabs.read();
 
         for tab in tabs.all() {
-            if let TabPayload::Video(ref vid) = tab.payload {
-                let mut sub_guard = vid.subwindow.lock();
-                if let Some(ref mut sub) = *sub_guard
-                    && sub.is_visible()
-                {
-                    if !combined.is_empty() {
-                        sub.clip_cutout_rectangles(&combined);
-                    } else {
-                        sub.reset_clip_shape();
-                    }
-                }
-            }
+            tab.payload.apply_overlay_cutouts(&combined);
         }
     }
 
@@ -266,8 +238,30 @@ impl ViewerTabManager {
         self.tabs.read().get(active).cloned()
     }
 
+    /// The one medium of the active tab; `None` for the Browse view and for a Multiview tab.
     pub fn get_active_media_id(&self) -> Option<MediaId> {
-        self.get_active_tab().map(|t| t.media_id)
+        self.get_active_tab().and_then(|t| t.single_media_id())
+    }
+
+    /// Every medium the active tab shows (the tiles of a Multiview tab); empty for the Browse view.
+    pub fn get_active_media_ids(&self) -> Vec<MediaId> {
+        self.get_active_tab()
+            .map(|t| t.member_ids())
+            .unwrap_or_default()
+    }
+
+    /// The medium an F2 rename acts on in the active tab: the one medium, or the tile of a Multiview chosen last.
+    pub fn active_rename_target(&self) -> Option<MediaId> {
+        let tab = self.get_active_tab()?;
+        match tab.multiview() {
+            Some(mv) => mv.instance.lock().rename_target(),
+            None => Some(tab.media_id),
+        }
+    }
+
+    /// The tab that owns the Multiview instance `instance_id`.
+    pub fn tab_id_of_instance(&self, instance_id: u64) -> Option<TabId> {
+        self.tabs.read().get_by_instance_id(instance_id).map(|t| t.id)
     }
 
     pub fn get_tab(&self, tab_id: TabId) -> Option<MediaTabSession> {
@@ -387,6 +381,9 @@ impl ViewerTabManager {
         let source_session = self
             .get_tab(source_tab_id)
             .ok_or(ViewerError::MediaNotFound(source_tab_id))?;
+        if source_session.is_multiview() {
+            return Err(ViewerError::MultiviewTab);
+        }
 
         let (new_tab_id, _) = self.open_or_focus_media(source_session.media_id, true)?;
 
@@ -677,6 +674,32 @@ impl ViewerTabManager {
         Ok(new_id)
     }
 
+    /// Adopts a running Multiview into a new background tab without restarting or moving anything. Nothing is activated;
+    /// the caller shows the tab when it wants to. Adopting the same instance twice returns its tab.
+    pub fn adopt_multiview_in_background(&self, instance: SharedInstance) -> TabId {
+        let instance_id = instance.lock().id();
+        let mut tabs = self.tabs.write();
+        if let Some(existing) = tabs.get_by_instance_id(instance_id) {
+            return existing.id;
+        }
+
+        let new_id = self.tab_counter.fetch_add(1, Ordering::Relaxed);
+        let title = TabTitleFormatter::allocate_tab_title(
+            tabs.all(),
+            MULTIVIEW_TAB_MEDIA_ID,
+            MULTIVIEW_TAB_TITLE,
+        );
+        tabs.push(MediaTabSession::for_multiview(new_id, title, instance));
+
+        tracing::info!(
+            tab_id = new_id,
+            instance = instance_id,
+            total_open_tabs = tabs.len(),
+            "[ViewerTabManager: AdoptMultiview] Adopted the running Multiview into a background tab"
+        );
+        new_id
+    }
+
     /// Replaces the media content of the active tab in-place (used for Prev/Next navigation).
     pub fn navigate_active_tab_to_media(&self, media_id: MediaId) -> Result<TabId, ViewerError> {
         let active_id = match *self.active_tab_id.read() {
@@ -686,6 +709,9 @@ impl ViewerTabManager {
                 return Ok(id);
             }
         };
+        if self.tabs.read().get(active_id).is_some_and(MediaTabSession::is_multiview) {
+            return Err(ViewerError::MultiviewTab);
+        }
 
         let record = self
             .library
@@ -768,6 +794,7 @@ impl ViewerTabManager {
                     vid.is_loading = false;
                     vid.error_message = error_msg;
                 }
+                TabPayload::Multiview(_) => {}
             }
         }
     }
@@ -993,13 +1020,7 @@ impl ViewerTabManager {
     // =========================================================================
 
     fn pause_session_playback(tab: &mut MediaTabSession) {
-        if let TabPayload::Video(ref vid) = tab.payload {
-            vid.player.set_view_active(false);
-            let mut sub_guard = vid.subwindow.lock();
-            if let Some(ref mut sub) = *sub_guard {
-                sub.hide();
-            }
-        }
+        tab.payload.deactivate_native();
     }
 
     fn resume_session_playback(
@@ -1045,13 +1066,7 @@ impl ViewerTabManager {
     }
 
     fn cleanup_session_resources(session: &MediaTabSession) {
-        if let TabPayload::Video(ref vid) = session.payload {
-            vid.player.stop();
-            let mut sub_guard = vid.subwindow.lock();
-            if let Some(ref mut sub) = *sub_guard {
-                sub.hide();
-            }
-        }
+        session.payload.stop_native();
     }
 
     fn resolve_next_active_tab(

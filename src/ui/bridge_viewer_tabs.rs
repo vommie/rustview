@@ -7,6 +7,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::BridgeTags;
 use super::tab_dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
+use super::tab_icon::tab_icon;
 use super::{MainWindow, TabItemModel};
 use crate::library::models::MediaId;
 use crate::library::Library;
@@ -464,7 +465,7 @@ impl BridgeViewerTabs {
         window.set_drag_ghost_x(session.ghost_left_x());
         window.set_drag_ghost_title(source_tab.title.clone().into());
         window.set_drag_ghost_format(source_tab.format.default_extension().into());
-        window.set_drag_ghost_is_video(matches!(source_tab.payload, TabPayload::Video(_)));
+        window.set_drag_ghost_icon(tab_icon(&source_tab));
         window.set_drag_ghost_rating(source_tab.record.rating as i32);
         window.set_drag_ghost_is_active(Some(tab_id) == tab_manager.active_tab_id());
 
@@ -706,6 +707,7 @@ impl BridgeViewerTabs {
             .map(|t| match t.payload {
                 TabPayload::Video(ref vid) => !vid.error_message.is_empty(),
                 TabPayload::Image(ref img) => !img.error_message.is_empty(),
+                TabPayload::Multiview(_) => false,
             })
             .unwrap_or(false);
 
@@ -1570,7 +1572,7 @@ impl BridgeViewerTabs {
                 title: t.title.clone().into(),
                 format_str: t.format.default_extension().into(),
                 is_active: !is_tab_grid && Some(t.id) == active_id_opt,
-                is_video: matches!(t.payload, TabPayload::Video(_)),
+                icon: tab_icon(t),
                 rating: t.record.rating as i32,
                 has_tags: false,
                 shift_x: 0.0,
@@ -1661,11 +1663,16 @@ impl BridgeViewerTabs {
                     window.set_viewer_error(vid.error_message.clone().into());
                     window.set_viewer_image(Image::default());
                 }
+                TabPayload::Multiview(_) => {
+                    window.set_viewer_is_loading(false);
+                    window.set_viewer_error("".into());
+                    window.set_viewer_image(Image::default());
+                }
             }
 
             {
                 let mut st = state.write();
-                st.active_tab_media_id = Some(active_tab.media_id);
+                st.active_tab_media_ids = active_tab.member_ids();
             }
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);
@@ -1676,7 +1683,7 @@ impl BridgeViewerTabs {
             window.set_viewer_is_video(false);
             {
                 let mut st = state.write();
-                st.active_tab_media_id = None;
+                st.active_tab_media_ids.clear();
             }
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);

@@ -279,6 +279,9 @@ impl TabCollection {
                 tab.record.filename = new_filename.to_string();
             }
         }
+        for mv in self.sessions.iter().filter_map(|t| t.payload.multiview()) {
+            mv.instance.lock().member_renamed(media_id, new_filename);
+        }
     }
 
     pub fn mark_deleted(&mut self, media_id: MediaId) {
@@ -304,8 +307,12 @@ impl TabCollection {
                             s.hide();
                         }
                     }
+                    TabPayload::Multiview(_) => {}
                 }
             }
+        }
+        for mv in self.sessions.iter().filter_map(|t| t.payload.multiview()) {
+            mv.instance.lock().member_deleted(media_id);
         }
     }
 
@@ -338,9 +345,19 @@ impl TabCollection {
                             );
                         }
                     }
+                    TabPayload::Multiview(_) => {}
                 }
             }
         }
+        for mv in self.sessions.iter().filter_map(|t| t.payload.multiview()) {
+            mv.instance.lock().member_refreshed(media_id, updated_record);
+        }
+    }
+
+    pub fn get_by_instance_id(&self, instance_id: u64) -> Option<&MediaTabSession> {
+        self.sessions
+            .iter()
+            .find(|t| t.multiview().is_some_and(|mv| mv.instance_id == instance_id))
     }
 }
 
@@ -506,5 +523,106 @@ impl ImageBufferEvictor {
                 );
             }
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::HostSurface;
+    use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
+    use crate::viewer::multiview::model::TileKind;
+    use crate::viewer::multiview::tile::TileSeed;
+    use crate::viewer::types::{MULTIVIEW_TAB_MEDIA_ID, TabContentType};
+
+    fn instance(ids: &[MediaId]) -> SharedInstance {
+        let seeds = ids
+            .iter()
+            .map(|&media_id| TileSeed {
+                media_id,
+                kind: TileKind::Image,
+                aspect: 1.78,
+                path: PathBuf::from(format!("/media/{media_id}.png")),
+                filename: format!("{media_id}.png"),
+            })
+            .collect();
+        let shared = MultiviewInstance::detached(seeds);
+        shared
+            .lock()
+            .set_host(&HostSurface::fullscreen(0, 1920, 1080, 1.0));
+        shared
+    }
+
+    fn collection_with_multiview(ids: &[MediaId]) -> (TabCollection, SharedInstance) {
+        let shared = instance(ids);
+        let mut tabs = TabCollection::new();
+        tabs.push(MediaTabSession::for_multiview(
+            1,
+            "Multiview".to_string(),
+            shared.clone(),
+        ));
+        (tabs, shared)
+    }
+
+    #[test]
+    fn a_multiview_tab_describes_itself_through_the_helpers() {
+        let (tabs, _shared) = collection_with_multiview(&[5, 6]);
+        let tab = tabs.get(1).expect("the tab exists");
+        assert_eq!(tab.kind(), TabContentType::Multiview);
+        assert!(tab.is_multiview() && !tab.is_video() && !tab.is_image());
+        assert_eq!(tab.media_id, MULTIVIEW_TAB_MEDIA_ID);
+        assert_eq!(tab.single_media_id(), None);
+        assert_eq!(tab.member_ids(), vec![5, 6]);
+        assert!(tab.has_member(6) && !tab.has_member(7));
+        assert_eq!(tab.display_size(), (1920, 1080));
+    }
+
+    #[test]
+    fn media_lookups_never_find_a_multiview_tab() {
+        let (tabs, shared) = collection_with_multiview(&[5, 6]);
+        assert!(tabs.get_by_media_id(5).is_none());
+        assert!(tabs.get_all_by_media_id(6).is_empty());
+        let instance_id = shared.lock().id();
+        assert!(tabs.get_by_instance_id(instance_id).is_some());
+        assert!(tabs.get_by_instance_id(instance_id + 1).is_none());
+    }
+
+    #[test]
+    fn several_multiview_tabs_get_numbered_titles() {
+        let (mut tabs, _shared) = collection_with_multiview(&[5, 6]);
+        let second =
+            TabTitleFormatter::allocate_tab_title(tabs.all(), MULTIVIEW_TAB_MEDIA_ID, "Multiview");
+        assert_eq!(second, "Multiview (1)");
+        tabs.push(MediaTabSession::for_multiview(2, second, instance(&[7, 8])));
+        let third =
+            TabTitleFormatter::allocate_tab_title(tabs.all(), MULTIVIEW_TAB_MEDIA_ID, "Multiview");
+        assert_eq!(third, "Multiview (2)");
+    }
+
+    #[test]
+    fn renames_reach_the_members_but_not_the_title() {
+        let (mut tabs, shared) = collection_with_multiview(&[5, 6]);
+        tabs.update_filename(6, "renamed.png");
+        let guard = shared.lock();
+        assert_eq!(guard.view().tiles.len(), 2);
+        drop(guard);
+        let tab = tabs.get(1).expect("the tab exists");
+        assert_eq!(tab.title, "Multiview");
+    }
+
+    #[test]
+    fn a_deleted_member_turns_its_tile_into_an_error() {
+        let (mut tabs, shared) = collection_with_multiview(&[5, 6]);
+        tabs.mark_deleted(6);
+        let view = shared.lock().view();
+        assert!(view.tiles[0].error.is_none());
+        assert!(view.tiles[1].error.is_some());
+        assert_eq!(
+            shared.lock().member_ids(),
+            vec![5, 6],
+            "the tile keeps its slot"
+        );
+
+        tabs.mark_deleted(99);
+        assert!(shared.lock().view().tiles[0].error.is_none());
     }
 }

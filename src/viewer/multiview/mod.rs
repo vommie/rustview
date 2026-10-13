@@ -14,6 +14,7 @@ pub mod instance;
 mod instance_host;
 mod instance_hover;
 mod instance_layout;
+mod instance_members;
 mod instance_sound;
 mod instance_tiles;
 pub mod layout;

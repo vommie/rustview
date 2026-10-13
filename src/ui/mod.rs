@@ -51,6 +51,7 @@ pub mod rubberband_selection;
 pub mod sidebar_panel_tab_dnd;
 pub mod tab_dnd;
 pub mod tab_grid;
+pub mod tab_icon;
 pub mod tag_history;
 pub mod thumbnail_badges;
 pub mod thumbnail_regeneration;

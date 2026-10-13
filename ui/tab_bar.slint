@@ -120,9 +120,9 @@ export component TabItemView inherits Rectangle {
             spacing: 6px;
             alignment: center;
 
-            // 1. Media Type Vector Icon (image / video)
+            // 1. Media Type Vector Icon (image / video / Multiview)
             IconSlot {
-                icon: root.tab.is-video ? IconId.media-video : IconId.media-image;
+                icon: root.tab.icon;
                 size: IconSize.md;
                 color: root.tab.is-active ? Theme.primary : (tab-touch.has-hover ? Theme.text : Theme.text-muted);
             }
@@ -181,7 +181,7 @@ export component TabItemView inherits Rectangle {
 export component GhostTabPreview inherits Rectangle {
     in property <string> title: "";
     in property <string> format-str: "";
-    in property <bool> is-video: false;
+    in property <IconId> icon: IconId.media-image;
     in property <int> rating: 0;
     in property <bool> is-active: false;
     in property <bool> show-rating-badge: false;
@@ -203,7 +203,7 @@ export component GhostTabPreview inherits Rectangle {
         alignment: center;
 
         IconSlot {
-            icon: root.is-video ? IconId.media-video : IconId.media-image;
+            icon: root.icon;
             size: IconSize.md;
             color: Theme.primary;
         }
@@ -234,7 +234,7 @@ export component MediaTabBar inherits Rectangle {
     in property <length> drag-ghost-x: 0px;
     in property <string> drag-ghost-title: "";
     in property <string> drag-ghost-format: "";
-    in property <bool> drag-ghost-is-video: false;
+    in property <IconId> drag-ghost-icon: IconId.media-image;
     in property <int> drag-ghost-rating: 0;
     in property <bool> drag-ghost-is-active: false;
 
@@ -324,7 +324,7 @@ export component MediaTabBar inherits Rectangle {
         y: (parent.height - self.height) / 2;
         title: root.drag-ghost-title;
         format-str: root.drag-ghost-format;
-        is-video: root.drag-ghost-is-video;
+        icon: root.drag-ghost-icon;
         rating: root.drag-ghost-rating;
         is-active: root.drag-ghost-is-active;
         show-rating-badge: root.show-rating-badge;

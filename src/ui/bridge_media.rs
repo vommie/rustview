@@ -1298,11 +1298,8 @@ impl BridgeMedia {
         let selected_ids = {
             let st = state.read();
             if window.get_active_view_mode() == 1 {
-                if let Some(tab_m_id) = st.active_tab_media_id {
-                    HashSet::from([tab_m_id])
-                } else {
-                    st.file_selection.selected_ids().clone()
-                }
+                st.active_tab_selection()
+                    .unwrap_or_else(|| st.file_selection.selected_ids().clone())
             } else {
                 st.file_selection.selected_ids().clone()
             }

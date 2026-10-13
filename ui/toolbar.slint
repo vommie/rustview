@@ -19,7 +19,7 @@ export component TopToolbar inherits Rectangle {
     in property <length> drag-ghost-x: 0px;
     in property <string> drag-ghost-title: "";
     in property <string> drag-ghost-format: "";
-    in property <bool> drag-ghost-is-video: false;
+    in property <IconId> drag-ghost-icon: IconId.media-image;
     in property <int> drag-ghost-rating: 0;
     in property <bool> drag-ghost-is-active: false;
 
@@ -94,7 +94,7 @@ export component TopToolbar inherits Rectangle {
             drag-ghost-x: root.drag-ghost-x;
             drag-ghost-title: root.drag-ghost-title;
             drag-ghost-format: root.drag-ghost-format;
-            drag-ghost-is-video: root.drag-ghost-is-video;
+            drag-ghost-icon: root.drag-ghost-icon;
             drag-ghost-rating: root.drag-ghost-rating;
             drag-ghost-is-active: root.drag-ghost-is-active;
 

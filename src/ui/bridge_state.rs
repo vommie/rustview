@@ -172,7 +172,8 @@ pub struct UiState {
     pub active_indices: Vec<usize>,
     pub file_selection: FileSelectionModel,
     pub last_active_panel: LastActivePanel,
-    pub active_tab_media_id: Option<MediaId>,
+    /// Media of the active viewer tab: one for a single-media tab, the tiles of a Multiview; empty without a shown tab.
+    pub active_tab_media_ids: Vec<MediaId>,
     pub rubberband_session: RubberbandSession,
     pub active_tab_dnd_session: Option<TabDndSession>,
     pub active_sidebar_panel_tab: String,
@@ -244,7 +245,7 @@ impl Default for UiState {
             active_indices: Vec::new(),
             file_selection: FileSelectionModel::new(),
             last_active_panel: LastActivePanel::Media,
-            active_tab_media_id: None,
+            active_tab_media_ids: Vec::new(),
             rubberband_session: RubberbandSession::default(),
             active_tab_dnd_session: None,
             active_sidebar_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
@@ -322,6 +323,13 @@ impl UiState {
             .into_iter()
             .map(|item| item.record.id)
             .collect()
+    }
+
+    /// The media an action in the viewer tab acts on, or `None` while no tab content is shown (the caller then falls back to
+    /// the Browse selection). A Multiview tab always yields its tiles, so its actions never leak to the Browse selection.
+    pub fn active_tab_selection(&self) -> Option<HashSet<MediaId>> {
+        (!self.active_tab_media_ids.is_empty())
+            .then(|| self.active_tab_media_ids.iter().copied().collect())
     }
 
     #[inline]
