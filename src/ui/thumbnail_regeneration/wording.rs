@@ -1,40 +1,59 @@
 //! User-facing texts for thumbnail regeneration (menu label, toolbar tooltip, status bar messages).
 //! Pure functions so the singular/plural wording of the context menu and the toolbar can never drift apart.
 
-/// Label of the context menu entry (singular for one file, plural with count otherwise).
-pub fn menu_label(selected_count: usize, has_video: bool) -> String {
-    match (selected_count == 1, has_video) {
-        (true, true) => "Thumbnail (Random Pos.)".to_string(),
-        (true, false) => "Thumbnail".to_string(),
-        (false, true) => format!("Thumbnails (Random Pos.) ({} Files)", selected_count),
-        (false, false) => format!("Thumbnails ({} Files)", selected_count),
+use super::eligibility::RegenerationEligibility;
+
+/// Label of the context menu entry. Only valid videos are counted: images cannot get a random-position thumbnail.
+pub fn menu_label(videos: usize) -> String {
+    if videos <= 1 {
+        "Thumbnail (Random Pos.)".to_string()
+    } else {
+        format!("Thumbnails (Random Pos.) ({} Videos)", videos)
     }
 }
 
-/// Tooltip of the Browse toolbar button; mirrors the singular/plural wording of the context menu entry.
-pub fn tooltip(selected_count: usize, has_video: bool) -> String {
-    match (selected_count, has_video) {
-        (0, _) => "Regenerate thumbnails: select one or more files first".to_string(),
-        (1, true) => "Regenerate thumbnail at a random video position".to_string(),
-        (1, false) => "Regenerate thumbnail".to_string(),
-        (n, true) => format!("Regenerate thumbnails of {} selected files (videos at random positions)", n),
-        (n, false) => format!("Regenerate thumbnails of {} selected files", n),
+/// Explanation shown as tooltip of the toolbar button and of the context menu entry (one text for both, so they
+/// can never drift apart). It always says that the thumbnail is regenerated at a random position, whether the
+/// control is enabled or not, and why it is disabled otherwise.
+pub fn hint(e: &RegenerationEligibility) -> String {
+    if e.selected == 0 {
+        return "Thumbnail (Random Pos.): select at least one video first".to_string();
     }
+    if !e.is_actionable() {
+        return "Thumbnail (Random Pos.): the selection contains no available video. Images have no duration; \
+                use Refresh > File (Full) to regenerate their thumbnails"
+            .to_string();
+    }
+    let base = if e.videos == 1 {
+        "Regenerate the thumbnail at a new random video position".to_string()
+    } else {
+        format!("Regenerate the thumbnails of {} videos at new random video positions", e.videos)
+    };
+    match e.skipped() {
+        0 => base,
+        1 => format!("{} (1 other selected file is skipped)", base),
+        n => format!("{} ({} other selected files are skipped)", base, n),
+    }
+}
+
+/// Tooltip of a menu entry that is disabled because another operation holds the busy lock.
+pub fn busy_hint() -> &'static str {
+    "Disabled: Another scan, refresh or thumbnail operation is currently in progress"
 }
 
 pub fn busy_message() -> &'static str {
-    "Cannot regenerate thumbnail: another operation is already in progress."
+    "Cannot regenerate thumbnails (Random Pos.): another operation is already in progress."
 }
 
 pub fn nothing_selected_message() -> &'static str {
-    "Select one or more files to regenerate their thumbnails."
+    "Select at least one available video to regenerate its thumbnail at a random position."
 }
 
 pub fn start_message(total: usize) -> String {
     if total == 1 {
-        "Regenerating thumbnail...".to_string()
+        "Regenerating thumbnail at a random video position...".to_string()
     } else {
-        format!("Regenerating thumbnails for {} selected files...", total)
+        format!("Regenerating thumbnails at random video positions for {} videos...", total)
     }
 }
 
@@ -92,7 +111,7 @@ fn success_message(s: &RegenerationSummary) -> String {
             format!("Regenerated thumbnail at {}% for '{}' in {}ms.", pct, name, s.elapsed_ms)
         }
         (Some((name, None)), 1) => format!("Regenerated thumbnail for '{}' in {}ms.", name, s.elapsed_ms),
-        _ => format!("Regenerated {} thumbnails in {}ms.", s.succeeded, s.elapsed_ms),
+        _ => format!("Regenerated {} thumbnails at random positions in {}ms.", s.succeeded, s.elapsed_ms),
     }
 }
 
@@ -100,31 +119,40 @@ fn success_message(s: &RegenerationSummary) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn menu_label_is_singular_for_one_file() {
-        assert_eq!(menu_label(1, true), "Thumbnail (Random Pos.)");
-        assert_eq!(menu_label(1, false), "Thumbnail");
+    fn e(selected: usize, videos: usize) -> RegenerationEligibility {
+        RegenerationEligibility { selected, videos }
     }
 
     #[test]
-    fn menu_label_is_plural_with_count_for_many_files() {
-        assert_eq!(menu_label(3, true), "Thumbnails (Random Pos.) (3 Files)");
-        assert_eq!(menu_label(3, false), "Thumbnails (3 Files)");
+    fn menu_label_always_says_random_pos_and_counts_only_videos() {
+        assert_eq!(menu_label(0), "Thumbnail (Random Pos.)");
+        assert_eq!(menu_label(1), "Thumbnail (Random Pos.)");
+        assert_eq!(menu_label(3), "Thumbnails (Random Pos.) (3 Videos)");
     }
 
     #[test]
-    fn tooltip_follows_selection_size_and_content() {
-        assert!(tooltip(0, false).contains("select"));
-        assert_eq!(tooltip(1, true), "Regenerate thumbnail at a random video position");
-        assert_eq!(tooltip(1, false), "Regenerate thumbnail");
-        assert_eq!(tooltip(4, true), "Regenerate thumbnails of 4 selected files (videos at random positions)");
-        assert_eq!(tooltip(4, false), "Regenerate thumbnails of 4 selected files");
+    fn hint_explains_why_the_control_is_disabled() {
+        assert!(hint(&e(0, 0)).contains("select at least one video"));
+        let no_video = hint(&e(4, 0));
+        assert!(no_video.contains("no available video") && no_video.contains("Refresh > File (Full)"));
+    }
+
+    #[test]
+    fn hint_names_the_random_position_for_single_and_multiple_videos() {
+        assert_eq!(hint(&e(1, 1)), "Regenerate the thumbnail at a new random video position");
+        assert_eq!(hint(&e(4, 4)), "Regenerate the thumbnails of 4 videos at new random video positions");
+    }
+
+    #[test]
+    fn hint_mentions_skipped_files_of_mixed_selections() {
+        assert!(hint(&e(2, 1)).ends_with("(1 other selected file is skipped)"));
+        assert!(hint(&e(5, 2)).contains("2 videos") && hint(&e(5, 2)).ends_with("(3 other selected files are skipped)"));
     }
 
     #[test]
     fn start_message_is_singular_or_plural() {
-        assert_eq!(start_message(1), "Regenerating thumbnail...");
-        assert_eq!(start_message(5), "Regenerating thumbnails for 5 selected files...");
+        assert_eq!(start_message(1), "Regenerating thumbnail at a random video position...");
+        assert_eq!(start_message(5), "Regenerating thumbnails at random video positions for 5 videos...");
     }
 
     fn summary(total: usize, succeeded: usize) -> RegenerationSummary {
@@ -140,7 +168,7 @@ mod tests {
     #[test]
     fn result_message_reports_full_success() {
         assert_eq!(result_message(&summary(1, 1)), "Regenerated thumbnail at 42% for 'a.mp4' in 12ms.");
-        assert_eq!(result_message(&summary(3, 3)), "Regenerated 3 thumbnails in 12ms.");
+        assert_eq!(result_message(&summary(3, 3)), "Regenerated 3 thumbnails at random positions in 12ms.");
     }
 
     #[test]

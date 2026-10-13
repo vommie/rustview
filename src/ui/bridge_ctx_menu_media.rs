@@ -12,6 +12,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::file_selection::FileSelectionModel;
+use super::thumbnail_regeneration::eligibility::RegenerationEligibility;
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::{
@@ -52,7 +53,8 @@ pub struct MediaSelectionMeta {
     pub all_selected_deleted: bool,
     pub selected_count: usize,
     pub is_single_image: bool,
-    pub has_video: bool,
+    /// Valid-video eligibility for "Thumbnail (Random Pos.)" (in-memory evaluation, no drive access).
+    pub regeneration: RegenerationEligibility,
     pub target_file_exists: bool,
     pub is_single_pending: bool,
     pub single_filename: String,
@@ -97,7 +99,7 @@ impl MediaContextMenu {
             .copied()
             .unwrap_or(media_id);
 
-        let (has_video, is_single_image, all_selected_deleted, target_path_opt, is_single_pending, single_filename, cur_folder_id) = {
+        let (is_single_image, all_selected_deleted, target_path_opt, is_single_pending, single_filename, cur_folder_id) = {
             let st = state.read();
             let selected_ids = st.file_selection.selected_ids();
 
@@ -109,21 +111,6 @@ impl MediaContextMenu {
                         .map(|m| m.record.is_deleted)
                         .unwrap_or(false)
                 });
-
-            let mut contains_video = false;
-            for &id in selected_ids {
-                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id)
-                    && matches!(item.record.media_type, MediaType::Video)
-                {
-                    contains_video = true;
-                    break;
-                } else if let Ok(Some(rec)) = library.media().get(id)
-                    && matches!(rec.media_type, MediaType::Video)
-                {
-                    contains_video = true;
-                    break;
-                }
-            }
 
             let (is_single_img, is_pending, fname, f_id) = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
                 (
@@ -150,7 +137,7 @@ impl MediaContextMenu {
                 library.resolve_media_path(single_id).ok()
             };
 
-            (contains_video, is_single_img, all_deleted, path, is_single && is_pending, fname, f_id)
+            (is_single_img, all_deleted, path, is_single && is_pending, fname, f_id)
         };
 
         let target_file_exists = if is_single {
@@ -182,7 +169,7 @@ impl MediaContextMenu {
             all_selected_deleted,
             selected_count,
             is_single_image: is_single && is_single_image,
-            has_video,
+            regeneration: ThumbnailRegeneration::eligibility(state),
             target_file_exists,
             is_single_pending,
             single_filename,
@@ -378,7 +365,14 @@ impl MediaContextMenu {
             format!("Files (Metadata) ({} Files)", meta.selected_count)
         };
 
-        let regen_thumb_text = ThumbnailRegeneration::menu_label(meta.selected_count, meta.has_video);
+        let regen_thumb_text = ThumbnailRegeneration::menu_label(&meta.regeneration);
+        // Enabled only if the selection contains a valid video (no drive access) and nothing else is running.
+        let can_regenerate_thumbs = meta.regeneration.is_actionable() && !is_busy;
+        let regen_thumb_tooltip = if is_busy && meta.regeneration.is_actionable() {
+            ThumbnailRegeneration::busy_hint().to_string()
+        } else {
+            ThumbnailRegeneration::hint(&meta.regeneration)
+        };
 
         let can_refresh = meta.selected_count > 0 && !is_busy;
 
@@ -509,12 +503,13 @@ impl MediaContextMenu {
                         Some(Icon::Refresh),
                         can_refresh,
                     )
-                    .action(
+                    .action_with_tooltip(
                         CTX_ACTION_REGENERATE_THUMB_RANDOM,
                         regen_thumb_text,
                         None,
                         Some(Icon::RegenerateThumbnail),
-                        can_refresh,
+                        can_regenerate_thumbs,
+                        regen_thumb_tooltip,
                     )
                 },
             )
@@ -723,7 +718,6 @@ impl MediaContextMenu {
             CTX_ACTION_REGENERATE_THUMB_RANDOM => {
                 ThumbnailRegeneration::regenerate_selected(
                     window,
-                    ctx.library,
                     ctx.thumbnails,
                     ctx.settings,
                     ctx.state,
@@ -1153,13 +1147,14 @@ impl MediaContextMenu {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ctx_menu::CtxMenuItem;
 
     fn meta(selected_count: usize, deleted: bool) -> MediaSelectionMeta {
         MediaSelectionMeta {
             all_selected_deleted: deleted,
             selected_count,
             is_single_image: selected_count == 1,
-            has_video: false,
+            regeneration: RegenerationEligibility::default(),
             target_file_exists: true,
             is_single_pending: false,
             single_filename: "image.jpg".to_string(),
@@ -1184,6 +1179,52 @@ mod tests {
                 menu.entries_without_icon()
             );
         }
+    }
+
+    fn regenerate_entry(menu: &CtxMenu) -> CtxMenuItem {
+        let refresh = menu.items.iter().find(|i| i.text == "Refresh").expect("refresh submenu");
+        refresh
+            .children
+            .iter()
+            .find(|i| i.id == CTX_ACTION_REGENERATE_THUMB_RANDOM)
+            .expect("regenerate entry")
+            .clone()
+    }
+
+    fn regeneration_menu(selected: usize, videos: usize, is_busy: bool) -> CtxMenuItem {
+        let mut m = meta(selected, false);
+        m.regeneration = RegenerationEligibility { selected, videos };
+        regenerate_entry(&MediaContextMenu::build_menu(&m, is_busy, None, false))
+    }
+
+    #[test]
+    fn regenerate_entry_is_disabled_without_a_valid_video_and_explains_why() {
+        let none_selected = regeneration_menu(0, 0, false);
+        let images_only = regeneration_menu(3, 0, false);
+        for entry in [&none_selected, &images_only] {
+            assert!(!entry.is_enabled);
+            assert_eq!(entry.text, "Thumbnail (Random Pos.)");
+        }
+        assert!(images_only.tooltip.as_deref().unwrap_or("").contains("no available video"));
+    }
+
+    #[test]
+    fn regenerate_entry_is_enabled_for_mixed_selections_and_counts_only_videos() {
+        let single = regeneration_menu(1, 1, false);
+        assert!(single.is_enabled);
+        assert_eq!(single.text, "Thumbnail (Random Pos.)");
+
+        let mixed = regeneration_menu(5, 2, false);
+        assert!(mixed.is_enabled);
+        assert_eq!(mixed.text, "Thumbnails (Random Pos.) (2 Videos)");
+        assert!(mixed.tooltip.as_deref().unwrap_or("").contains("3 other selected files are skipped"));
+    }
+
+    #[test]
+    fn regenerate_entry_is_disabled_while_another_operation_runs() {
+        let busy = regeneration_menu(2, 2, true);
+        assert!(!busy.is_enabled);
+        assert!(busy.tooltip.as_deref().unwrap_or("").contains("in progress"));
     }
 
     #[test]

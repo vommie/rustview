@@ -126,7 +126,6 @@ impl BridgeMedia {
 
         ThumbnailRegeneration::register_callbacks(
             window,
-            library.clone(),
             thumbnails.clone(),
             settings.clone(),
             state.clone(),

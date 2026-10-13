@@ -1,3 +1,4 @@
+use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::MainWindow;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
@@ -44,6 +45,8 @@ impl BridgeThumbnails {
                 let batch = thumb_ref.drain_ready_batch(64);
 
                 let mut row_set_us = 0u64;
+                // Set when a video turns corrupted: the random-position regeneration controls must re-evaluate.
+                let mut regeneration_state_dirty = false;
                 let items_drained = batch.len();
                 let is_table = window.get_is_table_view();
 
@@ -88,6 +91,7 @@ impl BridgeThumbnails {
                                 meta_changed = true;
                             }
                             if item_data.is_corrupted != item.is_corrupted {
+                                regeneration_state_dirty = true;
                                 item.record.is_corrupted = item_data.is_corrupted;
                                 item.is_corrupted = item_data.is_corrupted;
                                 item.flags_str = if item.record.is_deleted {
@@ -139,6 +143,10 @@ impl BridgeThumbnails {
                         }
                         row_set_us += t_row.elapsed().as_micros() as u64;
                     }
+                }
+
+                if regeneration_state_dirty {
+                    ThumbnailRegeneration::sync_toolbar_state(&window, &st_ref);
                 }
 
                 let total_drain_us = t_drain_start.elapsed().as_micros() as u64;
