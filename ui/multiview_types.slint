@@ -21,6 +21,15 @@ export struct MultiviewGutterView {
     vertical: bool,
 }
 
+/// Where the virtual display of a Multiview (the container) is shown inside its canvas, in logical pixels relative to the
+/// canvas. In the fullscreen window it covers the whole window; in a tab it is the scaled-down, centered miniature.
+export struct MultiviewScreenView {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+}
+
 /// The mute badge in the top right corner of the hovered video tile (shown through a hole in the video window).
 export struct MultiviewBadgeView {
     visible: bool,

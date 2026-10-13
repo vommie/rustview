@@ -3,8 +3,10 @@ import { AppIcon, IconId, IconSize } from "icons.slint";
 
 /// Separator between two Multiview tiles. The whole gutter is a drag handle (double click resets all splits); the swap
 /// button in the middle exchanges the two neighbors. Dragging reports the distance from the drag start in logical pixels.
+/// A non-interactive gutter (miniature in the tab grid) is only the divider line.
 export component MultiviewGutter inherits Rectangle {
     in property <bool> vertical: true;
+    in property <bool> interactive: true;
 
     callback drag-started();
     callback dragged(length /* distance from drag start */);
@@ -14,10 +16,12 @@ export component MultiviewGutter inherits Rectangle {
 
     property <bool> hot: drag.has-hover || drag.pressed || swap-touch.has-hover;
     property <length> button-size: Math.min(root.width, root.height);
+    property <bool> show-button: root.interactive && root.button-size >= 12px;
 
     drag := TouchArea {
         property <length> start-pos: 0px;
 
+        enabled: root.interactive;
         mouse-cursor: root.vertical ? col-resize : row-resize;
 
         pointer-event(event) => {
@@ -55,6 +59,8 @@ export component MultiviewGutter inherits Rectangle {
         y: root.vertical ? (parent.height - self.height) / 2 : 0px;
         width: root.button-size;
         height: root.button-size;
+        visible: root.show-button;
+        enabled: root.show-button;
         mouse-cursor: pointer;
 
         clicked => {
