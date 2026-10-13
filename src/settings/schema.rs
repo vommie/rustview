@@ -256,6 +256,11 @@ pub const MULTIVIEW_MIN_VIDEO_WINDOW_PX: i32 = 16;
 /// Base title of a tab that holds a Multiview; further ones get the usual numbered suffix.
 pub const MULTIVIEW_TAB_TITLE: &str = "Multiview";
 
+// --- mpv event observer ---
+/// Polling interval of the observer thread of a player that is shown (or in the tab grid) and of one that is hidden.
+pub const MPV_OBSERVER_ACTIVE_POLL_MS: u64 = 20;
+pub const MPV_OBSERVER_IDLE_POLL_MS: u64 = 100;
+
 // =============================================================================
 // SECTION 12: API & External Tools Settings - Single Point of Truth Constants
 // =============================================================================

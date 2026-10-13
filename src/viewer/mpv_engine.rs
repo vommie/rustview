@@ -1,6 +1,7 @@
 use super::error::ViewerError;
 use super::types::MpvPlaybackState;
 use crate::settings::LogObscurer;
+use crate::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
 use libmpv2::Mpv;
 use parking_lot::{Mutex, RwLock};
 use std::path::{Path, PathBuf};
@@ -690,10 +691,17 @@ impl MpvPlayer {
                 let mut last_sub_vis = true;
 
                 while running.load(Ordering::Relaxed) {
-                    let _ = mpv.wait_event(0.02);
+                    // A player that is neither shown nor in the tab grid has nobody to react to: poll it less often.
+                    let hidden = !is_view_active.load(Ordering::Relaxed)
+                        && !is_tab_grid_mode.load(Ordering::Relaxed);
+                    let poll_ms = if hidden {
+                        MPV_OBSERVER_IDLE_POLL_MS
+                    } else {
+                        MPV_OBSERVER_ACTIVE_POLL_MS
+                    };
+                    let _ = mpv.wait_event(poll_ms as f64 / 1000.0);
 
                     let in_grid = is_tab_grid_mode.load(Ordering::Relaxed);
-                    let view_active = is_view_active.load(Ordering::Relaxed);
 
                     // 1. Intercept TabGrid Mouse Clicks and Wheel Scrolling
                     if in_grid {
@@ -785,12 +793,19 @@ impl MpvPlayer {
                     // 6. Sync live playback properties
                     let pos = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
                     let dur = mpv.get_property::<f64>("duration").unwrap_or(0.0);
+                    // The pause state counts as the user's choice only if the view stayed active while it was read.
+                    // `set_view_active` stores the flag first and pauses afterwards, so a pause it caused is always
+                    // seen with the flag already cleared on one of the two samples.
+                    let active_before = is_view_active.load(Ordering::SeqCst)
+                        && !is_tab_grid_mode.load(Ordering::SeqCst);
                     let paused = mpv.get_property::<bool>("pause").unwrap_or(false);
+                    let active_after = is_view_active.load(Ordering::SeqCst)
+                        && !is_tab_grid_mode.load(Ordering::SeqCst);
                     let vol = mpv.get_property::<f64>("volume").unwrap_or(100.0);
                     let eof = mpv.get_property::<bool>("eof-reached").unwrap_or(false);
                     let idle = mpv.get_property::<bool>("idle-active").unwrap_or(true);
 
-                    if view_active && !in_grid {
+                    if active_before && active_after {
                         is_user_paused.store(paused, Ordering::Relaxed);
                     }
 
