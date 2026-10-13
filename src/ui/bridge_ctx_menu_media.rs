@@ -12,7 +12,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::file_selection::FileSelectionModel;
-use super::fullscreen_multiview::{OpenSummary, eligibility as multiview_eligibility};
+use super::multiview::{OpenSummary, eligibility as multiview_eligibility};
 use super::thumbnail_regeneration::eligibility::RegenerationEligibility;
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::{FileRenameDialog, MainWindow};

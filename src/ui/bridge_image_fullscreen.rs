@@ -1,7 +1,7 @@
 use super::bridge_file_selection::{BridgeFileSelection, DoubleClickKind, LastClickRecord};
 use super::bridge_state::UiState;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
-use super::fullscreen_multiview::MultiviewHandle;
+use super::multiview::MultiviewHandle;
 use super::{ImageFullscreenWindow, MainWindow};
 use crate::library::models::MediaId;
 use crate::library::Library;

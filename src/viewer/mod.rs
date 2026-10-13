@@ -2,6 +2,7 @@ pub mod error;
 pub mod loader;
 pub mod manager;
 pub mod mpv_engine;
+pub mod multiview;
 pub mod tab_item;
 pub mod types;
 pub mod x11_embed;
