@@ -144,7 +144,7 @@ impl BridgeFavorites {
                         updated = true;
                         tracing::info!(
                             index = idx,
-                            new_alias,
+                            new_alias = %LogObscurer::folder(None, Path::new(new_alias)),
                             elapsed_us = t0.elapsed().as_micros(),
                             "[BridgeFavorites: SurgicalRename] Updated single row in-place"
                         );

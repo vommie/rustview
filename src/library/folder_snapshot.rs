@@ -228,8 +228,7 @@ impl<'a> FolderSnapshotBuilder<'a> {
             );
             for (id, path) in &stats.orphan_samples {
                 tracing::warn!(
-                    folder_id = *id,
-                    path = %path,
+                    folder = %LogObscurer::folder(Some(*id), path),
                     "[FolderSnapshot: OrphanSample] Orphaned folder record (no valid parent link)"
                 );
             }

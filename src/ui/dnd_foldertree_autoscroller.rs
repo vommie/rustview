@@ -1,6 +1,8 @@
 use crate::ui::MainWindow;
+use crate::settings::LogObscurer;
 use slint::{ComponentHandle, Model, Timer};
 use std::cell::RefCell;
+use std::path::Path;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -187,8 +189,7 @@ impl DndFolderTreeAutoScroller {
             let target_id = row.id as u64;
             if window.get_drop_target_folder_id() != target_id as i32 {
                 tracing::info!(
-                    target_folder_id = target_id,
-                    folder_name = %row.name,
+                    target_folder = %LogObscurer::folder(Some(target_id), Path::new(row.name.as_str())),
                     row_index = row_idx,
                     scroll_offset_y = new_scroll_y,
                     "[DndFolderTreeAutoScroll: TargetChange] Auto-scrolled to new drop target folder"

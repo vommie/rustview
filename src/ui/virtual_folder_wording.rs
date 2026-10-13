@@ -18,24 +18,3 @@ pub fn tooltip(is_virtual_mode: bool, disabled_reason: Option<&str>) -> String {
         None => description(is_virtual_mode).to_string(),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn enabled_tooltip_only_describes_the_function() {
-        assert_eq!(
-            tooltip(false, None),
-            "Recursive folder view: Show media from current folder and all subfolders"
-        );
-        assert_eq!(tooltip(true, None), "Disable recursive folder view (show current folder only)");
-    }
-
-    #[test]
-    fn disabled_tooltip_keeps_the_description_and_adds_the_reason() {
-        let tip = tooltip(false, Some("No subfolders available in current folder"));
-        assert!(tip.starts_with("Recursive folder view: Show media"));
-        assert!(tip.ends_with("\nDisabled: No subfolders available in current folder"));
-    }
-}

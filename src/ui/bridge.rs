@@ -901,8 +901,7 @@ impl UiBridge {
 
             if folder_rec.is_deleted {
                 tracing::info!(
-                    folder_id,
-                    folder_name = %folder_name,
+                    folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
                     "[UiBridge: DeleteAction] DEL key pressed on missing folder: opening remove_orphaned folder dialog"
                 );
                 params.folder_dialogs.show_remove_orphaned(
@@ -913,8 +912,7 @@ impl UiBridge {
                 );
             } else {
                 tracing::info!(
-                    folder_id,
-                    folder_name = %folder_name,
+                    folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
                     "[UiBridge: DeleteAction] DEL key pressed on active folder: opening delete folder dialog"
                 );
                 params.folder_dialogs.show_delete(
@@ -1076,8 +1074,7 @@ impl UiBridge {
             };
 
             tracing::info!(
-                folder_id,
-                folder_name = %folder_name,
+                folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
                 "[UiBridge: RenameAction] F2 pressed on Folder Tree focus: Opening Rename Folder dialog"
             );
 

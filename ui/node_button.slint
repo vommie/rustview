@@ -49,8 +49,7 @@ export component NodeButton inherits Rectangle {
         border-width: root.btn-border-width;
         border-color: btn-touch.has-hover ? root.hover-border-color : root.button-border-color;
 
-        // Stays enabled even when the button is disabled, otherwise Slint reports no hover and the tooltip
-        // could never appear. Clicks are filtered below.
+        // Always enabled: a disabled TouchArea reports no hover, so the tooltip (with the reason) could not show. Clicks are filtered below.
         btn-touch := TouchArea {
             mouse-cursor: root.enabled ? pointer : default;
             pointer-event(event) => {

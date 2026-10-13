@@ -42,8 +42,7 @@ export component TagHistoryItemView inherits Rectangle {
             + (root.is-enabled ? "" : "\n" + root.disabled-hint);
     }
 
-    // Stays enabled even when the item is disabled, otherwise Slint reports no hover and the tooltip
-    // could never appear. Clicks are filtered below.
+    // Always enabled: a disabled TouchArea reports no hover, so the tooltip (with the reason) could not show. Clicks are filtered below.
     touch-area := TouchArea {
         mouse-cursor: root.is-enabled ? pointer : default;
         pointer-event(event) => {

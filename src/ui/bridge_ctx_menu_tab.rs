@@ -296,7 +296,7 @@ impl TabContextMenu {
 
                 tracing::info!(
                     tab_id,
-                    target_title = %tab_title,
+                    target_title = %LogObscurer::filename(&tab_title),
                     closed_count,
                     "[TabContextMenu: CloseLeft] User closed tabs to the left"
                 );
@@ -323,7 +323,7 @@ impl TabContextMenu {
 
                 tracing::info!(
                     tab_id,
-                    target_title = %tab_title,
+                    target_title = %LogObscurer::filename(&tab_title),
                     closed_count,
                     "[TabContextMenu: CloseRight] User closed tabs to the right"
                 );
@@ -350,7 +350,7 @@ impl TabContextMenu {
 
                 tracing::info!(
                     tab_id,
-                    target_title = %tab_title,
+                    target_title = %LogObscurer::filename(&tab_title),
                     closed_count,
                     "[TabContextMenu: CloseOthers] User closed all other tabs"
                 );
