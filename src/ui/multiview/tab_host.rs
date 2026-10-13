@@ -120,8 +120,9 @@ fn on_click(is_ctrl: bool) {
 }
 
 fn run(action: UiAction) {
+    let instance_id = current_instance().map(|i| i.lock().id());
     if let Some(handle) = with_host(|h| h.handle.clone()).flatten() {
-        router::execute(action, &handle);
+        router::execute(action, &handle, instance_id);
     }
 }
 

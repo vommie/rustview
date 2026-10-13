@@ -117,17 +117,20 @@ impl Session {
     /// Brings the tiles in line with the current selection: removed items leave, new items take the freed slots, the
     /// remaining tiles keep running. An empty selection changes nothing.
     pub(super) fn reconcile_now(&mut self) {
+        let Some(state) = self.state.clone() else {
+            return;
+        };
         if !self.populated || self.instance.lock().origin() != OriginKind::Browse {
             return;
         }
-        let wanted = eligibility::wanted_ids(&self.state.read());
+        let wanted = eligibility::wanted_ids(&state.read());
         let current = self.instance.lock().member_ids();
         let plan = reconcile::reconcile(&current, &wanted, MULTIVIEW_MAX_TILES);
         if plan.is_noop() {
             return;
         }
         let seeds: HashMap<MediaId, TileSeed> = {
-            let st = self.state.read();
+            let st = state.read();
             plan.add
                 .iter()
                 .filter_map(|&id| eligibility::plan_tile_for(&st, id))

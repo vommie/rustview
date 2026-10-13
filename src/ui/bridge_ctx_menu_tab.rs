@@ -67,7 +67,17 @@ impl TabContextMenu {
                 None,
                 Some(Icon::Copy),
                 !is_multiview,
-            )
+            );
+        if is_multiview {
+            builder = builder.action(
+                CTX_TAB_OPEN_MULTIVIEW,
+                "Open in Fullscreen (Multiview)",
+                None,
+                Some(Icon::OpenMultiview),
+                true,
+            );
+        }
+        let mut builder = builder
             .separator()
             .submenu("Move Tab...", Some(Icon::TabMove), has_multiple_tabs, move |sub| {
                 sub.action(
@@ -258,6 +268,15 @@ impl TabContextMenu {
                         StatusBarBridge::error(ctx.window, format!("Failed to duplicate tab: {}", e));
                     }
                 }
+            }
+            CTX_TAB_OPEN_MULTIVIEW => {
+                tracing::info!(tab_id, "[TabContextMenu: OpenMultiview] Open the Multiview tab in fullscreen");
+                ctx.fullscreen_controller.show_for_tab(
+                    tab_id,
+                    ctx.tab_manager,
+                    ctx.settings,
+                    ctx.window.as_weak(),
+                );
             }
             CTX_TAB_MOVE_TO_START => {
                 tracing::info!(tab_id, "[TabContextMenu: Move] Move tab to start requested");

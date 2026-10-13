@@ -3,14 +3,14 @@
 //! drag-and-drop lock, dialogs and the tab embedding already ask the fullscreen controller about.
 
 use super::eligibility;
-use super::session;
+use super::session::{self, TabReturn};
 use crate::library::models::MediaId;
 use crate::settings::SettingsManager;
 use crate::ui::MainWindow;
 use crate::ui::bridge_image_fullscreen::FullscreenCloseCallback;
 use crate::ui::bridge_state::UiState;
-use crate::viewer::ViewerTabManager;
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
+use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -113,6 +113,37 @@ impl MultiviewHandle {
         )
     }
 
+    /// Shows the Multiview that tab `tab_id` owns in the fullscreen window (from the tab view or the tab grid). UI thread
+    /// only. Returns `false` if the tab does not hold a Multiview.
+    pub fn open_tab(
+        &self,
+        tab_id: TabId,
+        tab_manager: &Arc<ViewerTabManager>,
+        settings: &Arc<SettingsManager>,
+        main_window: slint::Weak<MainWindow>,
+    ) -> bool {
+        let Some(instance) = tab_manager
+            .get_tab(tab_id)
+            .and_then(|tab| tab.multiview().map(|mv| mv.instance.clone()))
+        else {
+            return false;
+        };
+        let origin_mode = main_window
+            .upgrade()
+            .map_or(1, |w| w.get_active_view_mode());
+        *self.shared.main_window.lock() = Some(main_window.clone());
+        session::open_tab(
+            self.clone(),
+            instance,
+            TabReturn {
+                tab_id,
+                origin_mode,
+            },
+            settings.clone(),
+            main_window,
+        )
+    }
+
     /// Closes the Multiview and runs the close handler (re-syncs the Browse view). Callable from any thread.
     pub fn request_close(&self) {
         if self.is_open() {
@@ -141,13 +172,57 @@ impl MultiviewHandle {
         }
     }
 
-    pub(super) fn notify_closed(&self) {
+    /// Runs the application's close handler. A Multiview that came from a tab names the view it returns to; any other one
+    /// returns to the Browse view.
+    pub(super) fn notify_closed(&self, tab: Option<TabReturn>) {
         let handler = self.shared.close_handler.lock().clone();
         let main_window = self.shared.main_window.lock().clone();
         if let (Some(handler), Some(main_window)) = (handler, main_window) {
             let _ = main_window.upgrade_in_event_loop(move |w| {
                 w.set_is_modal_locked(false);
-                handler(0, None, None);
+                match tab {
+                    Some(tab) => handler(tab.origin_mode, Some(tab.tab_id), None),
+                    None => handler(0, None, None),
+                }
+            });
+        }
+    }
+
+    /// Opens the tab that owns the Multiview instance `instance_id` in the fullscreen window, through the same main window
+    /// callback as a middle click on its grid item.
+    pub(super) fn open_tab_fullscreen(&self, instance_id: u64) {
+        self.on_tab_of_instance(instance_id, |w, tab_id| {
+            w.invoke_tab_grid_item_middle_clicked(tab_id as i32)
+        });
+    }
+
+    /// Makes the tab that owns the Multiview instance `instance_id` the shown tab (left click on its grid item).
+    pub(super) fn activate_tab(&self, instance_id: u64) {
+        self.on_tab_of_instance(instance_id, |w, tab_id| {
+            w.invoke_tab_grid_item_left_clicked(tab_id as i32)
+        });
+    }
+
+    fn on_tab_of_instance(
+        &self,
+        instance_id: u64,
+        f: impl FnOnce(&MainWindow, TabId) + Send + 'static,
+    ) {
+        let (Some(tab_manager), Some(main_window)) = (self.tab_manager(), self.main_window())
+        else {
+            return;
+        };
+        let Some(tab_id) = tab_manager.tab_id_of_instance(instance_id) else {
+            return;
+        };
+        let _ = main_window.upgrade_in_event_loop(move |w| f(&w, tab_id));
+    }
+
+    /// Scrolls the tab grid (wheel over a grid item that shows a Multiview).
+    pub(super) fn scroll_grid(&self, up: bool) {
+        if let Some(main_window) = self.main_window() {
+            let _ = main_window.upgrade_in_event_loop(move |w| {
+                w.invoke_scroll_media_by(if up { 40.0 } else { -40.0 })
             });
         }
     }

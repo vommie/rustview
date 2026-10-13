@@ -302,6 +302,13 @@ impl ImageFullscreenDialogController {
             return;
         };
 
+        if target_tab.is_multiview() {
+            self.dismiss_for_replacement();
+            self.multiview
+                .open_tab(tab_id, tab_manager, settings, main_window_weak);
+            return;
+        }
+
         self.multiview.dismiss();
 
         let t0 = Instant::now();

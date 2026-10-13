@@ -59,16 +59,16 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
         PlayerEvent::GridMiddleClick => (RoutedEvent::GridMiddle, ClickKind::None),
         PlayerEvent::GridWheel { up } => (RoutedEvent::GridWheel { up }, ClickKind::None),
     };
-    let (mode, origin) = {
+    let (mode, origin, instance_id) = {
         let guard = instance.lock();
-        (guard.host_mode(), guard.origin())
+        (guard.host_mode(), guard.origin(), guard.id())
     };
     drop(instance);
     let action = route(mode, origin, routed, click);
     if click == ClickKind::CtrlDouble && action != UiAction::None {
         tracing::info!(?action, "[Multiview: Click] Ctrl+double click on a video");
     }
-    execute(action, handle);
+    execute(action, handle, Some(instance_id));
 }
 
 /// Shows the changed state of an instance in the host that presents it.
@@ -80,19 +80,20 @@ fn refresh_host(mode: HostMode) {
     }
 }
 
-/// Carries out an action. Called without any session borrow, so actions may close the session.
-pub(super) fn execute(action: UiAction, handle: &MultiviewHandle) {
-    match action {
-        UiAction::None => {}
-        UiAction::CloseFullscreen => session::close(true),
-        UiAction::ConvertToTab => session_convert::convert_to_tab(),
-        UiAction::RequestRename => handle.request_rename(),
-        UiAction::CloseActiveTab => handle.close_active_tab(),
-        other => {
-            tracing::debug!(
-                ?other,
-                "[Multiview: Router] The action is not available yet"
-            );
+/// Carries out an action. Called without any session borrow, so actions may close the session. `instance_id` names the
+/// Multiview the action comes from (needed for the actions that address its tab).
+pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: Option<u64>) {
+    match (action, instance_id) {
+        (UiAction::None, _) => {}
+        (UiAction::CloseFullscreen, _) => session::close(true),
+        (UiAction::ConvertToTab, _) => session_convert::convert_to_tab(),
+        (UiAction::RequestRename, _) => handle.request_rename(),
+        (UiAction::CloseActiveTab, _) => handle.close_active_tab(),
+        (UiAction::OpenTabFullscreen, Some(id)) => handle.open_tab_fullscreen(id),
+        (UiAction::ActivateTab, Some(id)) => handle.activate_tab(id),
+        (UiAction::ScrollGrid { up }, _) => handle.scroll_grid(up),
+        (other, _) => {
+            tracing::debug!(?other, "[Multiview: Router] The action needs a Multiview");
         }
     }
 }

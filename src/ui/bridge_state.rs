@@ -88,6 +88,7 @@ pub const CTX_TAB_CLOSE: CtxMenuActionId = 4006;
 pub const CTX_TAB_CLOSE_TO_LEFT: CtxMenuActionId = 4007;
 pub const CTX_TAB_CLOSE_TO_RIGHT: CtxMenuActionId = 4008;
 pub const CTX_TAB_CLOSE_OTHERS: CtxMenuActionId = 4009;
+pub const CTX_TAB_OPEN_MULTIVIEW: CtxMenuActionId = 4010;
 
 // Favorites Context Menu Action IDs
 pub const CTX_FAVORITE_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 5001;

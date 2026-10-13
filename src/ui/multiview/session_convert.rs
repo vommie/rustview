@@ -42,6 +42,18 @@ fn adopt(session: &Session) -> Result<TabId, String> {
         .handle
         .tab_manager()
         .ok_or("no tab manager is bound")?;
+    session.instance.lock().set_origin(OriginKind::Tab);
+    park_below_main_window(session)?;
+    Ok(tab_manager.adopt_multiview_in_background(session.instance.clone()))
+}
+
+/// Moves the video windows of the session's instance below the main window (hidden and paused), so the fullscreen window can
+/// go away without taking them along.
+pub(super) fn park_below_main_window(session: &Session) -> Result<(), String> {
+    let tab_manager = session
+        .handle
+        .tab_manager()
+        .ok_or("no tab manager is bound")?;
     let main_window = session
         .handle
         .main_window()
@@ -50,12 +62,10 @@ fn adopt(session: &Session) -> Result<TabId, String> {
     let main_xid =
         get_slint_window_xid(main_window.window()).ok_or("the main window has no native handle")?;
     let (x, y, width, height) = tab_manager.get_viewport_rect();
-    {
-        let mut instance = session.instance.lock();
-        instance.set_origin(OriginKind::Tab);
-        instance.park(main_xid, Rect::new(x, y, width as i32, height as i32))?;
-    }
-    Ok(tab_manager.adopt_multiview_in_background(session.instance.clone()))
+    session
+        .instance
+        .lock()
+        .park(main_xid, Rect::new(x, y, width as i32, height as i32))
 }
 
 /// The instance lives in the tab now: the fullscreen window goes away and the application returns to the Browse view with
@@ -75,7 +85,7 @@ fn complete(session: Session, tab_id: TabId) {
         instance = instance_id,
         "[Multiview: Convert] The Multiview moved into a background tab"
     );
-    handle.notify_closed();
+    handle.notify_closed(None);
     if let Some(main_window) = handle.main_window() {
         let _ = main_window.upgrade_in_event_loop(move |w| {
             StatusBarBridge::success(&w, format!("Multiview moved to tab '{title}'"));

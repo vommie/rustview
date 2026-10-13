@@ -9,6 +9,8 @@
 use super::eligibility::OpenPlan;
 use super::handle::{self, MultiviewHandle};
 use super::router::{UiEventSink, execute};
+use super::session_convert::park_below_main_window;
+use super::tab_host;
 use super::views::{self, ImageCache};
 use crate::settings::SettingsManager;
 use crate::settings::schema::{
@@ -18,6 +20,7 @@ use crate::settings::schema::{
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::bridge_state::UiState;
 use crate::ui::{MainWindow, MultiviewFullscreenWindow, MultiviewGutterView, MultiviewTileView};
+use crate::viewer::TabId;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::UiAction;
 use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
@@ -36,15 +39,39 @@ thread_local! {
     static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
 }
 
+/// Where a Multiview that was opened from a tab returns to when its fullscreen closes.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct TabReturn {
+    pub(super) tab_id: TabId,
+    /// View mode of the main window at the time (1 = tab view, 2 = tab grid).
+    pub(super) origin_mode: i32,
+}
+
+/// What a fullscreen session shows: a Multiview opened from the Browse selection, or the one a tab owns.
+enum Source {
+    Plan {
+        plan: OpenPlan,
+        state: Arc<RwLock<UiState>>,
+    },
+    Tab {
+        instance: SharedInstance,
+        tab: TabReturn,
+    },
+}
+
 pub(super) struct Session {
     /// Id of the instance; timers that outlive a session compare it to notice that the session was replaced.
     pub(super) generation: u64,
     pub(super) handle: MultiviewHandle,
     pub(super) window: slint::Weak<MultiviewFullscreenWindow>,
-    pub(super) state: Arc<RwLock<UiState>>,
+    /// Source of the live selection; only a Multiview opened from the Browse view follows it.
+    pub(super) state: Option<Arc<RwLock<UiState>>>,
     pub(super) monitor: MonitorInfo,
     pub(super) fs_xid: u64,
     pub(super) instance: SharedInstance,
+    /// The tiles of the instance still have to be started (a Multiview that comes from a tab is already running).
+    fresh: bool,
+    pub(super) tab_return: Option<TabReturn>,
     pub(super) probe: Option<PointerProbe>,
     pub(super) tile_model: Rc<VecModel<MultiviewTileView>>,
     pub(super) gutter_model: Rc<VecModel<MultiviewGutterView>>,
@@ -68,7 +95,7 @@ pub(super) fn run(f: impl FnOnce(&mut Session) -> UiAction) {
         }
     });
     if let Some((action, handle)) = outcome {
-        execute(action, &handle);
+        execute(action, &handle, None);
     }
 }
 
@@ -183,6 +210,34 @@ pub(super) fn open(
     state: Arc<RwLock<UiState>>,
     main_window: slint::Weak<MainWindow>,
 ) -> bool {
+    launch(handle, Source::Plan { plan, state }, &settings, main_window)
+}
+
+/// Shows the Multiview that a tab owns in the fullscreen window. The running players move over, nothing restarts; closing
+/// the fullscreen hands the windows back to the tab. UI thread only.
+pub(super) fn open_tab(
+    handle: MultiviewHandle,
+    instance: SharedInstance,
+    tab: TabReturn,
+    settings: Arc<SettingsManager>,
+    main_window: slint::Weak<MainWindow>,
+) -> bool {
+    tab_host::suspend();
+    instance.lock().deactivate();
+    launch(
+        handle,
+        Source::Tab { instance, tab },
+        &settings,
+        main_window,
+    )
+}
+
+fn launch(
+    handle: MultiviewHandle,
+    source: Source,
+    settings: &SettingsManager,
+    main_window: slint::Weak<MainWindow>,
+) -> bool {
     if session_generation().is_some() {
         close(false);
     }
@@ -193,13 +248,13 @@ pub(super) fn open(
         return false;
     };
 
-    let monitor = resolve_monitor(&settings, &main_window);
-    let tile_count = plan.tiles.len();
-    let session = Session::new(handle, window, state, monitor, plan);
+    let monitor = resolve_monitor(settings, &main_window);
+    let session = Session::new(handle, window, monitor, source);
     let generation = session.generation;
+    let tile_count = session.instance.lock().tile_count();
     prepare_window(
         &win,
-        &settings,
+        settings,
         &session.monitor,
         &session.tile_model,
         &session.gutter_model,
@@ -282,14 +337,24 @@ pub(super) fn take_session() -> Result<Option<Session>, ()> {
     })
 }
 
-/// Shuts a session that was taken out of its slot down; its instance is destroyed with it unless somebody else holds it.
+/// Shuts a session that was taken out of its slot down. A Multiview that comes from a tab hands its windows back to the tab
+/// first (while the fullscreen window still exists); any other instance is destroyed with the session unless a tab holds it.
 pub(super) fn finish_close(session: Session, notify: bool) {
     handle::set_open(false);
     let handle = session.handle.clone();
+    let tab_return = session.tab_return;
+    if tab_return.is_some()
+        && let Err(reason) = park_below_main_window(&session)
+    {
+        tracing::warn!(
+            reason,
+            "[Multiview: Close] The windows could not return to the tab"
+        );
+    }
     session.shutdown();
     tracing::info!(notify, "[Multiview: Close] Multiview closed");
     if notify {
-        handle.notify_closed();
+        handle.notify_closed(tab_return);
     }
 }
 
@@ -297,12 +362,20 @@ impl Session {
     fn new(
         handle: MultiviewHandle,
         window: slint::Weak<MultiviewFullscreenWindow>,
-        state: Arc<RwLock<UiState>>,
         monitor: MonitorInfo,
-        plan: OpenPlan,
+        source: Source,
     ) -> Self {
-        let instance =
-            MultiviewInstance::create(Arc::new(UiEventSink::new(handle.clone())), plan.tiles);
+        let (instance, state, tab_return) = match source {
+            Source::Plan { plan, state } => {
+                let sink = Arc::new(UiEventSink::new(handle.clone()));
+                (
+                    MultiviewInstance::create(sink, plan.tiles),
+                    Some(state),
+                    None,
+                )
+            }
+            Source::Tab { instance, tab } => (instance, None, Some(tab)),
+        };
         handle.bind_instance(&instance);
         let generation = instance.lock().id();
         Self {
@@ -313,6 +386,8 @@ impl Session {
             monitor,
             fs_xid: 0,
             instance,
+            fresh: tab_return.is_none(),
+            tab_return,
             probe: None,
             tile_model: Rc::new(VecModel::default()),
             gutter_model: Rc::new(VecModel::default()),
@@ -339,7 +414,9 @@ impl Session {
         {
             let mut instance = self.instance.lock();
             instance.set_host(&surface);
-            instance.start_all();
+            if self.fresh {
+                instance.start_all();
+            }
         }
 
         self.probe = match PointerProbe::new() {
