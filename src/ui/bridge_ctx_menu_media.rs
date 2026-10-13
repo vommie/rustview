@@ -12,6 +12,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::file_selection::FileSelectionModel;
+use super::fullscreen_multiview::{OpenSummary, eligibility as multiview_eligibility};
 use super::thumbnail_regeneration::eligibility::RegenerationEligibility;
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::{FileRenameDialog, MainWindow};
@@ -55,6 +56,8 @@ pub struct MediaSelectionMeta {
     pub is_single_image: bool,
     /// Valid-video eligibility for "Thumbnail (Random Pos.)" (in-memory evaluation, no drive access).
     pub regeneration: RegenerationEligibility,
+    /// What the Multiview would show for the current selection (in-memory evaluation, no drive access).
+    pub multiview: OpenSummary,
     pub target_file_exists: bool,
     pub is_single_pending: bool,
     pub single_filename: String,
@@ -170,6 +173,7 @@ impl MediaContextMenu {
             selected_count,
             is_single_image: is_single && is_single_image,
             regeneration: ThumbnailRegeneration::eligibility(state),
+            multiview: multiview_eligibility::summarize(&state.read()),
             target_file_exists,
             is_single_pending,
             single_filename,
@@ -414,15 +418,26 @@ impl MediaContextMenu {
                 open_in_bg_tab_shortcut,
                 Some(Icon::OpenInBackgroundTab),
                 can_open,
+            );
+        builder = if meta.multiview.is_multi() {
+            builder.action_with_tooltip(
+                CTX_ACTION_OPEN_IN_FULLSCREEN,
+                meta.multiview.menu_label(),
+                None,
+                Some(Icon::OpenMultiview),
+                meta.multiview.is_actionable(),
+                meta.multiview.hint(),
             )
-            .action(
+        } else {
+            builder.action(
                 CTX_ACTION_OPEN_IN_FULLSCREEN,
                 open_in_fullscreen_text,
                 open_in_fullscreen_shortcut,
                 Some(Icon::OpenFullscreen),
                 can_open,
             )
-            .separator();
+        };
+        builder = builder.separator();
 
         // 3. Move To... / Copy To... Submenus Projected directly from SPoT with zero disk I/O
         if let Some(snap) = snapshot {
@@ -801,6 +816,17 @@ impl MediaContextMenu {
         ctx: &MediaActionContext<'_>,
         target_ids: &[MediaId],
     ) {
+        if target_ids.len() > 1 {
+            tracing::info!(
+                target_count = target_ids.len(),
+                "[MediaContextMenu] 'Open in Fullscreen (Multiview)' action triggered"
+            );
+            ctx.fullscreen_controller.dismiss_for_replacement();
+            ctx.fullscreen_controller
+                .multiview()
+                .open(ctx.settings, ctx.state, window.as_weak());
+            return;
+        }
         if let Some(&media_id) = target_ids.first() {
             tracing::info!(
                 media_id,
@@ -1159,6 +1185,10 @@ mod tests {
             selected_count,
             is_single_image: selected_count == 1,
             regeneration: RegenerationEligibility::default(),
+            multiview: OpenSummary {
+                selected: selected_count,
+                playable: selected_count,
+            },
             target_file_exists: true,
             is_single_pending: false,
             single_filename: "image.jpg".to_string(),

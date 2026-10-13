@@ -1,3 +1,4 @@
+use super::fullscreen_multiview;
 use super::models::format_filesize;
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::MainWindow;
@@ -134,6 +135,7 @@ impl StatusBarBridge {
         window.set_virtual_folder_count(virtual_count as i32);
 
         ThumbnailRegeneration::sync_toolbar_state(window, state);
+        fullscreen_multiview::handle::on_selection_changed();
     }
 
     /// Updates the folder structure scan progress section.

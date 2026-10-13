@@ -136,7 +136,32 @@ struct X11Symbols {
     >,
     x_shape_combine_mask:
         Option<unsafe extern "C" fn(DisplayPtr, WindowId, c_int, c_int, c_int, c_ulong, c_int)>,
+    x_query_pointer: unsafe extern "C" fn(
+        DisplayPtr,
+        WindowId,
+        *mut WindowId,
+        *mut WindowId,
+        *mut c_int,
+        *mut c_int,
+        *mut c_int,
+        *mut c_int,
+        *mut c_uint,
+    ) -> c_int,
+    x_set_error_handler: unsafe extern "C" fn(XErrorHandler) -> XErrorHandler,
 }
+
+#[repr(C)]
+struct XErrorEvent {
+    type_: c_int,
+    display: DisplayPtr,
+    resource_id: c_ulong,
+    serial: c_ulong,
+    error_code: u8,
+    request_code: u8,
+    minor_code: u8,
+}
+
+type XErrorHandler = Option<unsafe extern "C" fn(DisplayPtr, *mut XErrorEvent) -> c_int>;
 
 unsafe impl Send for X11Symbols {}
 unsafe impl Sync for X11Symbols {}
@@ -227,6 +252,8 @@ unsafe fn load_symbols_from_handles(
         x_change_property: unsafe { load_sym(lib_x11, "XChangeProperty")? },
         x_shape_combine_rectangles,
         x_shape_combine_mask,
+        x_query_pointer: unsafe { load_sym(lib_x11, "XQueryPointer")? },
+        x_set_error_handler: unsafe { load_sym(lib_x11, "XSetErrorHandler")? },
     });
 
     unsafe {
@@ -846,6 +873,87 @@ pub fn force_x11_fullscreen_on_monitor(
             height,
             "[X11Fullscreen: TargetMonitor] Positioned and fullscreened window onto target monitor via EWMH"
         );
+    }
+}
+
+unsafe extern "C" fn nonfatal_x_error(_display: DisplayPtr, event: *mut XErrorEvent) -> c_int {
+    if let Some(ev) = unsafe { event.as_ref() } {
+        tracing::debug!(
+            error_code = ev.error_code,
+            request_code = ev.request_code,
+            minor_code = ev.minor_code,
+            resource_id = ev.resource_id,
+            "[X11: Error] Ignored non-fatal X protocol error"
+        );
+    }
+    0
+}
+
+/// Installs an X error handler that only logs. libmpv resets the process-wide Xlib error handler to Xlib's default when a
+/// video output shuts down, and that default terminates the whole process on any later X error (for example a stale
+/// window id). Call this after a player has been destroyed.
+pub fn install_nonfatal_error_handler() {
+    if let Ok(api) = get_x11_api() {
+        unsafe {
+            (api.x_set_error_handler)(Some(nonfatal_x_error));
+        }
+    }
+}
+
+/// Reads the global pointer position with a single `XQueryPointer` round trip on a private connection.
+pub struct PointerProbe {
+    api: Arc<X11Symbols>,
+    display: DisplayPtr,
+    root: WindowId,
+}
+
+unsafe impl Send for PointerProbe {}
+unsafe impl Sync for PointerProbe {}
+
+impl PointerProbe {
+    pub fn new() -> Result<Self, ViewerError> {
+        let api = get_x11_api()?;
+        unsafe {
+            let display = (api.x_open_display)(std::ptr::null());
+            if display.is_null() {
+                return Err(ViewerError::X11(
+                    "Failed to open X11 display for the pointer probe".into(),
+                ));
+            }
+            let root = (api.x_default_root_window)(display);
+            Ok(Self { api, display, root })
+        }
+    }
+
+    /// Pointer position in root window (screen) coordinates.
+    pub fn position(&self) -> Option<(i32, i32)> {
+        let mut root_ret: WindowId = 0;
+        let mut child_ret: WindowId = 0;
+        let (mut root_x, mut root_y, mut win_x, mut win_y): (c_int, c_int, c_int, c_int) =
+            (0, 0, 0, 0);
+        let mut mask: c_uint = 0;
+        let on_screen = unsafe {
+            (self.api.x_query_pointer)(
+                self.display,
+                self.root,
+                &mut root_ret,
+                &mut child_ret,
+                &mut root_x,
+                &mut root_y,
+                &mut win_x,
+                &mut win_y,
+                &mut mask,
+            )
+        };
+        (on_screen != 0).then_some((root_x, root_y))
+    }
+}
+
+impl Drop for PointerProbe {
+    fn drop(&mut self) {
+        unsafe {
+            (self.api.x_close_display)(self.display);
+        }
     }
 }
 

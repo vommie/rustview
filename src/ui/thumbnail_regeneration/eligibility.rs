@@ -63,7 +63,7 @@ impl RegenerationEligibility {
 
 /// Resolves a selected id to its loaded record via the row map. In-memory only: ids that are not part of the
 /// loaded list are ignored instead of being looked up in the database or on disk.
-fn loaded_item(st: &UiState, id: MediaId) -> Option<&IndexedMediaRecord> {
+pub(crate) fn loaded_item(st: &UiState, id: MediaId) -> Option<&IndexedMediaRecord> {
     let row = *st.media_row_map.get(&id)?;
     let index = if st.active_indices.is_empty() { row } else { *st.active_indices.get(row)? };
     st.all_folder_media.get(index).filter(|m| m.record.id == id)

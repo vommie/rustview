@@ -1,6 +1,7 @@
 use super::bridge_file_selection::{BridgeFileSelection, DoubleClickKind, LastClickRecord};
 use super::bridge_state::UiState;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::fullscreen_multiview::MultiviewHandle;
 use super::{ImageFullscreenWindow, MainWindow};
 use crate::library::models::MediaId;
 use crate::library::Library;
@@ -51,11 +52,15 @@ pub struct ImageFullscreenDialogController {
     cached_fs_xid: Arc<Mutex<Option<u64>>>,
     cached_viewport_rect: Arc<Mutex<(i32, i32, u32, u32)>>,
     close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>,
+    multiview: MultiviewHandle,
 }
 
 impl ImageFullscreenDialogController {
     pub fn new() -> Self {
+        let close_handler = Arc::new(Mutex::new(None));
         Self {
+            multiview: MultiviewHandle::new(close_handler.clone()),
+            close_handler,
             window_weak: Arc::new(Mutex::new(None)),
             main_window_weak: Arc::new(Mutex::new(None)),
             tab_manager_weak: Arc::new(Mutex::new(None)),
@@ -74,8 +79,12 @@ impl ImageFullscreenDialogController {
             cached_main_xid: Arc::new(Mutex::new(None)),
             cached_fs_xid: Arc::new(Mutex::new(None)),
             cached_viewport_rect: Arc::new(Mutex::new((0, 0, 800, 600))),
-            close_handler: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// The Multiview (several media in one fullscreen window) shares this controller's close handler and open state.
+    pub fn multiview(&self) -> &MultiviewHandle {
+        &self.multiview
     }
 
     /// Stores the ThumbnailManager instance to facilitate smooth slice re-anchoring when browsing from fullscreen.
@@ -98,8 +107,11 @@ impl ImageFullscreenDialogController {
         *self.cached_viewport_rect.lock() = (x, y, w, h);
     }
 
-    /// Returns the active media ID being viewed in fullscreen if available.
+    /// Returns the active media ID being viewed in fullscreen if available (in the Multiview: the tile F2 acts on).
     pub fn get_active_media_id(&self) -> Option<MediaId> {
+        if self.multiview.is_open() {
+            return self.multiview.rename_target();
+        }
         if let Some(tab_id) = *self.active_fullscreen_tab_id.lock()
             && let Some(ref tm) = *self.tab_manager_weak.lock()
             && let Some(tab) = tm.get_tab(tab_id)
@@ -290,6 +302,8 @@ impl ImageFullscreenDialogController {
             return;
         };
 
+        self.multiview.dismiss();
+
         let t0 = Instant::now();
         *self.main_window_weak.lock() = Some(main_window_weak.clone());
         *self.tab_manager_weak.lock() = Some(tab_manager.clone());
@@ -324,7 +338,7 @@ impl ImageFullscreenDialogController {
 
         let ctrl = self.clone();
         let tm_clone = tab_manager.clone();
-        let was_already_open = self.is_open();
+        let was_already_open = self.is_active.load(Ordering::SeqCst);
         let settings_clone = settings.clone();
 
         self.with_fullscreen_window(|win| {
@@ -400,7 +414,7 @@ impl ImageFullscreenDialogController {
         tab_manager: &Arc<ViewerTabManager>,
         main_window_weak: slint::Weak<MainWindow>,
     ) {
-        if self.is_open() && self.active_fullscreen_tab_id.lock().is_some() {
+        if self.is_active.load(Ordering::SeqCst) && self.active_fullscreen_tab_id.lock().is_some() {
             tracing::info!(
                 media_id,
                 "[FullscreenViewer: ShowForMedia] Ignored Quick-Fullscreen request because Tab-Fullscreen is currently exclusive"
@@ -426,6 +440,8 @@ impl ImageFullscreenDialogController {
             return;
         }
 
+        self.multiview.dismiss();
+
         *self.main_window_weak.lock() = Some(main_window_weak.clone());
         *self.library_weak.lock() = Some(library.clone());
         *self.settings_weak.lock() = Some(settings.clone());
@@ -441,7 +457,7 @@ impl ImageFullscreenDialogController {
             .unwrap_or(0);
         *self.origin_view_mode.lock() = origin_mode;
 
-        let was_already_open = self.is_open();
+        let was_already_open = self.is_active.load(Ordering::SeqCst);
         let settings_clone = settings.clone();
 
         let target_mon = self.resolve_current_target_monitor(&settings_clone);
@@ -1052,7 +1068,7 @@ impl ImageFullscreenDialogController {
     }
 
     pub fn sync_active_tab(&self, tab_manager: &Arc<ViewerTabManager>, settings: &SettingsManager) {
-        if !self.is_open() {
+        if !self.is_active.load(Ordering::SeqCst) {
             return;
         }
 
@@ -1089,7 +1105,19 @@ impl ImageFullscreenDialogController {
         });
     }
 
+    /// Closes whichever fullscreen is open (single viewer or Multiview).
     pub fn close(&self) {
+        self.multiview.request_close();
+        self.close_single(true);
+    }
+
+    /// Closes the single fullscreen without the close handler (the Browse view and its selection stay untouched)
+    /// because another fullscreen takes over.
+    pub fn dismiss_for_replacement(&self) {
+        self.close_single(false);
+    }
+
+    fn close_single(&self, notify: bool) {
         if !self.is_active.swap(false, Ordering::SeqCst) {
             return;
         }
@@ -1141,7 +1169,7 @@ impl ImageFullscreenDialogController {
             });
         }
 
-        if let Some(mw_weak) = mw_weak_opt {
+        if notify && let Some(mw_weak) = mw_weak_opt {
             let _ = mw_weak.upgrade_in_event_loop(move |mw| {
                 mw.set_is_modal_locked(false);
                 tracing::info!("[FullscreenViewer: Close] Main UI modal lock released");
@@ -1152,9 +1180,10 @@ impl ImageFullscreenDialogController {
         }
     }
 
+    /// True while the single fullscreen or the Multiview is open.
     #[inline]
     pub fn is_open(&self) -> bool {
-        self.is_active.load(Ordering::SeqCst)
+        self.is_active.load(Ordering::SeqCst) || self.multiview.is_open()
     }
 
     fn sync_tab_content(

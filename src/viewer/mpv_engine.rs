@@ -2,7 +2,7 @@ use super::error::ViewerError;
 use super::types::MpvPlaybackState;
 use crate::settings::LogObscurer;
 use libmpv2::Mpv;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,6 +34,7 @@ pub struct MpvPlayer {
     grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
     rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>>,
+    observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 impl MpvPlayer {
@@ -217,6 +218,7 @@ impl MpvPlayer {
             grid_wheel_down_callbacks: grid_wheel_down_callbacks.clone(),
             convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
             rename_callbacks: rename_callbacks.clone(),
+            observer_handle: Mutex::new(None),
         };
 
         player.spawn_event_observer_thread();
@@ -501,6 +503,41 @@ impl MpvPlayer {
         self.mpv.get_property::<f64>("volume").unwrap_or(100.0)
     }
 
+    /// Stops the observer thread and destroys mpv synchronously. When this returns, libmpv and its video output are gone, so
+    /// the X11 window it rendered into can be destroyed safely. Dropping the player instead only sends `quit`; the actual
+    /// shutdown then races with the destruction of the window. Must be called with the last reference to the player.
+    pub fn shutdown_blocking(self: Arc<Self>) {
+        self.observer_running.store(false, Ordering::Release);
+        let _ = self.mpv.command("stop", &[]);
+        if let Some(observer) = self.observer_handle.lock().take() {
+            let _ = observer.join();
+        }
+        drop(self);
+    }
+
+    /// Current mute state of this player (`false` if mpv cannot answer).
+    pub fn get_mute(&self) -> bool {
+        self.mpv.get_property::<bool>("mute").unwrap_or(false)
+    }
+
+    pub fn set_mute(&self, muted: bool) -> Result<(), ViewerError> {
+        self.mpv
+            .set_property("mute", muted)
+            .map_err(|e| ViewerError::Mpv(format!("Failed to set mute: {:?}", e)))
+    }
+
+    /// Display size and rotation of the playing video as reported by mpv (`video-params/dw`, `dh`, `rotate`).
+    /// `dw`/`dh` are not rotated; `None` until the first frame of the file is decoded.
+    pub fn video_display_params(&self) -> Option<(i64, i64, i64)> {
+        let width = self.mpv.get_property::<i64>("video-params/dw").ok()?;
+        let height = self.mpv.get_property::<i64>("video-params/dh").ok()?;
+        let rotate = self
+            .mpv
+            .get_property::<i64>("video-params/rotate")
+            .unwrap_or(0);
+        Some((width, height, rotate))
+    }
+
     pub fn get_position(&self) -> f64 {
         self.mpv.get_property::<f64>("time-pos").unwrap_or(0.0)
     }
@@ -644,7 +681,7 @@ impl MpvPlayer {
         let convert_callbacks = self.convert_to_tab_callbacks.clone();
         let rename_callbacks = self.rename_callbacks.clone();
 
-        std::thread::Builder::new()
+        let observer = std::thread::Builder::new()
             .name("mpv-event-observer".into())
             .spawn(move || {
                 tracing::debug!("[MpvPlayer: Observer] Event observer thread started");
@@ -794,6 +831,7 @@ impl MpvPlayer {
                 tracing::debug!("[MpvPlayer: Observer] Event observer thread terminated");
             })
             .expect("Failed to spawn MPV event observer thread");
+        *self.observer_handle.lock() = Some(observer);
     }
 }
 

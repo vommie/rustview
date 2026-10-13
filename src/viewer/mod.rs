@@ -18,6 +18,7 @@ pub use types::{
 pub use x11_embed::{
     find_window_by_pid_and_title, find_window_by_title, force_x11_fullscreen,
     force_x11_fullscreen_on_monitor, force_x11_maximized, get_raw_window_xid,
-    get_slint_window_xid, get_slint_window_xid_with_title_fallback, is_x11_window_maximized,
+    get_slint_window_xid, get_slint_window_xid_with_title_fallback,
+    install_nonfatal_error_handler, is_x11_window_maximized, PointerProbe,
     SubwindowGeometry, ViewportBounds, X11VideoSubwindow, XRectangle,
 };

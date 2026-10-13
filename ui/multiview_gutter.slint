@@ -1,0 +1,77 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+
+/// Separator between two Multiview tiles. The whole gutter is a drag handle (double click resets all splits); the swap
+/// button in the middle exchanges the two neighbors. Dragging reports the distance from the drag start in logical pixels.
+export component MultiviewGutter inherits Rectangle {
+    in property <bool> vertical: true;
+
+    callback drag-started();
+    callback dragged(length /* distance from drag start */);
+    callback drag-finished();
+    callback reset();
+    callback swap();
+
+    property <bool> hot: drag.has-hover || drag.pressed || swap-touch.has-hover;
+    property <length> button-size: Math.min(root.width, root.height);
+
+    drag := TouchArea {
+        property <length> start-pos: 0px;
+
+        mouse-cursor: root.vertical ? col-resize : row-resize;
+
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                self.start-pos = root.vertical ? root.x + self.mouse-x : root.y + self.mouse-y;
+                root.drag-started();
+            }
+            if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
+                root.drag-finished();
+            }
+        }
+
+        moved => {
+            if self.pressed {
+                root.dragged((root.vertical ? root.x + self.mouse-x : root.y + self.mouse-y) - self.start-pos);
+            }
+        }
+
+        double-clicked => {
+            root.reset();
+        }
+    }
+
+    // Divider line (same colors as the application's other resizers)
+    Rectangle {
+        x: root.vertical ? (parent.width - self.width) / 2 : 0px;
+        y: root.vertical ? 0px : (parent.height - self.height) / 2;
+        width: root.vertical ? (root.hot ? 2px : 1px) : parent.width;
+        height: root.vertical ? parent.height : (root.hot ? 2px : 1px);
+        background: drag.pressed ? Theme.accent : (root.hot ? Theme.primary : Theme.border);
+    }
+
+    swap-touch := TouchArea {
+        x: root.vertical ? 0px : (parent.width - self.width) / 2;
+        y: root.vertical ? (parent.height - self.height) / 2 : 0px;
+        width: root.button-size;
+        height: root.button-size;
+        mouse-cursor: pointer;
+
+        clicked => {
+            root.swap();
+        }
+
+        Rectangle {
+            background: swap-touch.has-hover ? Theme.surface-hover : Theme.surface;
+            border-radius: 3px;
+
+            AppIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                icon: root.vertical ? IconId.multiview-swap : IconId.multiview-swap-rows;
+                size: IconSize.sm;
+                color: swap-touch.has-hover ? Theme.primary : Theme.text-muted;
+            }
+        }
+    }
+}

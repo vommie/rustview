@@ -1,0 +1,31 @@
+/// One tile of the Multiview window. All geometry is computed in Rust (physical pixels converted to logical pixels), so
+/// Slint and the X11 video windows always use the same rectangles. Video tiles are drawn by mpv in a native window on
+/// top of the Slint scene; Slint only draws images, loading and error states.
+export struct MultiviewTileView {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    kind: int, // 0 = image, 1 = video (native window), 2 = unavailable
+    image: image,
+    is-loading: bool,
+    error-text: string,
+}
+
+/// A draggable separator between two tiles (or the two rows of a 2x2 grid) with a swap button in the middle.
+export struct MultiviewGutterView {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    vertical: bool,
+}
+
+/// The mute badge in the top right corner of the hovered video tile (shown through a hole in the video window).
+export struct MultiviewBadgeView {
+    visible: bool,
+    x: length,
+    y: length,
+    size: length,
+    muted: bool,
+}

@@ -79,6 +79,11 @@ open_with = { tabler = "apps", doc = "Open with another application" }
 open_in_tab = { tabler = "tabs", doc = "Open in a viewer tab" }
 open_in_background_tab = { tabler = "browser-plus", doc = "Open in a background viewer tab" }
 open_fullscreen = { tabler = "arrows-maximize", doc = "Open in fullscreen" }
+open_multiview = { tabler = "layout-columns", doc = "Open several media side by side in the fullscreen Multiview" }
+multiview_swap = { tabler = "arrows-exchange", doc = "Swap two neighboring media in the Multiview" }
+multiview_swap_rows = { tabler = "arrows-exchange-2", doc = "Swap the two rows of a 2x2 Multiview" }
+volume_on = { tabler = "volume", doc = "Sound on" }
+volume_off = { tabler = "volume-off", doc = "Sound muted" }
 copy = { tabler = "copy", doc = "Copy / duplicate" }
 move_to = { tabler = "arrow-move-right", doc = "Move to another location" }
 rename = { tabler = "pencil", doc = "Rename / edit", aliases = ["edit"] }

@@ -1,0 +1,194 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { MultiviewTileView, MultiviewGutterView, MultiviewBadgeView } from "multiview_types.slint";
+import { MultiviewGutter } from "multiview_gutter.slint";
+import { MultiviewMuteBadge } from "multiview_mute_badge.slint";
+
+/// Frameless fullscreen window showing several media side by side (Multiview). Video tiles are native mpv windows placed
+/// on top of this scene by Rust; everything else (background, images, gutters, badge) is drawn here. There is no navigation:
+/// arrow keys and the mouse wheel never switch media.
+export component MultiviewFullscreenWindow inherits Window {
+    title: "RustView - Fullscreen (Multiview)";
+    no-frame: true;
+
+    in property <[MultiviewTileView]> tiles;
+    in property <[MultiviewGutterView]> gutters;
+    in property <MultiviewBadgeView> badge;
+    in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
+    in-out property <bool> is-ready: false;
+
+    callback request-close();
+    callback request-rename();
+    callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
+    callback background-clicked(bool /* is_ctrl */);
+    callback middle-clicked();
+    callback gutter-drag-started(int);
+    callback gutter-dragged(int, length /* distance from drag start */);
+    callback gutter-drag-finished(int);
+    callback gutter-reset();
+    callback gutter-swap(int);
+    callback badge-clicked();
+    callback size-changed();
+
+    // Root window is transparent so mapping on the wrong display before X11 repositioning is invisible
+    background: transparent;
+
+    changed width => {
+        root.size-changed();
+    }
+    changed height => {
+        root.size-changed();
+    }
+
+    forward-focus: fs-focus;
+    fs-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.request-close();
+                return accept;
+            }
+            if (event.text == "w" || event.text == "W") && (event.modifiers.control || event.modifiers.meta) {
+                root.request-close();
+                return accept;
+            }
+            if event.modifiers.control && event.text == "\u{17}" {
+                root.request-close();
+                return accept;
+            }
+            if event.text == Key.F2 {
+                root.request-rename();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    main-canvas := Rectangle {
+        width: 100%;
+        height: 100%;
+        background: root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b);
+        opacity: root.is-ready ? 1.0 : 0.0;
+        animate opacity { duration: 60ms; }
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down {
+                    if event.button == PointerEventButton.left {
+                        root.background-clicked(event.modifiers.control || event.modifiers.meta);
+                    } else if event.button == PointerEventButton.middle {
+                        root.middle-clicked();
+                    }
+                }
+            }
+        }
+
+        if root.background-mode == 2 : Rectangle {
+            width: 100%;
+            height: 100%;
+            background: #181825;
+            opacity: 0.5;
+        }
+
+        for tile[index] in root.tiles : Rectangle {
+            x: tile.x;
+            y: tile.y;
+            width: tile.width;
+            height: tile.height;
+
+            if tile.kind == 0 && tile.image.width > 0 : Image {
+                source: tile.image;
+                width: 100%;
+                height: 100%;
+                image-fit: contain;
+            }
+
+            if tile.is-loading && tile.error-text == "" : AppIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                icon: IconId.loader;
+                size: IconSize.xxl;
+                color: Theme.primary;
+            }
+
+            if tile.error-text != "" : Rectangle {
+                background: Theme.corrupt-bg;
+                border-width: 1px;
+                border-color: #f38ba844;
+
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 10px;
+                    padding: 12px;
+
+                    HorizontalLayout {
+                        alignment: center;
+                        AppIcon {
+                            icon: IconId.status-warning;
+                            size: IconSize.xxl;
+                            color: Theme.status-corrupt;
+                        }
+                    }
+
+                    Text {
+                        text: tile.error-text;
+                        font-size: 13px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            TouchArea {
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down {
+                        if event.button == PointerEventButton.left {
+                            root.tile-clicked(index, event.modifiers.control || event.modifiers.meta);
+                        } else if event.button == PointerEventButton.middle {
+                            root.middle-clicked();
+                        }
+                    }
+                }
+            }
+        }
+
+        for gutter[index] in root.gutters : MultiviewGutter {
+            x: gutter.x;
+            y: gutter.y;
+            width: gutter.width;
+            height: gutter.height;
+            vertical: gutter.vertical;
+
+            drag-started => {
+                root.gutter-drag-started(index);
+            }
+            dragged(distance) => {
+                root.gutter-dragged(index, distance);
+            }
+            drag-finished => {
+                root.gutter-drag-finished(index);
+            }
+            reset => {
+                root.gutter-reset();
+            }
+            swap => {
+                root.gutter-swap(index);
+            }
+        }
+
+        if root.badge.visible : MultiviewMuteBadge {
+            x: root.badge.x;
+            y: root.badge.y;
+            width: root.badge.size;
+            height: root.badge.size;
+            muted: root.badge.muted;
+
+            clicked => {
+                root.badge-clicked();
+            }
+        }
+    }
+}

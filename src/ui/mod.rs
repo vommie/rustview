@@ -44,6 +44,7 @@ pub mod dnd_foldertree_autoscroller;
 pub mod fallback_view;
 pub mod favorites;
 pub mod file_selection;
+pub mod fullscreen_multiview;
 pub mod keyboard_navigation;
 pub mod models;
 pub mod rubberband_selection;

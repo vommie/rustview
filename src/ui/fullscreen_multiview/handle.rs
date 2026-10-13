@@ -1,0 +1,149 @@
+//! Thread-safe face of the Multiview. The session itself (Slint window, tiles, timers) lives on the UI thread; this handle is
+//! what the rest of the application and the mpv observer threads hold: open/close requests, the F2 rename target and the
+//! "is a Multiview open" flag that the drag-and-drop lock, dialogs and the tab embedding already ask the fullscreen
+//! controller about.
+
+use super::eligibility;
+use super::session;
+use crate::library::models::MediaId;
+use crate::settings::SettingsManager;
+use crate::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
+use crate::ui::MainWindow;
+use crate::ui::bridge_image_fullscreen::FullscreenCloseCallback;
+use crate::ui::bridge_state::UiState;
+use parking_lot::{Mutex, RwLock};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
+
+static OPEN: AtomicBool = AtomicBool::new(false);
+
+pub(super) fn set_open(open: bool) {
+    OPEN.store(open, Ordering::SeqCst);
+}
+
+struct Shared {
+    rename_target: Mutex<Option<MediaId>>,
+    main_window: Mutex<Option<slint::Weak<MainWindow>>>,
+    close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>,
+    last_ctrl_click: Mutex<Option<Instant>>,
+}
+
+#[derive(Clone)]
+pub struct MultiviewHandle {
+    shared: Arc<Shared>,
+}
+
+impl Default for MultiviewHandle {
+    fn default() -> Self {
+        Self::new(Arc::new(Mutex::new(None)))
+    }
+}
+
+impl MultiviewHandle {
+    /// `close_handler` is shared with the single fullscreen controller: the same handler releases the modal lock and
+    /// re-syncs the Browse view when either fullscreen mode closes.
+    pub fn new(close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>) -> Self {
+        Self {
+            shared: Arc::new(Shared {
+                rename_target: Mutex::new(None),
+                main_window: Mutex::new(None),
+                close_handler,
+                last_ctrl_click: Mutex::new(None),
+            }),
+        }
+    }
+
+    pub fn is_open(&self) -> bool {
+        OPEN.load(Ordering::SeqCst)
+    }
+
+    /// The media an F2 rename acts on (the tile the user pressed F2 over).
+    pub fn rename_target(&self) -> Option<MediaId> {
+        *self.shared.rename_target.lock()
+    }
+
+    /// Opens the Multiview with the playable items of the current selection. UI thread only. Returns `false` if the
+    /// selection does not contain at least two playable items.
+    pub fn open(
+        &self,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        main_window: slint::Weak<MainWindow>,
+    ) -> bool {
+        let plan = eligibility::plan_open(&state.read());
+        if !plan.summary.is_actionable() {
+            tracing::info!(
+                selected = plan.summary.selected,
+                playable = plan.summary.playable,
+                "[Multiview: Open] Ignored: fewer than two playable files in the selection"
+            );
+            return false;
+        }
+        *self.shared.main_window.lock() = Some(main_window.clone());
+        session::open(
+            self.clone(),
+            plan,
+            settings.clone(),
+            state.clone(),
+            main_window,
+        )
+    }
+
+    /// Closes the Multiview and runs the close handler (re-syncs the Browse view). Callable from any thread.
+    pub fn request_close(&self) {
+        if self.is_open() {
+            let _ = slint::invoke_from_event_loop(|| session::close(true));
+        }
+    }
+
+    /// Closes the Multiview without the close handler because another fullscreen replaces it. UI thread only.
+    pub fn dismiss(&self) {
+        if self.is_open() {
+            session::close(false);
+        }
+    }
+
+    /// Ctrl+click inside a video tile (mpv reports it as a window state change). Two of them within the double-click time
+    /// close the Multiview; a snapshot tab will hang off this gesture later. Callable from any thread.
+    pub fn video_ctrl_click(&self) {
+        let now = Instant::now();
+        let window = Duration::from_millis(MULTIVIEW_DOUBLE_CLICK_MS);
+        let is_double = {
+            let mut last = self.shared.last_ctrl_click.lock();
+            let double = last.is_some_and(|at| now.duration_since(at) < window);
+            *last = if double { None } else { Some(now) };
+            double
+        };
+        if is_double {
+            tracing::info!("[Multiview: Click] Ctrl+double click on a video closes the Multiview");
+            self.request_close();
+        }
+    }
+
+    /// F2 on a tile: remembers which media to rename and asks the main window for the regular rename dialog.
+    pub fn request_rename(&self, media_id: MediaId) {
+        *self.shared.rename_target.lock() = Some(media_id);
+        if let Some(main_window) = self.shared.main_window.lock().clone() {
+            let _ = main_window.upgrade_in_event_loop(|w| w.invoke_request_rename());
+        }
+    }
+
+    pub(super) fn notify_closed(&self) {
+        let handler = self.shared.close_handler.lock().clone();
+        let main_window = self.shared.main_window.lock().clone();
+        if let (Some(handler), Some(main_window)) = (handler, main_window) {
+            let _ = main_window.upgrade_in_event_loop(move |w| {
+                w.set_is_modal_locked(false);
+                handler(0, None, None);
+            });
+        }
+    }
+}
+
+/// Hook for the selection hub (`update_metrics`): costs one atomic load while no Multiview is open.
+pub fn on_selection_changed() {
+    if OPEN.load(Ordering::Relaxed) {
+        session::schedule_reconcile();
+    }
+}
