@@ -10,7 +10,7 @@ use crate::viewer::PointerProbe;
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::reconcile;
-use crate::viewer::multiview::route::{HostMode, RoutedEvent, UiAction, route};
+use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
 use slint::ComponentHandle;
 use std::collections::HashMap;
@@ -100,10 +100,7 @@ impl Session {
         };
         let action = route(HostMode::Fullscreen, origin, event, click);
         if action != UiAction::None {
-            tracing::info!(
-                is_ctrl,
-                "[Multiview: Click] Double click closes the Multiview"
-            );
+            tracing::info!(is_ctrl, ?action, "[Multiview: Click] Double click");
         }
         action
     }
@@ -120,7 +117,7 @@ impl Session {
     /// Brings the tiles in line with the current selection: removed items leave, new items take the freed slots, the
     /// remaining tiles keep running. An empty selection changes nothing.
     pub(super) fn reconcile_now(&mut self) {
-        if !self.populated {
+        if !self.populated || self.instance.lock().origin() != OriginKind::Browse {
             return;
         }
         let wanted = eligibility::wanted_ids(&self.state.read());

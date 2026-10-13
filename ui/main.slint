@@ -15,6 +15,9 @@ import { FloatingChoicePopup } from "floating_choice_popup.slint";
 import { MediaPanelToolbar } from "media_panel_toolbar.slint";
 import { ImageTabPanelToolbar } from "image_tab_panel_toolbar.slint";
 import { ImageViewer } from "image_viewer.slint";
+import { MultiviewCanvas } from "multiview_canvas.slint";
+import { MultiviewTabBus } from "multiview_tab_bus.slint";
+import { MultiviewScreenView } from "multiview_types.slint";
 import { EmptyStateView } from "empty_state_view.slint";
 import { TabGridView } from "tab_grid_view.slint";
 
@@ -35,7 +38,8 @@ export { MissingFolderDeleteDialog } from "missing_folder_delete_dialog.slint";
 export { MissingFileDialog } from "missing_file_dialog.slint";
 export { ImageFullscreenWindow } from "image_fullscreen_window.slint";
 export { MultiviewFullscreenWindow } from "multiview_fullscreen_window.slint";
-export { MultiviewTileView, MultiviewGutterView, MultiviewBadgeView } from "multiview_types.slint";
+export { MultiviewTileView, MultiviewGutterView, MultiviewBadgeView, MultiviewScreenView } from "multiview_types.slint";
+export { MultiviewTabBus } from "multiview_tab_bus.slint";
 export { FavoriteRenameDialog } from "favorite_rename_dialog.slint";
 export { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 export { IconId } from "icons.slint";
@@ -126,6 +130,7 @@ export component MainWindow inherits Window {
 
     // Image / Video Viewer properties
     in-out property <bool> viewer-is-video: false;
+    in-out property <bool> viewer-is-multiview: false;
     in-out property <string> viewer-filename: "";
     in-out property <string> viewer-resolution: "";
     in-out property <bool> viewer-is-loading: false;
@@ -335,6 +340,18 @@ export component MainWindow inherits Window {
     callback viewer-image-clicked();
     callback viewer-image-middle-clicked();
     callback viewer-viewport-geometry-changed(length /* x */, length /* y */, length /* width */, length /* height */);
+    // The area of the viewer tab that a Multiview fills changed (size or position); Rust places the native video windows.
+    callback multiview-viewport-changed();
+
+    /// The area of the Multiview canvas in the window (logical pixels), read by Rust to place the native video windows.
+    public pure function multiview-viewport() -> MultiviewScreenView {
+        return {
+            x: multiview-viewer.absolute-position.x,
+            y: multiview-viewer.absolute-position.y,
+            width: multiview-viewer.width,
+            height: multiview-viewer.height,
+        };
+    }
 
     callback modal-dismiss-requested();
     callback request-rename();
@@ -604,11 +621,11 @@ export component MainWindow inherits Window {
                     root.viewer-refresh();
                     return accept;
                 }
-                if event.text == Key.LeftArrow {
+                if event.text == Key.LeftArrow && !root.viewer-is-multiview {
                     root.viewer-previous();
                     return accept;
                 }
-                if event.text == Key.RightArrow {
+                if event.text == Key.RightArrow && !root.viewer-is-multiview {
                     root.viewer-next();
                     return accept;
                 }
@@ -902,7 +919,7 @@ export component MainWindow inherits Window {
                     }
 
                     image-viewer := ImageViewer {
-                        visible: root.active-view-mode == 1;
+                        visible: root.active-view-mode == 1 && !root.viewer-is-multiview;
                         is-video: root.viewer-is-video;
                         source-image: root.viewer-image;
                         is-loading: root.viewer-is-loading;
@@ -915,6 +932,31 @@ export component MainWindow inherits Window {
                         viewport-geometry-changed(vx, vy, vw, vh) => {
                             root.viewer-viewport-geometry-changed(vx, vy, vw, vh);
                         }
+                    }
+
+                    multiview-viewer := MultiviewCanvas {
+                        visible: root.active-view-mode == 1 && root.viewer-is-multiview;
+                        tiles: MultiviewTabBus.tiles;
+                        gutters: MultiviewTabBus.gutters;
+                        badge: MultiviewTabBus.badge;
+                        screen: MultiviewTabBus.screen;
+                        background-mode: root.viewer-background-mode;
+                        outer-color: #000000;
+                        show-frame: true;
+
+                        changed width => { root.multiview-viewport-changed(); }
+                        changed height => { root.multiview-viewport-changed(); }
+                        changed absolute-position => { root.multiview-viewport-changed(); }
+
+                        tile-clicked(index, is-ctrl) => { MultiviewTabBus.tile-clicked(index, is-ctrl); }
+                        background-clicked(is-ctrl) => { MultiviewTabBus.background-clicked(is-ctrl); }
+                        middle-clicked => { MultiviewTabBus.middle-clicked(); }
+                        gutter-drag-started(index) => { MultiviewTabBus.gutter-drag-started(index); }
+                        gutter-dragged(index, distance) => { MultiviewTabBus.gutter-dragged(index, distance); }
+                        gutter-drag-finished(index) => { MultiviewTabBus.gutter-drag-finished(index); }
+                        gutter-reset => { MultiviewTabBus.gutter-reset(); }
+                        gutter-swap(index) => { MultiviewTabBus.gutter-swap(index); }
+                        badge-clicked => { MultiviewTabBus.badge-clicked(); }
                     }
 
                     tab-grid-view := TabGridView {

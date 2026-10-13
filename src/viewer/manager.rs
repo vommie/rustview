@@ -250,15 +250,6 @@ impl ViewerTabManager {
             .unwrap_or_default()
     }
 
-    /// The medium an F2 rename acts on in the active tab: the one medium, or the tile of a Multiview chosen last.
-    pub fn active_rename_target(&self) -> Option<MediaId> {
-        let tab = self.get_active_tab()?;
-        match tab.multiview() {
-            Some(mv) => mv.instance.lock().rename_target(),
-            None => Some(tab.media_id),
-        }
-    }
-
     /// The tab that owns the Multiview instance `instance_id`.
     pub fn tab_id_of_instance(&self, instance_id: u64) -> Option<TabId> {
         self.tabs.read().get_by_instance_id(instance_id).map(|t| t.id)

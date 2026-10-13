@@ -58,6 +58,7 @@ impl TabContextMenu {
         let has_tabs_to_right = tab_idx + 1 < total_tabs;
         let has_other_tabs = total_tabs > 1;
 
+        let is_multiview = tab.is_multiview();
         let mut builder = CtxMenuBuilder::new()
             .header_with_tooltip(header_title, header_tooltip)
             .action(
@@ -65,7 +66,7 @@ impl TabContextMenu {
                 "Duplicate Tab",
                 None,
                 Some(Icon::Copy),
-                true,
+                !is_multiview,
             )
             .separator()
             .submenu("Move Tab...", Some(Icon::TabMove), has_multiple_tabs, move |sub| {
@@ -129,6 +130,11 @@ impl TabContextMenu {
                 Some(Icon::Close),
                 true,
             );
+
+        // A Multiview tab has no single file: the file sections do not apply (and the drive is not probed for it)
+        if is_multiview {
+            return builder.build();
+        }
 
         // Section 2: Shared File Open Actions (Open, Open With..., Open in File Manager)
         let target_file_exists = tab.file_path.is_file()

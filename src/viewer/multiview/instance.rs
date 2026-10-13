@@ -58,6 +58,8 @@ pub struct MultiviewInstance {
     pub(super) hole_pending: bool,
     pub(super) ticks: u32,
     pub(super) rename_target: Option<MediaId>,
+    /// The rename target was named by a player (not picked by the pointer) and is used by the next rename request.
+    pub(super) rename_pinned: bool,
     pub(super) clicks: ClickDetector,
     pub(super) revision: u64,
 }
@@ -85,6 +87,7 @@ impl MultiviewInstance {
                 hole_pending: false,
                 ticks: 0,
                 rename_target: None,
+                rename_pinned: false,
                 clicks: ClickDetector::default(),
                 revision: 0,
             })
@@ -138,8 +141,18 @@ impl MultiviewInstance {
         self.rename_target
     }
 
+    /// A player reported F2: the next rename request acts on that tile.
     pub fn note_rename_target(&mut self, id: MediaId) {
         self.rename_target = Some(id);
+        self.rename_pinned = true;
+    }
+
+    /// The tile a rename request acts on: the one a player named, else the one under the pointer (see `rename_hovered`).
+    pub fn resolve_rename_target(&mut self, pointer: Option<(i32, i32)>) -> Option<MediaId> {
+        if std::mem::take(&mut self.rename_pinned) {
+            return self.rename_target;
+        }
+        self.rename_hovered(pointer)
     }
 
     /// One click inside the Multiview (Slint tile or background, or a Ctrl+click reported by an mpv player).

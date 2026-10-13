@@ -9,6 +9,7 @@ use crate::settings::SettingsManager;
 use crate::ui::MainWindow;
 use crate::ui::bridge_image_fullscreen::FullscreenCloseCallback;
 use crate::ui::bridge_state::UiState;
+use crate::viewer::ViewerTabManager;
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
@@ -23,6 +24,7 @@ pub(super) fn set_open(open: bool) {
 struct Shared {
     main_window: Mutex<Option<slint::Weak<MainWindow>>>,
     close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>,
+    tab_manager: Mutex<Option<Arc<ViewerTabManager>>>,
     /// The instance shown by the open fullscreen Multiview (it owns the rename target).
     current: Mutex<WeakInstance>,
 }
@@ -46,6 +48,7 @@ impl MultiviewHandle {
             shared: Arc::new(Shared {
                 main_window: Mutex::new(None),
                 close_handler,
+                tab_manager: Mutex::new(None),
                 current: Mutex::new(WeakInstance::new()),
             }),
         }
@@ -62,6 +65,21 @@ impl MultiviewHandle {
         }
         let instance = self.shared.current.lock().upgrade()?;
         instance.lock().rename_target()
+    }
+
+    /// Connects the Multiview to the application once at startup: it needs the main window (rename dialog, close handler,
+    /// actions of the tab view) and the tab manager (converting the fullscreen into a tab).
+    pub fn bind(&self, tab_manager: Arc<ViewerTabManager>, main_window: slint::Weak<MainWindow>) {
+        *self.shared.tab_manager.lock() = Some(tab_manager);
+        *self.shared.main_window.lock() = Some(main_window);
+    }
+
+    pub(super) fn tab_manager(&self) -> Option<Arc<ViewerTabManager>> {
+        self.shared.tab_manager.lock().clone()
+    }
+
+    pub(super) fn main_window(&self) -> Option<slint::Weak<MainWindow>> {
+        self.shared.main_window.lock().clone()
     }
 
     pub(super) fn bind_instance(&self, instance: &SharedInstance) {
@@ -113,6 +131,13 @@ impl MultiviewHandle {
     pub fn request_rename(&self) {
         if let Some(main_window) = self.shared.main_window.lock().clone() {
             let _ = main_window.upgrade_in_event_loop(|w| w.invoke_request_rename());
+        }
+    }
+
+    /// Closes the tab that is shown in the main window (Ctrl+W on a video of a Multiview tab).
+    pub fn close_active_tab(&self) {
+        if let Some(main_window) = self.shared.main_window.lock().clone() {
+            let _ = main_window.upgrade_in_event_loop(|w| w.invoke_viewer_close_tab());
         }
     }
 

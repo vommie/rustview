@@ -6,6 +6,7 @@ use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::BridgeTags;
+use super::multiview::tab_host;
 use super::tab_dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
 use super::tab_icon::tab_icon;
 use super::{MainWindow, TabItemModel};
@@ -313,6 +314,17 @@ impl BridgeViewerTabs {
                 "[BridgeViewerTabs: MiddleClick] Middle-click detected on viewer canvas. Launching fullscreen viewer window directly (auto-play)..."
             );
             fs_ctrl_mid.show(&tm_fs_mid, &set_fs_mid, win_fs_mid.as_weak());
+        });
+
+        // 10a. The area of a Multiview tab changed (window or sidebar resize): place its native video windows
+        let win_mv_geom = window.clone_strong();
+        let tm_mv_geom = tab_manager.clone();
+        let set_mv_geom = settings.clone();
+        let fs_mv_geom = fullscreen_controller.clone();
+        window.on_multiview_viewport_changed(move || {
+            if win_mv_geom.get_viewer_is_multiview() {
+                Self::sync_video_embedding(&win_mv_geom, &tm_mv_geom, &fs_mv_geom, &set_mv_geom);
+            }
         });
 
         // 10. Viewport Geometry Changed Callback
@@ -679,11 +691,13 @@ impl BridgeViewerTabs {
         let view_mode = window.get_active_view_mode();
 
         if view_mode == 0 {
+            tab_host::suspend();
             tab_manager.hide_all_video_subwindows();
             return;
         }
 
         if view_mode == 2 {
+            tab_host::suspend();
             return;
         }
 
@@ -691,6 +705,12 @@ impl BridgeViewerTabs {
         let active_tab_id = active_tab.as_ref().map(|t| t.id);
 
         tab_manager.hide_video_subwindows_except(active_tab_id);
+
+        if let Some(multiview) = active_tab.as_ref().and_then(|t| t.multiview()) {
+            tab_host::sync(window, tab_manager, &multiview.instance);
+            return;
+        }
+        tab_host::suspend();
 
         let is_video = active_tab
             .as_ref()
@@ -1602,21 +1622,26 @@ impl BridgeViewerTabs {
 
         // 2. Synchronize Tab View Content when in single tab viewer mode
         if target_mode == 1 && let Some(active_tab) = tab_manager.get_active_tab() {
-            let is_video = matches!(active_tab.payload, TabPayload::Video(_));
+            let is_video = active_tab.is_video();
             window.set_viewer_is_video(is_video);
+            window.set_viewer_is_multiview(active_tab.is_multiview());
             window.set_viewer_filename(active_tab.title.clone().into());
 
-            let res_str = if active_tab.record.width > 0 && active_tab.record.height > 0 {
-                format!(
-                    "{} x {}",
-                    active_tab.record.width, active_tab.record.height
-                )
+            let (display_w, display_h) = if active_tab.is_multiview() {
+                active_tab.display_size()
+            } else {
+                (active_tab.record.width, active_tab.record.height)
+            };
+            let res_str = if display_w > 0 && display_h > 0 {
+                format!("{} x {}", display_w, display_h)
             } else {
                 String::new()
             };
             window.set_viewer_resolution(res_str.into());
 
-            let (has_prev, has_next) = {
+            let (has_prev, has_next) = if active_tab.is_multiview() {
+                (false, false)
+            } else {
                 let st = state.read();
                 let current_pos = if !st.active_indices.is_empty() {
                     st.active_indices.iter().position(|&idx| {
@@ -1681,6 +1706,7 @@ impl BridgeViewerTabs {
             Self::scroll_active_tab_into_view(window, tab_manager, settings);
         } else {
             window.set_viewer_is_video(false);
+            window.set_viewer_is_multiview(false);
             {
                 let mut st = state.write();
                 st.active_tab_media_ids.clear();

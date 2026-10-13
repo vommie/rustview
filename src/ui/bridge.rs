@@ -28,6 +28,7 @@ use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::dnd_foldertree_autoscroller::DndFolderTreeAutoScroller;
 use super::favorites::FavoriteManager;
 use super::keyboard_navigation::{handle_keyboard_navigate, KeyboardNavigateParams};
+use super::multiview::tab_host;
 use super::rubberband_selection::RubberbandAutoScroller;
 use super::thumbnail_badges::ThumbnailBadgeBridge;
 use super::{FileRenameDialog, MainWindow};
@@ -240,6 +241,11 @@ impl UiBridge {
         let last_click = Arc::new(Mutex::new(None));
 
         BridgeSidebarPanelTabs::init(&window, &settings, &state);
+
+        fullscreen_controller
+            .multiview()
+            .bind(tab_manager.clone(), window.as_weak());
+        tab_host::bind(&window, fullscreen_controller.multiview().clone());
 
         let win_fs_close = window.as_weak();
         let tm_fs_close = tab_manager.clone();
@@ -978,7 +984,7 @@ impl UiBridge {
         }
 
         if active_mode == 1 {
-            if let Some(media_id) = params.tab_manager.get_active_media_id() {
+            if let Some(media_id) = tab_host::rename_target(params.tab_manager) {
                 Self::open_media_rename(media_id, &params);
             }
             return;

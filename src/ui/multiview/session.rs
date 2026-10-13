@@ -262,15 +262,28 @@ fn finish_open(generation: u64, attempt: u32) {
 /// Closes the Multiview. With `notify` the application's close handler runs (re-syncs the Browse view); without it another
 /// fullscreen is replacing this one. Safe to call when nothing is open.
 pub(super) fn close(notify: bool) {
-    let taken = SESSION.with(|cell| cell.try_borrow_mut().map(|mut g| g.take()));
-    let session = match taken {
+    let session = match take_session() {
         Ok(Some(session)) => session,
         Ok(None) => return,
-        Err(_) => {
+        Err(()) => {
             let _ = slint::invoke_from_event_loop(move || close(notify));
             return;
         }
     };
+    finish_close(session, notify);
+}
+
+/// Takes the session out of its slot. `Err` means the slot is borrowed right now (an event handler is running).
+pub(super) fn take_session() -> Result<Option<Session>, ()> {
+    SESSION.with(|cell| {
+        cell.try_borrow_mut()
+            .map(|mut slot| slot.take())
+            .map_err(|_| ())
+    })
+}
+
+/// Shuts a session that was taken out of its slot down; its instance is destroyed with it unless somebody else holds it.
+pub(super) fn finish_close(session: Session, notify: bool) {
     handle::set_open(false);
     let handle = session.handle.clone();
     session.shutdown();
@@ -374,14 +387,17 @@ impl Session {
         }
     }
 
-    /// Hides the window; dropping the session then releases the instance, whose last reference shuts the players down
-    /// before their windows are destroyed.
-    fn shutdown(self) {
+    /// Hides the window and empties its models (the images would otherwise stay in memory until the next open); dropping
+    /// the session then releases the instance, whose last reference shuts the players down before their windows are
+    /// destroyed.
+    pub(super) fn shutdown(self) {
         self.debounce.stop();
         self.tick.stop();
         if let Some(win) = self.window.upgrade() {
             win.set_is_ready(false);
             let _ = win.hide();
         }
+        self.tile_model.set_vec(Vec::new());
+        self.gutter_model.set_vec(Vec::new());
     }
 }

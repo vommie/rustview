@@ -112,6 +112,7 @@ impl MultiviewInstance {
         let target = pick_target(under_pointer, self.hovered, self.last_hovered, &ids);
         if let Some(id) = target {
             self.rename_target = Some(id);
+            self.rename_pinned = false;
         }
         target
     }

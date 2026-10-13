@@ -1,7 +1,7 @@
 //! Conversion of the Slint-free description of a Multiview (physical pixels) into the Slint view structs (logical pixels).
 
 use crate::library::models::MediaId;
-use crate::ui::{MultiviewBadgeView, MultiviewGutterView, MultiviewTileView};
+use crate::ui::{MultiviewBadgeView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView};
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::model::TileKind;
 use crate::viewer::multiview::view::{BadgeView, GutterView, HostedView, TileView};
@@ -90,6 +90,17 @@ pub fn badge_view(badge: Option<&BadgeView>, dpi: f32) -> MultiviewBadgeView {
             size: 0.0,
             muted: false,
         },
+    }
+}
+
+/// Where the projected container sits inside the canvas of the host.
+pub fn screen_view(view: &HostedView) -> MultiviewScreenView {
+    let Rect { x, y, w, h } = view.screen;
+    MultiviewScreenView {
+        x: logical(x, view.dpi),
+        y: logical(y, view.dpi),
+        width: logical(w, view.dpi),
+        height: logical(h, view.dpi),
     }
 }
 

@@ -5,7 +5,9 @@
 //! A dead weak reference means the Multiview is gone, so the event is dropped.
 
 use super::handle::MultiviewHandle;
-use super::session;
+use super::session::{self, Session};
+use super::session_convert;
+use super::tab_host;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
 use crate::viewer::multiview::instance::WeakInstance;
@@ -64,18 +66,17 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
     drop(instance);
     let action = route(mode, origin, routed, click);
     if click == ClickKind::CtrlDouble && action != UiAction::None {
-        tracing::info!(
-            ?action,
-            "[Multiview: Click] Ctrl+double click on a video closes the Multiview"
-        );
+        tracing::info!(?action, "[Multiview: Click] Ctrl+double click on a video");
     }
     execute(action, handle);
 }
 
 /// Shows the changed state of an instance in the host that presents it.
 fn refresh_host(mode: HostMode) {
-    if mode == HostMode::Fullscreen {
-        session::with_session(session::Session::refresh);
+    match mode {
+        HostMode::Fullscreen => session::with_session(Session::refresh),
+        HostMode::TabView => tab_host::refresh(),
+        HostMode::Hidden | HostMode::TabGrid => {}
     }
 }
 
@@ -83,12 +84,14 @@ fn refresh_host(mode: HostMode) {
 pub(super) fn execute(action: UiAction, handle: &MultiviewHandle) {
     match action {
         UiAction::None => {}
-        UiAction::CloseFullscreen | UiAction::ConvertToTab => session::close(true),
+        UiAction::CloseFullscreen => session::close(true),
+        UiAction::ConvertToTab => session_convert::convert_to_tab(),
         UiAction::RequestRename => handle.request_rename(),
+        UiAction::CloseActiveTab => handle.close_active_tab(),
         other => {
             tracing::debug!(
                 ?other,
-                "[Multiview: Router] The action does not apply to the fullscreen host"
+                "[Multiview: Router] The action is not available yet"
             );
         }
     }

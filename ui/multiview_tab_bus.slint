@@ -1,0 +1,21 @@
+import { MultiviewTileView, MultiviewGutterView, MultiviewBadgeView, MultiviewScreenView } from "multiview_types.slint";
+
+/// What the Multiview shown in the active viewer tab draws, and the events it reports. Rust fills the properties from the
+/// instance of the tab and handles the callbacks; the canvas in the main window just binds to them, so the main window needs
+/// no Multiview properties of its own.
+export global MultiviewTabBus {
+    in-out property <[MultiviewTileView]> tiles;
+    in-out property <[MultiviewGutterView]> gutters;
+    in-out property <MultiviewBadgeView> badge;
+    in-out property <MultiviewScreenView> screen;
+
+    callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
+    callback background-clicked(bool /* is_ctrl */);
+    callback middle-clicked();
+    callback gutter-drag-started(int);
+    callback gutter-dragged(int, length /* distance from drag start */);
+    callback gutter-drag-finished(int);
+    callback gutter-reset();
+    callback gutter-swap(int);
+    callback badge-clicked();
+}
