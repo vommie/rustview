@@ -11,6 +11,9 @@ use crate::settings::LogObscurer;
 use crate::system::SystemFileHandler;
 use std::path::{Path, PathBuf};
 
+/// Reason appended to the tooltip of refresh entries while another scan or refresh holds the busy lock.
+const DISABLED_BUSY_REASON: &str = "Disabled: Another scan or refresh operation is currently in progress";
+
 /// Domain context menu builder and action handler for folder tree nodes.
 pub struct FolderContextMenu;
 
@@ -98,21 +101,25 @@ impl FolderContextMenu {
         let can_refresh = !target_node.is_deleted && !is_busy;
         builder = builder.separator();
         builder = builder.submenu("Refresh...", Some(Icon::Refresh), can_refresh, |sub| {
-            let disabled_busy_tip = "Disabled: Another scan or refresh operation is currently in progress";
-            let disabled_missing_tip = "Disabled: Folder does not exist on physical disk";
-
-            let refresh_file_tip = if target_node.is_deleted {
-                disabled_missing_tip
-            } else if is_busy {
-                disabled_busy_tip
-            } else {
-                "Scan and refresh all files in this folder (Full re-indexing)"
+            // Every tooltip keeps the description of the function; a disabled entry appends the reason.
+            let reason_tip = |description: &str| {
+                if target_node.is_deleted {
+                    format!("{}\nDisabled: Folder does not exist on physical disk", description)
+                } else if is_busy {
+                    format!("{}\n{}", description, DISABLED_BUSY_REASON)
+                } else {
+                    description.to_string()
+                }
             };
 
+            let refresh_file_tip = reason_tip("Scan and refresh all files in this folder (Full re-indexing)");
+            let refresh_meta_tip = reason_tip("Refresh metadata and file sizes without re-generating thumbnails");
+            let refresh_relative_tip = reason_tip("Rescan this folder and its subdirectories only");
+            let refresh_tree_description = "Perform a complete scan of the entire directory tree on disk";
             let refresh_tree_tip = if is_busy {
-                disabled_busy_tip
+                format!("{}\n{}", refresh_tree_description, DISABLED_BUSY_REASON)
             } else {
-                "Perform a complete scan of the entire directory tree on disk"
+                refresh_tree_description.to_string()
             };
 
             sub.action_with_tooltip(
@@ -129,7 +136,7 @@ impl FolderContextMenu {
                 None,
                 Some(Icon::Refresh),
                 can_refresh,
-                if can_refresh { "Refresh metadata and file sizes without re-generating thumbnails" } else { refresh_file_tip },
+                refresh_meta_tip,
             )
             .separator()
             .action_with_tooltip(
@@ -146,19 +153,20 @@ impl FolderContextMenu {
                 None,
                 Some(Icon::Refresh),
                 can_refresh,
-                if can_refresh { "Rescan this folder and its subdirectories only" } else { refresh_file_tip },
+                refresh_relative_tip,
             )
         });
 
         // 3. Add to Favorites (with disabled reason tooltip)
         builder = builder.separator();
         let can_favorite = !is_favorite && !target_node.is_deleted;
+        let favorite_description = "Bookmark this folder in the Favorites sidebar";
         let favorite_tip = if is_favorite {
-            "Disabled: Folder is already added to Favorites"
+            format!("{}\nDisabled: Folder is already added to Favorites", favorite_description)
         } else if target_node.is_deleted {
-            "Disabled: Cannot add a missing or deleted folder to Favorites"
+            format!("{}\nDisabled: Cannot add a missing or deleted folder to Favorites", favorite_description)
         } else {
-            "Bookmark this folder in the Favorites sidebar"
+            favorite_description.to_string()
         };
 
         builder = builder.action_with_tooltip(

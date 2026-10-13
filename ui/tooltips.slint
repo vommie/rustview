@@ -21,6 +21,14 @@ export global TooltipSettings {
     in-out property <length> max-width: 340px;
 }
 
+/// Single source of truth for the reasons appended to tooltips of disabled elements.
+/// Tooltips stay visible on disabled elements; dynamic ones append one of these lines (after a line break)
+/// so the user learns why the action is currently unavailable.
+export global TooltipReasons {
+    /// Same wording as `wording::busy_hint()` (Rust, context menus), so toolbar and menu entries read identically.
+    out property <string> busy: "Disabled: Another scan, refresh or thumbnail operation is currently in progress";
+}
+
 /// Global non-blocking Tooltip Overlay state manager.
 /// Manages tooltip visibility and positioning without creating modal popup window grabs.
 export global GlobalTooltip {

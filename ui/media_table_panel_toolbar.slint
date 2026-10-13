@@ -2,6 +2,7 @@ import { Theme } from "styles.slint";
 import { IconId } from "icons.slint";
 import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
 import { ToolbarSearchField } from "toolbar_search_field.slint";
+import { TooltipReasons } from "tooltips.slint";
 
 /// Dedicated modular toolbar for the Media Table View.
 /// Integrates Expander, Virtual Folder Toggle, Media Type Selector, Filter Search, Refresh, and ViewMode Switcher.
@@ -30,13 +31,13 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
     // 2. Virtual Folder Toggle Button
     ToolbarButton {
         icon: root.is-virtual-folder ? IconId.virtual-folder-off : IconId.virtual-folder-on;
-        tooltip: root.virtual-folder-tooltip != "" ? root.virtual-folder-tooltip : (
-            !root.is-virtual-folder-enabled
-                ? "No subfolders available in current folder"
-                : (root.is-virtual-folder
-                    ? "Disable recursive folder view (show current folder only)"
-                    : "Recursive folder view: Show media from current folder and all subfolders")
-        );
+        // The text from Rust already contains the function description and, if disabled, the reason (see `virtual_folder_wording`).
+        tooltip: (root.virtual-folder-tooltip != "" ? root.virtual-folder-tooltip : (
+            (root.is-virtual-folder
+                ? "Disable recursive folder view (show current folder only)"
+                : "Recursive folder view: Show media from current folder and all subfolders")
+            + (root.is-virtual-folder-enabled ? "" : "\nDisabled: No subfolders available in current folder")
+        )) + (root.is-busy ? "\n" + TooltipReasons.busy : "");
         is-active: root.is-virtual-folder;
         is-enabled: root.is-virtual-folder-enabled && !root.is-busy;
         clicked => {
@@ -53,7 +54,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
         is-enabled: !root.is-busy;
         button-display-mode: 0; // Icon only on main button
         popup-display-mode: 2;  // Icon + Text in dropdown options
-        tooltip: "Filter media types (Videos, Images, Videos & Images)";
+        tooltip: "Filter media types (Videos, Images, Videos & Images)" + (root.is-busy ? "\n" + TooltipReasons.busy : "");
 
         model: [
             {
@@ -96,7 +97,7 @@ export component MediaTablePanelToolbar inherits PanelToolbar {
     // 6. Refresh Media Button
     ToolbarButton {
         icon: IconId.refresh;
-        tooltip: "Scan and refresh media in current folder";
+        tooltip: "Scan and refresh media in current folder" + (root.is-busy ? "\n" + TooltipReasons.busy : "");
         is-enabled: !root.is-busy;
         clicked => { root.refresh-clicked(); }
     }

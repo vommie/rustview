@@ -369,7 +369,11 @@ impl MediaContextMenu {
         // Enabled only if the selection contains a valid video (no drive access) and nothing else is running.
         let can_regenerate_thumbs = meta.regeneration.is_actionable() && !is_busy;
         let regen_thumb_tooltip = if is_busy && meta.regeneration.is_actionable() {
-            ThumbnailRegeneration::busy_hint().to_string()
+            format!(
+                "{}\n{}",
+                ThumbnailRegeneration::hint(&meta.regeneration),
+                ThumbnailRegeneration::busy_hint()
+            )
         } else {
             ThumbnailRegeneration::hint(&meta.regeneration)
         };

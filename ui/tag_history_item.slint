@@ -6,6 +6,8 @@ import { TooltipHost } from "tooltips.slint";
 export component TagHistoryItemView inherits Rectangle {
     in property <TagHistoryItemModel> item;
     in property <bool> is-enabled: true;
+    /// Reason appended to the tooltip while the item is disabled.
+    in property <string> disabled-hint: "Disabled: No file selected. Select a file to assign this tag";
     callback clicked();
 
     width: content-layout.preferred-width;
@@ -36,12 +38,13 @@ export component TagHistoryItemView inherits Rectangle {
 
     // Clean hierarchical tooltip without action text
     tooltip-host := TooltipHost {
-        text: root.item.tooltip != "" ? root.item.tooltip : root.item.display-text;
-        is-enabled: root.is-enabled;
+        text: (root.item.tooltip != "" ? root.item.tooltip : root.item.display-text)
+            + (root.is-enabled ? "" : "\n" + root.disabled-hint);
     }
 
+    // Stays enabled even when the item is disabled, otherwise Slint reports no hover and the tooltip
+    // could never appear. Clicks are filtered below.
     touch-area := TouchArea {
-        enabled: root.is-enabled;
         mouse-cursor: root.is-enabled ? pointer : default;
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
@@ -50,7 +53,9 @@ export component TagHistoryItemView inherits Rectangle {
         }
         clicked => {
             tooltip-host.on-hover-leave();
-            root.clicked();
+            if root.is-enabled {
+                root.clicked();
+            }
         }
         moved => {
             tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);

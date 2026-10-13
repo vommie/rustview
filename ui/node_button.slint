@@ -38,7 +38,6 @@ export component NodeButton inherits Rectangle {
 
     tooltip-host := TooltipHost {
         text: root.tooltip;
-        is-enabled: root.enabled;
     }
 
     // 1. Branch / Parent Node Toggle Button Box (+ / -)
@@ -50,8 +49,9 @@ export component NodeButton inherits Rectangle {
         border-width: root.btn-border-width;
         border-color: btn-touch.has-hover ? root.hover-border-color : root.button-border-color;
 
+        // Stays enabled even when the button is disabled, otherwise Slint reports no hover and the tooltip
+        // could never appear. Clicks are filtered below.
         btn-touch := TouchArea {
-            enabled: root.enabled;
             mouse-cursor: root.enabled ? pointer : default;
             pointer-event(event) => {
                 if event.kind == PointerEventKind.down {
@@ -60,9 +60,11 @@ export component NodeButton inherits Rectangle {
             }
             clicked => {
                 tooltip-host.on-hover-leave();
-                root.is-expanded = !root.is-expanded;
-                root.toggled(root.is-expanded);
-                root.clicked();
+                if root.enabled {
+                    root.is-expanded = !root.is-expanded;
+                    root.toggled(root.is-expanded);
+                    root.clicked();
+                }
             }
             moved => {
                 tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);

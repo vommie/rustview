@@ -179,12 +179,12 @@ export component SearchField inherits Rectangle {
                 regex-tooltip-host := TooltipHost {
                     text: root.regex-tooltip;
                     shortcut: ".*";
-                    is-enabled: root.is-enabled;
                 }
 
+                // Stays enabled even when the field is disabled, otherwise Slint reports no hover and the tooltip
+                // could never appear. Clicks are filtered below.
                 regex-touch := TouchArea {
-                    enabled: root.is-enabled;
-                    mouse-cursor: pointer;
+                    mouse-cursor: root.is-enabled ? pointer : default;
                     pointer-event(event) => {
                         if event.kind == PointerEventKind.down {
                             regex-tooltip-host.on-hover-leave();
@@ -192,8 +192,10 @@ export component SearchField inherits Rectangle {
                     }
                     clicked => {
                         regex-tooltip-host.on-hover-leave();
-                        root.is-regex = !root.is-regex;
-                        root.regex-toggled(root.is-regex);
+                        if root.is-enabled {
+                            root.is-regex = !root.is-regex;
+                            root.regex-toggled(root.is-regex);
+                        }
                     }
                     moved => {
                         regex-tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);
@@ -235,12 +237,12 @@ export component SearchField inherits Rectangle {
                 clear-tooltip-host := TooltipHost {
                     text: root.clear-tooltip;
                     shortcut: "Esc";
-                    is-enabled: root.is-enabled;
                 }
 
+                // Stays enabled even when the field is disabled, otherwise Slint reports no hover and the tooltip
+                // could never appear. Clicks are filtered below.
                 clear-touch := TouchArea {
-                    enabled: root.is-enabled;
-                    mouse-cursor: pointer;
+                    mouse-cursor: root.is-enabled ? pointer : default;
                     pointer-event(event) => {
                         if event.kind == PointerEventKind.down {
                             clear-tooltip-host.on-hover-leave();
@@ -248,10 +250,12 @@ export component SearchField inherits Rectangle {
                     }
                     clicked => {
                         clear-tooltip-host.on-hover-leave();
-                        root.text = "";
-                        root.search-changed("");
-                        root.cleared();
-                        input.focus();
+                        if root.is-enabled {
+                            root.text = "";
+                            root.search-changed("");
+                            root.cleared();
+                            input.focus();
+                        }
                     }
                     moved => {
                         clear-tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);

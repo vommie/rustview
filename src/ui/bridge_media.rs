@@ -10,6 +10,7 @@ use super::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::video_preview_animator::VideoPreviewAnimator;
+use super::virtual_folder_wording;
 use super::{MainWindow, MediaItemView};
 use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::Library;
@@ -441,10 +442,11 @@ impl BridgeMedia {
     ) {
         let st = state.read();
 
-        let (is_enabled, tooltip) = if st.is_query_active && st.filter.scope_mode == ScopeMode::Global {
-            (false, "Recursive folder view is disabled during global query".to_string())
+        let is_virtual = st.is_virtual_folder_mode;
+        let (is_enabled, disabled_reason): (bool, Option<&str>) = if st.is_query_active && st.filter.scope_mode == ScopeMode::Global {
+            (false, Some("Recursive folder view is disabled during global query"))
         } else if st.is_query_active {
-            (false, "Recursive folder view is disabled while query filter is active".to_string())
+            (false, Some("Recursive folder view is disabled while query filter is active"))
         } else if let Some(folder_id) = st.current_folder_id {
             let has_subfolders = library
                 .folders()
@@ -452,21 +454,19 @@ impl BridgeMedia {
                 .map(|ids| ids.len() > 1)
                 .unwrap_or(false);
 
-            if !has_subfolders {
-                (false, "No subfolders available in current folder".to_string())
-            } else if st.is_virtual_folder_mode {
-                (true, "Disable recursive folder view (show current folder only)".to_string())
+            if has_subfolders {
+                (true, None)
             } else {
-                (true, "Recursive folder view: Show media from current folder and all subfolders".to_string())
+                (false, Some("No subfolders available in current folder"))
             }
         } else {
-            (false, "No folder selected".to_string())
+            (false, Some("No folder selected"))
         };
 
         drop(st);
 
         window.set_is_virtual_folder_btn_enabled(is_enabled);
-        window.set_virtual_folder_tooltip(tooltip.into());
+        window.set_virtual_folder_tooltip(virtual_folder_wording::tooltip(is_virtual, disabled_reason).into());
     }
 
     pub fn toggle_virtual_folder_mode(

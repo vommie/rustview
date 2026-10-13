@@ -19,7 +19,7 @@ export component ImageTabPanelToolbar inherits PanelToolbar {
     ToolbarButton {
         icon: IconId.chevron-left;
         text: "Prev";
-        tooltip: "Previous image in list (Left Arrow)";
+        tooltip: "Previous image in list (Left Arrow)" + (root.has-previous ? "" : "\nDisabled: There is no previous image in the list");
         is-enabled: root.has-previous;
         clicked => { root.previous-clicked(); }
     }
@@ -28,7 +28,7 @@ export component ImageTabPanelToolbar inherits PanelToolbar {
         icon: IconId.chevron-right;
         icon-trailing: true;
         text: "Next";
-        tooltip: "Next image in list (Right Arrow)";
+        tooltip: "Next image in list (Right Arrow)" + (root.has-next ? "" : "\nDisabled: There is no next image in the list");
         is-enabled: root.has-next;
         clicked => { root.next-clicked(); }
     }

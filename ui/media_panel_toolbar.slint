@@ -3,6 +3,7 @@ import { IconId } from "icons.slint";
 import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
 import { ToolbarThumbWidthControl } from "toolbar_thumb_width_control.slint";
 import { ToolbarSearchField } from "toolbar_search_field.slint";
+import { TooltipReasons } from "tooltips.slint";
 
 /// Persistent, unified toolbar for the central Media Area.
 /// Houses the Thumbnail Width Slider (visible in Grid View), Regenerate Thumbnails button, Virtual Folder Toggle, Media Type Selector,
@@ -51,7 +52,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
     // 3a. Regenerate Thumbnail(s) of the selection (videos at a random position)
     ToolbarButton {
         icon: IconId.regenerate-thumbnail;
-        tooltip: root.regenerate-thumbs-tooltip;
+        tooltip: root.regenerate-thumbs-tooltip + (root.is-busy ? "\n" + TooltipReasons.busy : "");
         is-enabled: root.is-regenerate-thumbs-enabled && !root.is-busy;
         clicked => { root.regenerate-thumbs-clicked(); }
     }
@@ -61,13 +62,13 @@ export component MediaPanelToolbar inherits PanelToolbar {
     // 3b. Virtual Folder / Recursive Subfolders View Toggle Button
     ToolbarButton {
         icon: root.is-virtual-folder ? IconId.virtual-folder-off : IconId.virtual-folder-on;
-        tooltip: root.virtual-folder-tooltip != "" ? root.virtual-folder-tooltip : (
-            !root.is-virtual-folder-enabled
-                ? "No subfolders available in current folder"
-                : (root.is-virtual-folder
-                    ? "Disable recursive folder view (show current folder only)"
-                    : "Recursive folder view: Show media from current folder and all subfolders")
-        );
+        // The text from Rust already contains the function description and, if disabled, the reason (see `virtual_folder_wording`).
+        tooltip: (root.virtual-folder-tooltip != "" ? root.virtual-folder-tooltip : (
+            (root.is-virtual-folder
+                ? "Disable recursive folder view (show current folder only)"
+                : "Recursive folder view: Show media from current folder and all subfolders")
+            + (root.is-virtual-folder-enabled ? "" : "\nDisabled: No subfolders available in current folder")
+        )) + (root.is-busy ? "\n" + TooltipReasons.busy : "");
         is-active: root.is-virtual-folder;
         is-enabled: root.is-virtual-folder-enabled && !root.is-busy;
         clicked => {
@@ -84,7 +85,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
         is-enabled: !root.is-busy;
         button-display-mode: 0; // Icon only on main button
         popup-display-mode: 2;  // Icon + Text in dropdown options
-        tooltip: "Filter media types (Videos, Images, Videos & Images)";
+        tooltip: "Filter media types (Videos, Images, Videos & Images)" + (root.is-busy ? "\n" + TooltipReasons.busy : "");
 
         model: [
             {
@@ -127,7 +128,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
     // 7. Refresh Media Button
     ToolbarButton {
         icon: IconId.refresh;
-        tooltip: "Scan and refresh media in current folder";
+        tooltip: "Scan and refresh media in current folder" + (root.is-busy ? "\n" + TooltipReasons.busy : "");
         is-enabled: !root.is-busy;
         clicked => { root.refresh-clicked(); }
     }

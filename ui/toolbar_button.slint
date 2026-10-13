@@ -47,11 +47,11 @@ export component ToolbarButton inherits Rectangle {
         text: root.tooltip;
         shortcut: root.tooltip-shortcut;
         delay: root.tooltip-delay;
-        is-enabled: root.is-enabled;
     }
 
+    // Stays enabled even when the button is disabled, otherwise Slint reports no hover and the tooltip
+    // (which explains why the action is unavailable) could never appear. Clicks are filtered below.
     touch-area := TouchArea {
-        enabled: root.is-enabled;
         mouse-cursor: root.is-enabled ? pointer : default;
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
@@ -60,7 +60,9 @@ export component ToolbarButton inherits Rectangle {
         }
         clicked => {
             tooltip-host.on-hover-leave();
-            root.clicked();
+            if root.is-enabled {
+                root.clicked();
+            }
         }
         moved => {
             tooltip-host.on-mouse-move(self.mouse-x, self.mouse-y);

@@ -82,7 +82,7 @@ export component TabGridPanelToolbar inherits PanelToolbar {
     // 5. Close All Tabs Action Button
     ToolbarButton {
         text: "Close All";
-        tooltip: "Close all open tabs in this session";
+        tooltip: "Close all open tabs in this session" + (root.total-tabs > 0 ? "" : "\nDisabled: There are no open tabs");
         is-enabled: root.total-tabs > 0;
         clicked => { root.close-all-clicked(); }
     }

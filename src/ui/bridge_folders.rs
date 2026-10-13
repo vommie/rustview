@@ -6,6 +6,7 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
+use super::virtual_folder_wording;
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::MainWindow;
 use crate::icons::Icon;
@@ -1227,7 +1228,7 @@ impl BridgeFolders {
         status_msg: &str,
         empty_title: &str,
         empty_icon: Icon,
-        virtual_folder_tooltip: &str,
+        virtual_folder_disabled_reason: &str,
     ) {
         {
             let mut st = state.write();
@@ -1253,7 +1254,9 @@ impl BridgeFolders {
         window.set_tag_filter_text("".into());
         window.set_is_virtual_folder(false);
         window.set_is_virtual_folder_btn_enabled(false);
-        window.set_virtual_folder_tooltip(virtual_folder_tooltip.into());
+        window.set_virtual_folder_tooltip(
+            virtual_folder_wording::tooltip(false, Some(virtual_folder_disabled_reason)).into(),
+        );
         window.set_virtual_folder_count(0);
 
         window.set_empty_state_active(true);

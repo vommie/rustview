@@ -54,6 +54,7 @@ pub mod tag_history;
 pub mod thumbnail_badges;
 pub mod thumbnail_regeneration;
 pub mod video_preview_animator;
+pub mod virtual_folder_wording;
 
 pub use bridge::{RenameActionParams, UiBridge};
 pub use bridge_ctx_menu::{FolderMenuContext, MediaMenuContext};

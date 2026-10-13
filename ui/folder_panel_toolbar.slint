@@ -2,6 +2,7 @@ import { Theme } from "styles.slint";
 import { IconId } from "icons.slint";
 import { PanelToolbar, ToolbarButton, ToolbarSpacer, ToolbarSeparator, ToolbarSelectButton, ToolbarSelectItem } from "panel_toolbar.slint";
 import { Throbber } from "throbber.slint";
+import { TooltipReasons } from "tooltips.slint";
 
 /// Specialized, fully encapsulated horizontal toolbar for the Folders Panel.
 /// Houses folder tree control actions such as rescanning, structure refresh, active background throbber indicator,
@@ -60,7 +61,10 @@ export component FolderPanelToolbar inherits PanelToolbar {
         button-display-mode: 0; // Icon only on main button
         popup-display-mode: 2;  // Icon + Text in dropdown options
         popup-align-right: true;
-        tooltip: "Scan and refresh folder tree (Entire Tree or Selected Folder)";
+        tooltip: "Scan and refresh folder tree (Entire Tree or Selected Folder)"
+            + (root.is-refreshing
+                ? "\nDisabled: The folder tree is currently being scanned"
+                : (root.is-busy ? "\n" + TooltipReasons.busy : ""));
 
         model: [
             {
