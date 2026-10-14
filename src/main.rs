@@ -10,6 +10,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+/// Work that starts once, after the first rendered frame.
+type AfterFirstFrame = Rc<std::cell::RefCell<Option<Box<dyn FnOnce()>>>>;
+
 #[derive(Debug, Clone)]
 struct WindowGeometryTracker {
     last_unmaximized_width: u32,
@@ -140,11 +143,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Background work that is not needed for the first frame starts after it, so that it does not compete with it for CPU: the
     // folder audit and the monitor diagnostics (subprocesses). Without a rendering notifier it starts at once.
     let audit_db = library.raw_db().clone();
-    let after_first_frame: Rc<std::cell::RefCell<Option<Box<dyn FnOnce()>>>> =
-        Rc::new(std::cell::RefCell::new(Some(Box::new(move || {
-            rustview::library::FolderDiagnostics::spawn_background_audit(audit_db, "startup");
-            SystemDisplayService::spawn_monitor_diagnostics();
-        }))));
+    let after_first_frame: AfterFirstFrame = Rc::new(std::cell::RefCell::new(Some(Box::new(move || {
+        rustview::library::FolderDiagnostics::spawn_background_audit(audit_db, "startup");
+        SystemDisplayService::spawn_monitor_diagnostics();
+    }))));
     let after_first_frame_render = after_first_frame.clone();
     if let Err(e) = main_window
         .window()
