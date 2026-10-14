@@ -26,6 +26,9 @@ pub enum BarOwner {
     TabView,
 }
 
+/// Called with the tile and the action id of a clicked bar button.
+type ActionHandler = Rc<dyn Fn(i32, i32)>;
+
 /// What a host wants the bar to show.
 pub struct BarRequest {
     pub owner: BarOwner,
@@ -38,7 +41,7 @@ pub struct BarRequest {
     /// Physical pixels per logical pixel of the host.
     pub scale: f32,
     pub actions: Vec<MultiviewActionView>,
-    pub on_action: Rc<dyn Fn(i32, i32)>,
+    pub on_action: ActionHandler,
 }
 
 thread_local! {
@@ -97,7 +100,7 @@ fn with_overlay<R>(f: impl FnOnce(&mut Overlay) -> R) -> Option<R> {
 /// What the callbacks of the window need as well.
 #[derive(Default)]
 struct Shared {
-    on_action: RefCell<Option<Rc<dyn Fn(i32, i32)>>>,
+    on_action: RefCell<Option<ActionHandler>>,
     x: RefCell<XState>,
 }
 
@@ -307,10 +310,10 @@ impl Overlay {
         if first_xid {
             state.xid = get_raw_window_xid(self.window.window());
         }
-        if let (Some(server), Some(xid)) = (state.server.as_ref(), state.xid) {
-            if moved || appeared || first_xid {
-                server.raise(xid);
-            }
+        if let (Some(server), Some(xid)) = (state.server.as_ref(), state.xid)
+            && (moved || appeared || first_xid)
+        {
+            server.raise(xid);
         }
         if moved || appeared || first_xid {
             state.apply_shape();

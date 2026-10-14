@@ -128,7 +128,7 @@ mod tests {
         for y in 0..34 {
             for x in 0..100 {
                 let outside = !covered(&region, x, y);
-                let in_corner = (x < 8 || x >= 92) && (y < 8 || y >= 26);
+                let in_corner = !(8..92).contains(&x) && !(8..26).contains(&y);
                 assert!(!outside || in_corner, "({x}, {y}) is cut away outside a corner");
             }
         }
