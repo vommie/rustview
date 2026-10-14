@@ -239,10 +239,8 @@ pub const MULTIVIEW_FALLBACK_ASPECT: f32 = 16.0 / 9.0;
 pub const MULTIVIEW_GUTTER_LOGICAL_PX: f32 = 16.0;
 pub const MULTIVIEW_MIN_COLUMN_LOGICAL_PX: f32 = 160.0;
 pub const MULTIVIEW_SNAP_LOGICAL_PX: f32 = 8.0;
-pub const MULTIVIEW_BADGE_LOGICAL_PX: f32 = 28.0;
-pub const MULTIVIEW_BADGE_INSET_LOGICAL_PX: f32 = 8.0;
-pub const MULTIVIEW_BADGE_MIN_TILE_WIDTH_LOGICAL_PX: f32 = 120.0;
-pub const MULTIVIEW_BADGE_MIN_TILE_HEIGHT_LOGICAL_PX: f32 = 80.0;
+/// The action bar disappears when the pointer has not moved for this long (it stays while the pointer is on the bar).
+pub const MULTIVIEW_BAR_IDLE_MS: u64 = 2500;
 pub const MULTIVIEW_SELECTION_DEBOUNCE_MS: u64 = 150;
 pub const MULTIVIEW_TICK_MS: u64 = 50;
 /// The mute state inside mpv (key `m`, on-screen controller) is polled every this many ticks.

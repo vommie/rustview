@@ -3,10 +3,13 @@
 
 use super::eligibility;
 use super::session::Session;
+use super::views;
 use crate::library::models::MediaId;
 use crate::system::MonitorInfo;
 use crate::viewer::PointerProbe;
+use crate::ui::bridge_ctx_menu::make_rounded_cutout_rectangles;
 use crate::viewer::multiview::HostSurface;
+use crate::viewer::multiview::actions::ActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
@@ -25,12 +28,14 @@ impl Session {
         let win = self.window.upgrade()?;
         let size = win.window().size();
         let scale = win.window().scale_factor().max(0.5);
-        Some(HostSurface::fullscreen(
+        let mut surface = HostSurface::fullscreen(
             self.fs_xid,
             size.width.max(1) as i32,
             size.height.max(1) as i32,
             scale,
-        ))
+        );
+        surface.overlay_cutouts = self.tooltip_cutouts.clone();
+        Some(surface)
     }
 
     pub(super) fn on_size_changed(&mut self) {
@@ -76,9 +81,44 @@ impl Session {
         self.refresh();
     }
 
-    pub(super) fn toggle_badge_mute(&mut self) {
-        self.instance.lock().toggle_badge_mute();
+    /// A button of the hover bar was clicked. What the application has to do about it runs after the session borrow is
+    /// released.
+    pub(super) fn on_action(&mut self, tile: i32, action: i32) -> UiAction {
+        let Some(action) = ActionId::from_code(action) else {
+            return UiAction::None;
+        };
+        let outcome = {
+            let mut instance = self.instance.lock();
+            let Some(media_id) = usize::try_from(tile)
+                .ok()
+                .and_then(|index| instance.member_ids().get(index).copied())
+            else {
+                return UiAction::None;
+            };
+            instance.perform_action(media_id, action)
+        };
         self.refresh();
+        outcome
+    }
+
+    /// The hover bar was drawn, moved or hidden: the video window below it is cut open (or closed again).
+    pub(super) fn on_bar_overlay(&mut self, visible: bool, x: f32, y: f32, w: f32, h: f32) {
+        let dpi = self.window.upgrade().map_or(1.0, |win| win.window().scale_factor());
+        let rect = views::bar_overlay(visible, x, y, w, h, dpi);
+        self.instance.lock().set_bar_overlay(rect);
+    }
+
+    /// The tooltip bubble appeared, moved or went away: video windows leave its area free.
+    pub(super) fn on_tooltip(&mut self, visible: bool, x: f32, y: f32, w: f32, h: f32) {
+        let scale = self.window.upgrade().map_or(1.0, |win| win.window().scale_factor());
+        self.tooltip_cutouts = if visible && w > 2.0 && h > 2.0 {
+            make_rounded_cutout_rectangles(x, y, w, h, scale)
+        } else {
+            Vec::new()
+        };
+        if let Some(surface) = self.host_surface() {
+            self.instance.lock().set_overlay_cutouts(&surface.overlay_cutouts);
+        }
     }
 
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what

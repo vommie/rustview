@@ -1,18 +1,22 @@
 import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
-import { MultiviewTileView, MultiviewGutterView, MultiviewBadgeView, MultiviewScreenView } from "multiview_types.slint";
+import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewActionView } from "multiview_types.slint";
 import { MultiviewGutter } from "multiview_gutter.slint";
-import { MultiviewMuteBadge } from "multiview_mute_badge.slint";
+import { MultiviewActionBar } from "multiview_action_bar.slint";
 
-/// The scene of a Multiview: background, image and status tiles, gutters and the mute badge. Video tiles are native mpv
-/// windows that Rust places on top of this scene. The same component draws the fullscreen window, the tab view and the tab
-/// grid item, so a tab is always a true miniature of the fullscreen arrangement. All geometry (tiles, gutters, badge,
-/// screen) arrives in logical pixels relative to this canvas.
+/// The scene of a Multiview: background, image and status tiles, gutters and the action bar of the hovered tile. Video
+/// tiles are native mpv windows that Rust places on top of this scene. The same component draws the fullscreen window,
+/// the tab view and the tab grid item, so a tab is always a true miniature of the fullscreen arrangement. All geometry
+/// (tiles, gutters, screen) arrives in logical pixels relative to this canvas; the bar is placed here, in the top right
+/// corner of the tile Rust names in `bar-tile`.
 export component MultiviewCanvas inherits Rectangle {
     in property <[MultiviewTileView]> tiles;
     in property <[MultiviewGutterView]> gutters;
-    in property <MultiviewBadgeView> badge;
     in property <MultiviewScreenView> screen;
+    // The tile that is hovered right now (and active recently); -1 = none. Rust decides, because mpv swallows the pointer.
+    in property <int> bar-tile: -1;
+    // The buttons of that tile. A separate model that Rust updates in place keeps the buttons (and their tooltips) alive.
+    in property <[MultiviewActionView]> bar-actions;
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
     in property <color> outer-color: #000000; // shown around the screen when the host has another aspect ratio
     // A non-interactive canvas is a picture: it has no touch areas, so clicks reach whatever is below it.
@@ -27,7 +31,18 @@ export component MultiviewCanvas inherits Rectangle {
     callback gutter-drag-finished(int);
     callback gutter-reset();
     callback gutter-swap(int);
-    callback badge-clicked();
+    callback action-clicked(int /* tile index */, int /* action id */);
+    // The action bar appeared, moved or disappeared (logical pixels in this canvas); Rust cuts it out of video windows.
+    callback overlay-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
+
+    property <bool> bar-shown: root.interactive && root.bar-tile >= 0 && root.bar-tile < root.tiles.length
+        && root.bar-actions.length > 0
+        && root.tiles[root.bar-tile].width >= action-bar.width + 16px
+        && root.tiles[root.bar-tile].height >= action-bar.height + 16px;
+
+    function report-bar() {
+        root.overlay-changed(action-bar.visible, action-bar.x, action-bar.y, action-bar.width, action-bar.height);
+    }
 
     background: root.outer-color;
     clip: true;
@@ -159,15 +174,30 @@ export component MultiviewCanvas inherits Rectangle {
         }
     }
 
-    if root.interactive && root.badge.visible : MultiviewMuteBadge {
-        x: root.badge.x;
-        y: root.badge.y;
-        width: root.badge.size;
-        height: root.badge.size;
-        muted: root.badge.muted;
+    action-bar := MultiviewActionBar {
+        visible: root.bar-shown;
+        actions: root.bar-actions;
+        x: root.tiles[root.bar-tile].x + root.tiles[root.bar-tile].width - self.width - 8px;
+        y: root.tiles[root.bar-tile].y + 8px;
 
-        clicked => {
-            root.badge-clicked();
+        changed visible => {
+            root.report-bar();
+        }
+        changed x => {
+            root.report-bar();
+        }
+        changed y => {
+            root.report-bar();
+        }
+        changed width => {
+            root.report-bar();
+        }
+        changed height => {
+            root.report-bar();
+        }
+
+        action-clicked(id) => {
+            root.action-clicked(root.bar-tile, id);
         }
     }
 }

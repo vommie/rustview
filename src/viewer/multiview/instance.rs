@@ -55,9 +55,12 @@ pub struct MultiviewInstance {
     pub(super) drag: Option<DragState>,
     pub(super) hovered: Option<usize>,
     pub(super) last_hovered: Option<MediaId>,
-    /// Tile index and host rectangle of the visible mute badge.
-    pub(super) badge: Option<(usize, Rect)>,
-    pub(super) hole_pending: bool,
+    /// The tile whose hover bar is shown, and where the host drew the bar (window coordinates, physical pixels).
+    pub(super) bar_tile: Option<usize>,
+    pub(super) bar_rect: Option<Rect>,
+    /// Last pointer position (window coordinates) and when it last changed; the bar hides when the pointer rests.
+    pub(super) pointer: Option<(i32, i32)>,
+    pub(super) last_move: Option<Instant>,
     pub(super) ticks: u32,
     pub(super) rename_target: Option<MediaId>,
     /// The rename target was named by a player (not picked by the pointer) and is used by the next rename request.
@@ -85,8 +88,10 @@ impl MultiviewInstance {
                 drag: None,
                 hovered: None,
                 last_hovered: None,
-                badge: None,
-                hole_pending: false,
+                bar_tile: None,
+                bar_rect: None,
+                pointer: None,
+                last_move: None,
                 ticks: 0,
                 rename_target: None,
                 rename_pinned: false,
@@ -136,6 +141,21 @@ impl MultiviewInstance {
 
     pub fn has_video(&self) -> bool {
         self.tiles.iter().any(|t| t.video.is_some())
+    }
+
+    /// True while an image tile waits for its decoder.
+    pub fn is_loading(&self) -> bool {
+        self.tiles.iter().any(|t| t.is_loading)
+    }
+
+    /// The rectangle of tile `index` in the host rectangle (physical pixels).
+    pub fn tile_rect(&self, index: usize) -> Rect {
+        self.host_content(index).unwrap_or_default()
+    }
+
+    /// Number of rows of the current arrangement (two for a 2x2 grid).
+    pub fn row_count(&self) -> usize {
+        self.layout.rows.len()
     }
 
     /// The media an F2 rename acts on (the tile the user pressed F2 over, or the one reported by its player).

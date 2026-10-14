@@ -1,16 +1,21 @@
-import { MultiviewTileView, MultiviewGutterView, MultiviewBadgeView } from "multiview_types.slint";
+import { MultiviewTileView, MultiviewGutterView, MultiviewActionView } from "multiview_types.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
+import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
+import { TooltipSettings } from "tooltips.slint";
 
-/// Frameless fullscreen window showing several media side by side (Multiview). Video tiles are native mpv windows placed
-/// on top of this scene by Rust; everything else (background, images, gutters, badge) is drawn by the shared
-/// `MultiviewCanvas`. There is no navigation: arrow keys and the mouse wheel never switch media.
+/// Frameless fullscreen window showing one to four media (Multiview). Video tiles are native mpv windows placed on top
+/// of this scene by Rust; everything else (background, images, gutters, action bar) is drawn by the shared
+/// `MultiviewCanvas`.
 export component MultiviewFullscreenWindow inherits Window {
     title: "RustView - Fullscreen (Multiview)";
     no-frame: true;
 
     in property <[MultiviewTileView]> tiles;
     in property <[MultiviewGutterView]> gutters;
-    in property <MultiviewBadgeView> badge;
+    in property <int> bar-tile: -1;
+    in property <[MultiviewActionView]> bar-actions;
+    in property <bool> enable-tooltips: true;
+    in property <int> tooltip-delay-ms: 750;
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
     in-out property <bool> is-ready: false;
 
@@ -24,11 +29,20 @@ export component MultiviewFullscreenWindow inherits Window {
     callback gutter-drag-finished(int);
     callback gutter-reset();
     callback gutter-swap(int);
-    callback badge-clicked();
+    callback action-clicked(int /* tile index */, int /* action id */);
+    callback overlay-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
+    callback tooltip-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
     callback size-changed();
 
     // Root window is transparent so mapping on the wrong display before X11 repositioning is invisible
     background: transparent;
+
+    changed enable-tooltips => {
+        TooltipSettings.enabled = root.enable-tooltips;
+    }
+    changed tooltip-delay-ms => {
+        TooltipSettings.default-delay = root.tooltip-delay-ms * 1ms;
+    }
 
     changed width => {
         root.size-changed();
@@ -68,7 +82,8 @@ export component MultiviewFullscreenWindow inherits Window {
 
         tiles: root.tiles;
         gutters: root.gutters;
-        badge: root.badge;
+        bar-tile: root.bar-tile;
+        bar-actions: root.bar-actions;
         screen: { x: 0px, y: 0px, width: root.width, height: root.height };
         background-mode: root.background-mode;
 
@@ -96,8 +111,22 @@ export component MultiviewFullscreenWindow inherits Window {
         gutter-swap(index) => {
             root.gutter-swap(index);
         }
-        badge-clicked => {
-            root.badge-clicked();
+        action-clicked(tile, id) => {
+            root.action-clicked(tile, id);
+        }
+        overlay-changed(visible, x, y, w, h) => {
+            root.overlay-changed(visible, x, y, w, h);
+        }
+    }
+
+    GlobalTooltipLayer {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+
+        state-changed(visible, x, y, w, h) => {
+            root.tooltip-changed(visible, x, y, w, h);
         }
     }
 }

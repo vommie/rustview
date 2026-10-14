@@ -1,0 +1,12 @@
+/// Outcome a button can signal for a moment after its action ran.
+export enum FeedbackKind {
+    none,
+    success,
+    error,
+}
+
+/// Feedback state of one button. `seq` changes with every new outcome, so the same outcome twice plays the feedback twice.
+export struct ButtonFeedback {
+    kind: FeedbackKind,
+    seq: int,
+}

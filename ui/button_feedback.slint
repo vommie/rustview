@@ -1,0 +1,65 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { FeedbackKind, ButtonFeedback } from "button_feedback_types.slint";
+
+/// Short, passive visual feedback laid over a button: it flashes in the color of the outcome (green with a check mark,
+/// red with a warning sign) and fades out by itself. Put it as the last child of any button and bind `feedback`; it
+/// plays whenever `feedback.seq` changes and needs nobody to reset it. The button sets `border-radius`.
+export component ButtonFeedbackOverlay inherits Rectangle {
+    in property <ButtonFeedback> feedback;
+    in property <duration> hold: 450ms;
+    in property <length> icon-size: IconSize.lg;
+
+    property <bool> flashing: false;
+    property <FeedbackKind> shown: FeedbackKind.none;
+    property <color> accent: root.shown == FeedbackKind.error ? Theme.status-corrupt : Theme.status-ok;
+    property <color> glyph: transparent;
+
+    changed feedback => {
+        if root.feedback.kind != FeedbackKind.none {
+            root.shown = root.feedback.kind;
+            root.flashing = true;
+            hold-timer.restart();
+        }
+    }
+
+    background: transparent;
+    width: 100%;
+    height: 100%;
+
+    states [
+        flash when root.flashing : {
+            background: root.accent.with-alpha(0.92);
+            glyph: Theme.surface;
+            in {
+                animate background, glyph {
+                    duration: 80ms;
+                    easing: ease-out;
+                }
+            }
+            out {
+                animate background, glyph {
+                    duration: 420ms;
+                    easing: ease-in;
+                }
+            }
+        }
+    ]
+
+    hold-timer := Timer {
+        interval: root.hold;
+        running: false;
+        triggered => {
+            root.flashing = false;
+            self.running = false;
+        }
+    }
+
+    AppIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: root.shown == FeedbackKind.error ? IconId.status-warning : IconId.check;
+        size: root.icon-size;
+        color: root.glyph;
+    }
+}

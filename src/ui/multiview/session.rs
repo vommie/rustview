@@ -11,7 +11,7 @@ use super::handle::{self, MultiviewHandle};
 use super::router::{UiEventSink, execute};
 use super::session_convert::park_below_main_window;
 use super::tab_host;
-use super::views::{self, ImageCache};
+use super::views::{self, ImageCache, ViewModels};
 use crate::settings::SettingsManager;
 use crate::settings::schema::{
     MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS,
@@ -19,18 +19,19 @@ use crate::settings::schema::{
 };
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::bridge_state::UiState;
-use crate::ui::{MainWindow, MultiviewFullscreenWindow, MultiviewGutterView, MultiviewTileView};
+use crate::ui::MainWindow;
+use crate::ui::MultiviewFullscreenWindow;
 use crate::viewer::TabId;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::UiAction;
+use crate::viewer::XRectangle;
 use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
 use parking_lot::RwLock;
 use slint::{
     CloseRequestResponse, ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer,
-    TimerMode, VecModel,
+    TimerMode,
 };
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -73,8 +74,9 @@ pub(super) struct Session {
     fresh: bool,
     pub(super) tab_return: Option<TabReturn>,
     pub(super) probe: Option<PointerProbe>,
-    pub(super) tile_model: Rc<VecModel<MultiviewTileView>>,
-    pub(super) gutter_model: Rc<VecModel<MultiviewGutterView>>,
+    pub(super) models: ViewModels,
+    /// Areas of the tooltip bubble that native video windows must leave free.
+    pub(super) tooltip_cutouts: Vec<XRectangle>,
     pub(super) images: ImageCache,
     shown_revision: Option<u64>,
     pub(super) debounce: Timer,
@@ -147,7 +149,13 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     win.on_gutter_drag_finished(|_| with_session(Session::drag_finished));
     win.on_gutter_reset(|| with_session(Session::reset_split));
     win.on_gutter_swap(|index| with_session(|s| s.swap(index.max(0) as usize)));
-    win.on_badge_clicked(|| with_session(Session::toggle_badge_mute));
+    win.on_action_clicked(|tile, action| run(|s| s.on_action(tile, action)));
+    win.on_overlay_changed(|visible, x, y, w, h| {
+        with_session(|s| s.on_bar_overlay(visible, x, y, w, h))
+    });
+    win.on_tooltip_changed(|visible, x, y, w, h| {
+        with_session(|s| s.on_tooltip(visible, x, y, w, h))
+    });
     win.on_size_changed(|| with_session(Session::on_size_changed));
     win.window().on_close_requested(|| {
         close(true);
@@ -186,16 +194,19 @@ fn prepare_window(
     win: &MultiviewFullscreenWindow,
     settings: &SettingsManager,
     monitor: &MonitorInfo,
-    tile_model: &Rc<VecModel<MultiviewTileView>>,
-    gutter_model: &Rc<VecModel<MultiviewGutterView>>,
+    models: &ViewModels,
 ) {
     win.set_is_ready(false);
     win.set_background_mode(background_mode_index(
         &settings.get().viewer.background_mode,
     ));
-    win.set_tiles(ModelRc::from(tile_model.clone()));
-    win.set_gutters(ModelRc::from(gutter_model.clone()));
-    win.set_badge(views::badge_view(None, 1.0));
+    win.set_tiles(ModelRc::from(models.tiles.clone()));
+    win.set_gutters(ModelRc::from(models.gutters.clone()));
+    win.set_bar_actions(ModelRc::from(models.bar_actions.clone()));
+    win.set_bar_tile(-1);
+    let appearance = &settings.get().appearance;
+    win.set_enable_tooltips(appearance.enable_tooltips);
+    win.set_tooltip_delay_ms(appearance.tooltip_delay_ms as i32);
     win.window()
         .set_position(PhysicalPosition::new(monitor.x, monitor.y));
     win.window()
@@ -256,8 +267,7 @@ fn launch(
         &win,
         settings,
         &session.monitor,
-        &session.tile_model,
-        &session.gutter_model,
+        &session.models,
     );
     if SESSION.with(|cell| {
         cell.try_borrow_mut()
@@ -389,8 +399,8 @@ impl Session {
             fresh: tab_return.is_none(),
             tab_return,
             probe: None,
-            tile_model: Rc::new(VecModel::default()),
-            gutter_model: Rc::new(VecModel::default()),
+            models: ViewModels::default(),
+            tooltip_cutouts: Vec::new(),
             images: ImageCache::default(),
             shown_revision: None,
             debounce: Timer::default(),
@@ -422,7 +432,7 @@ impl Session {
         self.probe = match PointerProbe::new() {
             Ok(probe) => Some(probe),
             Err(e) => {
-                tracing::warn!(error = %e, "[Multiview: Hover] No pointer probe; the mute badge is disabled");
+                tracing::warn!(error = %e, "[Multiview: Hover] No pointer probe; the hover bar is disabled");
                 None
             }
         };
@@ -453,14 +463,9 @@ impl Session {
             instance.view()
         };
         self.shown_revision = Some(view.revision);
-        views::sync_models(
-            &self.tile_model,
-            &self.gutter_model,
-            &view,
-            &mut self.images,
-        );
+        self.models.sync(&view, &mut self.images);
         if let Some(win) = self.window.upgrade() {
-            win.set_badge(views::badge_view(view.badge.as_ref(), view.dpi));
+            win.set_bar_tile(views::bar_tile_index(&view));
         }
     }
 
@@ -474,7 +479,6 @@ impl Session {
             win.set_is_ready(false);
             let _ = win.hide();
         }
-        self.tile_model.set_vec(Vec::new());
-        self.gutter_model.set_vec(Vec::new());
+        self.models.clear();
     }
 }

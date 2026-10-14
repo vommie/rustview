@@ -1,12 +1,16 @@
 //! Conversion of the Slint-free description of a Multiview (physical pixels) into the Slint view structs (logical pixels).
 
 use crate::library::models::MediaId;
-use crate::ui::{MultiviewBadgeView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView};
+use crate::ui::button_feedback_bridge;
+use crate::ui::{
+    MultiviewActionView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView,
+};
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::model::TileKind;
-use crate::viewer::multiview::view::{BadgeView, GutterView, HostedView, TileView};
+use crate::viewer::multiview::view::{ActionView, GutterView, HostedView, TileView};
 use slint::{Model, VecModel};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 fn logical(px: i32, dpi: f32) -> f32 {
     px as f32 / dpi.max(0.01)
@@ -74,23 +78,34 @@ fn gutter_view(gutter: &GutterView, dpi: f32) -> MultiviewGutterView {
     }
 }
 
-pub fn badge_view(badge: Option<&BadgeView>, dpi: f32) -> MultiviewBadgeView {
-    match badge {
-        Some(b) => MultiviewBadgeView {
-            visible: true,
-            x: logical(b.rect.x, dpi),
-            y: logical(b.rect.y, dpi),
-            size: logical(b.rect.w, dpi),
-            muted: b.muted,
-        },
-        None => MultiviewBadgeView {
-            visible: false,
-            x: 0.0,
-            y: 0.0,
-            size: 0.0,
-            muted: false,
-        },
+fn action_view(action: &ActionView) -> MultiviewActionView {
+    MultiviewActionView {
+        id: action.id.code(),
+        icon: action.icon.to_slint(),
+        tooltip: action.tooltip.into(),
+        toggle: action.active.is_some(),
+        active: action.active.unwrap_or(false),
+        feedback: button_feedback_bridge::to_slint(action.feedback),
     }
+}
+
+/// The tile whose hover bar is shown (`-1` = none).
+pub fn bar_tile_index(view: &HostedView) -> i32 {
+    view.bar_tile.map_or(-1, |index| index as i32)
+}
+
+/// The buttons of the hover bar: those of the tile named by `view.bar_tile`.
+pub fn bar_action_views(view: &HostedView) -> Vec<MultiviewActionView> {
+    view.bar_tile
+        .and_then(|index| view.tiles.get(index))
+        .map(|tile| tile.actions.iter().map(action_view).collect())
+        .unwrap_or_default()
+}
+
+/// The place of the hover bar reported by the host (logical pixels in the canvas), in physical pixels of the host
+/// rectangle; `None` while the bar is hidden.
+pub fn bar_overlay(visible: bool, x: f32, y: f32, width: f32, height: f32, dpi: f32) -> Option<Rect> {
+    visible.then(|| physical_rect(x, y, width, height, dpi))
 }
 
 /// A logical rectangle in window pixels -> physical window pixels. Edges are rounded, not sizes, so neighbors stay seamless
@@ -131,20 +146,32 @@ pub fn gutter_views(view: &HostedView) -> Vec<MultiviewGutterView> {
         .collect()
 }
 
-/// Updates the Slint models from the description of the instance.
-pub fn sync_models(
-    tile_model: &VecModel<MultiviewTileView>,
-    gutter_model: &VecModel<MultiviewGutterView>,
-    view: &HostedView,
-    images: &mut ImageCache,
-) {
-    images.retain(&view.tiles);
-    sync_model(tile_model, tile_views(view, images));
-    sync_model(gutter_model, gutter_views(view));
+/// The Slint models a host draws a Multiview from.
+#[derive(Default)]
+pub struct ViewModels {
+    pub tiles: Rc<VecModel<MultiviewTileView>>,
+    pub gutters: Rc<VecModel<MultiviewGutterView>>,
+    pub bar_actions: Rc<VecModel<MultiviewActionView>>,
+}
+
+impl ViewModels {
+    /// Updates the models from the description of the instance.
+    pub fn sync(&self, view: &HostedView, images: &mut ImageCache) {
+        images.retain(&view.tiles);
+        sync_model(&self.tiles, tile_views(view, images));
+        sync_model(&self.gutters, gutter_views(view));
+        sync_model(&self.bar_actions, bar_action_views(view));
+    }
+
+    pub fn clear(&self) {
+        self.tiles.set_vec(Vec::new());
+        self.gutters.set_vec(Vec::new());
+        self.bar_actions.set_vec(Vec::new());
+    }
 }
 
 /// Updates the rows in place when the row count is unchanged. Resetting the model would recreate the repeater items and
-/// abort a gutter drag in progress (the dragged gutter is one of the items).
+/// abort a gutter drag in progress (the dragged gutter is one of the items) or reset the hover of a bar button.
 fn sync_model<T: Clone + 'static>(model: &VecModel<T>, items: Vec<T>) {
     if model.row_count() == items.len() {
         for (row, item) in items.into_iter().enumerate() {

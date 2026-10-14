@@ -1,0 +1,68 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconSize } from "icons.slint";
+import { TooltipArea } from "tooltips.slint";
+import { ButtonFeedbackOverlay } from "button_feedback.slint";
+import { MultiviewActionView } from "multiview_types.slint";
+
+component MultiviewActionButton inherits Rectangle {
+    in property <MultiviewActionView> action;
+
+    callback activated();
+
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: area.has-hover ? Theme.surface-hover : transparent;
+
+    area := TooltipArea {
+        width: 100%;
+        height: 100%;
+        text: root.action.tooltip;
+
+        clicked => {
+            root.activated();
+        }
+
+        AppIcon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            icon: root.action.icon;
+            size: IconSize.lg;
+            color: (root.action.toggle && root.action.active) || area.has-hover ? Theme.primary : Theme.text;
+        }
+
+        ButtonFeedbackOverlay {
+            feedback: root.action.feedback;
+            border-radius: root.border-radius;
+        }
+    }
+}
+
+/// Row of action buttons that floats over the top right corner of the hovered medium. It is a normal Slint overlay
+/// (like the tab context menu): native video windows are cut open under it by Rust, which learns the rectangle of the bar
+/// from the canvas that places it.
+export component MultiviewActionBar inherits Rectangle {
+    in property <[MultiviewActionView]> actions;
+
+    callback action-clicked(int /* action id */);
+
+    width: layout.preferred-width;
+    height: layout.preferred-height;
+    background: Theme.surface.with-alpha(0.8);
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    layout := HorizontalLayout {
+        padding: 3px;
+        spacing: 2px;
+
+        for action in root.actions : MultiviewActionButton {
+            action: action;
+
+            activated => {
+                root.action-clicked(action.id);
+            }
+        }
+    }
+}

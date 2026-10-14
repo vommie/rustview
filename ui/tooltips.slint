@@ -224,6 +224,8 @@ export component TooltipArea inherits Rectangle {
 
     callback clicked();
 
+    out property <bool> has-hover: touch.has-hover;
+
     tooltip-host := TooltipHost {
         text: root.text;
         shortcut: root.shortcut;

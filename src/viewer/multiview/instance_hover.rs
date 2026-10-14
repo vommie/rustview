@@ -1,29 +1,35 @@
-//! Instance behavior around the pointer: the 20 Hz tick, which tile is hovered, the mute badge (a button drawn by the host
-//! and a hole punched into the hovered video's X11 window) and the runtime correction of aspect ratios reported by mpv.
+//! Instance behavior around the pointer: the 50 ms tick, which tile is hovered, when the hover bar of that tile is shown
+//! and the runtime correction of aspect ratios reported by mpv.
+//!
+//! mpv swallows the pointer events over a video, so the hovered tile is found by asking the X server for the pointer and
+//! testing it against the tile layout. The bar is a Slint overlay placed by the host; the instance only decides which
+//! tile it belongs to (the hovered tile, while the pointer is active or on the bar) and cuts the bar out of that tile's
+//! video window, like the tab context menu is cut out of the videos below it.
 
 use super::instance::MultiviewInstance;
-use super::layout::{self, Rect};
+use super::layout::Rect;
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::target_pick::pick_target;
 use super::tile::StaleProbe;
 use crate::library::models::MediaId;
-use crate::settings::schema::{
-    MULTIVIEW_BADGE_INSET_LOGICAL_PX, MULTIVIEW_BADGE_LOGICAL_PX,
-    MULTIVIEW_BADGE_MIN_TILE_HEIGHT_LOGICAL_PX, MULTIVIEW_BADGE_MIN_TILE_WIDTH_LOGICAL_PX,
-    MULTIVIEW_MUTE_POLL_TICKS,
-};
+use crate::settings::schema::{MULTIVIEW_BAR_IDLE_MS, MULTIVIEW_MUTE_POLL_TICKS};
+use std::time::{Duration, Instant};
 
 impl MultiviewInstance {
-    /// Only videos need the tick (badge, mute changes inside mpv, aspect probing); image-only instances stay idle.
-    /// `pointer` is asked for only when there is something to do; it returns the pointer position in the coordinates of
-    /// the host window.
+    /// Runs every tick while the Multiview is shown. `pointer` is asked for only when there is something to do; it returns
+    /// the pointer position in the coordinates of the host window. Sound changes inside mpv and aspect probing only
+    /// matter for videos.
     pub fn tick(&mut self, pointer: impl FnOnce() -> Option<(i32, i32)>) {
+        self.tick_at(Instant::now(), pointer);
+    }
+
+    /// `tick` with an explicit clock (tests).
+    pub fn tick_at(&mut self, now: Instant, pointer: impl FnOnce() -> Option<(i32, i32)>) {
+        self.ticks = self.ticks.wrapping_add(1);
+        self.poll_pointer(pointer(), now);
         if !self.has_video() {
             return;
         }
-        self.ticks = self.ticks.wrapping_add(1);
-        self.open_pending_hole();
-        self.poll_pointer(pointer());
         if self.ticks.is_multiple_of(MULTIVIEW_MUTE_POLL_TICKS) && self.poll_mute() {
             self.bump();
         }
@@ -36,73 +42,75 @@ impl MultiviewInstance {
         self.layout.tile_at(cx, cy)
     }
 
-    fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
-        let hovered = pointer.and_then(|(x, y)| self.tile_at_host(x, y));
-        if hovered == self.hovered {
-            return;
+    fn poll_pointer(&mut self, pointer: Option<(i32, i32)>, now: Instant) {
+        if pointer != self.pointer {
+            self.pointer = pointer;
+            self.last_move = Some(now);
         }
+        let hovered = pointer.and_then(|(x, y)| self.tile_at_host(x, y));
         self.hovered = hovered;
         if let Some(tile) = hovered.and_then(|i| self.tiles.get(i)) {
             self.last_hovered = Some(tile.media_id);
         }
-        self.refresh_badge();
+        let active = self
+            .last_move
+            .is_some_and(|at| now.duration_since(at) < Duration::from_millis(MULTIVIEW_BAR_IDLE_MS));
+        let on_bar = matches!(
+            (pointer, self.bar_rect),
+            (Some((x, y)), Some(bar)) if bar.contains(x, y)
+        );
+        self.set_bar_tile(hovered.filter(|_| active || on_bar));
     }
 
-    /// The badge exists only on live video tiles that are large enough for it.
-    fn badge_for(&self, index: usize) -> Option<(usize, Rect)> {
-        self.tiles.get(index)?.video.as_ref()?;
-        let content = self.host_content(index)?;
-        let rect = layout::badge_rect(
-            content,
-            self.host.surface.dpi,
-            MULTIVIEW_BADGE_LOGICAL_PX,
-            MULTIVIEW_BADGE_INSET_LOGICAL_PX,
-            MULTIVIEW_BADGE_MIN_TILE_WIDTH_LOGICAL_PX,
-            MULTIVIEW_BADGE_MIN_TILE_HEIGHT_LOGICAL_PX,
-        )?;
-        Some((index, rect))
-    }
-
-    /// Shows the badge on the hovered tile (or hides it). The host draws the button first; the hole in the video window
-    /// follows on the next tick so the background never shows through an empty hole.
-    pub(super) fn refresh_badge(&mut self) {
-        let wanted = self.hovered.and_then(|i| self.badge_for(i));
-        if wanted == self.badge {
+    /// Moves the hover bar to another tile (or hides it). The cutout of the tile it leaves goes away at once.
+    fn set_bar_tile(&mut self, tile: Option<usize>) {
+        if tile == self.bar_tile {
             return;
         }
-        self.drop_badge();
-        self.badge = wanted;
-        self.hole_pending = wanted.is_some();
+        let left = std::mem::replace(&mut self.bar_tile, tile);
+        if let Some(index) = left {
+            self.refresh_shape(index);
+        }
+        if tile.is_none() {
+            self.bar_rect = None;
+        }
         self.bump();
     }
 
-    /// Opens the hole of the badge in the video window (together with the cutouts of the host).
-    fn open_pending_hole(&mut self) {
-        if !self.hole_pending {
+    /// The host drew (or removed) the hover bar: `rect` is its place in the host rectangle in physical pixels. The
+    /// video window below it is cut open there.
+    pub fn set_bar_overlay(&mut self, rect: Option<Rect>) {
+        let origin = self.host.surface.rect;
+        let placed = rect.map(|r| Rect::new(r.x + origin.x, r.y + origin.y, r.w, r.h));
+        if placed == self.bar_rect {
             return;
         }
-        self.hole_pending = false;
-        if let Some((index, _)) = self.badge {
+        self.bar_rect = placed;
+        if let Some(index) = self.bar_tile {
             self.apply_cutouts(index);
         }
     }
 
-    /// Removes the badge and its hole (the window shape is relative to the window, so it must go before the window moves
-    /// or resizes).
-    pub(super) fn drop_badge(&mut self) {
-        self.hole_pending = false;
-        if let Some((index, _)) = self.badge.take() {
-            if let Some(video) = self.tiles.get_mut(index).and_then(|t| t.video.as_mut()) {
-                video.window.reset_clip_shape();
-            }
-            self.apply_cutouts(index);
-            self.bump();
+    /// Resets the shape of a video window (the shape is relative to the window, so it has to go before the window moves or
+    /// resizes) and applies the cutouts it needs now.
+    pub(super) fn refresh_shape(&mut self, index: usize) {
+        if let Some(video) = self.tiles.get_mut(index).and_then(|t| t.video.as_mut()) {
+            video.window.reset_clip_shape();
         }
+        self.apply_cutouts(index);
     }
 
+    /// Forgets the hover (the Multiview is hidden, parked, rearranged or its tiles changed).
     pub(super) fn clear_hover(&mut self) {
-        self.drop_badge();
         self.hovered = None;
+        self.pointer = None;
+        self.last_move = None;
+        self.set_bar_tile(None);
+    }
+
+    /// The hovered tile's bar belongs to this tile (for the view).
+    pub fn bar_tile(&self) -> Option<usize> {
+        self.bar_tile
     }
 
     /// F2 acts on the tile under the pointer, else the last hovered one, else the first. The result becomes the rename
@@ -159,5 +167,96 @@ impl MultiviewInstance {
         if changed {
             self.apply_layout();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::HostSurface;
+    use crate::viewer::multiview::instance::SharedInstance;
+    use crate::viewer::multiview::model::TileKind;
+    use crate::viewer::multiview::tile::TileSeed;
+    use std::path::PathBuf;
+
+    fn instance(count: u64) -> SharedInstance {
+        let seeds = (1..=count)
+            .map(|id| TileSeed {
+                media_id: id,
+                kind: TileKind::Image,
+                aspect: 1.78,
+                path: PathBuf::new(),
+                filename: format!("{id}.png"),
+            })
+            .collect();
+        let shared = MultiviewInstance::detached(seeds);
+        shared
+            .lock()
+            .set_host(&HostSurface::fullscreen(0, 1920, 1080, 1.0));
+        shared
+    }
+
+    fn centre(mv: &MultiviewInstance, tile: usize) -> (i32, i32) {
+        let r = mv.layout.tiles[tile].content;
+        (r.x + r.w / 2, r.y + r.h / 2)
+    }
+
+    #[test]
+    fn the_bar_follows_the_pointer_and_hides_when_it_rests() {
+        let shared = instance(2);
+        let mut mv = shared.lock();
+        let t0 = Instant::now();
+        let (first, second) = (centre(&mv, 0), centre(&mv, 1));
+
+        mv.tick_at(t0, || Some(first));
+        assert_eq!(mv.bar_tile(), Some(0));
+        mv.tick_at(t0 + Duration::from_millis(500), || Some(second));
+        assert_eq!(mv.bar_tile(), Some(1), "the bar moves with the pointer");
+
+        let rests = t0 + Duration::from_millis(500 + MULTIVIEW_BAR_IDLE_MS + 1);
+        mv.tick_at(rests, || Some(second));
+        assert_eq!(mv.bar_tile(), None, "a resting pointer hides the bar");
+        mv.tick_at(rests + Duration::from_millis(50), || Some((second.0 + 3, second.1)));
+        assert_eq!(mv.bar_tile(), Some(1), "any movement shows it again");
+    }
+
+    #[test]
+    fn the_bar_stays_while_the_pointer_rests_on_it() {
+        let shared = instance(1);
+        let mut mv = shared.lock();
+        let t0 = Instant::now();
+        let spot = centre(&mv, 0);
+        mv.tick_at(t0, || Some(spot));
+        mv.set_bar_overlay(Some(Rect::new(spot.0 - 40, spot.1 - 20, 120, 34)));
+        let later = t0 + Duration::from_millis(MULTIVIEW_BAR_IDLE_MS * 4);
+        mv.tick_at(later, || Some(spot));
+        assert_eq!(mv.bar_tile(), Some(0), "the pointer is on the bar");
+        mv.tick_at(later + Duration::from_millis(50), || Some((spot.0 + 200, spot.1)));
+        mv.tick_at(later + Duration::from_millis(60 + MULTIVIEW_BAR_IDLE_MS), || {
+            Some((spot.0 + 200, spot.1))
+        });
+        assert_eq!(mv.bar_tile(), None, "off the bar, the idle rule applies again");
+    }
+
+    #[test]
+    fn gutters_and_the_outside_have_no_bar() {
+        let shared = instance(2);
+        let mut mv = shared.lock();
+        let t0 = Instant::now();
+        let gutter = mv.layout.gutters[0].rect;
+        mv.tick_at(t0, || Some((gutter.x + gutter.w / 2, gutter.y + gutter.h / 2)));
+        assert_eq!(mv.bar_tile(), None);
+        mv.tick_at(t0, || None);
+        assert_eq!(mv.bar_tile(), None);
+    }
+
+    #[test]
+    fn the_bar_overlay_is_reported_relative_to_the_host() {
+        let shared = instance(1);
+        let mut mv = shared.lock();
+        mv.set_bar_overlay(Some(Rect::new(10, 20, 100, 30)));
+        assert_eq!(mv.bar_rect, Some(Rect::new(10, 20, 100, 30)));
+        mv.set_bar_overlay(None);
+        assert_eq!(mv.bar_rect, None);
     }
 }

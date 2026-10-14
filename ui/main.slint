@@ -1,6 +1,7 @@
 import { Theme } from "styles.slint";
 import { IconId, IconSize, IconSlot } from "icons.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
+import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 import { MediaItemView, FolderNodeView, FavoriteItemView, TagNodeView, TagColumnView, TagHistoryRowModel, ContextMenuItemModel, ContextMenuLevelModel, ConflictFileView, TabItemModel, TabGridItemModel, SidebarPanelTabModel } from "types.slint";
 import { TopToolbar } from "toolbar.slint";
 import { SidebarLeft } from "sidebar_left.slint";
@@ -38,8 +39,9 @@ export { MissingFolderDeleteDialog } from "missing_folder_delete_dialog.slint";
 export { MissingFileDialog } from "missing_file_dialog.slint";
 export { ImageFullscreenWindow } from "image_fullscreen_window.slint";
 export { MultiviewFullscreenWindow } from "multiview_fullscreen_window.slint";
-export { MultiviewTileView, MultiviewGutterView, MultiviewBadgeView, MultiviewScreenView } from "multiview_types.slint";
+export { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewActionView } from "multiview_types.slint";
 export { MultiviewTabBus } from "multiview_tab_bus.slint";
+export { FeedbackKind, ButtonFeedback } from "button_feedback_types.slint";
 export { FavoriteRenameDialog } from "favorite_rename_dialog.slint";
 export { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 export { IconId } from "icons.slint";
@@ -278,34 +280,7 @@ export component MainWindow inherits Window {
     in-out property <bool> info-is-collapsed: false;
     callback info-collapsed-toggled(bool);
 
-    // Reactive Tooltip State Hooks
-    property <bool> tooltip-active: GlobalTooltip.is-visible && TooltipSettings.enabled;
-    property <length> tooltip-bubble-x: Math.max(8px, Math.min(self.width - tooltip-bubble-w - 8px, GlobalTooltip.pos-x));
-    property <length> tooltip-bubble-y: Math.max(8px, Math.min(self.height - tooltip-bubble-h - 8px, GlobalTooltip.pos-y));
-    property <length> tooltip-bubble-w: tooltip-bubble.preferred-width;
-    property <length> tooltip-bubble-h: tooltip-bubble.preferred-height;
-
     callback global-tooltip-state-changed(bool /* is_visible */, length /* x */, length /* y */, length /* width */, length /* height */);
-
-    changed tooltip-active => {
-        if self.tooltip-active {
-            root.global-tooltip-state-changed(true, self.tooltip-bubble-x, self.tooltip-bubble-y, self.tooltip-bubble-w, self.tooltip-bubble-h);
-        } else {
-            root.global-tooltip-state-changed(false, 0px, 0px, 0px, 0px);
-        }
-    }
-
-    changed tooltip-bubble-x => {
-        if self.tooltip-active {
-            root.global-tooltip-state-changed(true, self.tooltip-bubble-x, self.tooltip-bubble-y, self.tooltip-bubble-w, self.tooltip-bubble-h);
-        }
-    }
-
-    changed tooltip-bubble-y => {
-        if self.tooltip-active {
-            root.global-tooltip-state-changed(true, self.tooltip-bubble-x, self.tooltip-bubble-y, self.tooltip-bubble-w, self.tooltip-bubble-h);
-        }
-    }
 
     callback refresh-folder();
     callback regenerate-thumbs-clicked();
@@ -938,7 +913,8 @@ export component MainWindow inherits Window {
                         visible: root.active-view-mode == 1 && root.viewer-is-multiview;
                         tiles: MultiviewTabBus.tiles;
                         gutters: MultiviewTabBus.gutters;
-                        badge: MultiviewTabBus.badge;
+                        bar-tile: MultiviewTabBus.bar-tile;
+                        bar-actions: MultiviewTabBus.bar-actions;
                         screen: MultiviewTabBus.screen;
                         background-mode: root.viewer-background-mode;
                         outer-color: #000000;
@@ -956,7 +932,8 @@ export component MainWindow inherits Window {
                         gutter-drag-finished(index) => { MultiviewTabBus.gutter-drag-finished(index); }
                         gutter-reset => { MultiviewTabBus.gutter-reset(); }
                         gutter-swap(index) => { MultiviewTabBus.gutter-swap(index); }
-                        badge-clicked => { MultiviewTabBus.badge-clicked(); }
+                        action-clicked(tile, id) => { MultiviewTabBus.action-clicked(tile, id); }
+                        overlay-changed(visible, x, y, w, h) => { MultiviewTabBus.overlay-changed(visible, x, y, w, h); }
                     }
 
                     tab-grid-view := TabGridView {
@@ -1091,75 +1068,14 @@ export component MainWindow inherits Window {
     }
 
     // High-Priority Global Tooltip Layer (Strictly rendered over all context menus and media at z: 200)
-    Rectangle {
+    GlobalTooltipLayer {
         x: 0px;
         y: 0px;
         width: 100%;
         height: 100%;
-        z: 200;
-        background: transparent;
-        visible: root.tooltip-active;
 
-        tooltip-bubble := Rectangle {
-            x: root.tooltip-bubble-x;
-            y: root.tooltip-bubble-y;
-            width: bubble-layout.preferred-width;
-            height: bubble-layout.preferred-height;
-            visible: root.tooltip-active;
-
-            background: TooltipSettings.default-background;
-            border-radius: TooltipSettings.default-corner-radius;
-            border-width: 1px;
-            border-color: TooltipSettings.default-border;
-            drop-shadow-blur: 8px;
-            drop-shadow-color: #000000aa;
-            drop-shadow-offset-y: 2px;
-
-            bubble-layout := HorizontalLayout {
-                padding-left: TooltipSettings.default-padding-h;
-                padding-right: TooltipSettings.default-padding-h;
-                padding-top: TooltipSettings.default-padding-v;
-                padding-bottom: TooltipSettings.default-padding-v;
-                spacing: 6px;
-                alignment: center;
-
-                if GlobalTooltip.icon != IconId.none : IconSlot {
-                    icon: GlobalTooltip.icon;
-                    size: IconSize.sm;
-                    color: TooltipSettings.default-text;
-                }
-
-                Text {
-                    text: GlobalTooltip.text;
-                    font-size: TooltipSettings.default-font-size;
-                    color: TooltipSettings.default-text;
-                    vertical-alignment: center;
-                    horizontal-alignment: left;
-                }
-
-                if GlobalTooltip.shortcut != "" : Rectangle {
-                    background: #ffffff14;
-                    border-radius: 3px;
-                    border-width: 1px;
-                    border-color: #ffffff22;
-                    height: 18px;
-                    y: (parent.height - self.height) / 2;
-
-                    HorizontalLayout {
-                        padding-left: 5px;
-                        padding-right: 5px;
-                        alignment: center;
-
-                        Text {
-                            text: GlobalTooltip.shortcut;
-                            font-size: 10.5px;
-                            font-weight: 700;
-                            color: TooltipSettings.default-shortcut-color;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-            }
+        state-changed(is-visible, x, y, w, h) => {
+            root.global-tooltip-state-changed(is-visible, x, y, w, h);
         }
     }
 

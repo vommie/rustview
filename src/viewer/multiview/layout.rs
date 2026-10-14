@@ -296,28 +296,6 @@ impl Layout {
     }
 }
 
-/// Rectangle of the mute badge inside a tile (top right corner), or `None` if the tile is too small for it.
-pub fn badge_rect(
-    content: Rect,
-    scale: f32,
-    size: f32,
-    inset: f32,
-    min_w: f32,
-    min_h: f32,
-) -> Option<Rect> {
-    if (content.w as f32) < min_w * scale || (content.h as f32) < min_h * scale {
-        return None;
-    }
-    let side = (size * scale).round() as i32;
-    let margin = (inset * scale).round() as i32;
-    Some(Rect::new(
-        content.x + content.w - margin - side,
-        content.y + margin,
-        side,
-        side,
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -522,15 +500,5 @@ mod tests {
         assert_eq!(l.tile_at(c1.x - 1, c1.y), None);
         assert_eq!(l.tile_at(c1.x + c1.w, c1.y), None);
         assert_eq!(l.tile_at(c1.x, c1.y - 1), None);
-    }
-
-    #[test]
-    fn badge_sits_in_the_top_right_corner_and_hides_in_small_tiles() {
-        let c = Rect::new(100, 50, 800, 450);
-        let b = badge_rect(c, 1.0, 28.0, 8.0, 120.0, 80.0).unwrap();
-        assert_eq!(b, Rect::new(100 + 800 - 8 - 28, 50 + 8, 28, 28));
-        assert!(badge_rect(Rect::new(0, 0, 100, 200), 1.0, 28.0, 8.0, 120.0, 80.0).is_none());
-        let scaled = badge_rect(c, 1.5, 28.0, 8.0, 120.0, 80.0).unwrap();
-        assert_eq!((scaled.w, scaled.x + scaled.w), (42, 100 + 800 - 12));
     }
 }

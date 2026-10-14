@@ -18,6 +18,8 @@ pub struct TileView {
     pub pixels: Option<SharedPixelBuffer<Rgb8Pixel>>,
     pub is_loading: bool,
     pub error: Option<String>,
+    /// The buttons of the hover bar of this tile.
+    pub actions: Vec<ActionView>,
 }
 
 /// One button of the hover bar of a tile.
@@ -35,11 +37,6 @@ pub struct GutterView {
     pub vertical: bool,
 }
 
-pub struct BadgeView {
-    pub rect: Rect,
-    pub muted: bool,
-}
-
 pub struct HostedView {
     /// Changes whenever anything visible changed, so presenters can skip identical syncs.
     pub revision: u64,
@@ -49,5 +46,6 @@ pub struct HostedView {
     pub screen: Rect,
     pub tiles: Vec<TileView>,
     pub gutters: Vec<GutterView>,
-    pub badge: Option<BadgeView>,
+    /// The tile whose hover bar is shown right now (the pointer is on it and has been active recently).
+    pub bar_tile: Option<usize>,
 }

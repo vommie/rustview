@@ -137,6 +137,11 @@ impl MultiviewInstance {
         self.trigger_feedback(id, action, kind);
     }
 
+    /// True if the tile of medium `id` is sticky.
+    pub fn is_sticky(&self, id: MediaId) -> bool {
+        self.tiles.iter().any(|t| t.media_id == id && t.sticky)
+    }
+
     /// The single medium of the Multiview, if there is exactly one.
     pub fn solo_tile(&self) -> Option<(MediaId, TileKind, bool)> {
         match self.tiles.as_slice() {

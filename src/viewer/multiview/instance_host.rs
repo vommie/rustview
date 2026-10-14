@@ -9,7 +9,7 @@ use super::instance::MultiviewInstance;
 use super::instance_layout::layout_params;
 use super::layout::{GutterKind, Rect};
 use super::route::HostMode;
-use super::view::{BadgeView, GutterView, HostedView, TileView};
+use super::view::{GutterView, HostedView, TileView};
 use crate::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
 use crate::viewer::{SubwindowGeometry, ViewportBounds, XRectangle};
 
@@ -108,8 +108,8 @@ impl HostState {
     }
 }
 
-/// The hole for the mute badge in the coordinates of the parent window.
-pub(super) fn hole_rectangle(rect: Rect) -> XRectangle {
+/// A rectangle of the host in the coordinates of the parent window, as the X server wants it.
+pub(super) fn cutout_rectangle(rect: Rect) -> XRectangle {
     XRectangle {
         x: rect.x.clamp(0, i16::MAX as i32) as i16,
         y: rect.y.clamp(0, i16::MAX as i32) as i16,
@@ -182,13 +182,14 @@ impl MultiviewInstance {
             .map(|t| self.host.projection.rect(t.content))
     }
 
-    /// Re-places everything after the layout or the projection changed. The hole of the mute badge is relative to its
-    /// window, so it goes away before any window moves and comes back on the next tick.
+    /// Re-places everything after the layout or the projection changed. The shape of a video window is relative to the
+    /// window, so it is reset before any window moves and applied again afterwards.
     pub(super) fn reproject(&mut self) {
-        self.drop_badge();
+        if let Some(index) = self.bar_tile {
+            self.refresh_shape(index);
+        }
         self.place_windows();
         self.apply_all_cutouts();
-        self.refresh_badge();
         self.bump();
     }
 
@@ -267,15 +268,15 @@ impl MultiviewInstance {
         }
     }
 
-    /// Everything that has to be cut out of the video window of tile `index`: the overlays of the host plus the hole of
-    /// the mute badge. The shape of a window holds one set of rectangles, so they are applied together.
+    /// Everything that has to be cut out of the video window of tile `index`: the overlays of the host (menus, tooltips)
+    /// plus the hover bar if it belongs to this tile. The shape of a window holds one set of rectangles, so they are
+    /// applied together.
     fn window_cutouts(&self, index: usize) -> Vec<XRectangle> {
         let mut rects = self.host.surface.overlay_cutouts.clone();
-        if let Some((badge_index, rect)) = self.badge
-            && badge_index == index
-            && !self.hole_pending
+        if self.bar_tile == Some(index)
+            && let Some(bar) = self.bar_rect
         {
-            rects.push(hole_rectangle(rect));
+            rects.push(cutout_rectangle(bar));
         }
         rects
     }
@@ -397,13 +398,15 @@ impl MultiviewInstance {
             .tiles
             .iter()
             .zip(&self.layout.tiles)
-            .map(|(tile, placed)| TileView {
+            .enumerate()
+            .map(|(index, (tile, placed))| TileView {
                 media_id: tile.media_id,
                 rect: relative(projection.rect(placed.content)),
                 kind: tile.kind,
                 pixels: tile.pixels.clone(),
                 is_loading: tile.is_loading,
                 error: tile.error.clone(),
+                actions: self.action_views(index),
             })
             .collect();
         let gutters = self
@@ -415,21 +418,13 @@ impl MultiviewInstance {
                 vertical: g.kind == GutterKind::Vertical,
             })
             .collect();
-        let badge = self.badge.map(|(index, rect)| BadgeView {
-            rect: relative(rect),
-            muted: self
-                .tiles
-                .get(index)
-                .and_then(|t| t.video.as_ref())
-                .is_some_and(|v| v.last_mute),
-        });
         HostedView {
             revision: self.revision,
             dpi: self.host.surface.dpi,
             screen: relative(projection.screen()),
             tiles,
             gutters,
-            badge,
+            bar_tile: self.bar_tile,
         }
     }
 }
@@ -654,7 +649,7 @@ mod tests {
     }
 
     #[test]
-    fn the_badge_hole_is_merged_with_the_overlay_cutouts() {
+    fn the_bar_cutout_is_merged_with_the_overlay_cutouts() {
         let shared = instance(&[1.78, 1.78]);
         let mut mv = shared.lock();
         mv.set_host(&HostSurface::tab_view(
@@ -665,22 +660,22 @@ mod tests {
         ));
         assert_eq!(mv.window_cutouts(0), vec![cutout(10, 10, 100, 50)]);
 
-        mv.badge = Some((0, Rect::new(300, 90, 28, 28)));
-        mv.hole_pending = true;
+        mv.bar_tile = Some(0);
         assert_eq!(
             mv.window_cutouts(0),
             vec![cutout(10, 10, 100, 50)],
-            "the hole waits for the next tick"
+            "no cutout until the host reports where the bar is"
         );
-        mv.hole_pending = false;
+        mv.set_bar_overlay(Some(Rect::new(300, 26, 120, 34)));
         assert_eq!(
             mv.window_cutouts(0),
-            vec![cutout(10, 10, 100, 50), cutout(300, 90, 28, 28)]
+            vec![cutout(10, 10, 100, 50), cutout(300, 90, 120, 34)],
+            "the bar is placed relative to the host rectangle (y + 64)"
         );
         assert_eq!(
             mv.window_cutouts(1),
             vec![cutout(10, 10, 100, 50)],
-            "the hole belongs to one window"
+            "the cutout belongs to the window of one tile"
         );
     }
 

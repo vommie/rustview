@@ -1,5 +1,5 @@
 //! Instance behavior around sound: applying the audio rules to the players, noticing mute changes made inside mpv and the
-//! mute badge click.
+//! user's mute toggle.
 
 use super::audio::{AudioMode, AudioOrigin, TileAudio};
 use super::instance::MultiviewInstance;
@@ -66,13 +66,6 @@ impl MultiviewInstance {
             );
         }
         changed
-    }
-
-    /// The mute badge of the hovered tile was clicked.
-    pub fn toggle_badge_mute(&mut self) {
-        if let Some((index, _)) = self.badge {
-            self.toggle_mute_at(index);
-        }
     }
 
     /// The user mutes or unmutes tile `index`; either way the choice is theirs and the sound rules leave it alone.

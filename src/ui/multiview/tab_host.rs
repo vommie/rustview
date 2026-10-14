@@ -2,23 +2,23 @@
 //!
 //! The canvas `multiview-viewer` in `main.slint` draws the scene from the `MultiviewTabBus` global. This module gives the
 //! instance its rectangle (read from Slint, never from hard-wired chrome sizes), fills the bus from the instance, runs the
-//! tick for the mute badge while a video is shown and turns the events of the canvas into instance calls and UI actions.
+//! tick for the hover bar while the tab is shown and turns the events of the canvas into instance calls and UI actions.
 //! All state lives on the UI thread; the instance stays the only copy of the Multiview itself.
 
 use super::handle::MultiviewHandle;
 use super::router;
-use super::views::{self, ImageCache};
+use super::views::{self, ImageCache, ViewModels};
 use crate::library::models::MediaId;
 use crate::settings::schema::MULTIVIEW_TICK_MS;
-use crate::ui::{MainWindow, MultiviewGutterView, MultiviewTabBus, MultiviewTileView};
+use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
+use crate::viewer::multiview::actions::ActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
-use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,8 +29,7 @@ struct TabHost {
     instance: WeakInstance,
     main_xid: u64,
     probe: Option<PointerProbe>,
-    tile_model: Rc<VecModel<MultiviewTileView>>,
-    gutter_model: Rc<VecModel<MultiviewGutterView>>,
+    models: ViewModels,
     images: ImageCache,
     /// Instance id and revision that the bus shows right now.
     shown: Option<(u64, u64)>,
@@ -62,15 +61,17 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     with_host(|h| {
         h.window = Some(window.as_weak());
         h.handle = Some(handle);
-        bus.set_tiles(ModelRc::from(h.tile_model.clone()));
-        bus.set_gutters(ModelRc::from(h.gutter_model.clone()));
+        bus.set_tiles(ModelRc::from(h.models.tiles.clone()));
+        bus.set_gutters(ModelRc::from(h.models.gutters.clone()));
+        bus.set_bar_actions(ModelRc::from(h.models.bar_actions.clone()));
     });
     bus.on_gutter_drag_started(|index| act(|mv| mv.drag_started(index.max(0) as usize)));
     bus.on_gutter_dragged(|_, distance| act(|mv| mv.dragged(distance)));
     bus.on_gutter_drag_finished(|_| act(MultiviewInstance::drag_finished));
     bus.on_gutter_reset(|| act(MultiviewInstance::reset_split));
     bus.on_gutter_swap(|index| act(|mv| mv.swap(index.max(0) as usize)));
-    bus.on_badge_clicked(|| act(MultiviewInstance::toggle_badge_mute));
+    bus.on_action_clicked(on_action);
+    bus.on_overlay_changed(on_bar_overlay);
     bus.on_tile_clicked(|_, is_ctrl| on_click(is_ctrl));
     bus.on_background_clicked(on_click);
     bus.on_middle_clicked(|| run(route_for(RoutedEvent::ToggleFullscreen, ClickKind::None)));
@@ -82,6 +83,36 @@ fn act(f: impl FnOnce(&mut MultiviewInstance)) {
         f(&mut instance.lock());
     }
     refresh();
+}
+
+/// A button of the hover bar was clicked; what the application has to do about it runs after the instance lock is released.
+fn on_action(tile: i32, action: i32) {
+    let (Some(instance), Some(action)) = (current_instance(), ActionId::from_code(action)) else {
+        return;
+    };
+    let outcome = {
+        let mut guard = instance.lock();
+        let Some(media_id) = usize::try_from(tile)
+            .ok()
+            .and_then(|index| guard.member_ids().get(index).copied())
+        else {
+            return;
+        };
+        guard.perform_action(media_id, action)
+    };
+    drop(instance);
+    refresh();
+    run(outcome);
+}
+
+/// The hover bar was drawn, moved or hidden: the video window below it is cut open (or closed again).
+fn on_bar_overlay(visible: bool, x: f32, y: f32, w: f32, h: f32) {
+    let dpi = with_host(|h| h.window.clone())
+        .flatten()
+        .and_then(|window| window.upgrade())
+        .map_or(1.0, |window| window.window().scale_factor());
+    let rect = views::bar_overlay(visible, x, y, w, h, dpi);
+    act(|mv| mv.set_bar_overlay(rect));
 }
 
 fn route_for(event: RoutedEvent, click: ClickKind) -> UiAction {
@@ -125,21 +156,17 @@ pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &Shar
     let rect = views::physical_rect(area.x, area.y, area.width, area.height, scale);
     let cutouts = tab_manager.get_combined_cutouts();
     let surface = HostSurface::tab_view(main_xid, rect, scale, cutouts);
-    let has_video = {
-        let mut guard = instance.lock();
-        guard.set_host(&surface);
-        guard.has_video()
-    };
+    instance.lock().set_host(&surface);
     with_host(|h| {
         h.window = Some(window.as_weak());
         h.instance = Arc::downgrade(instance);
         h.main_xid = main_xid;
         if h.probe.is_none() {
             h.probe = PointerProbe::new()
-                .map_err(|e| tracing::warn!(error = %e, "[Multiview: TabView] No pointer probe; the mute badge is disabled"))
+                .map_err(|e| tracing::warn!(error = %e, "[Multiview: TabView] No pointer probe; the hover bar is disabled"))
                 .ok();
         }
-        if has_video && h.probe.is_some() {
+        if h.probe.is_some() {
             if !h.tick.running() {
                 h.tick.start(
                     TimerMode::Repeated,
@@ -164,8 +191,7 @@ pub fn suspend() {
     .unwrap_or(false);
     if released {
         with_host(|h| {
-            h.tile_model.set_vec(Vec::new());
-            h.gutter_model.set_vec(Vec::new());
+            h.models.clear();
             h.images = ImageCache::default();
         });
         tracing::debug!("[Multiview: TabView] Suspended");
@@ -188,12 +214,13 @@ pub fn refresh() {
         (key.0, guard.view())
     };
     with_host(|h| {
-        views::sync_models(&h.tile_model, &h.gutter_model, &view, &mut h.images);
+        let TabHost { models, images, .. } = h;
+        models.sync(&view, images);
         h.shown = Some((id, view.revision));
     });
     let bus = window.global::<MultiviewTabBus>();
     bus.set_screen(views::screen_view(&view));
-    bus.set_badge(views::badge_view(view.badge.as_ref(), view.dpi));
+    bus.set_bar_tile(views::bar_tile_index(&view));
 }
 
 fn on_tick() {
