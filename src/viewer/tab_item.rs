@@ -279,8 +279,18 @@ impl TabCollection {
                 tab.record.filename = new_filename.to_string();
             }
         }
-        for mv in self.sessions.iter().filter_map(|t| t.payload.multiview()) {
-            mv.instance.lock().member_renamed(media_id, new_filename);
+        for tab in self.sessions.iter_mut() {
+            let Some(instance) = tab.payload.multiview().map(|mv| mv.instance.clone()) else {
+                continue;
+            };
+            let mut guard = instance.lock();
+            guard.member_renamed(media_id, new_filename);
+            // A Multiview tab of one medium is named after its file and follows the file's new name.
+            if guard.solo_tile().map(|(id, _, _)| id) == Some(media_id) {
+                let suffix = tab.title.strip_prefix(&tab.filename).unwrap_or("").to_string();
+                tab.title = format!("{new_filename}{suffix}");
+                tab.filename = new_filename.to_string();
+            }
         }
     }
 
@@ -624,5 +634,32 @@ mod tests {
 
         tabs.mark_deleted(99);
         assert!(shared.lock().view().tiles[0].error.is_none());
+    }
+
+    #[test]
+    fn a_multiview_tab_of_one_medium_is_named_after_its_file_and_follows_renames() {
+        let shared = instance(&[5]);
+        let mut tabs = TabCollection::new();
+        let mut single = MediaTabSession::for_multiview(1, "5.png".to_string(), shared);
+        single.filename = "5.png".to_string();
+        tabs.push(single);
+        tabs.push(MediaTabSession::for_multiview(
+            2,
+            "Multiview".to_string(),
+            instance(&[6, 7]),
+        ));
+
+        tabs.update_filename(5, "holiday.png");
+
+        let single = tabs.get(1).expect("single tab");
+        assert_eq!((single.title.as_str(), single.filename.as_str()), ("holiday.png", "holiday.png"));
+        assert_eq!(tabs.get(2).map(|t| t.title.as_str()), Some("Multiview"));
+
+        tabs.update_filename(6, "other.png");
+        assert_eq!(
+            tabs.get(2).map(|t| t.title.as_str()),
+            Some("Multiview"),
+            "a Multiview of several media keeps its title"
+        );
     }
 }

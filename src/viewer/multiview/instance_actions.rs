@@ -150,6 +150,14 @@ impl MultiviewInstance {
         }
     }
 
+    /// The file name of the single medium, if there is exactly one (a tab that holds such a Multiview is named after it).
+    pub fn solo_filename(&self) -> Option<String> {
+        match self.tiles.as_slice() {
+            [only] => Some(only.filename.clone()),
+            _ => None,
+        }
+    }
+
     /// Previous/next applies to a single image of a Multiview that follows the Browse selection. A video keeps all keys and
     /// the wheel for mpv (the Browse view is how one moves on), a snapshot that belongs to a tab is isolated.
     pub fn navigation(&self) -> Navigation {

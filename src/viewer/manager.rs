@@ -680,12 +680,16 @@ impl ViewerTabManager {
         }
 
         let new_id = self.tab_counter.fetch_add(1, Ordering::Relaxed);
-        let title = TabTitleFormatter::allocate_tab_title(
-            tabs.all(),
-            MULTIVIEW_TAB_MEDIA_ID,
-            MULTIVIEW_TAB_TITLE,
-        );
-        tabs.push(MediaTabSession::for_multiview(new_id, title, instance));
+        // A Multiview of one medium is named after its file, one of several media "Multiview".
+        let single_filename = instance.lock().solo_filename();
+        let base_title = single_filename.as_deref().unwrap_or(MULTIVIEW_TAB_TITLE);
+        let title =
+            TabTitleFormatter::allocate_tab_title(tabs.all(), MULTIVIEW_TAB_MEDIA_ID, base_title);
+        let mut session = MediaTabSession::for_multiview(new_id, title, instance);
+        if let Some(filename) = single_filename {
+            session.filename = filename;
+        }
+        tabs.push(session);
 
         tracing::info!(
             tab_id = new_id,
