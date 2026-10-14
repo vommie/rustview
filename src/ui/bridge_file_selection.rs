@@ -100,12 +100,9 @@ impl BridgeFileSelection {
         let lib_mid = library.clone();
         let set_mid = settings;
         let st_mid = state.clone();
-        let tm_mid = tab_manager;
         let fs_mid = fullscreen_controller;
         window.on_media_middle_clicked(move |id| {
-            Self::handle_middle_click(
-                id as u64, &win_mid, &lib_mid, &set_mid, &st_mid, &tm_mid, &fs_mid,
-            );
+            Self::handle_middle_click(id as u64, &win_mid, &lib_mid, &set_mid, &st_mid, &fs_mid);
         });
 
         let win_bg = window.clone_strong();
@@ -138,20 +135,20 @@ impl BridgeFileSelection {
         });
     }
 
-    /// Handles middle-click on a media tile or table row in the browse view:
-    /// selects the item and opens it in Quick-Fullscreen Mode (non-modal) so Inspector and Tag & Rate Panel stay in sync.
+    /// Handles middle-click on a media tile or table row in the browse view: selects the item and shows it in the
+    /// fullscreen (the Multiview). If a fullscreen that follows the selection is open already, it follows the new
+    /// selection instead. The main window stays usable, so the Inspector and Tag & Rate Panel stay in sync.
     pub fn handle_middle_click(
         media_id: MediaId,
         window: &MainWindow,
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        tab_manager: &Arc<ViewerTabManager>,
         fullscreen_controller: &ImageFullscreenDialogController,
     ) {
         tracing::info!(
             media_id,
-            "[FileSelection: MiddleClick] Quick-Fullscreen mode triggered directly on media item (bypassing tabs, non-modal)"
+            "[FileSelection: MiddleClick] Fullscreen requested directly on a media item (non-modal)"
         );
 
         let (changed_ids, _) = {
@@ -168,14 +165,16 @@ impl BridgeFileSelection {
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
 
-        fullscreen_controller.show_for_media(
-            media_id,
-            library,
-            settings,
-            state,
-            tab_manager,
-            window.as_weak(),
-        );
+        fullscreen_controller.dismiss_for_replacement();
+        if !fullscreen_controller
+            .multiview()
+            .open(settings, state, window.as_weak())
+        {
+            StatusBarBridge::warn(
+                window,
+                "This file cannot be shown in fullscreen (deleted, pending or corrupted).",
+            );
+        }
     }
 
     /// Programmatically selects a single media item in Browse Mode, synchronizing UI tiles,

@@ -22,37 +22,37 @@ pub struct OpenSummary {
 }
 
 impl OpenSummary {
-    /// The Multiview entry replaces "Open in Fullscreen" only for multi-selections.
-    pub fn is_multi(&self) -> bool {
-        self.selected > 1
-    }
-
     pub fn is_actionable(&self) -> bool {
-        self.playable >= 2
+        self.playable >= 1
     }
 
     pub fn shown(&self) -> usize {
         self.playable.min(MULTIVIEW_MAX_TILES)
     }
 
+    /// The Multiview is the only fullscreen: one medium fills the display, several are shown side by side.
     pub fn menu_label(&self) -> String {
         if self.playable > MULTIVIEW_MAX_TILES {
-            format!("Open First {MULTIVIEW_MAX_TILES} in Fullscreen (Multiview)")
+            format!("Open First {MULTIVIEW_MAX_TILES} in Fullscreen")
         } else {
-            "Open in Fullscreen (Multiview)".to_string()
+            "Open in Fullscreen".to_string()
         }
     }
 
     pub fn hint(&self) -> String {
         if !self.is_actionable() {
-            return "Multiview needs at least two playable files in the selection\n\
+            return "Nothing to show in fullscreen\n\
                     Disabled: deleted, pending and corrupted files are skipped"
                 .to_string();
         }
-        let mut text = format!(
-            "Show {} media side by side in one fullscreen window",
-            self.shown()
-        );
+        let mut text = if self.shown() == 1 {
+            "Show the selected medium in fullscreen".to_string()
+        } else {
+            format!(
+                "Show {} media side by side in one fullscreen window",
+                self.shown()
+            )
+        };
         if self.playable > MULTIVIEW_MAX_TILES {
             text.push_str(&format!(
                 " (only the first {MULTIVIEW_MAX_TILES} in view order)"
@@ -165,26 +165,24 @@ mod tests {
     }
 
     #[test]
-    fn needs_two_playable_files() {
-        assert!(!s(1, 1).is_actionable());
-        assert!(!s(3, 1).is_actionable());
-        assert!(s(2, 2).is_actionable());
+    fn needs_one_playable_file() {
+        assert!(!s(0, 0).is_actionable());
+        assert!(!s(3, 0).is_actionable());
+        assert!(s(1, 1).is_actionable());
         assert!(s(9, 4).is_actionable());
     }
 
     #[test]
     fn label_names_the_cap_only_when_it_applies() {
-        assert_eq!(s(3, 3).menu_label(), "Open in Fullscreen (Multiview)");
-        assert_eq!(s(4, 4).menu_label(), "Open in Fullscreen (Multiview)");
-        assert_eq!(
-            s(7, 7).menu_label(),
-            "Open First 4 in Fullscreen (Multiview)"
-        );
+        assert_eq!(s(1, 1).menu_label(), "Open in Fullscreen");
+        assert_eq!(s(4, 4).menu_label(), "Open in Fullscreen");
+        assert_eq!(s(7, 7).menu_label(), "Open First 4 in Fullscreen");
     }
 
     #[test]
     fn hint_explains_cap_skips_and_why_it_is_disabled() {
-        assert!(s(2, 1).hint().contains("at least two playable files"));
+        assert!(s(2, 0).hint().contains("deleted, pending and corrupted"));
+        assert_eq!(s(1, 1).hint(), "Show the selected medium in fullscreen");
         assert_eq!(
             s(3, 3).hint(),
             "Show 3 media side by side in one fullscreen window"
@@ -192,11 +190,5 @@ mod tests {
         assert!(s(7, 7).hint().contains("only the first 4 in view order"));
         assert!(s(3, 2).hint().ends_with("(1 selected file is skipped)"));
         assert!(s(6, 3).hint().ends_with("(3 selected files are skipped)"));
-    }
-
-    #[test]
-    fn only_multi_selections_use_the_multiview_entry() {
-        assert!(!s(1, 1).is_multi());
-        assert!(s(2, 0).is_multi());
     }
 }

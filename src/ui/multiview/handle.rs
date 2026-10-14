@@ -208,8 +208,9 @@ impl MultiviewHandle {
         }
     }
 
-    /// Opens the Multiview with the playable items of the current selection. UI thread only. Returns `false` if the
-    /// selection does not contain at least two playable items.
+    /// Opens the Multiview with the playable items of the current selection (one fills the display, up to four are shown
+    /// side by side); if one that follows the selection is open already, it follows the selection now. UI thread only.
+    /// Returns `false` if the selection contains nothing playable.
     pub fn open(
         &self,
         settings: &Arc<SettingsManager>,
@@ -221,9 +222,14 @@ impl MultiviewHandle {
             tracing::info!(
                 selected = plan.summary.selected,
                 playable = plan.summary.playable,
-                "[Multiview: Open] Ignored: fewer than two playable files in the selection"
+                "[Multiview: Open] Ignored: no playable file in the selection"
             );
             return false;
+        }
+        if self.is_open() && !self.is_isolated_open() {
+            tracing::debug!("[Multiview: Open] Already open: following the selection instead of reopening");
+            session::schedule_follow(Pace::Immediate);
+            return true;
         }
         *self.shared.main_window.lock() = Some(main_window.clone());
         session::open(

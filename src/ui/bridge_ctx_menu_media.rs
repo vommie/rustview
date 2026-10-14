@@ -354,7 +354,6 @@ impl MediaContextMenu {
         };
         let open_in_bg_tab_shortcut = if is_single { Some("Ctrl+MiddleClick") } else { None };
 
-        let open_in_fullscreen_text = "Open in Fullscreen".to_string();
         let open_in_fullscreen_shortcut = if is_single { Some("MiddleClick") } else { None };
 
         let refresh_full_text = if is_single {
@@ -419,25 +418,20 @@ impl MediaContextMenu {
                 Some(Icon::OpenInBackgroundTab),
                 can_open,
             );
-        builder = if meta.multiview.is_multi() {
-            builder.action_with_tooltip(
+        builder = builder
+            .action_with_tooltip(
                 CTX_ACTION_OPEN_IN_FULLSCREEN,
                 meta.multiview.menu_label(),
-                None,
-                Some(Icon::OpenMultiview),
+                open_in_fullscreen_shortcut,
+                Some(if is_single {
+                    Icon::OpenFullscreen
+                } else {
+                    Icon::OpenMultiview
+                }),
                 meta.multiview.is_actionable(),
                 meta.multiview.hint(),
             )
-        } else {
-            builder.action(
-                CTX_ACTION_OPEN_IN_FULLSCREEN,
-                open_in_fullscreen_text,
-                open_in_fullscreen_shortcut,
-                Some(Icon::OpenFullscreen),
-                can_open,
-            )
-        };
-        builder = builder.separator();
+            .separator();
 
         // 3. Move To... / Copy To... Submenus Projected directly from SPoT with zero disk I/O
         if let Some(snap) = snapshot {
@@ -816,31 +810,14 @@ impl MediaContextMenu {
         ctx: &MediaActionContext<'_>,
         target_ids: &[MediaId],
     ) {
-        if target_ids.len() > 1 {
-            tracing::info!(
-                target_count = target_ids.len(),
-                "[MediaContextMenu] 'Open in Fullscreen (Multiview)' action triggered"
-            );
-            ctx.fullscreen_controller.dismiss_for_replacement();
-            ctx.fullscreen_controller
-                .multiview()
-                .open(ctx.settings, ctx.state, window.as_weak());
-            return;
-        }
-        if let Some(&media_id) = target_ids.first() {
-            tracing::info!(
-                media_id,
-                "[MediaContextMenu] 'Open in Fullscreen' action triggered"
-            );
-            ctx.fullscreen_controller.show_for_media(
-                media_id,
-                ctx.library,
-                ctx.settings,
-                ctx.state,
-                ctx.tab_manager,
-                window.as_weak(),
-            );
-        }
+        tracing::info!(
+            target_count = target_ids.len(),
+            "[MediaContextMenu] 'Open in Fullscreen' action triggered"
+        );
+        ctx.fullscreen_controller.dismiss_for_replacement();
+        ctx.fullscreen_controller
+            .multiview()
+            .open(ctx.settings, ctx.state, window.as_weak());
     }
 
     fn handle_open_action(
