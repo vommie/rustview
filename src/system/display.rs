@@ -252,7 +252,18 @@ impl SystemDisplayService {
     }
 
     /// Emits structured startup diagnostics covering host OS, Linux kernel, session architecture, and active displays.
+    /// Logs the host environment and the connected monitors. Runs on a thread of its own: detecting the monitors starts
+    /// subprocesses (`kscreen-doctor`, `xrandr`), which must not delay the first window.
     pub fn log_system_diagnostics() {
+        let spawned = std::thread::Builder::new()
+            .name("system-diagnostics".into())
+            .spawn(Self::log_system_diagnostics_blocking);
+        if let Err(e) = spawned {
+            tracing::warn!(error = %e, "[SystemDiagnostics: Startup] Failed to start the diagnostics thread");
+        }
+    }
+
+    fn log_system_diagnostics_blocking() {
         let distro = std::fs::read_to_string("/etc/os-release")
             .ok()
             .and_then(|content| {

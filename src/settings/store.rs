@@ -6,7 +6,7 @@ use super::schema::{
     DEFAULT_VIDEO_ENGINE, DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH, MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
     MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_GRID_ITEM_PADDING_V,
-    MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_L1_CACHE_SLOTS, MAX_MAX_HISTORY_TAGS,
+    MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_L1_CACHE_SLOTS, MAX_MAX_HISTORY_TAGS, MAX_MAXIMIZED_WINDOW_SIZE,
     MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH,
     MAX_TAB_GRID_COLUMNS, MAX_TAG_HISTORY_HEIGHT, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH,
     MAX_TOOLTIP_DELAY_MS, MAX_VIDEO_OFFSET_PERCENT, MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE,
@@ -339,6 +339,13 @@ impl SettingsStore {
         }
         if settings.window.height < MIN_WINDOW_HEIGHT {
             settings.window.height = DEFAULT_WINDOW_HEIGHT;
+        }
+        let (max_w, max_h) = (settings.window.maximized_width, settings.window.maximized_height);
+        if !(MIN_WINDOW_WIDTH..=MAX_MAXIMIZED_WINDOW_SIZE).contains(&max_w)
+            || !(MIN_WINDOW_HEIGHT..=MAX_MAXIMIZED_WINDOW_SIZE).contains(&max_h)
+        {
+            settings.window.maximized_width = 0;
+            settings.window.maximized_height = 0;
         }
         if let Some(x) = settings.window.x
             && !(0..=10_000).contains(&x)

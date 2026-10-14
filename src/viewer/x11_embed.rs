@@ -603,6 +603,75 @@ pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
     }
 }
 
+/// Size of the X screen (the root window, i.e. all monitors together) in pixels. One short connection, no subprocess; `None`
+/// without an X server (a Wayland session without XWayland).
+pub fn x11_root_size() -> Option<(u32, u32)> {
+    let api = get_x11_api().ok()?;
+    unsafe {
+        let display = (api.x_open_display)(std::ptr::null());
+        if display.is_null() {
+            return None;
+        }
+        let root = (api.x_default_root_window)(display);
+        let (mut root_return, mut x, mut y) = (0, 0, 0);
+        let (mut width, mut height, mut border, mut depth) = (0, 0, 0, 0);
+        let status = (api.x_get_geometry)(
+            display,
+            root,
+            &mut root_return,
+            &mut x,
+            &mut y,
+            &mut width,
+            &mut height,
+            &mut border,
+            &mut depth,
+        );
+        (api.x_close_display)(display);
+        (status != 0 && width > 0 && height > 0).then_some((width, height))
+    }
+}
+
+/// Writes the maximized state into `_NET_WM_STATE` of a window that is not mapped yet. A window manager reads the initial state
+/// from this property when the window is mapped (EWMH), so the window appears maximized. The client message that
+/// `force_x11_maximized` and winit send only works for a window that is already mapped: the window would be shown at its
+/// normal size first and maximized afterwards. Returns whether the property was written.
+pub fn set_x11_initial_maximized(window_xid: u64) -> bool {
+    if window_xid == 0 {
+        return false;
+    }
+    let Ok(api) = get_x11_api() else {
+        return false;
+    };
+
+    unsafe {
+        let display = (api.x_open_display)(std::ptr::null());
+        if display.is_null() {
+            return false;
+        }
+        let atom_net_wm_state = (api.x_intern_atom)(display, c"_NET_WM_STATE".as_ptr(), 0);
+        let atom_max_vert =
+            (api.x_intern_atom)(display, c"_NET_WM_STATE_MAXIMIZED_VERT".as_ptr(), 0);
+        let atom_max_horz =
+            (api.x_intern_atom)(display, c"_NET_WM_STATE_MAXIMIZED_HORZ".as_ptr(), 0);
+        let atom_atom = (api.x_intern_atom)(display, c"ATOM".as_ptr(), 0);
+
+        let states = [atom_max_vert, atom_max_horz];
+        (api.x_change_property)(
+            display,
+            window_xid,
+            atom_net_wm_state,
+            atom_atom,
+            32,
+            0,
+            states.as_ptr() as *const u8,
+            2,
+        );
+        // Closing the connection flushes the request.
+        (api.x_close_display)(display);
+    }
+    true
+}
+
 pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
     if window_xid == 0 {
         return;

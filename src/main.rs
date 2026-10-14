@@ -132,12 +132,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     startup_clock::mark("Backend");
     let main_window = MainWindow::new()?;
     startup_clock::mark("MainWindowCreated");
+    // The restored window state is needed before the first frame: Slint renders it before it maps the window (X11), and the
+    // maximized state must be in place at that moment.
+    let win_state = settings.get().window;
+    let should_maximize = win_state.is_maximized;
+    let main_weak_render = main_window.as_weak();
     if let Err(e) = main_window
         .window()
-        .set_rendering_notifier(|state, _| {
-            if matches!(state, slint::RenderingState::AfterRendering) {
-                startup_clock::mark_first_frame();
+        .set_rendering_notifier(move |state, _| match state {
+            // Called while the window exists but is not mapped yet.
+            slint::RenderingState::RenderingSetup => {
+                startup_clock::mark("GlReady");
+                if should_maximize
+                    && let Some(window) = main_weak_render.upgrade()
+                    && let Some(xid) = rustview::viewer::get_raw_window_xid(window.window())
+                {
+                    let written = rustview::viewer::set_x11_initial_maximized(xid);
+                    tracing::info!(written, "[WindowState: Init] Maximized state written before the window is mapped");
+                }
             }
+            slint::RenderingState::AfterRendering => startup_clock::mark_first_frame(),
+            _ => {}
         })
     {
         tracing::debug!(error = %e, "[Startup: Stage] No rendering notifier; the first frame is not logged");
@@ -149,35 +164,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Restore Window Size, Position & State on the Target Monitor
-    let win_state = settings.get().window;
-    let should_maximize = win_state.is_maximized;
     let initial_width = win_state.width.max(MIN_WINDOW_WIDTH);
     let initial_height = win_state.height.max(MIN_WINDOW_HEIGHT);
+    // A window that was closed maximized is created with the size it had then: its first frame already has the size the
+    // window manager maximizes it to, so nothing is laid out again.
+    let (creation_width, creation_height) =
+        if should_maximize && win_state.maximized_width > 0 && win_state.maximized_height > 0 {
+            (win_state.maximized_width, win_state.maximized_height)
+        } else {
+            (initial_width, initial_height)
+        };
 
-    // Validate that saved position falls on an active display; otherwise anchor cleanly to primary display
-    let detected_monitors = SystemDisplayService::detect_monitors();
-    let (target_x, target_y) = match (win_state.x, win_state.y) {
-        (Some(x), Some(y)) => {
-            let on_active_screen = detected_monitors.iter().any(|m| m.contains_point(x + 50, y + 50));
-            if on_active_screen {
-                (x, y)
-            } else if let Some(primary) = detected_monitors.iter().find(|m| m.is_primary) {
-                (primary.x + 40, primary.y + 40)
-            } else {
-                (x, y)
+    // The saved position is only used if it is on the screen (a monitor may have been unplugged). The size of the X screen is
+    // enough for that and costs one short connection; the monitor detection starts subprocesses (kscreen-doctor, xrandr) and
+    // must not delay the first window. Without an X screen (Wayland) the compositor places the window.
+    let target_position = match (win_state.x, win_state.y) {
+        (Some(x), Some(y)) => match rustview::viewer::x11_root_size() {
+            Some((width, height)) if (0..width as i32).contains(&(x + 50)) && (0..height as i32).contains(&(y + 50)) => Some((x, y)),
+            Some(_) => {
+                tracing::info!("[WindowState: Init] The saved window position is outside the screen; the window manager places the window");
+                None
             }
-        }
-        _ => (0, 0),
+            None => Some((x, y)),
+        },
+        _ => None,
     };
 
     // Always set size and target position first so the window lands on the correct monitor
     main_window
         .window()
-        .set_size(slint::PhysicalSize::new(initial_width, initial_height));
+        .set_size(slint::PhysicalSize::new(creation_width, creation_height));
 
-    main_window
-        .window()
-        .set_position(slint::PhysicalPosition::new(target_x, target_y));
+    if let Some((x, y)) = target_position {
+        main_window.window().set_position(slint::PhysicalPosition::new(x, y));
+    }
 
     if should_maximize {
         main_window.window().set_maximized(true);
@@ -187,10 +207,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tracker = Arc::new(parking_lot::Mutex::new(WindowGeometryTracker {
         last_unmaximized_width: initial_width,
         last_unmaximized_height: initial_height,
-        last_unmaximized_x: Some(target_x),
-        last_unmaximized_y: Some(target_y),
-        active_monitor_x: target_x,
-        active_monitor_y: target_y,
+        last_unmaximized_x: target_position.map(|(x, _)| x),
+        last_unmaximized_y: target_position.map(|(_, y)| y),
+        active_monitor_x: target_position.map_or(0, |(x, _)| x),
+        active_monitor_y: target_position.map_or(0, |(_, y)| y),
         is_maximized: should_maximize,
         initialization_settled: false,
     }));
@@ -403,6 +423,10 @@ fn persist_window_geometry(
 
     let mut current_settings = settings.get();
     current_settings.window.is_maximized = is_max;
+    if is_max && cur_size.width >= MIN_WINDOW_WIDTH && cur_size.height >= MIN_WINDOW_HEIGHT {
+        current_settings.window.maximized_width = cur_size.width;
+        current_settings.window.maximized_height = cur_size.height;
+    }
     current_settings.window.width = final_width;
     current_settings.window.height = final_height;
     current_settings.window.x = final_x;

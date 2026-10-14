@@ -205,6 +205,8 @@ pub const MAX_TAG_HISTORY_HEIGHT: f32 = 500.0;
 pub const DEFAULT_WINDOW_WIDTH: u32 = 1280;
 pub const DEFAULT_WINDOW_HEIGHT: u32 = 800;
 pub const MIN_WINDOW_WIDTH: u32 = 600;
+/// Upper bound of a remembered maximized window size (physical pixels); anything larger is a damaged file.
+pub const MAX_MAXIMIZED_WINDOW_SIZE: u32 = 16_384;
 pub const MIN_WINDOW_HEIGHT: u32 = 400;
 pub const DEFAULT_WINDOW_MAXIMIZED: bool = false;
 
@@ -906,6 +908,10 @@ pub struct WindowState {
     pub width: u32,
     pub height: u32,
     pub is_maximized: bool,
+    /// Client size of the window the last time it was closed maximized (0 = unknown). The next launch creates the window with
+    /// this size, so its first frame already has the size the window manager maximizes it to.
+    pub maximized_width: u32,
+    pub maximized_height: u32,
 }
 
 impl Default for WindowState {
@@ -916,6 +922,8 @@ impl Default for WindowState {
             width: DEFAULT_WINDOW_WIDTH,
             height: DEFAULT_WINDOW_HEIGHT,
             is_maximized: DEFAULT_WINDOW_MAXIMIZED,
+            maximized_width: 0,
+            maximized_height: 0,
         }
     }
 }

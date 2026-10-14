@@ -257,6 +257,7 @@ fn prepare_window(
     win.set_navigation(0);
     let appearance = &settings.get().appearance;
     bar_overlay::set_tooltip_settings(appearance.enable_tooltips, appearance.tooltip_delay_ms as i32);
+    bar_overlay::prepare();
     win.window()
         .set_position(PhysicalPosition::new(monitor.x, monitor.y));
     win.window()

@@ -108,8 +108,24 @@ pub fn window_attributes_hook(attributes: WindowAttributes) -> WindowAttributes 
 /// The tooltip settings of the application (they apply to the overlay window too).
 pub fn set_tooltip_settings(enabled: bool, delay_ms: i32) {
     TOOLTIPS.with(|cell| cell.set((enabled, delay_ms)));
+    // Only bars that exist are updated. A bar window costs an X window and a GL context, so it is not created at startup; a new
+    // one reads these settings when it is created.
+    OVERLAYS.with(|cells| {
+        for cell in cells {
+            if let Ok(slot) = cell.try_borrow()
+                && let Some(overlay) = slot.as_ref()
+            {
+                overlay.apply_tooltip_settings();
+            }
+        }
+    });
+}
+
+/// Creates both bar windows ahead of their first reveal (a Multiview opens), so that creating them does not delay the first
+/// appearance of a bar.
+pub fn prepare() {
     for kind in [BarKind::Media, BarKind::Primary] {
-        with_overlay(kind, |overlay| overlay.apply_tooltip_settings());
+        with_overlay(kind, |_| ());
     }
 }
 
