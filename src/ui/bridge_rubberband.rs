@@ -9,6 +9,7 @@ use super::rubberband_selection::{
     TableLayoutConfig,
 };
 use super::MainWindow;
+use super::multiview::handle::{self as multiview_handle, Pace};
 use crate::library::Library;
 use parking_lot::RwLock;
 use slint::ComponentHandle;
@@ -244,6 +245,7 @@ impl BridgeRubberband {
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);
             StatusBarBridge::update_metrics(window, state);
+            multiview_handle::on_user_selection_changed(Pace::Settled);
         }
     }
 

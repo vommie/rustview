@@ -1193,6 +1193,20 @@ impl ImageFullscreenDialogController {
         self.is_active.load(Ordering::SeqCst) || self.multiview.is_open()
     }
 
+    /// True while the former single fullscreen is open (it disappears with the rework to the Multiview as sole fullscreen).
+    #[inline]
+    pub fn is_legacy_active(&self) -> bool {
+        self.is_active.load(Ordering::SeqCst)
+    }
+
+    /// True while a fullscreen that is isolated from the Browse view is open: it locks the main window, so dialogs, drag &
+    /// drop and the embedding of tab videos must treat it differently from a Multiview that follows the Browse selection.
+    #[inline]
+    pub fn is_modal_open(&self) -> bool {
+        (self.is_active.load(Ordering::SeqCst) && self.active_fullscreen_tab_id.lock().is_some())
+            || self.multiview.is_isolated_open()
+    }
+
     fn sync_tab_content(
         &self,
         win: &ImageFullscreenWindow,

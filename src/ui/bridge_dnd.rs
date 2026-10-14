@@ -62,11 +62,12 @@ impl BridgeDnd {
         let t0 = Instant::now();
         params.autoscroller.stop();
 
-        // While a fullscreen is open, a left click on a tile swaps the fullscreen content, so a drag must not start.
-        if params.fullscreen_controller.is_open() {
+        // A fullscreen that is isolated from the Browse view locks the main window; a Multiview that follows the Browse
+        // selection does not, so dragging works next to it.
+        if params.fullscreen_controller.is_modal_open() {
             tracing::debug!(
                 media_id = params.media_id,
-                "[MediaDrag: Blocked] Drag & Drop disabled while fullscreen is open"
+                "[MediaDrag: Blocked] Drag & Drop disabled while an isolated fullscreen is open"
             );
             return;
         }

@@ -1,4 +1,4 @@
-use super::multiview::handle::AppContext;
+use super::multiview::handle::{AppContext, KEEP_VIEW};
 use super::bridge_ctx_menu::{
     BridgeContextMenu, ContextMenuRegistration, MediaMenuContext,
 };
@@ -273,6 +273,12 @@ impl UiBridge {
             let fs_ctrl = fs_controller_close.clone();
 
             let _ = win_w.upgrade_in_event_loop(move |w| {
+                if origin_mode == KEEP_VIEW {
+                    // A Multiview that followed the Browse selection closed: the main window shows what it shows now.
+                    BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
+                    StatusBarBridge::update_metrics(&w, &st);
+                    return;
+                }
                 w.set_is_modal_locked(false);
                 w.set_active_view_mode(origin_mode);
                 w.set_is_browse_active(origin_mode == 0);
@@ -707,7 +713,7 @@ impl UiBridge {
             tracing::info!(
                 "[UiBridge: ModalDismiss] Main UI modal dismiss requested (backdrop clicked or Escape pressed during modal lock)"
             );
-            if fs_ctrl.is_open() {
+            if fs_ctrl.is_modal_open() {
                 fs_ctrl.close();
             }
             FileRenameDialogController::close(&ren_dlg, &st, &win, &fs_ctrl);
@@ -982,9 +988,12 @@ impl UiBridge {
     pub fn trigger_rename_action(params: RenameActionParams<'_>) {
         let window = params.window;
         let active_mode = window.get_active_view_mode();
-        let is_fs = params.fullscreen_controller.is_open();
+        // F2 pressed in the fullscreen window acts on the medium there; F2 in the main window always acts on what the main
+        // window shows, even while a Multiview is open next to it.
+        let from_fullscreen = super::multiview::handle::rename_requested_from_fullscreen()
+            || params.fullscreen_controller.is_legacy_active();
 
-        if is_fs {
+        if from_fullscreen {
             if let Some(media_id) = params.fullscreen_controller.get_active_media_id() {
                 Self::open_media_rename(media_id, &params);
             }

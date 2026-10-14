@@ -355,7 +355,7 @@ impl BridgeViewerTabs {
             let tm = tm_toggle.clone();
             let set = set_toggle.clone();
             let _ = win_toggle.upgrade_in_event_loop(move |w| {
-                if fs.is_open() {
+                if fs.is_modal_open() {
                     tracing::info!(
                         "[BridgeViewerTabs: MpvDblClick] Fullscreen exit requested via MPV event"
                     );
@@ -684,7 +684,9 @@ impl BridgeViewerTabs {
         fullscreen_controller: &ImageFullscreenDialogController,
         settings: &Arc<SettingsManager>,
     ) {
-        if fullscreen_controller.is_open() {
+        // Only a fullscreen that is isolated from the Browse view (it shows a tab's own player) owns the video windows; a
+        // Multiview that follows the Browse selection leaves the embedding of tab videos alone.
+        if fullscreen_controller.is_modal_open() {
             return;
         }
 

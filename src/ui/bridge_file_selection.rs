@@ -8,6 +8,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::file_selection::FileSelectionModel;
+use super::multiview::handle::{self as multiview_handle, Pace};
 use crate::library::Library;
 use crate::library::models::MediaId;
 use crate::media::MediaType;
@@ -241,6 +242,7 @@ impl BridgeFileSelection {
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
+        multiview_handle::on_user_selection_changed(Pace::Immediate);
 
         tracing::info!(
             media_id,
@@ -302,6 +304,7 @@ impl BridgeFileSelection {
         BridgeInspector::update(ctx.window, ctx.state);
         BridgeTags::sync_tag_selection(ctx.window, ctx.library, ctx.state);
         StatusBarBridge::update_metrics(ctx.window, ctx.state);
+        multiview_handle::on_user_selection_changed(Pace::Immediate);
         let t_insp = t_insp_start.elapsed();
 
         tracing::debug!(
@@ -464,6 +467,7 @@ impl BridgeFileSelection {
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
+        multiview_handle::on_user_selection_changed(Pace::Immediate);
 
         if total_count > 0 {
             StatusBarBridge::info(window, format!("Selected all {} media file(s).", total_count));
@@ -682,6 +686,7 @@ impl BridgeFileSelection {
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
+        multiview_handle::on_user_selection_changed(Pace::Immediate);
 
         let open_images_in_tab = settings.get().viewer.images.open_in_tab;
         let open_videos_in_tab = settings.get().viewer.videos.open_in_tab;

@@ -22,9 +22,25 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static OPEN: AtomicBool = AtomicBool::new(false);
+/// The open Multiview belongs to a tab: it is isolated from the Browse view, which stays locked while it is shown.
+static ISOLATED: AtomicBool = AtomicBool::new(false);
+/// The rename request that is being handled comes from the fullscreen window (F2 there), not from the main window.
+static RENAME_FROM_FULLSCREEN: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn set_open(open: bool) {
     OPEN.store(open, Ordering::SeqCst);
+    if !open {
+        ISOLATED.store(false, Ordering::SeqCst);
+    }
+}
+
+pub(super) fn set_isolated(isolated: bool) {
+    ISOLATED.store(isolated, Ordering::SeqCst);
+}
+
+/// True while the F2 rename request that is being handled was made in the fullscreen window.
+pub fn rename_requested_from_fullscreen() -> bool {
+    RENAME_FROM_FULLSCREEN.load(Ordering::SeqCst)
 }
 
 /// What the Multiview needs from the application to act on the Browse view and the tabs.
@@ -72,6 +88,11 @@ impl MultiviewHandle {
 
     pub fn is_open(&self) -> bool {
         OPEN.load(Ordering::SeqCst)
+    }
+
+    /// True while a Multiview that belongs to a tab is shown: it locks the Browse view and nothing follows the selection.
+    pub fn is_isolated_open(&self) -> bool {
+        ISOLATED.load(Ordering::SeqCst)
     }
 
     /// The media an F2 rename acts on (the tile the user pressed F2 over) while the fullscreen Multiview is open.
@@ -178,8 +199,13 @@ impl MultiviewHandle {
         self.shared.main_window.lock().clone()
     }
 
-    pub(super) fn bind_instance(&self, instance: &SharedInstance) {
+    /// Makes `instance` the one the fullscreen window shows. A Multiview that follows the Browse selection is no tab's
+    /// property, so it asks the tab manager to deliver library events (rename, delete, refresh) to it.
+    pub(super) fn bind_instance(&self, instance: &SharedInstance, observe: bool) {
         *self.shared.current.lock() = Arc::downgrade(instance);
+        if observe && let Some(tab_manager) = self.tab_manager() {
+            tab_manager.observe_instance(instance);
+        }
     }
 
     /// Opens the Multiview with the playable items of the current selection. UI thread only. Returns `false` if the
@@ -254,10 +280,16 @@ impl MultiviewHandle {
         }
     }
 
-    /// F2 on a tile: asks the main window for the regular rename dialog, which acts on `rename_target()`.
+    /// F2 on a tile: asks the main window for the regular rename dialog, which acts on `rename_target()`. The request is
+    /// marked as coming from the fullscreen window while it is handled; an F2 in the main window always means the Browse
+    /// selection, even with a Multiview open.
     pub fn request_rename(&self) {
         if let Some(main_window) = self.shared.main_window.lock().clone() {
-            let _ = main_window.upgrade_in_event_loop(|w| w.invoke_request_rename());
+            let _ = main_window.upgrade_in_event_loop(|w| {
+                RENAME_FROM_FULLSCREEN.store(true, Ordering::SeqCst);
+                w.invoke_request_rename();
+                RENAME_FROM_FULLSCREEN.store(false, Ordering::SeqCst);
+            });
         }
     }
 
@@ -268,18 +300,18 @@ impl MultiviewHandle {
         }
     }
 
-    /// Runs the application's close handler. A Multiview that came from a tab names the view it returns to; any other one
-    /// returns to the Browse view.
+    /// Runs the application's close handler. A Multiview that came from a tab names the view it returns to and releases the
+    /// lock it put on the main window; one that followed the Browse selection leaves the main window as it is.
     pub(super) fn notify_closed(&self, tab: Option<TabReturn>) {
         let handler = self.shared.close_handler.lock().clone();
         let main_window = self.shared.main_window.lock().clone();
         if let (Some(handler), Some(main_window)) = (handler, main_window) {
-            let _ = main_window.upgrade_in_event_loop(move |w| {
-                w.set_is_modal_locked(false);
-                match tab {
-                    Some(tab) => handler(tab.origin_mode, Some(tab.tab_id), None),
-                    None => handler(0, None, None),
+            let _ = main_window.upgrade_in_event_loop(move |w| match tab {
+                Some(tab) => {
+                    w.set_is_modal_locked(false);
+                    handler(tab.origin_mode, Some(tab.tab_id), None);
                 }
+                None => handler(KEEP_VIEW, None, None),
             });
         }
     }
@@ -324,9 +356,24 @@ impl MultiviewHandle {
     }
 }
 
-/// Hook for the selection hub (`update_metrics`): costs one atomic load while no Multiview is open.
-pub fn on_selection_changed() {
+/// Origin mode for the close handler that means "the main window shows what it shows now": a Multiview that followed the
+/// Browse selection must not pull the user back to the Browse view.
+pub const KEEP_VIEW: i32 = -1;
+
+/// How soon a changed Browse selection is applied to the open Multiview.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pace {
+    /// A discrete action (click, key, previous/next): applied at once.
+    Immediate,
+    /// A continuous gesture (rubber band): applied once the selection has been quiet for a moment.
+    Settled,
+}
+
+/// The user changed the selection in the Browse view (click, keys, rubber band, select all). Only these actions drive a
+/// Multiview that follows the selection; a folder change, query or refresh that happens to change what is selected does
+/// not. Costs one atomic load while no Multiview is open.
+pub fn on_user_selection_changed(pace: Pace) {
     if OPEN.load(Ordering::Relaxed) {
-        session::schedule_reconcile();
+        session::schedule_follow(pace);
     }
 }

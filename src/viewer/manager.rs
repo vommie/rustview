@@ -1,6 +1,6 @@
 use super::error::ViewerError;
 use super::mpv_engine::MpvPlayer;
-use super::multiview::instance::SharedInstance;
+use super::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use super::tab_item::{ImageBufferEvictor, TabCollection, TabSessionFactory, TabTitleFormatter};
 use super::types::{
     ImageTabPayload, MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, TabId, TabPayload, VideoTabPayload,
@@ -31,6 +31,9 @@ pub struct ViewerTabManager {
     cached_viewport_rect: RwLock<(i32, i32, u32, u32)>,
     active_menu_cutouts: RwLock<Vec<XRectangle>>,
     active_tooltip_cutouts: RwLock<Vec<XRectangle>>,
+    /// Multiviews that no tab owns (the fullscreen one that follows the Browse selection) but whose media may be renamed,
+    /// deleted or refreshed while it is open.
+    observed_instances: Mutex<Vec<WeakInstance>>,
 }
 
 impl ViewerTabManager {
@@ -44,6 +47,7 @@ impl ViewerTabManager {
             cached_viewport_rect: RwLock::new((0, 64, 800, 600)),
             active_menu_cutouts: RwLock::new(Vec::new()),
             active_tooltip_cutouts: RwLock::new(Vec::new()),
+            observed_instances: Mutex::new(Vec::new()),
         }
     }
 
@@ -669,6 +673,7 @@ impl ViewerTabManager {
     /// the caller shows the tab when it wants to. Adopting the same instance twice returns its tab.
     pub fn adopt_multiview_in_background(&self, instance: SharedInstance) -> TabId {
         let instance_id = instance.lock().id();
+        self.stop_observing_instance(instance_id);
         let mut tabs = self.tabs.write();
         if let Some(existing) = tabs.get_by_instance_id(instance_id) {
             return existing.id;
@@ -994,16 +999,53 @@ impl ViewerTabManager {
     // Reactive Event Synchronization
     // =========================================================================
 
+    /// Lets library events (rename, delete, refresh) reach a Multiview that no tab owns. Dead references are dropped.
+    pub fn observe_instance(&self, instance: &SharedInstance) {
+        let mut observed = self.observed_instances.lock();
+        observed.retain(|weak| weak.strong_count() > 0);
+        let id = instance.lock().id();
+        if !observed
+            .iter()
+            .filter_map(WeakInstance::upgrade)
+            .any(|other| other.lock().id() == id)
+        {
+            observed.push(Arc::downgrade(instance));
+        }
+    }
+
+    /// The Multiview with `instance_id` is owned by a tab now (or gone), so the tabs deliver its events.
+    pub fn stop_observing_instance(&self, instance_id: u64) {
+        self.observed_instances.lock().retain(|weak| {
+            weak.upgrade()
+                .is_some_and(|other| other.lock().id() != instance_id)
+        });
+    }
+
+    fn for_each_observed(&self, mut apply: impl FnMut(&mut MultiviewInstance)) {
+        let instances: Vec<SharedInstance> = self
+            .observed_instances
+            .lock()
+            .iter()
+            .filter_map(WeakInstance::upgrade)
+            .collect();
+        for instance in instances {
+            apply(&mut instance.lock());
+        }
+    }
+
     pub fn notify_media_renamed(&self, media_id: MediaId, new_filename: &str) {
         self.tabs.write().update_filename(media_id, new_filename);
+        self.for_each_observed(|mv| mv.member_renamed(media_id, new_filename));
     }
 
     pub fn notify_media_deleted(&self, media_id: MediaId) {
         self.tabs.write().mark_deleted(media_id);
+        self.for_each_observed(|mv| mv.member_deleted(media_id));
     }
 
     pub fn notify_media_refreshed(&self, media_id: MediaId, updated_record: &MediaRecord) {
         self.tabs.write().update_record(media_id, updated_record);
+        self.for_each_observed(|mv| mv.member_refreshed(media_id, updated_record));
     }
 
     // =========================================================================

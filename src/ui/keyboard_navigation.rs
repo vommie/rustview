@@ -7,6 +7,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::file_selection::FileSelectionModel;
 use super::MainWindow;
+use super::multiview::handle::{self as multiview_handle, Pace};
 use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::settings::SettingsManager;
@@ -307,6 +308,7 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
     BridgeInspector::update(params.window, params.state);
     BridgeTags::sync_tag_selection(params.window, params.library, params.state);
     StatusBarBridge::update_metrics(params.window, params.state);
+    multiview_handle::on_user_selection_changed(Pace::Immediate);
 
     tracing::debug!(
         direction = ?direction,

@@ -278,7 +278,7 @@ impl FileRenameDialogController {
             let _ = win.hide();
         }
         state.write().active_file_rename_target = None;
-        if !fullscreen_controller.is_open() {
+        if !fullscreen_controller.is_modal_open() {
             window.set_is_modal_locked(false);
         }
     }

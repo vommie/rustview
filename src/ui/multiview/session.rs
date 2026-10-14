@@ -7,7 +7,7 @@
 //! Input handling lives in `session_input`; this file owns the lifecycle: open, close, window wiring.
 
 use super::eligibility::OpenPlan;
-use super::handle::{self, MultiviewHandle};
+use super::handle::{self, MultiviewHandle, Pace};
 use super::router::{UiEventSink, execute};
 use super::session_convert::park_below_main_window;
 use super::tab_host;
@@ -116,15 +116,19 @@ fn session_generation() -> Option<u64> {
     })
 }
 
-/// Selection hub hook (debounced): the live selection is reconciled once the selection has been quiet for a moment.
-pub(super) fn schedule_reconcile() {
+/// A user action changed the Browse selection: the Multiview follows it, at once or once the selection is quiet.
+pub(super) fn schedule_follow(pace: Pace) {
     with_session(|s| {
-        if s.populated {
-            s.debounce.start(
+        if !s.populated {
+            return;
+        }
+        match pace {
+            Pace::Immediate => s.follow_now(),
+            Pace::Settled => s.debounce.start(
                 TimerMode::SingleShot,
                 Duration::from_millis(MULTIVIEW_SELECTION_DEBOUNCE_MS),
                 || with_session(Session::follow_now),
-            );
+            ),
         }
     });
 }
@@ -269,6 +273,7 @@ fn launch(
     };
 
     let monitor = resolve_monitor(settings, &main_window);
+    let isolated = matches!(source, Source::Tab { .. });
     let session = Session::new(handle, window, monitor, source);
     let generation = session.generation;
     let tile_count = session.instance.lock().tile_count();
@@ -288,7 +293,10 @@ fn launch(
     }
     handle::set_open(true);
 
-    if let Some(mw) = main_window.upgrade() {
+    // Only a Multiview that belongs to a tab is isolated and locks the Browse view; one that follows the selection is a
+    // second window next to it.
+    if isolated && let Some(mw) = main_window.upgrade() {
+        handle::set_isolated(true);
         mw.set_is_modal_locked(true);
     }
     if let Err(e) = win.show() {
@@ -395,7 +403,7 @@ impl Session {
             }
             Source::Tab { instance, tab } => (instance, None, Some(tab)),
         };
-        handle.bind_instance(&instance);
+        handle.bind_instance(&instance, tab_return.is_none());
         let generation = instance.lock().id();
         Self {
             generation,
