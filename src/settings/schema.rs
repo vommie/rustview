@@ -313,6 +313,9 @@ pub const MPV_OBSERVER_IDLE_POLL_MS: u64 = 100;
 pub const SHUTDOWN_WATCHDOG_MS: u64 = 10_000;
 /// How long the exit waits for the players that closed Multiviews are still shutting down on their worker threads.
 pub const SHUTDOWN_TEARDOWN_WAIT_MS: u64 = 3_000;
+/// How long the teardown of a closed video tab waits until nothing else holds its player (short-lived references of UI code that
+/// is still finishing) before it gives up and leaves the window alone.
+pub const PLAYER_TEARDOWN_WAIT_MS: u64 = 2_000;
 
 // =============================================================================
 // SECTION 12: API & External Tools Settings - Single Point of Truth Constants

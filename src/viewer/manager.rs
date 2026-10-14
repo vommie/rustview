@@ -809,10 +809,11 @@ impl ViewerTabManager {
         let mut active = self.active_tab_id.write();
 
         let (pos, removed) = tabs.remove(tab_id)?;
-        Self::cleanup_session_resources(&removed);
+        let removed_id = removed.id;
+        Self::cleanup_session_resources(removed);
 
         tracing::info!(
-            tab_id = removed.id,
+            tab_id = removed_id,
             remaining = tabs.len(),
             "[ViewerTabManager: Close] Closed tab session"
         );
@@ -838,7 +839,7 @@ impl ViewerTabManager {
 
         let evicted_ids: HashSet<TabId> = evicted.iter().map(|t| t.id).collect();
         for session in evicted {
-            Self::cleanup_session_resources(&session);
+            Self::cleanup_session_resources(session);
         }
 
         tracing::info!(
@@ -879,7 +880,7 @@ impl ViewerTabManager {
 
         let evicted_ids: HashSet<TabId> = evicted.iter().map(|t| t.id).collect();
         for session in evicted {
-            Self::cleanup_session_resources(&session);
+            Self::cleanup_session_resources(session);
         }
 
         tracing::info!(
@@ -914,7 +915,7 @@ impl ViewerTabManager {
         let closed_count = evicted.len();
 
         for session in evicted {
-            Self::cleanup_session_resources(&session);
+            Self::cleanup_session_resources(session);
         }
 
         if tabs.is_empty() {
@@ -946,7 +947,7 @@ impl ViewerTabManager {
 
         let evicted = tabs.clear();
         for session in evicted {
-            Self::cleanup_session_resources(&session);
+            Self::cleanup_session_resources(session);
         }
 
         *active = None;
@@ -1086,8 +1087,15 @@ impl ViewerTabManager {
         }
     }
 
-    fn cleanup_session_resources(session: &MediaTabSession) {
+    /// The tab is closed: playback stops, the windows disappear, and a video tab's player is shut down before its window is
+    /// destroyed (on a worker thread, see `teardown_video_deferred`; dropping the tab would destroy the window under the
+    /// running player and end the application).
+    fn cleanup_session_resources(session: MediaTabSession) {
         session.payload.stop_native();
+        if let TabPayload::Video(vid) = session.payload {
+            let window = vid.subwindow.lock().take();
+            teardown::teardown_video_deferred(vid.player, window);
+        }
     }
 
     fn resolve_next_active_tab(
