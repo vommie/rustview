@@ -42,8 +42,6 @@ pub struct MpvPlayer {
     rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
     pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>>,
-    /// What the user's mpv configuration says about `cursor-autohide`; restored when the Multiview stops controlling it.
-    cursor_autohide_default: String,
     observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
@@ -184,9 +182,6 @@ impl MpvPlayer {
             );
         }
 
-        let cursor_autohide_default = mpv_instance
-            .get_property::<String>("cursor-autohide")
-            .unwrap_or_else(|_| "1000".to_string());
         let mpv_arc = Arc::new(mpv_instance);
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
         let current_file_path = Arc::new(RwLock::new(None));
@@ -235,7 +230,6 @@ impl MpvPlayer {
             rename_callbacks: rename_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
             pause_callbacks: pause_callbacks.clone(),
-            cursor_autohide_default,
             observer_handle: Mutex::new(None),
         };
 
@@ -541,15 +535,6 @@ impl MpvPlayer {
             && self.mpv.set_property("background", color.as_str()).is_err()
         {
             tracing::debug!("[MpvPlayer: Background] mpv did not accept a background color");
-        }
-    }
-
-    /// Lets mpv hide the mouse cursor over its video after it rested for `idle_ms` (it shows it again when it moves);
-    /// `None` gives control back to the user's mpv configuration.
-    pub fn set_cursor_autohide(&self, idle_ms: Option<u64>) {
-        let value = idle_ms.map_or_else(|| self.cursor_autohide_default.clone(), |ms| ms.to_string());
-        if self.mpv.set_property("cursor-autohide", value.as_str()).is_err() {
-            tracing::debug!("[MpvPlayer: Cursor] mpv did not accept a cursor-autohide value");
         }
     }
 

@@ -10,7 +10,10 @@ export component GlobalTooltipLayer inherits Rectangle {
 
     property <bool> active: GlobalTooltip.is-visible && TooltipSettings.enabled;
     // Long tooltips wrap at the maximum width; `measure` is the text on one line, `wrapped` the same text at the final width.
-    property <length> text-w: Math.min(TooltipSettings.max-width, measure.preferred-width);
+    // The bubble stays inside the window it is drawn in (the bar windows are narrow): 8px margin on both sides, the padding
+    // of the bubble, and room for an icon or a shortcut badge.
+    property <length> room: root.width - 16px - 2 * TooltipSettings.default-padding-h - (GlobalTooltip.shortcut != "" ? 60px : 0px) - (GlobalTooltip.icon != IconId.none ? 22px : 0px);
+    property <length> text-w: Math.max(40px, Math.min(Math.min(TooltipSettings.max-width, root.room), measure.preferred-width));
     property <length> bubble-w: tooltip-bubble.preferred-width;
     property <length> bubble-h: Math.max(tooltip-bubble.preferred-height, wrapped.preferred-height + 2 * TooltipSettings.default-padding-v);
     property <length> bubble-x: Math.max(8px, Math.min(root.width - root.bubble-w - 8px, GlobalTooltip.pos-x));

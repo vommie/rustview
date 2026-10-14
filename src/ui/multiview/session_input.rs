@@ -135,11 +135,7 @@ impl Session {
             primary_click: self.primary_click.clone(),
         };
         let bars_visible = bar_hosting::update(&host, &self.instance, true);
-        let hide = !bars_visible && self.instance.lock().cursor_should_hide();
-        if hide != self.cursor_hidden {
-            self.cursor_hidden = hide;
-            cursor::set_hidden(win.window(), hide);
-        }
+        cursor::sync(win.window(), &self.instance, bars_visible, &mut self.cursor_hidden);
     }
 
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what

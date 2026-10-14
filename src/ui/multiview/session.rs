@@ -179,9 +179,7 @@ pub(super) fn refresh_settings(settings: &SettingsManager) {
             return;
         };
         apply_background(&win, settings);
-        let mut instance = s.instance.lock();
-        instance.set_video_background(video_background(&win));
-        instance.apply_cursor_autohide();
+        s.instance.lock().set_video_background(video_background(&win));
     });
 }
 
@@ -575,12 +573,12 @@ impl Session {
     /// Hides the window and empties its models (the images would otherwise stay in memory until the next open); dropping
     /// the session then releases the instance, whose last reference shuts the players down before their windows are
     /// destroyed.
-    pub(super) fn shutdown(self) {
+    pub(super) fn shutdown(mut self) {
         self.debounce.stop();
         self.tick.stop();
         bar_overlay::hide(BarOwner::Fullscreen);
         if let Some(win) = self.window.upgrade() {
-            cursor::set_hidden(win.window(), false);
+            cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
             win.set_is_ready(false);
             let _ = win.hide();
         }

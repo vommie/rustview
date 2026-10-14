@@ -36,7 +36,7 @@ impl MultiviewInstance {
     }
 
     fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
-        if pointer != self.pointer {
+        if pointer != self.pointer || self.last_move.is_none() {
             self.last_move = Some(Instant::now());
         }
         self.pointer = pointer;

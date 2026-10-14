@@ -61,6 +61,17 @@ struct ClientMessageEv {
     data: ClientMessageData,
 }
 
+/// `XColor` of Xlib (only needed to create the invisible cursor).
+#[repr(C)]
+struct XColorRgb {
+    pixel: c_ulong,
+    red: u16,
+    green: u16,
+    blue: u16,
+    flags: c_char,
+    pad: c_char,
+}
+
 struct X11Symbols {
     _lib_x11: *mut c_void,
     _lib_xext: *mut c_void,
@@ -112,6 +123,20 @@ struct X11Symbols {
         *mut c_uint,
     ) -> c_int,
     x_free: unsafe extern "C" fn(*mut c_void) -> c_int,
+    x_define_cursor: unsafe extern "C" fn(DisplayPtr, WindowId, c_ulong) -> c_int,
+    x_create_bitmap_from_data:
+        unsafe extern "C" fn(DisplayPtr, WindowId, *const c_char, c_uint, c_uint) -> c_ulong,
+    x_create_pixmap_cursor: unsafe extern "C" fn(
+        DisplayPtr,
+        c_ulong,
+        c_ulong,
+        *mut XColorRgb,
+        *mut XColorRgb,
+        c_uint,
+        c_uint,
+    ) -> c_ulong,
+    x_free_pixmap: unsafe extern "C" fn(DisplayPtr, c_ulong) -> c_int,
+    x_free_cursor: unsafe extern "C" fn(DisplayPtr, c_ulong) -> c_int,
     x_send_event:
         unsafe extern "C" fn(DisplayPtr, WindowId, c_int, c_long, *mut c_void) -> c_int,
     x_change_property: unsafe extern "C" fn(
@@ -275,6 +300,11 @@ unsafe fn load_symbols_from_handles(
         x_get_window_property: unsafe { load_sym(lib_x11, "XGetWindowProperty")? },
         x_query_tree: unsafe { load_sym(lib_x11, "XQueryTree")? },
         x_free: unsafe { load_sym(lib_x11, "XFree")? },
+        x_define_cursor: unsafe { load_sym(lib_x11, "XDefineCursor")? },
+        x_create_bitmap_from_data: unsafe { load_sym(lib_x11, "XCreateBitmapFromData")? },
+        x_create_pixmap_cursor: unsafe { load_sym(lib_x11, "XCreatePixmapCursor")? },
+        x_free_pixmap: unsafe { load_sym(lib_x11, "XFreePixmap")? },
+        x_free_cursor: unsafe { load_sym(lib_x11, "XFreeCursor")? },
         x_send_event: unsafe { load_sym(lib_x11, "XSendEvent")? },
         x_change_property: unsafe { load_sym(lib_x11, "XChangeProperty")? },
         x_shape_combine_rectangles,
@@ -1017,6 +1047,8 @@ pub struct X11VideoSubwindow {
     is_visible: bool,
     is_clipped: bool,
     last_applied_local_rects: Vec<XRectangle>,
+    /// An invisible cursor, created when the cursor is hidden for the first time.
+    blank_cursor: Option<c_ulong>,
 }
 
 unsafe impl Send for X11VideoSubwindow {}
@@ -1125,6 +1157,7 @@ impl X11VideoSubwindow {
                 is_visible: false,
                 is_clipped: false,
                 last_applied_local_rects: Vec::new(),
+                blank_cursor: None,
             })
         }
     }
@@ -1441,6 +1474,74 @@ impl X11VideoSubwindow {
         }
     }
 
+    /// Hides or shows the mouse cursor over this video window, whatever mpv does with its own cursor. The invisible cursor is
+    /// set on the container, the subwindow and every window below it (the window mpv draws in): mpv's window then shows
+    /// the cursor of its parent unless mpv defines its own. Showing removes the cursor from all of them again, so they
+    /// inherit the cursor of the host window.
+    pub fn set_cursor_hidden(&mut self, hidden: bool) {
+        unsafe {
+            let cursor = if hidden {
+                match self.blank_cursor.or_else(|| self.create_blank_cursor()) {
+                    Some(cursor) => {
+                        self.blank_cursor = Some(cursor);
+                        cursor
+                    }
+                    None => return,
+                }
+            } else {
+                0
+            };
+            let mut windows = vec![self.container_xid, self.subwindow_xid];
+            windows.extend(self.descendants_of(self.subwindow_xid));
+            for window in windows {
+                (self.api.x_define_cursor)(self.display, window, cursor);
+            }
+            (self.api.x_flush)(self.display);
+        }
+    }
+
+    fn create_blank_cursor(&self) -> Option<c_ulong> {
+        let data: [c_char; 1] = [0];
+        let mut color = XColorRgb { pixel: 0, red: 0, green: 0, blue: 0, flags: 0, pad: 0 };
+        let mut color2 = XColorRgb { pixel: 0, red: 0, green: 0, blue: 0, flags: 0, pad: 0 };
+        unsafe {
+            let bitmap = (self.api.x_create_bitmap_from_data)(self.display, self.container_xid, data.as_ptr(), 1, 1);
+            if bitmap == 0 {
+                return None;
+            }
+            let cursor =
+                (self.api.x_create_pixmap_cursor)(self.display, bitmap, bitmap, &mut color, &mut color2, 0, 0);
+            (self.api.x_free_pixmap)(self.display, bitmap);
+            (cursor != 0).then_some(cursor)
+        }
+    }
+
+    /// Every window below `window` (children, grandchildren, ...).
+    fn descendants_of(&self, window: WindowId) -> Vec<WindowId> {
+        let mut found = Vec::new();
+        let mut pending = vec![window];
+        while let Some(current) = pending.pop() {
+            let (mut root, mut parent): (WindowId, WindowId) = (0, 0);
+            let mut children: *mut WindowId = std::ptr::null_mut();
+            let mut count: c_uint = 0;
+            unsafe {
+                let ok = (self.api.x_query_tree)(self.display, current, &mut root, &mut parent, &mut children, &mut count);
+                if ok != 0 && !children.is_null() {
+                    let list = std::slice::from_raw_parts(children, count as usize);
+                    found.extend_from_slice(list);
+                    pending.extend_from_slice(list);
+                }
+                if !children.is_null() {
+                    (self.api.x_free)(children as *mut c_void);
+                }
+            }
+            if found.len() > 64 {
+                break;
+            }
+        }
+        found
+    }
+
     pub fn reset_clip_shape(&mut self) {
         if let Some(ref shape_mask_fn) = self.api.x_shape_combine_mask {
             unsafe {
@@ -1484,6 +1585,9 @@ impl Drop for X11VideoSubwindow {
         unsafe {
             (self.api.x_destroy_window)(self.display, self.subwindow_xid);
             (self.api.x_destroy_window)(self.display, self.container_xid);
+            if let Some(cursor) = self.blank_cursor {
+                (self.api.x_free_cursor)(self.display, cursor);
+            }
             (self.api.x_close_display)(self.display);
             tracing::debug!(
                 container_xid = self.container_xid,

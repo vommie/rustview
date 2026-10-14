@@ -33,7 +33,7 @@ impl MultiviewInstance {
             any_audible,
             any_playing,
             layout_custom: self.row_pins.is_some() || self.tiles.iter().any(|t| t.pin.is_some()),
-            pinned: self.pinned,
+            pinned: self.pin_in_effect(),
             hide_idle_cursor: bar.hide_idle_cursor,
             idle_cursor_ms: bar.idle_cursor_ms,
         }
@@ -48,6 +48,12 @@ impl MultiviewInstance {
             .collect()
     }
 
+    /// A pinned fullscreen only stays pinned while the user can reach the pin button: switching the primary bar or its pin
+    /// button off in the settings releases the pin, otherwise nothing could ever unpin the view again.
+    fn pin_in_effect(&self) -> bool {
+        self.pinned && prefs::current().primary.allows(PrimaryActionId::Pin)
+    }
+
     fn pulsing(&self, now: Instant) -> bool {
         self.pin_pulse_until.is_some_and(|until| now < until)
     }
@@ -57,7 +63,7 @@ impl MultiviewInstance {
         self.pin_pulse_until.is_some_and(|until| {
             until
                 .checked_duration_since(now)
-                .is_some_and(|left| (left.as_millis() as u64 / MULTIVIEW_PIN_BLINK_MS) % 2 == 0)
+                .is_some_and(|left| (left.as_millis() as u64 / MULTIVIEW_PIN_BLINK_MS).is_multiple_of(2))
         })
     }
 
@@ -106,7 +112,7 @@ impl MultiviewInstance {
             return UiAction::None;
         };
         if !spec.enabled {
-            if self.pinned && matches!(id, PrimaryActionId::SendToTab | PrimaryActionId::Close) {
+            if self.pin_in_effect() && matches!(id, PrimaryActionId::SendToTab | PrimaryActionId::Close) {
                 self.refuse_close();
             }
             return UiAction::None;
@@ -173,7 +179,7 @@ impl MultiviewInstance {
 
     /// Whether a pinned fullscreen refuses to close. A refusal shows the primary bar and blinks the pin button for a moment.
     pub fn refuse_close(&mut self) -> bool {
-        if !self.pinned {
+        if !self.pin_in_effect() {
             return false;
         }
         self.pin_pulse_until = Some(Instant::now() + Duration::from_millis(MULTIVIEW_PIN_PULSE_MS));
@@ -183,32 +189,31 @@ impl MultiviewInstance {
     }
 
     pub fn is_pinned(&self) -> bool {
-        self.pinned
+        self.pin_in_effect()
     }
 
-    /// Lets mpv hide the cursor over its videos after the idle time of the user's setting (and show it when it moves), or
-    /// returns control to the user's mpv configuration. mpv owns the cursor over a video, so this is the one place it is set.
-    pub fn apply_cursor_autohide(&self) {
-        for video in self.tiles.iter().filter_map(|t| t.video.as_ref()) {
-            self.apply_cursor_autohide_to(video);
-        }
-    }
-
-    pub(super) fn apply_cursor_autohide_to(&self, video: &super::tile::VideoTile) {
-        let bar = prefs::current().primary;
-        let idle = (bar.hide_idle_cursor && matches!(self.host.surface.mode, HostMode::Fullscreen | HostMode::TabView))
-            .then_some(u64::from(bar.idle_cursor_ms));
-        video.player.set_cursor_autohide(idle);
-    }
-
-    /// The mouse cursor over the Multiview should be hidden now: the user wants idle cursors hidden, the pointer is in the
-    /// host and has not moved for long enough.
+    /// The mouse cursor over the Multiview should be hidden now: the user wants idle cursors hidden, the pointer is inside
+    /// the Multiview (in a tab, the media area of the main window) and has not moved for long enough.
     pub fn cursor_should_hide(&self) -> bool {
         let prefs = prefs::current().primary;
+        let frame = self.host.surface.rect;
         prefs.hide_idle_cursor
-            && self.pointer.is_some()
+            && self.pointer.is_some_and(|(x, y)| frame.contains(x, y))
             && self
                 .last_move
                 .is_some_and(|at| at.elapsed() >= Duration::from_millis(u64::from(prefs.idle_cursor_ms)))
+    }
+
+    /// Hides or shows the mouse cursor over the video windows (the Slint window part is the host's); also for videos that
+    /// start later. mpv is not asked: whatever it does with its own cursor, ours is on the windows around it.
+    pub fn set_cursor_hidden(&mut self, hidden: bool) {
+        self.cursor_hidden = hidden;
+        for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
+            video.window.set_cursor_hidden(hidden);
+        }
+    }
+
+    pub fn is_cursor_hidden(&self) -> bool {
+        self.cursor_hidden
     }
 }

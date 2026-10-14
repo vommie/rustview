@@ -6,7 +6,7 @@
 
 mod bar_hosting;
 pub mod bar_overlay;
-mod cursor;
+pub mod cursor;
 pub mod eligibility;
 pub mod grid_host;
 pub mod handle;
@@ -25,5 +25,4 @@ pub use handle::MultiviewHandle;
 /// Applies changed settings to a fullscreen that is open (its background). UI thread only.
 pub fn refresh_settings(settings: &crate::settings::SettingsManager) {
     session::refresh_settings(settings);
-    tab_host::refresh_settings();
 }

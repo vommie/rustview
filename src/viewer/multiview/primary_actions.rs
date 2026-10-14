@@ -142,7 +142,8 @@ fn close(ctx: &PrimaryBarContext) -> Option<PrimaryActionSpec> {
 fn mute_all(ctx: &PrimaryBarContext) -> Option<PrimaryActionSpec> {
     (interactive(ctx) && ctx.video_count >= 2).then(|| PrimaryActionSpec {
         id: PrimaryActionId::MuteAll,
-        icon: if ctx.any_audible { Icon::VolumeOff } else { Icon::VolumeOn },
+        // Like the mute button of a medium, the icon shows the state: sound on, or muted.
+        icon: if ctx.any_audible { Icon::VolumeOn } else { Icon::VolumeOff },
         tooltip: if ctx.any_audible {
             format!("Mute all {} videos", ctx.video_count)
         } else {
@@ -220,4 +221,96 @@ fn pin(ctx: &PrimaryBarContext) -> Option<PrimaryActionSpec> {
 
 pub fn primary_actions_for(ctx: &PrimaryBarContext) -> Vec<PrimaryActionSpec> {
     PROVIDERS.iter().filter_map(|provider| provider(ctx)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ctx(host: HostMode, origin: OriginKind) -> PrimaryBarContext {
+        PrimaryBarContext {
+            host,
+            origin,
+            tile_count: 3,
+            video_count: 2,
+            any_audible: true,
+            any_playing: true,
+            layout_custom: false,
+            pinned: false,
+            hide_idle_cursor: false,
+            idle_cursor_ms: 3000,
+        }
+    }
+
+    fn ids(ctx: &PrimaryBarContext) -> Vec<PrimaryActionId> {
+        primary_actions_for(ctx).into_iter().map(|s| s.id).collect()
+    }
+
+    fn spec(ctx: &PrimaryBarContext, id: PrimaryActionId) -> PrimaryActionSpec {
+        primary_actions_for(ctx).into_iter().find(|s| s.id == id).expect("button is offered")
+    }
+
+    #[test]
+    fn a_browse_fullscreen_offers_every_button() {
+        use PrimaryActionId::*;
+        let all = ids(&ctx(HostMode::Fullscreen, OriginKind::Browse));
+        assert_eq!(all, vec![SendToTab, Close, MuteAll, PlayPauseAll, ResetLayout, HideIdleCursor, Pin]);
+    }
+
+    #[test]
+    fn tabs_have_no_send_to_tab_and_only_the_fullscreen_can_be_pinned() {
+        let tab_fullscreen = ids(&ctx(HostMode::Fullscreen, OriginKind::Tab));
+        assert!(!tab_fullscreen.contains(&PrimaryActionId::SendToTab) && tab_fullscreen.contains(&PrimaryActionId::Pin));
+        let tab_view = ids(&ctx(HostMode::TabView, OriginKind::Tab));
+        assert!(!tab_view.contains(&PrimaryActionId::SendToTab) && !tab_view.contains(&PrimaryActionId::Pin));
+        assert_eq!(spec(&ctx(HostMode::TabView, OriginKind::Tab), PrimaryActionId::Close).tooltip, "Close tab");
+        assert!(ids(&ctx(HostMode::TabGrid, OriginKind::Tab)).is_empty(), "the grid miniature has no bar");
+    }
+
+    #[test]
+    fn video_buttons_follow_the_videos() {
+        let mut c = ctx(HostMode::Fullscreen, OriginKind::Browse);
+        c.video_count = 1;
+        let offered = ids(&c);
+        assert!(!offered.contains(&PrimaryActionId::MuteAll) && offered.contains(&PrimaryActionId::PlayPauseAll));
+        c.video_count = 0;
+        assert!(!ids(&c).contains(&PrimaryActionId::PlayPauseAll));
+        c.video_count = 3;
+        assert!(ids(&c).contains(&PrimaryActionId::MuteAll));
+    }
+
+    #[test]
+    fn mute_all_and_play_pause_show_the_next_step() {
+        let mut c = ctx(HostMode::Fullscreen, OriginKind::Browse);
+        assert_eq!(spec(&c, PrimaryActionId::MuteAll).icon, Icon::VolumeOn);
+        assert_eq!(spec(&c, PrimaryActionId::PlayPauseAll).icon, Icon::PlaybackPause);
+        c.any_audible = false;
+        c.any_playing = false;
+        assert_eq!(spec(&c, PrimaryActionId::MuteAll).icon, Icon::VolumeOff);
+        assert!(spec(&c, PrimaryActionId::MuteAll).tooltip.contains("unmute"));
+        assert_eq!(spec(&c, PrimaryActionId::PlayPauseAll).icon, Icon::PlaybackPlay);
+    }
+
+    #[test]
+    fn pin_and_an_automatic_layout_disable_buttons_with_a_reason() {
+        let mut c = ctx(HostMode::Fullscreen, OriginKind::Browse);
+        let reset = spec(&c, PrimaryActionId::ResetLayout);
+        assert!(!reset.enabled && reset.tooltip.contains("already automatic"));
+        c.layout_custom = true;
+        assert!(spec(&c, PrimaryActionId::ResetLayout).enabled);
+        c.pinned = true;
+        for id in [PrimaryActionId::Close, PrimaryActionId::SendToTab] {
+            let s = spec(&c, id);
+            assert!(!s.enabled && s.tooltip.contains("unpin"), "{id:?}");
+        }
+        assert_eq!(spec(&c, PrimaryActionId::Pin).active, Some(true));
+    }
+
+    #[test]
+    fn codes_survive_the_trip_through_slint() {
+        for id in PrimaryActionId::ALL {
+            assert_eq!(PrimaryActionId::from_code(id.code()), Some(id));
+        }
+        assert_eq!(PrimaryActionId::from_code(99), None);
+    }
 }

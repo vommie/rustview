@@ -145,10 +145,13 @@ fn update_bar_overlay() {
         primary_click: Rc::new(|_, action| on_primary_action(action)),
     };
     let bars_visible = bar_hosting::update(&host, &instance, in_tab_view);
-    let hide = in_tab_view && !bars_visible && instance.lock().cursor_should_hide();
-    if with_host(|h| std::mem::replace(&mut h.cursor_hidden, hide) != hide).unwrap_or(false) {
-        cursor::set_hidden(window.window(), hide);
+    let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);
+    if in_tab_view {
+        cursor::sync(window.window(), &instance, bars_visible, &mut window_hidden);
+    } else {
+        cursor::release(window.window(), Some(&instance), &mut window_hidden);
     }
+    with_host(|h| h.cursor_hidden = window_hidden);
 }
 
 /// A button of the primary bar was clicked.
@@ -160,13 +163,6 @@ fn on_primary_action(action: i32) {
     drop(instance);
     refresh();
     run(outcome);
-}
-
-/// The settings changed: the shown Multiview lets mpv follow the cursor hiding the user chose.
-pub fn refresh_settings() {
-    if let Some(instance) = current_instance() {
-        instance.lock().apply_cursor_autohide();
-    }
 }
 
 fn route_for(event: RoutedEvent, click: ClickKind) -> UiAction {
@@ -238,10 +234,11 @@ pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &Shar
 /// The Multiview is no longer the shown content (another tab, the Browse view, the grid or a fullscreen took over).
 pub fn suspend() {
     bar_overlay::hide(BarOwner::TabView);
-    if let Some(window) = with_host(|h| h.window.clone()).flatten().and_then(|w| w.upgrade())
-        && with_host(|h| std::mem::replace(&mut h.cursor_hidden, false)).unwrap_or(false)
-    {
-        cursor::set_hidden(window.window(), false);
+    if let Some(window) = with_host(|h| h.window.clone()).flatten().and_then(|w| w.upgrade()) {
+        let instance = with_host(|h| h.instance.upgrade()).flatten();
+        let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);
+        cursor::release(window.window(), instance.as_ref(), &mut window_hidden);
+        with_host(|h| h.cursor_hidden = window_hidden);
     }
     let released = with_host(|h| {
         h.tick.stop();

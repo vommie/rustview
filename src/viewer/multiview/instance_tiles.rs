@@ -100,9 +100,11 @@ impl MultiviewInstance {
             &path,
         );
         match created {
-            Ok(video) => {
+            Ok(mut video) => {
                 video.player.set_background_color(self.effective_video_background());
-                self.apply_cursor_autohide_to(&video);
+                if self.cursor_hidden {
+                    video.window.set_cursor_hidden(true);
+                }
                 let tile = &mut self.tiles[index];
                 tile.video = Some(video);
                 tracing::info!(

@@ -63,6 +63,8 @@ pub struct MultiviewInstance {
     pub(super) last_move: Option<Instant>,
     /// The fullscreen cannot be closed (runtime state of this Multiview, cleared when it leaves the fullscreen).
     pub(super) pinned: bool,
+    /// The mouse cursor is hidden over the video windows right now.
+    pub(super) cursor_hidden: bool,
     /// A refused close made the primary bar show itself and its pin button blink until this moment.
     pub(super) pin_pulse_until: Option<Instant>,
     /// The color the fullscreen paints behind the media (also around a single video, whose window covers the display).
@@ -98,6 +100,7 @@ impl MultiviewInstance {
                 pointer: None,
                 last_move: None,
                 pinned: false,
+                cursor_hidden: false,
                 pin_pulse_until: None,
                 video_background: None,
                 ticks: 0,
