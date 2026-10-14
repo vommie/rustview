@@ -13,6 +13,7 @@ use super::model::{AspectSource, TileKind};
 use crate::button_feedback::ButtonFeedback;
 use crate::library::models::MediaId;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
+use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -29,6 +30,9 @@ pub struct VideoTile {
     /// The medium the player currently shows. A recycled player moves on to another medium, and the callbacks that were
     /// installed once at creation read this instead of the id they were created for.
     pub current_media: Arc<AtomicU64>,
+    /// Set while the player and window belong to a viewer tab that lent them to the fullscreen: they go back to the tab
+    /// (not into a teardown) when the fullscreen closes.
+    pub loan: Option<Arc<Mutex<Option<X11VideoSubwindow>>>>,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -107,7 +111,7 @@ fn forward(
 
 /// Installs every player callback once, when the tile is created. What an event means is decided when it arrives (by the
 /// current host of the instance), so the callbacks never have to be replaced.
-fn connect_callbacks(
+pub(super) fn connect_callbacks(
     player: &MpvPlayer,
     sink: &Arc<dyn MultiviewEventSink>,
     me: &WeakInstance,
@@ -170,6 +174,7 @@ pub fn create_video(
         native_mute,
         last_mute: native_mute,
         current_media,
+        loan: None,
     })
 }
 

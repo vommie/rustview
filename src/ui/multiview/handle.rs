@@ -4,6 +4,7 @@
 
 use super::eligibility;
 use super::navigation;
+use super::tab_single;
 use super::session::{self, Session, TabReturn};
 use crate::library::Library;
 use crate::library::models::MediaId;
@@ -241,8 +242,9 @@ impl MultiviewHandle {
         )
     }
 
-    /// Shows the Multiview that tab `tab_id` owns in the fullscreen window (from the tab view or the tab grid). UI thread
-    /// only. Returns `false` if the tab does not hold a Multiview.
+    /// Shows tab `tab_id` in the fullscreen window (from the tab view or the tab grid): the Multiview a tab owns as it is, a
+    /// normal image or video tab as a Multiview of one tile that stays isolated from the Browse view. UI thread only.
+    /// Returns `false` if the tab does not exist or cannot be shown.
     pub fn open_tab(
         &self,
         tab_id: TabId,
@@ -250,11 +252,15 @@ impl MultiviewHandle {
         settings: &Arc<SettingsManager>,
         main_window: slint::Weak<MainWindow>,
     ) -> bool {
-        let Some(instance) = tab_manager
-            .get_tab(tab_id)
-            .and_then(|tab| tab.multiview().map(|mv| mv.instance.clone()))
-        else {
+        let Some(tab) = tab_manager.get_tab(tab_id) else {
             return false;
+        };
+        let instance = match tab.multiview() {
+            Some(multiview) => multiview.instance.clone(),
+            None => match tab_single::instance_for_tab(self, &tab) {
+                Some(instance) => instance,
+                None => return false,
+            },
         };
         let origin_mode = main_window
             .upgrade()
@@ -270,6 +276,13 @@ impl MultiviewHandle {
             settings.clone(),
             main_window,
         )
+    }
+
+    /// A tab changed (closed, refreshed, renamed): a fullscreen that shows a tab closes when that tab is gone.
+    pub fn sync_tab(&self, tab_manager: &ViewerTabManager) {
+        if self.is_isolated_open() {
+            session::close_if_tab_gone(tab_manager);
+        }
     }
 
     /// Closes the Multiview and runs the close handler (re-syncs the Browse view). Callable from any thread.

@@ -289,7 +289,8 @@ impl ImageFullscreenDialogController {
         self.show_for_tab(active_tab.id, tab_manager, settings, main_window_weak);
     }
 
-    /// Displays the frameless fullscreen media window for any specific tab without changing active tab state (auto-plays).
+    /// Shows a tab in the fullscreen (the Multiview): a Multiview tab as it is, a normal image or video tab as a Multiview of
+    /// one tile that stays isolated from the Browse view. The tab's own player is lent, so playback continues.
     pub fn show_for_tab(
         &self,
         tab_id: TabId,
@@ -297,118 +298,16 @@ impl ImageFullscreenDialogController {
         settings: &Arc<SettingsManager>,
         main_window_weak: slint::Weak<MainWindow>,
     ) {
-        let Some(target_tab) = tab_manager.get_tab(tab_id) else {
-            tracing::warn!(tab_id, "[FullscreenViewer: ShowForTab] Tab session not found");
-            return;
-        };
-
-        if target_tab.is_multiview() {
-            self.dismiss_for_replacement();
-            self.multiview
-                .open_tab(tab_id, tab_manager, settings, main_window_weak);
-            return;
+        self.dismiss_for_replacement();
+        if !self
+            .multiview
+            .open_tab(tab_id, tab_manager, settings, main_window_weak)
+        {
+            tracing::warn!(
+                tab_id,
+                "[FullscreenViewer: ShowForTab] The tab cannot be shown in fullscreen"
+            );
         }
-
-        self.multiview.dismiss();
-
-        let t0 = Instant::now();
-        *self.main_window_weak.lock() = Some(main_window_weak.clone());
-        *self.tab_manager_weak.lock() = Some(tab_manager.clone());
-        *self.settings_weak.lock() = Some(settings.clone());
-
-        // Cleanly detach and pause any standalone video player when entering Tab-Fullscreen
-        if let Some(player) = self.standalone_video_player.lock().as_ref() {
-            player.set_view_active(false);
-            player.pause().ok();
-        }
-        if let Some(sub) = self.standalone_subwindow.lock().as_mut() {
-            sub.hide();
-        }
-
-        *self.active_fullscreen_tab_id.lock() = Some(tab_id);
-        *self.active_standalone_media_id.lock() = None;
-
-        let origin_mode = main_window_weak
-            .upgrade()
-            .map(|mw| mw.get_active_view_mode())
-            .unwrap_or(1);
-        *self.origin_view_mode.lock() = origin_mode;
-
-        let is_video = matches!(target_tab.payload, TabPayload::Video(_));
-        self.is_fullscreen_video.store(is_video, Ordering::SeqCst);
-
-        let file_exists = target_tab.file_path.is_file();
-
-        if let Some(mw) = main_window_weak.upgrade() {
-            mw.set_is_modal_locked(true);
-        }
-
-        let ctrl = self.clone();
-        let tm_clone = tab_manager.clone();
-        let was_already_open = self.is_active.load(Ordering::SeqCst);
-        let settings_clone = settings.clone();
-
-        self.with_fullscreen_window(|win| {
-            ctrl.sync_tab_content(win, &target_tab, &settings_clone);
-            win.set_is_video(is_video && file_exists);
-            win.set_allow_navigation(false);
-
-            if !file_exists {
-                win.set_source_image(Image::default());
-                win.set_is_loading(false);
-                let missing_msg = format!(
-                    "File not found on physical disk:\n{}",
-                    target_tab.file_path.display()
-                );
-                win.set_error_message(missing_msg.into());
-            }
-
-            let target_mon = ctrl.resolve_current_target_monitor(&settings_clone);
-
-            if !was_already_open {
-                // Initialize canvas opacity to 0 to prevent any visible flash on the originating display
-                win.set_is_ready(false);
-                ctrl.position_fullscreen_window(win, &target_mon);
-                let _ = win.show();
-
-                let fs_xid = ctrl.resolve_fs_xid(win);
-                if fs_xid > 0 {
-                    ctrl.apply_x11_monitor_fullscreen(fs_xid, &target_mon);
-                } else {
-                    let ctrl_retry = ctrl.clone();
-                    let win_weak_retry = win.as_weak();
-                    let mon_retry = target_mon.clone();
-                    Timer::single_shot(std::time::Duration::from_millis(15), move || {
-                        if let Some(w) = win_weak_retry.upgrade() {
-                            let xid = ctrl_retry.resolve_fs_xid(&w);
-                            if xid > 0 {
-                                ctrl_retry.apply_x11_monitor_fullscreen(xid, &mon_retry);
-                            }
-                        }
-                    });
-                }
-                ctrl.is_active.store(true, Ordering::SeqCst);
-            }
-
-            if is_video && file_exists {
-                ctrl.reparent_to_fullscreen(&tm_clone, win, tab_id, &target_mon);
-            }
-
-            // Window geometry is firmly settled on the target display; render canvas seamlessly
-            win.set_is_ready(true);
-        });
-
-        tracing::info!(
-            tab_id = target_tab.id,
-            media_id = target_tab.media_id,
-            is_video,
-            file_exists,
-            origin_mode,
-            in_place_swap = was_already_open,
-            filename = %LogObscurer::filename(&target_tab.filename),
-            elapsed_us = t0.elapsed().as_micros(),
-            "[FullscreenViewer: ShowForTab] Tab-Fullscreen activated (exclusive to tab, navigation disabled)"
-        );
     }
 
     /// Displays the frameless fullscreen viewer directly for a single media item without creating or modifying tabs (Quick-Fullscreen Mode).
@@ -1075,6 +974,7 @@ impl ImageFullscreenDialogController {
     }
 
     pub fn sync_active_tab(&self, tab_manager: &Arc<ViewerTabManager>, settings: &SettingsManager) {
+        self.multiview.sync_tab(tab_manager);
         if !self.is_active.load(Ordering::SeqCst) {
             return;
         }

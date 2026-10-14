@@ -14,6 +14,7 @@ mod screenshot_lab;
 mod session;
 mod session_convert;
 mod session_input;
+mod tab_single;
 pub mod tab_host;
 mod views;
 

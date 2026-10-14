@@ -17,6 +17,7 @@ mod instance_actions;
 mod instance_follow;
 mod instance_host;
 mod instance_hover;
+mod instance_loan;
 mod instance_layout;
 mod instance_members;
 mod instance_sound;

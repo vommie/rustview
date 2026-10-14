@@ -21,7 +21,7 @@ use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::bridge_state::UiState;
 use crate::ui::MainWindow;
 use crate::ui::MultiviewFullscreenWindow;
-use crate::viewer::TabId;
+use crate::viewer::{TabId, ViewerTabManager};
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::UiAction;
 use crate::viewer::XRectangle;
@@ -355,6 +355,20 @@ pub(super) fn close(notify: bool) {
     finish_close(session, notify);
 }
 
+/// Closes the fullscreen if it shows a tab that no longer exists.
+pub(super) fn close_if_tab_gone(tab_manager: &ViewerTabManager) {
+    let gone = SESSION.with(|cell| {
+        cell.try_borrow()
+            .ok()
+            .and_then(|slot| slot.as_ref().and_then(|s| s.tab_return))
+            .is_some_and(|tab| tab_manager.get_tab(tab.tab_id).is_none())
+    });
+    if gone {
+        tracing::info!("[Multiview: Close] The tab of the fullscreen is gone");
+        close(true);
+    }
+}
+
 /// Takes the session out of its slot. `Err` means the slot is borrowed right now (an event handler is running).
 pub(super) fn take_session() -> Result<Option<Session>, ()> {
     SESSION.with(|cell| {
@@ -377,6 +391,12 @@ pub(super) fn finish_close(session: Session, notify: bool) {
             reason,
             "[Multiview: Close] The windows could not return to the tab"
         );
+    }
+    if let Some(tab) = tab_return {
+        let alive = handle
+            .tab_manager()
+            .is_some_and(|tab_manager| tab_manager.get_tab(tab.tab_id).is_some());
+        session.instance.lock().return_loans(alive);
     }
     session.shutdown();
     tracing::info!(notify, "[Multiview: Close] Multiview closed");
@@ -443,6 +463,8 @@ impl Session {
             instance.set_host(&surface);
             if self.fresh {
                 instance.start_all();
+            } else {
+                instance.start_pending_images();
             }
         }
 
