@@ -5,9 +5,15 @@
 //! the many places that create or host an instance and a change takes effect on the next event.
 
 use super::media_actions::MediaActionId;
+use super::primary_actions::PrimaryActionId;
 use super::audio::{AudioPolicy, SoundFollows};
 use crate::settings::schema::{
-    DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED, DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+    DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR, DEFAULT_FULLSCREEN_IDLE_CURSOR_MS, DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_ENABLED, DEFAULT_FULLSCREEN_PRIMARY_BAR_REVEAL_DISTANCE_PX,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_CLOSE, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB, DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY, FullscreenSettings,
 };
@@ -48,23 +54,86 @@ impl MediaBarPrefs {
     }
 }
 
+/// Which buttons the primary bar (view-wide buttons, top-left) may show, how close the pointer has to come, and when the
+/// idle mouse cursor is hidden.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PrimaryBarPrefs {
+    pub enabled: bool,
+    pub send_to_tab: bool,
+    pub close: bool,
+    pub mute_all: bool,
+    pub play_pause_all: bool,
+    pub reset_layout: bool,
+    pub hide_cursor: bool,
+    pub pin: bool,
+    pub reveal_distance_px: u32,
+    pub hide_idle_cursor: bool,
+    pub idle_cursor_ms: u32,
+}
+
+impl PrimaryBarPrefs {
+    pub const DEFAULT: Self = Self {
+        enabled: DEFAULT_FULLSCREEN_PRIMARY_BAR_ENABLED,
+        send_to_tab: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB,
+        close: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_CLOSE,
+        mute_all: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL,
+        play_pause_all: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL,
+        reset_layout: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT,
+        hide_cursor: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR,
+        pin: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN,
+        reveal_distance_px: DEFAULT_FULLSCREEN_PRIMARY_BAR_REVEAL_DISTANCE_PX,
+        hide_idle_cursor: DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR,
+        idle_cursor_ms: DEFAULT_FULLSCREEN_IDLE_CURSOR_MS,
+    };
+
+    /// True if the user wants the button of `id` in the bar.
+    pub fn allows(&self, id: PrimaryActionId) -> bool {
+        self.enabled
+            && match id {
+                PrimaryActionId::SendToTab => self.send_to_tab,
+                PrimaryActionId::Close => self.close,
+                PrimaryActionId::MuteAll => self.mute_all,
+                PrimaryActionId::PlayPauseAll => self.play_pause_all,
+                PrimaryActionId::ResetLayout => self.reset_layout,
+                PrimaryActionId::HideIdleCursor => self.hide_cursor,
+                PrimaryActionId::Pin => self.pin,
+            }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MultiviewPrefs {
-    pub bar: MediaBarPrefs,
+    pub media_bar: MediaBarPrefs,
+    pub primary: PrimaryBarPrefs,
     pub audio: AudioPolicy,
 }
 
 impl MultiviewPrefs {
     pub const DEFAULT: Self = Self {
-        bar: MediaBarPrefs::DEFAULT,
+        media_bar: MediaBarPrefs::DEFAULT,
+        primary: PrimaryBarPrefs::DEFAULT,
         audio: AudioPolicy::DEFAULT,
     };
 
     pub fn from_settings(settings: &FullscreenSettings) -> Self {
         let bar = &settings.media_bar;
+        let primary = &settings.primary_bar;
         let sound = &settings.sound;
         Self {
-            bar: MediaBarPrefs {
+            primary: PrimaryBarPrefs {
+                enabled: primary.enabled,
+                send_to_tab: primary.show_send_to_tab,
+                close: primary.show_close,
+                mute_all: primary.show_mute_all,
+                play_pause_all: primary.show_play_pause_all,
+                reset_layout: primary.show_reset_layout,
+                hide_cursor: primary.show_hide_cursor,
+                pin: primary.show_pin,
+                reveal_distance_px: primary.reveal_distance_px,
+                hide_idle_cursor: primary.hide_idle_cursor,
+                idle_cursor_ms: primary.idle_cursor_ms,
+            },
+            media_bar: MediaBarPrefs {
                 enabled: bar.enabled,
                 mute: bar.show_mute,
                 sticky: bar.show_sticky,
@@ -93,7 +162,8 @@ pub fn apply(settings: &FullscreenSettings) {
     let mut current = PREFS.write();
     if *current != next {
         tracing::info!(
-            bar = ?next.bar,
+            media_bar = ?next.media_bar,
+            primary_bar = ?next.primary,
             audio = ?next.audio,
             "[Multiview: Prefs] Preferences applied"
         );

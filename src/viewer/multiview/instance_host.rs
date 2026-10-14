@@ -125,6 +125,9 @@ impl MultiviewInstance {
         let relayout = params != self.params || self.layout.tiles.len() != self.tiles.len();
         self.params = params;
         self.host.surface = surface.clone();
+        if surface.mode != HostMode::Fullscreen {
+            self.pinned = false;
+        }
         self.host.projection = projection;
         tracing::debug!(
             instance = self.id,
@@ -288,6 +291,7 @@ impl MultiviewInstance {
             video.player.set_view_active(active);
         }
         self.apply_video_background();
+        self.apply_cursor_autohide();
         if active {
             self.apply_audio();
         }

@@ -2,7 +2,7 @@ use super::registry::SettingsManager;
 use super::schema::{
     AppSettings, FullscreenSettings, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
     DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
-    MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
+    MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
 };
 use crate::util::hex_color;
 use crate::system::{MonitorInfo, SystemDisplayService};
@@ -265,6 +265,19 @@ impl SettingsDialogController {
         window.set_fullscreen_media_bar_show_remove(bar.show_remove);
         window.set_fullscreen_media_bar_reveal_distance_px(bar.reveal_distance_px as i32);
 
+        let primary = &fullscreen.primary_bar;
+        window.set_fullscreen_primary_bar_enabled(primary.enabled);
+        window.set_fullscreen_primary_bar_show_send_to_tab(primary.show_send_to_tab);
+        window.set_fullscreen_primary_bar_show_close(primary.show_close);
+        window.set_fullscreen_primary_bar_show_mute_all(primary.show_mute_all);
+        window.set_fullscreen_primary_bar_show_play_pause_all(primary.show_play_pause_all);
+        window.set_fullscreen_primary_bar_show_reset_layout(primary.show_reset_layout);
+        window.set_fullscreen_primary_bar_show_hide_cursor(primary.show_hide_cursor);
+        window.set_fullscreen_primary_bar_show_pin(primary.show_pin);
+        window.set_fullscreen_primary_bar_reveal_distance_px(primary.reveal_distance_px as i32);
+        window.set_fullscreen_hide_idle_cursor(primary.hide_idle_cursor);
+        window.set_fullscreen_idle_cursor_secs((primary.idle_cursor_ms as f32 / 1000.0).round() as i32);
+
         let sound = &fullscreen.sound;
         window.set_fullscreen_sound_auto_control(sound.auto_control);
         window.set_fullscreen_sound_follows_idx(match sound.follows.as_str() {
@@ -295,6 +308,22 @@ impl SettingsDialogController {
         bar.reveal_distance_px = u32::try_from(window.get_fullscreen_media_bar_reveal_distance_px())
             .unwrap_or(0)
             .clamp(MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX);
+
+        let primary = &mut fullscreen.primary_bar;
+        primary.enabled = window.get_fullscreen_primary_bar_enabled();
+        primary.show_send_to_tab = window.get_fullscreen_primary_bar_show_send_to_tab();
+        primary.show_close = window.get_fullscreen_primary_bar_show_close();
+        primary.show_mute_all = window.get_fullscreen_primary_bar_show_mute_all();
+        primary.show_play_pause_all = window.get_fullscreen_primary_bar_show_play_pause_all();
+        primary.show_reset_layout = window.get_fullscreen_primary_bar_show_reset_layout();
+        primary.show_hide_cursor = window.get_fullscreen_primary_bar_show_hide_cursor();
+        primary.show_pin = window.get_fullscreen_primary_bar_show_pin();
+        primary.reveal_distance_px = u32::try_from(window.get_fullscreen_primary_bar_reveal_distance_px())
+            .unwrap_or(0)
+            .clamp(MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX);
+        primary.hide_idle_cursor = window.get_fullscreen_hide_idle_cursor();
+        let secs = u32::try_from(window.get_fullscreen_idle_cursor_secs()).unwrap_or(1);
+        primary.idle_cursor_ms = (secs * 1000).clamp(MIN_FULLSCREEN_IDLE_CURSOR_MS, MAX_FULLSCREEN_IDLE_CURSOR_MS);
 
         let sound = &mut fullscreen.sound;
         sound.auto_control = window.get_fullscreen_sound_auto_control();

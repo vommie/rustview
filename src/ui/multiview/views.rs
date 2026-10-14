@@ -7,7 +7,8 @@ use crate::ui::{
 };
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::model::TileKind;
-use crate::viewer::multiview::view::{MediaActionView, GutterView, HostedView, Navigation, TileView};
+use crate::ui::button_feedback::ButtonFeedback;
+use crate::viewer::multiview::view::{MediaActionView, PrimaryActionView, GutterView, HostedView, Navigation, TileView};
 use slint::{Model, VecModel};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -86,7 +87,22 @@ fn action_view(action: &MediaActionView) -> MultiviewBarButtonView {
         tooltip: action.tooltip.into(),
         toggle: action.active.is_some(),
         active: action.active.unwrap_or(false),
+        enabled: true,
+        attention: false,
         feedback: button_feedback_bridge::to_slint(action.feedback),
+    }
+}
+
+fn primary_action_view(action: &PrimaryActionView) -> MultiviewBarButtonView {
+    MultiviewBarButtonView {
+        id: action.id.code(),
+        icon: action.icon.to_slint(),
+        tooltip: action.tooltip.as_str().into(),
+        toggle: action.active.is_some(),
+        active: action.active.unwrap_or(false),
+        enabled: action.enabled,
+        attention: action.attention,
+        feedback: button_feedback_bridge::to_slint(ButtonFeedback::default()),
     }
 }
 
@@ -99,7 +115,12 @@ pub fn navigation_code(navigation: Navigation) -> i32 {
     }
 }
 
-/// The buttons of the action bar window.
+/// The buttons of the primary action bar window.
+pub fn primary_action_views(actions: &[PrimaryActionView]) -> Vec<MultiviewBarButtonView> {
+    actions.iter().map(primary_action_view).collect()
+}
+
+/// The buttons of the media action bar window.
 pub fn action_views(actions: &[MediaActionView]) -> Vec<MultiviewBarButtonView> {
     actions.iter().map(action_view).collect()
 }

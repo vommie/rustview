@@ -7,14 +7,14 @@
 //! close enough to the bar.
 
 use super::instance::MultiviewInstance;
-use super::bar_placement::near_bar_corner;
+use super::bar_placement::{BarCorner, near_bar_corner};
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::prefs;
 use super::target_pick::pick_target;
+use std::time::Instant;
 use super::tile::StaleProbe;
 use super::view::MediaBarTarget;
 use crate::library::models::MediaId;
-use crate::settings::schema::MULTIVIEW_MUTE_POLL_TICKS;
 
 impl MultiviewInstance {
     /// Runs every tick while the Multiview is shown. `pointer` is asked for only when there is something to do; it returns
@@ -26,9 +26,6 @@ impl MultiviewInstance {
         if !self.has_video() {
             return;
         }
-        if self.ticks.is_multiple_of(MULTIVIEW_MUTE_POLL_TICKS) && self.poll_mute() {
-            self.bump();
-        }
         self.probe_aspects();
     }
 
@@ -39,6 +36,9 @@ impl MultiviewInstance {
     }
 
     fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
+        if pointer != self.pointer {
+            self.last_move = Some(Instant::now());
+        }
         self.pointer = pointer;
         self.hovered = pointer.and_then(|(x, y)| self.tile_at_host(x, y));
         if let Some(tile) = self.hovered.and_then(|i| self.tiles.get(i)) {
@@ -57,11 +57,11 @@ impl MultiviewInstance {
     /// `None` while no tile is hovered, the pointer is nowhere near the corner that carries the bar, the user switched the
     /// bar off or the tile offers no button.
     pub fn media_bar_target(&self) -> Option<MediaBarTarget> {
-        let bar = prefs::current().bar;
+        let bar = prefs::current().media_bar;
         let (tile, pointer) = (self.hovered?, self.pointer?);
         let rect = self.host_content(tile)?;
         if !bar.enabled
-            || !near_bar_corner(rect, pointer, self.host.surface.dpi, bar.reveal_distance_px)
+            || !near_bar_corner(BarCorner::TopRight, rect, pointer, self.host.surface.dpi, bar.reveal_distance_px)
         {
             return None;
         }

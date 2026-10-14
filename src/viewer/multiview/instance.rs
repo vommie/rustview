@@ -59,6 +59,12 @@ pub struct MultiviewInstance {
     pub(super) last_hovered: Option<MediaId>,
     /// Last pointer position in the coordinates of the host window (physical pixels).
     pub(super) pointer: Option<(i32, i32)>,
+    /// When the pointer last moved; the mouse cursor hides once it rested long enough.
+    pub(super) last_move: Option<Instant>,
+    /// The fullscreen cannot be closed (runtime state of this Multiview, cleared when it leaves the fullscreen).
+    pub(super) pinned: bool,
+    /// A refused close made the primary bar show itself and its pin button blink until this moment.
+    pub(super) pin_pulse_until: Option<Instant>,
     /// The color the fullscreen paints behind the media (also around a single video, whose window covers the display).
     pub(super) video_background: Option<[u8; 3]>,
     pub(super) ticks: u32,
@@ -90,6 +96,9 @@ impl MultiviewInstance {
                 hovered: None,
                 last_hovered: None,
                 pointer: None,
+                last_move: None,
+                pinned: false,
+                pin_pulse_until: None,
                 video_background: None,
                 ticks: 0,
                 rename_target: None,

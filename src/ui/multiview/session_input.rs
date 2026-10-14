@@ -1,15 +1,17 @@
 //! Session behavior around input: window geometry, the tick, clicks, gutter drag, swap, rename and the live selection.
 //! Everything here translates a UI event into a call on the instance and syncs the result into the window.
 
+use super::bar_hosting::{self, BarHost};
+use super::bar_overlay::BarOwner;
+use super::cursor;
 use super::eligibility;
 use super::session::Session;
-use super::views;
 use crate::library::models::MediaId;
 use crate::system::MonitorInfo;
 use crate::viewer::PointerProbe;
-use super::bar_overlay::{self, BarOwner, BarRequest};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::media_actions::MediaActionId;
+use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
@@ -106,30 +108,37 @@ impl Session {
         self.refresh();
     }
 
-    /// Shows, moves or hides the action bar window: it appears while the pointer is close to the place of the bar of the
-    /// hovered tile.
+    /// A button of the primary bar was clicked.
+    pub(super) fn on_primary_action(&mut self, action: i32) -> UiAction {
+        let Some(action) = PrimaryActionId::from_code(action) else {
+            return UiAction::None;
+        };
+        let outcome = self.instance.lock().perform_primary_action(action);
+        self.refresh();
+        outcome
+    }
+
+    /// Shows, moves or hides the two bar windows (each appears while the pointer is close to the place of its bar) and
+    /// hides the mouse cursor while it rests and no bar is in use.
     pub(super) fn update_bar_overlay(&mut self) {
         if !self.populated {
             return;
         }
-        let target = self.instance.lock().media_bar_target();
-        let scale = self.window.upgrade().map(|win| win.window().scale_factor());
-        let shown = match (target, scale) {
-            (Some(target), Some(scale)) => bar_overlay::show(&BarRequest {
-                owner: BarOwner::Fullscreen,
-                host_xid: self.fs_xid,
-                tile: target.tile as i32,
-                tile_rect: target.rect,
-                pointer: target.pointer,
-                reveal_distance_px: target.reveal_distance_px,
-                scale,
-                actions: views::action_views(&target.actions),
-                on_action: self.bar_click.clone(),
-            }),
-            _ => false,
+        let Some(win) = self.window.upgrade() else {
+            return;
         };
-        if !shown {
-            bar_overlay::hide(BarOwner::Fullscreen);
+        let host = BarHost {
+            owner: BarOwner::Fullscreen,
+            host_xid: self.fs_xid,
+            scale: win.window().scale_factor(),
+            media_click: self.bar_click.clone(),
+            primary_click: self.primary_click.clone(),
+        };
+        let bars_visible = bar_hosting::update(&host, &self.instance, true);
+        let hide = !bars_visible && self.instance.lock().cursor_should_hide();
+        if hide != self.cursor_hidden {
+            self.cursor_hidden = hide;
+            cursor::set_hidden(win.window(), hide);
         }
     }
 

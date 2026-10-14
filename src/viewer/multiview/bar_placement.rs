@@ -21,20 +21,40 @@ pub struct BarPlacement {
     pub bar: Rect,
 }
 
+/// The corner of its area a bar sits in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BarCorner {
+    TopRight,
+    TopLeft,
+}
+
 /// Places the bar (`bar_logical` = its size in logical pixels) in the top right corner of `tile`. `None` if the tile is
 /// too small to carry the bar with its margin: then there is no bar for that tile.
 pub fn place_bar(tile: Rect, bar_logical: (f32, f32), scale: f32) -> Option<BarPlacement> {
+    place_bar_in(BarCorner::TopRight, tile, bar_logical, scale)
+}
+
+/// Places a bar in `corner` of `area` (the hovered tile for the media bar, the whole Multiview for the primary bar).
+pub fn place_bar_in(corner: BarCorner, area: Rect, bar_logical: (f32, f32), scale: f32) -> Option<BarPlacement> {
     let scale = scale.max(0.5);
     let px = |logical: f32| (logical * scale).round() as i32;
     let margin = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX);
     let (bar_w, bar_h) = (px(bar_logical.0), px(bar_logical.1));
-    if bar_w <= 0 || bar_h <= 0 || tile.w < bar_w + 2 * margin || tile.h < bar_h + 2 * margin {
+    if bar_w <= 0 || bar_h <= 0 || area.w < bar_w + 2 * margin || area.h < bar_h + 2 * margin {
         return None;
     }
     let window_w = px(MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX).max(bar_w);
     let window_h = px(MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX).max(bar_h);
-    let window = Rect::new(tile.x + tile.w - margin - window_w, tile.y + margin, window_w, window_h);
-    let bar = Rect::new(window.x + window_w - bar_w, window.y, bar_w, bar_h);
+    let window_x = match corner {
+        BarCorner::TopRight => area.x + area.w - margin - window_w,
+        BarCorner::TopLeft => area.x + margin,
+    };
+    let window = Rect::new(window_x, area.y + margin, window_w, window_h);
+    let bar_x = match corner {
+        BarCorner::TopRight => window.x + window_w - bar_w,
+        BarCorner::TopLeft => window.x,
+    };
+    let bar = Rect::new(bar_x, window.y, bar_w, bar_h);
     Some(BarPlacement { window, bar })
 }
 
@@ -49,16 +69,20 @@ impl BarPlacement {
     }
 }
 
-/// Cheap superset test that needs no bar size: can the pointer be within `reveal_px` (logical pixels) of the bar of
-/// `tile`? The bar always lies inside the overlay window, which sits in the top right corner of the tile, so that corner
-/// region (window size plus margin plus reveal distance) covers every position from which the bar can be revealed.
-pub fn near_bar_corner(tile: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32) -> bool {
+/// Cheap superset test that needs no bar size: can the pointer be within `reveal_px` (logical pixels) of the bar in `corner`
+/// of `area`? The bar always lies inside the overlay window, which sits in that corner, so the corner region (window size
+/// plus margin plus reveal distance) covers every position from which the bar can be revealed.
+pub fn near_bar_corner(corner: BarCorner, area: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32) -> bool {
     let scale = scale.max(0.5);
     let px = |logical: f32| (logical * scale).round() as i32;
     let reveal = px(reveal_px as f32);
     let reach_x = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX + MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX) + reveal;
     let reach_y = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX + MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX) + reveal;
-    pointer.0 >= tile.x + tile.w - reach_x && pointer.1 <= tile.y + reach_y
+    let in_x = match corner {
+        BarCorner::TopRight => pointer.0 >= area.x + area.w - reach_x,
+        BarCorner::TopLeft => pointer.0 <= area.x + reach_x,
+    };
+    in_x && pointer.1 <= area.y + reach_y
 }
 
 /// The pointer is on the bar or within `reveal_px` (logical pixels) of its edge.

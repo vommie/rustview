@@ -242,6 +242,22 @@ pub const DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 15;
 pub const MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 0;
 pub const MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 100;
 
+// --- Fullscreen primary action bar (view-wide buttons in the top-left corner of the Multiview) ---
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_ENABLED: bool = true;
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB: bool = true;
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_CLOSE: bool = true;
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL: bool = true;
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL: bool = true;
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT: bool = true;
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR: bool = true;
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN: bool = true;
+pub const DEFAULT_FULLSCREEN_PRIMARY_BAR_REVEAL_DISTANCE_PX: u32 = 15;
+/// Hide the mouse cursor over the Multiview after it rested for `idle_cursor_ms` (the button of the primary bar flips it).
+pub const DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR: bool = false;
+pub const DEFAULT_FULLSCREEN_IDLE_CURSOR_MS: u32 = 3000;
+pub const MIN_FULLSCREEN_IDLE_CURSOR_MS: u32 = 500;
+pub const MAX_FULLSCREEN_IDLE_CURSOR_MS: u32 = 30_000;
+
 // --- Fullscreen sound (which videos are muted automatically while several videos are shown) ---
 pub const DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL: bool = true;
 /// Who has the sound while several videos are shown: "first" (leftmost), "newest" (the video that joined last) or
@@ -264,10 +280,12 @@ pub const MULTIVIEW_FALLBACK_ASPECT: f32 = 16.0 / 9.0;
 pub const MULTIVIEW_GUTTER_LOGICAL_PX: f32 = 16.0;
 pub const MULTIVIEW_MIN_COLUMN_LOGICAL_PX: f32 = 160.0;
 pub const MULTIVIEW_SNAP_LOGICAL_PX: f32 = 8.0;
+/// A refused attempt to close a pinned fullscreen shows the primary bar for this long, and its pin button blinks every
+/// `MULTIVIEW_PIN_BLINK_MS`.
+pub const MULTIVIEW_PIN_PULSE_MS: u64 = 1600;
+pub const MULTIVIEW_PIN_BLINK_MS: u64 = 200;
 pub const MULTIVIEW_SELECTION_DEBOUNCE_MS: u64 = 150;
 pub const MULTIVIEW_TICK_MS: u64 = 50;
-/// The mute state inside mpv (key `m`, on-screen controller) is polled every this many ticks.
-pub const MULTIVIEW_MUTE_POLL_TICKS: u32 = 4;
 pub const MULTIVIEW_DOUBLE_CLICK_MS: u64 = 400;
 /// Ticks during which the display parameters of a recycled player are taken for those of the previous file if they are equal.
 pub const MULTIVIEW_STALE_PROBE_TICKS: u32 = 20;
@@ -280,7 +298,7 @@ pub const MULTIVIEW_MIN_VIDEO_WINDOW_PX: i32 = 16;
 /// corner of the hovered tile, and the size of the window, which leaves room for a tooltip below the bar.
 pub const MULTIVIEW_BAR_MARGIN_LOGICAL_PX: f32 = 8.0;
 pub const MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX: f32 = 360.0;
-pub const MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX: f32 = 88.0;
+pub const MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX: f32 = 124.0;
 /// Base title of a tab that holds a Multiview; further ones get the usual numbered suffix.
 pub const MULTIVIEW_TAB_TITLE: &str = "Multiview";
 
@@ -719,6 +737,41 @@ impl Default for FullscreenMediaBarSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct FullscreenPrimaryBarSettings {
+    pub enabled: bool,
+    pub show_send_to_tab: bool,
+    pub show_close: bool,
+    pub show_mute_all: bool,
+    pub show_play_pause_all: bool,
+    pub show_reset_layout: bool,
+    pub show_hide_cursor: bool,
+    pub show_pin: bool,
+    pub reveal_distance_px: u32,
+    /// Shared with the "hide idle mouse cursor" button of the bar: there is one value, the button writes it.
+    pub hide_idle_cursor: bool,
+    pub idle_cursor_ms: u32,
+}
+
+impl Default for FullscreenPrimaryBarSettings {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_FULLSCREEN_PRIMARY_BAR_ENABLED,
+            show_send_to_tab: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB,
+            show_close: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_CLOSE,
+            show_mute_all: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL,
+            show_play_pause_all: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL,
+            show_reset_layout: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT,
+            show_hide_cursor: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR,
+            show_pin: DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN,
+            reveal_distance_px: DEFAULT_FULLSCREEN_PRIMARY_BAR_REVEAL_DISTANCE_PX,
+            hide_idle_cursor: DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR,
+            idle_cursor_ms: DEFAULT_FULLSCREEN_IDLE_CURSOR_MS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FullscreenSoundSettings {
     pub auto_control: bool,
     pub follows: String, // "first", "newest" or "nobody"
@@ -761,6 +814,7 @@ pub struct FullscreenSettings {
     /// Called `action_bar` before the primary action bar existed; old settings files keep working.
     #[serde(alias = "action_bar")]
     pub media_bar: FullscreenMediaBarSettings,
+    pub primary_bar: FullscreenPrimaryBarSettings,
     pub sound: FullscreenSoundSettings,
     pub background: FullscreenBackgroundSettings,
 }
@@ -773,6 +827,7 @@ impl Default for FullscreenSettings {
             enable_fallback_rule: DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE,
             fallback_target: DEFAULT_FULLSCREEN_FALLBACK_TARGET.to_string(),
             media_bar: FullscreenMediaBarSettings::default(),
+            primary_bar: FullscreenPrimaryBarSettings::default(),
             sound: FullscreenSoundSettings::default(),
             background: FullscreenBackgroundSettings::default(),
         }

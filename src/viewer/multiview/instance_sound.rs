@@ -3,6 +3,7 @@
 
 use super::audio::{AudioMode, AudioOrigin, TileAudio};
 use super::instance::MultiviewInstance;
+use crate::library::models::MediaId;
 
 impl MultiviewInstance {
     /// Pushes the mute state demanded by the audio rules to every video player whose actual state differs.
@@ -36,36 +37,38 @@ impl MultiviewInstance {
         }
     }
 
-    /// A mute change that did not come from us (key `m`, mpv on-screen controller) counts as the user's choice.
-    /// Returns `true` if any tile changed.
-    pub(super) fn poll_mute(&mut self) -> bool {
-        let mut changed = false;
-        for tile in &mut self.tiles {
-            let (Some(video), Some(audio)) = (tile.video.as_mut(), tile.audio.as_mut()) else {
-                continue;
-            };
-            let now = video.player.get_mute();
-            if now == video.last_mute {
-                continue;
-            }
-            video.last_mute = now;
-            let mode = if now {
-                AudioMode::Muted
-            } else {
-                AudioMode::Unmuted
-            };
-            *audio = TileAudio {
-                mode,
-                origin: AudioOrigin::User,
-            };
-            changed = true;
-            tracing::debug!(
-                media_id = tile.media_id,
-                muted = now,
-                "[Multiview: Audio] Mute changed inside mpv; kept as a user choice"
-            );
+    /// The player of `media_id` reports its mute state. A change that did not come from us (key `m`, mpv on-screen
+    /// controller) counts as the user's choice and the sound rules leave it alone from then on.
+    pub fn on_player_mute_changed(&mut self, media_id: MediaId, muted: bool) {
+        let Some(tile) = self.tiles.iter_mut().find(|t| t.media_id == media_id) else {
+            return;
+        };
+        let (Some(video), Some(audio)) = (tile.video.as_mut(), tile.audio.as_mut()) else {
+            return;
+        };
+        if video.last_mute == muted {
+            return;
         }
-        changed
+        video.last_mute = muted;
+        *audio = TileAudio {
+            mode: if muted { AudioMode::Muted } else { AudioMode::Unmuted },
+            origin: AudioOrigin::User,
+        };
+        tracing::debug!(
+            media_id,
+            muted,
+            "[Multiview: Audio] Mute changed inside mpv; kept as a user choice"
+        );
+        self.bump();
+    }
+
+    /// The player of `media_id` reports a change of the user's pause state (the bar reads the state live; this only makes
+    /// the hosts redraw).
+    pub fn on_player_pause_changed(&mut self, media_id: MediaId, paused: bool) {
+        if self.tiles.iter().any(|t| t.media_id == media_id && t.video.is_some()) {
+            tracing::debug!(media_id, paused, "[Multiview: Playback] Pause state changed");
+            self.bump();
+        }
     }
 
     /// The user mutes or unmutes tile `index`; either way the choice is theirs and the sound rules leave it alone.

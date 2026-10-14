@@ -24,6 +24,19 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <bool> media-bar-show-remove: true;
     in-out property <int> media-bar-reveal-distance-px: 15;
 
+    // Primary action bar
+    in-out property <bool> primary-bar-enabled: true;
+    in-out property <bool> primary-bar-show-send-to-tab: true;
+    in-out property <bool> primary-bar-show-close: true;
+    in-out property <bool> primary-bar-show-mute-all: true;
+    in-out property <bool> primary-bar-show-play-pause-all: true;
+    in-out property <bool> primary-bar-show-reset-layout: true;
+    in-out property <bool> primary-bar-show-hide-cursor: true;
+    in-out property <bool> primary-bar-show-pin: true;
+    in-out property <int> primary-bar-reveal-distance-px: 15;
+    in-out property <bool> hide-idle-cursor: false;
+    in-out property <int> idle-cursor-secs: 3;
+
     // Sound
     in-out property <bool> sound-auto-control: true;
     in-out property <int> sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
@@ -255,6 +268,151 @@ export component SettingsPageFullscreen inherits VerticalLayout {
             tooltip: "Remove the medium from the view. Closes the fullscreen or tab instead when it is the last medium. Esc always closes the fullscreen.";
             enabled: root.media-bar-enabled;
             checked <=> root.media-bar-show-remove;
+        }
+    }
+
+    SettingsCard {
+        title: "Primary Action Bar";
+        description: "The buttons for the whole view in the top-left corner of the fullscreen and of a Multiview tab.";
+
+        SettingsSwitchRow {
+            label: "Show the primary action bar";
+            tooltip: "Show a small bar of view-wide buttons in the top-left corner when the pointer comes close to it.";
+            checked <=> root.primary-bar-enabled;
+        }
+
+        SettingsOptionRow {
+            label: "Reveal distance";
+            description: "How close the pointer must come before the bar appears. 0 = only directly on the bar.";
+            tooltip: "The bar stays hidden while you watch. It appears when the pointer is within this many pixels of the place where the bar would be.";
+            enabled: root.primary-bar-enabled;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 0;
+                    maximum: 100;
+                    enabled: root.primary-bar-enabled;
+                    value: root.primary-bar-reveal-distance-px;
+                    changed(v) => { root.primary-bar-reveal-distance-px = Math.round(v); }
+                }
+
+                Text {
+                    text: root.primary-bar-reveal-distance-px + " px";
+                    color: root.primary-bar-enabled ? Theme.primary : Theme.text-muted;
+                    width: 46px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        Text {
+            text: "Buttons";
+            color: Theme.text-muted;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Send this view to a background tab";
+            tooltip: "Turn the whole fullscreen into a tab and close the fullscreen. Only shown in a fullscreen that follows the media view.";
+            enabled: root.primary-bar-enabled;
+            checked <=> root.primary-bar-show-send-to-tab;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Close fullscreen / tab";
+            tooltip: "Close the fullscreen, or the tab when the Multiview is shown in a tab. Esc always closes an unpinned fullscreen.";
+            enabled: root.primary-bar-enabled;
+            checked <=> root.primary-bar-show-close;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Mute / unmute all videos";
+            tooltip: "Mutes all videos, or unmutes them all when every video is muted. Shown when the Multiview has at least two videos.";
+            enabled: root.primary-bar-enabled;
+            checked <=> root.primary-bar-show-mute-all;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Play / pause all videos";
+            tooltip: "Pauses all videos, or starts them all when every video is paused. Shown while the Multiview has a video.";
+            enabled: root.primary-bar-enabled;
+            checked <=> root.primary-bar-show-play-pause-all;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Reset the arrangement";
+            tooltip: "Sets all resizers back to the automatic arrangement. Shown with two or more media; disabled while nothing was resized.";
+            enabled: root.primary-bar-enabled;
+            checked <=> root.primary-bar-show-reset-layout;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Hide the idle mouse cursor";
+            tooltip: "A switch for the setting below, so you can change it without opening the settings.";
+            enabled: root.primary-bar-enabled;
+            checked <=> root.primary-bar-show-hide-cursor;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Pin the fullscreen";
+            description: "While pinned, the fullscreen cannot be closed by Esc, double click or its buttons.";
+            tooltip: "Locks the fullscreen against closing by accident. Every attempt to close it makes the bar appear and the pin blink.";
+            enabled: root.primary-bar-enabled;
+            checked <=> root.primary-bar-show-pin;
+        }
+
+        Text {
+            text: "Mouse cursor";
+            color: Theme.text-muted;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Hide the mouse cursor when it rests";
+            tooltip: "Hides the cursor over the Multiview (fullscreen and tab) after it has not moved for the time below. It shows again when it moves and is never hidden over other windows. The button of the primary bar changes this setting too.";
+            checked <=> root.hide-idle-cursor;
+        }
+
+        SettingsOptionRow {
+            indent: 12px;
+            label: "Hide after";
+            tooltip: "How long the mouse cursor has to rest before it is hidden.";
+            enabled: root.hide-idle-cursor;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 1;
+                    maximum: 30;
+                    enabled: root.hide-idle-cursor;
+                    value: root.idle-cursor-secs;
+                    changed(v) => { root.idle-cursor-secs = Math.round(v); }
+                }
+
+                Text {
+                    text: root.idle-cursor-secs + " s";
+                    color: root.hide-idle-cursor ? Theme.primary : Theme.text-muted;
+                    width: 46px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
         }
     }
 

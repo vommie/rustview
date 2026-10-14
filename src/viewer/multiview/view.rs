@@ -4,6 +4,7 @@
 //! own view structs, so no host keeps a second copy of the arrangement.
 
 use super::media_actions::MediaActionId;
+use super::primary_actions::PrimaryActionId;
 use super::layout::Rect;
 use super::model::TileKind;
 use crate::ui::button_feedback::ButtonFeedback;
@@ -69,4 +70,27 @@ pub struct MediaBarTarget {
     pub actions: Vec<MediaActionView>,
     pub pointer: (i32, i32),
     pub reveal_distance_px: u32,
+}
+
+/// One button of the primary action bar.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrimaryActionView {
+    pub id: PrimaryActionId,
+    pub icon: Icon,
+    pub tooltip: String,
+    pub enabled: bool,
+    pub active: Option<bool>,
+    /// The button blinks (a refused attempt to close a pinned fullscreen).
+    pub attention: bool,
+}
+
+/// The primary bar a host may show: the area of the whole Multiview in the host window (physical pixels), the pointer, and
+/// the buttons. The bar appears while the pointer is within `reveal_distance_px` (logical pixels) of its place in the top
+/// left corner of `area`, or while `forced` (it shows itself to give feedback).
+pub struct PrimaryBarTarget {
+    pub area: Rect,
+    pub actions: Vec<PrimaryActionView>,
+    pub pointer: Option<(i32, i32)>,
+    pub reveal_distance_px: u32,
+    pub forced: bool,
 }

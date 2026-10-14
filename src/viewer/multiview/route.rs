@@ -49,6 +49,8 @@ pub enum UiAction {
     /// Action button: a medium left the Multiview of a tab, so everything that follows the tab's media (tab bar, inspector,
     /// tag and rating targets) has to catch up.
     TabMemberRemoved,
+    /// Primary bar button: the mouse cursor hiding after it rested is switched on or off (a setting of the application).
+    SetIdleCursorHide(bool),
     /// Previous/next medium of the single image the Multiview shows (keys and mouse wheel).
     Navigate { forward: bool },
 }

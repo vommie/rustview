@@ -40,7 +40,7 @@ impl MultiviewInstance {
             return Vec::new();
         };
         let tile = &self.tiles[index];
-        let bar = prefs::current().bar;
+        let bar = prefs::current().media_bar;
         media_actions_for(&ctx)
             .into_iter()
             .filter(|spec| bar.allows(spec.id))
@@ -85,7 +85,7 @@ impl MultiviewInstance {
     }
 
     /// What the close button does: the fullscreen closes, a tab that shows the Multiview closes with its tab.
-    fn close_action(&self) -> UiAction {
+    pub(super) fn close_action(&self) -> UiAction {
         match self.host.surface.mode {
             HostMode::TabView => UiAction::CloseActiveTab,
             _ => UiAction::CloseFullscreen,

@@ -118,6 +118,17 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-media-bar-show-open-as-tab: true;
     in-out property <bool> fullscreen-media-bar-show-remove: true;
     in-out property <int> fullscreen-media-bar-reveal-distance-px: 15;
+    in-out property <bool> fullscreen-primary-bar-enabled: true;
+    in-out property <bool> fullscreen-primary-bar-show-send-to-tab: true;
+    in-out property <bool> fullscreen-primary-bar-show-close: true;
+    in-out property <bool> fullscreen-primary-bar-show-mute-all: true;
+    in-out property <bool> fullscreen-primary-bar-show-play-pause-all: true;
+    in-out property <bool> fullscreen-primary-bar-show-reset-layout: true;
+    in-out property <bool> fullscreen-primary-bar-show-hide-cursor: true;
+    in-out property <bool> fullscreen-primary-bar-show-pin: true;
+    in-out property <int> fullscreen-primary-bar-reveal-distance-px: 15;
+    in-out property <bool> fullscreen-hide-idle-cursor: false;
+    in-out property <int> fullscreen-idle-cursor-secs: 3;
     in-out property <bool> fullscreen-sound-auto-control: true;
     in-out property <int> fullscreen-sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
     in-out property <bool> fullscreen-sound-hand-over: true;
@@ -270,6 +281,17 @@ export component SettingsWindow inherits Window {
                             media-bar-show-open-as-tab <=> root.fullscreen-media-bar-show-open-as-tab;
                             media-bar-show-remove <=> root.fullscreen-media-bar-show-remove;
                             media-bar-reveal-distance-px <=> root.fullscreen-media-bar-reveal-distance-px;
+                            primary-bar-enabled <=> root.fullscreen-primary-bar-enabled;
+                            primary-bar-show-send-to-tab <=> root.fullscreen-primary-bar-show-send-to-tab;
+                            primary-bar-show-close <=> root.fullscreen-primary-bar-show-close;
+                            primary-bar-show-mute-all <=> root.fullscreen-primary-bar-show-mute-all;
+                            primary-bar-show-play-pause-all <=> root.fullscreen-primary-bar-show-play-pause-all;
+                            primary-bar-show-reset-layout <=> root.fullscreen-primary-bar-show-reset-layout;
+                            primary-bar-show-hide-cursor <=> root.fullscreen-primary-bar-show-hide-cursor;
+                            primary-bar-show-pin <=> root.fullscreen-primary-bar-show-pin;
+                            primary-bar-reveal-distance-px <=> root.fullscreen-primary-bar-reveal-distance-px;
+                            hide-idle-cursor <=> root.fullscreen-hide-idle-cursor;
+                            idle-cursor-secs <=> root.fullscreen-idle-cursor-secs;
                             sound-auto-control <=> root.fullscreen-sound-auto-control;
                             sound-follows-idx <=> root.fullscreen-sound-follows-idx;
                             sound-hand-over <=> root.fullscreen-sound-hand-over;

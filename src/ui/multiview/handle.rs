@@ -335,8 +335,22 @@ impl MultiviewHandle {
     /// Closes the Multiview and runs the close handler (re-syncs the Browse view). Callable from any thread.
     pub fn request_close(&self) {
         if self.is_open() {
-            let _ = slint::invoke_from_event_loop(|| session::close(true));
+            let _ = slint::invoke_from_event_loop(|| {
+                session::close_by_user();
+            });
         }
+    }
+
+    /// The primary bar's cursor button: stores the new value in the application's settings (the one source of truth the
+    /// settings dialog shares); `prefs` and the open hosts follow through the settings subscriber.
+    pub(super) fn set_idle_cursor_hide(&self, on: bool) {
+        let Some(app) = self.app() else {
+            return;
+        };
+        let mut settings = app.settings.get();
+        settings.fullscreen.primary_bar.hide_idle_cursor = on;
+        app.settings.update(settings);
+        tracing::info!(on, "[Multiview: Cursor] Hiding of the idle mouse cursor changed by the bar button");
     }
 
     /// Closes the Multiview without the close handler because another fullscreen replaces it. UI thread only.

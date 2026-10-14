@@ -528,6 +528,13 @@ impl SettingsDiff {
                 "Fullscreen media action bar: enabled: {}, mute: {}, sticky: {}, open_as_tab: {}, remove: {}, reveal_distance_px: {}",
                 bar.enabled, bar.show_mute, bar.show_sticky, bar.show_open_as_tab, bar.show_remove, bar.reveal_distance_px
             ));
+            let primary = &new.fullscreen.primary_bar;
+            changes.push(format!(
+                "Fullscreen primary action bar: enabled: {}, send_to_tab: {}, close: {}, mute_all: {}, play_pause_all: {}, reset_layout: {}, hide_cursor: {}, pin: {}, reveal_distance_px: {}, hide_idle_cursor: {}, idle_cursor_ms: {}",
+                primary.enabled, primary.show_send_to_tab, primary.show_close, primary.show_mute_all, primary.show_play_pause_all,
+                primary.show_reset_layout, primary.show_hide_cursor, primary.show_pin, primary.reveal_distance_px,
+                primary.hide_idle_cursor, primary.idle_cursor_ms
+            ));
             let sound = &new.fullscreen.sound;
             changes.push(format!(
                 "Fullscreen sound: auto_control: {}, follows: '{}', hand_over: {}",

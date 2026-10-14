@@ -46,6 +46,26 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
             refresh_host(mode);
             return;
         }
+        PlayerEvent::MuteChanged { media_id, muted } => {
+            let mode = {
+                let mut guard = instance.lock();
+                guard.on_player_mute_changed(media_id, muted);
+                guard.host_mode()
+            };
+            drop(instance);
+            refresh_host(mode);
+            return;
+        }
+        PlayerEvent::PauseChanged { media_id, paused } => {
+            let mode = {
+                let mut guard = instance.lock();
+                guard.on_player_pause_changed(media_id, paused);
+                guard.host_mode()
+            };
+            drop(instance);
+            refresh_host(mode);
+            return;
+        }
         PlayerEvent::ToggleFullscreen => (RoutedEvent::ToggleFullscreen, ClickKind::None),
         PlayerEvent::CloseTab => (RoutedEvent::CloseTab, ClickKind::None),
         PlayerEvent::RenameRequested(media_id) => {
@@ -86,8 +106,16 @@ fn refresh_host(mode: HostMode) {
 pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: Option<u64>) {
     match (action, instance_id) {
         (UiAction::None, _) => {}
-        (UiAction::CloseFullscreen, _) => session::close(true),
-        (UiAction::ConvertToTab, _) => session_convert::convert_to_tab(),
+        (UiAction::CloseFullscreen, _) => {
+            session::close_by_user();
+        }
+        (UiAction::ConvertToTab, _) => {
+            // Moving the view into a tab ends the fullscreen, which a pinned fullscreen refuses.
+            if !session::close_refused() {
+                session_convert::convert_to_tab();
+            }
+        }
+        (UiAction::SetIdleCursorHide(on), _) => handle.set_idle_cursor_hide(on),
         (UiAction::RequestRename, _) => handle.request_rename(),
         (UiAction::CloseActiveTab, _) => handle.close_active_tab(),
         (UiAction::OpenTabFullscreen, Some(id)) => handle.open_tab_fullscreen(id),

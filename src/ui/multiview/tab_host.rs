@@ -5,7 +5,9 @@
 //! tick for the hover bar while the tab is shown and turns the events of the canvas into instance calls and UI actions.
 //! All state lives on the UI thread; the instance stays the only copy of the Multiview itself.
 
-use super::bar_overlay::{self, BarOwner, BarRequest};
+use super::bar_hosting::{self, BarHost};
+use super::bar_overlay::{self, BarOwner};
+use super::cursor;
 use super::handle::MultiviewHandle;
 use super::router;
 use super::views::{self, ImageCache, ViewModels};
@@ -14,6 +16,7 @@ use crate::settings::schema::MULTIVIEW_TICK_MS;
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::media_actions::MediaActionId;
+use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
@@ -36,6 +39,8 @@ struct TabHost {
     /// Instance id and revision that the bus shows right now.
     shown: Option<(u64, u64)>,
     tick: Timer,
+    /// The mouse cursor is hidden over the main window right now.
+    cursor_hidden: bool,
 }
 
 thread_local! {
@@ -121,8 +126,8 @@ pub fn action_finished(media_id: MediaId, action: MediaActionId, ok: bool) {
     refresh();
 }
 
-/// Shows, moves or hides the action bar window while the pointer is close to the bar of the hovered tile (only while the
-/// Multiview is shown in the viewer tab: a fullscreen over it has its own bar).
+/// Shows, moves or hides the two bar windows while the pointer is close to their place (only while the Multiview is shown
+/// in the viewer tab: a fullscreen over it has its own bars), and hides the mouse cursor while it rests and no bar is in use.
 fn update_bar_overlay() {
     let Some((window, instance, host_xid)) = with_host(|h| {
         Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))
@@ -131,25 +136,36 @@ fn update_bar_overlay() {
         bar_overlay::hide(BarOwner::TabView);
         return;
     };
-    let target = {
-        let guard = instance.lock();
-        (guard.host_mode() == HostMode::TabView).then(|| guard.media_bar_target()).flatten()
+    let in_tab_view = instance.lock().host_mode() == HostMode::TabView;
+    let host = BarHost {
+        owner: BarOwner::TabView,
+        host_xid,
+        scale: window.window().scale_factor(),
+        media_click: Rc::new(on_action),
+        primary_click: Rc::new(|_, action| on_primary_action(action)),
     };
-    let shown = target.is_some_and(|target| {
-        bar_overlay::show(&BarRequest {
-            owner: BarOwner::TabView,
-            host_xid,
-            tile: target.tile as i32,
-            tile_rect: target.rect,
-            pointer: target.pointer,
-            reveal_distance_px: target.reveal_distance_px,
-            scale: window.window().scale_factor(),
-            actions: views::action_views(&target.actions),
-            on_action: Rc::new(on_action),
-        })
-    });
-    if !shown {
-        bar_overlay::hide(BarOwner::TabView);
+    let bars_visible = bar_hosting::update(&host, &instance, in_tab_view);
+    let hide = in_tab_view && !bars_visible && instance.lock().cursor_should_hide();
+    if with_host(|h| std::mem::replace(&mut h.cursor_hidden, hide) != hide).unwrap_or(false) {
+        cursor::set_hidden(window.window(), hide);
+    }
+}
+
+/// A button of the primary bar was clicked.
+fn on_primary_action(action: i32) {
+    let (Some(instance), Some(action)) = (current_instance(), PrimaryActionId::from_code(action)) else {
+        return;
+    };
+    let outcome = instance.lock().perform_primary_action(action);
+    drop(instance);
+    refresh();
+    run(outcome);
+}
+
+/// The settings changed: the shown Multiview lets mpv follow the cursor hiding the user chose.
+pub fn refresh_settings() {
+    if let Some(instance) = current_instance() {
+        instance.lock().apply_cursor_autohide();
     }
 }
 
@@ -222,6 +238,11 @@ pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &Shar
 /// The Multiview is no longer the shown content (another tab, the Browse view, the grid or a fullscreen took over).
 pub fn suspend() {
     bar_overlay::hide(BarOwner::TabView);
+    if let Some(window) = with_host(|h| h.window.clone()).flatten().and_then(|w| w.upgrade())
+        && with_host(|h| std::mem::replace(&mut h.cursor_hidden, false)).unwrap_or(false)
+    {
+        cursor::set_hidden(window.window(), false);
+    }
     let released = with_host(|h| {
         h.tick.stop();
         h.instance = WeakInstance::new();

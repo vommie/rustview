@@ -15,6 +15,11 @@ pub type MpvCloseTabCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvGridClickCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvRenameCallback = Arc<dyn Fn() + Send + Sync>;
+/// Called from the observer thread when the mute state changed (a hotkey, the on-screen controller or `set_mute`).
+pub type MpvMuteCallback = Arc<dyn Fn(bool) + Send + Sync>;
+/// Called from the observer thread when the user's pause state changed (`true` = paused). A pause that only comes from
+/// the view being hidden is not the user's and is not reported.
+pub type MpvPauseCallback = Arc<dyn Fn(bool) + Send + Sync>;
 
 /// Central thread-safe MPV player engine wrapping `libmpv2` with native OSC, plugins, custom config files, and property observation.
 pub struct MpvPlayer {
@@ -35,6 +40,10 @@ pub struct MpvPlayer {
     grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
     rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>>,
+    mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
+    pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>>,
+    /// What the user's mpv configuration says about `cursor-autohide`; restored when the Multiview stops controlling it.
+    cursor_autohide_default: String,
     observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
@@ -175,6 +184,9 @@ impl MpvPlayer {
             );
         }
 
+        let cursor_autohide_default = mpv_instance
+            .get_property::<String>("cursor-autohide")
+            .unwrap_or_else(|_| "1000".to_string());
         let mpv_arc = Arc::new(mpv_instance);
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
         let current_file_path = Arc::new(RwLock::new(None));
@@ -200,6 +212,8 @@ impl MpvPlayer {
             Arc::new(RwLock::new(Vec::new()));
         let rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>> =
             Arc::new(RwLock::new(Vec::new()));
+        let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>> = Arc::new(RwLock::new(Vec::new()));
 
         let player = Self {
             mpv: mpv_arc.clone(),
@@ -219,6 +233,9 @@ impl MpvPlayer {
             grid_wheel_down_callbacks: grid_wheel_down_callbacks.clone(),
             convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
             rename_callbacks: rename_callbacks.clone(),
+            mute_callbacks: mute_callbacks.clone(),
+            pause_callbacks: pause_callbacks.clone(),
+            cursor_autohide_default,
             observer_handle: Mutex::new(None),
         };
 
@@ -527,6 +544,15 @@ impl MpvPlayer {
         }
     }
 
+    /// Lets mpv hide the mouse cursor over its video after it rested for `idle_ms` (it shows it again when it moves);
+    /// `None` gives control back to the user's mpv configuration.
+    pub fn set_cursor_autohide(&self, idle_ms: Option<u64>) {
+        let value = idle_ms.map_or_else(|| self.cursor_autohide_default.clone(), |ms| ms.to_string());
+        if self.mpv.set_property("cursor-autohide", value.as_str()).is_err() {
+            tracing::debug!("[MpvPlayer: Cursor] mpv did not accept a cursor-autohide value");
+        }
+    }
+
     /// Current mute state of this player (`false` if mpv cannot answer).
     pub fn get_mute(&self) -> bool {
         self.mpv.get_property::<bool>("mute").unwrap_or(false)
@@ -658,6 +684,26 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
+    /// Reports every mute change, whatever caused it (the single place that watches mpv for it).
+    pub fn on_mute_changed<F>(&self, callback: F)
+    where
+        F: Fn(bool) + Send + Sync + 'static,
+    {
+        let mut cbs = self.mute_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
+    /// Reports every change of the user's pause state, whatever caused it (a hotkey, the on-screen controller, `pause()`).
+    pub fn on_user_pause_changed<F>(&self, callback: F)
+    where
+        F: Fn(bool) + Send + Sync + 'static,
+    {
+        let mut cbs = self.pause_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
     pub fn on_convert_to_background_tab<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
@@ -692,6 +738,8 @@ impl MpvPlayer {
         let grid_wheel_down_callbacks = self.grid_wheel_down_callbacks.clone();
         let convert_callbacks = self.convert_to_tab_callbacks.clone();
         let rename_callbacks = self.rename_callbacks.clone();
+        let mute_callbacks = self.mute_callbacks.clone();
+        let pause_callbacks = self.pause_callbacks.clone();
 
         let observer = std::thread::Builder::new()
             .name("mpv-event-observer".into())
@@ -700,6 +748,8 @@ impl MpvPlayer {
 
                 let mut last_deinterlace = false;
                 let mut last_sub_vis = true;
+                let mut last_mute: Option<bool> = None;
+                let mut last_user_paused: Option<bool> = None;
 
                 while running.load(Ordering::Relaxed) {
                     // A player that is neither shown nor in the tab grid has nobody to react to: poll it less often.
@@ -821,6 +871,21 @@ impl MpvPlayer {
                     }
 
                     let user_paused_val = is_user_paused.load(Ordering::Relaxed);
+
+                    // Mute and pause changes made inside mpv (hotkeys, OSC) are reported to whoever listens.
+                    let muted = mpv.get_property::<bool>("mute").unwrap_or(false);
+                    if last_mute.is_some_and(|before| before != muted) {
+                        for cb in mute_callbacks.read().clone() {
+                            cb(muted);
+                        }
+                    }
+                    last_mute = Some(muted);
+                    if last_user_paused.is_some_and(|before| before != user_paused_val) {
+                        for cb in pause_callbacks.read().clone() {
+                            cb(user_paused_val);
+                        }
+                    }
+                    last_user_paused = Some(user_paused_val);
 
                     let has_changed = {
                         let mut st = state.write();

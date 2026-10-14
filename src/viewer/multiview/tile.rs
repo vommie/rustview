@@ -118,10 +118,22 @@ pub(super) fn connect_callbacks(
 ) {
     player.on_toggle_fullscreen(forward(sink, me, || PlayerEvent::ToggleFullscreen));
     player.on_close_tab(forward(sink, me, || PlayerEvent::CloseTab));
-    let current_media = Arc::clone(current_media);
+    let media = Arc::clone(current_media);
     player.on_rename_requested(forward(sink, me, move || {
-        PlayerEvent::RenameRequested(current_media.load(Ordering::SeqCst))
+        PlayerEvent::RenameRequested(media.load(Ordering::SeqCst))
     }));
+    let media = current_media.clone();
+    let (mute_sink, mute_me) = (Arc::clone(sink), me.clone());
+    player.on_mute_changed(move |muted| {
+        let media_id = media.load(Ordering::SeqCst);
+        mute_sink.post(mute_me.clone(), PlayerEvent::MuteChanged { media_id, muted });
+    });
+    let media = current_media.clone();
+    let (pause_sink, pause_me) = (Arc::clone(sink), me.clone());
+    player.on_user_pause_changed(move |paused| {
+        let media_id = media.load(Ordering::SeqCst);
+        pause_sink.post(pause_me.clone(), PlayerEvent::PauseChanged { media_id, paused });
+    });
     player.on_convert_to_background_tab(forward(sink, me, || PlayerEvent::CtrlClick));
     player.on_grid_left_click(forward(sink, me, || PlayerEvent::GridLeftClick));
     player.on_grid_middle_click(forward(sink, me, || PlayerEvent::GridMiddleClick));

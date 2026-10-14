@@ -13,7 +13,8 @@ component MultiviewBarButton inherits Rectangle {
     width: root.size;
     height: root.size;
     border-radius: 6px;
-    background: area.has-hover ? Theme.surface-hover : transparent;
+    background: root.action.attention ? Theme.accent.with-alpha(0.7) : (area.has-hover ? Theme.surface-hover : transparent);
+    animate background { duration: 90ms; }
 
     area := TooltipArea {
         width: 100%;
@@ -29,7 +30,7 @@ component MultiviewBarButton inherits Rectangle {
             y: (parent.height - self.height) / 2;
             icon: root.action.icon;
             size: IconSize.lg;
-            color: (root.action.toggle && root.action.active) || area.has-hover ? Theme.primary : Theme.text;
+            color: root.action.attention ? Theme.background : (!root.action.enabled ? Theme.text-muted.with-alpha(0.5) : ((root.action.toggle && root.action.active) || area.has-hover ? Theme.primary : Theme.text));
         }
 
         ButtonFeedbackOverlay {

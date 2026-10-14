@@ -8,6 +8,10 @@ export struct MultiviewBarButtonView {
     tooltip: string,
     toggle: bool, // the button shows an on/off state
     active: bool,
+    // A disabled button is dimmed; its tooltip says why. It still reports clicks (the application may react).
+    enabled: bool,
+    // The button blinks to draw the user's attention (a refused close of a pinned fullscreen).
+    attention: bool,
     feedback: ButtonFeedback,
 }
 

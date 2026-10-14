@@ -7,6 +7,7 @@
 //! Input handling lives in `session_input`; this file owns the lifecycle: open, close, window wiring.
 
 use super::bar_overlay::{self, BarOwner};
+use super::cursor;
 use super::eligibility::OpenPlan;
 use super::handle::{self, MultiviewHandle, Pace};
 use super::router::{UiEventSink, execute};
@@ -79,6 +80,10 @@ pub(super) struct Session {
     pub(super) models: ViewModels,
     /// What a click on a button of the action bar window does (the window is shared with the viewer tab host).
     pub(super) bar_click: Rc<dyn Fn(i32, i32)>,
+    /// What a click on a button of the primary bar window does.
+    pub(super) primary_click: Rc<dyn Fn(i32, i32)>,
+    /// The mouse cursor is hidden over the window right now.
+    pub(super) cursor_hidden: bool,
     pub(super) images: ImageCache,
     shown_revision: Option<u64>,
     pub(super) debounce: Timer,
@@ -174,17 +179,23 @@ pub(super) fn refresh_settings(settings: &SettingsManager) {
             return;
         };
         apply_background(&win, settings);
-        s.instance.lock().set_video_background(video_background(&win));
+        let mut instance = s.instance.lock();
+        instance.set_video_background(video_background(&win));
+        instance.apply_cursor_autohide();
     });
 }
 
 fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     let win = MultiviewFullscreenWindow::new()?;
-    win.on_request_close(|| close(true));
+    win.on_request_close(|| {
+        close_by_user();
+    });
     win.on_request_rename(|| run(Session::rename_hovered));
     win.on_tile_clicked(|_, is_ctrl| run(|s| s.on_click(is_ctrl)));
     win.on_background_clicked(|is_ctrl| run(|s| s.on_click(is_ctrl)));
-    win.on_middle_clicked(|| close(true));
+    win.on_middle_clicked(|| {
+        close_by_user();
+    });
     win.on_navigate(|forward| run(|_| UiAction::Navigate { forward }));
     win.on_wheel(|delta| {
         run(|_| match delta {
@@ -200,8 +211,11 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     win.on_gutter_swap(|index| with_session(|s| s.swap(index.max(0) as usize)));
     win.on_size_changed(|| with_session(Session::on_size_changed));
     win.window().on_close_requested(|| {
-        close(true);
-        CloseRequestResponse::HideWindow
+        if close_by_user() {
+            CloseRequestResponse::HideWindow
+        } else {
+            CloseRequestResponse::KeepWindowShown
+        }
     });
     Ok(win)
 }
@@ -367,6 +381,27 @@ fn finish_open(generation: u64, attempt: u32) {
     with_session(|s| s.populate(xid));
 }
 
+/// Whether the fullscreen refuses to close because it is pinned. A refusal makes the primary bar show itself and its pin
+/// button blink (the instance does that); the next tick draws it.
+pub(super) fn close_refused() -> bool {
+    SESSION.with(|cell| {
+        cell.try_borrow()
+            .ok()
+            .and_then(|slot| slot.as_ref().map(|s| s.instance.lock().refuse_close()))
+            .unwrap_or(false)
+    })
+}
+
+/// A close the user asked for (Esc, double or middle click, the window's close button, the close button of the bar). A
+/// pinned fullscreen stays; returns whether it closed.
+pub(super) fn close_by_user() -> bool {
+    if close_refused() {
+        return false;
+    }
+    close(true);
+    true
+}
+
 /// Closes the Multiview. With `notify` the application's close handler runs (re-syncs the Browse view); without it another
 /// fullscreen is replacing this one. Safe to call when nothing is open.
 pub(super) fn close(notify: bool) {
@@ -464,6 +499,8 @@ impl Session {
             probe: None,
             models: ViewModels::default(),
             bar_click: Rc::new(|tile, action| run(|s| s.on_action(tile, action))),
+            primary_click: Rc::new(|_, action| run(|s| s.on_primary_action(action))),
+            cursor_hidden: false,
             images: ImageCache::default(),
             shown_revision: None,
             debounce: Timer::default(),
@@ -543,6 +580,7 @@ impl Session {
         self.tick.stop();
         bar_overlay::hide(BarOwner::Fullscreen);
         if let Some(win) = self.window.upgrade() {
+            cursor::set_hidden(win.window(), false);
             win.set_is_ready(false);
             let _ = win.hide();
         }

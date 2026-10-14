@@ -20,7 +20,7 @@ use super::schema::{
 use super::schema::{
     FullscreenSettings, DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE,
     DEFAULT_FULLSCREEN_SOUND_FOLLOWS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
-    MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+    MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
 };
 use crate::util::hex_color;
 use std::fs;
@@ -342,6 +342,14 @@ impl SettingsStore {
         bar.reveal_distance_px = bar
             .reveal_distance_px
             .clamp(MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX);
+
+        let primary = &mut fullscreen.primary_bar;
+        primary.reveal_distance_px = primary
+            .reveal_distance_px
+            .clamp(MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX);
+        primary.idle_cursor_ms = primary
+            .idle_cursor_ms
+            .clamp(MIN_FULLSCREEN_IDLE_CURSOR_MS, MAX_FULLSCREEN_IDLE_CURSOR_MS);
 
         let follows = fullscreen.sound.follows.trim().to_lowercase();
         fullscreen.sound.follows = if matches!(follows.as_str(), "first" | "newest" | "nobody") {

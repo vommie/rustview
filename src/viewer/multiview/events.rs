@@ -15,6 +15,16 @@ pub enum PlayerEvent {
     ToggleFullscreen,
     CloseTab,
     RenameRequested(MediaId),
+    /// The mute state of the player of this medium changed (a hotkey or the on-screen controller of mpv, or us).
+    MuteChanged {
+        media_id: MediaId,
+        muted: bool,
+    },
+    /// The user's pause state of the player of this medium changed.
+    PauseChanged {
+        media_id: MediaId,
+        paused: bool,
+    },
     CtrlClick,
     GridLeftClick,
     GridMiddleClick,

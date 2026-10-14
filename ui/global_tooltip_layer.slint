@@ -9,8 +9,10 @@ export component GlobalTooltipLayer inherits Rectangle {
     callback state-changed(bool /* is_visible */, length /* x */, length /* y */, length /* width */, length /* height */);
 
     property <bool> active: GlobalTooltip.is-visible && TooltipSettings.enabled;
+    // Long tooltips wrap at the maximum width; `measure` is the text on one line, `wrapped` the same text at the final width.
+    property <length> text-w: Math.min(TooltipSettings.max-width, measure.preferred-width);
     property <length> bubble-w: tooltip-bubble.preferred-width;
-    property <length> bubble-h: tooltip-bubble.preferred-height;
+    property <length> bubble-h: Math.max(tooltip-bubble.preferred-height, wrapped.preferred-height + 2 * TooltipSettings.default-padding-v);
     property <length> bubble-x: Math.max(8px, Math.min(root.width - root.bubble-w - 8px, GlobalTooltip.pos-x));
     property <length> bubble-y: Math.max(8px, Math.min(root.height - root.bubble-h - 8px, GlobalTooltip.pos-y));
 
@@ -38,11 +40,25 @@ export component GlobalTooltipLayer inherits Rectangle {
     background: transparent;
     visible: root.active;
 
+    measure := Text {
+        visible: false;
+        text: GlobalTooltip.text;
+        font-size: TooltipSettings.default-font-size;
+    }
+
+    wrapped := Text {
+        visible: false;
+        width: root.text-w;
+        wrap: word-wrap;
+        text: GlobalTooltip.text;
+        font-size: TooltipSettings.default-font-size;
+    }
+
     tooltip-bubble := Rectangle {
         x: root.bubble-x;
         y: root.bubble-y;
         width: bubble-layout.preferred-width;
-        height: bubble-layout.preferred-height;
+        height: root.bubble-h;
         visible: root.active;
 
         background: TooltipSettings.default-background;
@@ -68,6 +84,8 @@ export component GlobalTooltipLayer inherits Rectangle {
             }
 
             Text {
+                width: root.text-w;
+                wrap: word-wrap;
                 text: GlobalTooltip.text;
                 font-size: TooltipSettings.default-font-size;
                 color: TooltipSettings.default-text;
