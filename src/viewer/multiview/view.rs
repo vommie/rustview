@@ -6,7 +6,7 @@
 use super::actions::ActionId;
 use super::layout::Rect;
 use super::model::TileKind;
-use crate::button_feedback::ButtonFeedback;
+use crate::ui::button_feedback::ButtonFeedback;
 use crate::icons::Icon;
 use crate::library::models::MediaId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};

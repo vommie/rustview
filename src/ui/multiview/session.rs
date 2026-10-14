@@ -13,7 +13,7 @@ use super::router::{UiEventSink, execute};
 use super::session_convert::park_below_main_window;
 use super::tab_host;
 use super::views::{self, ImageCache, ViewModels};
-use crate::hex_color;
+use crate::util::hex_color;
 use crate::settings::SettingsManager;
 use crate::settings::schema::{
     MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS,

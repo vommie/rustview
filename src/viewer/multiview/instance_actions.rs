@@ -8,7 +8,7 @@ use super::model::TileKind;
 use super::prefs;
 use super::route::{HostMode, OriginKind, UiAction};
 use super::view::{ActionView, Navigation};
-use crate::button_feedback::FeedbackKind;
+use crate::ui::button_feedback::FeedbackKind;
 use crate::library::models::MediaId;
 use std::collections::HashMap;
 

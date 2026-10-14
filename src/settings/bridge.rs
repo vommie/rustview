@@ -4,7 +4,7 @@ use super::schema::{
     DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
     MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
 };
-use crate::hex_color;
+use crate::util::hex_color;
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::color_picker::PickerRequest;
 use crate::ui::{color_picker, MainWindow, SettingsWindow, TooltipSettings};

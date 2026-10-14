@@ -9,7 +9,7 @@ use super::events::{MultiviewEventSink, PlayerEvent};
 use super::instance::WeakInstance;
 use super::layout::Rect;
 use super::model::{AspectSource, TileKind};
-use crate::button_feedback::ButtonFeedback;
+use crate::ui::button_feedback::ButtonFeedback;
 use crate::library::models::MediaId;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
 use parking_lot::Mutex;

@@ -4,7 +4,7 @@
 //! Call [`install`] once for every window that contains a `ColorPicker` or a `ColorSwatchButton`. [`open`] shows the
 //! picker in a window of its own.
 
-use crate::hex_color;
+use crate::util::hex_color;
 use crate::ui::{ColorCodec, ColorPickerWindow};
 use slint::{Color, ComponentHandle, Global, SharedString};
 use std::cell::RefCell;

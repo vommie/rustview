@@ -1,8 +1,6 @@
 pub mod app;
-pub mod button_feedback;
 pub mod cli_api;
 pub mod ctx_menu;
-pub mod hex_color;
 pub mod icons;
 pub mod library;
 pub mod media;
@@ -12,5 +10,6 @@ pub mod system;
 pub mod telemetry;
 pub mod thumbnails;
 pub mod ui;
+pub mod util;
 pub mod viewer;
 pub mod xnviewdb_migrate;

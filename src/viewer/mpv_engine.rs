@@ -519,7 +519,7 @@ impl MpvPlayer {
     /// The color mpv paints around a video that does not fill its window (letterbox bars). mpv 0.37 and newer call the
     /// option `background-color`; older versions take the color as `background`.
     pub fn set_background_color(&self, rgb: [u8; 3]) {
-        let color = crate::hex_color::format_rgb(rgb);
+        let color = crate::util::hex_color::format_rgb(rgb);
         if self.mpv.set_property("background-color", color.as_str()).is_err()
             && self.mpv.set_property("background", color.as_str()).is_err()
         {

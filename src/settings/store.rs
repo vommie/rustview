@@ -22,7 +22,7 @@ use super::schema::{
     DEFAULT_FULLSCREEN_SOUND_FOLLOWS, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
     MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
 };
-use crate::hex_color;
+use crate::util::hex_color;
 use std::fs;
 use std::path::{Path, PathBuf};
 
