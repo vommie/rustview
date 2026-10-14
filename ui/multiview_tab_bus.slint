@@ -1,4 +1,4 @@
-import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewActionView } from "multiview_types.slint";
+import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "multiview_types.slint";
 
 /// What the Multiview shown in the active viewer tab draws, and the events it reports. Rust fills the properties from the
 /// instance of the tab and handles the callbacks; the canvas in the main window just binds to them, so the main window needs
@@ -7,8 +7,6 @@ export global MultiviewTabBus {
     in-out property <[MultiviewTileView]> tiles;
     in-out property <[MultiviewGutterView]> gutters;
     in-out property <MultiviewScreenView> screen;
-    in-out property <int> bar-tile: -1;
-    in-out property <[MultiviewActionView]> bar-actions;
 
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
     callback background-clicked(bool /* is_ctrl */);
@@ -18,6 +16,4 @@ export global MultiviewTabBus {
     callback gutter-drag-finished(int);
     callback gutter-reset();
     callback gutter-swap(int);
-    callback action-clicked(int /* tile index */, int /* action id */);
-    callback overlay-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
 }

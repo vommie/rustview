@@ -5,6 +5,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
+mod overlay_server;
+pub use overlay_server::OverlayServer;
+
 type DisplayPtr = *mut c_void;
 type WindowId = c_ulong;
 type AtomId = c_ulong;
@@ -148,6 +151,30 @@ struct X11Symbols {
         *mut c_uint,
     ) -> c_int,
     x_set_error_handler: unsafe extern "C" fn(XErrorHandler) -> XErrorHandler,
+    x_default_screen: unsafe extern "C" fn(DisplayPtr) -> c_int,
+    x_get_selection_owner: unsafe extern "C" fn(DisplayPtr, AtomId) -> WindowId,
+    x_translate_coordinates: unsafe extern "C" fn(
+        DisplayPtr,
+        WindowId,
+        WindowId,
+        c_int,
+        c_int,
+        *mut c_int,
+        *mut c_int,
+        *mut WindowId,
+    ) -> c_int,
+    x_get_geometry: unsafe extern "C" fn(
+        DisplayPtr,
+        WindowId,
+        *mut WindowId,
+        *mut c_int,
+        *mut c_int,
+        *mut c_uint,
+        *mut c_uint,
+        *mut c_uint,
+        *mut c_uint,
+    ) -> c_int,
+    x_raise_window: unsafe extern "C" fn(DisplayPtr, WindowId) -> c_int,
 }
 
 #[repr(C)]
@@ -254,6 +281,11 @@ unsafe fn load_symbols_from_handles(
         x_shape_combine_mask,
         x_query_pointer: unsafe { load_sym(lib_x11, "XQueryPointer")? },
         x_set_error_handler: unsafe { load_sym(lib_x11, "XSetErrorHandler")? },
+        x_default_screen: unsafe { load_sym(lib_x11, "XDefaultScreen")? },
+        x_get_selection_owner: unsafe { load_sym(lib_x11, "XGetSelectionOwner")? },
+        x_translate_coordinates: unsafe { load_sym(lib_x11, "XTranslateCoordinates")? },
+        x_get_geometry: unsafe { load_sym(lib_x11, "XGetGeometry")? },
+        x_raise_window: unsafe { load_sym(lib_x11, "XRaiseWindow")? },
     });
 
     unsafe {

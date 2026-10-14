@@ -108,16 +108,6 @@ impl HostState {
     }
 }
 
-/// A rectangle of the host in the coordinates of the parent window, as the X server wants it.
-pub(super) fn cutout_rectangle(rect: Rect) -> XRectangle {
-    XRectangle {
-        x: rect.x.clamp(0, i16::MAX as i32) as i16,
-        y: rect.y.clamp(0, i16::MAX as i32) as i16,
-        width: rect.w.clamp(1, u16::MAX as i32) as u16,
-        height: rect.h.clamp(1, u16::MAX as i32) as u16,
-    }
-}
-
 impl MultiviewInstance {
     /// Shows the Multiview in `surface`. Returns `false` if nothing changed. A fullscreen host sets the container (the
     /// display the Multiview was last shown on); every other host scales that container into its rectangle.
@@ -185,9 +175,6 @@ impl MultiviewInstance {
     /// Re-places everything after the layout or the projection changed. The shape of a video window is relative to the
     /// window, so it is reset before any window moves and applied again afterwards.
     pub(super) fn reproject(&mut self) {
-        if let Some(index) = self.bar_tile {
-            self.refresh_shape(index);
-        }
         self.place_windows();
         self.apply_all_cutouts();
         self.bump();
@@ -268,21 +255,10 @@ impl MultiviewInstance {
         }
     }
 
-    /// Everything that has to be cut out of the video window of tile `index`: the overlays of the host (menus, tooltips)
-    /// plus the hover bar if it belongs to this tile. The shape of a window holds one set of rectangles, so they are
-    /// applied together.
-    fn window_cutouts(&self, index: usize) -> Vec<XRectangle> {
-        let mut rects = self.host.surface.overlay_cutouts.clone();
-        if self.bar_tile == Some(index)
-            && let Some(bar) = self.bar_rect
-        {
-            rects.push(cutout_rectangle(bar));
-        }
-        rects
-    }
-
+    /// Cuts the overlays of the host (menus, tooltips) out of the video window of tile `index`. The action bar is not one
+    /// of them: it floats in a window of its own above the Multiview and is blended with the video by the compositor.
     pub(super) fn apply_cutouts(&mut self, index: usize) {
-        let rects = self.window_cutouts(index);
+        let rects = self.host.surface.overlay_cutouts.clone();
         if let Some(video) = self.tiles.get_mut(index).and_then(|t| t.video.as_mut()) {
             video.window.clip_cutout_rectangles(&rects);
         }
@@ -398,15 +374,13 @@ impl MultiviewInstance {
             .tiles
             .iter()
             .zip(&self.layout.tiles)
-            .enumerate()
-            .map(|(index, (tile, placed))| TileView {
+            .map(|(tile, placed)| TileView {
                 media_id: tile.media_id,
                 rect: relative(projection.rect(placed.content)),
                 kind: tile.kind,
                 pixels: tile.pixels.clone(),
                 is_loading: tile.is_loading && tile.pixels.is_none(),
                 error: tile.error.clone(),
-                actions: self.action_views(index),
             })
             .collect();
         let gutters = self
@@ -424,7 +398,6 @@ impl MultiviewInstance {
             screen: relative(projection.screen()),
             tiles,
             gutters,
-            bar_tile: self.bar_tile,
             navigation: self.navigation(),
         }
     }
@@ -650,7 +623,7 @@ mod tests {
     }
 
     #[test]
-    fn the_bar_cutout_is_merged_with_the_overlay_cutouts() {
+    fn the_bar_floats_in_a_window_of_its_own_and_cuts_nothing_out_of_the_video() {
         let shared = instance(&[1.78, 1.78]);
         let mut mv = shared.lock();
         mv.set_host(&HostSurface::tab_view(
@@ -659,24 +632,12 @@ mod tests {
             1.0,
             vec![cutout(10, 10, 100, 50)],
         ));
-        assert_eq!(mv.window_cutouts(0), vec![cutout(10, 10, 100, 50)]);
-
         mv.bar_tile = Some(0);
+        mv.set_bar_overlay(Some(Rect::new(300, 90, 120, 34)));
         assert_eq!(
-            mv.window_cutouts(0),
+            mv.host.surface.overlay_cutouts,
             vec![cutout(10, 10, 100, 50)],
-            "no cutout until the host reports where the bar is"
-        );
-        mv.set_bar_overlay(Some(Rect::new(300, 26, 120, 34)));
-        assert_eq!(
-            mv.window_cutouts(0),
-            vec![cutout(10, 10, 100, 50), cutout(300, 90, 120, 34)],
-            "the bar is placed relative to the host rectangle (y + 64)"
-        );
-        assert_eq!(
-            mv.window_cutouts(1),
-            vec![cutout(10, 10, 100, 50)],
-            "the cutout belongs to the window of one tile"
+            "only the overlays of the host (menus, tooltips) are cut out"
         );
     }
 

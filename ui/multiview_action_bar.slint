@@ -6,11 +6,12 @@ import { MultiviewActionView } from "multiview_types.slint";
 
 component MultiviewActionButton inherits Rectangle {
     in property <MultiviewActionView> action;
+    in property <length> size: 28px;
 
     callback activated();
 
-    width: 28px;
-    height: 28px;
+    width: root.size;
+    height: root.size;
     border-radius: 6px;
     background: area.has-hover ? Theme.surface-hover : transparent;
 
@@ -38,27 +39,36 @@ component MultiviewActionButton inherits Rectangle {
     }
 }
 
-/// Row of action buttons that floats over the top right corner of the hovered medium. It is a normal Slint overlay
-/// (like the tab context menu): native video windows are cut open under it by Rust, which learns the rectangle of the bar
-/// from the canvas that places it.
+/// Row of action buttons for the hovered medium. It is drawn in the window of its own that `MultiviewOverlayWindow` is,
+/// which floats above the Multiview (and its native video windows) and is blended with them by the compositing manager.
 export component MultiviewActionBar inherits Rectangle {
     in property <[MultiviewActionView]> actions;
+    // Glass: the window is blended with what is below it. Without a compositing manager the window cannot be blended, so
+    // the bar is solid then.
+    in property <bool> translucent: true;
 
     callback action-clicked(int /* action id */);
 
-    width: layout.preferred-width;
-    height: layout.preferred-height;
-    background: Theme.surface.with-alpha(0.8);
+    // The size follows from the number of buttons alone, so Rust can read it at any time (a layout is only computed when
+    // the window draws).
+    property <length> button-size: 28px;
+    property <length> button-spacing: 2px;
+    property <length> inset: 3px;
+
+    width: root.actions.length * root.button-size + Math.max(root.actions.length - 1, 0) * root.button-spacing + 2 * root.inset;
+    height: root.button-size + 2 * root.inset;
+    background: root.translucent ? Theme.surface.with-alpha(0.7) : Theme.surface;
     border-radius: 8px;
     border-width: 1px;
     border-color: Theme.border;
 
     layout := HorizontalLayout {
-        padding: 3px;
-        spacing: 2px;
+        padding: root.inset;
+        spacing: root.button-spacing;
 
         for action in root.actions : MultiviewActionButton {
             action: action;
+            size: root.button-size;
 
             activated => {
                 root.action-clicked(action.id);

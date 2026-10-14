@@ -1,15 +1,19 @@
 //! Headless screenshots of the fullscreen Multiview (test scaffolding).
 //!
-//! The real `MultiviewFullscreenWindow` is rendered with Slint's software renderer; the tiles come from a real
+//! The real `MultiviewFullscreenWindow` and the real action bar window (`MultiviewOverlayWindow`, placed by the production
+//! `place_bar`) are rendered with Slint's software renderer; the lab blends the bar window over the scene like a
+//! compositing manager does. The tiles come from a real
 //! `MultiviewInstance` whose images are decoded from generated files exactly like in the application. Pointer events are
 //! injected into the window, the clock of the platform is controlled by the test, so animations (button feedback, tooltip
 //! delay) are deterministic. Native video windows cannot be drawn here; their geometry is covered by the layout tests.
 //! Set `RUSTVIEW_SCREENSHOT_DIR` to keep the PNGs; the assertions run either way.
 
-use super::views::{ImageCache, ViewModels};
-use crate::ui::MultiviewFullscreenWindow;
+use super::views::{self, ImageCache, ViewModels};
+use crate::ui::{MultiviewActionView, MultiviewFullscreenWindow, MultiviewOverlayWindow};
+use crate::settings::schema::MULTIVIEW_BAR_IDLE_MS;
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::actions::ActionId;
+use crate::viewer::multiview::bar_placement::{BarPlacement, place_bar};
 use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
 use crate::viewer::multiview::follow::Wanted;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
@@ -18,9 +22,14 @@ use crate::viewer::multiview::model::TileKind;
 use crate::viewer::multiview::route::UiAction;
 use crate::viewer::multiview::tile::TileSeed;
 use parking_lot::Mutex;
-use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+use slint::platform::software_renderer::{
+    MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType,
+};
 use slint::platform::{Key, Platform, PointerEventButton, WindowAdapter, WindowEvent};
-use slint::{ComponentHandle, LogicalPosition, ModelRc, PhysicalSize, PlatformError, Rgb8Pixel, SharedPixelBuffer};
+use slint::{
+    ComponentHandle, LogicalPosition, ModelRc, PhysicalSize, PlatformError, Rgb8Pixel,
+    SharedPixelBuffer, VecModel,
+};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -127,9 +136,30 @@ pub struct Lab {
     shots: Option<PathBuf>,
     /// Actions the window asked the application to run (the lab plays the session and executes the instance part).
     pub requested: Rc<RefCell<Vec<UiAction>>>,
-    /// Where the window drew the hover bar, and the tooltip bubble (logical = physical pixels at scale factor 1).
+    /// Where the bar and the tooltip bubble are on the screen (the coordinates of the fullscreen window; logical = physical
+    /// pixels at scale factor 1).
     pub overlay: Rc<Cell<Option<Rect>>>,
     pub tooltip: Rc<Cell<Option<Rect>>>,
+    overlay_window: MultiviewOverlayWindow,
+    overlay_adapter: Rc<MinimalSoftwareWindow>,
+    overlay_model: Rc<VecModel<MultiviewActionView>>,
+    overlay_origin: Rc<Cell<(i32, i32)>>,
+    /// Where the bar window is placed; `None` while no bar is shown.
+    pub placement: Option<BarPlacement>,
+    overlay_hover: bool,
+}
+
+/// What the bar window drew, premultiplied like a compositing manager receives it.
+pub struct OverlayShot {
+    pub width: usize,
+    pub height: usize,
+    pub pixels: Vec<PremultipliedRgbaColor>,
+}
+
+impl OverlayShot {
+    pub fn pixel(&self, x: i32, y: i32) -> PremultipliedRgbaColor {
+        self.pixels[y as usize * self.width + x as usize]
+    }
 }
 
 static NEXT_LAB: AtomicUsize = AtomicUsize::new(0);
@@ -143,6 +173,37 @@ impl Drop for Lab {
 /// Installs the platform once per thread; a second call (same thread) keeps the first.
 fn install_platform() {
     let _ = slint::platform::set_platform(Box::new(LabPlatform));
+}
+
+/// Blends a window with an alpha channel over the scene the way a compositing manager does (premultiplied "over").
+fn blend_over(
+    scene: &mut SharedPixelBuffer<Rgb8Pixel>,
+    width: usize,
+    height: usize,
+    origin: (i32, i32),
+    window: &OverlayShot,
+) {
+    let target = scene.make_mut_slice();
+    for y in 0..window.height {
+        for x in 0..window.width {
+            let (sx, sy) = (origin.0 + x as i32, origin.1 + y as i32);
+            if sx < 0 || sy < 0 || sx as usize >= width || sy as usize >= height {
+                continue;
+            }
+            let over = window.pixels[y * window.width + x];
+            if over.alpha == 0 {
+                continue;
+            }
+            let below = &mut target[sy as usize * width + sx as usize];
+            let keep = u32::from(255 - over.alpha);
+            let mix = |top: u8, bottom: u8| (u32::from(top) + (u32::from(bottom) * keep + 127) / 255).min(255) as u8;
+            *below = Rgb8Pixel {
+                r: mix(over.red, below.r),
+                g: mix(over.green, below.g),
+                b: mix(over.blue, below.b),
+            };
+        }
+    }
 }
 
 fn write_test_image(path: &std::path::Path, id: u64, width: u32, height: u32) {
@@ -204,16 +265,25 @@ impl Lab {
         let models = ViewModels::default();
         win.set_tiles(ModelRc::from(models.tiles.clone()));
         win.set_gutters(ModelRc::from(models.gutters.clone()));
-        win.set_bar_actions(ModelRc::from(models.bar_actions.clone()));
         win.set_is_ready(true);
         win.set_background_mode(0);
 
         let requested = Rc::new(RefCell::new(Vec::new()));
         let overlay = Rc::new(Cell::new(None));
         let tooltip = Rc::new(Cell::new(None));
+        let overlay_origin = Rc::new(Cell::new((0, 0)));
+
+        let overlay_window =
+            MultiviewOverlayWindow::new().expect("the action bar window can be created");
+        let overlay_adapter = WINDOW
+            .with(|slot| slot.borrow().clone())
+            .expect("the platform created a window adapter for the action bar");
+        overlay_adapter.set_size(PhysicalSize::new(360, 88));
+        let overlay_model: Rc<VecModel<MultiviewActionView>> = Rc::default();
+        overlay_window.set_actions(ModelRc::from(overlay_model.clone()));
         {
             let (for_actions, for_requests) = (instance.clone(), requested.clone());
-            win.on_action_clicked(move |tile, action| {
+            overlay_window.on_action_clicked(move |tile, action| {
                 let Some(action) = ActionId::from_code(action) else {
                     return;
                 };
@@ -227,12 +297,16 @@ impl Lab {
                 let outcome = guard.perform_action(id, action);
                 for_requests.borrow_mut().push(outcome);
             });
-            let (for_overlay, overlay) = (instance.clone(), overlay.clone());
-            win.on_overlay_changed(move |visible, x, y, w, h| {
-                let rect = visible.then(|| Rect::new(x as i32, y as i32, w as i32, h as i32));
-                overlay.set(rect);
-                for_overlay.lock().set_bar_overlay(rect);
+            let (tooltip, origin) = (tooltip.clone(), overlay_origin.clone());
+            overlay_window.on_tooltip_changed(move |visible, x, y, w, h| {
+                let (ox, oy) = origin.get();
+                tooltip.set(visible.then(|| {
+                    Rect::new(ox + x as i32, oy + y as i32, w as i32, h as i32)
+                }));
             });
+        }
+        overlay_window.show().expect("the action bar window can be shown");
+        {
             let for_keys = requested.clone();
             win.on_navigate(move |forward| {
                 for_keys.borrow_mut().push(UiAction::Navigate { forward });
@@ -241,10 +315,6 @@ impl Lab {
             win.on_wheel(move |delta| {
                 let forward = delta < 0.0;
                 for_wheel.borrow_mut().push(UiAction::Navigate { forward });
-            });
-            let tooltip = tooltip.clone();
-            win.on_tooltip_changed(move |visible, x, y, w, h| {
-                tooltip.set(visible.then(|| Rect::new(x as i32, y as i32, w as i32, h as i32)));
             });
         }
         win.show().expect("the window can be shown");
@@ -267,6 +337,12 @@ impl Lab {
             requested,
             overlay,
             tooltip,
+            overlay_window,
+            overlay_adapter,
+            overlay_model,
+            overlay_origin,
+            placement: None,
+            overlay_hover: false,
         }
     }
 
@@ -321,9 +397,49 @@ impl Lab {
     pub fn refresh(&mut self) {
         let view = self.instance.lock().view();
         self.models.sync(&view, &mut self.images);
-        self.win.set_bar_tile(super::views::bar_tile_index(&view));
         self.win
             .set_navigation(super::views::navigation_code(view.navigation));
+        self.update_overlay();
+    }
+
+    /// Does what a host does for the action bar window: shows it for the tile the pointer is on, or hides it.
+    fn update_overlay(&mut self) {
+        let target = self.instance.lock().bar_target();
+        let placement = target.and_then(|target| {
+            views::sync_model(&self.overlay_model, views::action_views(&target.actions));
+            self.overlay_window.set_tile(target.tile as i32);
+            let bar = (self.overlay_window.get_bar_width(), self.overlay_window.get_bar_height());
+            place_bar(target.rect, bar, 1.0)
+        });
+        match placement {
+            Some(placed) => {
+                self.overlay_adapter
+                    .set_size(PhysicalSize::new(placed.window.w as u32, placed.window.h as u32));
+                self.overlay_origin.set((placed.window.x, placed.window.y));
+            }
+            None if self.placement.is_some() => {
+                self.overlay_window.invoke_reset_tooltip();
+                self.overlay_hover = false;
+            }
+            None => {}
+        }
+        self.placement = placement;
+        self.overlay.set(placement.map(|placed| placed.bar));
+        self.instance.lock().set_bar_overlay(placement.map(|placed| placed.bar));
+    }
+
+    /// Switches the bar between glass (a compositing manager blends it) and solid (none runs).
+    pub fn set_glass(&mut self, glass: bool) {
+        self.overlay_window.set_translucent(glass);
+    }
+
+    /// The position in the bar window if a pointer at (`x`, `y`) of the screen is on the bar (the only part of the window
+    /// that takes pointer input).
+    fn on_bar(&self, x: i32, y: i32) -> Option<LogicalPosition> {
+        let placed = self.placement?;
+        placed.bar.contains(x, y).then(|| {
+            LogicalPosition::new((x - placed.window.x) as f32, (y - placed.window.y) as f32)
+        })
     }
 
     pub fn key(&mut self, key: Key) {
@@ -346,19 +462,36 @@ impl Lab {
 
     /// Moves the pointer: the window sees it (tooltips) and the instance probes it (hovered tile, hover bar).
     pub fn pointer(&mut self, x: i32, y: i32) {
-        self.adapter
-            .window()
-            .dispatch_event(WindowEvent::PointerMoved {
-                position: LogicalPosition::new(x as f32, y as f32),
-            });
+        match self.on_bar(x, y) {
+            Some(position) => {
+                // The bar window takes the pointer; the window below does not see it any more.
+                self.adapter.window().dispatch_event(WindowEvent::PointerExited);
+                self.overlay_adapter
+                    .window()
+                    .dispatch_event(WindowEvent::PointerMoved { position });
+                self.overlay_hover = true;
+            }
+            None => {
+                if std::mem::take(&mut self.overlay_hover) {
+                    self.overlay_adapter.window().dispatch_event(WindowEvent::PointerExited);
+                }
+                self.adapter
+                    .window()
+                    .dispatch_event(WindowEvent::PointerMoved {
+                        position: LogicalPosition::new(x as f32, y as f32),
+                    });
+            }
+        }
         self.instance.lock().tick(|| Some((x, y)));
         self.refresh();
         self.advance(Duration::from_millis(20));
     }
 
     pub fn click(&mut self, x: i32, y: i32) {
-        let position = LogicalPosition::new(x as f32, y as f32);
-        let window = self.adapter.window();
+        let (position, window) = match self.on_bar(x, y) {
+            Some(position) => (position, self.overlay_adapter.window()),
+            None => (LogicalPosition::new(x as f32, y as f32), self.adapter.window()),
+        };
         window.dispatch_event(WindowEvent::PointerMoved { position });
         window.dispatch_event(WindowEvent::PointerPressed {
             position,
@@ -390,6 +523,9 @@ impl Lab {
         self.adapter.draw_if_needed(|renderer| {
             renderer.render(pixels.make_mut_slice(), width as usize);
         });
+        if let (Some(placed), Some(bar)) = (self.placement, self.overlay_shot()) {
+            blend_over(&mut pixels, width as usize, height as usize, (placed.window.x, placed.window.y), &bar);
+        }
         let shot = Shot {
             width: width as usize,
             pixels,
@@ -402,6 +538,18 @@ impl Lab {
                 .expect("the screenshot can be written");
         }
         shot
+    }
+
+    /// What the bar window draws right now, or `None` while no bar is shown.
+    pub fn overlay_shot(&mut self) -> Option<OverlayShot> {
+        let placed = self.placement?;
+        let (width, height) = (placed.window.w as usize, placed.window.h as usize);
+        let mut pixels = vec![PremultipliedRgbaColor::default(); width * height];
+        self.overlay_adapter.request_redraw();
+        self.overlay_adapter.draw_if_needed(|renderer| {
+            renderer.render(&mut pixels, width);
+        });
+        Some(OverlayShot { width, height, pixels })
     }
 
     pub fn center_of(&self, tile: usize) -> (i32, i32) {
@@ -644,6 +792,116 @@ mod tests {
         );
     }
 
+    /// Hovers the second of two images and returns the bar and the lab (the bar window is shown then).
+    fn lab_with_a_bar() -> (Lab, Rect) {
+        let mut lab = Lab::new(W, H, &MEDIA);
+        lab.follow(&[2, 4]);
+        let (hx, hy) = lab.center_of(1);
+        lab.pointer(hx, hy);
+        lab.pointer(hx + 2, hy);
+        let bar = lab.overlay.get().expect("the bar is shown on the hovered tile");
+        (lab, bar)
+    }
+
+    /// The bar window in the coordinates of the lab's scene -> a point of the window.
+    fn local(lab: &Lab, x: i32, y: i32) -> (i32, i32) {
+        let window = lab.placement.expect("a bar is shown").window;
+        (x - window.x, y - window.y)
+    }
+
+    #[test]
+    fn the_bar_is_glass_with_transparent_rounded_corners() {
+        let (mut lab, bar) = lab_with_a_bar();
+        lab.advance(Duration::from_millis(100));
+        let window = lab.overlay_shot().expect("the bar window draws");
+        let (x, y) = local(&lab, bar.x, bar.y);
+
+        assert_eq!(window.pixel(x, y).alpha, 0, "the rounded corner is transparent, not a dark square");
+        assert_eq!(window.pixel(x + bar.w - 1, y + bar.h - 1).alpha, 0);
+        let gap = window.pixel(x + 2, y + bar.h / 2).alpha;
+        assert!(
+            (165..=190).contains(&gap),
+            "the surface of the bar is translucent so the medium below shows through: alpha {gap}"
+        );
+        let outside = window.pixel(x, y + bar.h + 30);
+        assert_eq!(outside.alpha, 0, "everything of the window outside the bar is transparent");
+    }
+
+    #[test]
+    fn the_glass_bar_blends_with_the_medium_below_it() {
+        let (mut lab, bar) = lab_with_a_bar();
+        let probe = (bar.x + 2, bar.y + bar.h / 2);
+        lab.set_glass(false);
+        let solid = lab.shot("31-solid-bar");
+        let surface = solid.at(probe.0, probe.1);
+        lab.set_glass(true);
+        let glass = lab.shot("32-glass-bar");
+        let seen = glass.at(probe.0, probe.1);
+        let tile = color_of(4);
+        for channel in 0..3 {
+            let expected = 0.7 * f32::from(surface[channel]) + 0.3 * f32::from(tile[channel]);
+            assert!(
+                (f32::from(seen[channel]) - expected).abs() <= 6.0,
+                "channel {channel}: {} should be 70% surface {} and 30% medium {} (about {expected:.0})",
+                seen[channel],
+                surface[channel],
+                tile[channel]
+            );
+        }
+        assert_ne!(seen, surface, "the glass is not the solid surface");
+    }
+
+    #[test]
+    fn without_a_compositing_manager_the_bar_is_solid() {
+        let (mut lab, bar) = lab_with_a_bar();
+        lab.set_glass(false);
+        lab.advance(Duration::from_millis(100));
+        let window = lab.overlay_shot().expect("the bar window draws");
+        let (x, y) = local(&lab, bar.x, bar.y);
+        assert_eq!(window.pixel(x + 2, y + bar.h / 2).alpha, 255, "the surface is opaque");
+        assert_eq!(
+            window.pixel(x, y).alpha,
+            0,
+            "the corner stays transparent (without a compositor the X shape cuts it away)"
+        );
+    }
+
+    #[test]
+    fn the_tooltip_of_a_button_is_drawn_in_the_bar_window_below_the_bar() {
+        let (mut lab, bar) = lab_with_a_bar();
+        let window = lab.placement.expect("a bar is shown").window;
+        let second_button = (bar.x + 3 + 30 + 14, bar.y + 3 + 14);
+        lab.pointer(second_button.0, second_button.1);
+        lab.advance(Duration::from_millis(900));
+        lab.refresh();
+        lab.advance(Duration::from_millis(50));
+        let bubble = lab.tooltip.get().expect("the tooltip bubble is reported");
+        assert!(bubble.y >= bar.y + bar.h, "below the bar: {bubble:?} vs {bar:?}");
+        assert!(
+            bubble.x >= window.x
+                && bubble.y >= window.y
+                && bubble.x + bubble.w <= window.x + window.w
+                && bubble.y + bubble.h <= window.y + window.h,
+            "the whole bubble fits into the window: {bubble:?} vs {window:?}"
+        );
+        let shot = lab.overlay_shot().expect("the bar window draws");
+        let (bx, by) = local(&lab, bubble.x + 6, bubble.y + 6);
+        assert!(shot.pixel(bx, by).alpha > 200, "the bubble itself is opaque");
+    }
+
+    #[test]
+    fn the_bar_window_vanishes_with_the_hover() {
+        let (mut lab, _) = lab_with_a_bar();
+        assert!(lab.placement.is_some());
+        let (x, y) = lab.center_of(1);
+        // The instance runs on the real clock: a tick later than the idle time, with the pointer where it was.
+        let later = Instant::now() + Duration::from_millis(MULTIVIEW_BAR_IDLE_MS + 500);
+        lab.instance.lock().tick_at(later, || Some((x + 2, y)));
+        lab.refresh();
+        assert!(lab.placement.is_none(), "a resting pointer hides the bar");
+        assert!(lab.overlay.get().is_none());
+    }
+
     #[test]
     fn hovering_a_button_shows_its_tooltip_above_everything() {
         let mut lab = Lab::new(W, H, &MEDIA);
@@ -779,6 +1037,9 @@ mod tests {
         let (cx, cy) = lab.center_of(0);
         lab.pointer(cx, cy);
         lab.pointer(cx + 2, cy);
+        // A change handler of Slint takes the first rendering as its starting point: the bar has been drawn before a
+        // button can flash, as it has in the application.
+        let _ = lab.shot("25-sticky-single-image-with-its-bar");
         lab.key(Key::RightArrow);
         assert_eq!(
             lab.requested.borrow().last(),

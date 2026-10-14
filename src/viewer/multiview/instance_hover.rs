@@ -2,15 +2,15 @@
 //! and the runtime correction of aspect ratios reported by mpv.
 //!
 //! mpv swallows the pointer events over a video, so the hovered tile is found by asking the X server for the pointer and
-//! testing it against the tile layout. The bar is a Slint overlay placed by the host; the instance only decides which
-//! tile it belongs to (the hovered tile, while the pointer is active or on the bar) and cuts the bar out of that tile's
-//! video window, like the tab context menu is cut out of the videos below it.
+//! testing it against the tile layout. The bar is a window of its own that the host places; the instance only decides
+//! which tile it belongs to (the hovered tile, while the pointer is active or on the bar).
 
 use super::instance::MultiviewInstance;
 use super::layout::Rect;
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::target_pick::pick_target;
 use super::tile::StaleProbe;
+use super::view::BarTarget;
 use crate::library::models::MediaId;
 use crate::settings::schema::{MULTIVIEW_BAR_IDLE_MS, MULTIVIEW_MUTE_POLL_TICKS};
 use std::time::{Duration, Instant};
@@ -62,42 +62,22 @@ impl MultiviewInstance {
         self.set_bar_tile(hovered.filter(|_| active || on_bar));
     }
 
-    /// Moves the hover bar to another tile (or hides it). The cutout of the tile it leaves goes away at once.
+    /// Moves the hover bar to another tile (or hides it).
     fn set_bar_tile(&mut self, tile: Option<usize>) {
         if tile == self.bar_tile {
             return;
         }
-        let left = std::mem::replace(&mut self.bar_tile, tile);
-        if let Some(index) = left {
-            self.refresh_shape(index);
-        }
+        self.bar_tile = tile;
         if tile.is_none() {
             self.bar_rect = None;
         }
         self.bump();
     }
 
-    /// The host drew (or removed) the hover bar: `rect` is its place in the host rectangle in physical pixels. The
-    /// video window below it is cut open there.
+    /// The host placed (or removed) the hover bar: `rect` is its place in the host window in physical pixels. While the
+    /// pointer rests on it, the bar stays.
     pub fn set_bar_overlay(&mut self, rect: Option<Rect>) {
-        let origin = self.host.surface.rect;
-        let placed = rect.map(|r| Rect::new(r.x + origin.x, r.y + origin.y, r.w, r.h));
-        if placed == self.bar_rect {
-            return;
-        }
-        self.bar_rect = placed;
-        if let Some(index) = self.bar_tile {
-            self.apply_cutouts(index);
-        }
-    }
-
-    /// Resets the shape of a video window (the shape is relative to the window, so it has to go before the window moves or
-    /// resizes) and applies the cutouts it needs now.
-    pub(super) fn refresh_shape(&mut self, index: usize) {
-        if let Some(video) = self.tiles.get_mut(index).and_then(|t| t.video.as_mut()) {
-            video.window.reset_clip_shape();
-        }
-        self.apply_cutouts(index);
+        self.bar_rect = rect;
     }
 
     /// Forgets the hover (the Multiview is hidden, parked, rearranged or its tiles changed).
@@ -111,6 +91,15 @@ impl MultiviewInstance {
     /// The hovered tile's bar belongs to this tile (for the view).
     pub fn bar_tile(&self) -> Option<usize> {
         self.bar_tile
+    }
+
+    /// The bar the host shows now: its tile, the place of that tile in the host window and the buttons of the tile. `None`
+    /// while no tile is hovered or the tile offers no button.
+    pub fn bar_target(&self) -> Option<BarTarget> {
+        let tile = self.bar_tile?;
+        let rect = self.host_content(tile)?;
+        let actions = self.action_views(tile);
+        (!actions.is_empty()).then_some(BarTarget { tile, rect, actions })
     }
 
     /// F2 acts on the tile under the pointer, else the last hovered one, else the first. The result becomes the rename
@@ -251,12 +240,28 @@ mod tests {
     }
 
     #[test]
-    fn the_bar_overlay_is_reported_relative_to_the_host() {
+    fn the_bar_overlay_is_kept_in_host_window_coordinates() {
         let shared = instance(1);
         let mut mv = shared.lock();
         mv.set_bar_overlay(Some(Rect::new(10, 20, 100, 30)));
         assert_eq!(mv.bar_rect, Some(Rect::new(10, 20, 100, 30)));
         mv.set_bar_overlay(None);
         assert_eq!(mv.bar_rect, None);
+    }
+
+    #[test]
+    fn the_bar_target_names_the_hovered_tile_its_place_and_its_buttons() {
+        let shared = instance(2);
+        let mut mv = shared.lock();
+        assert!(mv.bar_target().is_none(), "nothing is hovered yet");
+        let t0 = Instant::now();
+        let spot = centre(&mv, 1);
+        mv.tick_at(t0, || Some(spot));
+        let target = mv.bar_target().expect("the second tile is hovered");
+        assert_eq!(target.tile, 1);
+        assert_eq!(target.rect, mv.tile_rect(1));
+        assert!(!target.actions.is_empty());
+        mv.tick_at(t0 + Duration::from_millis(MULTIVIEW_BAR_IDLE_MS + 1), || Some(spot));
+        assert!(mv.bar_target().is_none(), "a resting pointer hides the bar");
     }
 }

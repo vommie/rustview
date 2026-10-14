@@ -253,6 +253,11 @@ pub const MULTIVIEW_OPEN_POLL_MS: u64 = 15;
 pub const MULTIVIEW_OPEN_XID_ATTEMPTS: u32 = 40;
 /// Video windows smaller than this (host pixels) are hidden: X11 containers are clamped to 16 px, which would distort the tile.
 pub const MULTIVIEW_MIN_VIDEO_WINDOW_PX: i32 = 16;
+/// The action bar floats in a small window of its own (see `viewer/multiview/bar_placement.rs`): its distance from the
+/// corner of the hovered tile, and the size of the window, which leaves room for a tooltip below the bar.
+pub const MULTIVIEW_BAR_MARGIN_LOGICAL_PX: f32 = 8.0;
+pub const MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX: f32 = 360.0;
+pub const MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX: f32 = 88.0;
 /// Base title of a tab that holds a Multiview; further ones get the usual numbered suffix.
 pub const MULTIVIEW_TAB_TITLE: &str = "Multiview";
 

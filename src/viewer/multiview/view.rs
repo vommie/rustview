@@ -18,8 +18,6 @@ pub struct TileView {
     pub pixels: Option<SharedPixelBuffer<Rgb8Pixel>>,
     pub is_loading: bool,
     pub error: Option<String>,
-    /// The buttons of the hover bar of this tile.
-    pub actions: Vec<ActionView>,
 }
 
 /// One button of the hover bar of a tile.
@@ -57,7 +55,13 @@ pub struct HostedView {
     pub screen: Rect,
     pub tiles: Vec<TileView>,
     pub gutters: Vec<GutterView>,
-    /// The tile whose hover bar is shown right now (the pointer is on it and has been active recently).
-    pub bar_tile: Option<usize>,
     pub navigation: Navigation,
+}
+
+/// The hover bar a host shows right now: the tile the pointer is on (and has been active on recently), where that tile is
+/// in the host window (physical pixels) and the buttons it offers.
+pub struct BarTarget {
+    pub tile: usize,
+    pub rect: Rect,
+    pub actions: Vec<ActionView>,
 }

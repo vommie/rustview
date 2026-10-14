@@ -5,6 +5,7 @@
 //! tick for the hover bar while the tab is shown and turns the events of the canvas into instance calls and UI actions.
 //! All state lives on the UI thread; the instance stays the only copy of the Multiview itself.
 
+use super::bar_overlay::{self, BarOwner, BarRequest};
 use super::handle::MultiviewHandle;
 use super::router;
 use super::views::{self, ImageCache, ViewModels};
@@ -19,6 +20,7 @@ use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiActio
 use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -63,15 +65,12 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
         h.handle = Some(handle);
         bus.set_tiles(ModelRc::from(h.models.tiles.clone()));
         bus.set_gutters(ModelRc::from(h.models.gutters.clone()));
-        bus.set_bar_actions(ModelRc::from(h.models.bar_actions.clone()));
     });
     bus.on_gutter_drag_started(|index| act(|mv| mv.drag_started(index.max(0) as usize)));
     bus.on_gutter_dragged(|_, distance| act(|mv| mv.dragged(distance)));
     bus.on_gutter_drag_finished(|_| act(MultiviewInstance::drag_finished));
     bus.on_gutter_reset(|| act(MultiviewInstance::reset_split));
     bus.on_gutter_swap(|index| act(|mv| mv.swap(index.max(0) as usize)));
-    bus.on_action_clicked(on_action);
-    bus.on_overlay_changed(on_bar_overlay);
     bus.on_tile_clicked(|_, is_ctrl| on_click(is_ctrl));
     bus.on_background_clicked(on_click);
     bus.on_middle_clicked(|| run(route_for(RoutedEvent::ToggleFullscreen, ClickKind::None)));
@@ -122,14 +121,35 @@ pub fn action_finished(media_id: MediaId, action: ActionId, ok: bool) {
     refresh();
 }
 
-/// The hover bar was drawn, moved or hidden: the video window below it is cut open (or closed again).
-fn on_bar_overlay(visible: bool, x: f32, y: f32, w: f32, h: f32) {
-    let dpi = with_host(|h| h.window.clone())
-        .flatten()
-        .and_then(|window| window.upgrade())
-        .map_or(1.0, |window| window.window().scale_factor());
-    let rect = views::bar_overlay(visible, x, y, w, h, dpi);
-    act(|mv| mv.set_bar_overlay(rect));
+/// Shows, moves or hides the action bar window for the tile the pointer is on (only while the Multiview is shown in the
+/// viewer tab: a fullscreen over it has its own bar).
+fn update_bar_overlay() {
+    let Some((window, instance, host_xid)) = with_host(|h| {
+        Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))
+    })
+    .flatten() else {
+        bar_overlay::hide(BarOwner::TabView);
+        return;
+    };
+    let target = {
+        let guard = instance.lock();
+        (guard.host_mode() == HostMode::TabView).then(|| guard.bar_target()).flatten()
+    };
+    let bar = target.and_then(|target| {
+        bar_overlay::show(&BarRequest {
+            owner: BarOwner::TabView,
+            host_xid,
+            tile: target.tile as i32,
+            tile_rect: target.rect,
+            scale: window.window().scale_factor(),
+            actions: views::action_views(&target.actions),
+            on_action: Rc::new(on_action),
+        })
+    });
+    if bar.is_none() {
+        bar_overlay::hide(BarOwner::TabView);
+    }
+    instance.lock().set_bar_overlay(bar);
 }
 
 fn route_for(event: RoutedEvent, click: ClickKind) -> UiAction {
@@ -200,6 +220,7 @@ pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &Shar
 
 /// The Multiview is no longer the shown content (another tab, the Browse view, the grid or a fullscreen took over).
 pub fn suspend() {
+    bar_overlay::hide(BarOwner::TabView);
     let released = with_host(|h| {
         h.tick.stop();
         h.instance = WeakInstance::new();
@@ -237,7 +258,7 @@ pub fn refresh() {
     });
     let bus = window.global::<MultiviewTabBus>();
     bus.set_screen(views::screen_view(&view));
-    bus.set_bar_tile(views::bar_tile_index(&view));
+    update_bar_overlay();
 }
 
 fn on_tick() {
@@ -252,6 +273,7 @@ fn on_tick() {
     instance.lock().tick(|| pointer);
     drop(instance);
     refresh();
+    update_bar_overlay();
 }
 
 /// The medium an F2 rename acts on in the active tab: its only medium, or for a Multiview the tile a player named, else

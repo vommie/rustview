@@ -7,7 +7,7 @@ use super::views;
 use crate::library::models::MediaId;
 use crate::system::MonitorInfo;
 use crate::viewer::PointerProbe;
-use crate::ui::bridge_ctx_menu::make_rounded_cutout_rectangles;
+use super::bar_overlay::{self, BarOwner, BarRequest};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::actions::ActionId;
 use crate::viewer::multiview::click::ClickKind;
@@ -28,14 +28,12 @@ impl Session {
         let win = self.window.upgrade()?;
         let size = win.window().size();
         let scale = win.window().scale_factor().max(0.5);
-        let mut surface = HostSurface::fullscreen(
+        Some(HostSurface::fullscreen(
             self.fs_xid,
             size.width.max(1) as i32,
             size.height.max(1) as i32,
             scale,
-        );
-        surface.overlay_cutouts = self.tooltip_cutouts.clone();
-        Some(surface)
+        ))
     }
 
     pub(super) fn on_size_changed(&mut self) {
@@ -55,6 +53,7 @@ impl Session {
             .lock()
             .tick(|| pointer_in_window(probe, monitor));
         self.refresh();
+        self.update_bar_overlay();
     }
 
     pub(super) fn drag_started(&mut self, index: usize) {
@@ -107,24 +106,29 @@ impl Session {
         self.refresh();
     }
 
-    /// The hover bar was drawn, moved or hidden: the video window below it is cut open (or closed again).
-    pub(super) fn on_bar_overlay(&mut self, visible: bool, x: f32, y: f32, w: f32, h: f32) {
-        let dpi = self.window.upgrade().map_or(1.0, |win| win.window().scale_factor());
-        let rect = views::bar_overlay(visible, x, y, w, h, dpi);
-        self.instance.lock().set_bar_overlay(rect);
-    }
-
-    /// The tooltip bubble appeared, moved or went away: video windows leave its area free.
-    pub(super) fn on_tooltip(&mut self, visible: bool, x: f32, y: f32, w: f32, h: f32) {
-        let scale = self.window.upgrade().map_or(1.0, |win| win.window().scale_factor());
-        self.tooltip_cutouts = if visible && w > 2.0 && h > 2.0 {
-            make_rounded_cutout_rectangles(x, y, w, h, scale)
-        } else {
-            Vec::new()
-        };
-        if let Some(surface) = self.host_surface() {
-            self.instance.lock().set_overlay_cutouts(&surface.overlay_cutouts);
+    /// Shows, moves or hides the action bar window for the tile the pointer is on.
+    pub(super) fn update_bar_overlay(&mut self) {
+        if !self.populated {
+            return;
         }
+        let target = self.instance.lock().bar_target();
+        let scale = self.window.upgrade().map(|win| win.window().scale_factor());
+        let bar = match (target, scale) {
+            (Some(target), Some(scale)) => bar_overlay::show(&BarRequest {
+                owner: BarOwner::Fullscreen,
+                host_xid: self.fs_xid,
+                tile: target.tile as i32,
+                tile_rect: target.rect,
+                scale,
+                actions: views::action_views(&target.actions),
+                on_action: self.bar_click.clone(),
+            }),
+            _ => None,
+        };
+        if bar.is_none() {
+            bar_overlay::hide(BarOwner::Fullscreen);
+        }
+        self.instance.lock().set_bar_overlay(bar);
     }
 
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what

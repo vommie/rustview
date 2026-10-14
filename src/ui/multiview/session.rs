@@ -6,6 +6,7 @@
 //! [`with_session`], which serialize access to the thread-local session and skip re-entrant calls instead of panicking.
 //! Input handling lives in `session_input`; this file owns the lifecycle: open, close, window wiring.
 
+use super::bar_overlay::{self, BarOwner};
 use super::eligibility::OpenPlan;
 use super::handle::{self, MultiviewHandle, Pace};
 use super::router::{UiEventSink, execute};
@@ -24,7 +25,6 @@ use crate::ui::MultiviewFullscreenWindow;
 use crate::viewer::{TabId, ViewerTabManager};
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::UiAction;
-use crate::viewer::XRectangle;
 use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
 use parking_lot::RwLock;
 use slint::{
@@ -32,6 +32,7 @@ use slint::{
     TimerMode,
 };
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -75,8 +76,8 @@ pub(super) struct Session {
     pub(super) tab_return: Option<TabReturn>,
     pub(super) probe: Option<PointerProbe>,
     pub(super) models: ViewModels,
-    /// Areas of the tooltip bubble that native video windows must leave free.
-    pub(super) tooltip_cutouts: Vec<XRectangle>,
+    /// What a click on a button of the action bar window does (the window is shared with the viewer tab host).
+    pub(super) bar_click: Rc<dyn Fn(i32, i32)>,
     pub(super) images: ImageCache,
     shown_revision: Option<u64>,
     pub(super) debounce: Timer,
@@ -161,13 +162,6 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     win.on_gutter_drag_finished(|_| with_session(Session::drag_finished));
     win.on_gutter_reset(|| with_session(Session::reset_split));
     win.on_gutter_swap(|index| with_session(|s| s.swap(index.max(0) as usize)));
-    win.on_action_clicked(|tile, action| run(|s| s.on_action(tile, action)));
-    win.on_overlay_changed(|visible, x, y, w, h| {
-        with_session(|s| s.on_bar_overlay(visible, x, y, w, h))
-    });
-    win.on_tooltip_changed(|visible, x, y, w, h| {
-        with_session(|s| s.on_tooltip(visible, x, y, w, h))
-    });
     win.on_size_changed(|| with_session(Session::on_size_changed));
     win.window().on_close_requested(|| {
         close(true);
@@ -214,12 +208,9 @@ fn prepare_window(
     ));
     win.set_tiles(ModelRc::from(models.tiles.clone()));
     win.set_gutters(ModelRc::from(models.gutters.clone()));
-    win.set_bar_actions(ModelRc::from(models.bar_actions.clone()));
-    win.set_bar_tile(-1);
     win.set_navigation(0);
     let appearance = &settings.get().appearance;
-    win.set_enable_tooltips(appearance.enable_tooltips);
-    win.set_tooltip_delay_ms(appearance.tooltip_delay_ms as i32);
+    bar_overlay::set_tooltip_settings(appearance.enable_tooltips, appearance.tooltip_delay_ms as i32);
     win.window()
         .set_position(PhysicalPosition::new(monitor.x, monitor.y));
     win.window()
@@ -437,7 +428,7 @@ impl Session {
             tab_return,
             probe: None,
             models: ViewModels::default(),
-            tooltip_cutouts: Vec::new(),
+            bar_click: Rc::new(|tile, action| run(|s| s.on_action(tile, action))),
             images: ImageCache::default(),
             shown_revision: None,
             debounce: Timer::default(),
@@ -504,9 +495,9 @@ impl Session {
         self.shown_revision = Some(view.revision);
         self.models.sync(&view, &mut self.images);
         if let Some(win) = self.window.upgrade() {
-            win.set_bar_tile(views::bar_tile_index(&view));
             win.set_navigation(views::navigation_code(view.navigation));
         }
+        self.update_bar_overlay();
     }
 
     /// Hides the window and empties its models (the images would otherwise stay in memory until the next open); dropping
@@ -515,6 +506,7 @@ impl Session {
     pub(super) fn shutdown(self) {
         self.debounce.stop();
         self.tick.stop();
+        bar_overlay::hide(BarOwner::Fullscreen);
         if let Some(win) = self.window.upgrade() {
             win.set_is_ready(false);
             let _ = win.hide();

@@ -98,23 +98,9 @@ pub fn navigation_code(navigation: Navigation) -> i32 {
     }
 }
 
-/// The tile whose hover bar is shown (`-1` = none).
-pub fn bar_tile_index(view: &HostedView) -> i32 {
-    view.bar_tile.map_or(-1, |index| index as i32)
-}
-
-/// The buttons of the hover bar: those of the tile named by `view.bar_tile`.
-pub fn bar_action_views(view: &HostedView) -> Vec<MultiviewActionView> {
-    view.bar_tile
-        .and_then(|index| view.tiles.get(index))
-        .map(|tile| tile.actions.iter().map(action_view).collect())
-        .unwrap_or_default()
-}
-
-/// The place of the hover bar reported by the host (logical pixels in the canvas), in physical pixels of the host
-/// rectangle; `None` while the bar is hidden.
-pub fn bar_overlay(visible: bool, x: f32, y: f32, width: f32, height: f32, dpi: f32) -> Option<Rect> {
-    visible.then(|| physical_rect(x, y, width, height, dpi))
+/// The buttons of the action bar window.
+pub fn action_views(actions: &[ActionView]) -> Vec<MultiviewActionView> {
+    actions.iter().map(action_view).collect()
 }
 
 /// A logical rectangle in window pixels -> physical window pixels. Edges are rounded, not sizes, so neighbors stay seamless
@@ -160,7 +146,6 @@ pub fn gutter_views(view: &HostedView) -> Vec<MultiviewGutterView> {
 pub struct ViewModels {
     pub tiles: Rc<VecModel<MultiviewTileView>>,
     pub gutters: Rc<VecModel<MultiviewGutterView>>,
-    pub bar_actions: Rc<VecModel<MultiviewActionView>>,
 }
 
 impl ViewModels {
@@ -169,19 +154,17 @@ impl ViewModels {
         images.retain(&view.tiles);
         sync_model(&self.tiles, tile_views(view, images));
         sync_model(&self.gutters, gutter_views(view));
-        sync_model(&self.bar_actions, bar_action_views(view));
     }
 
     pub fn clear(&self) {
         self.tiles.set_vec(Vec::new());
         self.gutters.set_vec(Vec::new());
-        self.bar_actions.set_vec(Vec::new());
     }
 }
 
 /// Updates the rows in place when the row count is unchanged. Resetting the model would recreate the repeater items and
 /// abort a gutter drag in progress (the dragged gutter is one of the items) or reset the hover of a bar button.
-fn sync_model<T: Clone + 'static>(model: &VecModel<T>, items: Vec<T>) {
+pub(super) fn sync_model<T: Clone + 'static>(model: &VecModel<T>, items: Vec<T>) {
     if model.row_count() == items.len() {
         for (row, item) in items.into_iter().enumerate() {
             model.set_row_data(row, item);

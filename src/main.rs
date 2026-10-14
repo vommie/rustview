@@ -110,6 +110,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?);
 
     // Initialize Slint Window
+    // The action bar of the Multiview floats in a window of its own; it has to be an override-redirect window, which Slint only
+    // lets us request before the first window is created.
+    slint::BackendSelector::new()
+        .with_winit_window_attributes_hook(
+            rustview::ui::multiview::bar_overlay::window_attributes_hook,
+        )
+        .select()?;
+
     let main_window = MainWindow::new()?;
 
     // Register XDG Desktop Application ID after platform initialization

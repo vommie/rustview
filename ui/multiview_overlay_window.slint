@@ -1,0 +1,66 @@
+import { MultiviewActionView } from "multiview_types.slint";
+import { MultiviewActionBar } from "multiview_action_bar.slint";
+import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
+import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
+
+/// The action bar of the hovered medium, in a frameless transparent window of its own that floats above the Multiview.
+/// Native video windows are children of the Multiview window, so nothing drawn there can blend with them; a window of its
+/// own is blended with everything below it by the compositing manager (glass), and a tooltip drawn in it is never covered
+/// by a video. Rust places the window so that the bar (top right corner of this window) sits in the corner of the tile.
+/// The window is larger than the bar to leave room for the tooltip bubble below it; Rust limits the pointer input of the
+/// window to the bar, so the rest of it is invisible to the pointer.
+export component MultiviewOverlayWindow inherits Window {
+    title: "RustView - Multiview action bar";
+    no-frame: true;
+    background: transparent;
+
+    in property <[MultiviewActionView]> actions;
+    // The tile the bar belongs to; it is handed back with every click.
+    in property <int> tile: -1;
+    // False without a compositing manager: the bar is solid then.
+    in property <bool> translucent: true;
+    in property <bool> enable-tooltips: true;
+    in property <int> tooltip-delay-ms: 750;
+    out property <length> bar-width: bar.width;
+    out property <length> bar-height: bar.height;
+    out property <length> bar-radius: bar.border-radius;
+    out property <length> tooltip-radius: TooltipSettings.default-corner-radius;
+
+    callback action-clicked(int /* tile index */, int /* action id */);
+    // The tooltip bubble appeared, moved or went away (logical pixels in this window).
+    callback tooltip-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
+
+    // Called when the window is hidden: a tooltip that was open must not be there when the window comes back.
+    public function reset-tooltip() {
+        GlobalTooltip.hide();
+    }
+
+    changed enable-tooltips => {
+        TooltipSettings.enabled = root.enable-tooltips;
+    }
+    changed tooltip-delay-ms => {
+        TooltipSettings.default-delay = root.tooltip-delay-ms * 1ms;
+    }
+
+    bar := MultiviewActionBar {
+        x: root.width - self.width;
+        y: 0px;
+        actions: root.actions;
+        translucent: root.translucent;
+
+        action-clicked(id) => {
+            root.action-clicked(root.tile, id);
+        }
+    }
+
+    GlobalTooltipLayer {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+
+        state-changed(visible, x, y, w, h) => {
+            root.tooltip-changed(visible, x, y, w, h);
+        }
+    }
+}

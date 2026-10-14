@@ -4,6 +4,7 @@
 //! Slint window, `tab_host` shows it in a viewer tab, `router` turns player events into UI actions and `handle` is the thread-safe face used by the rest of
 //! the application. The state and logic of a running Multiview live in `crate::viewer::multiview::instance`.
 
+pub mod bar_overlay;
 pub mod eligibility;
 pub mod grid_host;
 pub mod handle;

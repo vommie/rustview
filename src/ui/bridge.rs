@@ -13,7 +13,7 @@ use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, 
 use super::bridge_file_selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::bridge_folders::BridgeFolders;
-use super::multiview::MultiviewHandle;
+use super::multiview::{MultiviewHandle, bar_overlay};
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
@@ -204,6 +204,10 @@ impl UiBridge {
         window.set_grid_item_corner_radius(app_settings.appearance.grid_item_corner_radius as i32);
         window.set_enable_tooltips(app_settings.appearance.enable_tooltips);
         window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
+        bar_overlay::set_tooltip_settings(
+            app_settings.appearance.enable_tooltips,
+            app_settings.appearance.tooltip_delay_ms as i32,
+        );
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 
         window.set_tag_history_height(initial_state.tag_history_height);
@@ -456,6 +460,10 @@ impl UiBridge {
                 if diff_clone.tooltip_settings_changed {
                     window.set_enable_tooltips(new_clone.appearance.enable_tooltips);
                     window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms as i32);
+                    bar_overlay::set_tooltip_settings(
+                        new_clone.appearance.enable_tooltips,
+                        new_clone.appearance.tooltip_delay_ms as i32,
+                    );
                 }
 
                 if diff_clone.view_settings_changed {
