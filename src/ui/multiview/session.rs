@@ -415,17 +415,15 @@ pub(super) fn close(notify: bool) {
 }
 
 /// The application exits: the fullscreen closes whatever the user pinned. The close handler does not run (the main window is
-/// closing, so there is no view left to re-sync), and the window is destroyed too, not just hidden. UI thread only.
+/// closing, so there is no view left to re-sync). The window is only hidden, never dropped here: the video windows of the tiles
+/// are its children, and destroying it while a teardown thread still shuts their players down would end the process (libmpv's
+/// Xlib error handler). Slint destroys hidden windows when the event loop ends, after `ViewerTabManager::shutdown` has waited
+/// for the teardown threads. UI thread only.
 pub(super) fn shutdown() {
     match take_session() {
         Ok(Some(session)) => finish_close(session, false),
         Ok(None) => {}
         Err(()) => tracing::warn!("[Shutdown: Windows] The fullscreen is busy with an event; it cannot be closed in order"),
-    }
-    let window = WINDOW.with(|cell| cell.try_borrow_mut().ok().and_then(|mut slot| slot.take()));
-    if let Some(window) = window {
-        let _ = window.hide();
-        tracing::debug!("[Shutdown: Windows] Fullscreen window destroyed");
     }
 }
 

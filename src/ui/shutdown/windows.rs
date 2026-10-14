@@ -6,7 +6,7 @@
 /// `(component, how the shutdown closes it)`.
 pub const WINDOWS: &[(&str, &str)] = &[
     ("MainWindow", "its close request starts the shutdown"),
-    ("MultiviewFullscreenWindow", "MultiviewHandle::shutdown closes the session (pinned or not) and destroys the window"),
+    ("MultiviewFullscreenWindow", "MultiviewHandle::shutdown closes the session (pinned or not) and hides the window; Slint destroys it when the event loop ends"),
     ("MultiviewBarWindow", "bar_overlay::shutdown destroys both bar windows"),
     ("SettingsWindow", "SettingsDialogController::close; the changes that were not saved are discarded"),
     ("ColorPickerWindow", "color_picker::shutdown"),
