@@ -9,7 +9,7 @@
 //! into window calls.
 
 use super::views::sync_model;
-use crate::ui::{MultiviewActionView, MultiviewOverlayWindow};
+use crate::ui::{MultiviewBarButtonView, MultiviewBarWindow};
 use crate::viewer::multiview::bar_placement::{BarPlacement, in_reveal_zone, place_bar, rounded_region};
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::{OverlayServer, XRectangle, get_raw_window_xid};
@@ -44,7 +44,7 @@ pub struct BarRequest {
     pub reveal_distance_px: u32,
     /// Physical pixels per logical pixel of the host.
     pub scale: f32,
-    pub actions: Vec<MultiviewActionView>,
+    pub actions: Vec<MultiviewBarButtonView>,
     pub on_action: ActionHandler,
 }
 
@@ -158,18 +158,18 @@ fn xrectangle(rect: Rect) -> XRectangle {
 }
 
 struct Overlay {
-    window: MultiviewOverlayWindow,
-    model: Rc<VecModel<MultiviewActionView>>,
+    window: MultiviewBarWindow,
+    model: Rc<VecModel<MultiviewBarButtonView>>,
     shared: Rc<Shared>,
     owner: Option<BarOwner>,
     shown: bool,
-    last_actions: Vec<MultiviewActionView>,
+    last_actions: Vec<MultiviewBarButtonView>,
 }
 
 impl Overlay {
     fn new() -> Option<Self> {
         NEXT_IS_OVERLAY.with(|flag| flag.set(true));
-        let created = MultiviewOverlayWindow::new();
+        let created = MultiviewBarWindow::new();
         NEXT_IS_OVERLAY.with(|flag| flag.set(false));
         let window = match created {
             Ok(window) => window,

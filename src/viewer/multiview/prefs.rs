@@ -4,18 +4,18 @@
 //! when they need a decision (which buttons a tile offers, how new videos start), so nothing has to be threaded through
 //! the many places that create or host an instance and a change takes effect on the next event.
 
-use super::actions::ActionId;
+use super::media_actions::MediaActionId;
 use super::audio::{AudioPolicy, SoundFollows};
 use crate::settings::schema::{
-    DEFAULT_FULLSCREEN_BAR_ENABLED, DEFAULT_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
-    DEFAULT_FULLSCREEN_BAR_SHOW_MUTE, DEFAULT_FULLSCREEN_BAR_SHOW_OPEN_AS_TAB,
-    DEFAULT_FULLSCREEN_BAR_SHOW_REMOVE, DEFAULT_FULLSCREEN_BAR_SHOW_STICKY, FullscreenSettings,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED, DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY, FullscreenSettings,
 };
 use parking_lot::RwLock;
 
 /// Which buttons the hover bar may show and how close the pointer has to come before it appears.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BarPrefs {
+pub struct MediaBarPrefs {
     pub enabled: bool,
     pub mute: bool,
     pub sticky: bool,
@@ -26,45 +26,45 @@ pub struct BarPrefs {
     pub reveal_distance_px: u32,
 }
 
-impl BarPrefs {
+impl MediaBarPrefs {
     pub const DEFAULT: Self = Self {
-        enabled: DEFAULT_FULLSCREEN_BAR_ENABLED,
-        mute: DEFAULT_FULLSCREEN_BAR_SHOW_MUTE,
-        sticky: DEFAULT_FULLSCREEN_BAR_SHOW_STICKY,
-        open_as_tab: DEFAULT_FULLSCREEN_BAR_SHOW_OPEN_AS_TAB,
-        remove: DEFAULT_FULLSCREEN_BAR_SHOW_REMOVE,
-        reveal_distance_px: DEFAULT_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
+        enabled: DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED,
+        mute: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE,
+        sticky: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY,
+        open_as_tab: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
+        remove: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE,
+        reveal_distance_px: DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     };
 
     /// True if the user wants the button of `id` in the bar.
-    pub fn allows(&self, id: ActionId) -> bool {
+    pub fn allows(&self, id: MediaActionId) -> bool {
         self.enabled
             && match id {
-                ActionId::Mute => self.mute,
-                ActionId::Sticky => self.sticky,
-                ActionId::OpenAsTab => self.open_as_tab,
-                ActionId::Remove | ActionId::Close => self.remove,
+                MediaActionId::Mute => self.mute,
+                MediaActionId::Sticky => self.sticky,
+                MediaActionId::OpenAsTab => self.open_as_tab,
+                MediaActionId::Remove | MediaActionId::Close => self.remove,
             }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MultiviewPrefs {
-    pub bar: BarPrefs,
+    pub bar: MediaBarPrefs,
     pub audio: AudioPolicy,
 }
 
 impl MultiviewPrefs {
     pub const DEFAULT: Self = Self {
-        bar: BarPrefs::DEFAULT,
+        bar: MediaBarPrefs::DEFAULT,
         audio: AudioPolicy::DEFAULT,
     };
 
     pub fn from_settings(settings: &FullscreenSettings) -> Self {
-        let bar = &settings.action_bar;
+        let bar = &settings.media_bar;
         let sound = &settings.sound;
         Self {
-            bar: BarPrefs {
+            bar: MediaBarPrefs {
                 enabled: bar.enabled,
                 mute: bar.show_mute,
                 sticky: bar.show_sticky,

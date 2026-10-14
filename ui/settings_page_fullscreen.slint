@@ -17,12 +17,12 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <int> fallback-target-idx: 0; // 0 = Same display as Main UI, 1 = Different display from Main UI
 
     // Action bar
-    in-out property <bool> bar-enabled: true;
-    in-out property <bool> bar-show-mute: true;
-    in-out property <bool> bar-show-sticky: true;
-    in-out property <bool> bar-show-open-as-tab: true;
-    in-out property <bool> bar-show-remove: true;
-    in-out property <int> bar-reveal-distance-px: 15;
+    in-out property <bool> media-bar-enabled: true;
+    in-out property <bool> media-bar-show-mute: true;
+    in-out property <bool> media-bar-show-sticky: true;
+    in-out property <bool> media-bar-show-open-as-tab: true;
+    in-out property <bool> media-bar-show-remove: true;
+    in-out property <int> media-bar-reveal-distance-px: 15;
 
     // Sound
     in-out property <bool> sound-auto-control: true;
@@ -180,20 +180,20 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     }
 
     SettingsCard {
-        title: "Action Bar";
+        title: "Media Action Bar";
         description: "The buttons in the top-right corner of a medium in fullscreen.";
 
         SettingsSwitchRow {
-            label: "Show the action bar";
+            label: "Show the media action bar";
             tooltip: "Show a small bar of buttons in the corner of a medium when the pointer comes close to it.";
-            checked <=> root.bar-enabled;
+            checked <=> root.media-bar-enabled;
         }
 
         SettingsOptionRow {
             label: "Reveal distance";
             description: "How close the pointer must come before the bar appears. 0 = only directly on the bar.";
             tooltip: "The bar stays hidden while you watch. It appears when the pointer is within this many pixels of the place where the bar would be.";
-            enabled: root.bar-enabled;
+            enabled: root.media-bar-enabled;
 
             HorizontalLayout {
                 spacing: 8px;
@@ -202,14 +202,14 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                     width: 140px;
                     minimum: 0;
                     maximum: 100;
-                    enabled: root.bar-enabled;
-                    value: root.bar-reveal-distance-px;
-                    changed(v) => { root.bar-reveal-distance-px = Math.round(v); }
+                    enabled: root.media-bar-enabled;
+                    value: root.media-bar-reveal-distance-px;
+                    changed(v) => { root.media-bar-reveal-distance-px = Math.round(v); }
                 }
 
                 Text {
-                    text: root.bar-reveal-distance-px + " px";
-                    color: root.bar-enabled ? Theme.primary : Theme.text-muted;
+                    text: root.media-bar-reveal-distance-px + " px";
+                    color: root.media-bar-enabled ? Theme.primary : Theme.text-muted;
                     width: 46px;
                     vertical-alignment: center;
                     horizontal-alignment: right;
@@ -228,24 +228,24 @@ export component SettingsPageFullscreen inherits VerticalLayout {
             indent: 12px;
             label: "Mute";
             tooltip: "Mute or unmute a video. Shown on videos only.";
-            enabled: root.bar-enabled;
-            checked <=> root.bar-show-mute;
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-mute;
         }
 
         SettingsSwitchRow {
             indent: 12px;
             label: "Sticky";
             tooltip: "Keep a medium in view when the selection changes. Shown when the fullscreen follows the selection of the media view.";
-            enabled: root.bar-enabled;
-            checked <=> root.bar-show-sticky;
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-sticky;
         }
 
         SettingsSwitchRow {
             indent: 12px;
             label: "Open in a background tab";
             tooltip: "Open the medium in a viewer tab of its own, without leaving the fullscreen.";
-            enabled: root.bar-enabled;
-            checked <=> root.bar-show-open-as-tab;
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-open-as-tab;
         }
 
         SettingsSwitchRow {
@@ -253,8 +253,8 @@ export component SettingsPageFullscreen inherits VerticalLayout {
             label: "Remove / Close";
             description: "Removes a medium from the view; on the last medium it closes the fullscreen (or the tab).";
             tooltip: "Remove the medium from the view. Closes the fullscreen or tab instead when it is the last medium. Esc always closes the fullscreen.";
-            enabled: root.bar-enabled;
-            checked <=> root.bar-show-remove;
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-remove;
         }
     }
 
@@ -313,7 +313,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                             ? ("The leftmost video plays sound, the others start muted. A video that joins starts muted" + (root.sound-hand-over ? ", unless nothing plays; when the video with sound leaves, the next one takes over." : ", unless nothing plays."))
                             : (root.sound-follows-idx == 1
                                 ? ("The leftmost video plays sound when the fullscreen opens. A video that joins takes the sound; the others are muted" + (root.sound-hand-over ? ", and the sound passes on when its video leaves." : "."))
-                                : "Every video starts muted. Unmute one with its button in the action bar or with the M key."));
+                                : "Every video starts muted. Unmute one with its button in the media action bar or with the M key."));
                     color: Theme.text-muted;
                 }
             }

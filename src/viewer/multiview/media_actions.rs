@@ -11,7 +11,7 @@ use super::route::{HostMode, OriginKind};
 use crate::icons::Icon;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ActionId {
+pub enum MediaActionId {
     Mute,
     Sticky,
     OpenAsTab,
@@ -19,7 +19,7 @@ pub enum ActionId {
     Close,
 }
 
-impl ActionId {
+impl MediaActionId {
     /// Stable number that crosses the Slint boundary.
     pub const fn code(self) -> i32 {
         match self {
@@ -46,7 +46,7 @@ impl ActionId {
 
 /// Everything a provider may look at; all of it is in-memory state of the hovered tile and its Multiview.
 #[derive(Debug, Clone, Copy)]
-pub struct ActionContext {
+pub struct MediaBarContext {
     pub host: HostMode,
     pub origin: OriginKind,
     pub tile_count: usize,
@@ -60,33 +60,33 @@ pub struct ActionContext {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionSpec {
-    pub id: ActionId,
+pub struct MediaActionSpec {
+    pub id: MediaActionId,
     pub icon: Icon,
     pub tooltip: &'static str,
     /// `Some(on)` for buttons that show a toggle state.
     pub active: Option<bool>,
 }
 
-type Provider = fn(&ActionContext) -> Option<ActionSpec>;
+type Provider = fn(&MediaBarContext) -> Option<MediaActionSpec>;
 
 /// Order of the buttons in the bar, left to right.
 const PROVIDERS: &[Provider] = &[mute, sticky, open_as_tab, remove, close];
 
 /// The bar exists in the fullscreen window and in the viewer tab; the tab-grid miniature is a picture.
-fn interactive(ctx: &ActionContext) -> bool {
+fn interactive(ctx: &MediaBarContext) -> bool {
     matches!(ctx.host, HostMode::Fullscreen | HostMode::TabView)
 }
 
 /// Only a Multiview that follows the Browse selection can keep media independent of that selection.
-fn is_workspace(ctx: &ActionContext) -> bool {
+fn is_workspace(ctx: &MediaBarContext) -> bool {
     ctx.host == HostMode::Fullscreen && ctx.origin == OriginKind::Browse
 }
 
-fn mute(ctx: &ActionContext) -> Option<ActionSpec> {
+fn mute(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     let muted = ctx.muted.filter(|_| interactive(ctx))?;
-    Some(ActionSpec {
-        id: ActionId::Mute,
+    Some(MediaActionSpec {
+        id: MediaActionId::Mute,
         icon: if muted {
             Icon::VolumeOff
         } else {
@@ -97,9 +97,9 @@ fn mute(ctx: &ActionContext) -> Option<ActionSpec> {
     })
 }
 
-fn sticky(ctx: &ActionContext) -> Option<ActionSpec> {
-    is_workspace(ctx).then_some(ActionSpec {
-        id: ActionId::Sticky,
+fn sticky(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    is_workspace(ctx).then_some(MediaActionSpec {
+        id: MediaActionId::Sticky,
         icon: if ctx.sticky {
             Icon::MultiviewStickyOn
         } else {
@@ -114,18 +114,18 @@ fn sticky(ctx: &ActionContext) -> Option<ActionSpec> {
     })
 }
 
-fn open_as_tab(ctx: &ActionContext) -> Option<ActionSpec> {
-    (interactive(ctx) && !ctx.single_tab).then_some(ActionSpec {
-        id: ActionId::OpenAsTab,
+fn open_as_tab(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    (interactive(ctx) && !ctx.single_tab).then_some(MediaActionSpec {
+        id: MediaActionId::OpenAsTab,
         icon: Icon::OpenInBackgroundTab,
         tooltip: "Open in a background tab",
         active: None,
     })
 }
 
-fn remove(ctx: &ActionContext) -> Option<ActionSpec> {
-    (interactive(ctx) && ctx.tile_count > 1).then_some(ActionSpec {
-        id: ActionId::Remove,
+fn remove(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    (interactive(ctx) && ctx.tile_count > 1).then_some(MediaActionSpec {
+        id: MediaActionId::Remove,
         icon: Icon::MultiviewRemove,
         tooltip: if ctx.origin == OriginKind::Browse {
             "Remove from this view and deselect"
@@ -138,9 +138,9 @@ fn remove(ctx: &ActionContext) -> Option<ActionSpec> {
 
 /// The last remaining medium cannot be removed (the view is never empty), so the button closes what shows it instead:
 /// the fullscreen, or the tab.
-fn close(ctx: &ActionContext) -> Option<ActionSpec> {
-    (interactive(ctx) && ctx.tile_count <= 1).then_some(ActionSpec {
-        id: ActionId::Close,
+fn close(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    (interactive(ctx) && ctx.tile_count <= 1).then_some(MediaActionSpec {
+        id: MediaActionId::Close,
         icon: Icon::Close,
         tooltip: if ctx.host == HostMode::Fullscreen {
             "Close fullscreen"
@@ -151,6 +151,6 @@ fn close(ctx: &ActionContext) -> Option<ActionSpec> {
     })
 }
 
-pub fn actions_for(ctx: &ActionContext) -> Vec<ActionSpec> {
+pub fn media_actions_for(ctx: &MediaBarContext) -> Vec<MediaActionSpec> {
     PROVIDERS.iter().filter_map(|provider| provider(ctx)).collect()
 }

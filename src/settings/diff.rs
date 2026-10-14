@@ -523,9 +523,9 @@ impl SettingsDiff {
                 new.fullscreen.enable_fallback_rule,
                 new.fullscreen.fallback_target
             ));
-            let bar = &new.fullscreen.action_bar;
+            let bar = &new.fullscreen.media_bar;
             changes.push(format!(
-                "Fullscreen action bar: enabled: {}, mute: {}, sticky: {}, open_as_tab: {}, remove: {}, reveal_distance_px: {}",
+                "Fullscreen media action bar: enabled: {}, mute: {}, sticky: {}, open_as_tab: {}, remove: {}, reveal_distance_px: {}",
                 bar.enabled, bar.show_mute, bar.show_sticky, bar.show_open_as_tab, bar.show_remove, bar.reveal_distance_px
             ));
             let sound = &new.fullscreen.sound;

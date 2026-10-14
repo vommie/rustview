@@ -3,7 +3,7 @@
 //! A video tile is an `X11VideoSubwindow` below the host window with an `MpvPlayer` attached to it, the usual callbacks,
 //! `load_file` + `play`. mpv does whatever it does inside its rectangle; the layout only decides where that rectangle is.
 
-use super::actions::ActionId;
+use super::media_actions::MediaActionId;
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
 use super::instance::WeakInstance;
@@ -63,7 +63,7 @@ pub struct TileState {
     /// Width the user gave this tile by dragging a gutter, as a share of its row; `None` = automatic.
     pub pin: Option<f64>,
     /// Feedback of the action buttons of this tile.
-    pub feedback: HashMap<ActionId, ButtonFeedback>,
+    pub feedback: HashMap<MediaActionId, ButtonFeedback>,
     /// Display parameters mpv reported for the file a recycled player showed before: they are stale until they change.
     pub stale_probe: Option<StaleProbe>,
 }

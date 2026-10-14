@@ -9,7 +9,7 @@ use super::session::{self, Session};
 use super::session_convert;
 use super::tab_host;
 use crate::viewer::multiview::click::ClickKind;
-use crate::viewer::multiview::actions::ActionId;
+use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
 use crate::viewer::multiview::instance::WeakInstance;
 use crate::viewer::multiview::route::{HostMode, RoutedEvent, UiAction, route};
@@ -98,8 +98,8 @@ pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: O
         (UiAction::TabMemberRemoved, _) => handle.tab_members_changed(),
         (UiAction::OpenTileAsTab(media_id), _) => {
             let opened = handle.open_tile_as_tab(media_id);
-            session::with_session(|s| s.action_finished(media_id, ActionId::OpenAsTab, opened));
-            tab_host::action_finished(media_id, ActionId::OpenAsTab, opened);
+            session::with_session(|s| s.action_finished(media_id, MediaActionId::OpenAsTab, opened));
+            tab_host::action_finished(media_id, MediaActionId::OpenAsTab, opened);
         }
         (other, _) => {
             tracing::debug!(?other, "[Multiview: Router] The action needs a Multiview");

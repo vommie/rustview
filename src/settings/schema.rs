@@ -232,15 +232,15 @@ pub const DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE: bool = false;
 pub const DEFAULT_FULLSCREEN_FALLBACK_TARGET: &str = "same"; // "same" or "different"
 
 // --- Fullscreen action bar (the hover buttons of a medium) ---
-pub const DEFAULT_FULLSCREEN_BAR_ENABLED: bool = true;
-pub const DEFAULT_FULLSCREEN_BAR_SHOW_MUTE: bool = true;
-pub const DEFAULT_FULLSCREEN_BAR_SHOW_STICKY: bool = true;
-pub const DEFAULT_FULLSCREEN_BAR_SHOW_OPEN_AS_TAB: bool = true;
-pub const DEFAULT_FULLSCREEN_BAR_SHOW_REMOVE: bool = true;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED: bool = true;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE: bool = true;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY: bool = true;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB: bool = true;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE: bool = true;
 /// The bar appears when the pointer comes this close (logical pixels) to the place of the bar.
-pub const DEFAULT_FULLSCREEN_BAR_REVEAL_DISTANCE_PX: u32 = 15;
-pub const MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX: u32 = 0;
-pub const MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX: u32 = 100;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 15;
+pub const MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 0;
+pub const MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 100;
 
 // --- Fullscreen sound (which videos are muted automatically while several videos are shown) ---
 pub const DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL: bool = true;
@@ -694,7 +694,7 @@ impl Default for ViewerSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct FullscreenActionBarSettings {
+pub struct FullscreenMediaBarSettings {
     pub enabled: bool,
     pub show_mute: bool,
     pub show_sticky: bool,
@@ -704,15 +704,15 @@ pub struct FullscreenActionBarSettings {
     pub reveal_distance_px: u32,
 }
 
-impl Default for FullscreenActionBarSettings {
+impl Default for FullscreenMediaBarSettings {
     fn default() -> Self {
         Self {
-            enabled: DEFAULT_FULLSCREEN_BAR_ENABLED,
-            show_mute: DEFAULT_FULLSCREEN_BAR_SHOW_MUTE,
-            show_sticky: DEFAULT_FULLSCREEN_BAR_SHOW_STICKY,
-            show_open_as_tab: DEFAULT_FULLSCREEN_BAR_SHOW_OPEN_AS_TAB,
-            show_remove: DEFAULT_FULLSCREEN_BAR_SHOW_REMOVE,
-            reveal_distance_px: DEFAULT_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
+            enabled: DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED,
+            show_mute: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE,
+            show_sticky: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY,
+            show_open_as_tab: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
+            show_remove: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE,
+            reveal_distance_px: DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
         }
     }
 }
@@ -758,7 +758,9 @@ pub struct FullscreenSettings {
     pub specific_monitor: String,
     pub enable_fallback_rule: bool,
     pub fallback_target: String, // "same" or "different"
-    pub action_bar: FullscreenActionBarSettings,
+    /// Called `action_bar` before the primary action bar existed; old settings files keep working.
+    #[serde(alias = "action_bar")]
+    pub media_bar: FullscreenMediaBarSettings,
     pub sound: FullscreenSoundSettings,
     pub background: FullscreenBackgroundSettings,
 }
@@ -770,7 +772,7 @@ impl Default for FullscreenSettings {
             specific_monitor: DEFAULT_FULLSCREEN_SPECIFIC_MONITOR.to_string(),
             enable_fallback_rule: DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE,
             fallback_target: DEFAULT_FULLSCREEN_FALLBACK_TARGET.to_string(),
-            action_bar: FullscreenActionBarSettings::default(),
+            media_bar: FullscreenMediaBarSettings::default(),
             sound: FullscreenSoundSettings::default(),
             background: FullscreenBackgroundSettings::default(),
         }

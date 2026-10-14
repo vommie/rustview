@@ -1,8 +1,8 @@
 use super::registry::SettingsManager;
 use super::schema::{
     AppSettings, FullscreenSettings, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
-    DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
-    MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
+    DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+    MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
 };
 use crate::util::hex_color;
 use crate::system::{MonitorInfo, SystemDisplayService};
@@ -257,13 +257,13 @@ impl SettingsDialogController {
 
     /// Action bar, sound and background of the fullscreen.
     fn populate_fullscreen_extras(window: &SettingsWindow, fullscreen: &FullscreenSettings) {
-        let bar = &fullscreen.action_bar;
-        window.set_fullscreen_bar_enabled(bar.enabled);
-        window.set_fullscreen_bar_show_mute(bar.show_mute);
-        window.set_fullscreen_bar_show_sticky(bar.show_sticky);
-        window.set_fullscreen_bar_show_open_as_tab(bar.show_open_as_tab);
-        window.set_fullscreen_bar_show_remove(bar.show_remove);
-        window.set_fullscreen_bar_reveal_distance_px(bar.reveal_distance_px as i32);
+        let bar = &fullscreen.media_bar;
+        window.set_fullscreen_media_bar_enabled(bar.enabled);
+        window.set_fullscreen_media_bar_show_mute(bar.show_mute);
+        window.set_fullscreen_media_bar_show_sticky(bar.show_sticky);
+        window.set_fullscreen_media_bar_show_open_as_tab(bar.show_open_as_tab);
+        window.set_fullscreen_media_bar_show_remove(bar.show_remove);
+        window.set_fullscreen_media_bar_reveal_distance_px(bar.reveal_distance_px as i32);
 
         let sound = &fullscreen.sound;
         window.set_fullscreen_sound_auto_control(sound.auto_control);
@@ -286,15 +286,15 @@ impl SettingsDialogController {
     }
 
     fn save_fullscreen_extras(window: &SettingsWindow, fullscreen: &mut FullscreenSettings) {
-        let bar = &mut fullscreen.action_bar;
-        bar.enabled = window.get_fullscreen_bar_enabled();
-        bar.show_mute = window.get_fullscreen_bar_show_mute();
-        bar.show_sticky = window.get_fullscreen_bar_show_sticky();
-        bar.show_open_as_tab = window.get_fullscreen_bar_show_open_as_tab();
-        bar.show_remove = window.get_fullscreen_bar_show_remove();
-        bar.reveal_distance_px = u32::try_from(window.get_fullscreen_bar_reveal_distance_px())
+        let bar = &mut fullscreen.media_bar;
+        bar.enabled = window.get_fullscreen_media_bar_enabled();
+        bar.show_mute = window.get_fullscreen_media_bar_show_mute();
+        bar.show_sticky = window.get_fullscreen_media_bar_show_sticky();
+        bar.show_open_as_tab = window.get_fullscreen_media_bar_show_open_as_tab();
+        bar.show_remove = window.get_fullscreen_media_bar_show_remove();
+        bar.reveal_distance_px = u32::try_from(window.get_fullscreen_media_bar_reveal_distance_px())
             .unwrap_or(0)
-            .clamp(MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX);
+            .clamp(MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX);
 
         let sound = &mut fullscreen.sound;
         sound.auto_control = window.get_fullscreen_sound_auto_control();

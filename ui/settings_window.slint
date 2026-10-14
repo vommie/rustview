@@ -112,12 +112,12 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-enable-specific: false;
     in-out property <bool> fullscreen-enable-fallback: false;
     in-out property <int> fullscreen-fallback-target-idx: 0;
-    in-out property <bool> fullscreen-bar-enabled: true;
-    in-out property <bool> fullscreen-bar-show-mute: true;
-    in-out property <bool> fullscreen-bar-show-sticky: true;
-    in-out property <bool> fullscreen-bar-show-open-as-tab: true;
-    in-out property <bool> fullscreen-bar-show-remove: true;
-    in-out property <int> fullscreen-bar-reveal-distance-px: 15;
+    in-out property <bool> fullscreen-media-bar-enabled: true;
+    in-out property <bool> fullscreen-media-bar-show-mute: true;
+    in-out property <bool> fullscreen-media-bar-show-sticky: true;
+    in-out property <bool> fullscreen-media-bar-show-open-as-tab: true;
+    in-out property <bool> fullscreen-media-bar-show-remove: true;
+    in-out property <int> fullscreen-media-bar-reveal-distance-px: 15;
     in-out property <bool> fullscreen-sound-auto-control: true;
     in-out property <int> fullscreen-sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
     in-out property <bool> fullscreen-sound-hand-over: true;
@@ -264,12 +264,12 @@ export component SettingsWindow inherits Window {
                             enable-specific-monitor <=> root.fullscreen-enable-specific;
                             enable-fallback-rule <=> root.fullscreen-enable-fallback;
                             fallback-target-idx <=> root.fullscreen-fallback-target-idx;
-                            bar-enabled <=> root.fullscreen-bar-enabled;
-                            bar-show-mute <=> root.fullscreen-bar-show-mute;
-                            bar-show-sticky <=> root.fullscreen-bar-show-sticky;
-                            bar-show-open-as-tab <=> root.fullscreen-bar-show-open-as-tab;
-                            bar-show-remove <=> root.fullscreen-bar-show-remove;
-                            bar-reveal-distance-px <=> root.fullscreen-bar-reveal-distance-px;
+                            media-bar-enabled <=> root.fullscreen-media-bar-enabled;
+                            media-bar-show-mute <=> root.fullscreen-media-bar-show-mute;
+                            media-bar-show-sticky <=> root.fullscreen-media-bar-show-sticky;
+                            media-bar-show-open-as-tab <=> root.fullscreen-media-bar-show-open-as-tab;
+                            media-bar-show-remove <=> root.fullscreen-media-bar-show-remove;
+                            media-bar-reveal-distance-px <=> root.fullscreen-media-bar-reveal-distance-px;
                             sound-auto-control <=> root.fullscreen-sound-auto-control;
                             sound-follows-idx <=> root.fullscreen-sound-follows-idx;
                             sound-hand-over <=> root.fullscreen-sound-hand-over;

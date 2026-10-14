@@ -1,5 +1,5 @@
-import { MultiviewActionView } from "multiview_types.slint";
-import { MultiviewActionBar } from "multiview_action_bar.slint";
+import { MultiviewBarButtonView } from "multiview_types.slint";
+import { MultiviewBar } from "multiview_bar.slint";
 import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 
@@ -9,12 +9,12 @@ import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 /// by a video. Rust places the window so that the bar (top right corner of this window) sits in the corner of the tile.
 /// The window is larger than the bar to leave room for the tooltip bubble below it; Rust limits the pointer input of the
 /// window to the bar, so the rest of it is invisible to the pointer.
-export component MultiviewOverlayWindow inherits Window {
+export component MultiviewBarWindow inherits Window {
     title: "RustView - Multiview action bar";
     no-frame: true;
     background: transparent;
 
-    in property <[MultiviewActionView]> actions;
+    in property <[MultiviewBarButtonView]> actions;
     // The tile the bar belongs to; it is handed back with every click.
     in property <int> tile: -1;
     // False without a compositing manager: the bar is solid then.
@@ -42,7 +42,7 @@ export component MultiviewOverlayWindow inherits Window {
         TooltipSettings.default-delay = root.tooltip-delay-ms * 1ms;
     }
 
-    bar := MultiviewActionBar {
+    bar := MultiviewBar {
         x: root.width - self.width;
         y: 0px;
         actions: root.actions;

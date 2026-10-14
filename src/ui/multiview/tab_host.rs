@@ -13,7 +13,7 @@ use crate::library::models::MediaId;
 use crate::settings::schema::MULTIVIEW_TICK_MS;
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
-use crate::viewer::multiview::actions::ActionId;
+use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
@@ -86,7 +86,7 @@ fn act(f: impl FnOnce(&mut MultiviewInstance)) {
 
 /// A button of the hover bar was clicked; what the application has to do about it runs after the instance lock is released.
 fn on_action(tile: i32, action: i32) {
-    let (Some(instance), Some(action)) = (current_instance(), ActionId::from_code(action)) else {
+    let (Some(instance), Some(action)) = (current_instance(), MediaActionId::from_code(action)) else {
         return;
     };
     let outcome = {
@@ -106,7 +106,7 @@ fn on_action(tile: i32, action: i32) {
 
 /// The application finished what a button of the hover bar asked for: the button flashes green, or red if it failed. Only
 /// a Multiview that is shown in the viewer tab is addressed (the fullscreen session reports to its own instance).
-pub fn action_finished(media_id: MediaId, action: ActionId, ok: bool) {
+pub fn action_finished(media_id: MediaId, action: MediaActionId, ok: bool) {
     let Some(instance) = current_instance() else {
         return;
     };
@@ -133,7 +133,7 @@ fn update_bar_overlay() {
     };
     let target = {
         let guard = instance.lock();
-        (guard.host_mode() == HostMode::TabView).then(|| guard.bar_target()).flatten()
+        (guard.host_mode() == HostMode::TabView).then(|| guard.media_bar_target()).flatten()
     };
     let shown = target.is_some_and(|target| {
         bar_overlay::show(&BarRequest {

@@ -12,7 +12,7 @@ use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::prefs;
 use super::target_pick::pick_target;
 use super::tile::StaleProbe;
-use super::view::BarTarget;
+use super::view::MediaBarTarget;
 use crate::library::models::MediaId;
 use crate::settings::schema::MULTIVIEW_MUTE_POLL_TICKS;
 
@@ -56,7 +56,7 @@ impl MultiviewInstance {
     /// pointer and the buttons of the tile. The host reveals the bar once the pointer is within the reveal distance of it.
     /// `None` while no tile is hovered, the pointer is nowhere near the corner that carries the bar, the user switched the
     /// bar off or the tile offers no button.
-    pub fn bar_target(&self) -> Option<BarTarget> {
+    pub fn media_bar_target(&self) -> Option<MediaBarTarget> {
         let bar = prefs::current().bar;
         let (tile, pointer) = (self.hovered?, self.pointer?);
         let rect = self.host_content(tile)?;
@@ -66,7 +66,7 @@ impl MultiviewInstance {
             return None;
         }
         let actions = self.action_views(tile);
-        (!actions.is_empty()).then_some(BarTarget {
+        (!actions.is_empty()).then_some(MediaBarTarget {
             tile,
             rect,
             actions,

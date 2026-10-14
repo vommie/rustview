@@ -4,7 +4,7 @@ import { MultiviewCanvas } from "multiview_canvas.slint";
 
 /// Frameless fullscreen window showing one to four media (Multiview). Video tiles are native mpv windows placed on top
 /// of this scene by Rust; everything else (background, images, gutters) is drawn by the shared `MultiviewCanvas`. The
-/// action bar floats above this window in a window of its own (`MultiviewOverlayWindow`). A single image can be browsed with the arrow keys, space, page keys and the mouse wheel
+/// action bar floats above this window in a window of its own (`MultiviewBarWindow`). A single image can be browsed with the arrow keys, space, page keys and the mouse wheel
 /// (`navigation`); a video keeps all of them for mpv.
 export component MultiviewFullscreenWindow inherits Window {
     title: "RustView - Fullscreen (Multiview)";

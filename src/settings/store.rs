@@ -19,8 +19,8 @@ use super::schema::{
 };
 use super::schema::{
     FullscreenSettings, DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE,
-    DEFAULT_FULLSCREEN_SOUND_FOLLOWS, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
-    MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
+    DEFAULT_FULLSCREEN_SOUND_FOLLOWS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+    MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
 };
 use crate::util::hex_color;
 use std::fs;
@@ -338,10 +338,10 @@ impl SettingsStore {
 
     /// Action bar, sound and background of the fullscreen: a hand-edited file can never leave an unknown mode or color.
     fn sanitize_fullscreen_extras(&self, fullscreen: &mut FullscreenSettings) {
-        let bar = &mut fullscreen.action_bar;
+        let bar = &mut fullscreen.media_bar;
         bar.reveal_distance_px = bar
             .reveal_distance_px
-            .clamp(MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX);
+            .clamp(MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX);
 
         let follows = fullscreen.sound.follows.trim().to_lowercase();
         fullscreen.sound.follows = if matches!(follows.as_str(), "first" | "newest" | "nobody") {

@@ -3,11 +3,11 @@
 use crate::library::models::MediaId;
 use crate::ui::button_feedback_bridge;
 use crate::ui::{
-    MultiviewActionView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView,
+    MultiviewBarButtonView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView,
 };
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::model::TileKind;
-use crate::viewer::multiview::view::{ActionView, GutterView, HostedView, Navigation, TileView};
+use crate::viewer::multiview::view::{MediaActionView, GutterView, HostedView, Navigation, TileView};
 use slint::{Model, VecModel};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -79,8 +79,8 @@ fn gutter_view(gutter: &GutterView, dpi: f32) -> MultiviewGutterView {
     }
 }
 
-fn action_view(action: &ActionView) -> MultiviewActionView {
-    MultiviewActionView {
+fn action_view(action: &MediaActionView) -> MultiviewBarButtonView {
+    MultiviewBarButtonView {
         id: action.id.code(),
         icon: action.icon.to_slint(),
         tooltip: action.tooltip.into(),
@@ -100,7 +100,7 @@ pub fn navigation_code(navigation: Navigation) -> i32 {
 }
 
 /// The buttons of the action bar window.
-pub fn action_views(actions: &[ActionView]) -> Vec<MultiviewActionView> {
+pub fn action_views(actions: &[MediaActionView]) -> Vec<MultiviewBarButtonView> {
     actions.iter().map(action_view).collect()
 }
 

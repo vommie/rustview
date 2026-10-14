@@ -9,7 +9,7 @@ use crate::system::MonitorInfo;
 use crate::viewer::PointerProbe;
 use super::bar_overlay::{self, BarOwner, BarRequest};
 use crate::viewer::multiview::HostSurface;
-use crate::viewer::multiview::actions::ActionId;
+use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
@@ -83,7 +83,7 @@ impl Session {
     /// A button of the hover bar was clicked. What the application has to do about it runs after the session borrow is
     /// released.
     pub(super) fn on_action(&mut self, tile: i32, action: i32) -> UiAction {
-        let Some(action) = ActionId::from_code(action) else {
+        let Some(action) = MediaActionId::from_code(action) else {
             return UiAction::None;
         };
         let outcome = {
@@ -101,7 +101,7 @@ impl Session {
     }
 
     /// The application finished what a button asked for: the button flashes green, or red if it failed.
-    pub(super) fn action_finished(&mut self, media_id: MediaId, action: ActionId, ok: bool) {
+    pub(super) fn action_finished(&mut self, media_id: MediaId, action: MediaActionId, ok: bool) {
         self.instance.lock().action_finished(media_id, action, ok);
         self.refresh();
     }
@@ -112,7 +112,7 @@ impl Session {
         if !self.populated {
             return;
         }
-        let target = self.instance.lock().bar_target();
+        let target = self.instance.lock().media_bar_target();
         let scale = self.window.upgrade().map(|win| win.window().scale_factor());
         let shown = match (target, scale) {
             (Some(target), Some(scale)) => bar_overlay::show(&BarRequest {

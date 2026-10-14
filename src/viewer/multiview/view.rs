@@ -3,7 +3,7 @@
 //! The instance builds this description from its single state; the presenters of the hosts only convert it into their
 //! own view structs, so no host keeps a second copy of the arrangement.
 
-use super::actions::ActionId;
+use super::media_actions::MediaActionId;
 use super::layout::Rect;
 use super::model::TileKind;
 use crate::ui::button_feedback::ButtonFeedback;
@@ -22,8 +22,8 @@ pub struct TileView {
 
 /// One button of the hover bar of a tile.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ActionView {
-    pub id: ActionId,
+pub struct MediaActionView {
+    pub id: MediaActionId,
     pub icon: Icon,
     pub tooltip: &'static str,
     pub active: Option<bool>,
@@ -63,10 +63,10 @@ pub struct HostedView {
 /// The hover bar a host may show: the tile the pointer is on, where that tile is in the host window (physical pixels),
 /// the pointer (host window coordinates) and the buttons the tile offers. The bar only appears while the pointer is
 /// within `reveal_distance_px` (logical pixels) of the place where it would be.
-pub struct BarTarget {
+pub struct MediaBarTarget {
     pub tile: usize,
     pub rect: Rect,
-    pub actions: Vec<ActionView>,
+    pub actions: Vec<MediaActionView>,
     pub pointer: (i32, i32),
     pub reveal_distance_px: u32,
 }

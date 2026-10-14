@@ -2,10 +2,10 @@ import { Theme } from "styles.slint";
 import { AppIcon, IconSize } from "icons.slint";
 import { TooltipArea } from "tooltips.slint";
 import { ButtonFeedbackOverlay } from "button_feedback.slint";
-import { MultiviewActionView } from "multiview_types.slint";
+import { MultiviewBarButtonView } from "multiview_types.slint";
 
-component MultiviewActionButton inherits Rectangle {
-    in property <MultiviewActionView> action;
+component MultiviewBarButton inherits Rectangle {
+    in property <MultiviewBarButtonView> action;
     in property <length> size: 28px;
 
     callback activated();
@@ -39,10 +39,10 @@ component MultiviewActionButton inherits Rectangle {
     }
 }
 
-/// Row of action buttons for the hovered medium. It is drawn in the window of its own that `MultiviewOverlayWindow` is,
+/// Row of action buttons for the hovered medium. It is drawn in the window of its own that `MultiviewBarWindow` is,
 /// which floats above the Multiview (and its native video windows) and is blended with them by the compositing manager.
-export component MultiviewActionBar inherits Rectangle {
-    in property <[MultiviewActionView]> actions;
+export component MultiviewBar inherits Rectangle {
+    in property <[MultiviewBarButtonView]> actions;
     // Glass: the window is blended with what is below it. Without a compositing manager the window cannot be blended, so
     // the bar is solid then.
     in property <bool> translucent: true;
@@ -66,7 +66,7 @@ export component MultiviewActionBar inherits Rectangle {
         padding: root.inset;
         spacing: root.button-spacing;
 
-        for action in root.actions : MultiviewActionButton {
+        for action in root.actions : MultiviewBarButton {
             action: action;
             size: root.button-size;
 

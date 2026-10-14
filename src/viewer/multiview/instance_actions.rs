@@ -1,13 +1,13 @@
 //! Instance behavior around the action buttons of the hover bar: which buttons a tile offers, what a click does to the
 //! Multiview itself (sticky, sound, remove) and what the application has to do about it (open as tab, deselect, close).
 
-use super::actions::{ActionContext, ActionId, actions_for};
+use super::media_actions::{MediaBarContext, MediaActionId, media_actions_for};
 use super::follow::FollowPlan;
 use super::instance::MultiviewInstance;
 use super::model::TileKind;
 use super::prefs;
 use super::route::{HostMode, OriginKind, UiAction};
-use super::view::{ActionView, Navigation};
+use super::view::{MediaActionView, Navigation};
 use crate::ui::button_feedback::FeedbackKind;
 use crate::library::models::MediaId;
 use std::collections::HashMap;
@@ -17,9 +17,9 @@ impl MultiviewInstance {
         self.tiles.iter().position(|t| t.media_id == id)
     }
 
-    fn action_context(&self, index: usize) -> Option<ActionContext> {
+    fn action_context(&self, index: usize) -> Option<MediaBarContext> {
         let tile = self.tiles.get(index)?;
-        Some(ActionContext {
+        Some(MediaBarContext {
             host: self.host.surface.mode,
             origin: self.origin,
             tile_count: self.tiles.len(),
@@ -35,16 +35,16 @@ impl MultiviewInstance {
     }
 
     /// The buttons of the hover bar of tile `index`, with their current state.
-    pub fn action_views(&self, index: usize) -> Vec<ActionView> {
+    pub fn action_views(&self, index: usize) -> Vec<MediaActionView> {
         let Some(ctx) = self.action_context(index) else {
             return Vec::new();
         };
         let tile = &self.tiles[index];
         let bar = prefs::current().bar;
-        actions_for(&ctx)
+        media_actions_for(&ctx)
             .into_iter()
             .filter(|spec| bar.allows(spec.id))
-            .map(|spec| ActionView {
+            .map(|spec| MediaActionView {
                 id: spec.id,
                 icon: spec.icon,
                 tooltip: spec.tooltip,
@@ -56,7 +56,7 @@ impl MultiviewInstance {
 
     /// A click on an action button of tile `id`. Buttons the tile does not offer (a stale click) are ignored. The result
     /// is what the application has to do on top of the change the Multiview made to itself.
-    pub fn perform_action(&mut self, id: MediaId, action: ActionId) -> UiAction {
+    pub fn perform_action(&mut self, id: MediaId, action: MediaActionId) -> UiAction {
         let Some(index) = self.tile_index(id) else {
             return UiAction::None;
         };
@@ -70,17 +70,17 @@ impl MultiviewInstance {
         }
         tracing::info!(media_id = id, ?action, "[Multiview: Actions] Button clicked");
         match action {
-            ActionId::Mute => {
+            MediaActionId::Mute => {
                 self.toggle_mute_at(index);
                 UiAction::None
             }
-            ActionId::Sticky => {
+            MediaActionId::Sticky => {
                 self.toggle_sticky_at(index);
                 UiAction::None
             }
-            ActionId::OpenAsTab => UiAction::OpenTileAsTab(id),
-            ActionId::Remove => self.remove_tile(index),
-            ActionId::Close => self.close_action(),
+            MediaActionId::OpenAsTab => UiAction::OpenTileAsTab(id),
+            MediaActionId::Remove => self.remove_tile(index),
+            MediaActionId::Close => self.close_action(),
         }
     }
 
@@ -138,7 +138,7 @@ impl MultiviewInstance {
     }
 
     /// Plays the feedback of a button (success or error flash).
-    pub fn trigger_feedback(&mut self, id: MediaId, action: ActionId, kind: FeedbackKind) {
+    pub fn trigger_feedback(&mut self, id: MediaId, action: MediaActionId, kind: FeedbackKind) {
         let Some(index) = self.tile_index(id) else {
             return;
         };
@@ -151,7 +151,7 @@ impl MultiviewInstance {
     }
 
     /// The application finished what a button asked for: the button flashes green, or red if it failed.
-    pub fn action_finished(&mut self, id: MediaId, action: ActionId, ok: bool) {
+    pub fn action_finished(&mut self, id: MediaId, action: MediaActionId, ok: bool) {
         let kind = if ok {
             FeedbackKind::Success
         } else {
@@ -192,7 +192,7 @@ impl MultiviewInstance {
     /// A previous/next request was refused because the single medium is sticky: its sticky button flashes red.
     pub fn flash_blocked_navigation(&mut self) {
         if let Some((id, _, true)) = self.solo_tile() {
-            self.trigger_feedback(id, ActionId::Sticky, FeedbackKind::Error);
+            self.trigger_feedback(id, MediaActionId::Sticky, FeedbackKind::Error);
         }
     }
 }
