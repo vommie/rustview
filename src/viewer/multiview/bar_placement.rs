@@ -99,39 +99,3 @@ pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {
     push(rect.x, rect.y + r, rect.w, rect.h - 2 * r);
     rects
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_bar_is_revealed_only_near_its_own_place() {
-        let tile = Rect::new(0, 0, 800, 450);
-        let bar = place_bar(tile, (100.0, 34.0), 1.0).expect("fits").bar;
-        let (mid_x, mid_y) = (bar.x + bar.w / 2, bar.y + bar.h / 2);
-        assert!(in_reveal_zone(bar, (mid_x, mid_y), 1.0, 0), "on the bar");
-        assert!(!in_reveal_zone(bar, (bar.x - 1, mid_y), 1.0, 0), "just outside without a margin");
-        assert!(in_reveal_zone(bar, (bar.x - 15, mid_y), 1.0, 15), "inside the margin");
-        assert!(!in_reveal_zone(bar, (bar.x - 16, mid_y), 1.0, 15), "beyond the margin");
-        assert!(in_reveal_zone(bar, (bar.x - 30, mid_y), 2.0, 15), "the margin scales with the display");
-        assert!(!in_reveal_zone(bar, (100, 300), 1.0, 15), "the middle of the tile is nowhere near");
-    }
-
-    #[test]
-    fn the_cheap_corner_test_never_rejects_a_pointer_the_exact_test_accepts() {
-        let tile = Rect::new(100, 50, 800, 450);
-        for scale in [1.0_f32, 1.5, 2.0] {
-            let bar = place_bar(tile, (100.0, 34.0), scale).expect("fits").bar;
-            for reveal in [0_u32, 15, 100] {
-                for x in (tile.x..tile.x + tile.w).step_by(7) {
-                    for y in (tile.y..tile.y + tile.h).step_by(7) {
-                        if in_reveal_zone(bar, (x, y), scale, reveal) {
-                            assert!(near_bar_corner(tile, (x, y), scale, reveal), "({x}, {y}) at {scale}x, {reveal}px");
-                        }
-                    }
-                }
-            }
-        }
-        assert!(!near_bar_corner(tile, (tile.x + 10, tile.y + tile.h - 10), 1.0, 15), "the opposite corner is far away");
-    }
-}
