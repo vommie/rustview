@@ -477,7 +477,7 @@ impl BridgeViewerTabs {
         window.set_drag_ghost_x(session.ghost_left_x());
         window.set_drag_ghost_title(source_tab.title.clone().into());
         window.set_drag_ghost_format(source_tab.format.default_extension().into());
-        window.set_drag_ghost_icon(tab_icon(&source_tab));
+        window.set_drag_ghost_icon(tab_icon(source_tab));
         window.set_drag_ghost_rating(source_tab.record.rating as i32);
         window.set_drag_ghost_is_active(Some(tab_id) == tab_manager.active_tab_id());
 
