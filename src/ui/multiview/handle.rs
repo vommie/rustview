@@ -353,6 +353,13 @@ impl MultiviewHandle {
         tracing::info!(on, "[Multiview: Cursor] Hiding of the idle mouse cursor changed by the bar button");
     }
 
+    /// The application exits: the fullscreen (pinned or not) and the windows of both action bars are closed. UI thread only.
+    pub fn shutdown(&self) {
+        session::shutdown();
+        super::tab_host::shutdown();
+        super::bar_overlay::shutdown();
+    }
+
     /// Closes the Multiview without the close handler because another fullscreen replaces it. UI thread only.
     pub fn dismiss(&self) {
         if self.is_open() {

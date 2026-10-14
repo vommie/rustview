@@ -17,7 +17,7 @@ use super::instance_host::HostState;
 use super::instance_layout::{DragState, layout_params};
 use super::layout::{Layout, LayoutParams, Rect};
 use super::route::{HostMode, OriginKind};
-use super::teardown::teardown_videos;
+use super::teardown::{teardown_videos, teardown_videos_now};
 use super::tile::{TileSeed, TileState, VideoTile};
 use crate::library::models::MediaId;
 use crate::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
@@ -207,9 +207,29 @@ impl MultiviewInstance {
     }
 }
 
+impl MultiviewInstance {
+    fn take_videos(&mut self) -> Vec<VideoTile> {
+        self.tiles.drain(..).filter_map(|t| t.video).collect()
+    }
+
+    /// The application exits: the players are shut down and their windows destroyed right now, on the calling thread, instead
+    /// of on the worker thread that `Drop` uses (the end of the process would cut that short). The instance is empty
+    /// afterwards.
+    pub fn shutdown_now(&mut self) {
+        let videos = self.take_videos();
+        tracing::info!(
+            instance = self.id,
+            players = videos.len(),
+            "[Multiview: Instance] Shutting the players down for the exit of the application"
+        );
+        teardown_videos_now(videos);
+        self.bump();
+    }
+}
+
 impl Drop for MultiviewInstance {
     fn drop(&mut self) {
-        let videos: Vec<VideoTile> = self.tiles.drain(..).filter_map(|t| t.video).collect();
+        let videos = self.take_videos();
         tracing::debug!(
             instance = self.id,
             players = videos.len(),

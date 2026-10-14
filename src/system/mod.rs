@@ -5,6 +5,7 @@ pub mod dnd;
 pub mod error;
 pub mod file_handler;
 pub mod mounts;
+pub mod termination;
 
 pub use clipboard::SystemClipboard;
 pub use desktop::{DesktopApp, DesktopIntegration};

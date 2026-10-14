@@ -1,8 +1,9 @@
 use rustview::library::Library;
 use rustview::settings::{LogObscurer, SettingsManager, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 use rustview::system::SystemDisplayService;
+use rustview::system::termination;
 use rustview::thumbnails::ThumbnailManager;
-use rustview::ui::{MainWindow, UiBridge};
+use rustview::ui::{MainWindow, UiBridge, shutdown};
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -67,6 +68,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     tracing::info!("Launching RustView with Full Tracing & Persistent State...");
+
+    // Ctrl+C, `kill` and a closed terminal run the same orderly shutdown as the close button (before any thread exists).
+    termination::install_signal_handlers();
 
     // Diagnostic System, Distro, Kernel, Session, and Monitor info emission (Runs ONLY ONCE at startup)
     SystemDisplayService::log_system_diagnostics();
@@ -241,6 +245,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let Some(w) = main_weak_tracker.upgrade() else { return; };
             let win = w.window();
 
+            // A termination signal is handled like a click on the close button of the window.
+            if let Some(signum) = termination::received_signal()
+                && !shutdown::is_started()
+            {
+                tracing::info!(
+                    signal = termination::signal_name(signum),
+                    "[Shutdown: Signal] Termination signal received; closing the application in order"
+                );
+                if let Err(e) = win.try_dispatch_event(slint::platform::WindowEvent::CloseRequested) {
+                    tracing::error!(error = %e, "[Shutdown: Signal] The close request could not be delivered");
+                    termination::exit_now(termination::EXIT_SHUTDOWN_TIMEOUT);
+                }
+                return;
+            }
+
             let mut t = tracker_runtime.lock();
             if !t.initialization_settled {
                 return;
@@ -276,85 +295,107 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
-    // Persist Window Geometry and Target Screen on Close Request
-    let settings_for_close = settings.clone();
-    let main_weak_close = main_window.as_weak();
-    let tracker_close = tracker.clone();
-
-    main_window.window().on_close_requested(move || {
-        if let Some(w) = main_weak_close.upgrade() {
-            let win = w.window();
-            let slint_max = win.is_maximized();
-            let xid_opt = rustview::viewer::get_raw_window_xid(win);
-            let x11_max = xid_opt.and_then(rustview::viewer::is_x11_window_maximized);
-            let cur_size = win.size();
-            let cur_pos = win.position();
-
-            let t = tracker_close.lock();
-            let is_max = x11_max.unwrap_or(false) || slint_max || t.is_maximized;
-
-            let final_width = if !is_max && cur_size.width >= MIN_WINDOW_WIDTH {
-                cur_size.width
-            } else {
-                t.last_unmaximized_width
-            };
-
-            let final_height = if !is_max && cur_size.height >= MIN_WINDOW_HEIGHT {
-                cur_size.height
-            } else {
-                t.last_unmaximized_height
-            };
-
-            let (final_x, final_y) = if is_max {
-                // If maximized, persist the target screen's anchor position
-                let anchor_x = t.last_unmaximized_x.unwrap_or(t.active_monitor_x + 60);
-                let anchor_y = t.last_unmaximized_y.unwrap_or(t.active_monitor_y + 60);
-                (Some(anchor_x), Some(anchor_y))
-            } else {
-                (t.last_unmaximized_x.or(Some(cur_pos.x)), t.last_unmaximized_y.or(Some(cur_pos.y)))
-            };
-
-            let mut current_settings = settings_for_close.get();
-            current_settings.window.is_maximized = is_max;
-            current_settings.window.width = final_width;
-            current_settings.window.height = final_height;
-            current_settings.window.x = final_x;
-            current_settings.window.y = final_y;
-            settings_for_close.save_quiet(&current_settings);
-
-            tracing::info!(
-                is_max,
-                saved_x = ?final_x,
-                saved_y = ?final_y,
-                saved_size = format!("{}x{}", final_width, final_height),
-                active_screen_x = t.active_monitor_x,
-                "[Shutdown: WindowState] Persisted window geometry and monitor anchor cleanly"
-            );
-        }
-        CloseRequestResponse::HideWindow
-    });
-
     // Keep a handle for the background folder audit (the library is moved into the UI bridge below)
     let audit_db = library.raw_db().clone();
 
     // Wire UI Bridge
-    let _bridge = UiBridge::new(
+    let bridge = Rc::new(UiBridge::new(
         main_window.clone_strong(),
         library,
         thumbnails,
-        settings,
+        settings.clone(),
         &data_dir,
-    );
+    ));
+
+    // Close request (title bar, Alt+F4, termination signal): persist the window state, then shut everything down in order.
+    let main_weak_close = main_window.as_weak();
+    let bridge_weak = Rc::downgrade(&bridge);
+    main_window.window().on_close_requested(move || {
+        if !shutdown::begin() {
+            return CloseRequestResponse::HideWindow;
+        }
+        if let Some(w) = main_weak_close.upgrade() {
+            persist_window_geometry(&w, &tracker, &settings);
+        }
+        if let Some(bridge) = bridge_weak.upgrade() {
+            bridge.shutdown();
+        }
+        if let Err(e) = slint::quit_event_loop() {
+            tracing::warn!(error = %e, "[Shutdown: EventLoop] The event loop could not be asked to quit");
+        }
+        CloseRequestResponse::HideWindow
+    });
 
     tracing::info!("RustView UI & Storage Engine Ready.");
 
     // Read-only folder schema + media path resolution audit on a background thread (never blocks the UI)
     rustview::library::FolderDiagnostics::spawn_background_audit(audit_db, "startup");
 
-    main_window.run()?;
+    let result = main_window.run();
+
+    if shutdown::begin() {
+        tracing::warn!("[Shutdown: EventLoop] The event loop ended without a close request; shutting down now");
+        bridge.shutdown();
+    }
+    result?;
 
     tracing::info!("[RustView: Shutdown] Event loop finished. Application exiting cleanly.");
     Ok(())
+}
+
+/// Persists the geometry and the monitor of the main window (called when the window is asked to close).
+fn persist_window_geometry(
+    w: &MainWindow,
+    tracker: &parking_lot::Mutex<WindowGeometryTracker>,
+    settings: &SettingsManager,
+) {
+    let win = w.window();
+    let slint_max = win.is_maximized();
+    let xid_opt = rustview::viewer::get_raw_window_xid(win);
+    let x11_max = xid_opt.and_then(rustview::viewer::is_x11_window_maximized);
+    let cur_size = win.size();
+    let cur_pos = win.position();
+
+    let t = tracker.lock();
+    let is_max = x11_max.unwrap_or(false) || slint_max || t.is_maximized;
+
+    let final_width = if !is_max && cur_size.width >= MIN_WINDOW_WIDTH {
+        cur_size.width
+    } else {
+        t.last_unmaximized_width
+    };
+
+    let final_height = if !is_max && cur_size.height >= MIN_WINDOW_HEIGHT {
+        cur_size.height
+    } else {
+        t.last_unmaximized_height
+    };
+
+    let (final_x, final_y) = if is_max {
+        // If maximized, persist the target screen's anchor position
+        let anchor_x = t.last_unmaximized_x.unwrap_or(t.active_monitor_x + 60);
+        let anchor_y = t.last_unmaximized_y.unwrap_or(t.active_monitor_y + 60);
+        (Some(anchor_x), Some(anchor_y))
+    } else {
+        (t.last_unmaximized_x.or(Some(cur_pos.x)), t.last_unmaximized_y.or(Some(cur_pos.y)))
+    };
+
+    let mut current_settings = settings.get();
+    current_settings.window.is_maximized = is_max;
+    current_settings.window.width = final_width;
+    current_settings.window.height = final_height;
+    current_settings.window.x = final_x;
+    current_settings.window.y = final_y;
+    settings.save_quiet(&current_settings);
+
+    tracing::info!(
+        is_max,
+        saved_x = ?final_x,
+        saved_y = ?final_y,
+        saved_size = format!("{}x{}", final_width, final_height),
+        active_screen_x = t.active_monitor_x,
+        "[Shutdown: WindowState] Persisted window geometry and monitor anchor cleanly"
+    );
 }
 
 fn dirs_data_dir() -> PathBuf {

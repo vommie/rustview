@@ -30,6 +30,7 @@ use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::dnd_foldertree_autoscroller::DndFolderTreeAutoScroller;
 use super::favorites::FavoriteManager;
 use super::keyboard_navigation::{handle_keyboard_navigate, KeyboardNavigateParams};
+use super::shutdown::ShutdownTargets;
 use super::multiview::tab_host;
 use super::rubberband_selection::RubberbandAutoScroller;
 use super::thumbnail_badges::ThumbnailBadgeBridge;
@@ -1643,6 +1644,28 @@ impl UiBridge {
             &self.settings,
             &self.state,
         );
+    }
+
+    /// Closes every window and releases the native resources, see `ui::shutdown`. The caller has claimed the shutdown with
+    /// `shutdown::begin`. UI thread only.
+    pub fn shutdown(&self) {
+        super::shutdown::run(&ShutdownTargets {
+            window: &self.window,
+            settings: &self.settings,
+            thumbnails: &self.thumbnails,
+            state: &self.state,
+            settings_dialog: &self.settings_dialog,
+            fullscreen: &self.fullscreen,
+            tab_manager: &self.tab_manager,
+            file_rename_dialog: &self.rename_dialog,
+            favorite_rename_dialog: &self.favorite_rename_dialog,
+            missing_file_dialog: &self.missing_file_dialog,
+            delete_file_dialog: &self.delete_file_dialog,
+            remove_orphaned_dialog: &self.remove_orphaned_dialog,
+            conflict_dialog: &self.conflict_dialog,
+            tag_dialogs: &self.tag_dialogs,
+            folder_dialogs: &self.folder_dialogs,
+        });
     }
 
     pub fn reload_folders(&self) {

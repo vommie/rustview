@@ -23,18 +23,25 @@ use super::schema::{
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
 };
 use crate::util::hex_color;
+use parking_lot::Mutex;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SettingsStore {
     file_path: PathBuf,
+    /// Held while the file is written: the writers (the UI thread and the background savers) share one temporary file.
+    write_lock: Arc<Mutex<()>>,
 }
 
 impl SettingsStore {
     pub fn new(config_dir: &Path) -> Self {
         let file_path = config_dir.join("settings.json");
-        Self { file_path }
+        Self {
+            file_path,
+            write_lock: Arc::new(Mutex::new(())),
+        }
     }
 
     /// Loads settings from disk with tolerant forward/backward compatibility.
@@ -73,6 +80,15 @@ impl SettingsStore {
     }
 
     pub fn save(&self, settings: &AppSettings) -> Result<(), std::io::Error> {
+        self.save_latest(|| settings.clone())
+    }
+
+    /// Writes the settings that `latest` returns once the write lock is held, so that a writer which waited for another one
+    /// never puts an older state over a newer one.
+    pub fn save_latest(&self, latest: impl FnOnce() -> AppSettings) -> Result<(), std::io::Error> {
+        let _writing = self.write_lock.lock();
+        let settings = latest();
+        let settings = &settings;
         if let Some(parent) = self.file_path.parent() {
             fs::create_dir_all(parent)?;
         }

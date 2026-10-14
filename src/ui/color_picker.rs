@@ -118,6 +118,15 @@ pub fn close() {
     });
 }
 
+/// The application exits: the picker window is hidden and destroyed.
+pub fn shutdown() {
+    let window = WINDOW.with(|slot| slot.try_borrow_mut().ok().and_then(|mut slot| slot.take()));
+    if let Some(window) = window {
+        let _ = window.hide();
+        tracing::debug!("[Shutdown: Windows] Color picker window destroyed");
+    }
+}
+
 /// Puts `window` in the middle of `parent` (physical pixels, as both report them).
 fn center_over<P: ComponentHandle>(window: &ColorPickerWindow, parent: &P) {
     let (parent_pos, parent_size) = (parent.window().position(), parent.window().size());

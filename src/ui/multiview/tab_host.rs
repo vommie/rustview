@@ -255,6 +255,17 @@ pub fn suspend() {
     }
 }
 
+/// The application exits: the host lets go of the instance, its timer and its connection to the X server.
+pub fn shutdown() {
+    suspend();
+    with_host(|h| {
+        h.probe = None;
+        h.window = None;
+        h.handle = None;
+    });
+    tracing::debug!("[Shutdown: Windows] Tab view host released");
+}
+
 /// Brings the bus in line with the instance when it changed since the last sync (no X11 work).
 pub fn refresh() {
     let Some((window, instance)) =

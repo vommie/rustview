@@ -12,7 +12,7 @@ pub type SettingsChangeHook = Box<dyn Fn(&AppSettings, &AppSettings, &SettingsDi
 /// Pure decoupled settings manager and intelligent delta subscriber registry.
 pub struct SettingsManager {
     store: SettingsStore,
-    current: RwLock<AppSettings>,
+    current: Arc<RwLock<AppSettings>>,
     hooks: RwLock<Vec<SettingsChangeHook>>,
 }
 
@@ -21,7 +21,7 @@ impl SettingsManager {
         let store = SettingsStore::new(config_dir);
         let loaded = store.load();
         LogObscurer::set_obfuscate(loaded.debug.obfuscate_logs);
-        let current = RwLock::new(loaded);
+        let current = Arc::new(RwLock::new(loaded));
 
         Arc::new(Self {
             store,
@@ -67,7 +67,7 @@ impl SettingsManager {
             *writer = new_settings.clone();
         }
 
-        if let Err(e) = self.store.save(&new_settings) {
+        if let Err(e) = self.persist() {
             tracing::error!(error = %e, "[SettingsManager] Failed to persist settings to disk");
         } else {
             tracing::debug!(
@@ -89,7 +89,24 @@ impl SettingsManager {
             let mut writer = self.current.write();
             *writer = settings.clone();
         }
-        let _ = self.store.save(settings);
+        if let Err(e) = self.persist() {
+            tracing::error!(error = %e, "[SettingsManager] Failed to persist settings to disk");
+        }
+    }
+
+    /// Writes the current in-memory settings to disk. Writers take turns and each one writes whatever is current once it is
+    /// its turn, so the file never ends up older than the state in memory.
+    fn persist(&self) -> Result<(), std::io::Error> {
+        self.store.save_latest(|| self.current.read().clone())
+    }
+
+    /// Makes sure the file on disk holds the current settings: waits for a background saver that is writing right now and
+    /// writes once more. Called when the application exits.
+    pub fn flush(&self) {
+        match self.persist() {
+            Ok(()) => tracing::info!("[SettingsManager: Flush] Settings written to disk"),
+            Err(e) => tracing::error!(error = %e, "[SettingsManager: Flush] Failed to write the settings to disk"),
+        }
     }
 
     /// Persists settings in-memory immediately and flushes JSON to disk in a non-blocking background thread.
@@ -100,11 +117,11 @@ impl SettingsManager {
             *writer = settings.clone();
         }
         let store = self.store.clone();
-        let s_clone = settings.clone();
+        let current = self.current.clone();
         std::thread::Builder::new()
             .name("settings-async-saver".into())
             .spawn(move || {
-                let _ = store.save(&s_clone);
+                let _ = store.save_latest(|| current.read().clone());
             })
             .ok();
     }

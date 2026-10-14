@@ -414,6 +414,21 @@ pub(super) fn close(notify: bool) {
     finish_close(session, notify);
 }
 
+/// The application exits: the fullscreen closes whatever the user pinned. The close handler does not run (the main window is
+/// closing, so there is no view left to re-sync), and the window is destroyed too, not just hidden. UI thread only.
+pub(super) fn shutdown() {
+    match take_session() {
+        Ok(Some(session)) => finish_close(session, false),
+        Ok(None) => {}
+        Err(()) => tracing::warn!("[Shutdown: Windows] The fullscreen is busy with an event; it cannot be closed in order"),
+    }
+    let window = WINDOW.with(|cell| cell.try_borrow_mut().ok().and_then(|mut slot| slot.take()));
+    if let Some(window) = window {
+        let _ = window.hide();
+        tracing::debug!("[Shutdown: Windows] Fullscreen window destroyed");
+    }
+}
+
 /// Closes the fullscreen if it shows a tab that no longer exists.
 pub(super) fn close_if_tab_gone(tab_manager: &ViewerTabManager) {
     let gone = SESSION.with(|cell| {

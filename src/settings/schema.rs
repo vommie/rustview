@@ -307,6 +307,13 @@ pub const MULTIVIEW_TAB_TITLE: &str = "Multiview";
 pub const MPV_OBSERVER_ACTIVE_POLL_MS: u64 = 20;
 pub const MPV_OBSERVER_IDLE_POLL_MS: u64 = 100;
 
+// --- shutdown ---
+/// A shutdown that has not finished after this long is ended by the watchdog (a stuck teardown must not leave an invisible
+/// process behind).
+pub const SHUTDOWN_WATCHDOG_MS: u64 = 10_000;
+/// How long the exit waits for the players that closed Multiviews are still shutting down on their worker threads.
+pub const SHUTDOWN_TEARDOWN_WAIT_MS: u64 = 3_000;
+
 // =============================================================================
 // SECTION 12: API & External Tools Settings - Single Point of Truth Constants
 // =============================================================================

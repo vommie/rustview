@@ -128,11 +128,31 @@ pub fn hide(owner: BarOwner) {
 
 /// Hides one bar if `owner` is the host that shows it.
 pub fn hide_kind(kind: BarKind, owner: BarOwner) {
-    with_overlay(kind, |overlay| {
-        if overlay.owner == Some(owner) {
+    OVERLAYS.with(|cells| {
+        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
+            tracing::debug!("[Multiview: Overlay] Skipped a re-entrant call");
+            return;
+        };
+        // A bar that was never shown has no window; hiding it must not create one.
+        if let Some(overlay) = slot.as_mut().filter(|overlay| overlay.owner == Some(owner)) {
             overlay.hide();
         }
     });
+}
+
+/// The application exits: both bar windows are hidden and destroyed (with their X connections). A bar that was never shown has
+/// no window and is not created for this.
+pub fn shutdown() {
+    OVERLAYS.with(|cells| {
+        for kind in [BarKind::Media, BarKind::Primary] {
+            let taken = cells[kind.index()].try_borrow_mut().ok().and_then(|mut slot| slot.take());
+            if let Some(mut overlay) = taken {
+                overlay.hide();
+                tracing::debug!(bar = kind.label(), "[Shutdown: Windows] Bar window destroyed");
+            }
+        }
+    });
+    OVERLAY_XIDS.with(|cell| cell.set([None; 2]));
 }
 
 /// Runs `f` on the overlay, creating it on first use. Re-entrant calls (a click handler that hides the bar) are skipped.

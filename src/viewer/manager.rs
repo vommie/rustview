@@ -1,23 +1,24 @@
 use super::error::ViewerError;
 use super::mpv_engine::MpvPlayer;
 use super::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
+use super::multiview::teardown;
 use super::tab_item::{ImageBufferEvictor, TabCollection, TabSessionFactory, TabTitleFormatter};
 use super::tab_ui_gate::TabUiGate;
 use super::types::{
     ImageTabPayload, MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, TabId, TabPayload, VideoTabPayload,
 };
-use super::x11_embed::{X11VideoSubwindow, XRectangle};
+use super::x11_embed::{X11VideoSubwindow, XRectangle, install_nonfatal_error_handler};
 use crate::library::models::{MediaId, MediaRecord};
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::LogObscurer;
-use crate::settings::schema::MULTIVIEW_TAB_TITLE;
+use crate::settings::schema::{MULTIVIEW_TAB_TITLE, SHUTDOWN_TEARDOWN_WAIT_MS};
 use parking_lot::{Mutex, RwLock};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Maximum number of uncompressed high-resolution full-image buffers retained in RAM simultaneously.
 pub const MAX_CACHED_HIGH_RES_BUFFERS: usize = 6;
@@ -950,6 +951,36 @@ impl ViewerTabManager {
 
         *active = None;
         tracing::info!("[ViewerTabManager: CloseAll] Closed all open viewer tabs");
+    }
+
+    /// The application exits: every tab is closed and its native resources are destroyed on the calling thread, in the safe
+    /// order (a player is shut down completely before the window it rendered into is destroyed). Blocks until everything is
+    /// gone, including the teardowns that closed Multiviews left to worker threads.
+    pub fn shutdown(&self) {
+        let sessions = {
+            let mut tabs = self.tabs.write();
+            *self.active_tab_id.write() = None;
+            tabs.clear()
+        };
+        self.observed_instances.lock().clear();
+        let count = sessions.len();
+        for session in sessions {
+            Self::shutdown_session(session);
+        }
+        let settled = teardown::wait_for_teardowns(Duration::from_millis(SHUTDOWN_TEARDOWN_WAIT_MS));
+        tracing::info!(tabs = count, settled, "[ViewerTabManager: Shutdown] All tabs closed and their players shut down");
+    }
+
+    fn shutdown_session(session: MediaTabSession) {
+        match session.payload {
+            TabPayload::Video(vid) => {
+                let window = vid.subwindow.lock().take();
+                teardown::teardown_video(vid.player, window);
+                install_nonfatal_error_handler();
+            }
+            TabPayload::Multiview(mv) => mv.instance.lock().shutdown_now(),
+            TabPayload::Image(_) => {}
+        }
     }
 
     // =========================================================================
