@@ -4,6 +4,7 @@ use rustview::system::SystemDisplayService;
 use rustview::system::termination;
 use rustview::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge, shutdown};
+use rustview::util::startup_clock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -22,6 +23,7 @@ struct WindowGeometryTracker {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    startup_clock::begin();
     let args: Vec<String> = std::env::args().collect();
     let data_dir = dirs_data_dir();
     let config_dir = dirs_config_dir();
@@ -68,12 +70,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     tracing::info!("Launching RustView with Full Tracing & Persistent State...");
+    startup_clock::mark("Main");
 
     // Ctrl+C, `kill` and a closed terminal run the same orderly shutdown as the close button (before any thread exists).
     termination::install_signal_handlers();
 
     // Diagnostic System, Distro, Kernel, Session, and Monitor info emission (Runs ONLY ONCE at startup)
     SystemDisplayService::log_system_diagnostics();
+    startup_clock::mark("Diagnostics");
 
     std::fs::create_dir_all(&data_dir)?;
     std::fs::create_dir_all(&config_dir)?;
@@ -84,9 +88,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize Settings System and live Log Privacy Obscurer
     let settings = SettingsManager::new(&config_dir);
     LogObscurer::set_obfuscate(settings.get().debug.obfuscate_logs);
+    startup_clock::mark("Settings");
 
     // Initialize Core LMDB Storage
     let library = Arc::new(Library::open(&db_path)?);
+    startup_clock::mark("Library");
 
     // TEMPORARY DEBUG FEATURE (remove together with src/library/folder_reset.rs):
     // `--reset-folder-tree` resets the folder tree (SPoT) once. Media records and their folder paths are preserved.
@@ -112,6 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         settings.get().performance.l1_cache_slots,
         settings.get().performance.worker_threads,
     )?);
+    startup_clock::mark("Thumbnails");
 
     // Initialize Slint Window
     // The action bar of the Multiview floats in a window of its own; it has to be an override-redirect window, which Slint only
@@ -122,7 +129,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .select()?;
 
+    startup_clock::mark("Backend");
     let main_window = MainWindow::new()?;
+    startup_clock::mark("MainWindowCreated");
+    if let Err(e) = main_window
+        .window()
+        .set_rendering_notifier(|state, _| {
+            if matches!(state, slint::RenderingState::AfterRendering) {
+                startup_clock::mark_first_frame();
+            }
+        })
+    {
+        tracing::debug!(error = %e, "[Startup: Stage] No rendering notifier; the first frame is not logged");
+    }
 
     // Register XDG Desktop Application ID after platform initialization
     if let Err(e) = slint::set_xdg_app_id("org.rustview.app") {
@@ -327,10 +346,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     tracing::info!("RustView UI & Storage Engine Ready.");
+    startup_clock::mark("BridgeReady");
 
     // Read-only folder schema + media path resolution audit on a background thread (never blocks the UI)
     rustview::library::FolderDiagnostics::spawn_background_audit(audit_db, "startup");
 
+    startup_clock::mark("EventLoop");
     let result = main_window.run();
 
     if shutdown::begin() {
