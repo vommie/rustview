@@ -32,6 +32,8 @@ export struct MultiviewGutterView {
     width: length,
     height: length,
     vertical: bool,
+    // Only the swap button of one column of a 2x2 grid: no divider line and no drag.
+    swap-only: bool,
 }
 
 /// Where the virtual display of a Multiview (the container) is shown inside its canvas, in logical pixels relative to the

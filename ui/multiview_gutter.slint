@@ -7,6 +7,8 @@ import { AppIcon, IconId, IconSize } from "icons.slint";
 export component MultiviewGutter inherits Rectangle {
     in property <bool> vertical: true;
     in property <bool> interactive: true;
+    // Only the swap button (one per column of a 2x2 grid): no divider line, no dragging.
+    in property <bool> swap-only: false;
 
     callback drag-started();
     callback dragged(length /* distance from drag start */);
@@ -16,12 +18,12 @@ export component MultiviewGutter inherits Rectangle {
 
     property <bool> hot: drag.has-hover || drag.pressed || swap-touch.has-hover;
     property <length> button-size: Math.min(root.width, root.height);
-    property <bool> show-button: root.interactive && root.button-size >= 12px;
+    property <bool> show-button: root.interactive && root.button-size >= 12px && (root.vertical || root.swap-only);
 
     drag := TouchArea {
         property <length> start-pos: 0px;
 
-        enabled: root.interactive;
+        enabled: root.interactive && !root.swap-only;
         mouse-cursor: root.vertical ? col-resize : row-resize;
 
         pointer-event(event) => {
@@ -46,7 +48,7 @@ export component MultiviewGutter inherits Rectangle {
     }
 
     // Divider line (same colors as the application's other resizers)
-    Rectangle {
+    if !root.swap-only : Rectangle {
         x: root.vertical ? (parent.width - self.width) / 2 : 0px;
         y: root.vertical ? 0px : (parent.height - self.height) / 2;
         width: root.vertical ? (root.hot ? 2px : 1px) : parent.width;

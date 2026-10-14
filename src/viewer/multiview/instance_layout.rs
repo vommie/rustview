@@ -121,8 +121,8 @@ impl MultiviewInstance {
         tracing::debug!("[Multiview: Layout] Split reset to automatic");
     }
 
-    /// Exchanges the two tiles next to a vertical gutter, or the two rows of a 2x2 grid. Sound states and pinned widths
-    /// travel with the tiles.
+    /// Exchanges the two tiles next to a vertical gutter, or the two tiles of one column of a 2x2 grid (the swap button
+    /// of that column). Sound states and pinned widths travel with the tiles.
     pub fn swap(&mut self, index: usize) {
         let Some(gutter) = self.layout.gutters.get(index).copied() else {
             return;
@@ -139,16 +139,16 @@ impl MultiviewInstance {
                 };
                 self.tiles.swap(a, b);
             }
-            GutterKind::Horizontal => {
-                if self.tiles.len() != 4 {
+            GutterKind::ColumnSwap => {
+                let [top, bottom] = self.layout.rows.as_slice() else {
                     return;
-                }
-                self.tiles.swap(0, 2);
-                self.tiles.swap(1, 3);
-                if let Some(rows) = self.row_pins.as_mut() {
-                    rows.swap(0, 1);
-                }
+                };
+                let (Some(&a), Some(&b)) = (top.get(gutter.left), bottom.get(gutter.left)) else {
+                    return;
+                };
+                self.tiles.swap(a, b);
             }
+            GutterKind::Horizontal => return,
         }
         self.apply_layout();
         tracing::debug!(gutter = index, "[Multiview: Layout] Tiles swapped");

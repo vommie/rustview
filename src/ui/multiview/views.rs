@@ -75,6 +75,7 @@ fn gutter_view(gutter: &GutterView, dpi: f32) -> MultiviewGutterView {
         width: logical(w, dpi),
         height: logical(h, dpi),
         vertical: gutter.vertical,
+        swap_only: gutter.swap_only,
     }
 }
 

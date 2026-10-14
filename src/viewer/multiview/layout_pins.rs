@@ -166,6 +166,7 @@ pub fn drag_pins(
             next.cols[left] = Some(f64::from(new_left) / usable);
             next.cols[right] = Some(f64::from(pair - new_left) / usable);
         }
+        GutterKind::ColumnSwap => {}
         GutterKind::Horizontal => {
             let (Some(top_row), true) = (layout.rows.first(), layout.rows.len() == 2) else {
                 return next;

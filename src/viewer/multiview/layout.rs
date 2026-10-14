@@ -46,6 +46,9 @@ pub struct TileLayout {
 pub enum GutterKind {
     Vertical,
     Horizontal,
+    /// Only the swap button of one column of a 2x2 grid (`left` = the column): it exchanges the tile above with the
+    /// tile below and sits on the horizontal gutter, centered on the smaller of the two tiles.
+    ColumnSwap,
 }
 
 /// A draggable separator. A vertical gutter separates tiles `left` and `left + 1` of `row`; the horizontal gutter
@@ -282,6 +285,18 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], pins: &Pins) -> Layout {
         row: 0,
         left: 0,
     });
+    if let [top, bottom] = rows.as_slice() {
+        for (column, (&a, &b)) in top.iter().zip(bottom).enumerate() {
+            let smaller = if tiles[a].content.w <= tiles[b].content.w { a } else { b };
+            let content = tiles[smaller].content;
+            gutters.push(Gutter {
+                kind: GutterKind::ColumnSwap,
+                rect: Rect::new(content.x + (content.w - p.gutter) / 2, heights[0], p.gutter, p.gutter),
+                row: 0,
+                left: column,
+            });
+        }
+    }
     Layout {
         tiles,
         gutters,

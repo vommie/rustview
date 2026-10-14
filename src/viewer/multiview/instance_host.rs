@@ -421,6 +421,7 @@ impl MultiviewInstance {
             .map(|g| GutterView {
                 rect: relative(projection.rect(g.rect)),
                 vertical: g.kind == GutterKind::Vertical,
+                swap_only: g.kind == GutterKind::ColumnSwap,
             })
             .collect();
         HostedView {

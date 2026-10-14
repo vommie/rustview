@@ -33,6 +33,8 @@ pub struct ActionView {
 pub struct GutterView {
     pub rect: Rect,
     pub vertical: bool,
+    /// Only a swap button (no divider, no drag).
+    pub swap_only: bool,
 }
 
 /// Whether previous/next navigation (keys and mouse wheel) applies to what the Multiview shows.
