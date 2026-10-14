@@ -155,7 +155,7 @@ pub fn fit(aspect: f32, box_w: i32, box_h: i32) -> (i32, i32) {
     ((w as i32).max(1), (h as i32).max(1))
 }
 
-fn fit_cap(row_h: i32, aspect: f32) -> i32 {
+pub(super) fn fit_cap(row_h: i32, aspect: f32) -> i32 {
     let a = if aspect.is_finite() && aspect > 0.0 {
         f64::from(aspect)
     } else {
@@ -165,7 +165,7 @@ fn fit_cap(row_h: i32, aspect: f32) -> i32 {
 }
 
 /// Splits `total` by proportions; the last element absorbs the rounding remainder.
-fn proportional(total: i32, fractions: &[f64]) -> Vec<i32> {
+pub(super) fn proportional(total: i32, fractions: &[f64]) -> Vec<i32> {
     let n = fractions.len();
     let mut out: Vec<i32> = fractions
         .iter()
