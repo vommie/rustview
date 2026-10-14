@@ -46,6 +46,8 @@ pub enum UiAction {
     OpenTileAsTab(u64),
     /// Action button: the medium left the Multiview, so it is deselected in the Browse view too.
     DeselectInBrowse(u64),
+    /// Previous/next medium of the single image the Multiview shows (keys and mouse wheel).
+    Navigate { forward: bool },
 }
 
 pub fn route(mode: HostMode, origin: OriginKind, event: RoutedEvent, click: ClickKind) -> UiAction {

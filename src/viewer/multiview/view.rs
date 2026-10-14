@@ -37,6 +37,17 @@ pub struct GutterView {
     pub vertical: bool,
 }
 
+/// Whether previous/next navigation (keys and mouse wheel) applies to what the Multiview shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Navigation {
+    /// Not applicable (several media, a video that keeps all keys for mpv, or an isolated tab snapshot).
+    Off,
+    /// A single image that follows the Browse selection.
+    Allowed,
+    /// A single sticky image: the request is refused (the sticky button flashes).
+    Blocked,
+}
+
 pub struct HostedView {
     /// Changes whenever anything visible changed, so presenters can skip identical syncs.
     pub revision: u64,
@@ -48,4 +59,5 @@ pub struct HostedView {
     pub gutters: Vec<GutterView>,
     /// The tile whose hover bar is shown right now (the pointer is on it and has been active recently).
     pub bar_tile: Option<usize>,
+    pub navigation: Navigation,
 }

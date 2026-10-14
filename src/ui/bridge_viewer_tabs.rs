@@ -1411,6 +1411,7 @@ impl BridgeViewerTabs {
     }
 
     /// Opens a media file (Image or Video) in a background viewer tab without stealing focus or switching active view mode.
+    /// Returns the tab (an existing one if duplicates are not allowed), or `None` if it could not be opened.
     pub fn open_media_tab_background(
         media_id: MediaId,
         window: &MainWindow,
@@ -1418,7 +1419,7 @@ impl BridgeViewerTabs {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-    ) {
+    ) -> Option<TabId> {
         let t0 = Instant::now();
 
         let (is_video, filename_hint) = {
@@ -1555,6 +1556,7 @@ impl BridgeViewerTabs {
                     open_time_us = t0.elapsed().as_micros(),
                     "[BridgeViewerTabs: OpenBackground] Tab opened in background and UI synchronized"
                 );
+                Some(tab_id)
             }
             Err(e) => {
                 tracing::error!(
@@ -1566,6 +1568,7 @@ impl BridgeViewerTabs {
                     window,
                     format!("Failed to open background tab for media #{}: {}", media_id, e),
                 );
+                None
             }
         }
     }

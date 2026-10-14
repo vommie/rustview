@@ -3,13 +3,19 @@
 //! drag-and-drop lock, dialogs and the tab embedding already ask the fullscreen controller about.
 
 use super::eligibility;
-use super::session::{self, TabReturn};
+use super::navigation;
+use super::session::{self, Session, TabReturn};
+use crate::library::Library;
 use crate::library::models::MediaId;
 use crate::settings::SettingsManager;
+use crate::thumbnails::ThumbnailManager;
 use crate::ui::MainWindow;
+use crate::ui::bridge_file_selection::BridgeFileSelection;
 use crate::ui::bridge_image_fullscreen::FullscreenCloseCallback;
 use crate::ui::bridge_state::UiState;
+use crate::ui::bridge_viewer_tabs::BridgeViewerTabs;
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
+use crate::viewer::multiview::view::Navigation;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
@@ -21,10 +27,20 @@ pub(super) fn set_open(open: bool) {
     OPEN.store(open, Ordering::SeqCst);
 }
 
+/// What the Multiview needs from the application to act on the Browse view and the tabs.
+#[derive(Clone)]
+pub struct AppContext {
+    pub tab_manager: Arc<ViewerTabManager>,
+    pub library: Arc<Library>,
+    pub thumbnails: Arc<ThumbnailManager>,
+    pub settings: Arc<SettingsManager>,
+    pub state: Arc<RwLock<UiState>>,
+}
+
 struct Shared {
     main_window: Mutex<Option<slint::Weak<MainWindow>>>,
     close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>,
-    tab_manager: Mutex<Option<Arc<ViewerTabManager>>>,
+    app: Mutex<Option<AppContext>>,
     /// The instance shown by the open fullscreen Multiview (it owns the rename target).
     current: Mutex<WeakInstance>,
 }
@@ -48,7 +64,7 @@ impl MultiviewHandle {
             shared: Arc::new(Shared {
                 main_window: Mutex::new(None),
                 close_handler,
-                tab_manager: Mutex::new(None),
+                app: Mutex::new(None),
                 current: Mutex::new(WeakInstance::new()),
             }),
         }
@@ -68,14 +84,94 @@ impl MultiviewHandle {
     }
 
     /// Connects the Multiview to the application once at startup: it needs the main window (rename dialog, close handler,
-    /// actions of the tab view) and the tab manager (converting the fullscreen into a tab).
-    pub fn bind(&self, tab_manager: Arc<ViewerTabManager>, main_window: slint::Weak<MainWindow>) {
-        *self.shared.tab_manager.lock() = Some(tab_manager);
+    /// actions of the tab view), the tab manager (converting the fullscreen into a tab) and the Browse state (previous/next,
+    /// deselecting a removed medium, opening a medium as a tab).
+    pub fn bind(&self, app: AppContext, main_window: slint::Weak<MainWindow>) {
+        *self.shared.app.lock() = Some(app);
         *self.shared.main_window.lock() = Some(main_window);
     }
 
+    fn app(&self) -> Option<AppContext> {
+        self.shared.app.lock().clone()
+    }
+
     pub(super) fn tab_manager(&self) -> Option<Arc<ViewerTabManager>> {
-        self.shared.tab_manager.lock().clone()
+        self.app().map(|app| app.tab_manager)
+    }
+
+    /// The application and its main window, for the actions that reach into the Browse view. UI thread only.
+    fn app_and_window(&self) -> Option<(AppContext, MainWindow)> {
+        let window = self.main_window()?.upgrade()?;
+        Some((self.app()?, window))
+    }
+
+    /// Action button "open in a background tab". Returns whether a tab exists afterwards.
+    pub(super) fn open_tile_as_tab(&self, media_id: MediaId) -> bool {
+        let Some((app, window)) = self.app_and_window() else {
+            return false;
+        };
+        BridgeViewerTabs::open_media_tab_background(
+            media_id,
+            &window,
+            &app.tab_manager,
+            &app.library,
+            &app.settings,
+            &app.state,
+        )
+        .is_some()
+    }
+
+    /// A medium left the Multiview through its remove button: it is deselected in the Browse view too.
+    pub(super) fn deselect_in_browse(&self, media_id: MediaId) {
+        if let Some((app, window)) = self.app_and_window() {
+            BridgeFileSelection::deselect_media(media_id, &window, &app.library, &app.state);
+        }
+    }
+
+    /// Previous/next for a single image: the neighbor in the Browse view is selected (and revealed there), and the
+    /// Multiview follows that selection at once. A sticky image refuses and flashes its sticky button.
+    pub(super) fn navigate(&self, forward: bool) {
+        let Some(instance) = self.shared.current.lock().upgrade() else {
+            return;
+        };
+        let (current, navigation) = {
+            let guard = instance.lock();
+            (guard.solo_tile().map(|(id, _, _)| id), guard.navigation())
+        };
+        drop(instance);
+        match (navigation, current) {
+            (Navigation::Blocked, _) => {
+                if let Some(instance) = self.shared.current.lock().upgrade() {
+                    instance.lock().flash_blocked_navigation();
+                }
+                session::with_session(Session::refresh);
+            }
+            (Navigation::Allowed, Some(current)) => {
+                let Some((app, window)) = self.app_and_window() else {
+                    return;
+                };
+                let target = navigation::neighbor(&app.state.read(), current, forward);
+                let Some(target) = target else {
+                    tracing::debug!(
+                        current,
+                        forward,
+                        "[Multiview: Navigate] No other showable medium in the Browse view"
+                    );
+                    return;
+                };
+                tracing::info!(current, target, forward, "[Multiview: Navigate] Moving on in the Browse view");
+                BridgeFileSelection::select_and_reveal_media(
+                    target,
+                    &window,
+                    &app.library,
+                    Some(&app.thumbnails),
+                    &app.settings,
+                    &app.state,
+                );
+                session::with_session(Session::follow_now);
+            }
+            _ => {}
+        }
     }
 
     pub(super) fn main_window(&self) -> Option<slint::Weak<MainWindow>> {

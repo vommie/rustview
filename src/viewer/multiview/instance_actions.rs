@@ -5,8 +5,8 @@ use super::actions::{ActionContext, ActionId, actions_for};
 use super::follow::FollowPlan;
 use super::instance::MultiviewInstance;
 use super::model::TileKind;
-use super::route::UiAction;
-use super::view::ActionView;
+use super::route::{OriginKind, UiAction};
+use super::view::{ActionView, Navigation};
 use crate::button_feedback::{ButtonFeedback, FeedbackKind};
 use crate::library::models::MediaId;
 use std::collections::HashMap;
@@ -147,6 +147,19 @@ impl MultiviewInstance {
         match self.tiles.as_slice() {
             [only] => Some((only.media_id, only.kind, only.sticky)),
             _ => None,
+        }
+    }
+
+    /// Previous/next applies to a single image of a Multiview that follows the Browse selection. A video keeps all keys and
+    /// the wheel for mpv (the Browse view is how one moves on), a snapshot that belongs to a tab is isolated.
+    pub fn navigation(&self) -> Navigation {
+        if self.origin != OriginKind::Browse {
+            return Navigation::Off;
+        }
+        match self.solo_tile() {
+            Some((_, TileKind::Image, false)) => Navigation::Allowed,
+            Some((_, TileKind::Image, true)) => Navigation::Blocked,
+            _ => Navigation::Off,
         }
     }
 

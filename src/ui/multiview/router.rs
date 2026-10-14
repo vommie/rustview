@@ -9,6 +9,7 @@ use super::session::{self, Session};
 use super::session_convert;
 use super::tab_host;
 use crate::viewer::multiview::click::ClickKind;
+use crate::viewer::multiview::actions::ActionId;
 use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
 use crate::viewer::multiview::instance::WeakInstance;
 use crate::viewer::multiview::route::{HostMode, RoutedEvent, UiAction, route};
@@ -92,6 +93,12 @@ pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: O
         (UiAction::OpenTabFullscreen, Some(id)) => handle.open_tab_fullscreen(id),
         (UiAction::ActivateTab, Some(id)) => handle.activate_tab(id),
         (UiAction::ScrollGrid { up }, _) => handle.scroll_grid(up),
+        (UiAction::Navigate { forward }, _) => handle.navigate(forward),
+        (UiAction::DeselectInBrowse(media_id), _) => handle.deselect_in_browse(media_id),
+        (UiAction::OpenTileAsTab(media_id), _) => {
+            let opened = handle.open_tile_as_tab(media_id);
+            session::with_session(|s| s.action_finished(media_id, ActionId::OpenAsTab, opened));
+        }
         (other, _) => {
             tracing::debug!(?other, "[Multiview: Router] The action needs a Multiview");
         }

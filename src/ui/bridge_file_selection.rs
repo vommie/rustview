@@ -479,6 +479,29 @@ impl BridgeFileSelection {
         );
     }
 
+    /// Deselects one media item (for example because the Multiview removed it) and brings the tiles, Inspector, Tag & Rate
+    /// panel and status bar in line. Does nothing if the item is not selected.
+    pub fn deselect_media(
+        media_id: MediaId,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        {
+            let mut st = state.write();
+            if !st.file_selection.is_selected(media_id) {
+                return;
+            }
+            st.file_selection
+                .deselect_many(&std::collections::HashSet::from([media_id]));
+        }
+        Self::sync_selection_diff(window, state, &[media_id]);
+        BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
+        tracing::info!(media_id, "[FileSelection: Deselect] Media item deselected");
+    }
+
     /// Deselects all media items in the current Browse View (Ctrl+Shift+A / Esc).
     pub fn clear_selection(
         window: &MainWindow,

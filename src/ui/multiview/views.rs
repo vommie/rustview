@@ -7,7 +7,7 @@ use crate::ui::{
 };
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::model::TileKind;
-use crate::viewer::multiview::view::{ActionView, GutterView, HostedView, TileView};
+use crate::viewer::multiview::view::{ActionView, GutterView, HostedView, Navigation, TileView};
 use slint::{Model, VecModel};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -86,6 +86,15 @@ fn action_view(action: &ActionView) -> MultiviewActionView {
         toggle: action.active.is_some(),
         active: action.active.unwrap_or(false),
         feedback: button_feedback_bridge::to_slint(action.feedback),
+    }
+}
+
+/// The `navigation` property of the fullscreen window: 0 = off, 1 = previous/next allowed, 2 = refused.
+pub fn navigation_code(navigation: Navigation) -> i32 {
+    match navigation {
+        Navigation::Off => 0,
+        Navigation::Allowed => 1,
+        Navigation::Blocked => 2,
     }
 }
 

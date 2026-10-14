@@ -9,6 +9,7 @@ use super::teardown::teardown_videos;
 use super::tile;
 use crate::library::models::MediaId;
 use crate::settings::LogObscurer;
+use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// Error texts can embed file paths; with log obfuscation active they are not written to the log.
 fn loggable(error: &str) -> &str {
@@ -137,6 +138,18 @@ impl MultiviewInstance {
         if let Err(e) = spawned {
             tracing::error!(media_id, error = %e, "[Multiview: Tile] Could not start the image decoder thread");
             self.on_image_loaded(media_id, Err("This image could not be loaded".to_string()));
+        }
+    }
+
+    /// Shows `pixels` (a thumbnail the application already holds) in an image tile whose decode is still running, so
+    /// browsing does not flash an empty tile. The decoded image replaces it.
+    pub fn set_placeholder(&mut self, media_id: MediaId, pixels: SharedPixelBuffer<Rgb8Pixel>) {
+        let Some(tile) = self.tiles.iter_mut().find(|t| t.media_id == media_id) else {
+            return;
+        };
+        if tile.kind == TileKind::Image && tile.is_loading && tile.pixels.is_none() {
+            tile.pixels = Some(pixels);
+            self.bump();
         }
     }
 

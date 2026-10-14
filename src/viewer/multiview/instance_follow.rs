@@ -277,4 +277,25 @@ mod tests {
         assert_eq!(mv.member_ids(), vec![1, 2, 3, 4]);
         assert_eq!(mv.revision(), revision);
     }
+
+    #[test]
+    fn a_thumbnail_placeholder_fills_a_loading_tile_until_the_decode_arrives() {
+        use slint::{Rgb8Pixel, SharedPixelBuffer};
+        let shared = instance(&[1]);
+        let mut mv = shared.lock();
+        assert!(mv.view().tiles[0].is_loading, "a fresh image tile shows the spinner");
+
+        let thumbnail = SharedPixelBuffer::<Rgb8Pixel>::new(8, 6);
+        mv.set_placeholder(1, thumbnail);
+        let view = mv.view();
+        assert!(view.tiles[0].pixels.is_some() && !view.tiles[0].is_loading);
+
+        mv.on_image_loaded(1, Ok((800, 600, SharedPixelBuffer::<Rgb8Pixel>::new(80, 60))));
+        let full = mv.view().tiles[0].pixels.clone().expect("the decoded image");
+        assert_eq!((full.width(), full.height()), (80, 60));
+
+        mv.set_placeholder(1, SharedPixelBuffer::<Rgb8Pixel>::new(8, 6));
+        let still = mv.view().tiles[0].pixels.clone().expect("still the decoded image");
+        assert_eq!(still.width(), 80, "a late placeholder never replaces the decoded image");
+    }
 }

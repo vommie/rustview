@@ -74,7 +74,7 @@ pub struct OpenPlan {
     pub tiles: Vec<TileSeed>,
 }
 
-fn is_playable(item: &IndexedMediaRecord) -> bool {
+pub(super) fn is_playable(item: &IndexedMediaRecord) -> bool {
     !item.is_deleted && !item.is_pending && !item.is_corrupted
 }
 

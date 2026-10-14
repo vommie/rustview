@@ -144,6 +144,14 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     win.on_tile_clicked(|_, is_ctrl| run(|s| s.on_click(is_ctrl)));
     win.on_background_clicked(|is_ctrl| run(|s| s.on_click(is_ctrl)));
     win.on_middle_clicked(|| close(true));
+    win.on_navigate(|forward| run(|_| UiAction::Navigate { forward }));
+    win.on_wheel(|delta| {
+        run(|_| match delta {
+            d if d < 0.0 => UiAction::Navigate { forward: true },
+            d if d > 0.0 => UiAction::Navigate { forward: false },
+            _ => UiAction::None,
+        })
+    });
     win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0) as usize)));
     win.on_gutter_dragged(|_, distance| with_session(|s| s.dragged(distance)));
     win.on_gutter_drag_finished(|_| with_session(Session::drag_finished));
@@ -204,6 +212,7 @@ fn prepare_window(
     win.set_gutters(ModelRc::from(models.gutters.clone()));
     win.set_bar_actions(ModelRc::from(models.bar_actions.clone()));
     win.set_bar_tile(-1);
+    win.set_navigation(0);
     let appearance = &settings.get().appearance;
     win.set_enable_tooltips(appearance.enable_tooltips);
     win.set_tooltip_delay_ms(appearance.tooltip_delay_ms as i32);
@@ -466,6 +475,7 @@ impl Session {
         self.models.sync(&view, &mut self.images);
         if let Some(win) = self.window.upgrade() {
             win.set_bar_tile(views::bar_tile_index(&view));
+            win.set_navigation(views::navigation_code(view.navigation));
         }
     }
 

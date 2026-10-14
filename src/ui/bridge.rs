@@ -1,3 +1,4 @@
+use super::multiview::handle::AppContext;
 use super::bridge_ctx_menu::{
     BridgeContextMenu, ContextMenuRegistration, MediaMenuContext,
 };
@@ -242,9 +243,16 @@ impl UiBridge {
 
         BridgeSidebarPanelTabs::init(&window, &settings, &state);
 
-        fullscreen_controller
-            .multiview()
-            .bind(tab_manager.clone(), window.as_weak());
+        fullscreen_controller.multiview().bind(
+            AppContext {
+                tab_manager: tab_manager.clone(),
+                library: library.clone(),
+                thumbnails: thumbnails.clone(),
+                settings: settings.clone(),
+                state: state.clone(),
+            },
+            window.as_weak(),
+        );
         tab_host::bind(&window, fullscreen_controller.multiview().clone());
 
         let win_fs_close = window.as_weak();

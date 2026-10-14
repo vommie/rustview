@@ -22,10 +22,13 @@ export component MultiviewCanvas inherits Rectangle {
     // A non-interactive canvas is a picture: it has no touch areas, so clicks reach whatever is below it.
     in property <bool> interactive: true;
     in property <bool> show-frame: false;
+    // The mouse wheel is reported (previous/next for a single image); otherwise it passes through untouched.
+    in property <bool> wheel-navigation: false;
 
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
     callback background-clicked(bool /* is_ctrl */);
     callback middle-clicked();
+    callback wheel(length /* delta-y */);
     callback gutter-drag-started(int);
     callback gutter-dragged(int, length /* distance from drag start */);
     callback gutter-drag-finished(int);
@@ -74,6 +77,14 @@ export component MultiviewCanvas inherits Rectangle {
     if root.interactive : TouchArea {
         width: 100%;
         height: 100%;
+
+        scroll-event(event) => {
+            if root.wheel-navigation {
+                root.wheel(event.delta-y);
+                return accept;
+            }
+            return reject;
+        }
 
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
@@ -137,6 +148,14 @@ export component MultiviewCanvas inherits Rectangle {
         }
 
         if root.interactive : TouchArea {
+            scroll-event(event) => {
+                if root.wheel-navigation {
+                    root.wheel(event.delta-y);
+                    return accept;
+                }
+                return reject;
+            }
+
             pointer-event(event) => {
                 if event.kind == PointerEventKind.down {
                     if event.button == PointerEventButton.left {

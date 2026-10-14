@@ -19,7 +19,7 @@ use crate::viewer::multiview::route::UiAction;
 use crate::viewer::multiview::tile::TileSeed;
 use parking_lot::Mutex;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
-use slint::platform::{Platform, PointerEventButton, WindowAdapter, WindowEvent};
+use slint::platform::{Key, Platform, PointerEventButton, WindowAdapter, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition, ModelRc, PhysicalSize, PlatformError, Rgb8Pixel, SharedPixelBuffer};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -189,7 +189,7 @@ impl Lab {
         let overlay = Rc::new(Cell::new(None));
         let tooltip = Rc::new(Cell::new(None));
         {
-            let (for_actions, requested) = (instance.clone(), requested.clone());
+            let (for_actions, for_requests) = (instance.clone(), requested.clone());
             win.on_action_clicked(move |tile, action| {
                 let Some(action) = ActionId::from_code(action) else {
                     return;
@@ -202,13 +202,22 @@ impl Lab {
                     return;
                 };
                 let outcome = guard.perform_action(id, action);
-                requested.borrow_mut().push(outcome);
+                for_requests.borrow_mut().push(outcome);
             });
             let (for_overlay, overlay) = (instance.clone(), overlay.clone());
             win.on_overlay_changed(move |visible, x, y, w, h| {
                 let rect = visible.then(|| Rect::new(x as i32, y as i32, w as i32, h as i32));
                 overlay.set(rect);
                 for_overlay.lock().set_bar_overlay(rect);
+            });
+            let for_keys = requested.clone();
+            win.on_navigate(move |forward| {
+                for_keys.borrow_mut().push(UiAction::Navigate { forward });
+            });
+            let for_wheel = requested.clone();
+            win.on_wheel(move |delta| {
+                let forward = delta < 0.0;
+                for_wheel.borrow_mut().push(UiAction::Navigate { forward });
             });
             let tooltip = tooltip.clone();
             win.on_tooltip_changed(move |visible, x, y, w, h| {
@@ -289,6 +298,26 @@ impl Lab {
         let view = self.instance.lock().view();
         self.models.sync(&view, &mut self.images);
         self.win.set_bar_tile(super::views::bar_tile_index(&view));
+        self.win
+            .set_navigation(super::views::navigation_code(view.navigation));
+    }
+
+    pub fn key(&mut self, key: Key) {
+        let text: slint::SharedString = key.into();
+        let window = self.adapter.window();
+        window.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
+        window.dispatch_event(WindowEvent::KeyReleased { text });
+    }
+
+    /// One notch of the mouse wheel over the point (negative `delta_y` = wheel down).
+    pub fn wheel(&mut self, x: i32, y: i32, delta_y: f32) {
+        self.adapter
+            .window()
+            .dispatch_event(WindowEvent::PointerScrolled {
+                position: LogicalPosition::new(x as f32, y as f32),
+                delta_x: 0.0,
+                delta_y,
+            });
     }
 
     /// Moves the pointer: the window sees it (tooltips) and the instance probes it (hovered tile, hover bar).
@@ -605,5 +634,59 @@ mod tests {
         lab.click(close.0, close.1);
         assert_eq!(lab.requested.borrow().last(), Some(&UiAction::CloseFullscreen));
         assert_eq!(lab.instance.lock().member_ids(), vec![2], "closing is the application's job");
+    }
+
+    #[test]
+    fn previous_next_applies_to_a_single_image_only() {
+        let mut lab = Lab::new(W, H, &MEDIA);
+        lab.follow(&[2]);
+        let (cx, cy) = lab.center_of(0);
+
+        lab.key(Key::RightArrow);
+        assert_eq!(lab.requested.borrow().last(), Some(&UiAction::Navigate { forward: true }));
+        lab.key(Key::PageUp);
+        assert_eq!(lab.requested.borrow().last(), Some(&UiAction::Navigate { forward: false }));
+        lab.key(Key::Space);
+        assert_eq!(lab.requested.borrow().last(), Some(&UiAction::Navigate { forward: true }));
+        lab.wheel(cx, cy, 120.0);
+        assert_eq!(lab.requested.borrow().last(), Some(&UiAction::Navigate { forward: false }));
+        lab.wheel(cx, cy, -120.0);
+        assert_eq!(lab.requested.borrow().last(), Some(&UiAction::Navigate { forward: true }));
+
+        let before = lab.requested.borrow().len();
+        lab.follow(&[2, 4]);
+        lab.key(Key::RightArrow);
+        let (bx, by) = lab.center_of(1);
+        lab.wheel(bx, by, -120.0);
+        assert_eq!(
+            lab.requested.borrow().len(),
+            before,
+            "with several media the keys and the wheel do nothing"
+        );
+    }
+
+    #[test]
+    fn a_sticky_single_image_refuses_navigation_and_flashes_its_button() {
+        let mut lab = Lab::new(W, H, &MEDIA);
+        lab.follow(&[2]);
+        lab.instance.lock().perform_action(2, ActionId::Sticky);
+        lab.refresh();
+        let (cx, cy) = lab.center_of(0);
+        lab.pointer(cx, cy);
+        lab.pointer(cx + 2, cy);
+        lab.key(Key::RightArrow);
+        assert_eq!(
+            lab.requested.borrow().last(),
+            Some(&UiAction::Navigate { forward: true }),
+            "the window still reports the request; the application refuses it"
+        );
+        lab.instance.lock().flash_blocked_navigation();
+        lab.refresh();
+        lab.advance(Duration::from_millis(1));
+        lab.advance(Duration::from_millis(60));
+        let bar = lab.overlay.get().expect("the bar is shown");
+        let sticky = lab.shot_now("26-sticky-button-flashes-red-when-navigation-is-refused");
+        let px = sticky.at(bar.x + 3 + 4, bar.y + 3 + 4);
+        assert!(px[0] > 180 && px[1] < 160, "the sticky button flashes red: {px:?}");
     }
 }

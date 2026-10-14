@@ -5,7 +5,8 @@ import { TooltipSettings } from "tooltips.slint";
 
 /// Frameless fullscreen window showing one to four media (Multiview). Video tiles are native mpv windows placed on top
 /// of this scene by Rust; everything else (background, images, gutters, action bar) is drawn by the shared
-/// `MultiviewCanvas`.
+/// `MultiviewCanvas`. A single image can be browsed with the arrow keys, space, page keys and the mouse wheel
+/// (`navigation`); a video keeps all of them for mpv.
 export component MultiviewFullscreenWindow inherits Window {
     title: "RustView - Fullscreen (Multiview)";
     no-frame: true;
@@ -14,6 +15,7 @@ export component MultiviewFullscreenWindow inherits Window {
     in property <[MultiviewGutterView]> gutters;
     in property <int> bar-tile: -1;
     in property <[MultiviewActionView]> bar-actions;
+    in property <int> navigation: 0; // 0 = off, 1 = previous/next allowed, 2 = refused (sticky single image)
     in property <bool> enable-tooltips: true;
     in property <int> tooltip-delay-ms: 750;
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
@@ -24,6 +26,8 @@ export component MultiviewFullscreenWindow inherits Window {
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
     callback background-clicked(bool /* is_ctrl */);
     callback middle-clicked();
+    callback navigate(bool /* forward */);
+    callback wheel(length /* delta-y */);
     callback gutter-drag-started(int);
     callback gutter-dragged(int, length /* distance from drag start */);
     callback gutter-drag-finished(int);
@@ -70,6 +74,16 @@ export component MultiviewFullscreenWindow inherits Window {
                 root.request-rename();
                 return accept;
             }
+            if root.navigation != 0 {
+                if event.text == Key.RightArrow || event.text == Key.DownArrow || event.text == Key.PageDown || event.text == Key.Space {
+                    root.navigate(true);
+                    return accept;
+                }
+                if event.text == Key.LeftArrow || event.text == Key.UpArrow || event.text == Key.PageUp {
+                    root.navigate(false);
+                    return accept;
+                }
+            }
             return reject;
         }
     }
@@ -84,6 +98,7 @@ export component MultiviewFullscreenWindow inherits Window {
         gutters: root.gutters;
         bar-tile: root.bar-tile;
         bar-actions: root.bar-actions;
+        wheel-navigation: root.navigation != 0;
         screen: { x: 0px, y: 0px, width: root.width, height: root.height };
         background-mode: root.background-mode;
 
@@ -95,6 +110,9 @@ export component MultiviewFullscreenWindow inherits Window {
         }
         middle-clicked => {
             root.middle-clicked();
+        }
+        wheel(delta) => {
+            root.wheel(delta);
         }
         gutter-drag-started(index) => {
             root.gutter-drag-started(index);

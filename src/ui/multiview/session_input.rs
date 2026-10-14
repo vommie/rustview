@@ -101,6 +101,12 @@ impl Session {
         outcome
     }
 
+    /// The application finished what a button asked for: the button flashes green, or red if it failed.
+    pub(super) fn action_finished(&mut self, media_id: MediaId, action: ActionId, ok: bool) {
+        self.instance.lock().action_finished(media_id, action, ok);
+        self.refresh();
+    }
+
     /// The hover bar was drawn, moved or hidden: the video window below it is cut open (or closed again).
     pub(super) fn on_bar_overlay(&mut self, visible: bool, x: f32, y: f32, w: f32, h: f32) {
         let dpi = self.window.upgrade().map_or(1.0, |win| win.window().scale_factor());
@@ -161,6 +167,7 @@ impl Session {
         if !self.populated || self.instance.lock().origin() != OriginKind::Browse {
             return;
         }
+        self.debounce.stop();
         let wanted = eligibility::wanted(&state.read());
         let plan = self.instance.lock().plan_follow(&wanted);
         if plan.is_noop() {
@@ -180,7 +187,17 @@ impl Session {
                 .map(|seed| (seed.media_id, seed))
                 .collect()
         };
-        self.instance.lock().apply_follow(&plan, seeds);
+        let mut instance = self.instance.lock();
+        instance.apply_follow(&plan, seeds);
+        {
+            let st = state.read();
+            for &id in &plan.add {
+                if let Some(thumbnail) = st.folder_thumbnails.get(&id) {
+                    instance.set_placeholder(id, thumbnail.clone());
+                }
+            }
+        }
+        drop(instance);
         self.refresh();
     }
 }

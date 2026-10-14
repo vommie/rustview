@@ -7,6 +7,7 @@
 pub mod eligibility;
 pub mod grid_host;
 pub mod handle;
+mod navigation;
 mod router;
 #[cfg(test)]
 mod screenshot_lab;

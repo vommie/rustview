@@ -404,7 +404,7 @@ impl MultiviewInstance {
                 rect: relative(projection.rect(placed.content)),
                 kind: tile.kind,
                 pixels: tile.pixels.clone(),
-                is_loading: tile.is_loading,
+                is_loading: tile.is_loading && tile.pixels.is_none(),
                 error: tile.error.clone(),
                 actions: self.action_views(index),
             })
@@ -425,6 +425,7 @@ impl MultiviewInstance {
             tiles,
             gutters,
             bar_tile: self.bar_tile,
+            navigation: self.navigation(),
         }
     }
 }
