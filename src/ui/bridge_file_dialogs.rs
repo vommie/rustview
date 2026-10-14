@@ -4,7 +4,7 @@ pub use super::bridge_file_dialog_conflict::{
 pub use super::bridge_file_dialog_delete::DeleteFileDialogController;
 pub use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 pub use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
-pub use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+pub use super::multiview::MultiviewHandle;
 pub use super::bridge_inspector::BridgeInspector;
 pub use super::bridge_media::BridgeMedia;
 pub use super::bridge_state::UiState;
@@ -47,7 +47,7 @@ pub struct RenameDialogParams<'a> {
     pub ctx: &'a FileDialogContext,
     pub conflict_dialog: &'a FileOpsConflictDialogController,
     pub missing_dialog: &'a MissingFileDialogController,
-    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub fullscreen: &'a MultiviewHandle,
 }
 
 pub struct FileRenameDialogController;
@@ -62,7 +62,7 @@ impl FileRenameDialogController {
         let ctx = params.ctx;
         let conflict_dialog = params.conflict_dialog;
         let _missing_dialog = params.missing_dialog;
-        let fullscreen_controller = params.fullscreen_controller;
+        let fullscreen = params.fullscreen;
 
         let current_target = {
             let st = ctx.state.read();
@@ -164,7 +164,7 @@ impl FileRenameDialogController {
         let win_main_conf = window.clone_strong();
         let conflict_dlg_conf = conflict_dialog.clone();
         let dlg_ref_conf = dialog_ref.clone();
-        let fs_conf = fullscreen_controller.clone();
+        let fs_conf = fullscreen.clone();
         let target_id_conf = media_id;
         let orig_name_conf = current_name;
 
@@ -249,7 +249,7 @@ impl FileRenameDialogController {
         let dlg_ref_cancel = dialog_ref.clone();
         let st_cancel = ctx.state.clone();
         let win_main_cancel = window.clone_strong();
-        let fs_cancel = fullscreen_controller.clone();
+        let fs_cancel = fullscreen.clone();
         win.on_cancelled(move || {
             Self::close(&dlg_ref_cancel, &st_cancel, &win_main_cancel, &fs_cancel);
         });
@@ -257,7 +257,7 @@ impl FileRenameDialogController {
         let dlg_ref_close = dialog_ref.clone();
         let st_close = ctx.state.clone();
         let win_main_close = window.clone_strong();
-        let fs_close = fullscreen_controller.clone();
+        let fs_close = fullscreen.clone();
         win.window().on_close_requested(move || {
             Self::close(&dlg_ref_close, &st_close, &win_main_close, &fs_close);
             CloseRequestResponse::HideWindow
@@ -272,13 +272,13 @@ impl FileRenameDialogController {
         dialog_ref: &Rc<RefCell<Option<FileRenameDialog>>>,
         state: &Arc<RwLock<UiState>>,
         window: &MainWindow,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
     ) {
         if let Some(ref win) = *dialog_ref.borrow() {
             let _ = win.hide();
         }
         state.write().active_file_rename_target = None;
-        if !fullscreen_controller.is_modal_open() {
+        if !fullscreen.is_isolated_open() {
             window.set_is_modal_locked(false);
         }
     }
@@ -290,7 +290,7 @@ impl FileRenameDialogController {
         overwrite: bool,
         ctx: &FileDialogContext,
         window: &MainWindow,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
     ) {
         match ctx
             .library
@@ -312,14 +312,7 @@ impl FileRenameDialogController {
                 ctx.tab_manager.notify_media_renamed(media_id, new_name);
                 ctx.tab_manager.notify_media_refreshed(media_id, &updated_record);
 
-                if fullscreen_controller.is_open() {
-                    fullscreen_controller.sync_active_tab(&ctx.tab_manager, &ctx.settings);
-                    fullscreen_controller.update_quick_fullscreen_media(
-                        media_id,
-                        &ctx.library,
-                        &ctx.settings,
-                    );
-                }
+                fullscreen.sync_tab(&ctx.tab_manager);
 
                 StatusBarBridge::success(window, format!("Renamed file to '{}'", new_name));
                 BridgeInspector::update(window, &ctx.state);

@@ -1,6 +1,6 @@
 use super::MainWindow;
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::{BridgeMedia, MediaReloadOptions};
 use super::bridge_state::{LastActivePanel, UiState};
@@ -37,7 +37,7 @@ pub struct FileClickContext<'a> {
     pub tab_manager: &'a Arc<ViewerTabManager>,
     pub state: &'a Arc<RwLock<UiState>>,
     pub last_click: &'a Arc<Mutex<Option<LastClickRecord>>>,
-    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub fullscreen: &'a MultiviewHandle,
 }
 
 /// Discriminant representing the detected double click type.
@@ -56,7 +56,7 @@ pub struct LastClickRecord {
     pub is_ctrl: bool,
 }
 
-/// Subsystem managing media file selection calculations, fast in-place model mutations, clicks, and quick fullscreen triggers.
+/// Subsystem managing media file selection calculations, fast in-place model mutations, clicks, and the triggers that drive the fullscreen Multiview.
 pub struct BridgeFileSelection;
 
 impl BridgeFileSelection {
@@ -68,7 +68,7 @@ impl BridgeFileSelection {
         tab_manager: Arc<ViewerTabManager>,
         state: Arc<RwLock<UiState>>,
         last_click: Arc<Mutex<Option<LastClickRecord>>>,
-        fullscreen_controller: ImageFullscreenDialogController,
+        fullscreen: MultiviewHandle,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
@@ -76,7 +76,7 @@ impl BridgeFileSelection {
         let tm = tab_manager.clone();
         let st = state.clone();
         let lc = last_click;
-        let fs = fullscreen_controller.clone();
+        let fs = fullscreen.clone();
         window.on_media_clicked(move |id, is_ctrl, is_shift| {
             Self::handle_click(
                 FileClickEvent {
@@ -91,7 +91,7 @@ impl BridgeFileSelection {
                     tab_manager: &tm,
                     state: &st,
                     last_click: &lc,
-                    fullscreen_controller: &fs,
+                    fullscreen: &fs,
                 },
             );
         });
@@ -100,7 +100,7 @@ impl BridgeFileSelection {
         let lib_mid = library.clone();
         let set_mid = settings;
         let st_mid = state.clone();
-        let fs_mid = fullscreen_controller;
+        let fs_mid = fullscreen;
         window.on_media_middle_clicked(move |id| {
             Self::handle_middle_click(id as u64, &win_mid, &lib_mid, &set_mid, &st_mid, &fs_mid);
         });
@@ -144,7 +144,7 @@ impl BridgeFileSelection {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
     ) {
         tracing::info!(
             media_id,
@@ -165,9 +165,8 @@ impl BridgeFileSelection {
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
 
-        fullscreen_controller.dismiss_for_replacement();
-        if !fullscreen_controller
-            .multiview()
+        fullscreen.dismiss();
+        if !fullscreen
             .open(settings, state, window.as_weak())
         {
             StatusBarBridge::warn(
@@ -251,16 +250,12 @@ impl BridgeFileSelection {
         );
     }
 
-    /// Handles media tile clicks with modifier keys, double-click timing, live Quick-Fullscreen synchronization, and surgical UI updates.
+    /// Handles media tile clicks with modifier keys, double-click timing, the live Multiview follow, and surgical UI updates.
     pub fn handle_click(
         event: FileClickEvent,
         ctx: FileClickContext<'_>,
     ) {
         let t_start = Instant::now();
-
-        if ctx.fullscreen_controller.is_quick_fullscreen_active() {
-            ctx.fullscreen_controller.update_quick_fullscreen_media(event.media_id, ctx.library, ctx.settings);
-        }
 
         // 1. Double Click Detection (< 400ms delta on same ID)
         match Self::check_double_click(event, ctx.last_click) {
@@ -272,6 +267,7 @@ impl BridgeFileSelection {
                     ctx.settings,
                     ctx.tab_manager,
                     ctx.window,
+                    ctx.fullscreen,
                 );
                 return;
             }
@@ -312,12 +308,12 @@ impl BridgeFileSelection {
             is_shift = event.is_shift,
             selected_count = sel_count,
             changed_rows = changed_ids.len(),
-            quick_fullscreen_active = ctx.fullscreen_controller.is_quick_fullscreen_active(),
+            fullscreen_open = ctx.fullscreen.is_open(),
             math_us = t_math.as_micros(),
             model_sync_us = t_sync.as_micros(),
             inspector_and_tags_us = t_insp.as_micros(),
             total_click_us = t_start.elapsed().as_micros(),
-            "[FileSelection: FastInPlace] Instant selection updated with tag synchronization, status bar, and live quick fullscreen"
+            "[FileSelection: FastInPlace] Instant selection updated with tag synchronization, status bar, and live fullscreen follow"
         );
     }
 
@@ -546,6 +542,7 @@ impl BridgeFileSelection {
         settings: &Arc<SettingsManager>,
         tab_manager: &Arc<ViewerTabManager>,
         window: &MainWindow,
+        fullscreen: &MultiviewHandle,
     ) {
         let (is_image, is_video, is_pending, filename) = {
             let st = state.read();
@@ -610,6 +607,7 @@ impl BridgeFileSelection {
                 library,
                 settings,
                 state,
+                fullscreen,
             );
         } else {
             tracing::info!(

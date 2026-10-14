@@ -1,4 +1,4 @@
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
@@ -388,7 +388,7 @@ impl BridgeTabGrid {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
     ) {
         tracing::info!(
             tab_id,
@@ -404,7 +404,7 @@ impl BridgeTabGrid {
         window.set_is_tab_grid_active(false);
 
         BridgeViewerTabs::sync_ui(window, tab_manager, library, settings, state);
-        BridgeViewerTabs::sync_video_embedding(window, tab_manager, fullscreen_controller, settings);
+        BridgeViewerTabs::sync_video_embedding(window, tab_manager, fullscreen, settings);
     }
 
     /// Handles Middle-Click on a TabGrid item: launches Fullscreen Viewer directly for that tab without changing active tab (Requirement 3: auto-plays).
@@ -413,14 +413,14 @@ impl BridgeTabGrid {
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
         settings: &Arc<SettingsManager>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
     ) {
         tracing::info!(
             tab_id,
             "[TabGrid: MiddleClick] Launching fullscreen for media item directly from TabGrid (Requirement 3: auto-plays)"
         );
 
-        fullscreen_controller.show_for_tab(tab_id, tab_manager, settings, window.as_weak());
+        fullscreen.open_tab(tab_id, tab_manager, settings, window.as_weak());
     }
 
     /// Handles Close Button on a TabGrid item.

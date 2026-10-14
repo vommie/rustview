@@ -27,7 +27,6 @@ pub mod bridge_folder_dialogs;
 pub mod bridge_folder_move_sync;
 pub mod bridge_folder_tree_sync;
 pub mod bridge_folders;
-pub mod bridge_image_fullscreen;
 pub mod bridge_inspector;
 pub mod bridge_media;
 pub mod bridge_rubberband;
@@ -89,7 +88,7 @@ pub use bridge_folder_dialog_rename::RenameFolderDialogController;
 pub use bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 pub use bridge_folder_move_sync::BridgeFolderMoveSync;
 pub use bridge_folder_tree_sync::FolderTreeSync;
-pub use bridge_image_fullscreen::ImageFullscreenDialogController;
+pub use multiview::MultiviewHandle;
 pub use bridge_rubberband::{
     BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams,
 };

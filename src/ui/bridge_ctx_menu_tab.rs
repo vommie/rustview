@@ -1,5 +1,5 @@
 use super::bridge_ctx_menu_media::MediaContextMenu;
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
@@ -23,7 +23,7 @@ pub struct TabActionContext<'a> {
     pub library: &'a Arc<Library>,
     pub settings: &'a Arc<SettingsManager>,
     pub state: &'a Arc<RwLock<UiState>>,
-    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub fullscreen: &'a MultiviewHandle,
 }
 
 /// Domain context menu builder and action handler for viewer tab items.
@@ -212,8 +212,7 @@ impl TabContextMenu {
                             .unwrap_or(false);
 
                         if is_video_session {
-                            let fs_dummy = ImageFullscreenDialogController::new();
-                            BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, &fs_dummy, ctx.settings);
+                            BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
                         } else if let Ok(file_path) = ctx.library.resolve_media_path(session.media_id) {
                             let tm_async = ctx.tab_manager.clone();
                             let w_weak = ctx.window.as_weak();
@@ -271,7 +270,7 @@ impl TabContextMenu {
             }
             CTX_TAB_OPEN_MULTIVIEW => {
                 tracing::info!(tab_id, "[TabContextMenu: OpenMultiview] Open the Multiview tab in fullscreen");
-                ctx.fullscreen_controller.show_for_tab(
+                ctx.fullscreen.open_tab(
                     tab_id,
                     ctx.tab_manager,
                     ctx.settings,
@@ -327,8 +326,8 @@ impl TabContextMenu {
                 );
 
                 BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
-                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
-                ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
+                ctx.fullscreen.sync_tab(ctx.tab_manager);
 
                 if ctx.window.get_active_view_mode() == 2 {
                     BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
@@ -354,8 +353,8 @@ impl TabContextMenu {
                 );
 
                 BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
-                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
-                ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
+                ctx.fullscreen.sync_tab(ctx.tab_manager);
 
                 if ctx.window.get_active_view_mode() == 2 {
                     BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
@@ -381,8 +380,8 @@ impl TabContextMenu {
                 );
 
                 BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
-                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
-                ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
+                ctx.fullscreen.sync_tab(ctx.tab_manager);
 
                 if ctx.window.get_active_view_mode() == 2 {
                     BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
@@ -399,8 +398,8 @@ impl TabContextMenu {
                 tracing::info!(tab_id, "[TabContextMenu: Close] Close tab requested from context menu");
                 ctx.tab_manager.close_tab(tab_id);
                 BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
-                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen_controller, ctx.settings);
-                ctx.fullscreen_controller.sync_active_tab(ctx.tab_manager, ctx.settings);
+                BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
+                ctx.fullscreen.sync_tab(ctx.tab_manager);
 
                 if ctx.window.get_active_view_mode() == 2 {
                     BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);

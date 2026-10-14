@@ -1,6 +1,6 @@
 //! Thread-safe face of the Multiview. The session itself (Slint window, timers) lives on the UI thread; this handle is what
 //! the rest of the application holds: open/close requests, the F2 rename target and the "is a Multiview open" flag that the
-//! drag-and-drop lock, dialogs and the tab embedding already ask the fullscreen controller about.
+//! drag-and-drop lock, dialogs and the tab embedding ask about.
 
 use super::eligibility;
 use super::navigation;
@@ -12,15 +12,17 @@ use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
 use crate::ui::MainWindow;
 use crate::ui::bridge_file_selection::BridgeFileSelection;
-use crate::ui::bridge_image_fullscreen::FullscreenCloseCallback;
 use crate::ui::bridge_state::UiState;
 use crate::ui::bridge_viewer_tabs::BridgeViewerTabs;
+use crate::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
+use crate::viewer::multiview::click::{ClickDetector, ClickKind};
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
 use crate::viewer::multiview::view::Navigation;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::{Mutex, RwLock};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 static OPEN: AtomicBool = AtomicBool::new(false);
 /// The open Multiview belongs to a tab: it is isolated from the Browse view, which stays locked while it is shown.
@@ -54,9 +56,15 @@ pub struct AppContext {
     pub state: Arc<RwLock<UiState>>,
 }
 
+/// What the application does when the fullscreen closes: the view it returns to ([`KEEP_VIEW`], 1 = tab view, 2 = tab grid)
+/// and the tab that was shown.
+pub type CloseHandler = Arc<dyn Fn(i32, Option<TabId>) + Send + Sync>;
+
 struct Shared {
     main_window: Mutex<Option<slint::Weak<MainWindow>>>,
-    close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>,
+    close_handler: Mutex<Option<CloseHandler>>,
+    /// Double clicks on the image canvas of the tab view (they open the tab in the fullscreen).
+    canvas_clicks: Mutex<ClickDetector>,
     app: Mutex<Option<AppContext>>,
     /// The instance shown by the open fullscreen Multiview (it owns the rename target).
     current: Mutex<WeakInstance>,
@@ -69,21 +77,46 @@ pub struct MultiviewHandle {
 
 impl Default for MultiviewHandle {
     fn default() -> Self {
-        Self::new(Arc::new(Mutex::new(None)))
+        Self {
+            shared: Arc::new(Shared {
+                main_window: Mutex::new(None),
+                close_handler: Mutex::new(None),
+                canvas_clicks: Mutex::new(ClickDetector::default()),
+                app: Mutex::new(None),
+                current: Mutex::new(WeakInstance::new()),
+            }),
+        }
     }
 }
 
 impl MultiviewHandle {
-    /// `close_handler` is shared with the single fullscreen controller: the same handler releases the modal lock and
-    /// re-syncs the Browse view when either fullscreen mode closes.
-    pub fn new(close_handler: Arc<Mutex<Option<FullscreenCloseCallback>>>) -> Self {
-        Self {
-            shared: Arc::new(Shared {
-                main_window: Mutex::new(None),
-                close_handler,
-                app: Mutex::new(None),
-                current: Mutex::new(WeakInstance::new()),
-            }),
+    /// Sets what the application does when the fullscreen closes (restoring the view, the video embedding, the status).
+    pub fn set_close_handler(&self, handler: impl Fn(i32, Option<TabId>) + Send + Sync + 'static) {
+        *self.shared.close_handler.lock() = Some(Arc::new(handler));
+    }
+
+    /// A click on the image canvas of the tab view: true for the second click of a double click.
+    pub fn canvas_double_click(&self) -> bool {
+        self.shared.canvas_clicks.lock().register(
+            Instant::now(),
+            false,
+            Duration::from_millis(MULTIVIEW_DOUBLE_CLICK_MS),
+        ) == ClickKind::Double
+    }
+
+    /// Shows the active tab in the fullscreen. UI thread only.
+    pub fn open_active_tab(
+        &self,
+        tab_manager: &Arc<ViewerTabManager>,
+        settings: &Arc<SettingsManager>,
+        main_window: slint::Weak<MainWindow>,
+    ) -> bool {
+        match tab_manager.get_active_tab() {
+            Some(tab) => self.open_tab(tab.id, tab_manager, settings, main_window),
+            None => {
+                tracing::warn!("[Multiview: OpenTab] No active tab to show in fullscreen");
+                false
+            }
         }
     }
 
@@ -328,9 +361,9 @@ impl MultiviewHandle {
             let _ = main_window.upgrade_in_event_loop(move |w| match tab {
                 Some(tab) => {
                     w.set_is_modal_locked(false);
-                    handler(tab.origin_mode, Some(tab.tab_id), None);
+                    handler(tab.origin_mode, Some(tab.tab_id));
                 }
-                None => handler(KEEP_VIEW, None, None),
+                None => handler(KEEP_VIEW, None),
             });
         }
     }

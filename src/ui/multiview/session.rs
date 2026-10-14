@@ -447,7 +447,7 @@ impl Session {
     }
 
     /// Builds the tiles once the native window exists: positions it on the target monitor, lays the tiles out, starts
-    /// every video (same recipe as the single quick fullscreen) and decodes the images in the background.
+    /// every video and decodes the images in the background.
     pub(super) fn populate(&mut self, xid: u64) {
         if self.populated {
             return;

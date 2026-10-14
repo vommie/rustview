@@ -1,6 +1,5 @@
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_folder_tree_sync::FolderTreeSync;
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::{LastActivePanel, UiState};
@@ -47,7 +46,6 @@ impl BridgeFolders {
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
         settings_dialog: Rc<RefCell<SettingsDialogController>>,
-        _fullscreen_controller: ImageFullscreenDialogController,
     ) {
         let lib = library.clone();
         let thumb = thumbnails.clone();

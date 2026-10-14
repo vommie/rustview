@@ -13,7 +13,7 @@ use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, 
 use super::bridge_file_selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::bridge_folders::BridgeFolders;
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
@@ -66,7 +66,7 @@ pub struct RenameActionParams<'a> {
     pub missing_dialog: &'a MissingFileDialogController,
     pub conflict_dialog: &'a FileOpsConflictDialogController,
     pub folder_dialogs: &'a FolderDialogController,
-    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub fullscreen: &'a MultiviewHandle,
 }
 
 pub struct DeleteActionParams<'a> {
@@ -89,7 +89,7 @@ pub struct UiBridge {
     tab_manager: Arc<ViewerTabManager>,
     settings: Arc<SettingsManager>,
     settings_dialog: Rc<RefCell<SettingsDialogController>>,
-    fullscreen_controller: ImageFullscreenDialogController,
+    fullscreen: MultiviewHandle,
     rename_dialog: Rc<RefCell<Option<FileRenameDialog>>>,
     favorite_rename_dialog: FavoriteRenameDialogController,
     missing_file_dialog: MissingFileDialogController,
@@ -121,8 +121,7 @@ impl UiBridge {
         let mut controller = SettingsDialogController::new(settings.clone());
         controller.set_main_window(window.as_weak());
         let settings_dialog = Rc::new(RefCell::new(controller));
-        let fullscreen_controller = ImageFullscreenDialogController::new();
-        fullscreen_controller.set_thumbnails(thumbnails.clone());
+        let fullscreen = MultiviewHandle::default();
 
         let rename_dialog = Rc::new(RefCell::new(None));
         let favorite_rename_dialog = FavoriteRenameDialogController::new();
@@ -221,7 +220,6 @@ impl UiBridge {
         let initial_win_sz = window.window().size();
         if let Some(main_xid) = crate::viewer::get_slint_window_xid(window.window()) {
             tab_manager.set_main_viewport_info(main_xid, 0, 64, initial_win_sz.width.max(800), initial_win_sz.height.max(600));
-            fullscreen_controller.set_main_viewport_info(main_xid, 0, 64, initial_win_sz.width.max(800), initial_win_sz.height.max(600));
         }
 
         window.set_is_virtual_folder(false);
@@ -243,7 +241,7 @@ impl UiBridge {
 
         BridgeSidebarPanelTabs::init(&window, &settings, &state);
 
-        fullscreen_controller.multiview().bind(
+        fullscreen.bind(
             AppContext {
                 tab_manager: tab_manager.clone(),
                 library: library.clone(),
@@ -253,21 +251,19 @@ impl UiBridge {
             },
             window.as_weak(),
         );
-        tab_host::bind(&window, fullscreen_controller.multiview().clone());
+        tab_host::bind(&window, fullscreen.clone());
 
         let win_fs_close = window.as_weak();
         let tm_fs_close = tab_manager.clone();
         let lib_fs_close = library.clone();
-        let thumb_fs_close = thumbnails.clone();
         let set_fs_close = settings.clone();
         let st_fs_close = state.clone();
-        let fs_controller_close = fullscreen_controller.clone();
+        let fs_controller_close = fullscreen.clone();
 
-        fullscreen_controller.set_close_handler(move |origin_mode, tab_id_opt, standalone_media_id_opt| {
+        fullscreen.set_close_handler(move |origin_mode, tab_id_opt| {
             let win_w = win_fs_close.clone();
             let tm = tm_fs_close.clone();
             let lib = lib_fs_close.clone();
-            let thumb = thumb_fs_close.clone();
             let set = set_fs_close.clone();
             let st = st_fs_close.clone();
             let fs_ctrl = fs_controller_close.clone();
@@ -296,16 +292,6 @@ impl UiBridge {
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                 } else {
                     tm.activate_browse();
-                    if let Some(media_id) = standalone_media_id_opt {
-                        BridgeFileSelection::select_and_reveal_media(
-                            media_id,
-                            &w,
-                            &lib,
-                            Some(&thumb),
-                            &set,
-                            &st,
-                        );
-                    }
                     BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                 }
@@ -327,7 +313,7 @@ impl UiBridge {
             tab_manager,
             settings,
             settings_dialog,
-            fullscreen_controller,
+            fullscreen,
             rename_dialog,
             favorite_rename_dialog,
             missing_file_dialog,
@@ -370,14 +356,12 @@ impl UiBridge {
         let set = bridge.settings.clone();
         let st = bridge.state.clone();
         let tm_post = bridge.tab_manager.clone();
-        let fs_post = bridge.fullscreen_controller.clone();
 
         Timer::single_shot(std::time::Duration::from_millis(50), move || {
             if let Some(win) = w_weak.upgrade() {
                 if let Some(main_xid) = crate::viewer::get_slint_window_xid(win.window()) {
                     let sz = win.window().size();
                     tm_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
-                    fs_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
                 }
                 BridgeFolders::sync_root(&win, &lib, &thumb, &set, &st);
                 BridgeMedia::update_virtual_folder_button_state(&win, &lib, &st);
@@ -505,7 +489,7 @@ impl UiBridge {
             self.thumbnails.clone(),
             self.settings.clone(),
             self.state.clone(),
-            self.fullscreen_controller.clone(),
+            self.fullscreen.clone(),
         );
 
         BridgeFolders::register_callbacks(
@@ -515,7 +499,6 @@ impl UiBridge {
             self.settings.clone(),
             self.state.clone(),
             self.settings_dialog.clone(),
-            self.fullscreen_controller.clone(),
         );
 
         BridgeSidebarPanelTabs::register_callbacks(
@@ -531,7 +514,7 @@ impl UiBridge {
             self.tab_manager.clone(),
             self.state.clone(),
             self.last_click.clone(),
-            self.fullscreen_controller.clone(),
+            self.fullscreen.clone(),
         );
 
         BridgeContextMenu::register_callbacks(
@@ -551,7 +534,7 @@ impl UiBridge {
                 conflict_dialog: self.conflict_dialog.clone(),
                 tag_dialogs: self.tag_dialogs.clone(),
                 folder_dialogs: self.folder_dialogs.clone(),
-                fullscreen_controller: self.fullscreen_controller.clone(),
+                fullscreen: self.fullscreen.clone(),
                 settings: self.settings.clone(),
             },
         );
@@ -563,7 +546,6 @@ impl UiBridge {
             self.tab_manager.clone(),
             self.settings.clone(),
             self.state.clone(),
-            self.fullscreen_controller.clone(),
         );
 
         let set_th_col = self.settings.clone();
@@ -651,7 +633,6 @@ impl UiBridge {
             self.tab_manager.clone(),
             self.settings.clone(),
             self.state.clone(),
-            self.fullscreen_controller.clone(),
         );
 
         let win_fav = self.window.clone_strong();
@@ -696,7 +677,7 @@ impl UiBridge {
     }
 
     fn register_modal_dismiss_callback(&self) {
-        let fs_ctrl = self.fullscreen_controller.clone();
+        let fs_ctrl = self.fullscreen.clone();
         let ren_dlg = self.rename_dialog.clone();
         let fav_ren_dlg = self.favorite_rename_dialog.clone();
         let set_dlg = self.settings_dialog.clone();
@@ -713,8 +694,8 @@ impl UiBridge {
             tracing::info!(
                 "[UiBridge: ModalDismiss] Main UI modal dismiss requested (backdrop clicked or Escape pressed during modal lock)"
             );
-            if fs_ctrl.is_modal_open() {
-                fs_ctrl.close();
+            if fs_ctrl.is_isolated_open() {
+                fs_ctrl.request_close();
             }
             FileRenameDialogController::close(&ren_dlg, &st, &win, &fs_ctrl);
             fav_ren_dlg.close(&win);
@@ -766,7 +747,7 @@ impl UiBridge {
         let missing_dlg = self.missing_file_dialog.clone();
         let conflict_dlg = self.conflict_dialog.clone();
         let fld_dlg = self.folder_dialogs.clone();
-        let fs_ctrl = self.fullscreen_controller.clone();
+        let fs_ctrl = self.fullscreen.clone();
 
         self.window.on_request_rename(move || {
             Self::trigger_rename_action(RenameActionParams {
@@ -782,7 +763,7 @@ impl UiBridge {
                 missing_dialog: &missing_dlg,
                 conflict_dialog: &conflict_dlg,
                 folder_dialogs: &fld_dlg,
-                fullscreen_controller: &fs_ctrl,
+                fullscreen: &fs_ctrl,
             });
         });
     }
@@ -990,11 +971,10 @@ impl UiBridge {
         let active_mode = window.get_active_view_mode();
         // F2 pressed in the fullscreen window acts on the medium there; F2 in the main window always acts on what the main
         // window shows, even while a Multiview is open next to it.
-        let from_fullscreen = super::multiview::handle::rename_requested_from_fullscreen()
-            || params.fullscreen_controller.is_legacy_active();
+        let from_fullscreen = super::multiview::handle::rename_requested_from_fullscreen();
 
         if from_fullscreen {
-            if let Some(media_id) = params.fullscreen_controller.get_active_media_id() {
+            if let Some(media_id) = params.fullscreen.rename_target() {
                 Self::open_media_rename(media_id, &params);
             }
             return;
@@ -1145,7 +1125,7 @@ impl UiBridge {
             ctx: &dialog_ctx,
             conflict_dialog: params.conflict_dialog,
             missing_dialog: params.missing_dialog,
-            fullscreen_controller: params.fullscreen_controller,
+            fullscreen: params.fullscreen,
         });
     }
 
@@ -1155,7 +1135,7 @@ impl UiBridge {
         let thumb = self.thumbnails.clone();
         let set = self.settings.clone();
         let st = self.state.clone();
-        let fs = self.fullscreen_controller.clone();
+        let fs = self.fullscreen.clone();
 
         self.window.on_media_navigate(move |direction_code, is_shift, page_rows| {
             handle_keyboard_navigate(KeyboardNavigateParams {
@@ -1167,7 +1147,7 @@ impl UiBridge {
                 thumbnails: &thumb,
                 settings: &set,
                 state: &st,
-                fullscreen_controller: &fs,
+                fullscreen: &fs,
             });
         });
     }
@@ -1178,7 +1158,7 @@ impl UiBridge {
         let lib_grid = self.library.clone();
         let set_grid = self.settings.clone();
         let st_grid = self.state.clone();
-        let fs_grid = self.fullscreen_controller.clone();
+        let fs_grid = self.fullscreen.clone();
 
         self.window.on_tab_grid_clicked(move || {
             tracing::info!("[UiBridge: TabGrid] Tab-Grid button clicked. Switching to Masonry Tab Grid view");
@@ -1197,7 +1177,7 @@ impl UiBridge {
         let lib_left = self.library.clone();
         let set_left = self.settings.clone();
         let st_left = self.state.clone();
-        let fs_left = self.fullscreen_controller.clone();
+        let fs_left = self.fullscreen.clone();
         self.window.on_tab_grid_item_left_clicked(move |tab_id| {
             BridgeTabGrid::handle_item_left_clicked(
                 tab_id as u64,
@@ -1213,7 +1193,7 @@ impl UiBridge {
         let win_mid = self.window.clone_strong();
         let tm_mid = self.tab_manager.clone();
         let set_mid = self.settings.clone();
-        let fs_mid = self.fullscreen_controller.clone();
+        let fs_mid = self.fullscreen.clone();
         self.window.on_tab_grid_item_middle_clicked(move |tab_id| {
             BridgeTabGrid::handle_item_middle_clicked(
                 tab_id as u64,
@@ -1361,7 +1341,7 @@ impl UiBridge {
         let thumb_start = self.thumbnails.clone();
         let st_start = self.state.clone();
         let autoscroll_start = self.dnd_foldertree_autoscroller.clone();
-        let fs_start = self.fullscreen_controller.clone();
+        let fs_start = self.fullscreen.clone();
         self.window.on_media_drag_started(move |id, x, y| {
             BridgeDnd::handle_drag_started(DragStartParams {
                 media_id: id as u64,
@@ -1372,7 +1352,7 @@ impl UiBridge {
                 thumbnails: &thumb_start,
                 state: &st_start,
                 autoscroller: &autoscroll_start,
-                fullscreen_controller: &fs_start,
+                fullscreen: &fs_start,
             });
         });
 
@@ -1516,7 +1496,7 @@ impl UiBridge {
         let right_count_clone = right_events_count;
 
         let tm_right = self.tab_manager.clone();
-        let fs_right = self.fullscreen_controller.clone();
+        let fs_right = self.fullscreen.clone();
         let set_right = self.settings.clone();
         let win_right = self.window.clone_strong();
         let lib_right = self.library.clone();
@@ -1556,7 +1536,7 @@ impl UiBridge {
 
         let set_right_fin = self.settings.clone();
         let tm_right_fin = self.tab_manager.clone();
-        let fs_right_fin = self.fullscreen_controller.clone();
+        let fs_right_fin = self.fullscreen.clone();
         let win_right_fin = self.window.clone_strong();
         let lib_right_fin = self.library.clone();
         let st_right_fin = self.state.clone();
@@ -1660,7 +1640,7 @@ impl UiBridge {
                 tab_manager: &self.tab_manager,
                 state: &self.state,
                 last_click: &self.last_click,
-                fullscreen_controller: &self.fullscreen_controller,
+                fullscreen: &self.fullscreen,
             },
         );
     }

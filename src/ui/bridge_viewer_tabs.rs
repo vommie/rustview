@@ -1,5 +1,4 @@
-use super::bridge_file_selection::DoubleClickKind;
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
@@ -32,7 +31,7 @@ pub struct TabDragEndParams<'a> {
     pub library: &'a Arc<Library>,
     pub settings: &'a Arc<SettingsManager>,
     pub state: &'a Arc<RwLock<UiState>>,
-    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub fullscreen: &'a MultiviewHandle,
     pub autoscroller: &'a TabDndAutoScroller,
 }
 
@@ -48,7 +47,7 @@ impl BridgeViewerTabs {
         thumbnails: Arc<ThumbnailManager>,
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
-        fullscreen_controller: ImageFullscreenDialogController,
+        fullscreen: MultiviewHandle,
     ) {
         let tab_autoscroller = TabDndAutoScroller::new();
 
@@ -58,7 +57,7 @@ impl BridgeViewerTabs {
         let lib_browse = library.clone();
         let st_browse = state.clone();
         let set_browse = settings.clone();
-        let fs_browse = fullscreen_controller.clone();
+        let fs_browse = fullscreen.clone();
         window.on_browse_clicked(move || {
             tracing::info!(
                 "[BridgeViewerTabs: Browse] User clicked Browse button. Switching to media browser and auto-pausing video tabs"
@@ -77,7 +76,7 @@ impl BridgeViewerTabs {
         let lib_select = library.clone();
         let st_select = state.clone();
         let set_select = settings.clone();
-        let fs_select = fullscreen_controller.clone();
+        let fs_select = fullscreen.clone();
         window.on_tab_selected(move |tab_id| {
             tracing::info!(tab_id, "[BridgeViewerTabs: Select] Tab selected by user");
             tm_select.set_active_tab_internal(tab_id as TabId, true);
@@ -94,13 +93,13 @@ impl BridgeViewerTabs {
         let lib_close = library.clone();
         let st_close = state.clone();
         let set_close = settings.clone();
-        let fs_close = fullscreen_controller.clone();
+        let fs_close = fullscreen.clone();
         window.on_tab_closed(move |tab_id| {
             tracing::info!(tab_id, "[BridgeViewerTabs: Close] Tab closed by user");
             tm_close.close_tab(tab_id as TabId);
             Self::sync_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
             Self::sync_video_embedding(&win_close, &tm_close, &fs_close, &set_close);
-            fs_close.sync_active_tab(&tm_close, &set_close);
+            fs_close.sync_tab(&tm_close);
             if win_close.get_active_view_mode() == 2 {
                 BridgeTabGrid::sync_tab_grid_ui(
                     &win_close,
@@ -118,7 +117,7 @@ impl BridgeViewerTabs {
         let lib_wheel = library.clone();
         let set_wheel = settings.clone();
         let st_wheel = state.clone();
-        let fs_wheel = fullscreen_controller.clone();
+        let fs_wheel = fullscreen.clone();
         window.on_tab_wheel_scrolled(move |is_next| {
             Self::cycle_active_tab(
                 &win_wheel,
@@ -166,7 +165,7 @@ impl BridgeViewerTabs {
         let lib_dend = library.clone();
         let set_dend = settings.clone();
         let st_dend = state.clone();
-        let fs_dend = fullscreen_controller.clone();
+        let fs_dend = fullscreen.clone();
         let scroller_dend = tab_autoscroller.clone();
         window.on_tab_drag_ended(move |tab_id, _target_idx| {
             Self::handle_tab_drag_ended(TabDragEndParams {
@@ -176,7 +175,7 @@ impl BridgeViewerTabs {
                 library: &lib_dend,
                 settings: &set_dend,
                 state: &st_dend,
-                fullscreen_controller: &fs_dend,
+                fullscreen: &fs_dend,
                 autoscroller: &scroller_dend,
             });
         });
@@ -206,7 +205,7 @@ impl BridgeViewerTabs {
         let lib_v_close = library.clone();
         let st_v_close = state.clone();
         let set_v_close = settings.clone();
-        let fs_v_close = fullscreen_controller.clone();
+        let fs_v_close = fullscreen.clone();
         window.on_viewer_close_tab(move || {
             if let Some(active_id) = tm_v_close.active_tab_id() {
                 tracing::info!(
@@ -222,7 +221,7 @@ impl BridgeViewerTabs {
                     &st_v_close,
                 );
                 Self::sync_video_embedding(&win_v_close, &tm_v_close, &fs_v_close, &set_v_close);
-                fs_v_close.sync_active_tab(&tm_v_close, &set_v_close);
+                fs_v_close.sync_tab(&tm_v_close);
                 if win_v_close.get_active_view_mode() == 2 {
                     BridgeTabGrid::sync_tab_grid_ui(
                         &win_v_close,
@@ -242,7 +241,7 @@ impl BridgeViewerTabs {
         let thumb_v_refresh = thumbnails;
         let set_v_refresh = settings.clone();
         let st_v_refresh = state.clone();
-        let fs_v_refresh = fullscreen_controller.clone();
+        let fs_v_refresh = fullscreen.clone();
         window.on_viewer_refresh(move || {
             if BridgeMedia::is_system_busy(&win_v_refresh, &thumb_v_refresh, &st_v_refresh) {
                 StatusBarBridge::warn(
@@ -260,7 +259,7 @@ impl BridgeViewerTabs {
                 &set_v_refresh,
                 &st_v_refresh,
             );
-            fs_v_refresh.sync_active_tab(&tm_v_refresh, &set_v_refresh);
+            fs_v_refresh.sync_tab(&tm_v_refresh);
         });
 
         // 8. Previous / Next Navigation in active list
@@ -269,7 +268,7 @@ impl BridgeViewerTabs {
         let lib_prev = library.clone();
         let st_prev = state.clone();
         let set_prev = settings.clone();
-        let fs_prev = fullscreen_controller.clone();
+        let fs_prev = fullscreen.clone();
         window.on_viewer_previous(move || {
             Self::navigate_adjacent(
                 &win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, &fs_prev, false,
@@ -282,7 +281,7 @@ impl BridgeViewerTabs {
         let lib_next = library.clone();
         let st_next = state.clone();
         let set_next = settings.clone();
-        let fs_next = fullscreen_controller.clone();
+        let fs_next = fullscreen.clone();
         window.on_viewer_next(move || {
             Self::navigate_adjacent(
                 &win_next, &tm_next, &lib_next, &set_next, &st_next, &fs_next, true,
@@ -294,13 +293,13 @@ impl BridgeViewerTabs {
         let win_fs = window.clone_strong();
         let tm_fs = tab_manager.clone();
         let set_fs = settings.clone();
-        let fs_ctrl = fullscreen_controller.clone();
+        let fs_ctrl = fullscreen.clone();
         window.on_viewer_image_clicked(move || {
-            if fs_ctrl.check_double_click(false) == DoubleClickKind::Normal {
+            if fs_ctrl.canvas_double_click() {
                 tracing::info!(
                     "[BridgeViewerTabs: DoubleClick] Double-click detected on viewer canvas. Launching fullscreen viewer window (auto-play)..."
                 );
-                fs_ctrl.show(&tm_fs, &set_fs, win_fs.as_weak());
+                fs_ctrl.open_active_tab(&tm_fs, &set_fs, win_fs.as_weak());
             }
         });
 
@@ -308,19 +307,19 @@ impl BridgeViewerTabs {
         let win_fs_mid = window.clone_strong();
         let tm_fs_mid = tab_manager.clone();
         let set_fs_mid = settings.clone();
-        let fs_ctrl_mid = fullscreen_controller.clone();
+        let fs_ctrl_mid = fullscreen.clone();
         window.on_viewer_image_middle_clicked(move || {
             tracing::info!(
                 "[BridgeViewerTabs: MiddleClick] Middle-click detected on viewer canvas. Launching fullscreen viewer window directly (auto-play)..."
             );
-            fs_ctrl_mid.show(&tm_fs_mid, &set_fs_mid, win_fs_mid.as_weak());
+            fs_ctrl_mid.open_active_tab(&tm_fs_mid, &set_fs_mid, win_fs_mid.as_weak());
         });
 
         // 10a. The area of a Multiview tab changed (window or sidebar resize): place its native video windows
         let win_mv_geom = window.clone_strong();
         let tm_mv_geom = tab_manager.clone();
         let set_mv_geom = settings.clone();
-        let fs_mv_geom = fullscreen_controller.clone();
+        let fs_mv_geom = fullscreen.clone();
         window.on_multiview_viewport_changed(move || {
             if win_mv_geom.get_viewer_is_multiview() {
                 Self::sync_video_embedding(&win_mv_geom, &tm_mv_geom, &fs_mv_geom, &set_mv_geom);
@@ -331,7 +330,7 @@ impl BridgeViewerTabs {
         let win_geom = window.clone_strong();
         let tm_geom = tab_manager;
         let set_geom = settings;
-        let fs_geom = fullscreen_controller;
+        let fs_geom = fullscreen;
         window.on_viewer_viewport_geometry_changed(move |_vx, _vy, _vw, _vh| {
             Self::sync_video_embedding(&win_geom, &tm_geom, &fs_geom, &set_geom);
         });
@@ -342,10 +341,10 @@ impl BridgeViewerTabs {
         player: &Arc<crate::viewer::MpvPlayer>,
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
         settings: &Arc<SettingsManager>,
     ) {
-        let fs_toggle = fullscreen_controller.clone();
+        let fs_toggle = fullscreen.clone();
         let tm_toggle = tab_manager.clone();
         let set_toggle = settings.clone();
         let win_toggle = window.as_weak();
@@ -355,16 +354,16 @@ impl BridgeViewerTabs {
             let tm = tm_toggle.clone();
             let set = set_toggle.clone();
             let _ = win_toggle.upgrade_in_event_loop(move |w| {
-                if fs.is_modal_open() {
+                if fs.is_isolated_open() {
                     tracing::info!(
                         "[BridgeViewerTabs: MpvDblClick] Fullscreen exit requested via MPV event"
                     );
-                    fs.close();
+                    fs.request_close();
                 } else if w.get_active_view_mode() == 1 {
                     tracing::info!(
                         "[BridgeViewerTabs: MpvDblClick] Fullscreen enter requested via MPV event (auto-play)"
                     );
-                    fs.show(&tm, &set, w.as_weak());
+                    fs.open_active_tab(&tm, &set, w.as_weak());
                 }
             });
         });
@@ -397,7 +396,7 @@ impl BridgeViewerTabs {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
         is_next: bool,
     ) {
         let total_tabs = tab_manager.tab_count();
@@ -423,7 +422,7 @@ impl BridgeViewerTabs {
             window.set_is_browse_active(false);
             window.set_active_view_mode(1);
             Self::sync_ui(window, tab_manager, library, settings, state);
-            fullscreen_controller.sync_active_tab(tab_manager, settings);
+            fullscreen.sync_tab(tab_manager);
         }
     }
 
@@ -633,7 +632,7 @@ impl BridgeViewerTabs {
         Self::sync_video_embedding(
             params.window,
             params.tab_manager,
-            params.fullscreen_controller,
+            params.fullscreen,
             params.settings,
         );
 
@@ -681,12 +680,12 @@ impl BridgeViewerTabs {
     pub fn sync_video_embedding(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
         settings: &Arc<SettingsManager>,
     ) {
         // Only a fullscreen that is isolated from the Browse view (it shows a tab's own player) owns the video windows; a
         // Multiview that follows the Browse selection leaves the embedding of tab videos alone.
-        if fullscreen_controller.is_modal_open() {
+        if fullscreen.is_isolated_open() {
             return;
         }
 
@@ -765,7 +764,6 @@ impl BridgeViewerTabs {
         let phys_h = (logical_h * scale).round() as u32;
 
         tab_manager.set_main_viewport_info(main_xid, phys_x, phys_y, phys_w, phys_h);
-        fullscreen_controller.set_main_viewport_info(main_xid, phys_x, phys_y, phys_w, phys_h);
 
         if let Some(active_session) = active_tab
             && let TabPayload::Video(ref vid) = active_session.payload
@@ -774,7 +772,7 @@ impl BridgeViewerTabs {
                 &vid.player,
                 window,
                 tab_manager,
-                fullscreen_controller,
+                fullscreen,
                 settings,
             );
 
@@ -846,7 +844,7 @@ impl BridgeViewerTabs {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
         is_next: bool,
     ) {
         let active_media_id = match tab_manager.get_active_media_id() {
@@ -902,7 +900,7 @@ impl BridgeViewerTabs {
             match tab_manager.navigate_active_tab_to_media(target_id) {
                 Ok(tab_id) => {
                     Self::sync_ui(window, tab_manager, library, settings, state);
-                    fullscreen_controller.sync_active_tab(tab_manager, settings);
+                    fullscreen.sync_tab(tab_manager);
 
                     let target_session = tab_manager.get_tab(tab_id);
                     let is_image = target_session
@@ -922,7 +920,7 @@ impl BridgeViewerTabs {
                             &vid.player,
                             window,
                             tab_manager,
-                            fullscreen_controller,
+                            fullscreen,
                             settings,
                         );
                     }
@@ -933,7 +931,7 @@ impl BridgeViewerTabs {
                         let lib_async = library.clone();
                         let st_async = state.clone();
                         let set_async = settings.clone();
-                        let fs_async = fullscreen_controller.clone();
+                        let fs_async = fullscreen.clone();
 
                         rayon::spawn(move || {
                             let load_res = HighResImageLoader::load_full_resolution(&file_path);
@@ -969,7 +967,7 @@ impl BridgeViewerTabs {
                                     }
                                 }
                                 Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                                fs_async.sync_active_tab(&tm_async, &set_async);
+                                fs_async.sync_tab(&tm_async);
                             });
                         });
                     }
@@ -993,7 +991,7 @@ impl BridgeViewerTabs {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        fullscreen_controller: &ImageFullscreenDialogController,
+        fullscreen: &MultiviewHandle,
     ) {
         if media_ids.is_empty() {
             return;
@@ -1007,6 +1005,7 @@ impl BridgeViewerTabs {
                 library,
                 settings,
                 state,
+                fullscreen,
             );
             return;
         }
@@ -1111,7 +1110,7 @@ impl BridgeViewerTabs {
                         Self::sync_video_embedding(
                             window,
                             tab_manager,
-                            fullscreen_controller,
+                            fullscreen,
                             settings,
                         );
                     } else {
@@ -1290,6 +1289,7 @@ impl BridgeViewerTabs {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
+        fullscreen: &MultiviewHandle,
     ) {
         let t0 = Instant::now();
 
@@ -1328,8 +1328,7 @@ impl BridgeViewerTabs {
 
                 if is_video_session {
                     if file_exists {
-                        let fs_dummy = ImageFullscreenDialogController::new();
-                        Self::sync_video_embedding(window, tab_manager, &fs_dummy, settings);
+                        Self::sync_video_embedding(window, tab_manager, fullscreen, settings);
                     } else {
                         tab_manager.hide_all_video_subwindows();
                     }

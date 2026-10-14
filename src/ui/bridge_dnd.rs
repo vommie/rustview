@@ -2,7 +2,7 @@ use super::bridge_file_dialog_conflict::{ConflictDialogParams, FileOpsConflictDi
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folders::BridgeFolders;
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
@@ -41,7 +41,7 @@ pub struct DragStartParams<'a> {
     pub thumbnails: &'a Arc<ThumbnailManager>,
     pub state: &'a Arc<RwLock<UiState>>,
     pub autoscroller: &'a DndFolderTreeAutoScroller,
-    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub fullscreen: &'a MultiviewHandle,
 }
 
 pub struct BatchTransferParams<'a> {
@@ -64,7 +64,7 @@ impl BridgeDnd {
 
         // A fullscreen that is isolated from the Browse view locks the main window; a Multiview that follows the Browse
         // selection does not, so dragging works next to it.
-        if params.fullscreen_controller.is_modal_open() {
+        if params.fullscreen.is_isolated_open() {
             tracing::debug!(
                 media_id = params.media_id,
                 "[MediaDrag: Blocked] Drag & Drop disabled while an isolated fullscreen is open"

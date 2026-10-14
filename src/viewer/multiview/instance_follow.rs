@@ -2,8 +2,8 @@
 //!
 //! The pure planner (`follow`) decides which tiles stay, leave and join; this applies the plan: tiles that stay keep
 //! running (and keep their pinned width), a newcomer that takes the slot of a leaving tile inherits the slot's width, and a
-//! video that replaces a video reuses the player of the leaving tile (`loadfile replace`, like the former quick fullscreen
-//! browsed videos) so volume, speed and loop settings carry over.
+//! video that replaces a video reuses the player of the leaving tile (`loadfile replace`) so volume, speed and loop
+//! settings carry over.
 
 use super::audio::{self, TileAudio};
 use super::follow::{self, FollowPlan, Shown, Wanted};

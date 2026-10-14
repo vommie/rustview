@@ -1,8 +1,7 @@
 //! Runtime state of one Multiview tile and the creation of its native video window.
 //!
-//! A video tile is set up exactly like the standalone video of the single quick fullscreen: an `X11VideoSubwindow` below the
-//! host window, an `MpvPlayer` attached to it, the same callbacks, `load_file` + `play`. mpv does whatever it does
-//! inside its rectangle; the layout only decides where that rectangle is.
+//! A video tile is an `X11VideoSubwindow` below the host window with an `MpvPlayer` attached to it, the usual callbacks,
+//! `load_file` + `play`. mpv does whatever it does inside its rectangle; the layout only decides where that rectangle is.
 
 use super::actions::ActionId;
 use super::audio::TileAudio;
@@ -178,8 +177,8 @@ pub fn create_video(
     })
 }
 
-/// Plays another medium in the player of `video`, the way the former quick fullscreen browsed videos: one player and one
-/// window, `loadfile replace`, so volume, speed and loop settings carry over.
+/// Plays another medium in the player of `video`: one player and one window, `loadfile replace`, so volume, speed and loop
+/// settings carry over.
 pub fn reload_video(video: &VideoTile, media_id: MediaId, path: &Path) -> Result<(), String> {
     video.current_media.store(media_id, Ordering::SeqCst);
     video.player.load_file(path).map_err(|e| e.to_string())

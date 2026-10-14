@@ -778,7 +778,7 @@ impl MpvPlayer {
                         }
                     }
 
-                    // 5. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert standalone video to background tab
+                    // 5. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert the fullscreen Multiview to a background tab
                     let convert_requested = mpv
                         .get_property::<bool>("window-maximized")
                         .unwrap_or(false);

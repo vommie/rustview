@@ -1,6 +1,5 @@
 use super::bridge_ctx_menu::BridgeContextMenu;
 use super::bridge_ctx_menu_tag::TagContextMenu;
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
@@ -1059,7 +1058,6 @@ impl BridgeTags {
         tab_manager: Arc<ViewerTabManager>,
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
-        _fullscreen_controller: ImageFullscreenDialogController,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();

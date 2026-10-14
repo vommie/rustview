@@ -2,7 +2,7 @@
 //!
 //! The order is the current Browse view; the walk is cyclic and skips media that cannot be shown (deleted, pending,
 //! corrupted - decided from in-memory flags by the caller). A current medium that is no longer part of the view
-//! (filter, folder or delete) anchors to the first (next) or last (previous) showable medium, as the former Quick-Fullscreen did.
+//! (filter, folder or delete) anchors to the first (next) or last (previous) showable medium.
 
 /// Index of the neighbor of `current` among `len` entries, or `None` if there is nothing else to show.
 pub fn cyclic_neighbor(

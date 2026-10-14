@@ -14,7 +14,7 @@ use crate::settings::LogObscurer;
 
 impl MultiviewInstance {
     /// Lets the tile of `media_id` show the lent player of a video tab: its callbacks report to this instance for the time of
-    /// the loan, and playback continues (the former tab fullscreen auto-played as well).
+    /// the loan, and playback continues.
     pub fn lend_video(&mut self, media_id: MediaId, video: VideoTile) -> bool {
         let Some(index) = self
             .tiles

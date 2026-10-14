@@ -4,7 +4,7 @@ use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFile
 use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
 use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
 use super::bridge_file_selection::BridgeFileSelection;
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
@@ -46,7 +46,7 @@ pub struct MediaActionContext<'a> {
     pub delete_file_dialog: &'a DeleteFileDialogController,
     pub remove_orphaned_dialog: &'a RemoveOrphanedFileDialogController,
     pub conflict_dialog: &'a FileOpsConflictDialogController,
-    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub fullscreen: &'a MultiviewHandle,
 }
 
 #[derive(Debug, Clone)]
@@ -645,7 +645,7 @@ impl MediaContextMenu {
                         ctx.library,
                         ctx.settings,
                         ctx.state,
-                        ctx.fullscreen_controller,
+                        ctx.fullscreen,
                     );
                 }
             }
@@ -814,9 +814,8 @@ impl MediaContextMenu {
             target_count = target_ids.len(),
             "[MediaContextMenu] 'Open in Fullscreen' action triggered"
         );
-        ctx.fullscreen_controller.dismiss_for_replacement();
-        ctx.fullscreen_controller
-            .multiview()
+        ctx.fullscreen.dismiss();
+        ctx.fullscreen
             .open(ctx.settings, ctx.state, window.as_weak());
     }
 
@@ -1145,7 +1144,7 @@ impl MediaContextMenu {
                 ctx: &dialog_ctx,
                 conflict_dialog: ctx.conflict_dialog,
                 missing_dialog: ctx.missing_file_dialog,
-                fullscreen_controller: ctx.fullscreen_controller,
+                fullscreen: ctx.fullscreen,
             });
         }
     }

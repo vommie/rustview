@@ -31,9 +31,9 @@ pub(super) fn layout_params(container: &Container, gutter_floor: i32) -> LayoutP
 }
 
 impl MultiviewInstance {
-    /// The aspect ratios the layout is solved with. A lone video fills the whole display like the former quick fullscreen
-    /// (mpv letterboxes inside its window, so wheel, keys and on-screen controller work everywhere); it is laid out with
-    /// the aspect of the container, which makes its window the whole container.
+    /// The aspect ratios the layout is solved with. A lone video fills the whole display (mpv letterboxes inside its
+    /// window, so wheel, keys and on-screen controller work everywhere); it is laid out with the aspect of the container,
+    /// which makes its window the whole container.
     fn aspects(&self) -> Vec<f32> {
         if let [only] = self.tiles.as_slice()
             && only.kind == TileKind::Video

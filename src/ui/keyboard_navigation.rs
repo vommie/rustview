@@ -1,5 +1,5 @@
 use super::bridge_file_selection::BridgeFileSelection;
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::{BridgeMedia, MediaReloadOptions};
 use super::bridge_state::{LastActivePanel, UiState};
@@ -55,7 +55,7 @@ pub struct KeyboardNavigateParams<'a> {
     pub thumbnails: &'a Arc<ThumbnailManager>,
     pub settings: &'a Arc<SettingsManager>,
     pub state: &'a Arc<RwLock<UiState>>,
-    pub fullscreen_controller: &'a ImageFullscreenDialogController,
+    pub fullscreen: &'a MultiviewHandle,
 }
 
 /// Pure mathematical calculation engine for grid and table keyboard navigation.
@@ -300,10 +300,6 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
     }
 
     params.window.invoke_scroll_media_item_into_view(target_idx as i32);
-
-    if params.fullscreen_controller.is_quick_fullscreen_active() {
-        params.fullscreen_controller.update_quick_fullscreen_media(target_media_id, params.library, params.settings);
-    }
 
     BridgeInspector::update(params.window, params.state);
     BridgeTags::sync_tag_selection(params.window, params.library, params.state);

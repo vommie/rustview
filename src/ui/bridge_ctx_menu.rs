@@ -13,7 +13,7 @@ pub use super::bridge_file_dialogs::{FileDialogContext, FileRenameContext, FileR
 use super::bridge_favorite_dialog_rename::FavoriteRenameDialogController;
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
+use super::multiview::MultiviewHandle;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_tag_dialogs::TagDialogController;
@@ -66,7 +66,7 @@ pub struct ContextMenuRegistration {
     pub conflict_dialog: FileOpsConflictDialogController,
     pub tag_dialogs: TagDialogController,
     pub folder_dialogs: FolderDialogController,
-    pub fullscreen_controller: ImageFullscreenDialogController,
+    pub fullscreen: MultiviewHandle,
     pub settings: Arc<SettingsManager>,
 }
 
@@ -225,7 +225,7 @@ impl BridgeContextMenu {
         let conflict_dlg = reg.conflict_dialog;
         let tag_dlg = reg.tag_dialogs;
         let fld_dlg = reg.folder_dialogs;
-        let fs_ctrl = reg.fullscreen_controller;
+        let fs_ctrl = reg.fullscreen;
 
         window.on_context_menu_item_clicked(move |action_id| {
             CtxMenuPresenter::dismiss(&win);
@@ -294,7 +294,7 @@ impl BridgeContextMenu {
                             library: &lib,
                             settings: &set,
                             state: &st,
-                            fullscreen_controller: &fs_ctrl,
+                            fullscreen: &fs_ctrl,
                         },
                         Some(target_tab_id),
                     );
@@ -314,7 +314,7 @@ impl BridgeContextMenu {
                         delete_file_dialog: &delete_file_dlg,
                         remove_orphaned_dialog: &remove_orphaned_dlg,
                         conflict_dialog: &conflict_dlg,
-                        fullscreen_controller: &fs_ctrl,
+                        fullscreen: &fs_ctrl,
                     };
 
                     MediaContextMenu::handle_file_action_for_ids(
@@ -343,7 +343,7 @@ impl BridgeContextMenu {
                     delete_file_dialog: &delete_file_dlg,
                     remove_orphaned_dialog: &remove_orphaned_dlg,
                     conflict_dialog: &conflict_dlg,
-                    fullscreen_controller: &fs_ctrl,
+                    fullscreen: &fs_ctrl,
                 },
             );
         });

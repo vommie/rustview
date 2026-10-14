@@ -1,5 +1,4 @@
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
-use super::bridge_image_fullscreen::ImageFullscreenDialogController;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
@@ -93,7 +92,6 @@ impl BridgeMedia {
         tab_manager: Arc<ViewerTabManager>,
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
-        _fullscreen_controller: ImageFullscreenDialogController,
     ) {
         let win = window.clone_strong();
         let lib = library.clone();
