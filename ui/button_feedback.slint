@@ -13,7 +13,8 @@ export component ButtonFeedbackOverlay inherits Rectangle {
     property <bool> flashing: false;
     property <FeedbackKind> shown: FeedbackKind.none;
     property <color> accent: root.shown == FeedbackKind.error ? Theme.status-corrupt : Theme.status-ok;
-    property <color> glyph: transparent;
+    // 0 = resting, 1 = fully flashed. Everything that is drawn derives from it, so there is nothing to reset.
+    property <float> level: 0;
 
     changed feedback => {
         if root.feedback.kind != FeedbackKind.none {
@@ -23,22 +24,21 @@ export component ButtonFeedbackOverlay inherits Rectangle {
         }
     }
 
-    background: transparent;
+    background: root.accent.with-alpha(0.92 * root.level);
     width: 100%;
     height: 100%;
 
     states [
         flash when root.flashing : {
-            background: root.accent.with-alpha(0.92);
-            glyph: Theme.surface;
+            level: 1;
             in {
-                animate background, glyph {
+                animate level {
                     duration: 80ms;
                     easing: ease-out;
                 }
             }
             out {
-                animate background, glyph {
+                animate level {
                     duration: 420ms;
                     easing: ease-in;
                 }
@@ -55,11 +55,14 @@ export component ButtonFeedbackOverlay inherits Rectangle {
         }
     }
 
+    // A fully transparent colorize means "do not tint" in Slint and would draw the raw black SVG, so the glyph is not
+    // drawn at all while the overlay rests, and is tinted with a non-zero alpha while it fades.
     AppIcon {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        visible: root.level > 0.02;
         icon: root.shown == FeedbackKind.error ? IconId.status-warning : IconId.check;
         size: root.icon-size;
-        color: root.glyph;
+        color: Theme.surface.with-alpha(root.level);
     }
 }
