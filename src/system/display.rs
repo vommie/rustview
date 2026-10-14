@@ -252,18 +252,9 @@ impl SystemDisplayService {
     }
 
     /// Emits structured startup diagnostics covering host OS, Linux kernel, session architecture, and active displays.
-    /// Logs the host environment and the connected monitors. Runs on a thread of its own: detecting the monitors starts
-    /// subprocesses (`kscreen-doctor`, `xrandr`), which must not delay the first window.
-    pub fn log_system_diagnostics() {
-        let spawned = std::thread::Builder::new()
-            .name("system-diagnostics".into())
-            .spawn(Self::log_system_diagnostics_blocking);
-        if let Err(e) = spawned {
-            tracing::warn!(error = %e, "[SystemDiagnostics: Startup] Failed to start the diagnostics thread");
-        }
-    }
-
-    fn log_system_diagnostics_blocking() {
+    /// Logs the host environment (distribution, kernel, session type). Reads two small files and the environment; no
+    /// subprocess, so it is cheap enough for the start of the launch (a crash report then says where it happened).
+    pub fn log_host_environment() {
         let distro = std::fs::read_to_string("/etc/os-release")
             .ok()
             .and_then(|content| {
@@ -285,20 +276,35 @@ impl SystemDisplayService {
         let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "unknown".into());
         let wayland_display = std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "none".into());
         let x11_display = std::env::var("DISPLAY").unwrap_or_else(|_| "none".into());
-        let pid = std::process::id();
-
-        let monitors = Self::detect_monitors();
 
         tracing::info!(
-            pid,
+            pid = std::process::id(),
             distro = %distro,
             kernel = %kernel,
             session_type = %session_type,
             desktop = %desktop,
             display = %x11_display,
             wayland_display = %wayland_display,
+            "[SystemDiagnostics: Startup] Linux host environment"
+        );
+    }
+
+    /// Logs the connected monitors on a thread of its own. Detecting them starts subprocesses (`kscreen-doctor`, `xrandr`), so
+    /// the launch calls this only after the first frame: it must neither delay the first window nor compete with it for CPU.
+    pub fn spawn_monitor_diagnostics() {
+        let spawned = std::thread::Builder::new()
+            .name("system-diagnostics".into())
+            .spawn(Self::log_monitors_blocking);
+        if let Err(e) = spawned {
+            tracing::warn!(error = %e, "[SystemDiagnostics: Monitor] Failed to start the diagnostics thread");
+        }
+    }
+
+    fn log_monitors_blocking() {
+        let monitors = Self::detect_monitors();
+        tracing::info!(
             connected_monitors = monitors.len(),
-            "[SystemDiagnostics: Startup] Linux host environment and display subsystem initialized"
+            "[SystemDiagnostics: Monitor] Display subsystem initialized"
         );
 
         for m in &monitors {

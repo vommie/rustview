@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     termination::install_signal_handlers();
 
     // Diagnostic System, Distro, Kernel, Session, and Monitor info emission (Runs ONLY ONCE at startup)
-    SystemDisplayService::log_system_diagnostics();
+    SystemDisplayService::log_host_environment();
     startup_clock::mark("Diagnostics");
 
     std::fs::create_dir_all(&data_dir)?;
@@ -137,6 +137,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let win_state = settings.get().window;
     let should_maximize = win_state.is_maximized;
     let main_weak_render = main_window.as_weak();
+    // Background work that is not needed for the first frame starts after it, so that it does not compete with it for CPU: the
+    // folder audit and the monitor diagnostics (subprocesses). Without a rendering notifier it starts at once.
+    let audit_db = library.raw_db().clone();
+    let after_first_frame: Rc<std::cell::RefCell<Option<Box<dyn FnOnce()>>>> =
+        Rc::new(std::cell::RefCell::new(Some(Box::new(move || {
+            rustview::library::FolderDiagnostics::spawn_background_audit(audit_db, "startup");
+            SystemDisplayService::spawn_monitor_diagnostics();
+        }))));
+    let after_first_frame_render = after_first_frame.clone();
     if let Err(e) = main_window
         .window()
         .set_rendering_notifier(move |state, _| match state {
@@ -151,11 +160,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tracing::info!(written, "[WindowState: Init] Maximized state written before the window is mapped");
                 }
             }
-            slint::RenderingState::AfterRendering => startup_clock::mark_first_frame(),
+            slint::RenderingState::AfterRendering => {
+                startup_clock::mark_first_frame();
+                let pending = after_first_frame_render.borrow_mut().take();
+                if let Some(start) = pending {
+                    start();
+                }
+            }
             _ => {}
         })
     {
         tracing::debug!(error = %e, "[Startup: Stage] No rendering notifier; the first frame is not logged");
+        let pending = after_first_frame.borrow_mut().take();
+        if let Some(start) = pending {
+            start();
+        }
     }
 
     // Register XDG Desktop Application ID after platform initialization
@@ -334,9 +353,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
-    // Keep a handle for the background folder audit (the library is moved into the UI bridge below)
-    let audit_db = library.raw_db().clone();
-
     // Wire UI Bridge
     let bridge = Rc::new(UiBridge::new(
         main_window.clone_strong(),
@@ -367,9 +383,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("RustView UI & Storage Engine Ready.");
     startup_clock::mark("BridgeReady");
-
-    // Read-only folder schema + media path resolution audit on a background thread (never blocks the UI)
-    rustview::library::FolderDiagnostics::spawn_background_audit(audit_db, "startup");
 
     startup_clock::mark("EventLoop");
     let result = main_window.run();
