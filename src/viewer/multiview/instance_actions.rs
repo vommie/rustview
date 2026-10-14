@@ -5,7 +5,7 @@ use super::actions::{ActionContext, ActionId, actions_for};
 use super::follow::FollowPlan;
 use super::instance::MultiviewInstance;
 use super::model::TileKind;
-use super::route::{OriginKind, UiAction};
+use super::route::{HostMode, OriginKind, UiAction};
 use super::view::{ActionView, Navigation};
 use crate::button_feedback::FeedbackKind;
 use crate::library::models::MediaId;
@@ -29,6 +29,7 @@ impl MultiviewInstance {
                 .filter(|_| tile.audio.is_some())
                 .map(|video| video.last_mute),
             sticky: tile.sticky,
+            single_tab: self.single_tab,
         })
     }
 
@@ -76,7 +77,15 @@ impl MultiviewInstance {
             }
             ActionId::OpenAsTab => UiAction::OpenTileAsTab(id),
             ActionId::Remove => self.remove_tile(index),
-            ActionId::Close => UiAction::CloseFullscreen,
+            ActionId::Close => self.close_action(),
+        }
+    }
+
+    /// What the close button does: the fullscreen closes, a tab that shows the Multiview closes with its tab.
+    fn close_action(&self) -> UiAction {
+        match self.host.surface.mode {
+            HostMode::TabView => UiAction::CloseActiveTab,
+            _ => UiAction::CloseFullscreen,
         }
     }
 
@@ -93,11 +102,12 @@ impl MultiviewInstance {
         self.bump();
     }
 
-    /// Takes the tile out of the view (the last tile cannot leave: the button is a close button then). The application
-    /// deselects the medium in the Browse view afterwards.
+    /// Takes the tile out of the view (the last tile cannot leave: the button is a close button then). A Multiview that
+    /// follows the Browse selection has the medium deselected there afterwards; the Multiview of a tab just loses a member,
+    /// and the application lets everything that follows the tab's media catch up.
     fn remove_tile(&mut self, index: usize) -> UiAction {
         if self.tiles.len() <= 1 {
-            return UiAction::CloseFullscreen;
+            return self.close_action();
         }
         let id = self.tiles[index].media_id;
         let plan = FollowPlan {
@@ -111,7 +121,17 @@ impl MultiviewInstance {
             ..FollowPlan::default()
         };
         self.apply_follow(&plan, HashMap::new());
-        UiAction::DeselectInBrowse(id)
+        match self.origin {
+            OriginKind::Browse => UiAction::DeselectInBrowse(id),
+            OriginKind::Tab => {
+                tracing::info!(
+                    media_id = id,
+                    remaining = self.tiles.len(),
+                    "[Multiview: Actions] A medium was removed from the tab"
+                );
+                UiAction::TabMemberRemoved
+            }
+        }
     }
 
     /// Plays the feedback of a button (success or error flash).
@@ -184,6 +204,7 @@ mod tests {
     use super::*;
     use crate::viewer::multiview::HostSurface;
     use crate::viewer::multiview::instance::SharedInstance;
+    use crate::viewer::multiview::layout::Rect;
     use crate::viewer::multiview::route::OriginKind;
     use crate::viewer::multiview::tile::TileSeed;
     use std::path::PathBuf;
@@ -292,12 +313,86 @@ mod tests {
     }
 
     #[test]
-    fn a_tab_snapshot_only_offers_close() {
+    fn a_tab_in_the_fullscreen_loses_media_without_touching_the_browse_view() {
+        let shared = instance(3);
+        let mut mv = shared.lock();
+        mv.set_origin(OriginKind::Tab);
+        assert_eq!(ids(&mv, 0), vec![ActionId::OpenAsTab, ActionId::Remove]);
+        mv.drag_started(0);
+        mv.dragged(120.0);
+        let pinned = mv.tiles[0].pin;
+        assert!(pinned.is_some());
+
+        assert_eq!(mv.perform_action(2, ActionId::Remove), UiAction::TabMemberRemoved);
+        assert_eq!(mv.member_ids(), vec![1, 3], "the tab keeps the other media");
+        assert_eq!(mv.tiles[0].pin, pinned, "the arrangement of the others stays");
+
+        assert_eq!(mv.perform_action(1, ActionId::Sticky), UiAction::None);
+        assert!(!mv.tiles[0].sticky, "a tab has no selection to stay independent of");
+    }
+
+    #[test]
+    fn the_last_medium_of_a_tab_in_the_fullscreen_closes_the_fullscreen() {
         let shared = instance(2);
         let mut mv = shared.lock();
         mv.set_origin(OriginKind::Tab);
+        assert_eq!(mv.perform_action(1, ActionId::Remove), UiAction::TabMemberRemoved);
+        assert_eq!(ids(&mv, 0), vec![ActionId::OpenAsTab, ActionId::Close]);
+        assert_eq!(mv.perform_action(2, ActionId::Remove), UiAction::None, "a stale click");
+        assert_eq!(mv.perform_action(2, ActionId::Close), UiAction::CloseFullscreen);
+        assert_eq!(mv.member_ids(), vec![2], "the view is never empty");
+    }
+
+    fn tab_view_instance(count: u64) -> SharedInstance {
+        let shared = instance(count);
+        {
+            let mut mv = shared.lock();
+            mv.set_origin(OriginKind::Tab);
+            mv.set_host(&HostSurface::tab_view(0, Rect::new(0, 64, 1280, 640), 1.0, Vec::new()));
+        }
+        shared
+    }
+
+    #[test]
+    fn every_image_of_a_tab_view_has_a_bar_with_open_as_tab_and_remove() {
+        let shared = tab_view_instance(3);
+        let mv = shared.lock();
+        for index in 0..3 {
+            assert_eq!(
+                ids(&mv, index),
+                vec![ActionId::OpenAsTab, ActionId::Remove],
+                "tile {index}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_tab_view_removes_media_and_the_last_one_closes_the_tab() {
+        let shared = tab_view_instance(2);
+        let mut mv = shared.lock();
+        assert_eq!(mv.perform_action(1, ActionId::Remove), UiAction::TabMemberRemoved);
+        assert_eq!(mv.member_ids(), vec![2]);
+        assert_eq!(ids(&mv, 0), vec![ActionId::OpenAsTab, ActionId::Close]);
+        assert_eq!(mv.perform_action(2, ActionId::Close), UiAction::CloseActiveTab);
+        assert_eq!(mv.member_ids(), vec![2], "closing the tab is the application's job");
+    }
+
+    #[test]
+    fn a_tab_view_opens_a_member_as_its_own_tab() {
+        let shared = tab_view_instance(2);
+        let mut mv = shared.lock();
+        assert_eq!(mv.perform_action(2, ActionId::OpenAsTab), UiAction::OpenTileAsTab(2));
+        assert_eq!(mv.member_ids(), vec![1, 2], "the member stays in the tab");
+    }
+
+    #[test]
+    fn the_fullscreen_of_a_normal_tab_only_offers_closing() {
+        let shared = instance(1);
+        let mut mv = shared.lock();
+        mv.set_origin(OriginKind::Tab);
+        mv.set_single_tab(true);
         assert_eq!(ids(&mv, 0), vec![ActionId::Close]);
-        assert_eq!(mv.perform_action(1, ActionId::Sticky), UiAction::None);
-        assert!(!mv.tiles[0].sticky, "the isolated snapshot cannot be made sticky");
+        assert_eq!(mv.perform_action(1, ActionId::OpenAsTab), UiAction::None);
+        assert_eq!(mv.perform_action(1, ActionId::Close), UiAction::CloseFullscreen);
     }
 }

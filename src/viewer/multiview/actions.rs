@@ -2,8 +2,9 @@
 //!
 //! Rust decides *which* buttons a hovered medium gets and in which order; the Slint action bar only draws them. A new
 //! action is one provider function appended to `PROVIDERS`. Providers look at where the Multiview is shown and what it
-//! was opened from: a Multiview that follows the Browse selection offers sticky/remove/open-as-tab, a snapshot that
-//! belongs to a tab stays isolated and only offers sound and closing.
+//! was opened from: a Multiview that follows the Browse selection offers sticky/remove/open-as-tab; a Multiview that
+//! belongs to a tab (shown in the tab or in the fullscreen) offers remove/open-as-tab too, but no sticky (a tab has no
+//! Browse selection to stay independent of). On the last medium remove turns into a close button that fits the host.
 
 use super::model::TileKind;
 use super::route::{HostMode, OriginKind};
@@ -53,6 +54,9 @@ pub struct ActionContext {
     /// `Some(muted)` while the tile has sound control (a playing video), else `None`.
     pub muted: Option<bool>,
     pub sticky: bool,
+    /// The Multiview is only the fullscreen view of a normal image or video tab: that tab already exists, so there is
+    /// nothing to open as a tab.
+    pub single_tab: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,7 +78,7 @@ fn interactive(ctx: &ActionContext) -> bool {
     matches!(ctx.host, HostMode::Fullscreen | HostMode::TabView)
 }
 
-/// Only a Multiview that follows the Browse selection is a workspace; a tab snapshot stays as it is.
+/// Only a Multiview that follows the Browse selection can keep media independent of that selection.
 fn is_workspace(ctx: &ActionContext) -> bool {
     ctx.host == HostMode::Fullscreen && ctx.origin == OriginKind::Browse
 }
@@ -111,7 +115,7 @@ fn sticky(ctx: &ActionContext) -> Option<ActionSpec> {
 }
 
 fn open_as_tab(ctx: &ActionContext) -> Option<ActionSpec> {
-    is_workspace(ctx).then_some(ActionSpec {
+    (interactive(ctx) && !ctx.single_tab).then_some(ActionSpec {
         id: ActionId::OpenAsTab,
         icon: Icon::OpenInBackgroundTab,
         tooltip: "Open in a background tab",
@@ -120,22 +124,29 @@ fn open_as_tab(ctx: &ActionContext) -> Option<ActionSpec> {
 }
 
 fn remove(ctx: &ActionContext) -> Option<ActionSpec> {
-    (is_workspace(ctx) && ctx.tile_count > 1).then_some(ActionSpec {
+    (interactive(ctx) && ctx.tile_count > 1).then_some(ActionSpec {
         id: ActionId::Remove,
         icon: Icon::MultiviewRemove,
-        tooltip: "Remove from this view and deselect",
+        tooltip: if ctx.origin == OriginKind::Browse {
+            "Remove from this view and deselect"
+        } else {
+            "Remove from this tab"
+        },
         active: None,
     })
 }
 
-/// The last remaining medium cannot be removed (the view is never empty), so the button closes the fullscreen instead.
+/// The last remaining medium cannot be removed (the view is never empty), so the button closes what shows it instead:
+/// the fullscreen, or the tab.
 fn close(ctx: &ActionContext) -> Option<ActionSpec> {
-    let closes = ctx.host == HostMode::Fullscreen
-        && (ctx.origin == OriginKind::Tab || ctx.tile_count <= 1);
-    closes.then_some(ActionSpec {
+    (interactive(ctx) && ctx.tile_count <= 1).then_some(ActionSpec {
         id: ActionId::Close,
         icon: Icon::Close,
-        tooltip: "Close fullscreen",
+        tooltip: if ctx.host == HostMode::Fullscreen {
+            "Close fullscreen"
+        } else {
+            "Close tab"
+        },
         active: None,
     })
 }
@@ -156,6 +167,7 @@ mod tests {
             kind,
             muted: (kind == TileKind::Video).then_some(false),
             sticky: false,
+            single_tab: false,
         }
     }
 
@@ -198,17 +210,68 @@ mod tests {
     }
 
     #[test]
-    fn a_tab_snapshot_stays_isolated() {
-        let video = ctx(HostMode::Fullscreen, OriginKind::Tab, 1, TileKind::Video);
-        assert_eq!(ids(&video), vec![ActionId::Mute, ActionId::Close]);
-        let multi = ctx(HostMode::Fullscreen, OriginKind::Tab, 3, TileKind::Image);
-        assert_eq!(ids(&multi), vec![ActionId::Close]);
+    fn a_tab_in_the_fullscreen_can_shrink_and_open_media_as_tabs() {
+        let video = ctx(HostMode::Fullscreen, OriginKind::Tab, 3, TileKind::Video);
+        assert_eq!(
+            ids(&video),
+            vec![ActionId::Mute, ActionId::OpenAsTab, ActionId::Remove]
+        );
+        let image = ctx(HostMode::Fullscreen, OriginKind::Tab, 2, TileKind::Image);
+        assert_eq!(ids(&image), vec![ActionId::OpenAsTab, ActionId::Remove]);
+        let remove = actions_for(&image).pop().expect("a remove button");
+        assert_eq!(remove.tooltip, "Remove from this tab");
+        let last = ctx(HostMode::Fullscreen, OriginKind::Tab, 1, TileKind::Image);
+        assert_eq!(ids(&last), vec![ActionId::OpenAsTab, ActionId::Close]);
+        let close = actions_for(&last).pop().expect("a close button");
+        assert_eq!((close.icon, close.tooltip), (Icon::Close, "Close fullscreen"));
     }
 
     #[test]
-    fn the_tab_view_only_offers_sound_and_the_grid_nothing() {
-        let tab = ctx(HostMode::TabView, OriginKind::Tab, 2, TileKind::Video);
-        assert_eq!(ids(&tab), vec![ActionId::Mute]);
+    fn the_fullscreen_of_a_normal_tab_only_offers_sound_and_closing() {
+        let mut video = ctx(HostMode::Fullscreen, OriginKind::Tab, 1, TileKind::Video);
+        video.single_tab = true;
+        assert_eq!(ids(&video), vec![ActionId::Mute, ActionId::Close]);
+        let mut image = ctx(HostMode::Fullscreen, OriginKind::Tab, 1, TileKind::Image);
+        image.single_tab = true;
+        assert_eq!(ids(&image), vec![ActionId::Close]);
+    }
+
+    #[test]
+    fn every_medium_of_a_tab_view_has_a_bar() {
+        let video = ctx(HostMode::TabView, OriginKind::Tab, 2, TileKind::Video);
+        assert_eq!(
+            ids(&video),
+            vec![ActionId::Mute, ActionId::OpenAsTab, ActionId::Remove]
+        );
+        let image = ctx(HostMode::TabView, OriginKind::Tab, 4, TileKind::Image);
+        assert_eq!(ids(&image), vec![ActionId::OpenAsTab, ActionId::Remove]);
+    }
+
+    #[test]
+    fn the_last_medium_of_a_tab_view_closes_the_tab() {
+        let last = ctx(HostMode::TabView, OriginKind::Tab, 1, TileKind::Image);
+        assert_eq!(ids(&last), vec![ActionId::OpenAsTab, ActionId::Close]);
+        let close = actions_for(&last).pop().expect("a close button");
+        assert_eq!((close.icon, close.tooltip), (Icon::Close, "Close tab"));
+    }
+
+    #[test]
+    fn only_a_followed_multiview_offers_sticky() {
+        for host in [HostMode::Fullscreen, HostMode::TabView] {
+            for count in 1..=4 {
+                for kind in [TileKind::Image, TileKind::Video] {
+                    let has_sticky = ids(&ctx(host, OriginKind::Tab, count, kind))
+                        .contains(&ActionId::Sticky);
+                    assert!(!has_sticky, "{host:?} with {count} tiles");
+                }
+            }
+        }
+        let browse = ctx(HostMode::Fullscreen, OriginKind::Browse, 2, TileKind::Image);
+        assert!(ids(&browse).contains(&ActionId::Sticky));
+    }
+
+    #[test]
+    fn the_grid_and_a_hidden_multiview_offer_nothing() {
         let grid = ctx(HostMode::TabGrid, OriginKind::Tab, 2, TileKind::Video);
         assert!(ids(&grid).is_empty());
         let hidden = ctx(HostMode::Hidden, OriginKind::Browse, 2, TileKind::Video);

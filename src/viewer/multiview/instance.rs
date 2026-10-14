@@ -43,6 +43,8 @@ pub struct MultiviewInstance {
     pub(super) id: u64,
     pub(super) sink: Arc<dyn MultiviewEventSink>,
     pub(super) origin: OriginKind,
+    /// The Multiview is the fullscreen view of a normal image or video tab, not a Multiview of its own.
+    pub(super) single_tab: bool,
     pub(super) tiles: Vec<TileState>,
     /// Heights of the two rows of a 2x2 grid after the user dragged the horizontal gutter; `None` = automatic. The widths
     /// the user set belong to the tiles (`TileState::pin`).
@@ -79,6 +81,7 @@ impl MultiviewInstance {
                 id,
                 sink,
                 origin: OriginKind::Browse,
+                single_tab: false,
                 tiles: seeds.into_iter().map(TileState::from_seed).collect(),
                 row_pins: None,
                 container: PLACEHOLDER_CONTAINER,
@@ -116,6 +119,11 @@ impl MultiviewInstance {
 
     pub fn set_origin(&mut self, origin: OriginKind) {
         self.origin = origin;
+    }
+
+    /// Marks the instance as the fullscreen view of a normal image or video tab (its tab exists already).
+    pub fn set_single_tab(&mut self, single_tab: bool) {
+        self.single_tab = single_tab;
     }
 
     /// The media ids of the tiles in slot order.

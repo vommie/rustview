@@ -38,6 +38,7 @@ pub(super) fn instance_for_tab(
     {
         let mut guard = instance.lock();
         guard.set_origin(OriginKind::Tab);
+        guard.set_single_tab(true);
         match &tab.payload {
             TabPayload::Image(image) => {
                 if !image.error_message.is_empty() {

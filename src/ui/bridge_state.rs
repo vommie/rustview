@@ -358,3 +358,49 @@ impl UiState {
         self.folder_hierarchy = Some(Arc::new(snapshot));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::MediaTabSession;
+    use crate::viewer::multiview::actions::ActionId;
+    use crate::viewer::multiview::instance::MultiviewInstance;
+    use crate::viewer::multiview::model::TileKind;
+    use crate::viewer::multiview::route::{OriginKind, UiAction};
+    use crate::viewer::multiview::tile::TileSeed;
+    use std::path::PathBuf;
+
+    fn seed(id: MediaId) -> TileSeed {
+        TileSeed {
+            media_id: id,
+            kind: TileKind::Image,
+            aspect: 1.78,
+            path: PathBuf::new(),
+            filename: format!("{id}.png"),
+        }
+    }
+
+    /// What `sync_ui` does for the active tab: the media of the tab become the target of tag and rating actions.
+    fn sync_like_the_tab_bar(state: &mut UiState, tab: &MediaTabSession) {
+        state.active_tab_media_ids = tab.member_ids();
+    }
+
+    #[test]
+    fn tag_and_rating_targets_follow_the_media_left_in_a_tab() {
+        let instance = MultiviewInstance::detached(vec![seed(10), seed(11), seed(12)]);
+        instance.lock().set_origin(OriginKind::Tab);
+        let tab = MediaTabSession::for_multiview(1, "Multiview".to_string(), instance.clone());
+        let mut state = UiState::default();
+        sync_like_the_tab_bar(&mut state, &tab);
+        assert_eq!(state.active_tab_selection(), Some(HashSet::from([10, 11, 12])));
+
+        let outcome = instance.lock().perform_action(11, ActionId::Remove);
+        assert_eq!(outcome, UiAction::TabMemberRemoved);
+        sync_like_the_tab_bar(&mut state, &tab);
+        assert_eq!(
+            state.active_tab_selection(),
+            Some(HashSet::from([10, 12])),
+            "an assignment after the removal must not reach the removed medium"
+        );
+    }
+}

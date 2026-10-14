@@ -676,6 +676,56 @@ mod tests {
     }
 
     #[test]
+    fn the_fullscreen_of_a_tab_removes_media_and_opens_them_as_tabs() {
+        use crate::viewer::multiview::route::OriginKind;
+        let mut lab = Lab::new(W, H, &MEDIA);
+        lab.follow(&[2, 4, 5]);
+        lab.instance.lock().set_origin(OriginKind::Tab);
+        lab.refresh();
+        let (hx, hy) = lab.center_of(1);
+        lab.pointer(hx, hy);
+        lab.pointer(hx + 2, hy);
+        lab.shot("29-tab-fullscreen-three-images");
+        let bar = lab.overlay.get().expect("the bar is shown on an image of a tab");
+        assert_eq!(bar.w, 2 * 28 + 2 + 6, "open as tab and remove, but no sticky button");
+        let button = |bar: Rect, i: i32| (bar.x + 3 + i * 30 + 14, bar.y + 3 + 14);
+
+        let open = button(bar, 0);
+        lab.click(open.0, open.1);
+        assert_eq!(lab.requested.borrow().last(), Some(&UiAction::OpenTileAsTab(4)));
+
+        let remove = button(bar, 1);
+        lab.click(remove.0, remove.1);
+        assert_eq!(lab.requested.borrow().last(), Some(&UiAction::TabMemberRemoved));
+        assert_eq!(lab.instance.lock().member_ids(), vec![2, 5], "the medium left the tab");
+        assert!(
+            !lab.requested.borrow().iter().any(|a| matches!(a, UiAction::DeselectInBrowse(_))),
+            "a tab has no Browse selection to change"
+        );
+
+        lab.refresh();
+        let (hx, hy) = lab.center_of(1);
+        lab.pointer(hx, hy);
+        lab.pointer(hx + 2, hy);
+        let bar = lab.overlay.get().expect("the bar follows to the other image");
+        let remove = button(bar, 1);
+        lab.click(remove.0, remove.1);
+        assert_eq!(lab.instance.lock().member_ids(), vec![2]);
+
+        lab.refresh();
+        let (hx, hy) = lab.center_of(0);
+        lab.pointer(hx, hy);
+        lab.pointer(hx + 2, hy);
+        lab.shot("30-tab-fullscreen-last-image");
+        let bar = lab.overlay.get().expect("the bar is shown on the last image");
+        assert_eq!(bar.w, 2 * 28 + 2 + 6, "open as tab and close");
+        let close = button(bar, 1);
+        lab.click(close.0, close.1);
+        assert_eq!(lab.requested.borrow().last(), Some(&UiAction::CloseFullscreen));
+        assert_eq!(lab.instance.lock().member_ids(), vec![2], "the view is never empty");
+    }
+
+    #[test]
     fn previous_next_applies_to_a_single_image_only() {
         let mut lab = Lab::new(W, H, &MEDIA);
         lab.follow(&[2]);

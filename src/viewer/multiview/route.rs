@@ -46,6 +46,9 @@ pub enum UiAction {
     OpenTileAsTab(u64),
     /// Action button: the medium left the Multiview, so it is deselected in the Browse view too.
     DeselectInBrowse(u64),
+    /// Action button: a medium left the Multiview of a tab, so everything that follows the tab's media (tab bar, inspector,
+    /// tag and rating targets) has to catch up.
+    TabMemberRemoved,
     /// Previous/next medium of the single image the Multiview shows (keys and mouse wheel).
     Navigate { forward: bool },
 }

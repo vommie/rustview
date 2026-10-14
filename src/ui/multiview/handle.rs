@@ -13,6 +13,7 @@ use crate::thumbnails::ThumbnailManager;
 use crate::ui::MainWindow;
 use crate::ui::bridge_file_selection::BridgeFileSelection;
 use crate::ui::bridge_state::UiState;
+use crate::ui::bridge_tab_grid::BridgeTabGrid;
 use crate::ui::bridge_viewer_tabs::BridgeViewerTabs;
 use crate::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
 use crate::viewer::multiview::click::{ClickDetector, ClickKind};
@@ -174,6 +175,19 @@ impl MultiviewHandle {
             &app.state,
         )
         .is_some()
+    }
+
+    /// A medium left the Multiview of a tab through its remove button: the tab bar, the inspector, the status bar and the
+    /// targets of tag and rating assignment (the tab's remaining media) catch up. UI thread only.
+    pub(super) fn tab_members_changed(&self) {
+        let Some((app, window)) = self.app_and_window() else {
+            return;
+        };
+        BridgeViewerTabs::sync_ui(&window, &app.tab_manager, &app.library, &app.settings, &app.state);
+        if window.get_active_view_mode() == 2 {
+            BridgeTabGrid::sync_tab_grid_ui(&window, &app.tab_manager, &app.library, &app.settings, &app.state);
+        }
+        tracing::debug!("[Multiview: TabMembers] The application caught up with the media left in the tab");
     }
 
     /// A medium left the Multiview through its remove button: it is deselected in the Browse view too.

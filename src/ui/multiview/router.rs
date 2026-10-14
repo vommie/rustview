@@ -95,9 +95,11 @@ pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: O
         (UiAction::ScrollGrid { up }, _) => handle.scroll_grid(up),
         (UiAction::Navigate { forward }, _) => handle.navigate(forward),
         (UiAction::DeselectInBrowse(media_id), _) => handle.deselect_in_browse(media_id),
+        (UiAction::TabMemberRemoved, _) => handle.tab_members_changed(),
         (UiAction::OpenTileAsTab(media_id), _) => {
             let opened = handle.open_tile_as_tab(media_id);
             session::with_session(|s| s.action_finished(media_id, ActionId::OpenAsTab, opened));
+            tab_host::action_finished(media_id, ActionId::OpenAsTab, opened);
         }
         (other, _) => {
             tracing::debug!(?other, "[Multiview: Router] The action needs a Multiview");

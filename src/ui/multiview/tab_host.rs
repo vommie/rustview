@@ -105,6 +105,23 @@ fn on_action(tile: i32, action: i32) {
     run(outcome);
 }
 
+/// The application finished what a button of the hover bar asked for: the button flashes green, or red if it failed. Only
+/// a Multiview that is shown in the viewer tab is addressed (the fullscreen session reports to its own instance).
+pub fn action_finished(media_id: MediaId, action: ActionId, ok: bool) {
+    let Some(instance) = current_instance() else {
+        return;
+    };
+    {
+        let mut guard = instance.lock();
+        if guard.host_mode() != HostMode::TabView {
+            return;
+        }
+        guard.action_finished(media_id, action, ok);
+    }
+    drop(instance);
+    refresh();
+}
+
 /// The hover bar was drawn, moved or hidden: the video window below it is cut open (or closed again).
 fn on_bar_overlay(visible: bool, x: f32, y: f32, w: f32, h: f32) {
     let dpi = with_host(|h| h.window.clone())
