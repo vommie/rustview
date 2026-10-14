@@ -7,7 +7,7 @@ use super::instance::MultiviewInstance;
 use super::model::TileKind;
 use super::route::{OriginKind, UiAction};
 use super::view::{ActionView, Navigation};
-use crate::button_feedback::{ButtonFeedback, FeedbackKind};
+use crate::button_feedback::FeedbackKind;
 use crate::library::models::MediaId;
 use std::collections::HashMap;
 
@@ -122,7 +122,7 @@ impl MultiviewInstance {
         self.tiles[index]
             .feedback
             .entry(action)
-            .or_insert_with(ButtonFeedback::default)
+            .or_default()
             .trigger(kind);
         self.bump();
     }
