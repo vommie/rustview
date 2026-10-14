@@ -12,6 +12,8 @@ export component MultiviewCanvas inherits Rectangle {
     in property <[MultiviewGutterView]> gutters;
     in property <MultiviewScreenView> screen;
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
+    // A color that replaces the background of `background-mode` (transparent = use the mode).
+    in property <color> fill-color: transparent;
     in property <color> outer-color: #000000; // shown around the screen when the host has another aspect ratio
     // A non-interactive canvas is a picture: it has no touch areas, so clicks reach whatever is below it.
     in property <bool> interactive: true;
@@ -46,9 +48,9 @@ export component MultiviewCanvas inherits Rectangle {
         y: root.screen.y;
         width: root.screen.width;
         height: root.screen.height;
-        background: root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b);
+        background: root.fill-color != Colors.transparent ? root.fill-color : (root.background-mode == 1 ? #000000 : (root.background-mode == 2 ? #1e1e2e : #11111b));
 
-        if root.background-mode == 2 : Rectangle {
+        if root.fill-color == Colors.transparent && root.background-mode == 2 : Rectangle {
             width: 100%;
             height: 100%;
             background: #181825;

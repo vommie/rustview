@@ -231,6 +231,31 @@ pub const DEFAULT_FULLSCREEN_SPECIFIC_MONITOR: &str = "";
 pub const DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE: bool = false;
 pub const DEFAULT_FULLSCREEN_FALLBACK_TARGET: &str = "same"; // "same" or "different"
 
+// --- Fullscreen action bar (the hover buttons of a medium) ---
+pub const DEFAULT_FULLSCREEN_BAR_ENABLED: bool = true;
+pub const DEFAULT_FULLSCREEN_BAR_SHOW_MUTE: bool = true;
+pub const DEFAULT_FULLSCREEN_BAR_SHOW_STICKY: bool = true;
+pub const DEFAULT_FULLSCREEN_BAR_SHOW_OPEN_AS_TAB: bool = true;
+pub const DEFAULT_FULLSCREEN_BAR_SHOW_REMOVE: bool = true;
+/// The bar appears when the pointer comes this close (logical pixels) to the place of the bar.
+pub const DEFAULT_FULLSCREEN_BAR_REVEAL_DISTANCE_PX: u32 = 15;
+pub const MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX: u32 = 0;
+pub const MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX: u32 = 100;
+
+// --- Fullscreen sound (which videos are muted automatically while several videos are shown) ---
+pub const DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL: bool = true;
+/// Who has the sound while several videos are shown: "first" (leftmost), "newest" (the video that joined last) or
+/// "nobody" (every video starts muted).
+pub const DEFAULT_FULLSCREEN_SOUND_FOLLOWS: &str = "first";
+/// The sound passes to another video when the video that had it leaves.
+pub const DEFAULT_FULLSCREEN_SOUND_HAND_OVER: bool = true;
+
+// --- Fullscreen background ---
+/// "theme" (color of the app theme), "viewer" (the background of the viewer settings) or "custom" (`color`).
+pub const DEFAULT_FULLSCREEN_BACKGROUND_SOURCE: &str = "theme";
+/// Custom color as `#rrggbb`; equals the dark theme background so that switching to "custom" starts from what is shown.
+pub const DEFAULT_FULLSCREEN_BACKGROUND_COLOR: &str = "#11111b";
+
 // --- Multiview: 1 to 4 media in the fullscreen (not user-configurable) ---
 pub const MULTIVIEW_MAX_TILES: usize = 4;
 /// Minimum aspect ratio (width / height) for a medium to count as widescreen; exactly four widescreen media form a 2x2 grid.
@@ -239,8 +264,6 @@ pub const MULTIVIEW_FALLBACK_ASPECT: f32 = 16.0 / 9.0;
 pub const MULTIVIEW_GUTTER_LOGICAL_PX: f32 = 16.0;
 pub const MULTIVIEW_MIN_COLUMN_LOGICAL_PX: f32 = 160.0;
 pub const MULTIVIEW_SNAP_LOGICAL_PX: f32 = 8.0;
-/// The action bar disappears when the pointer has not moved for this long (it stays while the pointer is on the bar).
-pub const MULTIVIEW_BAR_IDLE_MS: u64 = 2500;
 pub const MULTIVIEW_SELECTION_DEBOUNCE_MS: u64 = 150;
 pub const MULTIVIEW_TICK_MS: u64 = 50;
 /// The mute state inside mpv (key `m`, on-screen controller) is polled every this many ticks.
@@ -671,11 +694,73 @@ impl Default for ViewerSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct FullscreenActionBarSettings {
+    pub enabled: bool,
+    pub show_mute: bool,
+    pub show_sticky: bool,
+    pub show_open_as_tab: bool,
+    /// Remove (several media) and Close (the last medium) are one button that changes its role.
+    pub show_remove: bool,
+    pub reveal_distance_px: u32,
+}
+
+impl Default for FullscreenActionBarSettings {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_FULLSCREEN_BAR_ENABLED,
+            show_mute: DEFAULT_FULLSCREEN_BAR_SHOW_MUTE,
+            show_sticky: DEFAULT_FULLSCREEN_BAR_SHOW_STICKY,
+            show_open_as_tab: DEFAULT_FULLSCREEN_BAR_SHOW_OPEN_AS_TAB,
+            show_remove: DEFAULT_FULLSCREEN_BAR_SHOW_REMOVE,
+            reveal_distance_px: DEFAULT_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FullscreenSoundSettings {
+    pub auto_control: bool,
+    pub follows: String, // "first", "newest" or "nobody"
+    pub hand_over: bool,
+}
+
+impl Default for FullscreenSoundSettings {
+    fn default() -> Self {
+        Self {
+            auto_control: DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL,
+            follows: DEFAULT_FULLSCREEN_SOUND_FOLLOWS.to_string(),
+            hand_over: DEFAULT_FULLSCREEN_SOUND_HAND_OVER,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FullscreenBackgroundSettings {
+    pub source: String, // "theme", "viewer" or "custom"
+    pub color: String,  // "#rrggbb"
+}
+
+impl Default for FullscreenBackgroundSettings {
+    fn default() -> Self {
+        Self {
+            source: DEFAULT_FULLSCREEN_BACKGROUND_SOURCE.to_string(),
+            color: DEFAULT_FULLSCREEN_BACKGROUND_COLOR.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FullscreenSettings {
     pub enable_specific_monitor: bool,
     pub specific_monitor: String,
     pub enable_fallback_rule: bool,
     pub fallback_target: String, // "same" or "different"
+    pub action_bar: FullscreenActionBarSettings,
+    pub sound: FullscreenSoundSettings,
+    pub background: FullscreenBackgroundSettings,
 }
 
 impl Default for FullscreenSettings {
@@ -685,6 +770,9 @@ impl Default for FullscreenSettings {
             specific_monitor: DEFAULT_FULLSCREEN_SPECIFIC_MONITOR.to_string(),
             enable_fallback_rule: DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE,
             fallback_target: DEFAULT_FULLSCREEN_FALLBACK_TARGET.to_string(),
+            action_bar: FullscreenActionBarSettings::default(),
+            sound: FullscreenSoundSettings::default(),
+            background: FullscreenBackgroundSettings::default(),
         }
     }
 }

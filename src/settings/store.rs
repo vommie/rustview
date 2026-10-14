@@ -17,6 +17,12 @@ use super::schema::{
     MIN_TAG_HISTORY_HEIGHT, MIN_THUMBNAIL_DB_SIZE, MIN_THUMBNAIL_WIDTH, MIN_TOOLTIP_DELAY_MS,
     MIN_VIDEO_OFFSET_PERCENT, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, MIN_WORKER_THREADS,
 };
+use super::schema::{
+    FullscreenSettings, DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE,
+    DEFAULT_FULLSCREEN_SOUND_FOLLOWS, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
+    MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
+};
+use crate::hex_color;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -249,6 +255,7 @@ impl SettingsStore {
         if fb_lower != "same" && fb_lower != "different" {
             settings.fullscreen.fallback_target = DEFAULT_FULLSCREEN_FALLBACK_TARGET.to_string();
         }
+        self.sanitize_fullscreen_extras(&mut settings.fullscreen);
 
         // Tag Settings Sanitization (including Tag History limits and height)
         settings.tags.max_history_tags = settings
@@ -327,5 +334,30 @@ impl SettingsStore {
         {
             settings.window.y = None;
         }
+    }
+
+    /// Action bar, sound and background of the fullscreen: a hand-edited file can never leave an unknown mode or color.
+    fn sanitize_fullscreen_extras(&self, fullscreen: &mut FullscreenSettings) {
+        let bar = &mut fullscreen.action_bar;
+        bar.reveal_distance_px = bar
+            .reveal_distance_px
+            .clamp(MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX);
+
+        let follows = fullscreen.sound.follows.trim().to_lowercase();
+        fullscreen.sound.follows = if matches!(follows.as_str(), "first" | "newest" | "nobody") {
+            follows
+        } else {
+            DEFAULT_FULLSCREEN_SOUND_FOLLOWS.to_string()
+        };
+
+        let source = fullscreen.background.source.trim().to_lowercase();
+        fullscreen.background.source = if matches!(source.as_str(), "theme" | "viewer" | "custom") {
+            source
+        } else {
+            DEFAULT_FULLSCREEN_BACKGROUND_SOURCE.to_string()
+        };
+        fullscreen.background.color = hex_color::parse_rgb(&fullscreen.background.color)
+            .map(hex_color::format_rgb)
+            .unwrap_or_else(|| DEFAULT_FULLSCREEN_BACKGROUND_COLOR.to_string());
     }
 }

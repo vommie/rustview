@@ -27,6 +27,7 @@ pub mod layout;
 pub mod layout_pins;
 pub mod model;
 pub mod navigation;
+pub mod prefs;
 pub mod route;
 pub mod target_pick;
 pub mod teardown;

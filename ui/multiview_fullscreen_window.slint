@@ -1,3 +1,4 @@
+import { Theme } from "styles.slint";
 import { MultiviewTileView, MultiviewGutterView } from "multiview_types.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
 
@@ -13,6 +14,12 @@ export component MultiviewFullscreenWindow inherits Window {
     in property <[MultiviewGutterView]> gutters;
     in property <int> navigation: 0; // 0 = off, 1 = previous/next allowed, 2 = refused (sticky single image)
     in property <int> background-mode: 0; // 0 = Dark Theme (#11111b), 1 = Deep Black (#000000), 2 = Checkerboard
+    // Where the background comes from: 0 = the theme, 1 = `background-mode` (the viewer setting), 2 = `custom-fill`.
+    in property <int> fill-source: 0;
+    in property <color> custom-fill: #11111b;
+    // The color behind the media (transparent when the background is drawn by `background-mode`); Rust also gives it to
+    // the video player, whose window covers the whole display when a single video is shown.
+    out property <color> resolved-fill: root.fill-source == 0 ? Theme.fullscreen-background : (root.fill-source == 2 ? root.custom-fill : transparent);
     in-out property <bool> is-ready: false;
 
     callback request-close();
@@ -83,6 +90,7 @@ export component MultiviewFullscreenWindow inherits Window {
         wheel-navigation: root.navigation != 0;
         screen: { x: 0px, y: 0px, width: root.width, height: root.height };
         background-mode: root.background-mode;
+        fill-color: root.resolved-fill;
 
         tile-clicked(index, is-ctrl) => {
             root.tile-clicked(index, is-ctrl);

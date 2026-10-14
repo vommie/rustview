@@ -6,6 +6,7 @@
 //! settings carry over.
 
 use super::audio::{self, TileAudio};
+use super::prefs;
 use super::follow::{self, FollowPlan, Shown, Wanted};
 use super::instance::MultiviewInstance;
 use super::model::TileKind;
@@ -117,7 +118,7 @@ impl MultiviewInstance {
             .filter(|&i| self.tiles[i].video.is_none())
             .collect();
         let mut slots: Vec<Option<TileAudio>> = self.tiles.iter().map(|t| t.audio).collect();
-        audio::after_reconcile(&mut slots, &fresh);
+        audio::after_reconcile(&mut slots, &fresh, &prefs::current().audio);
         for (tile, slot) in self.tiles.iter_mut().zip(slots) {
             tile.audio = slot;
         }

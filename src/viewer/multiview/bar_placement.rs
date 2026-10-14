@@ -38,6 +38,41 @@ pub fn place_bar(tile: Rect, bar_logical: (f32, f32), scale: f32) -> Option<BarP
     Some(BarPlacement { window, bar })
 }
 
+impl BarPlacement {
+    /// The same placement moved by (`dx`, `dy`): from coordinates of the host window to coordinates of the screen.
+    pub fn translated(self, dx: i32, dy: i32) -> Self {
+        let shift = |r: Rect| Rect::new(r.x + dx, r.y + dy, r.w, r.h);
+        Self {
+            window: shift(self.window),
+            bar: shift(self.bar),
+        }
+    }
+}
+
+/// Cheap superset test that needs no bar size: can the pointer be within `reveal_px` (logical pixels) of the bar of
+/// `tile`? The bar always lies inside the overlay window, which sits in the top right corner of the tile, so that corner
+/// region (window size plus margin plus reveal distance) covers every position from which the bar can be revealed.
+pub fn near_bar_corner(tile: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32) -> bool {
+    let scale = scale.max(0.5);
+    let px = |logical: f32| (logical * scale).round() as i32;
+    let reveal = px(reveal_px as f32);
+    let reach_x = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX + MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX) + reveal;
+    let reach_y = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX + MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX) + reveal;
+    pointer.0 >= tile.x + tile.w - reach_x && pointer.1 <= tile.y + reach_y
+}
+
+/// The pointer is on the bar or within `reveal_px` (logical pixels) of its edge.
+pub fn in_reveal_zone(bar: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32) -> bool {
+    let reveal = (reveal_px as f32 * scale.max(0.5)).round() as i32;
+    Rect::new(
+        bar.x - reveal,
+        bar.y - reveal,
+        bar.w + 2 * reveal,
+        bar.h + 2 * reveal,
+    )
+    .contains(pointer.0, pointer.1)
+}
+
 /// `rect` with rounded corners as the list of rectangles the X shape extension wants (one per pixel row of the corners,
 /// plus the straight middle). Used when no compositing manager blends the window: the corners must not show as black.
 pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {
@@ -63,4 +98,40 @@ pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {
     }
     push(rect.x, rect.y + r, rect.w, rect.h - 2 * r);
     rects
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_bar_is_revealed_only_near_its_own_place() {
+        let tile = Rect::new(0, 0, 800, 450);
+        let bar = place_bar(tile, (100.0, 34.0), 1.0).expect("fits").bar;
+        let (mid_x, mid_y) = (bar.x + bar.w / 2, bar.y + bar.h / 2);
+        assert!(in_reveal_zone(bar, (mid_x, mid_y), 1.0, 0), "on the bar");
+        assert!(!in_reveal_zone(bar, (bar.x - 1, mid_y), 1.0, 0), "just outside without a margin");
+        assert!(in_reveal_zone(bar, (bar.x - 15, mid_y), 1.0, 15), "inside the margin");
+        assert!(!in_reveal_zone(bar, (bar.x - 16, mid_y), 1.0, 15), "beyond the margin");
+        assert!(in_reveal_zone(bar, (bar.x - 30, mid_y), 2.0, 15), "the margin scales with the display");
+        assert!(!in_reveal_zone(bar, (100, 300), 1.0, 15), "the middle of the tile is nowhere near");
+    }
+
+    #[test]
+    fn the_cheap_corner_test_never_rejects_a_pointer_the_exact_test_accepts() {
+        let tile = Rect::new(100, 50, 800, 450);
+        for scale in [1.0_f32, 1.5, 2.0] {
+            let bar = place_bar(tile, (100.0, 34.0), scale).expect("fits").bar;
+            for reveal in [0_u32, 15, 100] {
+                for x in (tile.x..tile.x + tile.w).step_by(7) {
+                    for y in (tile.y..tile.y + tile.h).step_by(7) {
+                        if in_reveal_zone(bar, (x, y), scale, reveal) {
+                            assert!(near_bar_corner(tile, (x, y), scale, reveal), "({x}, {y}) at {scale}x, {reveal}px");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(!near_bar_corner(tile, (tile.x + 10, tile.y + tile.h - 10), 1.0, 15), "the opposite corner is far away");
+    }
 }

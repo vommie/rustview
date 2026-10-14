@@ -58,10 +58,13 @@ pub struct HostedView {
     pub navigation: Navigation,
 }
 
-/// The hover bar a host shows right now: the tile the pointer is on (and has been active on recently), where that tile is
-/// in the host window (physical pixels) and the buttons it offers.
+/// The hover bar a host may show: the tile the pointer is on, where that tile is in the host window (physical pixels),
+/// the pointer (host window coordinates) and the buttons the tile offers. The bar only appears while the pointer is
+/// within `reveal_distance_px` (logical pixels) of the place where it would be.
 pub struct BarTarget {
     pub tile: usize,
     pub rect: Rect,
     pub actions: Vec<ActionView>,
+    pub pointer: (i32, i32),
+    pub reveal_distance_px: u32,
 }

@@ -1,6 +1,7 @@
 //! Instance behavior around the tiles: creating and starting them and decoding images.
 
 use super::audio::{self, TileAudio};
+use super::prefs;
 use super::events::{DecodedImage, PlayerEvent};
 use super::image_decode;
 use super::instance::MultiviewInstance;
@@ -41,7 +42,7 @@ impl MultiviewInstance {
 
     fn assign_audio_on_open(&mut self) {
         let mut slots: Vec<Option<TileAudio>> = self.tiles.iter().map(|t| t.audio).collect();
-        audio::assign_on_open(&mut slots);
+        audio::assign_on_open(&mut slots, &prefs::current().audio);
         for (tile, slot) in self.tiles.iter_mut().zip(slots) {
             tile.audio = slot;
         }
@@ -100,6 +101,7 @@ impl MultiviewInstance {
         );
         match created {
             Ok(video) => {
+                video.player.set_background_color(self.effective_video_background());
                 let tile = &mut self.tiles[index];
                 tile.video = Some(video);
                 tracing::info!(

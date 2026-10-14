@@ -13,7 +13,8 @@ use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, 
 use super::bridge_file_selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::bridge_folders::BridgeFolders;
-use super::multiview::{MultiviewHandle, bar_overlay};
+use super::multiview::{self, MultiviewHandle, bar_overlay};
+use crate::viewer::multiview::prefs;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
@@ -208,6 +209,7 @@ impl UiBridge {
             app_settings.appearance.enable_tooltips,
             app_settings.appearance.tooltip_delay_ms as i32,
         );
+        prefs::apply(&app_settings.fullscreen);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 
         window.set_tag_history_height(initial_state.tag_history_height);
@@ -464,6 +466,11 @@ impl UiBridge {
                         new_clone.appearance.enable_tooltips,
                         new_clone.appearance.tooltip_delay_ms as i32,
                     );
+                }
+
+                if diff_clone.fullscreen_settings_changed || diff_clone.viewer_settings_changed {
+                    prefs::apply(&new_clone.fullscreen);
+                    multiview::refresh_settings(&settings);
                 }
 
                 if diff_clone.view_settings_changed {

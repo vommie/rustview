@@ -121,8 +121,8 @@ pub fn action_finished(media_id: MediaId, action: ActionId, ok: bool) {
     refresh();
 }
 
-/// Shows, moves or hides the action bar window for the tile the pointer is on (only while the Multiview is shown in the
-/// viewer tab: a fullscreen over it has its own bar).
+/// Shows, moves or hides the action bar window while the pointer is close to the bar of the hovered tile (only while the
+/// Multiview is shown in the viewer tab: a fullscreen over it has its own bar).
 fn update_bar_overlay() {
     let Some((window, instance, host_xid)) = with_host(|h| {
         Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))
@@ -135,21 +135,22 @@ fn update_bar_overlay() {
         let guard = instance.lock();
         (guard.host_mode() == HostMode::TabView).then(|| guard.bar_target()).flatten()
     };
-    let bar = target.and_then(|target| {
+    let shown = target.is_some_and(|target| {
         bar_overlay::show(&BarRequest {
             owner: BarOwner::TabView,
             host_xid,
             tile: target.tile as i32,
             tile_rect: target.rect,
+            pointer: target.pointer,
+            reveal_distance_px: target.reveal_distance_px,
             scale: window.window().scale_factor(),
             actions: views::action_views(&target.actions),
             on_action: Rc::new(on_action),
         })
     });
-    if bar.is_none() {
+    if !shown {
         bar_overlay::hide(BarOwner::TabView);
     }
-    instance.lock().set_bar_overlay(bar);
 }
 
 fn route_for(event: RoutedEvent, click: ClickKind) -> UiAction {

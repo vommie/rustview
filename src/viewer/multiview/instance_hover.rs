@@ -1,19 +1,20 @@
-//! Instance behavior around the pointer: the 50 ms tick, which tile is hovered, when the hover bar of that tile is shown
-//! and the runtime correction of aspect ratios reported by mpv.
+//! Instance behavior around the pointer: the 50 ms tick, which tile is hovered, which tile the hover bar belongs to and
+//! the runtime correction of aspect ratios reported by mpv.
 //!
 //! mpv swallows the pointer events over a video, so the hovered tile is found by asking the X server for the pointer and
-//! testing it against the tile layout. The bar is a window of its own that the host places; the instance only decides
-//! which tile it belongs to (the hovered tile, while the pointer is active or on the bar).
+//! testing it against the tile layout. The bar is a window of its own that the host places and reveals; the instance only
+//! says which tile it belongs to (the hovered one) and hands over what the host needs to decide whether the pointer is
+//! close enough to the bar.
 
 use super::instance::MultiviewInstance;
-use super::layout::Rect;
+use super::bar_placement::near_bar_corner;
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
+use super::prefs;
 use super::target_pick::pick_target;
 use super::tile::StaleProbe;
 use super::view::BarTarget;
 use crate::library::models::MediaId;
-use crate::settings::schema::{MULTIVIEW_BAR_IDLE_MS, MULTIVIEW_MUTE_POLL_TICKS};
-use std::time::{Duration, Instant};
+use crate::settings::schema::MULTIVIEW_MUTE_POLL_TICKS;
 
 impl MultiviewInstance {
     /// Runs every tick while the Multiview is shown. `pointer` is asked for only when there is something to do; it returns
@@ -21,7 +22,7 @@ impl MultiviewInstance {
     /// matter for videos.
     pub fn tick(&mut self, pointer: impl FnOnce() -> Option<(i32, i32)>) {
         self.ticks = self.ticks.wrapping_add(1);
-        self.poll_pointer(pointer(), Instant::now());
+        self.poll_pointer(pointer());
         if !self.has_video() {
             return;
         }
@@ -37,64 +38,41 @@ impl MultiviewInstance {
         self.layout.tile_at(cx, cy)
     }
 
-    fn poll_pointer(&mut self, pointer: Option<(i32, i32)>, now: Instant) {
-        if pointer != self.pointer {
-            self.pointer = pointer;
-            self.last_move = Some(now);
-        }
-        let hovered = pointer.and_then(|(x, y)| self.tile_at_host(x, y));
-        self.hovered = hovered;
-        if let Some(tile) = hovered.and_then(|i| self.tiles.get(i)) {
+    fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
+        self.pointer = pointer;
+        self.hovered = pointer.and_then(|(x, y)| self.tile_at_host(x, y));
+        if let Some(tile) = self.hovered.and_then(|i| self.tiles.get(i)) {
             self.last_hovered = Some(tile.media_id);
         }
-        let active = self
-            .last_move
-            .is_some_and(|at| now.duration_since(at) < Duration::from_millis(MULTIVIEW_BAR_IDLE_MS));
-        let on_bar = matches!(
-            (pointer, self.bar_rect),
-            (Some((x, y)), Some(bar)) if bar.contains(x, y)
-        );
-        self.set_bar_tile(hovered.filter(|_| active || on_bar));
-    }
-
-    /// Moves the hover bar to another tile (or hides it).
-    fn set_bar_tile(&mut self, tile: Option<usize>) {
-        if tile == self.bar_tile {
-            return;
-        }
-        self.bar_tile = tile;
-        if tile.is_none() {
-            self.bar_rect = None;
-        }
-        self.bump();
-    }
-
-    /// The host placed (or removed) the hover bar: `rect` is its place in the host window in physical pixels. While the
-    /// pointer rests on it, the bar stays.
-    pub fn set_bar_overlay(&mut self, rect: Option<Rect>) {
-        self.bar_rect = rect;
     }
 
     /// Forgets the hover (the Multiview is hidden, parked, rearranged or its tiles changed).
     pub(super) fn clear_hover(&mut self) {
         self.hovered = None;
         self.pointer = None;
-        self.last_move = None;
-        self.set_bar_tile(None);
     }
 
-    /// The hovered tile's bar belongs to this tile (for the view).
-    pub fn bar_tile(&self) -> Option<usize> {
-        self.bar_tile
-    }
-
-    /// The bar the host shows now: its tile, the place of that tile in the host window and the buttons of the tile. `None`
-    /// while no tile is hovered or the tile offers no button.
+    /// The bar the host may show now: the hovered tile, where that tile is in the host window (physical pixels), the
+    /// pointer and the buttons of the tile. The host reveals the bar once the pointer is within the reveal distance of it.
+    /// `None` while no tile is hovered, the pointer is nowhere near the corner that carries the bar, the user switched the
+    /// bar off or the tile offers no button.
     pub fn bar_target(&self) -> Option<BarTarget> {
-        let tile = self.bar_tile?;
+        let bar = prefs::current().bar;
+        let (tile, pointer) = (self.hovered?, self.pointer?);
         let rect = self.host_content(tile)?;
+        if !bar.enabled
+            || !near_bar_corner(rect, pointer, self.host.surface.dpi, bar.reveal_distance_px)
+        {
+            return None;
+        }
         let actions = self.action_views(tile);
-        (!actions.is_empty()).then_some(BarTarget { tile, rect, actions })
+        (!actions.is_empty()).then_some(BarTarget {
+            tile,
+            rect,
+            actions,
+            pointer,
+            reveal_distance_px: bar.reveal_distance_px,
+        })
     }
 
     /// F2 acts on the tile under the pointer, else the last hovered one, else the first. The result becomes the rename

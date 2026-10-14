@@ -40,6 +40,7 @@ pub mod bridge_tags;
 pub mod bridge_thumbnails;
 pub mod bridge_viewer_tabs;
 pub mod button_feedback_bridge;
+pub mod color_picker;
 pub mod dnd_foldertree_autoscroller;
 pub mod fallback_view;
 pub mod favorites;

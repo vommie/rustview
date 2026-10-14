@@ -10,7 +10,7 @@
 
 use super::views::sync_model;
 use crate::ui::{MultiviewActionView, MultiviewOverlayWindow};
-use crate::viewer::multiview::bar_placement::{BarPlacement, place_bar, rounded_region};
+use crate::viewer::multiview::bar_placement::{BarPlacement, in_reveal_zone, place_bar, rounded_region};
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::{OverlayServer, XRectangle, get_raw_window_xid};
 use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
@@ -38,6 +38,10 @@ pub struct BarRequest {
     /// The hovered tile (handed back with a click) and its rectangle in the coordinates of the host window.
     pub tile: i32,
     pub tile_rect: Rect,
+    /// Pointer position in the coordinates of the host window. The bar is revealed while the pointer is within
+    /// `reveal_distance_px` (logical pixels) of the place of the bar, and hidden otherwise.
+    pub pointer: (i32, i32),
+    pub reveal_distance_px: u32,
     /// Physical pixels per logical pixel of the host.
     pub scale: f32,
     pub actions: Vec<MultiviewActionView>,
@@ -67,11 +71,10 @@ pub fn set_tooltip_settings(enabled: bool, delay_ms: i32) {
     with_overlay(|overlay| overlay.apply_tooltip_settings());
 }
 
-/// Shows the bar for the tile of `request`, or hides it if the tile cannot carry a bar or the host is not the active
-/// window. Returns the place of the bar in the coordinates of the host window (the pointer rests on it, see the hover
-/// logic of the instance), `None` while there is no bar.
-pub fn show(request: &BarRequest) -> Option<Rect> {
-    with_overlay(|overlay| overlay.show(request)).flatten()
+/// Shows the bar for the tile of `request` while the pointer is close enough to it, or hides it if the pointer is not, the
+/// tile cannot carry a bar or the host is not the window in front. Returns whether the bar is visible.
+pub fn show(request: &BarRequest) -> bool {
+    with_overlay(|overlay| overlay.show(request)).unwrap_or(false)
 }
 
 /// Hides the bar if `owner` is the host that shows it.
@@ -224,35 +227,25 @@ impl Overlay {
         self.window.set_tooltip_delay_ms(delay_ms);
     }
 
-    fn show(&mut self, request: &BarRequest) -> Option<Rect> {
-        let Some((origin, in_front)) = self.host_state(request.host_xid) else {
-            self.hide();
-            return None;
-        };
-        if !in_front {
-            self.hide();
-            return None;
-        }
+    fn show(&mut self, request: &BarRequest) -> bool {
         self.sync_content(request);
         let bar_logical = (self.window.get_bar_width(), self.window.get_bar_height());
-        let tile = Rect::new(
-            request.tile_rect.x + origin.0,
-            request.tile_rect.y + origin.1,
-            request.tile_rect.w,
-            request.tile_rect.h,
-        );
-        let Some(placement) = place_bar(tile, bar_logical, request.scale) else {
+        // The pointer decision comes first and needs no X round trip: both rectangles are in host window coordinates.
+        let Some(in_host) = place_bar(request.tile_rect, bar_logical, request.scale) else {
             self.hide();
-            return None;
+            return false;
+        };
+        if !in_reveal_zone(in_host.bar, request.pointer, request.scale, request.reveal_distance_px) {
+            self.hide();
+            return false;
+        }
+        let Some((origin, true)) = self.host_state(request.host_xid) else {
+            self.hide();
+            return false;
         };
         self.owner = Some(request.owner);
-        self.place(placement, request.scale);
-        Some(Rect::new(
-            placement.bar.x - origin.0,
-            placement.bar.y - origin.1,
-            placement.bar.w,
-            placement.bar.h,
-        ))
+        self.place(in_host.translated(origin.0, origin.1), request.scale);
+        true
     }
 
     /// Where the host window is on the screen, and whether it is in front at the pointer. The overlay window itself counts

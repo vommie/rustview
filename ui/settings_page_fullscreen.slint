@@ -1,9 +1,11 @@
-import { ComboBox, CheckBox } from "std-widgets.slint";
+import { ComboBox, CheckBox, Slider } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { BulletItem } from "bullet_item.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 import { SettingsCard } from "settings_card.slint";
 import { TooltipHost } from "tooltips.slint";
+import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
+import { ColorSwatchButton } from "color_picker.slint";
 
 export component SettingsPageFullscreen inherits VerticalLayout {
     spacing: 12px;
@@ -14,7 +16,26 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <bool> enable-fallback-rule: false;
     in-out property <int> fallback-target-idx: 0; // 0 = Same display as Main UI, 1 = Different display from Main UI
 
+    // Action bar
+    in-out property <bool> bar-enabled: true;
+    in-out property <bool> bar-show-mute: true;
+    in-out property <bool> bar-show-sticky: true;
+    in-out property <bool> bar-show-open-as-tab: true;
+    in-out property <bool> bar-show-remove: true;
+    in-out property <int> bar-reveal-distance-px: 15;
+
+    // Sound
+    in-out property <bool> sound-auto-control: true;
+    in-out property <int> sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
+    in-out property <bool> sound-hand-over: true;
+
+    // Background
+    in-out property <int> background-source-idx: 0; // 0 = theme, 1 = same as viewer, 2 = custom color
+    in-out property <color> background-color: Theme.fullscreen-background;
+
     callback refresh-displays();
+    // The user wants to choose the custom background color (Rust opens the color picker window).
+    callback pick-background-color();
 
     SettingsCard {
         title: "Displays";
@@ -153,6 +174,179 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                             ? (root.fallback-target-idx == 1 ? "Fullscreen opens on a different display than Main UI (if multi-monitor setup exists)." : "Fullscreen opens on the same display as Main UI.")
                             : "Standard mode: Fullscreen always opens on the same display as Main UI.");
                     color: Theme.text-muted;
+                }
+            }
+        }
+    }
+
+    SettingsCard {
+        title: "Action Bar";
+        description: "The buttons in the top-right corner of a medium in fullscreen.";
+
+        SettingsSwitchRow {
+            label: "Show the action bar";
+            tooltip: "Show a small bar of buttons in the corner of a medium when the pointer comes close to it.";
+            checked <=> root.bar-enabled;
+        }
+
+        SettingsOptionRow {
+            label: "Reveal distance";
+            description: "How close the pointer must come before the bar appears. 0 = only directly on the bar.";
+            tooltip: "The bar stays hidden while you watch. It appears when the pointer is within this many pixels of the place where the bar would be.";
+            enabled: root.bar-enabled;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 0;
+                    maximum: 100;
+                    enabled: root.bar-enabled;
+                    value: root.bar-reveal-distance-px;
+                    changed(v) => { root.bar-reveal-distance-px = Math.round(v); }
+                }
+
+                Text {
+                    text: root.bar-reveal-distance-px + " px";
+                    color: root.bar-enabled ? Theme.primary : Theme.text-muted;
+                    width: 46px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        Text {
+            text: "Buttons";
+            color: Theme.text-muted;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Mute";
+            tooltip: "Mute or unmute a video. Shown on videos only.";
+            enabled: root.bar-enabled;
+            checked <=> root.bar-show-mute;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Sticky";
+            tooltip: "Keep a medium in view when the selection changes. Shown when the fullscreen follows the selection of the media view.";
+            enabled: root.bar-enabled;
+            checked <=> root.bar-show-sticky;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Open in a background tab";
+            tooltip: "Open the medium in a viewer tab of its own, without leaving the fullscreen.";
+            enabled: root.bar-enabled;
+            checked <=> root.bar-show-open-as-tab;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Remove / Close";
+            description: "Removes a medium from the view; on the last medium it closes the fullscreen (or the tab).";
+            tooltip: "Remove the medium from the view. Closes the fullscreen or tab instead when it is the last medium. Esc always closes the fullscreen.";
+            enabled: root.bar-enabled;
+            checked <=> root.bar-show-remove;
+        }
+    }
+
+    SettingsCard {
+        title: "Sound";
+        description: "Which videos are muted automatically while several videos are shown. A mute you set yourself is never changed.";
+
+        SettingsSwitchRow {
+            label: "Automatic sound control";
+            tooltip: "Mute surplus videos automatically so that only one video plays sound at a time. When off, every video keeps its own sound state.";
+            checked <=> root.sound-auto-control;
+        }
+
+        SettingsOptionRow {
+            label: "The sound belongs to";
+            tooltip: "First video: the leftmost video plays, videos that join start muted. Newest video: a video that joins takes the sound. Nobody: every video starts muted.";
+            enabled: root.sound-auto-control;
+
+            ComboBox {
+                width: 220px;
+                enabled: root.sound-auto-control;
+                model: ["The first video (leftmost)", "The newest video", "Nobody (all muted)"];
+                current-index <=> root.sound-follows-idx;
+            }
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Pass the sound on when its video leaves";
+            tooltip: "When the video that plays sound is removed or deleted, the next video takes over instead of the view falling silent.";
+            enabled: root.sound-auto-control && root.sound-follows-idx != 2;
+            checked <=> root.sound-hand-over;
+        }
+
+        Rectangle {
+            background: #89b4fa12;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: #89b4fa33;
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 3px;
+
+                Text {
+                    text: "Active Behavior:";
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: Theme.primary;
+                }
+
+                BulletItem {
+                    text: !root.sound-auto-control
+                        ? "Nothing is muted automatically: every video starts with its own sound state."
+                        : (root.sound-follows-idx == 0
+                            ? ("The leftmost video plays sound, the others start muted. A video that joins starts muted" + (root.sound-hand-over ? ", unless nothing plays; when the video with sound leaves, the next one takes over." : ", unless nothing plays."))
+                            : (root.sound-follows-idx == 1
+                                ? ("The leftmost video plays sound when the fullscreen opens. A video that joins takes the sound; the others are muted" + (root.sound-hand-over ? ", and the sound passes on when its video leaves." : "."))
+                                : "Every video starts muted. Unmute one with its button in the action bar or with the M key."));
+                    color: Theme.text-muted;
+                }
+            }
+        }
+    }
+
+    SettingsCard {
+        title: "Background";
+        description: "The color behind the media in fullscreen.";
+
+        SettingsOptionRow {
+            label: "Fullscreen background";
+            tooltip: "Theme: the background color of the app theme. Same as viewer: the background chosen under Viewer. Custom color: pick any color.";
+
+            ComboBox {
+                width: 220px;
+                model: ["Theme (automatic)", "Same as viewer background", "Custom color"];
+                current-index <=> root.background-source-idx;
+            }
+        }
+
+        SettingsOptionRow {
+            indent: 12px;
+            label: "Custom color";
+            tooltip: "Click to open the color picker. The color applies to the next fullscreen and to one that is open once you save.";
+            enabled: root.background-source-idx == 2;
+
+            ColorSwatchButton {
+                value: root.background-color;
+                enabled: root.background-source-idx == 2;
+                tooltip: "Choose the fullscreen background color";
+                clicked => {
+                    root.pick-background-color();
                 }
             }
         }

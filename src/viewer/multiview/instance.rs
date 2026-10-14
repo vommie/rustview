@@ -57,12 +57,10 @@ pub struct MultiviewInstance {
     pub(super) drag: Option<DragState>,
     pub(super) hovered: Option<usize>,
     pub(super) last_hovered: Option<MediaId>,
-    /// The tile whose hover bar is shown, and where the host drew the bar (window coordinates, physical pixels).
-    pub(super) bar_tile: Option<usize>,
-    pub(super) bar_rect: Option<Rect>,
-    /// Last pointer position (window coordinates) and when it last changed; the bar hides when the pointer rests.
+    /// Last pointer position in the coordinates of the host window (physical pixels).
     pub(super) pointer: Option<(i32, i32)>,
-    pub(super) last_move: Option<Instant>,
+    /// The color the fullscreen paints behind the media (also around a single video, whose window covers the display).
+    pub(super) video_background: Option<[u8; 3]>,
     pub(super) ticks: u32,
     pub(super) rename_target: Option<MediaId>,
     /// The rename target was named by a player (not picked by the pointer) and is used by the next rename request.
@@ -91,10 +89,8 @@ impl MultiviewInstance {
                 drag: None,
                 hovered: None,
                 last_hovered: None,
-                bar_tile: None,
-                bar_rect: None,
                 pointer: None,
-                last_move: None,
+                video_background: None,
                 ticks: 0,
                 rename_target: None,
                 rename_pinned: false,

@@ -106,29 +106,31 @@ impl Session {
         self.refresh();
     }
 
-    /// Shows, moves or hides the action bar window for the tile the pointer is on.
+    /// Shows, moves or hides the action bar window: it appears while the pointer is close to the place of the bar of the
+    /// hovered tile.
     pub(super) fn update_bar_overlay(&mut self) {
         if !self.populated {
             return;
         }
         let target = self.instance.lock().bar_target();
         let scale = self.window.upgrade().map(|win| win.window().scale_factor());
-        let bar = match (target, scale) {
+        let shown = match (target, scale) {
             (Some(target), Some(scale)) => bar_overlay::show(&BarRequest {
                 owner: BarOwner::Fullscreen,
                 host_xid: self.fs_xid,
                 tile: target.tile as i32,
                 tile_rect: target.rect,
+                pointer: target.pointer,
+                reveal_distance_px: target.reveal_distance_px,
                 scale,
                 actions: views::action_views(&target.actions),
                 on_action: self.bar_click.clone(),
             }),
-            _ => None,
+            _ => false,
         };
-        if bar.is_none() {
+        if !shown {
             bar_overlay::hide(BarOwner::Fullscreen);
         }
-        self.instance.lock().set_bar_overlay(bar);
     }
 
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what

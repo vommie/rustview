@@ -12,6 +12,8 @@ import { SettingsPageApi } from "settings_page_api.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
 import { ButtonBar } from "button_bar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
+import { TooltipSettings } from "tooltips.slint";
 
 export { SettingsSidebar } from "settings_sidebar.slint";
 export { SettingsPageGeneral } from "settings_page_general.slint";
@@ -110,7 +112,19 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-enable-specific: false;
     in-out property <bool> fullscreen-enable-fallback: false;
     in-out property <int> fullscreen-fallback-target-idx: 0;
+    in-out property <bool> fullscreen-bar-enabled: true;
+    in-out property <bool> fullscreen-bar-show-mute: true;
+    in-out property <bool> fullscreen-bar-show-sticky: true;
+    in-out property <bool> fullscreen-bar-show-open-as-tab: true;
+    in-out property <bool> fullscreen-bar-show-remove: true;
+    in-out property <int> fullscreen-bar-reveal-distance-px: 15;
+    in-out property <bool> fullscreen-sound-auto-control: true;
+    in-out property <int> fullscreen-sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
+    in-out property <bool> fullscreen-sound-hand-over: true;
+    in-out property <int> fullscreen-background-source-idx: 0; // 0 = theme, 1 = same as viewer, 2 = custom color
+    in-out property <color> fullscreen-background-color: Theme.fullscreen-background;
     callback refresh-displays();
+    callback pick-fullscreen-background();
 
     // Tags & Ratings options
     in-out property <int> max-history-tags: 20;
@@ -125,6 +139,15 @@ export component SettingsWindow inherits Window {
     callback browse-root-folder();
     callback save-and-apply();
     callback cancel-clicked();
+
+    // The tooltips of this window follow the options being edited (the dialog is a window of its own with its own
+    // tooltip settings).
+    changed enable-tooltips => {
+        TooltipSettings.enabled = root.enable-tooltips;
+    }
+    changed tooltip-delay-ms => {
+        TooltipSettings.default-delay = root.tooltip-delay-ms * 1ms;
+    }
 
     forward-focus: dialog-focus;
 
@@ -241,7 +264,19 @@ export component SettingsWindow inherits Window {
                             enable-specific-monitor <=> root.fullscreen-enable-specific;
                             enable-fallback-rule <=> root.fullscreen-enable-fallback;
                             fallback-target-idx <=> root.fullscreen-fallback-target-idx;
+                            bar-enabled <=> root.fullscreen-bar-enabled;
+                            bar-show-mute <=> root.fullscreen-bar-show-mute;
+                            bar-show-sticky <=> root.fullscreen-bar-show-sticky;
+                            bar-show-open-as-tab <=> root.fullscreen-bar-show-open-as-tab;
+                            bar-show-remove <=> root.fullscreen-bar-show-remove;
+                            bar-reveal-distance-px <=> root.fullscreen-bar-reveal-distance-px;
+                            sound-auto-control <=> root.fullscreen-sound-auto-control;
+                            sound-follows-idx <=> root.fullscreen-sound-follows-idx;
+                            sound-hand-over <=> root.fullscreen-sound-hand-over;
+                            background-source-idx <=> root.fullscreen-background-source-idx;
+                            background-color <=> root.fullscreen-background-color;
                             refresh-displays => { root.refresh-displays(); }
+                            pick-background-color => { root.pick-fullscreen-background(); }
                         }
 
                         if root.active-category == 7 : SettingsPageTagsRatings {
@@ -267,5 +302,13 @@ export component SettingsWindow inherits Window {
                 save-clicked => { root.save-and-apply(); }
             }
         }
+    }
+
+    // Tooltips of the options (drawn above everything, they never take the pointer).
+    GlobalTooltipLayer {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
     }
 }

@@ -1,11 +1,14 @@
 use super::registry::SettingsManager;
 use super::schema::{
-    AppSettings, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS,
-    MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
+    AppSettings, FullscreenSettings, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
+    DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX,
+    MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
 };
+use crate::hex_color;
 use crate::system::{MonitorInfo, SystemDisplayService};
-use crate::ui::{MainWindow, SettingsWindow};
-use slint::{CloseRequestResponse, ComponentHandle, ModelRc, VecModel};
+use crate::ui::color_picker::PickerRequest;
+use crate::ui::{color_picker, MainWindow, SettingsWindow, TooltipSettings};
+use slint::{CloseRequestResponse, Color, ComponentHandle, ModelRc, VecModel};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -43,7 +46,8 @@ impl SettingsDialogController {
     /// Programmatically closes and hides the settings window, releasing the main window modal lock.
     pub fn close(&self) {
         if let Some(ref w) = self.settings_window {
-            let _ = w.hide();
+            color_picker::close();
+                let _ = w.hide();
         }
         if let Some(ref mw_weak) = self.main_window_weak
             && let Some(mw) = mw_weak.upgrade()
@@ -55,6 +59,7 @@ impl SettingsDialogController {
     pub fn show(&mut self) {
         if self.settings_window.is_none() {
             let window = SettingsWindow::new().expect("Failed to create SettingsWindow");
+            color_picker::install(&window);
             self.register_callbacks(&window);
             self.settings_window = Some(window);
         }
@@ -109,6 +114,10 @@ impl SettingsDialogController {
         window.set_enable_hover_previews(settings.appearance.enable_hover_previews);
         window.set_enable_tooltips(settings.appearance.enable_tooltips);
         window.set_tooltip_delay_ms(settings.appearance.tooltip_delay_ms as i32);
+        // The window reacts to later changes of these two; the values it opens with are set here.
+        let tooltips = window.global::<TooltipSettings>();
+        tooltips.set_enabled(settings.appearance.enable_tooltips);
+        tooltips.set_default_delay(i64::from(settings.appearance.tooltip_delay_ms));
 
         // Grid Items Layout properties
         window.set_grid_item_padding_h(settings.appearance.grid_item_padding_horizontal as i32);
@@ -234,6 +243,7 @@ impl SettingsDialogController {
             0
         };
         window.set_fullscreen_fallback_target_idx(fallback_idx);
+        Self::populate_fullscreen_extras(window, &settings.fullscreen);
 
         // Tags & Ratings properties
         window.set_max_history_tags(settings.tags.max_history_tags as i32);
@@ -243,6 +253,67 @@ impl SettingsDialogController {
 
         // Debug properties
         window.set_obfuscate_logs(settings.debug.obfuscate_logs);
+    }
+
+    /// Action bar, sound and background of the fullscreen.
+    fn populate_fullscreen_extras(window: &SettingsWindow, fullscreen: &FullscreenSettings) {
+        let bar = &fullscreen.action_bar;
+        window.set_fullscreen_bar_enabled(bar.enabled);
+        window.set_fullscreen_bar_show_mute(bar.show_mute);
+        window.set_fullscreen_bar_show_sticky(bar.show_sticky);
+        window.set_fullscreen_bar_show_open_as_tab(bar.show_open_as_tab);
+        window.set_fullscreen_bar_show_remove(bar.show_remove);
+        window.set_fullscreen_bar_reveal_distance_px(bar.reveal_distance_px as i32);
+
+        let sound = &fullscreen.sound;
+        window.set_fullscreen_sound_auto_control(sound.auto_control);
+        window.set_fullscreen_sound_follows_idx(match sound.follows.as_str() {
+            "newest" => 1,
+            "nobody" => 2,
+            _ => 0,
+        });
+        window.set_fullscreen_sound_hand_over(sound.hand_over);
+
+        window.set_fullscreen_background_source_idx(match fullscreen.background.source.as_str() {
+            "viewer" => 1,
+            "custom" => 2,
+            _ => 0,
+        });
+        let [r, g, b] = hex_color::parse_rgb(&fullscreen.background.color)
+            .or_else(|| hex_color::parse_rgb(DEFAULT_FULLSCREEN_BACKGROUND_COLOR))
+            .unwrap_or([0x11, 0x11, 0x1b]);
+        window.set_fullscreen_background_color(Color::from_rgb_u8(r, g, b));
+    }
+
+    fn save_fullscreen_extras(window: &SettingsWindow, fullscreen: &mut FullscreenSettings) {
+        let bar = &mut fullscreen.action_bar;
+        bar.enabled = window.get_fullscreen_bar_enabled();
+        bar.show_mute = window.get_fullscreen_bar_show_mute();
+        bar.show_sticky = window.get_fullscreen_bar_show_sticky();
+        bar.show_open_as_tab = window.get_fullscreen_bar_show_open_as_tab();
+        bar.show_remove = window.get_fullscreen_bar_show_remove();
+        bar.reveal_distance_px = u32::try_from(window.get_fullscreen_bar_reveal_distance_px())
+            .unwrap_or(0)
+            .clamp(MIN_FULLSCREEN_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_BAR_REVEAL_DISTANCE_PX);
+
+        let sound = &mut fullscreen.sound;
+        sound.auto_control = window.get_fullscreen_sound_auto_control();
+        sound.follows = match window.get_fullscreen_sound_follows_idx() {
+            1 => "newest",
+            2 => "nobody",
+            _ => "first",
+        }
+        .to_string();
+        sound.hand_over = window.get_fullscreen_sound_hand_over();
+
+        fullscreen.background.source = match window.get_fullscreen_background_source_idx() {
+            1 => "viewer",
+            2 => "custom",
+            _ => "theme",
+        }
+        .to_string();
+        let color = window.get_fullscreen_background_color();
+        fullscreen.background.color = hex_color::format_rgb([color.red(), color.green(), color.blue()]);
     }
 
     fn register_callbacks(&self, window: &SettingsWindow) {
@@ -427,6 +498,7 @@ impl SettingsDialogController {
                 } else {
                     "same".to_string()
                 };
+                Self::save_fullscreen_extras(&w, &mut current.fullscreen);
 
                 // Save Tag History Configuration
                 let new_max_history = (w.get_max_history_tags() as usize).clamp(MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS);
@@ -447,12 +519,36 @@ impl SettingsDialogController {
                     main.set_is_modal_locked(false);
                 }
 
+                color_picker::close();
                 let _ = w.hide();
             }
         });
 
         let w_weak_cancel = w_weak;
         let main_weak_cancel = main_weak;
+        let w_weak_pick = w_weak_cancel.clone();
+        window.on_pick_fullscreen_background(move || {
+            let Some(w) = w_weak_pick.upgrade() else {
+                return;
+            };
+            let [r, g, b] = hex_color::parse_rgb(DEFAULT_FULLSCREEN_BACKGROUND_COLOR).unwrap_or([0x11, 0x11, 0x1b]);
+            let target = w.as_weak();
+            color_picker::open(
+                &w,
+                PickerRequest {
+                    title: "Fullscreen background color",
+                    initial: w.get_fullscreen_background_color(),
+                    default: Some(Color::from_rgb_u8(r, g, b)),
+                    show_alpha: false,
+                },
+                move |color| {
+                    if let Some(w) = target.upgrade() {
+                        w.set_fullscreen_background_color(color);
+                    }
+                },
+            );
+        });
+
         window.on_cancel_clicked(move || {
             tracing::info!(
                 "[SettingsDialog: Cancel] Settings window cancelled/dismissed via Escape key or Cancel button"
@@ -463,6 +559,7 @@ impl SettingsDialogController {
                 {
                     mw.set_is_modal_locked(false);
                 }
+                color_picker::close();
                 let _ = w.hide();
             }
         });
@@ -477,6 +574,7 @@ impl SettingsDialogController {
             {
                 main.set_is_modal_locked(false);
             }
+            color_picker::close();
             CloseRequestResponse::HideWindow
         });
     }

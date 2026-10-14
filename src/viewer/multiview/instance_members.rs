@@ -2,6 +2,7 @@
 //! instance from the records it already holds in memory; the drive is never touched.
 
 use super::audio::{self, TileAudio};
+use super::prefs;
 use super::instance::MultiviewInstance;
 use super::model::{AspectSource, aspect_differs, aspect_from_size};
 use super::teardown::teardown_videos;
@@ -44,7 +45,7 @@ impl MultiviewInstance {
         teardown_videos(video.into_iter().collect());
         self.clear_hover();
         let mut slots: Vec<Option<TileAudio>> = self.tiles.iter().map(|t| t.audio).collect();
-        audio::after_reconcile(&mut slots, &[]);
+        audio::after_reconcile(&mut slots, &[], &prefs::current().audio);
         for (tile, slot) in self.tiles.iter_mut().zip(slots) {
             tile.audio = slot;
         }

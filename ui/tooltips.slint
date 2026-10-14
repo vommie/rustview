@@ -221,6 +221,7 @@ export component TooltipArea inherits Rectangle {
     in property <bool> follow-cursor: false;
     in property <length> offset-x: 0px;
     in property <length> offset-y: 0px;
+    in property <MouseCursor> cursor: MouseCursor.default;
 
     callback clicked();
 
@@ -240,6 +241,7 @@ export component TooltipArea inherits Rectangle {
     touch := TouchArea {
         width: 100%;
         height: 100%;
+        mouse-cursor: root.cursor;
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 tooltip-host.on-hover-leave();

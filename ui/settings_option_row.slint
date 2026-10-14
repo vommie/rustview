@@ -1,0 +1,142 @@
+import { Theme } from "styles.slint";
+import { TooltipArea } from "tooltips.slint";
+import { ToggleSwitch } from "toggle_switch.slint";
+
+/// One option of a settings card: a label with an optional explanation on the left, the control (`@children`) on the right.
+/// Hovering the row shows `tooltip`; a control in front of the row has its own hover, so the tooltip belongs to
+/// the label side.
+export component SettingsOptionRow inherits Rectangle {
+    in property <string> label: "";
+    in property <string> description: "";
+    in property <string> tooltip: "";
+    in property <bool> enabled: true;
+    in property <length> indent: 0px;
+
+    min-height: content.min-height;
+    preferred-height: content.preferred-height;
+
+    TooltipArea {
+        width: 100%;
+        height: 100%;
+        text: root.tooltip;
+    }
+
+    content := HorizontalLayout {
+        padding-left: 8px + root.indent;
+        padding-right: 8px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        spacing: 12px;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+
+            Text {
+                text: root.label;
+                color: root.enabled ? Theme.text : Theme.text-muted;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+
+            if root.description != "" : Text {
+                text: root.description;
+                color: Theme.text-muted;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            @children
+        }
+    }
+}
+
+/// An option that is on or off: the whole row switches it (mouse, or space/enter while it has the focus).
+export component SettingsSwitchRow inherits Rectangle {
+    in property <string> label: "";
+    in property <string> description: "";
+    in property <string> tooltip: "";
+    in property <bool> enabled: true;
+    in property <length> indent: 0px;
+    in-out property <bool> checked: false;
+
+    callback toggled(bool /* checked */);
+
+    background: area.has-hover && root.enabled ? Theme.surface-hover : transparent;
+    border-radius: 4px;
+    min-height: content.min-height;
+    preferred-height: content.preferred-height;
+
+    function toggle() {
+        if root.enabled {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+
+    area := TooltipArea {
+        width: 100%;
+        height: 100%;
+        text: root.tooltip;
+        cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => {
+            keys.focus();
+            root.toggle();
+        }
+    }
+
+    keys := FocusScope {
+        width: 0px;
+        height: 0px;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == " " || event.text == "\n" {
+                root.toggle();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    content := HorizontalLayout {
+        padding-left: 8px + root.indent;
+        padding-right: 8px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        spacing: 12px;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+
+            Text {
+                text: root.label;
+                color: root.enabled ? Theme.text : Theme.text-muted;
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+
+            if root.description != "" : Text {
+                text: root.description;
+                color: Theme.text-muted;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            ToggleSwitch {
+                checked: root.checked;
+                enabled: root.enabled;
+                has-focus: keys.has-focus;
+            }
+        }
+    }
+}

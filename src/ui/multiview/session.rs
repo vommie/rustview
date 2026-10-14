@@ -13,6 +13,7 @@ use super::router::{UiEventSink, execute};
 use super::session_convert::park_below_main_window;
 use super::tab_host;
 use super::views::{self, ImageCache, ViewModels};
+use crate::hex_color;
 use crate::settings::SettingsManager;
 use crate::settings::schema::{
     MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS,
@@ -28,7 +29,7 @@ use crate::viewer::multiview::route::UiAction;
 use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
 use parking_lot::RwLock;
 use slint::{
-    CloseRequestResponse, ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer,
+    CloseRequestResponse, Color, ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer,
     TimerMode,
 };
 use std::cell::RefCell;
@@ -142,6 +143,41 @@ fn background_mode_index(mode: &str) -> i32 {
     }
 }
 
+/// Tells the window where its background comes from (theme, the viewer setting, or the custom color); the window resolves
+/// the final color.
+fn apply_background(win: &MultiviewFullscreenWindow, settings: &SettingsManager) {
+    let current = settings.get();
+    let background = &current.fullscreen.background;
+    win.set_background_mode(background_mode_index(&current.viewer.background_mode));
+    win.set_fill_source(match background.source.as_str() {
+        "viewer" => 1,
+        "custom" => 2,
+        _ => 0,
+    });
+    let [r, g, b] = hex_color::parse_rgb(&background.color).unwrap_or([0x11, 0x11, 0x1b]);
+    win.set_custom_fill(Color::from_rgb_u8(r, g, b));
+    tracing::debug!(source = %background.source, "[Multiview: Background] Fullscreen background applied");
+}
+
+/// The color behind the media as mpv needs it: a single video covers the whole display, so mpv paints the bars around it.
+/// `None` while the background is drawn by the viewer setting (Slint only), mpv keeps its black then.
+fn video_background(win: &MultiviewFullscreenWindow) -> Option<[u8; 3]> {
+    let fill = win.get_resolved_fill();
+    (fill.alpha() > 0).then(|| [fill.red(), fill.green(), fill.blue()])
+}
+
+/// The settings changed: a fullscreen that is open follows the look it describes. The behavior settings (action bar,
+/// sound) are read when they are needed, see `viewer::multiview::prefs`. UI thread only.
+pub(super) fn refresh_settings(settings: &SettingsManager) {
+    with_session(|s| {
+        let Some(win) = s.window.upgrade() else {
+            return;
+        };
+        apply_background(&win, settings);
+        s.instance.lock().set_video_background(video_background(&win));
+    });
+}
+
 fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     let win = MultiviewFullscreenWindow::new()?;
     win.on_request_close(|| close(true));
@@ -203,9 +239,7 @@ fn prepare_window(
     models: &ViewModels,
 ) {
     win.set_is_ready(false);
-    win.set_background_mode(background_mode_index(
-        &settings.get().viewer.background_mode,
-    ));
+    apply_background(win, settings);
     win.set_tiles(ModelRc::from(models.tiles.clone()));
     win.set_gutters(ModelRc::from(models.gutters.clone()));
     win.set_navigation(0);
@@ -274,6 +308,7 @@ fn launch(
         &session.monitor,
         &session.models,
     );
+    session.instance.lock().set_video_background(video_background(&win));
     if SESSION.with(|cell| {
         cell.try_borrow_mut()
             .map(|mut g| *g = Some(session))

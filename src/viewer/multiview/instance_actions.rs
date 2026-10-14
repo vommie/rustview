@@ -5,6 +5,7 @@ use super::actions::{ActionContext, ActionId, actions_for};
 use super::follow::FollowPlan;
 use super::instance::MultiviewInstance;
 use super::model::TileKind;
+use super::prefs;
 use super::route::{HostMode, OriginKind, UiAction};
 use super::view::{ActionView, Navigation};
 use crate::button_feedback::FeedbackKind;
@@ -39,8 +40,10 @@ impl MultiviewInstance {
             return Vec::new();
         };
         let tile = &self.tiles[index];
+        let bar = prefs::current().bar;
         actions_for(&ctx)
             .into_iter()
+            .filter(|spec| bar.allows(spec.id))
             .map(|spec| ActionView {
                 id: spec.id,
                 icon: spec.icon,

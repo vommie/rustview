@@ -2,6 +2,7 @@ pub mod app;
 pub mod button_feedback;
 pub mod cli_api;
 pub mod ctx_menu;
+pub mod hex_color;
 pub mod icons;
 pub mod library;
 pub mod media;

@@ -1,0 +1,807 @@
+import { Theme } from "styles.slint";
+import { TooltipArea } from "tooltips.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+
+// A reusable color picker: `ColorPicker` is the panel (saturation/value area, hue and optional alpha slider, hex field,
+// RGB and HSV fields, palette, original/new preview), `ColorSwatchButton` is the small button that shows a color and
+// opens the panel. The panel is a plain component, so it can sit inline in a page, in a dialog or in a popup.
+//
+// Usage: a `ColorSwatchButton` shows the color and reports a click; Rust then opens the `ColorPickerWindow` (a window of its
+// own, centered over its parent) with `crate::ui::color_picker::open`. `ColorPicker` is the panel inside that window and
+// can also be placed inline anywhere else.
+//
+// Hex text is parsed and formatted in Rust because Slint cannot take a string apart: call
+// `crate::ui::color_picker::install(&window)` once for every window that contains a picker.
+
+export global ColorCodec {
+    pure callback to-hex(color, bool /* with alpha */) -> string;
+    pure callback is-valid(string, bool /* with alpha */) -> bool;
+    pure callback from-hex(string) -> color;
+}
+
+/// Light and dark squares behind translucent colors.
+component CheckerPattern inherits Rectangle {
+    in property <length> cell: 6px;
+    property <int> cols: Math.ceil(root.width / root.cell);
+    property <int> rows: Math.ceil(root.height / root.cell);
+
+    clip: true;
+    background: #ffffff;
+
+    for i in root.cols * root.rows : Rectangle {
+        x: Math.mod(i, root.cols) * root.cell;
+        y: Math.floor(i / root.cols) * root.cell;
+        width: root.cell;
+        height: root.cell;
+        background: Math.mod(Math.mod(i, root.cols) + Math.floor(i / root.cols), 2) == 0 ? #ffffff : #c4c4c4;
+    }
+}
+
+/// The round handle of the saturation/value area and of the sliders.
+component PickerHandle inherits Rectangle {
+    in property <color> fill: transparent;
+    in property <bool> focused: false;
+
+    width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: #0000008c;
+
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        border-width: root.focused ? 3px : 2px;
+        border-color: root.focused ? Theme.primary : #ffffff;
+        background: root.fill;
+    }
+}
+
+/// A small number field in the theme colors (the std spin box is too wide for a row of three). Typing applies the number at
+/// once while it is in range; the arrow keys step by 1 (Shift: 10); `shown` is what the field displays while it has no focus.
+component ChannelField inherits Rectangle {
+    in property <int> shown: 0;
+    in property <int> minimum: 0;
+    in property <int> maximum: 255;
+    in property <string> unit: "";
+    property <bool> focused: input.has-focus;
+
+    callback edited(int);
+
+    height: 28px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: root.focused ? Theme.primary : Theme.border;
+    background: Theme.surface-variant;
+
+    function step(delta: int) {
+        let next = Math.max(root.minimum, Math.min(root.maximum, Math.round(input.text.to-float()) + delta));
+        input.text = next;
+        root.edited(next);
+    }
+
+    changed shown => {
+        if !root.focused {
+            input.text = root.shown;
+        }
+    }
+    changed focused => {
+        if !root.focused {
+            input.text = root.shown;
+        }
+    }
+    init => {
+        input.text = root.shown;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 2px;
+
+        input := TextInput {
+            horizontal-stretch: 1;
+            font-size: 12px;
+            color: Theme.text;
+            vertical-alignment: center;
+            input-type: InputType.number;
+            single-line: true;
+            selection-background-color: Theme.primary;
+            selection-foreground-color: Theme.background;
+
+            edited => {
+                if self.text != "" && self.text.to-float() >= root.minimum && self.text.to-float() <= root.maximum {
+                    root.edited(Math.round(self.text.to-float()));
+                }
+            }
+            accepted => {
+                self.text = root.shown;
+            }
+            key-pressed(event) => {
+                let big = event.modifiers.shift ? 10 : 1;
+                if event.text == Key.UpArrow {
+                    root.step(big);
+                    return accept;
+                }
+                if event.text == Key.DownArrow {
+                    root.step(-big);
+                    return accept;
+                }
+                return reject;
+            }
+        }
+
+        if root.unit != "" : Text {
+            text: root.unit;
+            color: Theme.text-muted;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component ColorPicker inherits Rectangle {
+    // The edited color. Every change the user makes is written here at once and reported by `edited`.
+    in-out property <color> value: #11111b;
+    // The color before editing: the left half of the preview, and what a click on it restores.
+    in property <color> original: #11111b;
+    // Adds the alpha slider and field and lets the hex field take `#rrggbbaa`.
+    in property <bool> show-alpha: false;
+    // Shows a "Default" button that restores this color (transparent = no button).
+    in property <color> default-color: transparent;
+    in property <[color]> swatches: [
+        #000000, #11111b, #1e1e2e, #313244, #45475a, #6c7086, #cdd6f4, #ffffff,
+        #f38ba8, #fab387, #f9e2af, #a6e3a1, #94e2d5, #89b4fa, #cba6f7, #f5c2e7,
+    ];
+
+    callback edited(color);
+
+    // The picker works in HSV so that dragging never loses the hue of a grey or dark color.
+    property <float> hue: 0;
+    property <float> sat: 0;
+    property <float> val: 0;
+    property <float> alpha: 1;
+    property <color> current: hsv(root.hue, root.sat, root.val, root.show-alpha ? root.alpha : 1.0);
+    property <color> hue-color: hsv(root.hue, 1.0, 1.0, 1.0);
+
+    preferred-width: 292px;
+    background: Theme.surface;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    function commit() {
+        root.value = root.current;
+        root.edited(root.current);
+    }
+
+    // Takes an RGB(A) color as the new state; the hue stays when the color is grey or black (it has none).
+    function adopt(c: color) {
+        let parts = c.to-hsv();
+        if parts.saturation > 0.0 && parts.value > 0.0 {
+            root.hue = parts.hue;
+        }
+        root.sat = parts.saturation;
+        root.val = parts.value;
+        root.alpha = parts.alpha;
+    }
+
+    // A color typed or picked as exact RGB(A) values is committed as is (an HSV round trip could be off by one).
+    function apply(c: color) {
+        let exact = root.show-alpha ? c : c.with-alpha(1.0);
+        root.adopt(exact);
+        root.value = exact;
+        root.edited(exact);
+    }
+
+    function sync-hex() {
+        if !hex.has-focus || ColorCodec.from-hex(hex.text) != root.value {
+            hex.text = ColorCodec.to-hex(root.value, root.show-alpha);
+        }
+    }
+
+    changed value => {
+        if root.value != root.current {
+            root.adopt(root.value);
+        }
+        root.sync-hex();
+    }
+
+    init => {
+        root.adopt(root.value);
+        hex.text = ColorCodec.to-hex(root.value, root.show-alpha);
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+
+        // Saturation (left to right) and value (bottom to top) of the current hue.
+        Rectangle {
+            height: 150px;
+            border-radius: 4px;
+            clip: true;
+
+            Rectangle {
+                background: @linear-gradient(90deg, #ffffff 0%, root.hue-color 100%);
+            }
+
+            Rectangle {
+                background: @linear-gradient(180deg, #00000000 0%, #000000 100%);
+            }
+
+            PickerHandle {
+                x: root.sat * parent.width - self.width / 2;
+                y: (1 - root.val) * parent.height - self.height / 2;
+                focused: sv-keys.has-focus;
+            }
+
+            sv-keys := FocusScope {
+                key-pressed(event) => {
+                    let step = event.modifiers.shift ? 0.1 : 0.01;
+                    if event.text == Key.LeftArrow {
+                        root.sat = Math.max(0.0, root.sat - step);
+                    } else if event.text == Key.RightArrow {
+                        root.sat = Math.min(1.0, root.sat + step);
+                    } else if event.text == Key.UpArrow {
+                        root.val = Math.min(1.0, root.val + step);
+                    } else if event.text == Key.DownArrow {
+                        root.val = Math.max(0.0, root.val - step);
+                    } else {
+                        return reject;
+                    }
+                    root.commit();
+                    return accept;
+                }
+            }
+
+            sv-touch := TouchArea {
+                mouse-cursor: MouseCursor.crosshair;
+
+                function pick() {
+                    root.sat = Math.max(0.0, Math.min(1.0, self.mouse-x / self.width));
+                    root.val = 1.0 - Math.max(0.0, Math.min(1.0, self.mouse-y / self.height));
+                    root.commit();
+                }
+
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        sv-keys.focus();
+                        self.pick();
+                    }
+                }
+                moved => {
+                    if self.pressed {
+                        self.pick();
+                    }
+                }
+            }
+        }
+
+        // Hue.
+        Rectangle {
+            height: 16px;
+
+            Rectangle {
+                y: 3px;
+                height: 10px;
+                border-radius: 5px;
+                background: @linear-gradient(90deg, #ff0000 0%, #ffff00 16.6667%, #00ff00 33.3333%, #00ffff 50%, #0000ff 66.6667%, #ff00ff 83.3333%, #ff0000 100%);
+            }
+
+            PickerHandle {
+                x: root.hue / 360.0 * (parent.width - self.width);
+                fill: root.hue-color;
+                focused: hue-keys.has-focus;
+            }
+
+            hue-keys := FocusScope {
+                key-pressed(event) => {
+                    let step = event.modifiers.shift ? 10.0 : 1.0;
+                    if event.text == Key.LeftArrow || event.text == Key.DownArrow {
+                        root.hue = Math.max(0.0, root.hue - step);
+                    } else if event.text == Key.RightArrow || event.text == Key.UpArrow {
+                        root.hue = Math.min(360.0, root.hue + step);
+                    } else {
+                        return reject;
+                    }
+                    root.commit();
+                    return accept;
+                }
+            }
+
+            hue-touch := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
+
+                function pick() {
+                    root.hue = 360.0 * Math.max(0.0, Math.min(1.0, (self.mouse-x - 8px) / (self.width - 16px)));
+                    root.commit();
+                }
+
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        hue-keys.focus();
+                        self.pick();
+                    }
+                }
+                moved => {
+                    if self.pressed {
+                        self.pick();
+                    }
+                }
+            }
+        }
+
+        // Alpha.
+        if root.show-alpha : Rectangle {
+            height: 16px;
+
+            Rectangle {
+                y: 3px;
+                height: 10px;
+                border-radius: 5px;
+                clip: true;
+
+                CheckerPattern {
+                    cell: 5px;
+                }
+
+                Rectangle {
+                    background: @linear-gradient(90deg, hsv(root.hue, root.sat, root.val, 0.0) 0%, hsv(root.hue, root.sat, root.val, 1.0) 100%);
+                }
+            }
+
+            PickerHandle {
+                x: root.alpha * (parent.width - self.width);
+                focused: alpha-keys.has-focus;
+            }
+
+            alpha-keys := FocusScope {
+                key-pressed(event) => {
+                    let step = event.modifiers.shift ? 0.1 : 0.01;
+                    if event.text == Key.LeftArrow || event.text == Key.DownArrow {
+                        root.alpha = Math.max(0.0, root.alpha - step);
+                    } else if event.text == Key.RightArrow || event.text == Key.UpArrow {
+                        root.alpha = Math.min(1.0, root.alpha + step);
+                    } else {
+                        return reject;
+                    }
+                    root.commit();
+                    return accept;
+                }
+            }
+
+            alpha-touch := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
+
+                function pick() {
+                    root.alpha = Math.max(0.0, Math.min(1.0, (self.mouse-x - 8px) / (self.width - 16px)));
+                    root.commit();
+                }
+
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        alpha-keys.focus();
+                        self.pick();
+                    }
+                }
+                moved => {
+                    if self.pressed {
+                        self.pick();
+                    }
+                }
+            }
+        }
+
+        // Original / new preview, hex field and the default button.
+        HorizontalLayout {
+            spacing: 8px;
+
+            Rectangle {
+                width: 72px;
+                height: 32px;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: Theme.border;
+                clip: true;
+
+                if root.show-alpha : CheckerPattern {
+                    cell: 6px;
+                }
+
+                HorizontalLayout {
+                    TooltipArea {
+                        text: "Original color. Click to restore it.";
+                        cursor: MouseCursor.pointer;
+                        background: root.original;
+                        clicked => {
+                            root.apply(root.original);
+                        }
+                    }
+
+                    TooltipArea {
+                        text: "New color";
+                        background: root.current;
+                    }
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 32px;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: hex.has-focus ? Theme.primary : Theme.border;
+                background: Theme.surface-variant;
+
+                hex := TextInput {
+                    x: 8px;
+                    width: parent.width - 16px;
+                    height: parent.height;
+                    font-size: 12px;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    single-line: true;
+                    selection-background-color: Theme.primary;
+                    selection-foreground-color: Theme.background;
+
+                    edited => {
+                        // Live while the text is complete; shorthand like #abc is taken on Enter, so typing is never rewritten.
+                        if ColorCodec.is-valid(self.text, root.show-alpha) && (self.text.character-count == (root.show-alpha ? 9 : 7)) {
+                            root.apply(ColorCodec.from-hex(self.text));
+                        }
+                    }
+                    accepted => {
+                        if ColorCodec.is-valid(self.text, root.show-alpha) {
+                            root.apply(ColorCodec.from-hex(self.text));
+                        }
+                        self.text = ColorCodec.to-hex(root.value, root.show-alpha);
+                    }
+                }
+            }
+
+            if root.default-color != Colors.transparent : Rectangle {
+                width: 64px;
+                height: 32px;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: default-touch.has-hover ? Theme.primary : Theme.border;
+                background: default-touch.has-hover ? Theme.surface-hover : Theme.surface-variant;
+
+                Text {
+                    text: "Default";
+                    color: Theme.text;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                default-touch := TooltipArea {
+                    text: "Restore the default color";
+                    cursor: MouseCursor.pointer;
+                    clicked => {
+                        root.apply(root.default-color);
+                    }
+                }
+            }
+        }
+
+        // RGB.
+        HorizontalLayout {
+            spacing: 6px;
+
+            Text {
+                text: "RGB";
+                color: Theme.text-muted;
+                font-size: 11px;
+                vertical-alignment: center;
+                width: 30px;
+            }
+
+            ChannelField {
+                shown: root.current.red;
+                horizontal-stretch: 1;
+                minimum: 0;
+                maximum: 255;
+                edited(v) => {
+                    root.apply(rgb(v, root.current.green, root.current.blue, root.alpha));
+                }
+            }
+
+            ChannelField {
+                shown: root.current.green;
+                horizontal-stretch: 1;
+                minimum: 0;
+                maximum: 255;
+                edited(v) => {
+                    root.apply(rgb(root.current.red, v, root.current.blue, root.alpha));
+                }
+            }
+
+            ChannelField {
+                shown: root.current.blue;
+                horizontal-stretch: 1;
+                minimum: 0;
+                maximum: 255;
+                edited(v) => {
+                    root.apply(rgb(root.current.red, root.current.green, v, root.alpha));
+                }
+            }
+        }
+
+        // HSV (hue in degrees, saturation and value in percent).
+        HorizontalLayout {
+            spacing: 6px;
+
+            Text {
+                text: "HSV";
+                color: Theme.text-muted;
+                font-size: 11px;
+                vertical-alignment: center;
+                width: 30px;
+            }
+
+            ChannelField {
+                shown: Math.round(root.hue);
+                unit: "°";
+                horizontal-stretch: 1;
+                minimum: 0;
+                maximum: 360;
+                edited(v) => {
+                    root.hue = v;
+                    root.commit();
+                }
+            }
+
+            ChannelField {
+                shown: Math.round(root.sat * 100);
+                unit: "%";
+                horizontal-stretch: 1;
+                minimum: 0;
+                maximum: 100;
+                edited(v) => {
+                    root.sat = v / 100.0;
+                    root.commit();
+                }
+            }
+
+            ChannelField {
+                shown: Math.round(root.val * 100);
+                unit: "%";
+                horizontal-stretch: 1;
+                minimum: 0;
+                maximum: 100;
+                edited(v) => {
+                    root.val = v / 100.0;
+                    root.commit();
+                }
+            }
+        }
+
+        if root.show-alpha : HorizontalLayout {
+            spacing: 6px;
+
+            Text {
+                text: "Alpha";
+                color: Theme.text-muted;
+                font-size: 11px;
+                vertical-alignment: center;
+                width: 30px;
+            }
+
+            ChannelField {
+                shown: Math.round(root.alpha * 100);
+                unit: "%";
+                horizontal-stretch: 1;
+                minimum: 0;
+                maximum: 100;
+                edited(v) => {
+                    root.alpha = v / 100.0;
+                    root.commit();
+                }
+            }
+        }
+
+        // Palette (two rows of eight).
+        Rectangle {
+            property <length> gap: 5px;
+            property <length> cell: (self.width - 7 * self.gap) / 8;
+
+            height: 2 * self.cell + self.gap;
+
+            for swatch[i] in root.swatches : Rectangle {
+                x: Math.mod(i, 8) * (parent.cell + parent.gap);
+                y: Math.floor(i / 8) * (parent.cell + parent.gap);
+                width: parent.cell;
+                height: parent.cell;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: swatch-touch.has-hover ? Theme.primary : Theme.border;
+                background: swatch;
+
+                swatch-touch := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
+                    clicked => {
+                        root.apply(swatch);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The button that shows a color; a click is reported and the host opens the picker window.
+export component ColorSwatchButton inherits Rectangle {
+    in property <color> value: #11111b;
+    in property <bool> show-alpha: false;
+    in property <bool> enabled: true;
+    in property <string> tooltip: "";
+    callback clicked();
+
+    width: 132px;
+    height: 28px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: touch.has-hover && root.enabled ? Theme.primary : Theme.border;
+    background: root.enabled ? Theme.surface-variant : Theme.surface;
+
+    touch := TooltipArea {
+        text: root.tooltip;
+        cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => {
+            if root.enabled {
+                root.clicked();
+            }
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 6px;
+        spacing: 8px;
+
+        VerticalLayout {
+            alignment: center;
+
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 3px;
+                border-width: 1px;
+                border-color: Theme.border;
+                clip: true;
+
+                if root.show-alpha : CheckerPattern {
+                    cell: 4px;
+                }
+
+                Rectangle {
+                    background: root.enabled ? root.value : Theme.surface-selected;
+                }
+            }
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: ColorCodec.to-hex(root.value, root.show-alpha);
+            color: root.enabled ? Theme.text : Theme.text-muted;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            AppIcon {
+                icon: IconId.chevron-right;
+                size: IconSize.md;
+                color: root.enabled ? Theme.text-muted : Theme.surface-selected;
+            }
+        }
+    }
+}
+
+/// The color picker in a window of its own. Every change is reported at once (`edited`), so the host can show it live;
+/// Cancel (or Esc, or closing the window) reports `original` again. Rust centers the window over its parent.
+export component ColorPickerWindow inherits Window {
+    in property <string> dialog-title: "Choose a color";
+    in-out property <color> value: #11111b;
+    in property <color> original: #11111b;
+    in property <bool> show-alpha: false;
+    in property <color> default-color: Colors.transparent;
+
+    callback edited(color);
+    callback accepted();
+    callback cancelled();
+
+    title: root.dialog-title;
+    background: Theme.background;
+    preferred-width: 340px;
+    min-width: 340px;
+    max-width: 340px;
+
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            if event.text == Key.Return {
+                root.accepted();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 10px;
+
+            ColorPicker {
+                value <=> root.value;
+                original: root.original;
+                show-alpha: root.show-alpha;
+                default-color: root.default-color;
+                edited(c) => {
+                    root.edited(c);
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+
+                Rectangle {
+                    width: 84px;
+                    height: 30px;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: cancel-touch.has-hover ? Theme.primary : Theme.border;
+                    background: cancel-touch.has-hover ? Theme.surface-hover : Theme.surface-variant;
+
+                    Text {
+                        text: "Cancel";
+                        color: Theme.text;
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    cancel-touch := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => {
+                            root.cancelled();
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 84px;
+                    height: 30px;
+                    border-radius: 4px;
+                    background: ok-touch.has-hover ? Theme.primary.brighter(0.15) : Theme.primary;
+
+                    Text {
+                        text: "OK";
+                        color: Theme.background;
+                        font-size: 12px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    ok-touch := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => {
+                            root.accepted();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

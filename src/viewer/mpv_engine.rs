@@ -516,6 +516,17 @@ impl MpvPlayer {
         drop(self);
     }
 
+    /// The color mpv paints around a video that does not fill its window (letterbox bars). mpv 0.37 and newer call the
+    /// option `background-color`; older versions take the color as `background`.
+    pub fn set_background_color(&self, rgb: [u8; 3]) {
+        let color = crate::hex_color::format_rgb(rgb);
+        if self.mpv.set_property("background-color", color.as_str()).is_err()
+            && self.mpv.set_property("background", color.as_str()).is_err()
+        {
+            tracing::debug!("[MpvPlayer: Background] mpv did not accept a background color");
+        }
+    }
+
     /// Current mute state of this player (`false` if mpv cannot answer).
     pub fn get_mute(&self) -> bool {
         self.mpv.get_property::<bool>("mute").unwrap_or(false)

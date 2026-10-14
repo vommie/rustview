@@ -19,3 +19,8 @@ mod views;
 
 pub use eligibility::OpenSummary;
 pub use handle::MultiviewHandle;
+
+/// Applies changed settings to a fullscreen that is open (its background). UI thread only.
+pub fn refresh_settings(settings: &crate::settings::SettingsManager) {
+    session::refresh_settings(settings);
+}

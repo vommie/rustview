@@ -523,6 +523,20 @@ impl SettingsDiff {
                 new.fullscreen.enable_fallback_rule,
                 new.fullscreen.fallback_target
             ));
+            let bar = &new.fullscreen.action_bar;
+            changes.push(format!(
+                "Fullscreen action bar: enabled: {}, mute: {}, sticky: {}, open_as_tab: {}, remove: {}, reveal_distance_px: {}",
+                bar.enabled, bar.show_mute, bar.show_sticky, bar.show_open_as_tab, bar.show_remove, bar.reveal_distance_px
+            ));
+            let sound = &new.fullscreen.sound;
+            changes.push(format!(
+                "Fullscreen sound: auto_control: {}, follows: '{}', hand_over: {}",
+                sound.auto_control, sound.follows, sound.hand_over
+            ));
+            changes.push(format!(
+                "Fullscreen background: source: '{}', color: '{}'",
+                new.fullscreen.background.source, new.fullscreen.background.color
+            ));
         }
 
         if old.tags.max_history_tags != new.tags.max_history_tags {

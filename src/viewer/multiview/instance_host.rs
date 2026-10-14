@@ -287,9 +287,40 @@ impl MultiviewInstance {
             video.player.set_tab_grid_mode(grid);
             video.player.set_view_active(active);
         }
+        self.apply_video_background();
         if active {
             self.apply_audio();
         }
+    }
+
+    /// Sets the color behind the media of the fullscreen (`None`: mpv's own black), for videos that are playing now and
+    /// those that start later. Only the fullscreen host uses it; a tab always gets mpv's default back.
+    pub fn set_video_background(&mut self, color: Option<[u8; 3]>) {
+        if self.video_background == color {
+            return;
+        }
+        self.video_background = color;
+        self.apply_video_background();
+    }
+
+    /// The background color mpv has to use in the current host.
+    pub(super) fn effective_video_background(&self) -> [u8; 3] {
+        match self.host.surface.mode {
+            HostMode::Fullscreen => self.video_background.unwrap_or([0, 0, 0]),
+            _ => [0, 0, 0],
+        }
+    }
+
+    pub(super) fn apply_video_background(&self) {
+        let color = self.effective_video_background();
+        for video in self.tiles.iter().filter_map(|t| t.video.as_ref()) {
+            video.player.set_background_color(color);
+        }
+        tracing::debug!(
+            instance = self.id,
+            mode = ?self.host.surface.mode,
+            "[Multiview: Background] Video background applied"
+        );
     }
 
     /// Moves every video window below `parent_xid`, hidden and paused, so the Multiview can live on as a background tab
