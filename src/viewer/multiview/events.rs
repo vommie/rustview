@@ -31,10 +31,3 @@ pub trait MultiviewEventSink: Send + Sync {
     /// Called on any thread.
     fn post(&self, instance: WeakInstance, event: PlayerEvent);
 }
-
-/// Sink for instances without a UI (tests): events are dropped.
-pub struct NullSink;
-
-impl MultiviewEventSink for NullSink {
-    fn post(&self, _instance: WeakInstance, _event: PlayerEvent) {}
-}

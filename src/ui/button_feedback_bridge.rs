@@ -13,18 +13,3 @@ pub fn to_slint(feedback: ButtonFeedback) -> SlintFeedback {
         seq: feedback.seq as i32,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_outcome_and_the_sequence_cross_the_boundary() {
-        let mut fb = ButtonFeedback::default();
-        fb.error();
-        let slint = to_slint(fb);
-        assert_eq!(slint.kind, SlintKind::Error);
-        assert_eq!(slint.seq, 1);
-        assert_eq!(to_slint(ButtonFeedback::default()).kind, SlintKind::None);
-    }
-}

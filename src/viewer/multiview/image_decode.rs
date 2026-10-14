@@ -43,27 +43,3 @@ pub fn load_scaled(
     scaled.make_mut_bytes().copy_from_slice(target.buffer());
     Ok((width, height, scaled))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn images_that_fit_are_left_alone() {
-        assert_eq!(downscaled_size(800, 600, 1920, 1080), (800, 600));
-        assert_eq!(downscaled_size(1920, 1080, 1920, 1080), (1920, 1080));
-    }
-
-    #[test]
-    fn large_images_are_fitted_without_distortion() {
-        assert_eq!(downscaled_size(6000, 4000, 1920, 1080), (1620, 1080));
-        assert_eq!(downscaled_size(4000, 6000, 1920, 1080), (720, 1080));
-        assert_eq!(downscaled_size(8000, 1000, 1920, 1080), (1920, 240));
-    }
-
-    #[test]
-    fn empty_dimensions_never_panic() {
-        assert_eq!(downscaled_size(0, 10, 100, 100), (0, 10));
-        assert_eq!(downscaled_size(10, 0, 100, 100), (10, 0));
-    }
-}

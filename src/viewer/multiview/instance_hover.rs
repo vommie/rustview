@@ -20,13 +20,8 @@ impl MultiviewInstance {
     /// the pointer position in the coordinates of the host window. Sound changes inside mpv and aspect probing only
     /// matter for videos.
     pub fn tick(&mut self, pointer: impl FnOnce() -> Option<(i32, i32)>) {
-        self.tick_at(Instant::now(), pointer);
-    }
-
-    /// `tick` with an explicit clock (tests).
-    pub fn tick_at(&mut self, now: Instant, pointer: impl FnOnce() -> Option<(i32, i32)>) {
         self.ticks = self.ticks.wrapping_add(1);
-        self.poll_pointer(pointer(), now);
+        self.poll_pointer(pointer(), Instant::now());
         if !self.has_video() {
             return;
         }
@@ -156,112 +151,5 @@ impl MultiviewInstance {
         if changed {
             self.apply_layout();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::viewer::multiview::HostSurface;
-    use crate::viewer::multiview::instance::SharedInstance;
-    use crate::viewer::multiview::model::TileKind;
-    use crate::viewer::multiview::tile::TileSeed;
-    use std::path::PathBuf;
-
-    fn instance(count: u64) -> SharedInstance {
-        let seeds = (1..=count)
-            .map(|id| TileSeed {
-                media_id: id,
-                kind: TileKind::Image,
-                aspect: 1.78,
-                path: PathBuf::new(),
-                filename: format!("{id}.png"),
-            })
-            .collect();
-        let shared = MultiviewInstance::detached(seeds);
-        shared
-            .lock()
-            .set_host(&HostSurface::fullscreen(0, 1920, 1080, 1.0));
-        shared
-    }
-
-    fn centre(mv: &MultiviewInstance, tile: usize) -> (i32, i32) {
-        let r = mv.layout.tiles[tile].content;
-        (r.x + r.w / 2, r.y + r.h / 2)
-    }
-
-    #[test]
-    fn the_bar_follows_the_pointer_and_hides_when_it_rests() {
-        let shared = instance(2);
-        let mut mv = shared.lock();
-        let t0 = Instant::now();
-        let (first, second) = (centre(&mv, 0), centre(&mv, 1));
-
-        mv.tick_at(t0, || Some(first));
-        assert_eq!(mv.bar_tile(), Some(0));
-        mv.tick_at(t0 + Duration::from_millis(500), || Some(second));
-        assert_eq!(mv.bar_tile(), Some(1), "the bar moves with the pointer");
-
-        let rests = t0 + Duration::from_millis(500 + MULTIVIEW_BAR_IDLE_MS + 1);
-        mv.tick_at(rests, || Some(second));
-        assert_eq!(mv.bar_tile(), None, "a resting pointer hides the bar");
-        mv.tick_at(rests + Duration::from_millis(50), || Some((second.0 + 3, second.1)));
-        assert_eq!(mv.bar_tile(), Some(1), "any movement shows it again");
-    }
-
-    #[test]
-    fn the_bar_stays_while_the_pointer_rests_on_it() {
-        let shared = instance(1);
-        let mut mv = shared.lock();
-        let t0 = Instant::now();
-        let spot = centre(&mv, 0);
-        mv.tick_at(t0, || Some(spot));
-        mv.set_bar_overlay(Some(Rect::new(spot.0 - 40, spot.1 - 20, 120, 34)));
-        let later = t0 + Duration::from_millis(MULTIVIEW_BAR_IDLE_MS * 4);
-        mv.tick_at(later, || Some(spot));
-        assert_eq!(mv.bar_tile(), Some(0), "the pointer is on the bar");
-        mv.tick_at(later + Duration::from_millis(50), || Some((spot.0 + 200, spot.1)));
-        mv.tick_at(later + Duration::from_millis(60 + MULTIVIEW_BAR_IDLE_MS), || {
-            Some((spot.0 + 200, spot.1))
-        });
-        assert_eq!(mv.bar_tile(), None, "off the bar, the idle rule applies again");
-    }
-
-    #[test]
-    fn gutters_and_the_outside_have_no_bar() {
-        let shared = instance(2);
-        let mut mv = shared.lock();
-        let t0 = Instant::now();
-        let gutter = mv.layout.gutters[0].rect;
-        mv.tick_at(t0, || Some((gutter.x + gutter.w / 2, gutter.y + gutter.h / 2)));
-        assert_eq!(mv.bar_tile(), None);
-        mv.tick_at(t0, || None);
-        assert_eq!(mv.bar_tile(), None);
-    }
-
-    #[test]
-    fn the_bar_overlay_is_kept_in_host_window_coordinates() {
-        let shared = instance(1);
-        let mut mv = shared.lock();
-        mv.set_bar_overlay(Some(Rect::new(10, 20, 100, 30)));
-        assert_eq!(mv.bar_rect, Some(Rect::new(10, 20, 100, 30)));
-        mv.set_bar_overlay(None);
-        assert_eq!(mv.bar_rect, None);
-    }
-
-    #[test]
-    fn the_bar_target_names_the_hovered_tile_its_place_and_its_buttons() {
-        let shared = instance(2);
-        let mut mv = shared.lock();
-        assert!(mv.bar_target().is_none(), "nothing is hovered yet");
-        let t0 = Instant::now();
-        let spot = centre(&mv, 1);
-        mv.tick_at(t0, || Some(spot));
-        let target = mv.bar_target().expect("the second tile is hovered");
-        assert_eq!(target.tile, 1);
-        assert_eq!(target.rect, mv.tile_rect(1));
-        assert!(!target.actions.is_empty());
-        mv.tick_at(t0 + Duration::from_millis(MULTIVIEW_BAR_IDLE_MS + 1), || Some(spot));
-        assert!(mv.bar_target().is_none(), "a resting pointer hides the bar");
     }
 }

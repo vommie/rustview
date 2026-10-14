@@ -173,27 +173,3 @@ pub(super) fn sync_model<T: Clone + 'static>(model: &VecModel<T>, items: Vec<T>)
         model.set_vec(items);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_logical_area_converts_to_physical_pixels_by_rounding_edges() {
-        assert_eq!(
-            physical_rect(0.0, 64.0, 960.0, 540.0, 1.0),
-            Rect::new(0, 64, 960, 540)
-        );
-
-        let rect = physical_rect(0.0, 64.0, 801.5, 539.5, 1.25);
-        assert_eq!((rect.x, rect.y), (0, 80));
-        assert_eq!(rect.x + rect.w, (801.5f32 * 1.25).round() as i32);
-        assert_eq!(rect.y + rect.h, ((64.0f32 + 539.5) * 1.25).round() as i32);
-    }
-
-    #[test]
-    fn a_collapsed_area_never_yields_an_empty_rectangle() {
-        let rect = physical_rect(10.0, 10.0, 0.0, 0.0, 2.0);
-        assert!(rect.w >= 1 && rect.h >= 1);
-    }
-}

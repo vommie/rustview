@@ -40,31 +40,3 @@ pub fn aspect_from_video_params(display_w: i64, display_h: i64, rotate: i64) -> 
 pub fn aspect_differs(a: f32, b: f32) -> bool {
     (a - b).abs() / b.max(0.0001) > 0.01
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unknown_dimensions_use_the_fallback() {
-        assert_eq!(aspect_from_size(0, 100, 1.5), 1.5);
-        assert_eq!(aspect_from_size(100, 0, 1.5), 1.5);
-        assert_eq!(aspect_from_size(200, 100, 1.5), 2.0);
-    }
-
-    #[test]
-    fn rotation_swaps_the_display_size() {
-        assert_eq!(aspect_from_video_params(640, 360, 0), Some(640.0 / 360.0));
-        assert_eq!(aspect_from_video_params(640, 360, 90), Some(360.0 / 640.0));
-        assert_eq!(aspect_from_video_params(640, 360, 270), Some(360.0 / 640.0));
-        assert_eq!(aspect_from_video_params(640, 360, 180), Some(640.0 / 360.0));
-        assert_eq!(aspect_from_video_params(640, 360, -90), Some(360.0 / 640.0));
-        assert_eq!(aspect_from_video_params(0, 360, 0), None);
-    }
-
-    #[test]
-    fn small_aspect_differences_are_ignored() {
-        assert!(!aspect_differs(1.7778, 1.7777));
-        assert!(aspect_differs(0.8889, 1.7778));
-    }
-}

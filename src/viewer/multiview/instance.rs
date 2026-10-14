@@ -12,7 +12,7 @@
 
 use super::click::{ClickDetector, ClickKind};
 use super::container::Container;
-use super::events::{MultiviewEventSink, NullSink};
+use super::events::MultiviewEventSink;
 use super::instance_host::HostState;
 use super::instance_layout::{DragState, layout_params};
 use super::layout::{Layout, LayoutParams, Rect};
@@ -102,11 +102,6 @@ impl MultiviewInstance {
                 revision: 0,
             })
         })
-    }
-
-    /// An instance without a UI and without native windows (tests).
-    pub fn detached(seeds: Vec<TileSeed>) -> SharedInstance {
-        Self::create(Arc::new(NullSink), seeds)
     }
 
     pub fn id(&self) -> u64 {

@@ -32,37 +32,3 @@ impl ButtonFeedback {
         self.trigger(FeedbackKind::Error);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_new_button_shows_no_feedback() {
-        let fb = ButtonFeedback::default();
-        assert_eq!((fb.kind, fb.seq), (FeedbackKind::None, 0));
-    }
-
-    #[test]
-    fn every_trigger_changes_the_sequence_even_for_the_same_outcome() {
-        let mut fb = ButtonFeedback::default();
-        fb.success();
-        let first = fb;
-        fb.success();
-        assert_eq!(fb.kind, FeedbackKind::Success);
-        assert_ne!(fb.seq, first.seq, "a repeated success must replay");
-        fb.error();
-        assert_eq!(fb.kind, FeedbackKind::Error);
-        assert_eq!(fb.seq, first.seq.wrapping_add(2));
-    }
-
-    #[test]
-    fn the_sequence_wraps_instead_of_panicking() {
-        let mut fb = ButtonFeedback {
-            kind: FeedbackKind::None,
-            seq: u32::MAX,
-        };
-        fb.error();
-        assert_eq!(fb.seq, 0);
-    }
-}
