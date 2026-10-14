@@ -2,6 +2,7 @@ use super::error::ViewerError;
 use super::mpv_engine::MpvPlayer;
 use super::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use super::tab_item::{ImageBufferEvictor, TabCollection, TabSessionFactory, TabTitleFormatter};
+use super::tab_ui_gate::TabUiGate;
 use super::types::{
     ImageTabPayload, MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, TabId, TabPayload, VideoTabPayload,
 };
@@ -34,7 +35,13 @@ pub struct ViewerTabManager {
     /// Multiviews that no tab owns (the fullscreen one that follows the Browse selection) but whose media may be renamed,
     /// deleted or refreshed while it is open.
     observed_instances: Mutex<Vec<WeakInstance>>,
+    /// Whether the UI shows the tabs that exist, and who to tell when a tab is created (see `TabUiGate`).
+    tab_ui_gate: TabUiGate,
+    tabs_changed_hook: Mutex<Option<TabsChangedHook>>,
 }
+
+/// Called (from any thread, with no manager lock held) after a tab was created.
+type TabsChangedHook = Arc<dyn Fn() + Send + Sync>;
 
 impl ViewerTabManager {
     pub fn new(library: Arc<Library>) -> Self {
@@ -48,6 +55,41 @@ impl ViewerTabManager {
             active_menu_cutouts: RwLock::new(Vec::new()),
             active_tooltip_cutouts: RwLock::new(Vec::new()),
             observed_instances: Mutex::new(Vec::new()),
+            tab_ui_gate: TabUiGate::default(),
+            tabs_changed_hook: Mutex::new(None),
+        }
+    }
+
+    // =========================================================================
+    // Tab UI Invariant: a created tab is always rendered
+    // =========================================================================
+
+    /// Sets what happens after a tab was created: the application renders the tab list if it has not done so already.
+    pub fn set_tabs_changed_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *self.tabs_changed_hook.lock() = Some(Arc::new(hook));
+    }
+
+    /// The revision of the tab list; the UI passes it to `mark_tab_ui_synced` once it has rendered the tabs.
+    pub fn tab_ui_revision(&self) -> u64 {
+        self.tab_ui_gate.revision()
+    }
+
+    pub fn mark_tab_ui_synced(&self, revision: u64) {
+        self.tab_ui_gate.mark_synced(revision);
+    }
+
+    /// True while a tab exists that the UI has not rendered yet.
+    pub fn is_tab_ui_stale(&self) -> bool {
+        self.tab_ui_gate.is_stale()
+    }
+
+    /// Every creation path ends here, after its tab collection lock is released.
+    fn tab_created(&self) {
+        let revision = self.tab_ui_gate.changed();
+        tracing::debug!(revision, "[ViewerTabManager: TabCreated] The tab UI has to show the new tab");
+        let hook = self.tabs_changed_hook.lock().clone();
+        if let Some(hook) = hook {
+            hook();
         }
     }
 
@@ -503,6 +545,8 @@ impl ViewerTabManager {
             "[ViewerTabManager: Open] Created new viewer tab session"
         );
 
+        drop(tabs);
+        self.tab_created();
         Ok((new_id, true))
     }
 
@@ -571,6 +615,8 @@ impl ViewerTabManager {
             "[ViewerTabManager: OpenBackground] Created new background viewer tab session"
         );
 
+        drop(tabs);
+        self.tab_created();
         Ok((new_id, true))
     }
 
@@ -602,6 +648,8 @@ impl ViewerTabManager {
             total_open_tabs = tabs.len(),
             "[ViewerTabManager: AdoptMultiview] Adopted the running Multiview into a background tab"
         );
+        drop(tabs);
+        self.tab_created();
         new_id
     }
 
@@ -1167,5 +1215,94 @@ impl ViewerTabManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::model::TileKind;
+    use crate::viewer::multiview::tile::TileSeed;
+    use std::path::PathBuf;
+    use std::sync::atomic::AtomicUsize;
+
+    fn manager(dir: &std::path::Path) -> ViewerTabManager {
+        let library = Arc::new(Library::open(&dir.join("library")).expect("open library"));
+        ViewerTabManager::new(library)
+    }
+
+    fn multiview(ids: &[MediaId]) -> SharedInstance {
+        MultiviewInstance::detached(
+            ids.iter()
+                .map(|&id| TileSeed {
+                    media_id: id,
+                    kind: TileKind::Image,
+                    aspect: 1.78,
+                    path: PathBuf::new(),
+                    filename: format!("{id}.png"),
+                })
+                .collect(),
+        )
+    }
+
+    fn counting_hook(manager: &ViewerTabManager) -> Arc<AtomicUsize> {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        manager.set_tabs_changed_hook(move || {
+            seen.fetch_add(1, Ordering::SeqCst);
+        });
+        calls
+    }
+
+    #[test]
+    fn a_multiview_moved_into_a_tab_makes_the_tab_ui_stale_and_tells_the_application() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let manager = manager(dir.path());
+        let calls = counting_hook(&manager);
+        assert!(!manager.is_tab_ui_stale());
+
+        let tab = manager.adopt_multiview_in_background(multiview(&[1, 2]));
+        assert!(manager.get_tab(tab).is_some(), "the tab exists");
+        assert!(manager.is_tab_ui_stale(), "but the tab UI has not shown it yet");
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "the application was told once");
+
+        manager.mark_tab_ui_synced(manager.tab_ui_revision());
+        assert!(!manager.is_tab_ui_stale(), "rendering the tab list settles it");
+    }
+
+    #[test]
+    fn adopting_the_same_multiview_twice_creates_and_announces_one_tab() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let manager = manager(dir.path());
+        let calls = counting_hook(&manager);
+        let instance = multiview(&[1, 2]);
+
+        let first = manager.adopt_multiview_in_background(instance.clone());
+        manager.mark_tab_ui_synced(manager.tab_ui_revision());
+        let second = manager.adopt_multiview_in_background(instance);
+
+        assert_eq!(first, second);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(!manager.is_tab_ui_stale(), "nothing new to render");
+    }
+
+    #[test]
+    fn a_tab_created_after_the_last_render_is_stale_again() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let manager = manager(dir.path());
+        manager.adopt_multiview_in_background(multiview(&[1]));
+        let rendered = manager.tab_ui_revision();
+        manager.adopt_multiview_in_background(multiview(&[2]));
+        manager.mark_tab_ui_synced(rendered);
+        assert!(manager.is_tab_ui_stale(), "the second tab was not part of that render");
+    }
+
+    #[test]
+    fn a_missing_hook_does_not_get_in_the_way() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let manager = manager(dir.path());
+        let tab = manager.adopt_multiview_in_background(multiview(&[1]));
+        assert!(manager.get_tab(tab).is_some());
+        assert!(manager.is_tab_ui_stale());
     }
 }

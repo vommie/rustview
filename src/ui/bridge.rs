@@ -270,7 +270,12 @@ impl UiBridge {
 
             let _ = win_w.upgrade_in_event_loop(move |w| {
                 if origin_mode == KEEP_VIEW {
-                    // A Multiview that followed the Browse selection closed: the main window shows what it shows now.
+                    // A Multiview that followed the Browse selection closed: the main window shows what it shows now, and
+                    // the tab list too (the Multiview may have been moved into a new tab as it closed).
+                    BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
+                    if w.get_active_view_mode() == 2 {
+                        BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &lib, &set, &st);
+                    }
                     BridgeViewerTabs::sync_video_embedding(&w, &tm, &fs_ctrl, &set);
                     StatusBarBridge::update_metrics(&w, &st);
                     return;
@@ -299,6 +304,8 @@ impl UiBridge {
                 StatusBarBridge::update_metrics(&w, &st);
             });
         });
+
+        Self::install_tabs_changed_hook(&window, &tab_manager, &library, &settings, &state);
 
         let thumbnail_timer = BridgeThumbnails::start_drain_timer(
             thumbnails.clone(),
@@ -370,6 +377,39 @@ impl UiBridge {
         });
 
         bridge
+    }
+
+    /// Whatever creates a tab (a click, a menu, an action button, a Multiview moved into a tab), the tab list is rendered
+    /// right away: after a tab was created the UI thread checks whether the tab UI is behind and, if so, renders it. The paths
+    /// that render on their own have already marked the tab UI as current, so the check is free for them.
+    fn install_tabs_changed_hook(
+        window: &MainWindow,
+        tab_manager: &Arc<ViewerTabManager>,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+    ) {
+        let win = window.as_weak();
+        let tm_weak = Arc::downgrade(tab_manager);
+        let lib = library.clone();
+        let set = settings.clone();
+        let st = state.clone();
+        tab_manager.set_tabs_changed_hook(move || {
+            let (tm_weak, lib, set, st) = (tm_weak.clone(), lib.clone(), set.clone(), st.clone());
+            let _ = win.upgrade_in_event_loop(move |w| {
+                let Some(tm) = tm_weak.upgrade() else {
+                    return;
+                };
+                if !tm.is_tab_ui_stale() {
+                    return;
+                }
+                tracing::info!("[UiBridge: TabsChanged] A created tab was not rendered yet; rendering the tab list");
+                BridgeViewerTabs::sync_ui(&w, &tm, &lib, &set, &st);
+                if w.get_active_view_mode() == 2 {
+                    BridgeTabGrid::sync_tab_grid_ui(&w, &tm, &lib, &set, &st);
+                }
+            });
+        });
     }
 
     pub fn window(&self) -> &MainWindow {

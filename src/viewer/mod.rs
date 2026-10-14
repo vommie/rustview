@@ -5,6 +5,7 @@ pub mod mpv_engine;
 pub mod multiview;
 pub mod tab_item;
 mod tab_native;
+pub mod tab_ui_gate;
 pub mod types;
 pub mod x11_embed;
 

@@ -1582,6 +1582,8 @@ impl BridgeViewerTabs {
         settings: &SettingsManager,
         state: &RwLock<UiState>,
     ) {
+        // Every tab that exists from here on is rendered below, so this render counts for the revision read now.
+        tab_manager.mark_tab_ui_synced(tab_manager.tab_ui_revision());
         let tabs = tab_manager.list_tabs();
         let active_id_opt = tab_manager.active_tab_id();
         let is_tab_grid = window.get_is_tab_grid_active();
