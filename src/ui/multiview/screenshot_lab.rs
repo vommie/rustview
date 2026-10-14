@@ -89,6 +89,14 @@ impl Shot {
     pub fn same_as(&self, other: &Shot) -> bool {
         self.pixels.as_bytes() == other.pixels.as_bytes()
     }
+
+    /// Number of pixels inside `rect` whose three channels are all at most `limit` (pure black ink).
+    pub fn count_dark(&self, rect: Rect, limit: u8) -> usize {
+        (rect.y..rect.y + rect.h)
+            .flat_map(|y| (rect.x..rect.x + rect.w).map(move |x| (x, y)))
+            .filter(|&(x, y)| self.at(x, y).iter().all(|&c| c <= limit))
+            .count()
+    }
 }
 
 pub fn color_of(id: u64) -> [u8; 3] {
@@ -587,6 +595,37 @@ mod tests {
         let failed = lab.shot_now("21-open-as-tab-feedback-error");
         let px = failed.at(buttons[1].0 - 10, buttons[1].1 - 10);
         assert!(px[0] > 180 && px[1] < 160, "the button flashes red: {px:?}");
+    }
+
+    #[test]
+    fn a_resting_action_bar_shows_no_leftover_feedback_glyphs() {
+        let mut lab = Lab::new(W, H, &MEDIA);
+        lab.follow(&[2, 4]);
+        let (hx, hy) = lab.center_of(1);
+        lab.pointer(hx, hy);
+        lab.pointer(hx + 2, hy);
+        let resting = lab.shot("26-action-bar-at-rest");
+        let bar = lab.overlay.get().expect("the bar is shown");
+        assert_eq!(
+            resting.count_dark(bar, 8),
+            0,
+            "the feedback overlay must not draw its untinted (black) check mark while nothing flashes"
+        );
+
+        let open_tab = (bar.x + 3 + 30 + 14, bar.y + 3 + 14);
+        lab.instance.lock().action_finished(4, ActionId::OpenAsTab, true);
+        lab.refresh();
+        lab.advance(Duration::from_millis(1));
+        lab.advance(Duration::from_millis(60));
+        let flash = lab.shot_now("27-feedback-flash");
+        assert!(flash.at(open_tab.0 - 10, open_tab.1 - 10)[1] > 150, "the flash is still green");
+        lab.advance(Duration::from_millis(1500));
+        let after = lab.shot_now("28-action-bar-after-the-flash");
+        assert_eq!(
+            after.count_dark(bar, 8),
+            0,
+            "once the flash has faded no black glyph is left behind"
+        );
     }
 
     #[test]
