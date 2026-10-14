@@ -1,18 +1,14 @@
-//! Instance behavior around the tiles: creating and starting them, decoding images and the live reconcile with the
-//! selection of the Browse view.
+//! Instance behavior around the tiles: creating and starting them and decoding images.
 
 use super::audio::{self, TileAudio};
 use super::events::{DecodedImage, PlayerEvent};
 use super::image_decode;
 use super::instance::MultiviewInstance;
-use super::layout::Split;
 use super::model::{AspectSource, TileKind, aspect_differs, aspect_from_size};
-use super::reconcile::ReconcilePlan;
 use super::teardown::teardown_videos;
-use super::tile::{self, TileSeed, TileState, VideoTile};
+use super::tile;
 use crate::library::models::MediaId;
 use crate::settings::LogObscurer;
-use std::collections::HashMap;
 
 /// Error texts can embed file paths; with log obfuscation active they are not written to the log.
 fn loggable(error: &str) -> &str {
@@ -51,10 +47,39 @@ impl MultiviewInstance {
     }
 
     pub(super) fn start_tile(&mut self, index: usize) {
-        match self.tiles.get(index).map(|t| t.kind) {
-            Some(TileKind::Video) => self.start_video(index),
-            Some(TileKind::Image) => self.start_image(index),
+        match self.tiles.get(index).map(|t| (t.kind, t.video.is_some())) {
+            Some((TileKind::Video, true)) => self.reload_video(index),
+            Some((TileKind::Video, false)) => self.start_video(index),
+            Some((TileKind::Image, _)) => self.start_image(index),
             None => {}
+        }
+    }
+
+    /// A video tile took over the player of the tile it replaced: the player plays the new file in its existing window.
+    fn reload_video(&mut self, index: usize) {
+        let (media_id, path) = {
+            let tile = &self.tiles[index];
+            (tile.media_id, tile.path.clone())
+        };
+        let Some(video) = self.tiles[index].video.as_ref() else {
+            return;
+        };
+        match tile::reload_video(video, media_id, &path) {
+            Ok(()) => tracing::info!(
+                media_id,
+                index,
+                filename = %LogObscurer::filename(&self.tiles[index].filename),
+                "[Multiview: Tile] Video tile recycled the player of the tile it replaced"
+            ),
+            Err(e) => {
+                tracing::error!(media_id, index, error = %loggable(&e), "[Multiview: Tile] Recycled video failed");
+                let tile = &mut self.tiles[index];
+                tile.error = Some(format!("This video could not be played\n{e}"));
+                tile.audio = None;
+                let failed = tile.video.take();
+                teardown_videos(failed.into_iter().collect());
+                self.bump();
+            }
         }
     }
 
@@ -147,58 +172,5 @@ impl MultiviewInstance {
         } else {
             self.bump();
         }
-    }
-
-    /// Brings the tiles in line with a reconcile plan: removed items leave, new items take the freed slots, the remaining
-    /// tiles keep running. `seeds` holds the new items.
-    pub fn reconcile(&mut self, plan: &ReconcilePlan, mut seeds: HashMap<MediaId, TileSeed>) {
-        if plan.is_noop() {
-            return;
-        }
-        self.drag = None;
-        self.clear_hover();
-        let mut kept: HashMap<MediaId, TileState> =
-            self.tiles.drain(..).map(|t| (t.media_id, t)).collect();
-
-        let mut removed: Vec<VideoTile> = Vec::new();
-        for id in &plan.remove {
-            removed.extend(kept.remove(id).and_then(|t| t.video));
-        }
-        let mut added: Vec<usize> = Vec::new();
-        for id in &plan.slots {
-            if let Some(tile) = kept.remove(id) {
-                self.tiles.push(tile);
-            } else if let Some(seed) = seeds.remove(id) {
-                added.push(self.tiles.len());
-                self.tiles.push(TileState::from_seed(seed));
-            }
-        }
-        removed.extend(kept.into_values().filter_map(|t| t.video));
-
-        let removed_count = plan.remove.len();
-        if removed_count != added.len() {
-            self.split = Split::Auto;
-        }
-        let mut slots: Vec<Option<TileAudio>> = self.tiles.iter().map(|t| t.audio).collect();
-        audio::after_reconcile(&mut slots, &added);
-        for (tile, slot) in self.tiles.iter_mut().zip(slots) {
-            tile.audio = slot;
-        }
-
-        self.apply_layout();
-        for &index in &added {
-            self.start_tile(index);
-        }
-        self.apply_audio();
-        let teardown_count = removed.len();
-        teardown_videos(removed);
-        self.bump();
-        tracing::info!(
-            removed = removed_count,
-            added = added.len(),
-            shown = self.tiles.len(),
-            players_closed = teardown_count,
-            "[Multiview: Reconcile] Tiles updated to match the selection"
-        );
     }
 }

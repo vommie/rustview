@@ -4,16 +4,20 @@
 //! host window, an `MpvPlayer` attached to it, the same callbacks, `load_file` + `play`. mpv does whatever it does
 //! inside its rectangle; the layout only decides where that rectangle is.
 
+use super::actions::ActionId;
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
 use super::instance::WeakInstance;
 use super::layout::Rect;
 use super::model::{AspectSource, TileKind};
+use crate::button_feedback::ButtonFeedback;
 use crate::library::models::MediaId;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub struct VideoTile {
     pub player: Arc<MpvPlayer>,
@@ -22,6 +26,9 @@ pub struct VideoTile {
     pub native_mute: bool,
     /// Last mute state known, to tell our own changes from changes made inside mpv (`m`, OSC).
     pub last_mute: bool,
+    /// The medium the player currently shows. A recycled player moves on to another medium, and the callbacks that were
+    /// installed once at creation read this instead of the id they were created for.
+    pub current_media: Arc<AtomicU64>,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -48,6 +55,21 @@ pub struct TileState {
     pub video: Option<VideoTile>,
     /// `None` for images (no sound).
     pub audio: Option<TileAudio>,
+    /// Stays on screen when the Browse selection changes (only Multiviews that follow the selection use it).
+    pub sticky: bool,
+    /// Width the user gave this tile by dragging a gutter, as a share of its row; `None` = automatic.
+    pub pin: Option<f64>,
+    /// Feedback of the action buttons of this tile.
+    pub feedback: HashMap<ActionId, ButtonFeedback>,
+    /// Display parameters mpv reported for the file a recycled player showed before: they are stale until they change.
+    pub stale_probe: Option<StaleProbe>,
+}
+
+/// Parameters that must not be taken for the new file, and how many ticks to ignore them at most.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StaleProbe {
+    pub params: (i64, i64, i64),
+    pub ticks_left: u32,
 }
 
 impl TileState {
@@ -65,6 +87,10 @@ impl TileState {
             error: None,
             video: None,
             audio: is_video.then(TileAudio::native),
+            sticky: false,
+            pin: None,
+            feedback: HashMap::new(),
+            stale_probe: None,
         }
     }
 }
@@ -85,12 +111,13 @@ fn connect_callbacks(
     player: &MpvPlayer,
     sink: &Arc<dyn MultiviewEventSink>,
     me: &WeakInstance,
-    media_id: MediaId,
+    current_media: &Arc<AtomicU64>,
 ) {
     player.on_toggle_fullscreen(forward(sink, me, || PlayerEvent::ToggleFullscreen));
     player.on_close_tab(forward(sink, me, || PlayerEvent::CloseTab));
+    let current_media = Arc::clone(current_media);
     player.on_rename_requested(forward(sink, me, move || {
-        PlayerEvent::RenameRequested(media_id)
+        PlayerEvent::RenameRequested(current_media.load(Ordering::SeqCst))
     }));
     player.on_convert_to_background_tab(forward(sink, me, || PlayerEvent::CtrlClick));
     player.on_grid_left_click(forward(sink, me, || PlayerEvent::GridLeftClick));
@@ -120,7 +147,8 @@ pub fn create_video(
     window.show();
 
     let player = Arc::new(MpvPlayer::new().map_err(|e| e.to_string())?);
-    connect_callbacks(&player, sink, me, media_id);
+    let current_media = Arc::new(AtomicU64::new(media_id));
+    connect_callbacks(&player, sink, me, &current_media);
 
     let started = player.attach_to_window(wid).and_then(|()| {
         player.set_tab_grid_mode(false);
@@ -141,5 +169,13 @@ pub fn create_video(
         window,
         native_mute,
         last_mute: native_mute,
+        current_media,
     })
+}
+
+/// Plays another medium in the player of `video`, the way the former quick fullscreen browsed videos: one player and one
+/// window, `loadfile replace`, so volume, speed and loop settings carry over.
+pub fn reload_video(video: &VideoTile, media_id: MediaId, path: &Path) -> Result<(), String> {
+    video.current_media.store(media_id, Ordering::SeqCst);
+    video.player.load_file(path).map_err(|e| e.to_string())
 }

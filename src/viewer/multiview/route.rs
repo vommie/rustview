@@ -42,6 +42,10 @@ pub enum UiAction {
     RequestRename,
     ActivateTab,
     ScrollGrid { up: bool },
+    /// Action button: open the medium as a normal background tab.
+    OpenTileAsTab(u64),
+    /// Action button: the medium left the Multiview, so it is deselected in the Browse view too.
+    DeselectInBrowse(u64),
 }
 
 pub fn route(mode: HostMode, origin: OriginKind, event: RoutedEvent, click: ClickKind) -> UiAction {

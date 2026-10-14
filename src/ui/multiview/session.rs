@@ -121,7 +121,7 @@ pub(super) fn schedule_reconcile() {
             s.debounce.start(
                 TimerMode::SingleShot,
                 Duration::from_millis(MULTIVIEW_SELECTION_DEBOUNCE_MS),
-                || with_session(Session::reconcile_now),
+                || with_session(Session::follow_now),
             );
         }
     });

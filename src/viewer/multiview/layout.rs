@@ -2,7 +2,10 @@
 //!
 //! One row with 1..=4 tiles is the normal case; exactly four widescreen media form a 2x2 grid. Every medium is fitted
 //! (contain) into its column and aligned towards the window center, so media with spare room sit directly next to
-//! each other instead of drifting apart. Column widths follow "fair share with fit cap" (water filling).
+//! each other instead of drifting apart. Column widths follow "fair share with fit cap" (water filling); widths the user
+//! pinned by dragging a gutter come from `layout_pins`.
+
+use super::layout_pins::{Pins, split_columns};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Rect {
@@ -61,39 +64,6 @@ pub struct Layout {
     pub gutters: Vec<Gutter>,
     /// Tile indices of each row (one row, or two rows for 2x2).
     pub rows: Vec<Vec<usize>>,
-}
-
-/// Proportions after the user dragged a gutter: `col_fr[row][column]` sums to 1 per row, `row_fr` sums to 1.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ManualSplit {
-    pub col_fr: Vec<Vec<f64>>,
-    pub row_fr: Vec<f64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub enum Split {
-    #[default]
-    Auto,
-    Manual(ManualSplit),
-}
-
-impl ManualSplit {
-    /// Exchanges two neighboring tiles of a row together with their column shares.
-    pub fn swap_columns(&mut self, row: usize, left: usize) {
-        if let Some(fr) = self.col_fr.get_mut(row)
-            && left + 1 < fr.len()
-        {
-            fr.swap(left, left + 1);
-        }
-    }
-
-    /// Exchanges the two rows of a 2x2 grid together with their heights and column shares.
-    pub fn swap_rows(&mut self) {
-        if self.col_fr.len() == 2 {
-            self.col_fr.swap(0, 1);
-            self.row_fr.swap(0, 1);
-        }
-    }
 }
 
 /// Distributes `total` pixels over elements that each want at most `caps[i]` pixels. If everything fits, the elements
@@ -178,25 +148,22 @@ pub(super) fn proportional(total: i32, fractions: &[f64]) -> Vec<i32> {
     out
 }
 
-/// One row of tiles: columns by manual fractions or fair share, each tile fitted and aligned towards the center.
+/// One row of tiles: columns by pinned shares or fair share, each tile fitted and aligned towards the center.
+#[allow(clippy::too_many_arguments)]
 fn solve_row(
     x0: i32,
     y0: i32,
     total_w: i32,
     row_h: i32,
     gutter: i32,
+    min_column: i32,
     aspects: &[f32],
-    col_fr: Option<&[f64]>,
+    pins: &[Option<f64>],
 ) -> Vec<TileLayout> {
     let n = aspects.len();
     let usable = (total_w - (n as i32 - 1) * gutter).max(n as i32);
-    let columns = match col_fr {
-        Some(fr) if fr.len() == n => proportional(usable, fr),
-        _ => {
-            let caps: Vec<i32> = aspects.iter().map(|&a| fit_cap(row_h, a)).collect();
-            fair_share(usable, &caps)
-        }
-    };
+    let caps: Vec<i32> = aspects.iter().map(|&a| fit_cap(row_h, a)).collect();
+    let columns = split_columns(usable, &caps, pins, min_column);
 
     let mut out = Vec::with_capacity(n);
     let mut x = x0;
@@ -227,31 +194,13 @@ pub fn partition(aspects: &[f32], min_wide_aspect: f32) -> Vec<Vec<usize>> {
     }
 }
 
-fn manual_matches<'a>(split: &'a Split, rows: &[Vec<usize>]) -> Option<&'a ManualSplit> {
-    match split {
-        Split::Manual(m)
-            if m.col_fr.len() == rows.len()
-                && m.col_fr.iter().zip(rows).all(|(fr, r)| fr.len() == r.len())
-                && m.row_fr.len() == rows.len() =>
-        {
-            Some(m)
-        }
-        _ => None,
-    }
-}
-
-/// True if `split` is manual and still matches the row/column structure of `rows` (a changed partition invalidates it).
-pub fn manual_fits(split: &Split, rows: &[Vec<usize>]) -> bool {
-    manual_matches(split, rows).is_some()
-}
-
-/// Solves the whole layout. A manual split is used only while it still fits the current partition.
-pub fn solve(p: &LayoutParams, aspects: &[f32], split: &Split) -> Layout {
+/// Solves the whole layout. Pinned widths (and, in a 2x2 grid, row heights) take precedence over the automatic share.
+pub fn solve(p: &LayoutParams, aspects: &[f32], pins: &Pins) -> Layout {
     if aspects.is_empty() {
         return Layout::default();
     }
     let rows = partition(aspects, p.min_wide_aspect);
-    let manual = manual_matches(split, &rows);
+    let row_pins = |row: &[usize]| -> Vec<Option<f64>> { row.iter().map(|&i| pins.col(i)).collect() };
     let mut tiles = vec![TileLayout::default(); aspects.len()];
     let mut gutters = Vec::new();
 
@@ -262,8 +211,9 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], split: &Split) -> Layout {
             p.width,
             p.height,
             p.gutter,
+            p.min_column,
             aspects,
-            manual.map(|m| m.col_fr[0].as_slice()),
+            &row_pins(&rows[0]),
         );
         for (i, t) in sub.iter().enumerate() {
             tiles[i] = *t;
@@ -284,8 +234,11 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], split: &Split) -> Layout {
     }
 
     let available = (p.height - p.gutter).max(2);
-    let heights = match manual {
-        Some(m) => proportional(available, &m.row_fr),
+    let pinned_rows = pins
+        .rows
+        .filter(|r| r.iter().all(|f| f.is_finite() && *f > 0.0));
+    let heights = match pinned_rows {
+        Some(fr) => proportional(available, &fr),
         None => {
             let natural: Vec<i32> = rows
                 .iter()
@@ -300,8 +253,16 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], split: &Split) -> Layout {
     let mut y = 0;
     for (ri, (row, &row_h)) in rows.iter().zip(&heights).enumerate() {
         let row_aspects: Vec<f32> = row.iter().map(|&i| aspects[i]).collect();
-        let fr = manual.map(|m| m.col_fr[ri].as_slice());
-        let sub = solve_row(0, y, p.width, row_h, p.gutter, &row_aspects, fr);
+        let sub = solve_row(
+            0,
+            y,
+            p.width,
+            row_h,
+            p.gutter,
+            p.min_column,
+            &row_aspects,
+            &row_pins(row),
+        );
         for (k, (&idx, t)) in row.iter().zip(&sub).enumerate() {
             tiles[idx] = *t;
             if k + 1 < sub.len() {
@@ -329,96 +290,10 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], split: &Split) -> Layout {
 }
 
 impl Layout {
-    /// The current arrangement as manual proportions; converting does not move any rectangle (up to 1 px of rounding).
-    pub fn to_manual(&self) -> ManualSplit {
-        let col_fr = self
-            .rows
-            .iter()
-            .map(|r| {
-                let usable: i32 = r.iter().map(|&i| self.tiles[i].column.w).sum();
-                r.iter()
-                    .map(|&i| f64::from(self.tiles[i].column.w) / f64::from(usable.max(1)))
-                    .collect()
-            })
-            .collect();
-        let row_fr = if self.rows.len() > 1 {
-            let heights: Vec<i32> = self
-                .rows
-                .iter()
-                .map(|r| self.tiles[r[0]].column.h)
-                .collect();
-            let sum: i32 = heights.iter().sum();
-            heights
-                .iter()
-                .map(|&h| f64::from(h) / f64::from(sum.max(1)))
-                .collect()
-        } else {
-            vec![1.0]
-        };
-        ManualSplit { col_fr, row_fr }
-    }
-
     /// Index of the tile whose medium contains the point (window coordinates).
     pub fn tile_at(&self, x: i32, y: i32) -> Option<usize> {
         self.tiles.iter().position(|t| t.content.contains(x, y))
     }
-}
-
-/// Moves a gutter by `delta` pixels relative to the proportions at drag start (`start`, solved as `start_layout`).
-/// Both neighbors keep at least `min_column` pixels; the result snaps to "neighbor exactly fitted" within `snap` pixels.
-pub fn drag(
-    start: &ManualSplit,
-    start_layout: &Layout,
-    gutter: &Gutter,
-    delta: i32,
-    p: &LayoutParams,
-    aspects: &[f32],
-    snap: i32,
-) -> ManualSplit {
-    let mut next = start.clone();
-    match gutter.kind {
-        GutterKind::Vertical => {
-            let Some(row) = start_layout.rows.get(gutter.row) else {
-                return next;
-            };
-            let (Some(&left_tile), Some(&right_tile)) =
-                (row.get(gutter.left), row.get(gutter.left + 1))
-            else {
-                return next;
-            };
-            let usable: i32 = row.iter().map(|&i| start_layout.tiles[i].column.w).sum();
-            let left_w = start_layout.tiles[left_tile].column.w;
-            let pair = left_w + start_layout.tiles[right_tile].column.w;
-            let min_col = p.min_column.min(pair / 3).max(1);
-            let row_h = start_layout.tiles[left_tile].column.h;
-            let mut new_left = (left_w + delta).clamp(min_col, (pair - min_col).max(min_col));
-            let left_fit = fit_cap(row_h, aspects[left_tile]);
-            let right_fit = fit_cap(row_h, aspects[right_tile]);
-            if (new_left - left_fit).abs() <= snap {
-                new_left = left_fit;
-            } else if ((pair - new_left) - right_fit).abs() <= snap {
-                new_left = pair - right_fit;
-            }
-            let new_left = new_left.clamp(min_col, (pair - min_col).max(min_col));
-            let fr = &mut next.col_fr[gutter.row];
-            fr[gutter.left] = f64::from(new_left) / f64::from(usable.max(1));
-            fr[gutter.left + 1] = f64::from(pair - new_left) / f64::from(usable.max(1));
-        }
-        GutterKind::Horizontal => {
-            if start.row_fr.len() != 2 {
-                return next;
-            }
-            let available = (p.height - p.gutter).max(2);
-            let top = (start.row_fr[0] * f64::from(available)).round() as i32;
-            let min_row = p.min_column.min(available / 3).max(1);
-            let new_top = (top + delta).clamp(min_row, (available - min_row).max(min_row));
-            next.row_fr = vec![
-                f64::from(new_top) / f64::from(available),
-                f64::from(available - new_top) / f64::from(available),
-            ];
-        }
-    }
-    next
 }
 
 /// Rectangle of the mute badge inside a tile (top right corner), or `None` if the tile is too small for it.
@@ -458,7 +333,7 @@ mod tests {
     const P916: f32 = 9.0 / 16.0;
 
     fn contents(aspects: &[f32]) -> Vec<(i32, i32)> {
-        solve(&P, aspects, &Split::Auto)
+        solve(&P, aspects, &Pins::default())
             .tiles
             .iter()
             .map(|t| (t.content.w, t.content.h))
@@ -481,7 +356,7 @@ mod tests {
 
     #[test]
     fn exactly_four_widescreen_media_form_a_2x2_grid() {
-        let l = solve(&P, &[W169; 4], &Split::Auto);
+        let l = solve(&P, &[W169; 4], &Pins::default());
         assert_eq!(l.rows, vec![vec![0, 1], vec![2, 3]]);
         assert!(
             l.tiles
@@ -497,21 +372,21 @@ mod tests {
         );
         // three widescreen plus one portrait stays in one row
         assert_eq!(
-            solve(&P, &[W169, W169, W169, P916], &Split::Auto)
+            solve(&P, &[W169, W169, W169, P916], &Pins::default())
                 .rows
                 .len(),
             1
         );
         // a square medium is not widescreen
         assert_eq!(
-            solve(&P, &[W169, W169, W169, 1.0], &Split::Auto).rows.len(),
+            solve(&P, &[W169, W169, W169, 1.0], &Pins::default()).rows.len(),
             1
         );
     }
 
     #[test]
     fn media_with_spare_room_sit_next_to_each_other() {
-        let l = solve(&P, &[3.0 / 4.0, 3.0 / 4.0], &Split::Auto);
+        let l = solve(&P, &[3.0 / 4.0, 3.0 / 4.0], &Pins::default());
         let (a, b) = (l.tiles[0].content, l.tiles[1].content);
         assert_eq!(
             b.x - (a.x + a.w),
@@ -532,7 +407,7 @@ mod tests {
             vec![W169; 3],
             vec![1.0, P916, W169, 0.8],
         ] {
-            let l = solve(&P, &aspects, &Split::Auto);
+            let l = solve(&P, &aspects, &Pins::default());
             let usable: i32 = l.tiles.iter().map(|t| t.column.w).sum();
             assert_eq!(usable, P.width - (aspects.len() as i32 - 1) * P.gutter);
             for t in &l.tiles {
@@ -569,95 +444,79 @@ mod tests {
             min_wide_aspect: 1.2,
         };
         for aspects in [vec![0.0], vec![f32::NAN, -1.0], vec![W169; 4], vec![1.0; 3]] {
-            let l = solve(&tiny, &aspects, &Split::Auto);
+            let l = solve(&tiny, &aspects, &Pins::default());
             assert_eq!(l.tiles.len(), aspects.len());
         }
-        assert!(solve(&P, &[], &Split::Auto).tiles.is_empty());
+        assert!(solve(&P, &[], &Pins::default()).tiles.is_empty());
     }
 
     #[test]
-    fn converting_auto_to_manual_moves_nothing() {
-        for aspects in [vec![P916, W169], vec![P916, W169, 1.0], vec![W169; 4]] {
-            let auto = solve(&P, &aspects, &Split::Auto);
-            let manual = solve(&P, &aspects, &Split::Manual(auto.to_manual()));
-            for (a, m) in auto.tiles.iter().zip(&manual.tiles) {
-                assert!(
-                    (a.column.x - m.column.x).abs() <= 2 && (a.column.w - m.column.w).abs() <= 2,
-                    "{a:?} vs {m:?}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn dragging_keeps_the_minimum_and_the_sum() {
-        let aspects = [P916, W169];
-        let start_layout = solve(&P, &aspects, &Split::Auto);
-        let start = start_layout.to_manual();
-        let gutter = start_layout.gutters[0];
-        for delta in [-5000, -300, 0, 120, 5000] {
-            let next = drag(&start, &start_layout, &gutter, delta, &P, &aspects, 8);
-            let l = solve(&P, &aspects, &Split::Manual(next));
-            assert!(
-                l.tiles[0].column.w
-                    >= P.min_column
-                        .min((l.tiles[0].column.w + l.tiles[1].column.w) / 3)
-            );
-            assert!(l.tiles[1].column.w >= 1);
-            assert_eq!(
-                l.tiles[0].column.w + l.tiles[1].column.w,
-                P.width - P.gutter
-            );
-        }
-    }
-
-    #[test]
-    fn dragging_snaps_to_an_exactly_fitted_neighbor() {
-        let aspects = [P916, W169];
-        let start_layout = solve(&P, &aspects, &Split::Auto);
-        let start = start_layout.to_manual();
-        let gutter = start_layout.gutters[0];
-        let fitted = fit_cap(1080, P916);
-        let next = drag(
-            &start,
-            &start_layout,
-            &gutter,
-            fitted - start_layout.tiles[0].column.w - 5,
-            &P,
-            &aspects,
-            8,
-        );
-        let l = solve(&P, &aspects, &Split::Manual(next));
-        assert_eq!(l.tiles[0].column.w, fitted);
-    }
-
-    #[test]
-    fn swapping_exchanges_shares_and_rows() {
-        let mut m = ManualSplit {
-            col_fr: vec![vec![0.3, 0.7], vec![0.4, 0.6]],
-            row_fr: vec![0.6, 0.4],
+    fn a_pinned_width_is_honored_and_the_rest_adapts() {
+        let pins = Pins {
+            cols: vec![Some(0.7), None],
+            rows: None,
         };
-        m.swap_columns(0, 0);
-        assert_eq!(m.col_fr[0], vec![0.7, 0.3]);
-        m.swap_rows();
-        assert_eq!(
-            (m.row_fr.clone(), m.col_fr[0].clone()),
-            (vec![0.4, 0.6], vec![0.4, 0.6])
-        );
-        m.swap_columns(5, 0);
+        let l = solve(&P, &[W169, W169], &pins);
+        let usable = P.width - P.gutter;
+        assert_eq!(l.tiles[0].column.w, (0.7 * f64::from(usable)).round() as i32);
+        assert_eq!(l.tiles[0].column.w + l.tiles[1].column.w, usable);
     }
 
     #[test]
-    fn a_stale_manual_split_is_ignored_when_the_partition_changes() {
-        let two = solve(&P, &[P916, W169], &Split::Auto).to_manual();
-        let l = solve(&P, &[P916, W169, W169], &Split::Manual(two));
-        assert_eq!(l.tiles.len(), 3);
-        assert_eq!(l, solve(&P, &[P916, W169, W169], &Split::Auto));
+    fn a_pin_survives_when_a_tile_joins_and_new_tiles_stay_automatic() {
+        let pins = Pins {
+            cols: vec![Some(0.5), None],
+            rows: None,
+        };
+        let two = solve(&P, &[W169, W169], &pins);
+        let three = solve(&P, &[W169, W169, W169], &pins);
+        let share = |l: &Layout| {
+            let usable: i32 = l.tiles.iter().map(|t| t.column.w).sum();
+            f64::from(l.tiles[0].column.w) / f64::from(usable)
+        };
+        assert!(
+            (share(&two) - share(&three)).abs() < 0.001,
+            "the pinned tile keeps its share of the row"
+        );
+        assert_eq!(three.tiles.len(), 3);
+        let usable = P.width - 2 * P.gutter;
+        let total: i32 = three.tiles.iter().map(|t| t.column.w).sum();
+        assert_eq!(total, usable);
+    }
+
+    #[test]
+    fn pinned_row_heights_apply_to_a_2x2_grid() {
+        let pins = Pins {
+            cols: Vec::new(),
+            rows: Some([0.7, 0.3]),
+        };
+        let l = solve(&P, &[W169; 4], &pins);
+        let available = P.height - P.gutter;
+        assert_eq!(l.tiles[0].column.h, (0.7 * f64::from(available)).round() as i32);
+        assert_eq!(l.tiles[2].column.h, available - l.tiles[0].column.h);
+        let garbage = Pins {
+            cols: Vec::new(),
+            rows: Some([f64::NAN, 0.3]),
+        };
+        assert_eq!(
+            solve(&P, &[W169; 4], &garbage),
+            solve(&P, &[W169; 4], &Pins::default()),
+            "unusable row pins count as automatic"
+        );
+    }
+
+    #[test]
+    fn a_pin_on_a_single_tile_changes_nothing() {
+        let pins = Pins {
+            cols: vec![Some(0.3)],
+            rows: None,
+        };
+        assert_eq!(solve(&P, &[W169], &pins), solve(&P, &[W169], &Pins::default()));
     }
 
     #[test]
     fn tile_hit_testing_matches_the_content_rectangles() {
-        let l = solve(&P, &[P916, W169], &Split::Auto);
+        let l = solve(&P, &[P916, W169], &Pins::default());
         let c1 = l.tiles[1].content;
         assert_eq!(l.tile_at(c1.x, c1.y), Some(1));
         assert_eq!(l.tile_at(c1.x - 1, c1.y), None);

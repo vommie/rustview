@@ -4,12 +4,10 @@
 use super::eligibility;
 use super::session::Session;
 use crate::library::models::MediaId;
-use crate::settings::schema::MULTIVIEW_MAX_TILES;
 use crate::system::MonitorInfo;
 use crate::viewer::PointerProbe;
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
-use crate::viewer::multiview::reconcile;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
 use slint::ComponentHandle;
@@ -114,19 +112,24 @@ impl Session {
         }
     }
 
-    /// Brings the tiles in line with the current selection: removed items leave, new items take the freed slots, the
-    /// remaining tiles keep running. An empty selection changes nothing.
-    pub(super) fn reconcile_now(&mut self) {
+    /// Brings the tiles in line with the current selection: tiles that are not sticky and no longer selected leave, new
+    /// items take the freed slots, the remaining tiles keep running. An empty selection changes nothing.
+    pub(super) fn follow_now(&mut self) {
         let Some(state) = self.state.clone() else {
             return;
         };
         if !self.populated || self.instance.lock().origin() != OriginKind::Browse {
             return;
         }
-        let wanted = eligibility::wanted_ids(&state.read());
-        let current = self.instance.lock().member_ids();
-        let plan = reconcile::reconcile(&current, &wanted, MULTIVIEW_MAX_TILES);
+        let wanted = eligibility::wanted(&state.read());
+        let plan = self.instance.lock().plan_follow(&wanted);
         if plan.is_noop() {
+            if plan.overflow > 0 {
+                tracing::info!(
+                    overflow = plan.overflow,
+                    "[Multiview: Follow] Selected media found no free slot"
+                );
+            }
             return;
         }
         let seeds: HashMap<MediaId, TileSeed> = {
@@ -137,7 +140,7 @@ impl Session {
                 .map(|seed| (seed.media_id, seed))
                 .collect()
         };
-        self.instance.lock().reconcile(&plan, seeds);
+        self.instance.lock().apply_follow(&plan, seeds);
         self.refresh();
     }
 }

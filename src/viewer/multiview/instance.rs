@@ -7,15 +7,15 @@
 //! tears the players down in the safe order, so nobody has to remember an explicit teardown.
 //!
 //! The behavior is split over `instance_host` (placement and projection), `instance_layout` (arrangement, gutters),
-//! `instance_tiles` (tile lifecycle, live selection), `instance_sound` (mute state) and `instance_hover` (pointer, mute
-//! badge, aspect probing).
+//! `instance_tiles` (tile lifecycle), `instance_follow` (following the Browse selection), `instance_actions` (the action
+//! buttons), `instance_sound` (mute state) and `instance_hover` (pointer, mute badge, aspect probing).
 
 use super::click::{ClickDetector, ClickKind};
 use super::container::Container;
 use super::events::{MultiviewEventSink, NullSink};
 use super::instance_host::HostState;
 use super::instance_layout::{DragState, layout_params};
-use super::layout::{Layout, LayoutParams, Rect, Split};
+use super::layout::{Layout, LayoutParams, Rect};
 use super::route::{HostMode, OriginKind};
 use super::teardown::teardown_videos;
 use super::tile::{TileSeed, TileState, VideoTile};
@@ -44,7 +44,9 @@ pub struct MultiviewInstance {
     pub(super) sink: Arc<dyn MultiviewEventSink>,
     pub(super) origin: OriginKind,
     pub(super) tiles: Vec<TileState>,
-    pub(super) split: Split,
+    /// Heights of the two rows of a 2x2 grid after the user dragged the horizontal gutter; `None` = automatic. The widths
+    /// the user set belong to the tiles (`TileState::pin`).
+    pub(super) row_pins: Option<[f64; 2]>,
     pub(super) container: Container,
     pub(super) params: LayoutParams,
     /// Always solved in container pixels; hosts project it into their own rectangle.
@@ -75,7 +77,7 @@ impl MultiviewInstance {
                 sink,
                 origin: OriginKind::Browse,
                 tiles: seeds.into_iter().map(TileState::from_seed).collect(),
-                split: Split::Auto,
+                row_pins: None,
                 container: PLACEHOLDER_CONTAINER,
                 params: layout_params(&PLACEHOLDER_CONTAINER, 0),
                 layout: Layout::default(),

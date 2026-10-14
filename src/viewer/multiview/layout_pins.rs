@@ -3,7 +3,10 @@
 //! A pin belongs to a tile, not to a slot or to the whole arrangement: it says how much of its row's width the tile
 //! wants. Tiles without a pin stay automatic and share what the pinned tiles leave over, so a tile the user never
 //! resized adapts whenever media are added or removed, while a resized (typically sticky) tile keeps its width. If the
-//! pinned tiles want more than the row can give, they are scaled down so that every automatic tile keeps a minimum.
+//! pinned tiles want more than the row can give, they are scaled down so that every automatic tile keeps a minimum. If the
+//! pins already fill the whole row (typically right after a drag between two tiles), a tile that joins is a newcomer
+//! without a share: all pinned tiles then give up the same fraction, so their proportions survive and the newcomer gets
+//! the same share as everybody else instead of a sliver.
 
 use super::layout::{Gutter, GutterKind, Layout, LayoutParams, fair_share, fit_cap, proportional};
 
@@ -14,6 +17,9 @@ pub struct Pins {
     /// Heights of the two rows of a 2x2 grid as shares of the available height (`None` = automatic).
     pub rows: Option<[f64; 2]>,
 }
+
+/// Pinned shares that add up to at least this much leave no room: the row counts as completely set by the user.
+const FULL_ROW_SHARE: f64 = 0.98;
 
 fn valid_share(share: &f64) -> bool {
     share.is_finite() && *share > 0.0
@@ -77,7 +83,18 @@ pub fn split_columns(usable: i32, caps: &[i32], pins: &[Option<f64>], floor: i32
     }
 
     let free = wants.iter().filter(|w| w.is_none()).count() as i32;
-    let budget = (usable - free * floor).max(1);
+    let pinned_share: f64 = wants.iter().flatten().sum();
+    let reserve = if pinned_share >= FULL_ROW_SHARE {
+        let equal = usable / n as i32;
+        (0..n)
+            .filter(|&i| wants[i].is_none())
+            .map(|i| caps[i].min(equal))
+            .sum::<i32>()
+            .max(free * floor)
+    } else {
+        free * floor
+    };
+    let budget = (usable - reserve).max(1);
     let mut pinned: Vec<i32> = wants
         .iter()
         .flatten()
@@ -172,7 +189,7 @@ pub fn drag_pins(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::viewer::multiview::layout::{LayoutParams, Split, solve};
+    use crate::viewer::multiview::layout::{LayoutParams, solve};
 
     const P: LayoutParams = LayoutParams {
         width: 1920,
@@ -227,8 +244,24 @@ mod tests {
         let w = split_columns(1000, &[900; 3], &[Some(0.9), None, None], 100);
         assert_eq!(w.iter().sum::<i32>(), 1000);
         assert_eq!(w, vec![800, 100, 100]);
+    }
+
+    #[test]
+    fn a_row_that_is_completely_pinned_makes_room_for_a_newcomer_proportionally() {
+        let w = split_columns(1000, &[900; 3], &[Some(0.4), Some(0.6), None], 100);
+        assert_eq!(w.iter().sum::<i32>(), 1000);
+        assert_eq!(w, vec![267, 400, 333]);
+        let ratio = f64::from(w[0]) / f64::from(w[1]);
+        assert!((ratio - 0.4 / 0.6).abs() < 0.01, "the user's proportions survive");
+
         let w = split_columns(1000, &[900; 3], &[Some(0.5), Some(0.5), None], 100);
-        assert_eq!(w, vec![450, 450, 100]);
+        assert_eq!(w, vec![334, 334, 332]);
+    }
+
+    #[test]
+    fn a_row_with_room_left_keeps_the_pins_when_a_newcomer_joins() {
+        let w = split_columns(1000, &[900; 3], &[Some(0.6), None, None], 100);
+        assert_eq!(w, vec![600, 200, 200], "the newcomer shares what the pin left over");
     }
 
     #[test]
@@ -282,7 +315,7 @@ mod tests {
     #[test]
     fn dragging_pins_exactly_the_two_neighbors() {
         let aspects = [W169, W169, W169];
-        let layout = solve(&P, &aspects, &Split::Auto);
+        let layout = solve(&P, &aspects, &Pins::default());
         let pins = drag_pins(&Pins::default(), &layout, &layout.gutters[0], 100, &P, &aspects, 8);
         assert_eq!(pins.cols.len(), 3);
         let (a, b) = (pins.col(0).unwrap_or(0.0), pins.col(1).unwrap_or(0.0));
@@ -297,7 +330,7 @@ mod tests {
     #[test]
     fn a_drag_is_clamped_to_the_minimum_column() {
         let aspects = [P916, W169];
-        let layout = solve(&P, &aspects, &Split::Auto);
+        let layout = solve(&P, &aspects, &Pins::default());
         let gutter = layout.gutters[0];
         for delta in [-9999, 9999] {
             let pins = drag_pins(&Pins::default(), &layout, &gutter, delta, &P, &aspects, 0);
@@ -312,7 +345,7 @@ mod tests {
     #[test]
     fn a_drag_snaps_to_an_exactly_fitted_neighbor() {
         let aspects = [P916, W169];
-        let layout = solve(&P, &aspects, &Split::Auto);
+        let layout = solve(&P, &aspects, &Pins::default());
         let fitted = fit_cap(1080, P916);
         let delta = fitted - layout.tiles[0].column.w - 5;
         let pins = drag_pins(&Pins::default(), &layout, &layout.gutters[0], delta, &P, &aspects, 8);
@@ -324,7 +357,7 @@ mod tests {
     #[test]
     fn dragging_the_horizontal_gutter_pins_the_row_heights() {
         let aspects = [W169; 4];
-        let layout = solve(&P, &aspects, &Split::Auto);
+        let layout = solve(&P, &aspects, &Pins::default());
         let gutter = layout
             .gutters
             .iter()
@@ -341,7 +374,7 @@ mod tests {
     #[test]
     fn existing_pins_of_other_tiles_survive_a_drag() {
         let aspects = [W169, W169, W169, W169];
-        let layout = solve(&P, &aspects, &Split::Auto);
+        let layout = solve(&P, &aspects, &Pins::default());
         let before = Pins {
             cols: vec![None, None, Some(0.4), None],
             rows: None,
@@ -353,7 +386,7 @@ mod tests {
     #[test]
     fn a_stale_gutter_changes_nothing() {
         let aspects = [W169, W169];
-        let layout = solve(&P, &aspects, &Split::Auto);
+        let layout = solve(&P, &aspects, &Pins::default());
         let stale = Gutter {
             kind: GutterKind::Vertical,
             rect: layout.gutters[0].rect,

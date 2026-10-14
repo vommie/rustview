@@ -3,8 +3,11 @@
 //! The instance builds this description from its single state; the presenters of the hosts only convert it into their
 //! own view structs, so no host keeps a second copy of the arrangement.
 
+use super::actions::ActionId;
 use super::layout::Rect;
 use super::model::TileKind;
+use crate::button_feedback::ButtonFeedback;
+use crate::icons::Icon;
 use crate::library::models::MediaId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
@@ -15,6 +18,16 @@ pub struct TileView {
     pub pixels: Option<SharedPixelBuffer<Rgb8Pixel>>,
     pub is_loading: bool,
     pub error: Option<String>,
+}
+
+/// One button of the hover bar of a tile.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ActionView {
+    pub id: ActionId,
+    pub icon: Icon,
+    pub tooltip: &'static str,
+    pub active: Option<bool>,
+    pub feedback: ButtonFeedback,
 }
 
 pub struct GutterView {

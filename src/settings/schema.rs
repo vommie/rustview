@@ -231,7 +231,7 @@ pub const DEFAULT_FULLSCREEN_SPECIFIC_MONITOR: &str = "";
 pub const DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE: bool = false;
 pub const DEFAULT_FULLSCREEN_FALLBACK_TARGET: &str = "same"; // "same" or "different"
 
-// --- Multiview: several media side by side in the quick fullscreen (not user-configurable) ---
+// --- Multiview: 1 to 4 media in the fullscreen (not user-configurable) ---
 pub const MULTIVIEW_MAX_TILES: usize = 4;
 /// Minimum aspect ratio (width / height) for a medium to count as widescreen; exactly four widescreen media form a 2x2 grid.
 pub const MULTIVIEW_WRAP_MIN_ASPECT: f32 = 1.2;
@@ -248,6 +248,8 @@ pub const MULTIVIEW_TICK_MS: u64 = 50;
 /// The mute state inside mpv (key `m`, on-screen controller) is polled every this many ticks.
 pub const MULTIVIEW_MUTE_POLL_TICKS: u32 = 4;
 pub const MULTIVIEW_DOUBLE_CLICK_MS: u64 = 400;
+/// Ticks during which the display parameters of a recycled player are taken for those of the previous file if they are equal.
+pub const MULTIVIEW_STALE_PROBE_TICKS: u32 = 20;
 /// The native window handle appears a moment after `show()`; the session polls for it every `MULTIVIEW_OPEN_POLL_MS`.
 pub const MULTIVIEW_OPEN_POLL_MS: u64 = 15;
 pub const MULTIVIEW_OPEN_XID_ATTEMPTS: u32 = 40;

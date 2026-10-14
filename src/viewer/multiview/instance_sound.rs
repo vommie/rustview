@@ -68,8 +68,15 @@ impl MultiviewInstance {
         changed
     }
 
+    /// The mute badge of the hovered tile was clicked.
     pub fn toggle_badge_mute(&mut self) {
-        let Some((index, _)) = self.badge else { return };
+        if let Some((index, _)) = self.badge {
+            self.toggle_mute_at(index);
+        }
+    }
+
+    /// The user mutes or unmutes tile `index`; either way the choice is theirs and the sound rules leave it alone.
+    pub(super) fn toggle_mute_at(&mut self, index: usize) {
         let Some(tile) = self.tiles.get_mut(index) else {
             return;
         };
@@ -85,7 +92,7 @@ impl MultiviewInstance {
                 tracing::info!(
                     media_id = tile.media_id,
                     muted = target,
-                    "[Multiview: Audio] Mute toggled with the badge"
+                    "[Multiview: Audio] Mute toggled by the user"
                 );
             }
             Err(e) => {

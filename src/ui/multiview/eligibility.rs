@@ -10,6 +10,7 @@ use crate::query::filters::IndexedMediaRecord;
 use crate::settings::schema::{MULTIVIEW_FALLBACK_ASPECT, MULTIVIEW_MAX_TILES};
 use crate::ui::bridge_state::UiState;
 use crate::ui::thumbnail_regeneration::eligibility::loaded_item;
+use crate::viewer::multiview::follow::Wanted;
 use crate::viewer::multiview::model::{TileKind, aspect_from_size};
 use crate::viewer::multiview::tile::TileSeed;
 
@@ -104,11 +105,14 @@ pub fn summarize(st: &UiState) -> OpenSummary {
     }
 }
 
-/// All selected playable ids in view order (not capped; the reconcile applies the tile cap).
-pub fn wanted_ids(st: &UiState) -> Vec<MediaId> {
+/// All selected playable media in view order (not capped; following the selection applies the tile cap).
+pub fn wanted(st: &UiState) -> Vec<Wanted> {
     playable_in_view_order(st)
         .into_iter()
-        .map(|(_, item)| item.record.id)
+        .map(|(_, item)| Wanted {
+            id: item.record.id,
+            is_video: matches!(item.record.media_type, MediaType::Video),
+        })
         .collect()
 }
 
@@ -145,7 +149,7 @@ pub fn plan_open(st: &UiState) -> OpenPlan {
     OpenPlan { summary, tiles }
 }
 
-/// A single tile for an item that joined the selection later (live reconcile).
+/// A single tile for an item that joined the selection later (following the selection).
 pub fn plan_tile_for(st: &UiState, id: MediaId) -> Option<TileSeed> {
     loaded_item(st, id)
         .filter(|item| is_playable(item))

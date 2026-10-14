@@ -5,6 +5,7 @@ use super::instance::MultiviewInstance;
 use super::layout::{self, Rect};
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::target_pick::pick_target;
+use super::tile::StaleProbe;
 use crate::library::models::MediaId;
 use crate::settings::schema::{
     MULTIVIEW_BADGE_INSET_LOGICAL_PX, MULTIVIEW_BADGE_LOGICAL_PX,
@@ -130,6 +131,16 @@ impl MultiviewInstance {
             let Some((width, height, rotate)) = video.player.video_display_params() else {
                 continue;
             };
+            if let Some(stale) = tile.stale_probe {
+                if stale.params == (width, height, rotate) && stale.ticks_left > 0 {
+                    tile.stale_probe = Some(StaleProbe {
+                        ticks_left: stale.ticks_left - 1,
+                        ..stale
+                    });
+                    continue;
+                }
+                tile.stale_probe = None;
+            }
             let Some(aspect) = aspect_from_video_params(width, height, rotate) else {
                 continue;
             };

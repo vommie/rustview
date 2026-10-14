@@ -438,7 +438,7 @@ impl MultiviewInstance {
 mod tests {
     use super::*;
     use crate::viewer::multiview::instance::SharedInstance;
-    use crate::viewer::multiview::layout::{self, Split};
+    use crate::viewer::multiview::layout;
     use crate::viewer::multiview::model::TileKind;
     use crate::viewer::multiview::tile::TileSeed;
     use std::path::PathBuf;
@@ -584,9 +584,8 @@ mod tests {
         mv.set_host(&HostSurface::fullscreen(1, 1920, 1080, 1.0));
         mv.drag_started(0);
         mv.dragged(120.0);
-        let Split::Manual(manual) = mv.split.clone() else {
-            panic!("the drag must produce a manual split");
-        };
+        let pins = mv.pins();
+        assert!(!pins.is_auto(), "the drag must pin the neighbors");
         mv.set_host(&HostSurface::tab_view(
             MAIN,
             Rect::new(0, 64, 700, 400),
@@ -594,8 +593,8 @@ mod tests {
             Vec::new(),
         ));
         mv.set_host(&HostSurface::fullscreen(2, 1920, 1080, 1.0));
-        assert_eq!(mv.split, Split::Manual(manual.clone()));
-        let expected = layout::solve(&mv.params, &[1.78, 1.78, 1.78], &Split::Manual(manual));
+        assert_eq!(mv.pins(), pins);
+        let expected = layout::solve(&mv.params, &[1.78, 1.78, 1.78], &pins);
         assert_eq!(mv.layout, expected);
     }
 
