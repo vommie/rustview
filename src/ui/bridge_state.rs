@@ -363,6 +363,7 @@ impl UiState {
 mod tests {
     use super::*;
     use crate::viewer::MediaTabSession;
+    use crate::viewer::multiview::HostSurface;
     use crate::viewer::multiview::actions::ActionId;
     use crate::viewer::multiview::instance::MultiviewInstance;
     use crate::viewer::multiview::model::TileKind;
@@ -388,7 +389,11 @@ mod tests {
     #[test]
     fn tag_and_rating_targets_follow_the_media_left_in_a_tab() {
         let instance = MultiviewInstance::detached(vec![seed(10), seed(11), seed(12)]);
-        instance.lock().set_origin(OriginKind::Tab);
+        {
+            let mut mv = instance.lock();
+            mv.set_origin(OriginKind::Tab);
+            mv.set_host(&HostSurface::fullscreen(0, 1920, 1080, 1.0));
+        }
         let tab = MediaTabSession::for_multiview(1, "Multiview".to_string(), instance.clone());
         let mut state = UiState::default();
         sync_like_the_tab_bar(&mut state, &tab);

@@ -26,6 +26,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 const PALETTE: [[u8; 3]; 6] = [
@@ -121,6 +122,7 @@ pub struct Lab {
     models: ViewModels,
     images: ImageCache,
     media: HashMap<u64, Media>,
+    dir: PathBuf,
     pub size: (u32, u32),
     shots: Option<PathBuf>,
     /// Actions the window asked the application to run (the lab plays the session and executes the instance part).
@@ -128,6 +130,14 @@ pub struct Lab {
     /// Where the window drew the hover bar, and the tooltip bubble (logical = physical pixels at scale factor 1).
     pub overlay: Rc<Cell<Option<Rect>>>,
     pub tooltip: Rc<Cell<Option<Rect>>>,
+}
+
+static NEXT_LAB: AtomicUsize = AtomicUsize::new(0);
+
+impl Drop for Lab {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
 }
 
 /// Installs the platform once per thread; a second call (same thread) keeps the first.
@@ -163,7 +173,12 @@ impl Lab {
             .expect("the platform created a window adapter");
         adapter.set_size(PhysicalSize::new(width, height));
 
-        let dir = std::env::temp_dir().join(format!("rustview-lab-{}", std::process::id()));
+        // Labs run in parallel threads: each one writes its images to a directory of its own.
+        let dir = std::env::temp_dir().join(format!(
+            "rustview-lab-{}-{}",
+            std::process::id(),
+            NEXT_LAB.fetch_add(1, Ordering::SeqCst)
+        ));
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         let media = media
             .iter()
@@ -246,6 +261,7 @@ impl Lab {
             models,
             images: ImageCache::default(),
             media,
+            dir,
             size: (width, height),
             shots,
             requested,
