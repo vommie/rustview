@@ -119,9 +119,10 @@ pub const DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB: &str = "folders";
 // =============================================================================
 // SECTION 5: Performance, Video & Engine - Single Point of Truth Constants
 // =============================================================================
-pub const DEFAULT_L1_CACHE_SLOTS: usize = 512;
-pub const MIN_L1_CACHE_SLOTS: usize = 100;
-pub const MAX_L1_CACHE_SLOTS: usize = 8000;
+/// RAM budget in megabytes; `0` = automatic (half of the usable RAM, see `settings::memory_budget`).
+pub const DEFAULT_MEMORY_BUDGET_MB: u32 = 0;
+pub const MIN_MEMORY_BUDGET_MB: u32 = 256;
+pub const MAX_MEMORY_BUDGET_MB: u32 = 1_048_576;
 
 pub const MIN_WORKER_THREADS: usize = 1;
 pub const MAX_WORKER_THREADS: usize = 32;
@@ -604,7 +605,8 @@ impl Default for ViewSettings {
 #[serde(default)]
 pub struct PerformanceSettings {
     pub worker_threads: usize,
-    pub l1_cache_slots: usize,
+    /// RAM the application may use for caches, in megabytes; `0` = automatic.
+    pub memory_budget_mb: u32,
     pub thumbnail_db_size: u32,
     pub thumbnail_format: String,
     pub thumbnail_quality: u8,
@@ -624,7 +626,7 @@ impl Default for PerformanceSettings {
     fn default() -> Self {
         Self {
             worker_threads: default_worker_threads(),
-            l1_cache_slots: DEFAULT_L1_CACHE_SLOTS,
+            memory_budget_mb: DEFAULT_MEMORY_BUDGET_MB,
             thumbnail_db_size: DEFAULT_THUMBNAIL_DB_SIZE,
             thumbnail_format: DEFAULT_THUMBNAIL_FORMAT.to_string(),
             thumbnail_quality: DEFAULT_THUMBNAIL_QUALITY,

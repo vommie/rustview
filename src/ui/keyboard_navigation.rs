@@ -279,12 +279,7 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
         (changed, count)
     };
 
-    let need_slice_reanchor = {
-        let st = params.state.read();
-        !st.loaded_slice_valid
-            || target_idx < st.loaded_slice_start
-            || target_idx >= (st.loaded_slice_start + st.loaded_slice_len)
-    };
+    let need_slice_reanchor = !params.state.read().ring.range().contains(&target_idx);
 
     if need_slice_reanchor {
         BridgeMedia::reload_with_options(

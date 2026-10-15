@@ -378,7 +378,7 @@ impl FileRenameDialogController {
         if let Some(old_id) = overwritten_id {
             st.file_selection.deselect_many(&std::collections::HashSet::from([old_id]));
             st.media_row_map.remove(&old_id);
-            st.folder_thumbnails.remove(&old_id);
+            st.thumbs.remove(old_id);
         }
 
         // 2. Update the renamed media record
@@ -414,6 +414,7 @@ impl FileRenameDialogController {
             }
             item.record = updated_record.clone();
         }
+        st.mark_list_bytes_dirty();
 
         // 3. Re-index all items to maintain sequential 0..N indices
         for (i, item) in st.all_folder_media.iter_mut().enumerate() {
@@ -422,8 +423,9 @@ impl FileRenameDialogController {
 
         // 4. Invalidate search cache and slice to guarantee full clean reload
         st.active_indices.clear();
+        st.mark_list_bytes_dirty();
         st.last_executed_query.clear();
-        st.invalidate_loaded_slice();
+        st.invalidate_view_window();
 
         overwritten_id
     }

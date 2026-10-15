@@ -5,12 +5,16 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::browse_window::{
+    DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, GRID_MARGIN_ROWS, TABLE_MARGIN_ROWS, ViewGeometry, apply_record, margin_rows_for,
+    sync_window, timed, update_tile,
+};
 use super::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::video_preview_animator::VideoPreviewAnimator;
 use super::virtual_folder_wording;
-use super::{MainWindow, MediaItemView};
+use super::MainWindow;
 use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::Library;
 use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms, format_filesize_mb};
@@ -25,7 +29,7 @@ use crate::thumbnails::{
 use crate::viewer::{HighResImageLoader, ViewerTabManager};
 use parking_lot::RwLock;
 use rayon::prelude::*;
-use slint::{ComponentHandle, Image, Model, ModelRc, Timer, VecModel};
+use slint::{ComponentHandle, Image, Timer};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -230,7 +234,7 @@ impl BridgeMedia {
 
                 let (format, full_path_opt) = {
                     let st_r = st.read();
-                    if let Some(item) = st_r.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                    if let Some(item) = st_r.all_folder_media.find(media_id) {
                         (item.record.format, Some(item.full_path.clone()))
                     } else {
                         (MediaFormat::Unknown, None)
@@ -247,23 +251,7 @@ impl BridgeMedia {
                         let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
                         let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
                             if let Some(w) = win_w.upgrade() {
-                                let media_model = w.get_media_items();
-                                let start_window = w.get_visible_start_index() as usize;
-                                let visible_count = media_model.row_count();
-                                let st_r = st_c.read();
-
-                                if let Some(&global_row_idx) = st_r.media_row_map.get(&media_id)
-                                    && global_row_idx >= start_window
-                                    && global_row_idx < start_window + visible_count
-                                {
-                                    let local_idx = global_row_idx - start_window;
-                                    if let Some(mut item) = media_model.row_data(local_idx)
-                                        && item.id == media_id as i32
-                                    {
-                                        item.thumbnail = img;
-                                        media_model.set_row_data(local_idx, item);
-                                    }
-                                }
+                                update_tile(&w, &st_c.read(), media_id, |row| row.thumbnail = img);
                             }
                         });
                         ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
@@ -283,23 +271,7 @@ impl BridgeMedia {
                                         if is_still_hovered {
                                             let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
                                             let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
-                                                let media_model = w.get_media_items();
-                                                let start_window = w.get_visible_start_index() as usize;
-                                                let visible_count = media_model.row_count();
-                                                let st_r = st_async.read();
-
-                                                if let Some(&global_row_idx) = st_r.media_row_map.get(&media_id)
-                                                    && global_row_idx >= start_window
-                                                    && global_row_idx < start_window + visible_count
-                                                {
-                                                    let local_idx = global_row_idx - start_window;
-                                                    if let Some(mut item) = media_model.row_data(local_idx)
-                                                        && item.id == media_id as i32
-                                                    {
-                                                        item.thumbnail = img;
-                                                        media_model.set_row_data(local_idx, item);
-                                                    }
-                                                }
+                                                update_tile(&w, &st_async.read(), media_id, |row| row.thumbnail = img);
                                             });
                                             ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                                         }
@@ -311,23 +283,7 @@ impl BridgeMedia {
                 } else if let Some(images) = VideoPreviewAnimator::load_preview_images(&thumb, media_id) {
                     let timer = VideoPreviewAnimator::start_animation(images, move |img| {
                         if let Some(w) = win_w.upgrade() {
-                            let media_model = w.get_media_items();
-                            let start_window = w.get_visible_start_index() as usize;
-                            let visible_count = media_model.row_count();
-                            let st_r = st_c.read();
-
-                            if let Some(&global_row_idx) = st_r.media_row_map.get(&media_id)
-                                && global_row_idx >= start_window
-                                && global_row_idx < start_window + visible_count
-                            {
-                                let local_idx = global_row_idx - start_window;
-                                if let Some(mut item) = media_model.row_data(local_idx)
-                                    && item.id == media_id as i32
-                                {
-                                    item.thumbnail = img;
-                                    media_model.set_row_data(local_idx, item);
-                                }
-                            }
+                            update_tile(&w, &st_c.read(), media_id, |row| row.thumbnail = img);
                         }
                     });
                     ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
@@ -336,40 +292,25 @@ impl BridgeMedia {
                 ACTIVE_HOVER_MEDIA_ID.with(|active_id| *active_id.borrow_mut() = None);
                 ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = None);
 
-                let media_model = win_hover.get_media_items();
-                let start_window = win_hover.get_visible_start_index() as usize;
-                let visible_count = media_model.row_count();
                 let st_r = st.read();
-
-                if let Some(&global_row_idx) = st_r.media_row_map.get(&media_id)
-                    && global_row_idx >= start_window
-                    && global_row_idx < start_window + visible_count
-                    && let Some(buf) = st_r.folder_thumbnails.get(&media_id)
-                {
-                    let local_idx = global_row_idx - start_window;
-                    if let Some(mut item) = media_model.row_data(local_idx)
-                        && item.id == media_id as i32
-                    {
-                        item.thumbnail = Image::from_rgb8(buf.clone());
-                        media_model.set_row_data(local_idx, item);
-                    }
+                if let Some(buf) = st_r.thumbs.get(media_id) {
+                    update_tile(&win_hover, &st_r, media_id, |row| row.thumbnail = Image::from_rgb8(buf));
                 }
             }
         });
 
         let thumb_stream = thumbnails.clone();
-        let set_stream = settings.clone();
         let st_stream = state.clone();
         let win_stream = window.clone_strong();
-        window.on_visible_chunk_changed(move |first_idx, last_idx, total| {
-            Self::handle_visible_chunk_changed(
-                first_idx as usize,
-                last_idx as usize,
-                total as usize,
+        window.on_viewport_changed(move |first_row, visible_rows, columns, total| {
+            Self::handle_viewport_changed(
+                first_row.max(0) as usize,
+                visible_rows.max(1) as usize,
+                columns.max(1) as usize,
+                total.max(0) as usize,
                 &win_stream,
                 &st_stream,
                 &thumb_stream,
-                &set_stream,
             );
         });
 
@@ -495,9 +436,9 @@ impl BridgeMedia {
             st.active_folder_token = st.active_folder_token.wrapping_add(1);
             st.is_virtual_folder_mode = !st.is_virtual_folder_mode;
             st.active_indices.clear();
+            st.mark_list_bytes_dirty();
             st.file_selection.clear();
-            st.folder_thumbnails.clear();
-            st.invalidate_loaded_slice();
+            st.invalidate_view_window();
 
             (st.current_folder_id, st.current_folder_path.clone(), st.is_virtual_folder_mode)
         };
@@ -563,7 +504,7 @@ impl BridgeMedia {
 
                 {
                     let mut st = state.write();
-                    st.all_folder_media = indexed_media;
+                    st.all_folder_media.replace(indexed_media);
                     st.file_selection.clear();
                 }
 
@@ -638,7 +579,7 @@ impl BridgeMedia {
 
         {
             let mut st = state.write();
-            st.invalidate_loaded_slice();
+            st.reset_view_window();
             st.scroll_bench.is_table_view.store(is_table, Ordering::Relaxed);
         }
 
@@ -663,163 +604,47 @@ impl BridgeMedia {
         );
     }
 
-    pub fn handle_visible_chunk_changed(
-        first_idx: usize,
-        last_idx: usize,
+    /// The viewport of the grid or the table moved or changed size: keeps the tiles around it filled.
+    pub fn handle_viewport_changed(
+        first_row: usize,
+        visible_rows: usize,
+        columns: usize,
         total: usize,
         window: &MainWindow,
         state: &RwLock<UiState>,
         thumbnails: &ThumbnailManager,
-        _settings: &SettingsManager,
     ) {
         if total == 0 {
             return;
         }
 
         let is_table = window.get_is_table_view();
-        let scroll_bench = state.read().scroll_bench.clone();
+        let margin = if is_table { TABLE_MARGIN_ROWS } else { GRID_MARGIN_ROWS };
+        let geometry = ViewGeometry::new(columns, visible_rows, margin);
+
+        let mut st = state.write();
+        let scroll_bench = st.scroll_bench.clone();
         scroll_bench.record_event();
+        scroll_bench.is_table_view.store(is_table, Ordering::Relaxed);
 
-        let (buffer_size, margin_threshold) = if is_table {
-            (160usize, 32usize)
-        } else {
-            (120usize, 24usize)
-        };
-
-        {
-            let st = state.read();
-            if st.loaded_slice_valid
-                && st.loaded_slice_len > 0
-                && first_idx >= st.loaded_slice_start + margin_threshold
-                && last_idx + margin_threshold <= st.loaded_slice_start + st.loaded_slice_len
-            {
-                scroll_bench.record_hysteresis_hit();
-                return;
-            }
+        let unchanged = st.view_geometry == Some(geometry)
+            && st.ring.range() == geometry.window(first_row, total)
+            && st.ring.pool() == geometry.pool_size(total);
+        if unchanged {
+            scroll_bench.record_hysteresis_hit();
+            return;
         }
 
-        let t_reload_start = Instant::now();
-
-        let visible_center = (first_idx + last_idx) / 2;
-        let half_buf = buffer_size / 2;
-        let mut start_window = visible_center.saturating_sub(half_buf);
-        let end_window = (start_window + buffer_size).min(total);
-        start_window = end_window.saturating_sub(buffer_size);
-        let window_len = end_window.saturating_sub(start_window);
-
-        let mut slice_views = Vec::with_capacity(window_len);
-
-        {
-            let mut st = state.write();
-
-            for global_idx in start_window..end_window {
-                let item_info_opt = if !st.active_indices.is_empty() {
-                    st.active_indices.get(global_idx).and_then(|&idx| st.all_folder_media.get(idx))
-                } else {
-                    st.all_folder_media.get(global_idx)
-                }.map(|item| {
-                    (
-                        item.record.id,
-                        item.filename_slint.clone(),
-                        item.folder_path_str.clone(),
-                        item.modified_date_str.clone(),
-                        item.created_date_str.clone(),
-                        item.filesize_mb_str.clone(),
-                        item.record.rating as i32,
-                        item.rating_str.clone(),
-                        item.tags_count as i32,
-                        item.tags_count_str.clone(),
-                        item.width_str.clone(),
-                        item.height_str.clone(),
-                        item.ar_str.clone(),
-                        item.duration_str.clone(),
-                        item.duration_badge_str.clone(),
-                        item.format_str.clone(),
-                        item.flags_str.clone(),
-                        item.is_corrupted,
-                        item.is_deleted,
-                        item.is_pending,
-                        item.has_tags,
-                        matches!(item.record.media_type, MediaType::Video),
-                    )
-                });
-
-                if let Some((
-                    media_id,
-                    filename_slint,
-                    folder_path_str,
-                    modified_date_str,
-                    created_date_str,
-                    filesize_str,
-                    rating,
-                    rating_str,
-                    tags_count,
-                    tags_str,
-                    width_str,
-                    height_str,
-                    ar_str,
-                    duration_str,
-                    duration_badge_str,
-                    format_str,
-                    flags_str,
-                    is_corrupted,
-                    is_deleted,
-                    is_pending,
-                    has_tags,
-                    is_video,
-                )) = item_info_opt {
-                    let is_selected = st.file_selection.is_selected(media_id);
-
-                    let thumb_img = if is_table {
-                        Image::default()
-                    } else if let Some(buf) = st.folder_thumbnails.get(&media_id) {
-                        Image::from_rgb8(buf.clone())
-                    } else if let Some(buf) = thumbnails.try_load_existing(media_id) {
-                        st.folder_thumbnails.insert(media_id, buf.clone());
-                        Image::from_rgb8(buf)
-                    } else {
-                        Image::default()
-                    };
-
-                    slice_views.push(MediaItemView {
-                        id: media_id as i32,
-                        filename: filename_slint,
-                        path_str: folder_path_str,
-                        modified_date_str,
-                        created_date_str,
-                        filesize_str,
-                        rating,
-                        rating_str,
-                        tags_count,
-                        tags_str,
-                        width_str,
-                        height_str,
-                        ar_str,
-                        duration_str,
-                        duration_badge_str,
-                        format_str,
-                        flags_str,
-                        has_tags,
-                        thumbnail: thumb_img,
-                        is_selected,
-                        is_video,
-                        is_corrupted,
-                        is_deleted,
-                        is_pending,
-                    });
-                }
-            }
-
-            st.loaded_slice_start = start_window;
-            st.loaded_slice_len = window_len;
-            st.loaded_slice_valid = true;
-        }
-
-        window.set_visible_start_index(start_window as i32);
-        window.set_media_items(ModelRc::new(VecModel::from(slice_views)));
-
-        let slice_us = t_reload_start.elapsed().as_micros() as u64;
+        let (outcome, slice_us) = timed(|| sync_window(window, &mut st, thumbnails, geometry, first_row, total, false));
         scroll_bench.record_slice_reload(slice_us);
+        tracing::trace!(
+            first_row,
+            rows_written = outcome.rows_written,
+            rebuilt = outcome.rebuilt,
+            requested = outcome.requested,
+            elapsed_us = slice_us,
+            "[BrowseWindow: Sync] Tiles updated for the viewport"
+        );
     }
 
     pub fn execute_metadata_only_refresh(
@@ -1091,7 +916,9 @@ impl BridgeMedia {
                                 "OK".into()
                             };
 
-                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.record.id == item.media_id) {
+                            st.mark_list_bytes_dirty();
+
+                            if let Some(target_indexed) = st.all_folder_media.find_mut(item.media_id) {
                                 target_indexed.record = item.updated_record.clone();
                                 target_indexed.width_str = width_str;
                                 target_indexed.height_str = height_str;
@@ -1123,43 +950,11 @@ impl BridgeMedia {
                         }
                     }
 
-                    let media_model = w.get_media_items();
-                    let start_window = w.get_visible_start_index() as usize;
-                    let visible_count = media_model.row_count();
-
                     {
                         let st_read = st_arc.read();
-
                         for item in &successful_items {
-                            if let Some(&global_row_idx) = st_read.media_row_map.get(&item.media_id)
-                                && global_row_idx >= start_window
-                                && global_row_idx < start_window + visible_count
-                            {
-                                let local_idx = global_row_idx - start_window;
-                                if let Some(mut view) = media_model.row_data(local_idx)
-                                    && view.id == item.media_id as i32
-                                {
-                                    if let Some(indexed) = st_read.all_folder_media.iter().find(|m| m.record.id == item.media_id) {
-                                        view.width_str = indexed.width_str.clone();
-                                        view.height_str = indexed.height_str.clone();
-                                        view.ar_str = indexed.ar_str.clone();
-                                        view.duration_str = indexed.duration_str.clone();
-                                        view.duration_badge_str = indexed.duration_badge_str.clone();
-                                        view.filesize_str = indexed.filesize_mb_str.clone();
-                                        view.modified_date_str = indexed.modified_date_str.clone();
-                                        view.created_date_str = indexed.created_date_str.clone();
-                                        view.format_str = indexed.format_str.clone();
-                                        view.flags_str = indexed.flags_str.clone();
-                                        view.is_corrupted = indexed.is_corrupted;
-                                        view.is_deleted = indexed.is_deleted;
-                                        view.is_pending = indexed.is_pending;
-                                        view.tags_count = indexed.tags_count as i32;
-                                        view.tags_str = indexed.tags_count_str.clone();
-                                        view.has_tags = indexed.has_tags;
-                                    }
-
-                                    media_model.set_row_data(local_idx, view);
-                                }
+                            if let Some(indexed) = st_read.record_by_id(item.media_id) {
+                                update_tile(&w, &st_read, item.media_id, |view| apply_record(view, indexed));
                             }
                         }
                     }
@@ -1228,7 +1023,7 @@ impl BridgeMedia {
             let folder_path_opt = st.current_folder_path.clone();
 
             for &id in &selected_ids {
-                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id) {
+                if let Some(item) = st.all_folder_media.find(id) {
                     targets.push((id, item.full_path.clone(), item.record.clone()));
                 } else if let Some(ref folder_path) = folder_path_opt
                     && let Ok(Some(record)) = library.media().get(id)
@@ -1313,7 +1108,7 @@ impl BridgeMedia {
             let folder_path_opt = st.current_folder_path.clone();
 
             for &id in &selected_ids {
-                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id) {
+                if let Some(item) = st.all_folder_media.find(id) {
                     targets.push((id, item.full_path.clone(), item.record.clone()));
                 } else if let Some(ref folder_path) = folder_path_opt
                     && let Ok(Some(record)) = library.media().get(id)
@@ -1667,13 +1462,7 @@ impl BridgeMedia {
                                     item.primary_height,
                                 );
 
-                                st.folder_thumbnails.insert(item.media_id, shared_buf.clone());
-                                let _ = thumb_arc.cache().insert(
-                                    item.media_id,
-                                    item.primary_width,
-                                    item.primary_height,
-                                    &item.primary_pixels,
-                                );
+                                st.thumbs.insert(item.media_id, shared_buf.clone());
                             }
 
                             let is_video = matches!(item.updated_record.media_type, MediaType::Video);
@@ -1720,7 +1509,9 @@ impl BridgeMedia {
                                 "OK".into()
                             };
 
-                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.record.id == item.media_id) {
+                            st.mark_list_bytes_dirty();
+
+                            if let Some(target_indexed) = st.all_folder_media.find_mut(item.media_id) {
                                 target_indexed.record = item.updated_record.clone();
                                 target_indexed.width_str = width_str;
                                 target_indexed.height_str = height_str;
@@ -1791,51 +1582,21 @@ impl BridgeMedia {
                         });
                     }
 
-                    let media_model = w.get_media_items();
-                    let start_window = w.get_visible_start_index() as usize;
-                    let visible_count = media_model.row_count();
                     let is_table = w.get_is_table_view();
 
                     {
                         let st_read = st_arc.read();
-
                         for item in &successful_items {
-                            if let Some(&global_row_idx) = st_read.media_row_map.get(&item.media_id)
-                                && global_row_idx >= start_window
-                                && global_row_idx < start_window + visible_count
-                            {
-                                let local_idx = global_row_idx - start_window;
-                                if let Some(mut view) = media_model.row_data(local_idx)
-                                    && view.id == item.media_id as i32
-                                {
-                                    if !is_table
-                                        && let Some(buf) = st_read.folder_thumbnails.get(&item.media_id)
-                                    {
-                                        view.thumbnail = Image::from_rgb8(buf.clone());
-                                    }
-
-                                    if let Some(indexed) = st_read.all_folder_media.iter().find(|m| m.record.id == item.media_id) {
-                                        view.width_str = indexed.width_str.clone();
-                                        view.height_str = indexed.height_str.clone();
-                                        view.ar_str = indexed.ar_str.clone();
-                                        view.duration_str = indexed.duration_str.clone();
-                                        view.duration_badge_str = indexed.duration_badge_str.clone();
-                                        view.filesize_str = indexed.filesize_mb_str.clone();
-                                        view.modified_date_str = indexed.modified_date_str.clone();
-                                        view.created_date_str = indexed.created_date_str.clone();
-                                        view.format_str = indexed.format_str.clone();
-                                        view.flags_str = indexed.flags_str.clone();
-                                        view.is_corrupted = indexed.is_corrupted;
-                                        view.is_deleted = indexed.is_deleted;
-                                        view.is_pending = indexed.is_pending;
-                                        view.tags_count = indexed.tags_count as i32;
-                                        view.tags_str = indexed.tags_count_str.clone();
-                                        view.has_tags = indexed.has_tags;
-                                    }
-
-                                    media_model.set_row_data(local_idx, view);
+                            let fresh_image = (!is_table).then(|| st_read.thumbs.get(item.media_id)).flatten();
+                            let indexed = st_read.record_by_id(item.media_id);
+                            update_tile(&w, &st_read, item.media_id, |view| {
+                                if let Some(buf) = fresh_image {
+                                    view.thumbnail = Image::from_rgb8(buf);
                                 }
-                            }
+                                if let Some(indexed) = indexed {
+                                    apply_record(view, indexed);
+                                }
+                            });
                         }
                     }
 
@@ -2169,11 +1930,11 @@ impl BridgeMedia {
                     }
                 }
                 let indexed = Self::preindex_records(library, known);
-                state.write().all_folder_media = indexed;
+                state.write().all_folder_media.replace(indexed);
             } else {
                 let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
                 let indexed = Self::preindex(library, raw_media, p);
-                state.write().all_folder_media = indexed;
+                state.write().all_folder_media.replace(indexed);
             }
         }
 
@@ -2213,65 +1974,12 @@ impl BridgeMedia {
         let matched_len = sorted_refs.len();
         let mut row_map = HashMap::with_capacity(matched_len);
         let is_table = window.get_is_table_view();
-        let p0_initial_window = if is_table { 90usize } else { 60usize };
 
         let mut matched_indices = Vec::with_capacity(matched_len);
 
         for (row_idx, &item) in sorted_refs.iter().enumerate() {
             matched_indices.push(item.index);
             row_map.insert(item.record.id, row_idx);
-        }
-
-        let anchor = options.anchor_index.unwrap_or(0);
-        let half_buf = p0_initial_window / 2;
-        let mut start_window = anchor.saturating_sub(half_buf);
-        let end_window = (start_window + p0_initial_window).min(matched_len);
-        start_window = end_window.saturating_sub(p0_initial_window);
-        let slice_len = end_window.saturating_sub(start_window);
-
-        let mut slice_views = Vec::with_capacity(slice_len);
-        let mut newly_discovered_thumbnails = Vec::new();
-
-        for &item in &sorted_refs[start_window..end_window] {
-            let is_selected = st.file_selection.is_selected(item.record.id);
-
-            let thumb_img = if is_table {
-                Image::default()
-            } else if let Some(buf) = st.folder_thumbnails.get(&item.record.id) {
-                Image::from_rgb8(buf.clone())
-            } else if let Some(buf) = thumbnails.try_load_existing(item.record.id) {
-                newly_discovered_thumbnails.push((item.record.id, buf.clone()));
-                Image::from_rgb8(buf)
-            } else {
-                Image::default()
-            };
-
-            slice_views.push(MediaItemView {
-                id: item.record.id as i32,
-                filename: item.filename_slint.clone(),
-                path_str: item.folder_path_str.clone(),
-                modified_date_str: item.modified_date_str.clone(),
-                created_date_str: item.created_date_str.clone(),
-                filesize_str: item.filesize_mb_str.clone(),
-                rating: item.record.rating as i32,
-                rating_str: item.rating_str.clone(),
-                tags_count: item.tags_count as i32,
-                tags_str: item.tags_count_str.clone(),
-                width_str: item.width_str.clone(),
-                height_str: item.height_str.clone(),
-                ar_str: item.ar_str.clone(),
-                duration_str: item.duration_str.clone(),
-                duration_badge_str: item.duration_badge_str.clone(),
-                format_str: item.format_str.clone(),
-                flags_str: item.flags_str.clone(),
-                has_tags: item.has_tags,
-                thumbnail: thumb_img,
-                is_selected,
-                is_video: matches!(item.record.media_type, MediaType::Video),
-                is_corrupted: item.is_corrupted,
-                is_deleted: item.is_deleted,
-                is_pending: item.is_pending,
-            });
         }
 
         drop(st);
@@ -2281,13 +1989,10 @@ impl BridgeMedia {
             bench.view_model_map_time_us.store(map_us, Ordering::Relaxed);
         }
 
+        let t_slint_start = Instant::now();
         let mut selection_pruned = false;
         {
             let mut st_write = state.write();
-
-            for (id, buf) in newly_discovered_thumbnails {
-                st_write.folder_thumbnails.insert(id, buf);
-            }
 
             let prev_sel_count = st_write.file_selection.count();
             if prev_sel_count > 0 {
@@ -2302,19 +2007,28 @@ impl BridgeMedia {
             st_write.media_row_map = row_map;
             st_write.active_indices = matched_indices;
             st_write.last_executed_query = current_query.clone();
-            st_write.loaded_slice_start = start_window;
-            st_write.loaded_slice_len = slice_len;
-            st_write.loaded_slice_valid = true;
-        }
+            st_write.mark_list_bytes_dirty();
+            st_write.invalidate_view_window();
 
-        let t_slint_start = Instant::now();
-        window.set_total_items_count(matched_len as i32);
-        window.set_visible_start_index(start_window as i32);
-        window.set_media_items(ModelRc::new(VecModel::from(slice_views)));
+            let geometry = st_write
+                .view_geometry
+                .unwrap_or_else(|| ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table)));
+            let first_row = options.anchor_index.unwrap_or(0) / geometry.columns;
+            window.set_total_items_count(matched_len as i32);
+            let outcome = sync_window(window, &mut st_write, thumbnails, geometry, first_row, matched_len, true);
+            tracing::debug!(
+                items = matched_len,
+                rows_written = outcome.rows_written,
+                requested = outcome.requested,
+                "[BrowseWindow: Reload] Tile pool refilled for the new list"
+            );
+        }
 
         let app_settings = settings.get();
         let has_root = app_settings.general.root_folder.is_some();
-        let root_exists = app_settings.general.root_folder.as_ref().map(|p| p.is_dir()).unwrap_or(false);
+        // The root is only probed when the folder holds nothing at all; any record proves that the root was there.
+        let root_exists = total_active_dataset_count > 0
+            || app_settings.general.root_folder.as_ref().map(|p| p.is_dir()).unwrap_or(false);
         let current_folder_name = path_opt.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str());
 
         let fallback_state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {

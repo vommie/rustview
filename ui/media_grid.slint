@@ -215,8 +215,9 @@ export component VirtualizedMediaGrid inherits Rectangle {
     clip: true;
 
     in property <[MediaItemView]> media-items: [];
-    in property <int> visible-start-index: 0;
     in property <int> total-items-count: 0;
+    /// The view that is shown; the hidden one neither reports its viewport nor builds tiles.
+    in property <bool> active: true;
 
     in property <int> thumb-size: 190;
     in property <int> thumb-aspect-idx: 1;
@@ -237,6 +238,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
     in property <length> rubberband-y: 0px;
     in property <length> rubberband-width: 0px;
     in property <length> rubberband-height: 0px;
+
+    property <[MediaItemView]> no-items: [];
 
     property <length> grid-padding: root.grid-padding-val * 1px;
     property <length> grid-spacing: root.grid-spacing-val * 1px;
@@ -260,9 +263,9 @@ export component VirtualizedMediaGrid inherits Rectangle {
     property <int> total-rows: Math.ceil(root.total-items-count / root.columns);
     property <length> total-content-height: (root.total-rows * root.row-stride) + (2 * root.grid-padding);
 
-    property <int> pool-rows-count: Math.min(root.total-rows, Math.ceil(scroll-area.height / Math.max(1px, root.row-stride)) + 6);
+    // Rows that intersect the viewport, partially visible ones included.
+    property <int> visible-rows: Math.ceil(scroll-area.height / Math.max(1px, root.row-stride)) + 1;
     property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / Math.max(1px, root.row-stride)));
-    property <int> scroll-block: Math.floor(-scroll-area.clamped-y / Math.max(1px, root.row-stride * 2));
 
     callback item-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     callback item-middle-clicked(int /* id */);
@@ -270,7 +273,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback sort-clicked(int /* column_index */);
     callback background-clicked();
     callback item-hover-changed(int /* id */, bool /* is_hover */);
-    callback visible-chunk-changed(int /* first_item */, int /* last_item */, int /* total */);
+    /// The viewport moved or changed size: Rust keeps the tiles around it filled (see `ui::browse_window`).
+    callback viewport-changed(int /* first-row */, int /* visible-rows */, int /* columns */, int /* total */);
 
     callback item-drag-started(int /* id */, length /* x */, length /* y */);
     callback item-drag-moved(length /* x */, length /* y */);
@@ -322,23 +326,17 @@ export component VirtualizedMediaGrid inherits Rectangle {
         return root.first-visible-row * root.columns;
     }
 
-    changed scroll-block => {
-        let first-item = self.scroll-block * 2 * root.columns;
-        let last-item = Math.min(root.total-items-count, first-item + (root.pool-rows-count * root.columns));
-        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
+    function emit-viewport() {
+        if root.active {
+            root.viewport-changed(root.first-visible-row, root.visible-rows, root.columns, root.total-items-count);
+        }
     }
 
-    changed columns => {
-        let first-item = self.scroll-block * 2 * root.columns;
-        let last-item = Math.min(root.total-items-count, first-item + (root.pool-rows-count * root.columns));
-        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
-    }
-
-    changed pool-rows-count => {
-        let first-item = self.scroll-block * 2 * root.columns;
-        let last-item = Math.min(root.total-items-count, first-item + (root.pool-rows-count * root.columns));
-        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
-    }
+    changed active => { root.emit-viewport(); }
+    changed first-visible-row => { root.emit-viewport(); }
+    changed visible-rows => { root.emit-viewport(); }
+    changed columns => { root.emit-viewport(); }
+    changed total-items-count => { root.emit-viewport(); }
 
     VerticalLayout {
         padding: 0px;
@@ -432,8 +430,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
                 width: parent.width;
                 height: root.total-content-height;
 
-                for item[idx] in root.media-items: MediaTile {
-                    property <int> global-idx: root.visible-start-index + idx;
+                for item in root.active ? root.media-items : root.no-items: MediaTile {
+                    property <int> global-idx: item.index;
                     property <int> r-idx: Math.floor(self.global-idx / root.columns);
                     property <int> c-idx: Math.mod(self.global-idx, root.columns);
 
@@ -443,6 +441,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     height: root.item-tile-height;
 
                     item: item;
+                    visible: item.index >= 0;
                     thumb-width: root.thumb-size;
                     thumb-aspect-idx: root.thumb-aspect-idx;
                     badge-config: root.badge-config;

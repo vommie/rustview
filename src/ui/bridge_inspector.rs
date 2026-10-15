@@ -41,7 +41,7 @@ impl BridgeInspector {
         // Fast O(1) single-item path (zero string allocations, direct lookup in in-memory dataset)
         if sel_count == 1 {
             let single_id = *selected_ids.iter().next().unwrap();
-            let item_opt = st.all_folder_media.iter().find(|m| m.record.id == single_id);
+            let item_opt = st.all_folder_media.find(single_id);
 
             if let Some(item) = item_opt {
                 Self::render_single(window, item);

@@ -45,7 +45,7 @@ impl DeleteFileDialogController {
             let mut total = 0u64;
             let mut name = String::new();
             for (idx, &id) in media_ids.iter().enumerate() {
-                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id) {
+                if let Some(item) = st.all_folder_media.find(id) {
                     if idx == 0 {
                         name = item.record.filename.clone();
                     }
@@ -100,7 +100,7 @@ impl DeleteFileDialogController {
         {
             let st = ctx.state.read();
             for &id in media_ids {
-                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id) {
+                if let Some(item) = st.all_folder_media.find(id) {
                     paths_to_delete.push(item.full_path.clone());
                 } else if let Ok(p) = ctx.library.resolve_media_path(id) {
                     paths_to_delete.push(p);

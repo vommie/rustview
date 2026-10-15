@@ -115,7 +115,7 @@ impl MediaContextMenu {
                         .unwrap_or(false)
                 });
 
-            let (is_single_img, is_pending, fname, f_id) = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
+            let (is_single_img, is_pending, fname, f_id) = if let Some(item) = st.all_folder_media.find(single_id) {
                 (
                     matches!(item.record.media_type, MediaType::Image),
                     item.is_pending,
@@ -134,7 +134,7 @@ impl MediaContextMenu {
                 (false, false, String::new(), st.current_folder_id)
             };
 
-            let path = if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
+            let path = if let Some(item) = st.all_folder_media.find(single_id) {
                 Some(item.full_path.clone())
             } else {
                 library.resolve_media_path(single_id).ok()
@@ -906,7 +906,7 @@ impl MediaContextMenu {
         let st = ctx.state.read();
 
         for &id in target_ids {
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id) {
+            if let Some(item) = st.all_folder_media.find(id) {
                 paths.push(item.full_path.clone());
             } else if let Ok(p) = ctx.library.resolve_media_path(id) {
                 paths.push(p);
@@ -974,7 +974,7 @@ impl MediaContextMenu {
         let st = ctx.state.read();
 
         for &id in target_ids {
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == id) {
+            if let Some(item) = st.all_folder_media.find(id) {
                 names.push(item.record.filename.clone());
             } else if let Ok(Some(rec)) = ctx.library.media().get(id) {
                 names.push(rec.filename);
@@ -1050,7 +1050,7 @@ impl MediaContextMenu {
 
         let (filename, full_path) = {
             let st = ctx.state.read();
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == single_id) {
+            if let Some(item) = st.all_folder_media.find(single_id) {
                 (item.record.filename.clone(), item.full_path.clone())
             } else if let Ok(p) = ctx.library.resolve_media_path(single_id) {
                 let name = p

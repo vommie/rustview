@@ -40,6 +40,7 @@ use crate::library::folders::normalize_path;
 use crate::library::models::{FileTransferKind, FolderId, MediaId, TagId};
 use crate::library::Library;
 use crate::query::{MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
+use crate::settings::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
 use crate::settings::{
     AppSettings, GridAspectRatio, LogObscurer, SettingsDialogController, SettingsDiff,
     SettingsManager,
@@ -137,6 +138,7 @@ impl UiBridge {
         let folder_dialogs = FolderDialogController::new();
 
         let mut initial_state = UiState::default();
+        initial_state.thumbs = thumbnails.cache_handle();
         let restored_expanded_tags = settings.get().tags.expanded_tag_ids;
         initial_state.expanded_tag_ids = restored_expanded_tags.into_iter().collect();
 
@@ -449,11 +451,24 @@ impl UiBridge {
             let new_clone = new_settings.clone();
 
             let _ = w_weak.upgrade_in_event_loop(move |window| {
+                if diff_clone.performance_cache_changed {
+                    let plan = MemoryPlan::resolve(new_clone.performance.memory_budget_mb, SystemMemory::read());
+                    thumbnails.cache().set_budget(plan.thumbnail_cache_bytes as usize);
+                    tracing::info!(
+                        automatic = plan.automatic,
+                        budget_mb = plan.budget_bytes / BYTES_PER_MB,
+                        thumbnail_cache_mb = plan.thumbnail_cache_bytes / BYTES_PER_MB,
+                        "[Memory: Budget] RAM budget changed; the thumbnail cache was resized"
+                    );
+                    if !plan.warnings.is_empty() {
+                        tracing::warn!(warnings = %plan.warning_text(), "[Memory: Budget] The configured RAM budget is questionable");
+                    }
+                }
+
                 if diff_clone.performance_pipeline_changed {
                     let new_config = ThumbnailConfig::from_performance_settings(&new_clone.performance);
                     thumbnails.set_config(new_config);
                     thumbnails.cache().clear();
-                    state.write().folder_thumbnails.clear();
 
                     if state.read().current_folder_id.is_some() {
                         BridgeMedia::reload(&window, &library, &thumbnails, &settings, &state, true, false);
@@ -1644,6 +1659,11 @@ impl UiBridge {
             &self.settings,
             &self.state,
         );
+    }
+
+    /// Starts the scripted scroll scenarios when `RUSTVIEW_PERF` asks for them (developer probe, see `ui::perf_probe`).
+    pub fn start_perf_probe(&self) {
+        super::perf_probe::start_if_requested(&self.window, &self.state, &self.thumbnails);
     }
 
     /// Closes every window and releases the native resources, see `ui::shutdown`. The caller has claimed the shutdown with

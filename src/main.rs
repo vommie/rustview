@@ -1,5 +1,6 @@
 use rustview::library::Library;
-use rustview::settings::{LogObscurer, SettingsManager, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
+use rustview::settings::memory_budget::BYTES_PER_MB;
+use rustview::settings::{LogObscurer, MemoryPlan, SettingsManager, SystemMemory, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 use rustview::system::SystemDisplayService;
 use rustview::system::termination;
 use rustview::thumbnails::ThumbnailManager;
@@ -114,11 +115,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     library.set_folder_tree_root(configured_root);
 
+    // The RAM budget is resolved from the setting and the machine (microseconds of /proc reads, no drive access).
+    let memory_plan = MemoryPlan::resolve(settings.get().performance.memory_budget_mb, SystemMemory::read());
+    tracing::info!(
+        automatic = memory_plan.automatic,
+        budget_mb = memory_plan.budget_bytes / BYTES_PER_MB,
+        thumbnail_cache_mb = memory_plan.thumbnail_cache_bytes / BYTES_PER_MB,
+        usable_ram_mb = memory_plan.system.usable_total_bytes() / BYTES_PER_MB,
+        available_ram_mb = memory_plan.system.available_bytes / BYTES_PER_MB,
+        "[Memory: Budget] RAM budget resolved"
+    );
+    if !memory_plan.warnings.is_empty() {
+        tracing::warn!(warnings = %memory_plan.warning_text(), "[Memory: Budget] The configured RAM budget is questionable");
+    }
+
     // Initialize SIMD Thumbnail Manager
     let thumbnails = Arc::new(ThumbnailManager::new(
         library.clone(),
         &cache_path,
-        settings.get().performance.l1_cache_slots,
+        memory_plan.thumbnail_cache_bytes as usize,
         settings.get().performance.worker_threads,
     )?);
     startup_clock::mark("Thumbnails");
@@ -163,12 +178,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             slint::RenderingState::AfterRendering => {
+                rustview::ui::perf_probe::note_rendering_state(&state);
                 startup_clock::mark_first_frame();
                 let pending = after_first_frame_render.borrow_mut().take();
                 if let Some(start) = pending {
                     start();
                 }
             }
+            slint::RenderingState::BeforeRendering => rustview::ui::perf_probe::note_rendering_state(&state),
             _ => {}
         })
     {
@@ -385,6 +402,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("RustView UI & Storage Engine Ready.");
     startup_clock::mark("BridgeReady");
+    bridge.start_perf_probe();
 
     startup_clock::mark("EventLoop");
     let result = main_window.run();

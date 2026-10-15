@@ -1025,7 +1025,7 @@ impl BridgeViewerTabs {
         for &media_id in &media_ids[..total - 1] {
             let is_video = {
                 let st = state.read();
-                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                if let Some(item) = st.all_folder_media.find(media_id) {
                     matches!(item.record.media_type, MediaType::Video)
                 } else if let Ok(Some(record)) = library.media().get(media_id) {
                     matches!(record.media_type, MediaType::Video)
@@ -1077,7 +1077,7 @@ impl BridgeViewerTabs {
         let last_id = media_ids[total - 1];
         let is_last_video = {
             let st = state.read();
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == last_id) {
+            if let Some(item) = st.all_folder_media.find(last_id) {
                 matches!(item.record.media_type, MediaType::Video)
             } else if let Ok(Some(record)) = library.media().get(last_id) {
                 matches!(record.media_type, MediaType::Video)
@@ -1197,7 +1197,7 @@ impl BridgeViewerTabs {
         for &media_id in media_ids {
             let is_video = {
                 let st = state.read();
-                if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+                if let Some(item) = st.all_folder_media.find(media_id) {
                     matches!(item.record.media_type, MediaType::Video)
                 } else if let Ok(Some(record)) = library.media().get(media_id) {
                     matches!(record.media_type, MediaType::Video)
@@ -1295,7 +1295,7 @@ impl BridgeViewerTabs {
 
         let is_video = {
             let st = state.read();
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+            if let Some(item) = st.all_folder_media.find(media_id) {
                 matches!(item.record.media_type, MediaType::Video)
             } else if let Ok(Some(record)) = library.media().get(media_id) {
                 matches!(record.media_type, MediaType::Video)
@@ -1425,7 +1425,7 @@ impl BridgeViewerTabs {
 
         let (is_video, filename_hint) = {
             let st = state.read();
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+            if let Some(item) = st.all_folder_media.find(media_id) {
                 (
                     matches!(item.record.media_type, MediaType::Video),
                     item.record.filename.clone(),

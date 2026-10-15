@@ -99,7 +99,7 @@ impl BridgeDnd {
             let first_item = ordered_selected
                 .first()
                 .copied()
-                .or_else(|| st.all_folder_media.iter().find(|m| m.record.id == params.media_id));
+                .or_else(|| st.all_folder_media.find(params.media_id));
 
             let name = first_item
                 .map(|m| m.record.filename.clone())
@@ -113,8 +113,8 @@ impl BridgeDnd {
                 }
             });
 
-            let thumb = if let Some(buf) = st.folder_thumbnails.get(&params.media_id) {
-                Image::from_rgb8(buf.clone())
+            let thumb = if let Some(buf) = st.thumbs.get(params.media_id) {
+                Image::from_rgb8(buf)
             } else {
                 Image::default()
             };
@@ -593,7 +593,7 @@ impl BatchTransferRunner {
 
     fn resolve_media_path(&self, media_id: MediaId) -> PathBuf {
         let st = self.state.read();
-        if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+        if let Some(item) = st.all_folder_media.find(media_id) {
             return item.full_path.clone();
         }
         drop(st);

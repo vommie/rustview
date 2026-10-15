@@ -391,7 +391,8 @@ export component MediaTableView inherits Rectangle {
     clip: true;
 
     in property <[MediaItemView]> items: [];
-    in property <int> visible-start-index: 0;
+    /// The view that is shown; the hidden one neither reports its viewport nor builds rows.
+    in property <bool> active: true;
     in property <int> total-items-count: 0;
 
     in property <int> sort-column: 0;
@@ -426,7 +427,8 @@ export component MediaTableView inherits Rectangle {
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
     callback background-clicked();
-    callback visible-chunk-changed(int /* first_item */, int /* last_item */, int /* total */);
+    /// The viewport moved or changed size: Rust keeps the rows around it filled (see `ui::browse_window`).
+    callback viewport-changed(int /* first-row */, int /* visible-rows */, int /* columns */, int /* total */);
 
     callback item-drag-started(int /* id */, length /* x */, length /* y */);
     callback item-drag-moved(length /* x */, length /* y */);
@@ -454,12 +456,13 @@ export component MediaTableView inherits Rectangle {
 
     property <length> content-scroll-width: Math.max(self.width, root.total-columns-width);
 
+    property <[MediaItemView]> no-items: [];
     property <length> row-height: 28px;
     property <length> total-content-height: root.total-items-count * root.row-height;
 
-    property <int> pool-rows-count: Math.min(root.total-items-count, Math.ceil(scroll-area.height / root.row-height) + 12);
+    // Rows that intersect the viewport, partially visible ones included.
+    property <int> visible-rows: Math.ceil(scroll-area.height / root.row-height) + 1;
     property <int> first-visible-row: Math.max(0, Math.floor(-scroll-area.clamped-y / root.row-height));
-    property <int> scroll-block: Math.floor(-scroll-area.clamped-y / (root.row-height * 6));
 
     /// Calculates dynamically how many full table rows fit into the current visible viewport height
     pure public function get-page-rows() -> int {
@@ -495,17 +498,16 @@ export component MediaTableView inherits Rectangle {
         return root.first-visible-row;
     }
 
-    changed scroll-block => {
-        let first-item = self.scroll-block * 6;
-        let last-item = Math.min(root.total-items-count, first-item + root.pool-rows-count);
-        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
+    function emit-viewport() {
+        if root.active {
+            root.viewport-changed(root.first-visible-row, root.visible-rows, 1, root.total-items-count);
+        }
     }
 
-    changed pool-rows-count => {
-        let first-item = self.scroll-block * 6;
-        let last-item = Math.min(root.total-items-count, first-item + root.pool-rows-count);
-        root.visible-chunk-changed(first-item, last-item, root.total-items-count);
-    }
+    changed active => { root.emit-viewport(); }
+    changed first-visible-row => { root.emit-viewport(); }
+    changed visible-rows => { root.emit-viewport(); }
+    changed total-items-count => { root.emit-viewport(); }
 
     VerticalLayout {
         padding: 0px;
@@ -630,14 +632,15 @@ export component MediaTableView inherits Rectangle {
                 width: root.content-scroll-width;
                 height: root.total-content-height;
 
-                for item[idx] in root.items: MediaTableRow {
-                    property <int> global-idx: root.visible-start-index + idx;
+                for item in root.active ? root.items : root.no-items: MediaTableRow {
+                    property <int> global-idx: item.index;
 
                     x: 0px;
                     y: self.global-idx * root.row-height;
                     width: root.content-scroll-width;
                     row-height: root.row-height;
                     item: item;
+                    visible: item.index >= 0;
 
                     col-filename-width: root.col-filename-width;
                     col-path-width: root.col-path-width;

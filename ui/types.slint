@@ -3,6 +3,8 @@ import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "mul
 
 export struct MediaItemView {
     id: int,
+    /// Position of the item in the sorted list; the tile places itself by it.
+    index: int,
     filename: string,
     path_str: string,
     modified_date_str: string,

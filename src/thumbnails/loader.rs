@@ -1,12 +1,14 @@
-use super::cache::{L1AnimatedPreviewCache, L1ThumbnailCache};
+use super::cache::L1AnimatedPreviewCache;
 use super::error::ThumbnailError;
 use super::generator::ThumbnailGenerator;
 use super::gif::{AnimatedPreview, GifThumbnailer};
 use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
+use super::ram_cache::{CachedThumbnail, ThumbnailRamCache};
 use super::store::PackStore;
 use super::types::{
-    ThumbnailConfig, ThumbnailFormat, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord,
+    ThumbnailConfig, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord,
 };
+use super::view_loader::{ViewLoader, ViewLoaderDeps};
 use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::media::{MediaFormat, MediaType};
@@ -19,6 +21,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Threads that decode the thumbnails the Browse view shows (small decodes, latency matters more than throughput).
+const VIEW_LOADER_THREADS: usize = 2;
+
+/// Pipeline id of the thumbnails that the view loader delivers: they belong to no folder pipeline, so starting or cancelling
+/// one never discards them (the view applies a thumbnail only if its tile still exists).
+pub const VIEW_LOAD_PIPELINE_ID: usize = usize::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProbedMetadata {
@@ -60,11 +69,12 @@ pub struct ReadyThumbnailItem {
 
 pub struct ThumbnailScheduler {
     pub library: Arc<Library>,
-    cache: Arc<L1ThumbnailCache>,
+    cache: Arc<ThumbnailRamCache>,
     animated_cache: Arc<L1AnimatedPreviewCache>,
     store: Arc<PackStore>,
     generator: Arc<ThumbnailGenerator>,
     pool: Arc<ThreadPool>,
+    view_loader: Arc<ViewLoader>,
     tracker: Arc<ThumbnailProgressTracker>,
     ready_drain_queue: Arc<Mutex<Vec<ReadyThumbnailItem>>>,
     generation_queue: Arc<Mutex<VecDeque<PreparedTarget>>>,
@@ -78,7 +88,7 @@ pub struct ThumbnailScheduler {
 impl ThumbnailScheduler {
     pub fn new(
         library: Arc<Library>,
-        cache: Arc<L1ThumbnailCache>,
+        cache: Arc<ThumbnailRamCache>,
         animated_cache: Arc<L1AnimatedPreviewCache>,
         store: Arc<PackStore>,
         threads: usize,
@@ -91,17 +101,32 @@ impl ThumbnailScheduler {
                 .expect("Failed to build high-performance thumbnail worker pool"),
         );
 
+        let generator = Arc::new(ThumbnailGenerator::new());
+        let ready_drain_queue = Arc::new(Mutex::new(Vec::with_capacity(2048)));
+        let active_pipeline_id = Arc::new(AtomicUsize::new(0));
+        let view_loader = Arc::new(ViewLoader::new(
+            ViewLoaderDeps {
+                library: library.clone(),
+                cache: cache.clone(),
+                store: store.clone(),
+                generator: generator.clone(),
+                ready: ready_drain_queue.clone(),
+            },
+            VIEW_LOADER_THREADS,
+        ));
+
         Self {
             library,
             cache,
             animated_cache,
             store,
-            generator: Arc::new(ThumbnailGenerator::new()),
+            generator,
             pool,
+            view_loader,
             tracker: Arc::new(ThumbnailProgressTracker::new()),
-            ready_drain_queue: Arc::new(Mutex::new(Vec::with_capacity(2048))),
+            ready_drain_queue,
             generation_queue: Arc::new(Mutex::new(VecDeque::new())),
-            active_pipeline_id: Arc::new(AtomicUsize::new(0)),
+            active_pipeline_id,
             is_cancelled: Arc::new(AtomicBool::new(false)),
             active_benchmark: Arc::new(RwLock::new(None)),
             active_in_flight: Arc::new(Mutex::new(HashSet::new())),
@@ -136,7 +161,7 @@ impl ThumbnailScheduler {
             return Vec::new();
         }
 
-        queue.retain(|item| item.pipeline_id == current_pipeline);
+        queue.retain(|item| item.pipeline_id == current_pipeline || item.pipeline_id == VIEW_LOAD_PIPELINE_ID);
 
         let take_count = queue.len().min(max_items);
         let items: Vec<ReadyThumbnailItem> = queue.drain(0..take_count).collect();
@@ -169,22 +194,34 @@ impl ThumbnailScheduler {
         self.is_cancelled.store(true, Ordering::Release);
         self.active_pipeline_id.fetch_add(1, Ordering::SeqCst);
         self.generation_queue.lock().clear();
-        self.ready_drain_queue.lock().clear();
+        self.ready_drain_queue.lock().retain(|item| item.pipeline_id == VIEW_LOAD_PIPELINE_ID);
         self.active_in_flight.lock().clear();
         self.tracker.reset();
         *self.active_benchmark.write() = None;
     }
 
-    /// Fast, non-blocking synchronous check for an existing thumbnail in L1 cache or L2 PackStore.
+    /// The thumbnail if it is already in RAM (a reference-count bump, no I/O and no decode). The Browse view uses this on the UI
+    /// thread; what is missing goes through [`Self::request_view_thumbnails`].
+    pub fn cached_thumbnail(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+        self.cache.get(media_id)
+    }
+
+    /// Asks the view loader for these thumbnails, most urgent first; earlier pending requests are dropped. Returns how many
+    /// requests are pending.
+    pub fn request_view_thumbnails(&self, ids: impl IntoIterator<Item = MediaId>) -> usize {
+        self.view_loader.request(ids)
+    }
+
+    pub fn cancel_view_requests(&self) {
+        self.view_loader.cancel_pending();
+    }
+
+    /// Blocking lookup in RAM, then in the pack store. For callers that are not on the UI thread.
     pub fn try_load_existing(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
-        // 1. L1 RAM Cache check
         if let Some(cached) = self.cache.get(media_id) {
-            let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(cached.width, cached.height);
-            pixel_buffer.make_mut_bytes().copy_from_slice(&cached.pixels);
-            return Some(pixel_buffer);
+            return Some(cached);
         }
 
-        // 2. L2 PackStore check
         let location = {
             let rtxn = self.library.raw_db().env.read_txn().ok()?;
             self.library.raw_db().thumbnails.get(&rtxn, &media_id).ok().flatten()?
@@ -193,10 +230,7 @@ impl ThumbnailScheduler {
         if let Ok(compressed_bytes) = self.store.read(location)
             && let Ok((w, h, rgb8_data)) = self.generator.decompress(&compressed_bytes)
         {
-            let _ = self.cache.insert(media_id, w, h, &rgb8_data);
-            let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-            pixel_buffer.make_mut_bytes().copy_from_slice(&rgb8_data);
-            return Some(pixel_buffer);
+            return Some(self.cache.insert_rgb(media_id, w, h, &rgb8_data).pixels);
         }
 
         None
@@ -323,7 +357,10 @@ impl ThumbnailScheduler {
             return;
         }
 
-        let mut existing_locations: Vec<(MediaId, PathBuf, ThumbnailLocation)> = Vec::new();
+        // Thumbnails that exist are not decoded here: the Browse view loads the ones it shows on demand, so opening a folder costs
+        // one database lookup per item and no pixel memory, however large the folder is.
+        let t_scan = Instant::now();
+        let mut existing_count = 0usize;
         let mut missing_targets: Vec<PreparedTarget> = Vec::new();
 
         {
@@ -341,7 +378,7 @@ impl ThumbnailScheduler {
                 }
 
                 let is_video = MediaFormat::from_path(&target.file_path).media_type() == Some(MediaType::Video);
-                let has_primary = self.library.raw_db().thumbnails.get(&rtxn, &target.media_id).ok().flatten();
+                let has_primary = self.library.raw_db().thumbnails.get(&rtxn, &target.media_id).ok().flatten().is_some();
 
                 let previews_ok = if is_video && config.generate_video_previews {
                     if let Ok(Some(prev)) = self.library.raw_db().video_previews.get(&rtxn, &target.media_id) {
@@ -353,156 +390,23 @@ impl ThumbnailScheduler {
                     true
                 };
 
-                if let Some(cached) = self.cache.get(target.media_id) {
-                    benchmark.record_l1_hit();
-                    let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(cached.width, cached.height);
-                    pixel_buffer.make_mut_bytes().copy_from_slice(&cached.pixels);
-
-                    let mut q = self.ready_drain_queue.lock();
-                    q.push(ReadyThumbnailItem {
-                        pipeline_id,
-                        folder_id,
-                        media_id: target.media_id,
-                        width: cached.width,
-                        height: cached.height,
-                        pixel_buffer: Some(pixel_buffer),
-                        orig_width: 0,
-                        orig_height: 0,
-                        duration_ms: 0,
-                        is_corrupted: false,
-                    });
-                    benchmark.record_queue_depth(q.len());
-
-                    if is_video && !previews_ok {
-                        missing_targets.push(target);
-                    }
-                    continue;
-                }
-
-                benchmark.record_l1_miss();
-
-                if let Some(location) = has_primary {
-                    existing_locations.push((target.media_id, target.file_path.clone(), location));
-                    if is_video && !previews_ok {
-                        missing_targets.push(target);
-                    }
+                if has_primary && previews_ok {
+                    existing_count += 1;
                 } else {
                     missing_targets.push(target);
                 }
             }
         }
 
-        let existing_count = existing_locations.len();
-        let missing_count = missing_targets.len();
-
+        benchmark.set_preload_duration(t_scan.elapsed().as_micros() as u64);
         tracing::info!(
             folder_id = folder_id,
             pipeline_id = pipeline_id,
             existing_cached = existing_count,
-            missing_to_generate = missing_count,
-            "[ThumbnailPipeline: Orchestration] Segregated items: preloading cached and generating missing/updated previews..."
+            missing_to_generate = missing_targets.len(),
+            scan_us = t_scan.elapsed().as_micros() as u64,
+            "[ThumbnailPipeline: Scan] Existing thumbnails stay in the pack store (loaded on demand); generating the missing ones"
         );
-
-        // =========================================================================
-        // PHASE 1: Bulk High-Throughput Parallel Preload
-        // =========================================================================
-        let corrupted_items = Arc::new(Mutex::new(Vec::new()));
-
-        if !existing_locations.is_empty() {
-            let t_phase1 = Instant::now();
-            self.tracker.set_preload_total(existing_count);
-
-            use rayon::prelude::*;
-            let corrupted_ref = corrupted_items.clone();
-            let bench_ref = benchmark.clone();
-
-            existing_locations
-                .into_par_iter()
-                .for_each(|(media_id, path, location)| {
-                    if self.is_pipeline_stale(pipeline_id) {
-                        return;
-                    }
-
-                    let mut load_successful = false;
-                    let t_read = Instant::now();
-
-                    if let Ok(compressed_bytes) = self.store.read(location) {
-                        let is_webp = ThumbnailFormat::detect(&compressed_bytes)
-                            != Some(ThumbnailFormat::Jpeg);
-                        bench_ref.record_pack_read(
-                            compressed_bytes.len() as u64,
-                            t_read.elapsed().as_micros() as u64,
-                        );
-
-                        let t_dec = Instant::now();
-                        if let Ok((w, h, rgb8_data)) = self.generator.decompress(&compressed_bytes) {
-                            let raw_len = rgb8_data.len() as u64;
-                            bench_ref.record_decompress(
-                                is_webp,
-                                raw_len,
-                                t_dec.elapsed().as_micros() as u64,
-                            );
-
-                            if !self.is_pipeline_stale(pipeline_id) {
-                                let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
-                                pixel_buffer.make_mut_bytes().copy_from_slice(&rgb8_data);
-
-                                let _ = self.cache.insert(media_id, w, h, &rgb8_data);
-                                let mut q = self.ready_drain_queue.lock();
-                                q.push(ReadyThumbnailItem {
-                                    pipeline_id,
-                                    folder_id,
-                                    media_id,
-                                    width: w,
-                                    height: h,
-                                    pixel_buffer: Some(pixel_buffer),
-                                    orig_width: 0,
-                                    orig_height: 0,
-                                    duration_ms: 0,
-                                    is_corrupted: false,
-                                });
-                                bench_ref.record_queue_depth(q.len());
-                                load_successful = true;
-                            }
-                        }
-                    }
-
-                    if !load_successful && !self.is_pipeline_stale(pipeline_id) {
-                        corrupted_ref.lock().push(PreparedTarget {
-                            pipeline_id,
-                            folder_id,
-                            media_id,
-                            file_path: path,
-                        });
-                    }
-
-                    self.tracker.increment_preload_done();
-                });
-
-            benchmark.set_preload_duration(t_phase1.elapsed().as_micros() as u64);
-        }
-
-        if self.is_pipeline_stale(pipeline_id) {
-            return;
-        }
-
-        let corrupted_list = corrupted_items.lock().drain(..).collect::<Vec<_>>();
-        if !corrupted_list.is_empty() {
-            let count = corrupted_list.len();
-            benchmark.record_corrupted_repaired(count);
-
-            if let Ok(mut wtxn) = self.library.raw_db().env.write_txn() {
-                for item in &corrupted_list {
-                    let _ = self.library.raw_db().thumbnails.delete(&mut wtxn, &item.media_id);
-                    let _ = self.library.raw_db().video_previews.delete(&mut wtxn, &item.media_id);
-                }
-                let _ = wtxn.commit();
-            }
-
-            for item in corrupted_list {
-                missing_targets.push(item);
-            }
-        }
 
         // =========================================================================
         // PHASE 2: Dedicated Missing Thumbnail & Video Preview Generation
@@ -668,15 +572,10 @@ impl ThumbnailScheduler {
                                         is_corrupted: false,
                                     });
 
-                                    let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(primary.width, primary.height);
-                                    pixel_buffer.make_mut_bytes().copy_from_slice(&primary.rgb_pixels);
-
-                                    let _ = self.cache.insert(
-                                        target.media_id,
-                                        primary.width,
-                                        primary.height,
-                                        &primary.rgb_pixels,
-                                    );
+                                    let pixel_buffer = self
+                                    .cache
+                                    .insert_rgb(target.media_id, primary.width, primary.height, &primary.rgb_pixels)
+                                    .pixels;
 
                                     let mut q = self.ready_drain_queue.lock();
                                     q.push(ReadyThumbnailItem {
@@ -750,15 +649,10 @@ impl ThumbnailScheduler {
                                         is_corrupted: false,
                                     });
 
-                                    let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(frame.width, frame.height);
-                                    pixel_buffer.make_mut_bytes().copy_from_slice(&frame.rgb_pixels);
-
-                                    let _ = self.cache.insert(
-                                        target.media_id,
-                                        frame.width,
-                                        frame.height,
-                                        &frame.rgb_pixels,
-                                    );
+                                    let pixel_buffer = self
+                                    .cache
+                                    .insert_rgb(target.media_id, frame.width, frame.height, &frame.rgb_pixels)
+                                    .pixels;
 
                                     let mut q = self.ready_drain_queue.lock();
                                     q.push(ReadyThumbnailItem {
@@ -892,6 +786,7 @@ impl ThumbnailScheduler {
             store: self.store.clone(),
             generator: self.generator.clone(),
             pool: self.pool.clone(),
+            view_loader: self.view_loader.clone(),
             tracker: self.tracker.clone(),
             ready_drain_queue: self.ready_drain_queue.clone(),
             generation_queue: self.generation_queue.clone(),
@@ -908,8 +803,8 @@ impl ThumbnailScheduler {
         media_id: MediaId,
         file_path: &Path,
         config: ThumbnailConfig,
-    ) -> Result<super::cache::CachedThumbnail, ThumbnailError> {
-        if let Some(item) = self.cache.get(media_id) {
+    ) -> Result<CachedThumbnail, ThumbnailError> {
+        if let Some(item) = self.cache.get_thumbnail(media_id) {
             return Ok(item);
         }
 
@@ -922,7 +817,7 @@ impl ThumbnailScheduler {
             && let Ok(compressed) = self.store.read(loc)
             && let Ok((w, h, rgb8)) = self.generator.decompress(&compressed)
         {
-            let item = self.cache.insert(media_id, w, h, &rgb8);
+            let item = self.cache.insert_rgb(media_id, w, h, &rgb8);
             return Ok(item);
         }
 
@@ -959,7 +854,7 @@ impl ThumbnailScheduler {
 
         let item = self
             .cache
-            .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
+            .insert_rgb(media_id, frame.width, frame.height, &frame.rgb_pixels);
         Ok(item)
     }
 
@@ -969,7 +864,7 @@ impl ThumbnailScheduler {
         media_id: MediaId,
         file_path: &Path,
         config: &ThumbnailConfig,
-    ) -> Result<super::cache::CachedThumbnail, ThumbnailError> {
+    ) -> Result<CachedThumbnail, ThumbnailError> {
         let is_video = MediaFormat::from_path(file_path).media_type() == Some(MediaType::Video);
         let (frame, video_preview_rec) = if is_video {
             let video_res = self
@@ -1046,7 +941,7 @@ impl ThumbnailScheduler {
 
         let item = self
             .cache
-            .insert(media_id, frame.width, frame.height, &frame.rgb_pixels);
+            .insert_rgb(media_id, frame.width, frame.height, &frame.rgb_pixels);
 
         Ok(item)
     }
@@ -1058,7 +953,7 @@ impl ThumbnailScheduler {
         file_path: &Path,
         config: &ThumbnailConfig,
         offset_percent: u8,
-    ) -> Result<super::cache::CachedThumbnail, ThumbnailError> {
+    ) -> Result<CachedThumbnail, ThumbnailError> {
         let custom_cfg = config.with_video_offset_percent(offset_percent);
         self.regenerate_sync(media_id, file_path, &custom_cfg)
     }

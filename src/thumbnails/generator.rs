@@ -93,7 +93,7 @@ impl ThumbnailGenerator {
 
         let width = img.width();
         let height = img.height();
-        let raw = img.to_rgb8().into_raw();
+        let raw = img.into_rgb8().into_raw();
 
         Ok((width, height, raw))
     }

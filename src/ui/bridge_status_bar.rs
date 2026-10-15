@@ -71,26 +71,12 @@ impl StatusBarBridge {
         let selected_ids = st.file_selection.selected_ids();
         let sel_count = selected_ids.len();
 
-        let mut total_bytes: u64 = 0;
-        let mut selected_bytes: u64 = 0;
-
-        if !st.active_indices.is_empty() {
-            for &idx in &st.active_indices {
-                if let Some(item) = st.all_folder_media.get(idx) {
-                    total_bytes += item.record.file_size;
-                    if selected_ids.contains(&item.record.id) {
-                        selected_bytes += item.record.file_size;
-                    }
-                }
-            }
-        } else {
-            for item in &st.all_folder_media {
-                total_bytes += item.record.file_size;
-                if selected_ids.contains(&item.record.id) {
-                    selected_bytes += item.record.file_size;
-                }
-            }
-        }
+        let total_bytes = st.visible_total_bytes();
+        let selected_bytes: u64 = selected_ids
+            .iter()
+            .filter_map(|&id| st.record_by_id(id))
+            .map(|item| item.record.file_size)
+            .sum();
 
         let is_query_active = st.is_query_active;
         let is_virtual = st.is_virtual_folder_mode;

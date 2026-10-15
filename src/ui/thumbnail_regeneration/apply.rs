@@ -7,10 +7,10 @@ use crate::ui::bridge_inspector::BridgeInspector;
 use crate::ui::bridge_media::BridgeMedia;
 use crate::ui::bridge_state::UiState;
 use crate::ui::bridge_status_bar::StatusBarBridge;
-use crate::ui::models::rgb8_to_shared_buffer;
+use crate::ui::browse_window::update_tile;
 use crate::ui::MainWindow;
 use parking_lot::RwLock;
-use slint::{Image, Model};
+use slint::Image;
 use std::time::Duration;
 
 /// Ends the "Gen" progress and the refresh lock. Only the generate counters are cleared; the preload counters
@@ -41,32 +41,15 @@ fn show_new_thumbnails(window: &MainWindow, state: &RwLock<UiState>, succeeded: 
     if succeeded.is_empty() {
         return;
     }
-    let mut st = state.write();
-    let model = window.get_media_items();
-    let start_window = window.get_visible_start_index() as usize;
-    let visible_count = model.row_count();
+    let st = state.read();
     let is_table = window.get_is_table_view();
 
     for item in succeeded {
-        let thumb = &item.thumbnail;
-        let buffer = rgb8_to_shared_buffer(&thumb.pixels, thumb.width, thumb.height);
-        st.folder_thumbnails.insert(item.media_id, buffer.clone());
+        let buffer = item.thumbnail.pixels.clone();
+        st.thumbs.insert(item.media_id, buffer.clone());
 
-        if is_table {
-            continue;
-        }
-        let Some(&global_row) = st.media_row_map.get(&item.media_id) else {
-            continue;
-        };
-        if global_row < start_window || global_row >= start_window + visible_count {
-            continue;
-        }
-        let local_row = global_row - start_window;
-        if let Some(mut view) = model.row_data(local_row)
-            && view.id == item.media_id as i32
-        {
-            view.thumbnail = Image::from_rgb8(buffer);
-            model.set_row_data(local_row, view);
+        if !is_table {
+            update_tile(window, &st, item.media_id, |view| view.thumbnail = Image::from_rgb8(buffer));
         }
     }
 }

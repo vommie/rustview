@@ -3,12 +3,13 @@ use super::MainWindow;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
+use super::browse_window::{apply_record, update_tile};
 use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms};
 use crate::media::MediaType;
 use crate::telemetry::BenchmarkReportFormatter;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
-use slint::{Image, Model, Timer};
+use slint::{Image, Timer};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
@@ -52,27 +53,14 @@ impl BridgeThumbnails {
 
                 if !batch.is_empty() {
                     let mut st = st_ref.write();
-                    let media_model = window.get_media_items();
-                    let start_window = window.get_visible_start_index() as usize;
-                    let visible_count = media_model.row_count();
 
                     for item_data in batch {
-                        let is_folder_match = st.is_query_active
-                            || st.is_virtual_folder_mode
-                            || st.current_folder_id == Some(item_data.folder_id);
+                        let media_id = item_data.media_id;
 
-                        if !is_folder_match {
-                            continue;
-                        }
-
-                        if let Some(ref buf) = item_data.pixel_buffer {
-                            st.folder_thumbnails.insert(item_data.media_id, buf.clone());
-                        }
-
-                        let mut meta_changed = false;
                         if (item_data.orig_width > 0 || item_data.orig_height > 0 || item_data.duration_ms > 0 || item_data.is_corrupted)
-                            && let Some(item) = st.all_folder_media.iter_mut().find(|m| m.record.id == item_data.media_id)
+                            && let Some(item) = st.all_folder_media.find_mut(media_id)
                         {
+                            let mut meta_changed = false;
                             if item_data.orig_width > 0 && item.record.width == 0 {
                                 item.record.width = item_data.orig_width;
                                 item.width_str = item_data.orig_width.to_string().into();
@@ -110,37 +98,16 @@ impl BridgeThumbnails {
                         }
 
                         let t_row = Instant::now();
-
-                        if let Some(&global_row_idx) = st.media_row_map.get(&item_data.media_id)
-                            && global_row_idx >= start_window
-                            && global_row_idx < start_window + visible_count
-                        {
-                            let local_idx = global_row_idx - start_window;
-                            if let Some(mut item) = media_model.row_data(local_idx)
-                                && item.id == item_data.media_id as i32
-                            {
-                                if !is_table {
-                                    if let Some(ref buf) = item_data.pixel_buffer {
-                                        item.thumbnail = Image::from_rgb8(buf.clone());
-                                    } else {
-                                        item.thumbnail = Image::default();
-                                    }
-                                }
-
-                                if let Some(updated_rec) = st.all_folder_media.iter().find(|m| m.record.id == item_data.media_id) {
-                                    item.width_str = updated_rec.width_str.clone();
-                                    item.height_str = updated_rec.height_str.clone();
-                                    item.ar_str = updated_rec.ar_str.clone();
-                                    item.duration_str = updated_rec.duration_str.clone();
-                                    item.duration_badge_str = updated_rec.duration_badge_str.clone();
-                                    item.flags_str = updated_rec.flags_str.clone();
-                                    item.is_corrupted = updated_rec.is_corrupted;
-                                    item.is_deleted = updated_rec.is_deleted;
-                                }
-
-                                media_model.set_row_data(local_idx, item);
+                        let picture = item_data.pixel_buffer.map(Image::from_rgb8);
+                        let record = st.record_by_id(media_id);
+                        update_tile(&window, &st, media_id, |row| {
+                            if !is_table {
+                                row.thumbnail = picture.unwrap_or_default();
                             }
-                        }
+                            if let Some(record) = record {
+                                apply_record(row, record);
+                            }
+                        });
                         row_set_us += t_row.elapsed().as_micros() as u64;
                     }
                 }

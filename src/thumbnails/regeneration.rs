@@ -6,7 +6,7 @@
 //! its previous thumbnail because `ThumbnailScheduler::regenerate_sync` writes to the database only after a
 //! successful generation.
 
-use super::cache::CachedThumbnail;
+use super::ram_cache::CachedThumbnail;
 use super::types::{generate_random_video_offset_percent, ThumbnailConfig};
 use super::ThumbnailManager;
 use crate::library::models::MediaId;

@@ -779,7 +779,7 @@ impl BridgeFolders {
             st.current_folder_id = Some(folder_id);
             st.current_folder_path = Some(normalized_path.clone());
             st.active_indices.clear();
-            st.folder_thumbnails.clear();
+            st.mark_list_bytes_dirty();
             st.all_folder_media.clear();
 
             if !is_explicit_refresh {
@@ -870,7 +870,7 @@ impl BridgeFolders {
 
         {
             let mut s = ctx.state.write();
-            s.all_folder_media = indexed_media;
+            s.all_folder_media.replace(indexed_media);
         }
 
         BridgeMedia::reload(ctx.window, ctx.library, ctx.thumbnails, ctx.settings, ctx.state, false, false);
@@ -954,16 +954,12 @@ impl BridgeFolders {
                                                 item.primary_width,
                                                 item.primary_height,
                                             );
-                                            st.folder_thumbnails.insert(item.media_id, shared_buf);
-                                            let _ = thumb_arc.cache().insert(
-                                                item.media_id,
-                                                item.primary_width,
-                                                item.primary_height,
-                                                &item.primary_pixels,
-                                            );
+                                            st.thumbs.insert(item.media_id, shared_buf);
                                         }
 
-                                        if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.record.id == item.media_id) {
+                                        st.mark_list_bytes_dirty();
+
+                                        if let Some(target_indexed) = st.all_folder_media.find_mut(item.media_id) {
                                             target_indexed.record = item.updated_record.clone();
                                             target_indexed.width_str = if item.updated_record.width > 0 { item.updated_record.width.to_string().into() } else { "-".into() };
                                             target_indexed.height_str = if item.updated_record.height > 0 { item.updated_record.height.to_string().into() } else { "-".into() };
@@ -1136,7 +1132,7 @@ impl BridgeFolders {
                     if is_still_current {
                         {
                             let mut s = st_scanner.write();
-                            s.all_folder_media = indexed_media;
+                            s.all_folder_media.replace(indexed_media);
                         }
 
                         BridgeMedia::reload(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, false, false);
@@ -1233,8 +1229,8 @@ impl BridgeFolders {
             st.current_folder_id = None;
             st.current_folder_path = None;
             st.all_folder_media.clear();
-            st.folder_thumbnails.clear();
             st.active_indices.clear();
+            st.mark_list_bytes_dirty();
             st.file_selection.clear();
             st.media_row_map.clear();
             st.last_executed_query.clear();

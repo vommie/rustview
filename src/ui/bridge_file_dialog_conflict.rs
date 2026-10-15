@@ -484,7 +484,7 @@ fn load_conflict_thumbnail(
 ) -> Image {
     if let Some(id) = media_id {
         match thumbnails.get_or_load_sync(id, path, config.clone()) {
-            Ok(cached) => return rgb8_to_slint_image(&cached.pixels, cached.width, cached.height),
+            Ok(cached) => return slint::Image::from_rgb8(cached.pixels),
             Err(e) => tracing::warn!(media_id = id, error = %e, "[ConflictDialog: Thumbnail] Stored/generated thumbnail unavailable, using transient fallback"),
         }
     }

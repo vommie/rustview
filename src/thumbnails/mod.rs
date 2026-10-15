@@ -7,19 +7,22 @@ pub mod gif;
 pub mod image;
 pub mod loader;
 pub mod progress;
+pub mod ram_cache;
 pub mod regeneration;
 pub mod store;
 pub mod types;
 pub mod video;
+pub mod view_loader;
 
 pub use arena::ThumbnailArena;
-pub use cache::{CachedThumbnail, L1AnimatedPreviewCache, L1ThumbnailCache};
+pub use cache::L1AnimatedPreviewCache;
 pub use error::ThumbnailError;
 pub use gc::ThumbnailGarbageCollector;
 pub use generator::ThumbnailGenerator;
 pub use gif::{AnimatedFrame, AnimatedPreview, GifThumbnailer};
 pub use loader::{PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
 pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
+pub use ram_cache::{CachedThumbnail, RamCacheStats, ThumbnailRamCache};
 pub use store::PackStore;
 pub use types::{
     anonymize_target, calculate_aspect_dimensions, generate_random_video_offset_percent,
@@ -38,7 +41,7 @@ use std::sync::Arc;
 
 /// Unified high-performance Thumbnail Subsystem facade.
 pub struct ThumbnailManager {
-    cache: Arc<L1ThumbnailCache>,
+    cache: Arc<ThumbnailRamCache>,
     animated_cache: Arc<L1AnimatedPreviewCache>,
     store: Arc<PackStore>,
     scheduler: Arc<ThumbnailScheduler>,
@@ -48,11 +51,11 @@ impl ThumbnailManager {
     pub fn new(
         library: Arc<Library>,
         cache_dir: &Path,
-        l1_slots: usize,
+        cache_budget_bytes: usize,
         worker_threads: usize,
     ) -> Result<Self, ThumbnailError> {
         let store = Arc::new(PackStore::open(cache_dir)?);
-        let cache = Arc::new(L1ThumbnailCache::new(l1_slots));
+        let cache = Arc::new(ThumbnailRamCache::new(cache_budget_bytes));
         let animated_cache = Arc::new(L1AnimatedPreviewCache::new(64));
         let scheduler = Arc::new(ThumbnailScheduler::new(
             library,
@@ -88,10 +91,26 @@ impl ThumbnailManager {
             .start_folder_pipeline(folder_id, all_targets, config);
     }
 
-    /// Fast synchronous lookup in L1 RAM cache or L2 PackStore.
+    /// Blocking lookup in the RAM cache, then in the pack store. Never call this on the UI thread: use
+    /// [`Self::cached_thumbnail`] and [`Self::request_view_thumbnails`] there.
     #[inline]
     pub fn try_load_existing(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
         self.scheduler.try_load_existing(media_id)
+    }
+
+    /// The thumbnail if it is in RAM (no I/O, no decode); safe on the UI thread.
+    #[inline]
+    pub fn cached_thumbnail(&self, media_id: MediaId) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+        self.scheduler.cached_thumbnail(media_id)
+    }
+
+    /// Loads these thumbnails in the background, most urgent first; they arrive through [`Self::drain_ready_batch`].
+    pub fn request_view_thumbnails(&self, ids: impl IntoIterator<Item = MediaId>) -> usize {
+        self.scheduler.request_view_thumbnails(ids)
+    }
+
+    pub fn cancel_view_requests(&self) {
+        self.scheduler.cancel_view_requests();
     }
 
     /// Fast non-blocking lookup for cached preview animation frames (0.05ms).
@@ -124,8 +143,10 @@ impl ThumbnailManager {
             .get_or_load_animated_preview_async(media_id, path, config, on_loaded);
     }
 
+    /// Stops the running folder pipeline and drops the thumbnail loads the previous list had requested.
     pub fn cancel_pipeline(&self) {
         self.scheduler.cancel_current_pipeline();
+        self.scheduler.cancel_view_requests();
     }
 
     pub fn current_pipeline_id(&self) -> usize {
@@ -186,8 +207,13 @@ impl ThumbnailManager {
             .regenerate_with_offset_sync(media_id, file_path, config, offset_percent)
     }
 
-    pub fn cache(&self) -> &L1ThumbnailCache {
+    pub fn cache(&self) -> &ThumbnailRamCache {
         &self.cache
+    }
+
+    /// A shared handle for code that has no `ThumbnailManager` at hand (the UI state keeps one).
+    pub fn cache_handle(&self) -> Arc<ThumbnailRamCache> {
+        self.cache.clone()
     }
 
     pub fn animated_cache(&self) -> &L1AnimatedPreviewCache {

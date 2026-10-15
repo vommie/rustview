@@ -1,6 +1,7 @@
+use super::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
 use super::registry::SettingsManager;
 use super::schema::{
-    AppSettings, FullscreenSettings, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
+    AppSettings, FullscreenSettings, MAX_MEMORY_BUDGET_MB, MIN_MEMORY_BUDGET_MB, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
     DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
 };
@@ -130,7 +131,17 @@ impl SettingsDialogController {
         // Performance properties
         window.set_worker_threads(settings.performance.worker_threads as i32);
         window.set_batch_commit_size(settings.performance.batch_commit_size as i32);
-        window.set_l1_cache_slots(settings.performance.l1_cache_slots as i32);
+        let system = SystemMemory::read();
+        window.set_memory_budget_auto(settings.performance.memory_budget_mb == 0);
+        window.set_memory_budget_mb(
+            if settings.performance.memory_budget_mb == 0 {
+                MemoryPlan::resolve(0, system).budget_bytes / BYTES_PER_MB
+            } else {
+                u64::from(settings.performance.memory_budget_mb)
+            } as i32,
+        );
+        window.set_memory_budget_max_mb((system.usable_total_bytes() / BYTES_PER_MB).max(1024) as i32);
+        Self::show_memory_plan(window, system);
         window.set_thumb_db_size(settings.performance.thumbnail_db_size as i32);
         window.set_thumb_format_idx(
             if settings
@@ -345,8 +356,26 @@ impl SettingsDialogController {
         fullscreen.background.color = hex_color::format_rgb([color.red(), color.green(), color.blue()]);
     }
 
+    /// Shows the summary and the warnings of the budget the dialog currently describes.
+    fn show_memory_plan(window: &SettingsWindow, system: SystemMemory) {
+        let setting_mb = if window.get_memory_budget_auto() { 0 } else { window.get_memory_budget_mb().max(0) as u32 };
+        let plan = MemoryPlan::resolve(setting_mb, system);
+        window.set_memory_summary(plan.summary().into());
+        window.set_memory_warning(plan.warning_text().into());
+    }
+
     fn register_callbacks(&self, window: &SettingsWindow) {
         let w_weak = window.as_weak();
+
+        // The summary and the warnings follow the budget controls while the dialog is open (the machine is read once).
+        let system = SystemMemory::read();
+        let w_weak_memory = w_weak.clone();
+        window.on_memory_budget_edited(move || {
+            if let Some(w) = w_weak_memory.upgrade() {
+                Self::show_memory_plan(&w, system);
+            }
+        });
+
         let manager = self.manager.clone();
         let main_weak = self.main_window_weak.clone();
 
@@ -461,8 +490,11 @@ impl SettingsDialogController {
                 current.performance.worker_threads = w.get_worker_threads().clamp(1, 32) as usize;
                 current.performance.batch_commit_size =
                     w.get_batch_commit_size().clamp(4, 256) as usize;
-                current.performance.l1_cache_slots =
-                    w.get_l1_cache_slots().clamp(100, 8000) as usize;
+                current.performance.memory_budget_mb = if w.get_memory_budget_auto() {
+                    0
+                } else {
+                    w.get_memory_budget_mb().clamp(MIN_MEMORY_BUDGET_MB as i32, MAX_MEMORY_BUDGET_MB as i32) as u32
+                };
                 current.performance.thumbnail_db_size =
                     w.get_thumb_db_size().clamp(64, 1024) as u32;
                 current.performance.thumbnail_format = if w.get_thumb_format_idx() == 1 {

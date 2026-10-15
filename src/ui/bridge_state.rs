@@ -1,6 +1,7 @@
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId};
 use crate::library::models::{FolderHierarchySnapshot, FolderId, MediaId, TagId};
 use crate::query::filters::IndexedMediaRecord;
+use crate::query::MediaStore;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{
     DEFAULT_IS_INSPECTOR_COLLAPSED, DEFAULT_IS_TAG_HISTORY_COLLAPSED,
@@ -16,10 +17,11 @@ use crate::ui::sidebar_panel_tab_dnd::SidebarPanelTabDndSession;
 use crate::ui::tab_dnd::TabDndSession;
 use crate::ui::tab_grid::MasonryRect;
 use crate::viewer::TabId;
-use slint::{Rgb8Pixel, SharedPixelBuffer};
-use std::collections::{HashMap, HashSet, VecDeque};
+use crate::thumbnails::ThumbnailRamCache;
+use crate::ui::browse_window::{RingWindow, ViewGeometry};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 // Standard File Context Menu Action IDs
@@ -103,61 +105,7 @@ pub enum LastActivePanel {
     Favorite,
 }
 
-#[derive(Debug, Clone)]
-pub struct LruThumbnailStore {
-    capacity: usize,
-    map: HashMap<MediaId, SharedPixelBuffer<Rgb8Pixel>>,
-    order: VecDeque<MediaId>,
-}
-
-impl Default for LruThumbnailStore {
-    fn default() -> Self {
-        Self::new(2048)
-    }
-}
-
-impl LruThumbnailStore {
-    pub fn new(capacity: usize) -> Self {
-        Self {
-            capacity: capacity.max(128),
-            map: HashMap::with_capacity(capacity.min(2048)),
-            order: VecDeque::with_capacity(capacity.min(2048)),
-        }
-    }
-
-    #[inline]
-    pub fn insert(&mut self, id: MediaId, buffer: SharedPixelBuffer<Rgb8Pixel>) -> Option<MediaId> {
-        let mut evicted = None;
-        if self.map.len() >= self.capacity
-            && !self.map.contains_key(&id)
-            && let Some(evicted_id) = self.order.pop_front()
-        {
-            self.map.remove(&evicted_id);
-            evicted = Some(evicted_id);
-        }
-        self.map.insert(id, buffer);
-        self.order.retain(|&i| i != id);
-        self.order.push_back(id);
-        evicted
-    }
-
-    #[inline]
-    pub fn get(&self, id: &MediaId) -> Option<&SharedPixelBuffer<Rgb8Pixel>> {
-        self.map.get(id)
-    }
-
-    #[inline]
-    pub fn remove(&mut self, id: &MediaId) {
-        self.map.remove(id);
-        self.order.retain(|i| i != id);
-    }
-
-    #[inline]
-    pub fn clear(&mut self) {
-        self.map.clear();
-        self.order.clear();
-    }
-}
+const LIST_BYTES_DIRTY: u64 = u64::MAX;
 
 pub struct UiState {
     pub current_folder_id: Option<FolderId>,
@@ -168,9 +116,12 @@ pub struct UiState {
     pub active_folder_cancel_flag: Option<Arc<AtomicBool>>,
     pub active_folder_bench: Option<Arc<FolderLoadBenchmark>>,
     pub scroll_bench: Arc<ViewScrollBenchmark>,
-    pub all_folder_media: Vec<IndexedMediaRecord>,
-    pub folder_thumbnails: LruThumbnailStore,
+    pub all_folder_media: MediaStore,
+    /// The one RAM cache of decoded thumbnails, shared with the thumbnail loader.
+    pub thumbs: Arc<ThumbnailRamCache>,
     pub active_indices: Vec<usize>,
+    /// Sum of the file sizes of the listed items (`LIST_BYTES_DIRTY` = not computed since the list or a size changed).
+    list_total_bytes: AtomicU64,
     pub file_selection: FileSelectionModel,
     pub last_active_panel: LastActivePanel,
     /// Media of the active viewer tab: one for a single-media tab, the tiles of a Multiview; empty without a shown tab.
@@ -201,10 +152,9 @@ pub struct UiState {
     pub cached_tab_grid_rects: Vec<MasonryRect>,
     pub cached_tab_grid_total_h: f32,
 
-    // Viewport Windowing State
-    pub loaded_slice_start: usize,
-    pub loaded_slice_len: usize,
-    pub loaded_slice_valid: bool,
+    // Viewport Windowing State: the tile pool of the grid/table and the viewport it was last filled for.
+    pub ring: RingWindow,
+    pub view_geometry: Option<ViewGeometry>,
 
     // Hierarchical Folder Tree SPoT & State
     pub folder_hierarchy: Option<Arc<FolderHierarchySnapshot>>,
@@ -241,9 +191,10 @@ impl Default for UiState {
             active_folder_cancel_flag: None,
             active_folder_bench: None,
             scroll_bench: Arc::new(ViewScrollBenchmark::new(false)),
-            all_folder_media: Vec::new(),
-            folder_thumbnails: LruThumbnailStore::default(),
+            all_folder_media: MediaStore::new(),
+            thumbs: Arc::new(ThumbnailRamCache::new(0)),
             active_indices: Vec::new(),
+            list_total_bytes: AtomicU64::new(LIST_BYTES_DIRTY),
             file_selection: FileSelectionModel::new(),
             last_active_panel: LastActivePanel::Media,
             active_tab_media_ids: Vec::new(),
@@ -270,9 +221,8 @@ impl Default for UiState {
             tab_grid_auto_columns: DEFAULT_TAB_GRID_AUTO_COLUMNS,
             cached_tab_grid_rects: Vec::new(),
             cached_tab_grid_total_h: 0.0,
-            loaded_slice_start: 0,
-            loaded_slice_len: 0,
-            loaded_slice_valid: false,
+            ring: RingWindow::new(1),
+            view_geometry: None,
             folder_hierarchy: None,
             expanded_folder_ids: HashSet::new(),
             is_refreshing_folders: false,
@@ -295,6 +245,47 @@ impl Default for UiState {
 }
 
 impl UiState {
+    /// The list or a file size changed: the next status bar update sums the sizes again.
+    #[inline]
+    pub fn mark_list_bytes_dirty(&self) {
+        self.list_total_bytes.store(LIST_BYTES_DIRTY, Ordering::Relaxed);
+    }
+
+    /// Total size of the listed items; summed once after every change of the list, not on every selection click.
+    pub fn visible_total_bytes(&self) -> u64 {
+        let known = self.list_total_bytes.load(Ordering::Relaxed);
+        if known != LIST_BYTES_DIRTY {
+            return known;
+        }
+        let total: u64 = if self.active_indices.is_empty() {
+            self.all_folder_media.iter().map(|item| item.record.file_size).sum()
+        } else {
+            self.active_indices
+                .iter()
+                .filter_map(|&index| self.all_folder_media.get(index))
+                .map(|item| item.record.file_size)
+                .sum()
+        };
+        self.list_total_bytes.store(total.min(LIST_BYTES_DIRTY - 1), Ordering::Relaxed);
+        total
+    }
+
+    /// The record at `position` of the sorted, filtered list the grid and the table show.
+    #[inline]
+    pub fn item_at(&self, position: usize) -> Option<&IndexedMediaRecord> {
+        if self.active_indices.is_empty() {
+            self.all_folder_media.get(position)
+        } else {
+            self.active_indices.get(position).and_then(|&index| self.all_folder_media.get(index))
+        }
+    }
+
+    /// The record of a media item that is part of the list the view shows (O(1)); hidden items yield `None`.
+    #[inline]
+    pub fn record_by_id(&self, media_id: MediaId) -> Option<&IndexedMediaRecord> {
+        self.item_at(*self.media_row_map.get(&media_id)?)
+    }
+
     pub fn get_selected_media_ordered(&self) -> Vec<&IndexedMediaRecord> {
         let selected_ids = self.file_selection.selected_ids();
         if selected_ids.is_empty() || self.active_indices.is_empty() {
@@ -341,11 +332,18 @@ impl UiState {
                 || self.is_query_active)
     }
 
+    /// The tiles hold nothing valid any more: the next viewport update refills every one of them.
     #[inline]
-    pub fn invalidate_loaded_slice(&mut self) {
-        self.loaded_slice_valid = false;
-        self.loaded_slice_start = 0;
-        self.loaded_slice_len = 0;
+    pub fn invalidate_view_window(&mut self) {
+        let pool = self.ring.pool();
+        self.ring.reset(pool);
+    }
+
+    /// Also forgets the viewport geometry (the other view, the grid or the table, takes over).
+    #[inline]
+    pub fn reset_view_window(&mut self) {
+        self.invalidate_view_window();
+        self.view_geometry = None;
     }
 
     #[inline]

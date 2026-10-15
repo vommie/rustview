@@ -153,7 +153,6 @@ export component MainWindow inherits Window {
     in-out property <int> grid-item-corner-radius: 4;
 
     // Viewport windowing properties
-    in-out property <int> visible-start-index: 0;
     in-out property <int> total-items-count: 0;
     out property <int> grid-columns: grid-view.columns;
 
@@ -351,7 +350,7 @@ export component MainWindow inherits Window {
     callback media-context-menu(int /* id */, length /* x */, length /* y */);
     callback media-hover-changed(int /* id */, bool /* is_hover */);
     callback background-clicked();
-    callback visible-chunk-changed(int /* first_item */, int /* last_item */, int /* total */);
+    callback viewport-changed(int /* first_row */, int /* visible_rows */, int /* columns */, int /* total */);
 
     // Keyboard Navigation Callback
     callback media-navigate(int /* direction */, bool /* is_shift */, int /* page_rows */);
@@ -784,8 +783,8 @@ export component MainWindow inherits Window {
                     grid-view := VirtualizedMediaGrid {
                         visible: root.active-view-mode == 0 && !root.is-table-view;
                         media-items: root.media-items;
-                        visible-start-index: root.visible-start-index;
                         total-items-count: root.total-items-count;
+                        active: root.active-view-mode == 0 && !root.is-table-view;
                         thumb-size: root.thumb-size;
                         thumb-aspect-idx: root.thumb-aspect-idx;
                         badge-config: root.thumbnail-badge-config;
@@ -807,8 +806,8 @@ export component MainWindow inherits Window {
                         ensure-focus => {
                             main-window-focus.focus();
                         }
-                        visible-chunk-changed(first, last, tot) => {
-                            root.visible-chunk-changed(first, last, tot);
+                        viewport-changed(first-row, visible-rows, columns, total) => {
+                            root.viewport-changed(first-row, visible-rows, columns, total);
                         }
                         item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                         item-middle-clicked(id) => { root.media-middle-clicked(id); }
@@ -834,8 +833,8 @@ export component MainWindow inherits Window {
                     table-view := MediaTableView {
                         visible: root.active-view-mode == 0 && root.is-table-view;
                         items: root.media-items;
-                        visible-start-index: root.visible-start-index;
                         total-items-count: root.total-items-count;
+                        active: root.active-view-mode == 0 && root.is-table-view;
                         sort-column: root.sort-column-idx;
                         sort-order: root.sort-order-idx;
 
@@ -862,8 +861,8 @@ export component MainWindow inherits Window {
                         ensure-focus => {
                             main-window-focus.focus();
                         }
-                        visible-chunk-changed(first, last, tot) => {
-                            root.visible-chunk-changed(first, last, tot);
+                        viewport-changed(first-row, visible-rows, columns, total) => {
+                            root.viewport-changed(first-row, visible-rows, columns, total);
                         }
                         item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
                         item-middle-clicked(id) => { root.media-middle-clicked(id); }

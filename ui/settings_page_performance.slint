@@ -7,7 +7,12 @@ export component SettingsPagePerformance inherits VerticalLayout {
 
     in-out property <int> worker-threads: 4;
     in-out property <int> batch-commit-size: 32;
-    in-out property <int> l1-cache-slots: 512;
+    in-out property <bool> memory-budget-auto: true;
+    in-out property <int> memory-budget-mb: 4096;
+    in property <int> memory-budget-max-mb: 65536;
+    in property <string> memory-summary;
+    in property <string> memory-warning;
+    callback memory-budget-edited();
     in-out property <int> thumb-db-size: 256;
     in-out property <int> thumb-format-idx: 0; // 0 = WebP, 1 = JPEG
     in-out property <int> thumb-quality: 80;
@@ -73,32 +78,53 @@ export component SettingsPagePerformance inherits VerticalLayout {
         }
     }
 
-    // Card 2: L1 In-Memory RAM Cache
+    // Card 2: RAM budget
     SettingsCard {
-        title: "L1 In-Memory RAM Cache";
-        description: "Uncompressed thumbnails are retained in physical RAM for instant, stutter-free 60 FPS scrolling and zero disk latency.";
+        title: "Memory (RAM) Budget";
+        description: "How much RAM RustView may use for caches: decoded thumbnails stay in RAM so that scrolling never waits for the disk, and the records of large folders live there. Automatic uses half of the installed RAM; the thumbnail cache is trimmed at once when the budget shrinks.";
 
-        HorizontalLayout {
+        CheckBox {
+            text: "Automatic (half of the installed RAM)";
+            checked <=> root.memory-budget-auto;
+            toggled => { root.memory-budget-edited(); }
+        }
+
+        if !root.memory-budget-auto : HorizontalLayout {
             Text {
-                text: "L1 Cache Capacity:";
+                text: "RAM Budget:";
                 color: Theme.text;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
             Slider {
                 width: 150px;
-                minimum: 100;
-                maximum: 4000;
-                value: root.l1-cache-slots;
-                changed(v) => { root.l1-cache-slots = Math.round(v); }
+                minimum: 256;
+                maximum: root.memory-budget-max-mb;
+                value: root.memory-budget-mb;
+                changed(v) => {
+                    root.memory-budget-mb = Math.round(v / 256) * 256;
+                    root.memory-budget-edited();
+                }
             }
             Text {
-                text: root.l1-cache-slots + " slots";
+                text: root.memory-budget-mb + " MB";
                 color: Theme.primary;
                 width: 75px;
                 vertical-alignment: center;
                 horizontal-alignment: right;
             }
+        }
+
+        Text {
+            text: root.memory-summary;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+
+        if root.memory-warning != "" : Text {
+            text: root.memory-warning;
+            color: #f9e2af;
+            wrap: word-wrap;
         }
     }
 

@@ -203,7 +203,7 @@ impl Session {
         {
             let st = state.read();
             for &id in &plan.add {
-                if let Some(thumbnail) = st.folder_thumbnails.get(&id) {
+                if let Some(thumbnail) = st.thumbs.get(id) {
                     instance.set_placeholder(id, thumbnail.clone());
                 }
             }

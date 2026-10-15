@@ -7,6 +7,7 @@ use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::browse_window::update_tile;
 use super::file_selection::FileSelectionModel;
 use super::multiview::handle::{self as multiview_handle, Pace};
 use crate::library::Library;
@@ -201,19 +202,14 @@ impl BridgeFileSelection {
                     st.all_folder_media.get(idx).map(|m| m.record.id == media_id).unwrap_or(false)
                 })
             } else {
-                st.all_folder_media.iter().position(|m| m.record.id == media_id)
+                st.all_folder_media.position_of(media_id)
             };
 
             (changed, visual_idx)
         };
 
         if let Some(target_idx) = target_visual_idx_opt {
-            let need_slice_reanchor = {
-                let st = state.read();
-                !st.loaded_slice_valid
-                    || target_idx < st.loaded_slice_start
-                    || target_idx >= (st.loaded_slice_start + st.loaded_slice_len)
-            };
+            let need_slice_reanchor = !state.read().ring.range().contains(&target_idx);
 
             if need_slice_reanchor {
                 if let Some(thumb_mgr) = thumbnails {
@@ -390,21 +386,20 @@ impl BridgeFileSelection {
         }
 
         let media_model = window.get_media_items();
-        let start_window = window.get_visible_start_index() as usize;
         let visible_count = media_model.row_count();
         let st = state.read();
 
         // O(Viewport) Optimization:
         // If changed_ids contains many elements (Select All or Clear Selection across 1k-100k items),
-        // iterating directly over the visible rows in media_model (~60 to ~160 rows) is orders of magnitude
+        // iterating directly over the rows of the tile pool (~60 to ~160 rows) is orders of magnitude
         // faster than running tens of thousands of hashmap lookups.
         if changed_ids.len() > visible_count * 2 {
-            for local_idx in 0..visible_count {
-                if let Some(mut item) = media_model.row_data(local_idx) {
+            for slot in 0..visible_count {
+                if let Some(mut item) = media_model.row_data(slot) {
                     let is_selected = st.file_selection.is_selected(item.id as u64);
                     if item.is_selected != is_selected {
                         item.is_selected = is_selected;
-                        media_model.set_row_data(local_idx, item);
+                        media_model.set_row_data(slot, item);
                     }
                 }
             }
@@ -412,21 +407,8 @@ impl BridgeFileSelection {
         }
 
         for &id in changed_ids {
-            if let Some(&global_row_idx) = st.media_row_map.get(&id)
-                && global_row_idx >= start_window
-                && global_row_idx < start_window + visible_count
-            {
-                let local_idx = global_row_idx - start_window;
-                if let Some(mut item) = media_model.row_data(local_idx)
-                    && item.id == id as i32
-                {
-                    let is_selected = st.file_selection.is_selected(id);
-                    if item.is_selected != is_selected {
-                        item.is_selected = is_selected;
-                        media_model.set_row_data(local_idx, item);
-                    }
-                }
-            }
+            let is_selected = st.file_selection.is_selected(id);
+            update_tile(window, &st, id, |item| item.is_selected = is_selected);
         }
     }
 
@@ -546,7 +528,7 @@ impl BridgeFileSelection {
     ) {
         let (is_image, is_video, is_pending, filename) = {
             let st = state.read();
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+            if let Some(item) = st.all_folder_media.find(media_id) {
                 (
                     matches!(item.record.media_type, MediaType::Image),
                     matches!(item.record.media_type, MediaType::Video),
@@ -634,7 +616,7 @@ impl BridgeFileSelection {
     ) {
         let (is_image, is_video, is_pending, filename) = {
             let st = state.read();
-            if let Some(item) = st.all_folder_media.iter().find(|m| m.record.id == media_id) {
+            if let Some(item) = st.all_folder_media.find(media_id) {
                 (
                     matches!(item.record.media_type, MediaType::Image),
                     matches!(item.record.media_type, MediaType::Video),

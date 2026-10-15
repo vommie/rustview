@@ -6,6 +6,7 @@ use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tag_history::BridgeTagHistory;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::browse_window::update_tile;
 use super::models::{format_timestamp, rgb8_to_shared_buffer};
 use super::{MainWindow, TagColumnView, TagNodeView};
 use crate::ctx_menu::CtxMenuActionId;
@@ -528,47 +529,24 @@ impl TagActionHandler {
         library: &Library,
         state: &RwLock<UiState>,
     ) {
-        let media_model = window.get_media_items();
-        let start_window = window.get_visible_start_index() as usize;
-        let visible_count = media_model.row_count();
-        let mut media_updates = Vec::new();
-
-        {
-            let mut st = state.write();
-            let UiState {
-                ref mut all_folder_media,
-                ref media_row_map,
-                ..
-            } = *st;
-
-            for item in all_folder_media.iter_mut() {
-                if selected_ids.contains(&item.record.id) {
-                    let assigned_tags = library
-                        .tags()
-                        .get_tags_for_media(item.record.id)
-                        .unwrap_or_default();
-                    let count = assigned_tags.len();
-                    item.tags_count = count;
-                    item.tags_count_str = count.to_string().into();
-                    item.has_tags = count > 0;
-
-                    if let Some(&global_row_idx) = media_row_map.get(&item.record.id)
-                        && global_row_idx >= start_window
-                        && global_row_idx < start_window + visible_count
-                    {
-                        media_updates.push((global_row_idx - start_window, count, item.has_tags));
-                    }
-                }
+        let mut st = state.write();
+        let mut counts = Vec::with_capacity(selected_ids.len());
+        for &media_id in selected_ids {
+            if let Some(item) = st.all_folder_media.find_mut(media_id) {
+                let count = library.tags().get_tags_for_media(media_id).unwrap_or_default().len();
+                item.tags_count = count;
+                item.tags_count_str = count.to_string().into();
+                item.has_tags = count > 0;
+                counts.push((media_id, count));
             }
         }
 
-        for (local_idx, count, has_tags) in media_updates {
-            if let Some(mut view) = media_model.row_data(local_idx) {
-                view.has_tags = has_tags;
+        for (media_id, count) in counts {
+            update_tile(window, &st, media_id, |view| {
+                view.has_tags = count > 0;
                 view.tags_count = count as i32;
                 view.tags_str = count.to_string().into();
-                media_model.set_row_data(local_idx, view);
-            }
+            });
         }
     }
 
@@ -639,40 +617,19 @@ impl TagActionHandler {
             }
         }
 
-        let media_model = ctx.window.get_media_items();
-        let start_window = ctx.window.get_visible_start_index() as usize;
-        let visible_count = media_model.row_count();
-        let mut row_updates = Vec::new();
-
         {
             let mut st = ctx.state.write();
-            let UiState {
-                ref mut all_folder_media,
-                ref media_row_map,
-                ..
-            } = *st;
-
-            for item in all_folder_media.iter_mut() {
-                if ids.contains(&item.record.id) {
+            for &media_id in ids {
+                if let Some(item) = st.all_folder_media.find_mut(media_id) {
                     item.record.rating = rating;
                     item.rating_str = rating.to_string().into();
-                    if let Some(&global_row_idx) = media_row_map.get(&item.record.id)
-                        && global_row_idx >= start_window
-                        && global_row_idx < start_window + visible_count
-                    {
-                        row_updates.push((global_row_idx - start_window, item.record.id));
-                    }
                 }
             }
-        }
-
-        for (local_idx, media_id) in row_updates {
-            if let Some(mut view) = media_model.row_data(local_idx)
-                && view.id == media_id as i32
-            {
-                view.rating = rating as i32;
-                view.rating_str = rating.to_string().into();
-                media_model.set_row_data(local_idx, view);
+            for &media_id in ids {
+                update_tile(ctx.window, &st, media_id, |view| {
+                    view.rating = i32::from(rating);
+                    view.rating_str = rating.to_string().into();
+                });
             }
         }
 
@@ -726,7 +683,7 @@ impl TagActionHandler {
 
             {
                 let mut st = ctx.state.write();
-                st.all_folder_media = indexed;
+                st.all_folder_media.replace(indexed);
                 st.file_selection.prune_missing(&valid_ids);
             }
         }
@@ -823,10 +780,10 @@ impl TagActionHandler {
                                 }
                             }
                         }
-                        st.all_folder_media = BridgeMedia::preindex_records(ctx.library, known);
+                        st.all_folder_media.replace(BridgeMedia::preindex_records(ctx.library, known));
                     } else {
                         let raw_media = ctx.library.media().get_all_by_folder(f_id).unwrap_or_default();
-                        st.all_folder_media = BridgeMedia::preindex(ctx.library, raw_media, path);
+                        st.all_folder_media.replace(BridgeMedia::preindex(ctx.library, raw_media, path));
                     }
                     let valid_ids: HashSet<MediaId> =
                         st.all_folder_media.iter().map(|m| m.record.id).collect();
@@ -870,7 +827,7 @@ impl TagActionHandler {
 
         {
             let mut st = ctx.state.write();
-            st.all_folder_media = indexed_results;
+            st.all_folder_media.replace(indexed_results);
             st.file_selection.prune_missing(&valid_ids);
         }
 
@@ -1001,16 +958,12 @@ impl TagActionHandler {
                                             item.primary_width,
                                             item.primary_height,
                                         );
-                                        st.folder_thumbnails.insert(item.media_id, shared_buf);
-                                        let _ = thumb_arc.cache().insert(
-                                            item.media_id,
-                                            item.primary_width,
-                                            item.primary_height,
-                                            &item.primary_pixels,
-                                        );
+                                        st.thumbs.insert(item.media_id, shared_buf);
                                     }
 
-                                    if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.record.id == item.media_id) {
+                                    st.mark_list_bytes_dirty();
+
+                                    if let Some(target_indexed) = st.all_folder_media.find_mut(item.media_id) {
                                         target_indexed.record = item.updated_record.clone();
                                         target_indexed.width_str = if item.updated_record.width > 0 { item.updated_record.width.to_string().into() } else { "-".into() };
                                         target_indexed.height_str = if item.updated_record.height > 0 { item.updated_record.height.to_string().into() } else { "-".into() };

@@ -91,7 +91,7 @@ impl SettingsDiff {
 
         let hover_previews_changed = old.appearance.enable_hover_previews != new.appearance.enable_hover_previews;
 
-        let performance_cache_changed = old.performance.l1_cache_slots != new.performance.l1_cache_slots;
+        let performance_cache_changed = old.performance.memory_budget_mb != new.performance.memory_budget_mb;
 
         let performance_pipeline_changed = old.performance.worker_threads != new.performance.worker_threads
             || old.performance.thumbnail_db_size != new.performance.thumbnail_db_size
@@ -331,10 +331,10 @@ impl SettingsDiff {
                 old.performance.worker_threads, new.performance.worker_threads
             ));
         }
-        if old.performance.l1_cache_slots != new.performance.l1_cache_slots {
+        if old.performance.memory_budget_mb != new.performance.memory_budget_mb {
             changes.push(format!(
-                "Performance: l1_cache_slots ({} -> {})",
-                old.performance.l1_cache_slots, new.performance.l1_cache_slots
+                "Performance: memory_budget_mb ({} -> {}; 0 = automatic)",
+                old.performance.memory_budget_mb, new.performance.memory_budget_mb
             ));
         }
         if old.performance.thumbnail_db_size != new.performance.thumbnail_db_size {
