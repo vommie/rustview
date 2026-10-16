@@ -85,9 +85,10 @@ impl ThumbnailGenerator {
             Some(ThumbnailFormat::Jpeg) => {
                 image::load_from_memory_with_format(compressed, image::ImageFormat::Jpeg)?
             }
-            Some(ThumbnailFormat::Webp) => {
-                image::load_from_memory_with_format(compressed, image::ImageFormat::WebP)?
-            }
+            Some(ThumbnailFormat::Webp) => match decode_webp_rgb(compressed) {
+                Some(decoded) => return Ok(decoded),
+                None => image::load_from_memory_with_format(compressed, image::ImageFormat::WebP)?,
+            },
             None => image::load_from_memory(compressed)?,
         };
 
@@ -109,8 +110,64 @@ impl ThumbnailGenerator {
     }
 }
 
+/// libwebp decodes a lossy RGB thumbnail several times faster than the pure Rust decoder of the `image` crate and writes RGB8 directly.
+/// Anything else (alpha, animation, damaged data) returns `None` and is left to the generic decoder.
+fn decode_webp_rgb(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let decoded = webp::Decoder::new(bytes).decode()?;
+    if decoded.is_alpha() {
+        return None;
+    }
+    Some((decoded.width(), decoded.height(), decoded.to_vec()))
+}
+
 impl Default for ThumbnailGenerator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn gradient(width: u32, height: u32) -> Vec<u8> {
+        let mut rgb = Vec::with_capacity((width * height * 3) as usize);
+        for y in 0..height {
+            for x in 0..width {
+                rgb.extend_from_slice(&[(x * 255 / width) as u8, (y * 255 / height) as u8, ((x + y) % 256) as u8]);
+            }
+        }
+        rgb
+    }
+
+    #[test]
+    fn a_lossy_webp_round_trips_through_libwebp() {
+        let generator = ThumbnailGenerator::new();
+        let rgb = gradient(64, 48);
+        let packed = generator.compress(&rgb, 64, 48, ThumbnailFormat::Webp, 90).expect("compress");
+        let (width, height, decoded) = generator.decompress(&packed).expect("decompress");
+        assert_eq!((width, height), (64, 48));
+        assert_eq!(decoded.len(), rgb.len());
+        let max_error = rgb.iter().zip(&decoded).map(|(a, b)| a.abs_diff(*b)).max().unwrap_or(0);
+        assert!(max_error < 40, "lossy error too large: {max_error}");
+    }
+
+    #[test]
+    fn a_jpeg_still_decodes_through_the_generic_path() {
+        let generator = ThumbnailGenerator::new();
+        let rgb = gradient(32, 32);
+        let packed = generator.compress(&rgb, 32, 32, ThumbnailFormat::Jpeg, 90).expect("compress");
+        let (width, height, decoded) = generator.decompress(&packed).expect("decompress");
+        assert_eq!((width, height, decoded.len()), (32, 32, rgb.len()));
+    }
+
+    #[test]
+    fn damaged_data_is_an_error_not_a_panic() {
+        let generator = ThumbnailGenerator::new();
+        let rgb = gradient(16, 16);
+        let mut packed = generator.compress(&rgb, 16, 16, ThumbnailFormat::Webp, 80).expect("compress");
+        packed.truncate(packed.len() / 2);
+        let _ = generator.decompress(&packed);
+        assert!(generator.decompress(&[1, 2, 3, 4]).is_err());
     }
 }

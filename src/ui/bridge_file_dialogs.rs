@@ -69,7 +69,7 @@ impl FileRenameDialogController {
             st.all_folder_media
                 .iter()
                 .find(|m| m.record.id == media_id)
-                .map(|m| (m.record.filename.clone(), m.full_path.clone()))
+                .map(|m| (m.record.filename.clone(), m.full_path()))
                 .or_else(|| {
                     let path = ctx.library.resolve_media_path(media_id).ok()?;
                     let name = path.file_name().map(|n| n.to_string_lossy().to_string())?;
@@ -387,32 +387,7 @@ impl FileRenameDialogController {
             .iter_mut()
             .find(|m| m.record.id == media_id)
         {
-            item.filename_slint = updated_record.filename.clone().into();
-            item.filename_lower = updated_record.filename.to_lowercase();
-            item.modified_date_str = format_timestamp(updated_record.modification_time).into();
-            item.created_date_str = format_timestamp(updated_record.creation_time).into();
-            item.format_str = updated_record
-                .format
-                .default_extension()
-                .to_ascii_lowercase()
-                .into();
-            item.is_corrupted = updated_record.is_corrupted;
-            item.is_deleted = updated_record.is_deleted;
-            item.flags_str = if updated_record.is_deleted {
-                "Deleted".into()
-            } else if item.is_pending {
-                "Pending".into()
-            } else if updated_record.is_corrupted {
-                "Corrupted".into()
-            } else {
-                "OK".into()
-            };
-            if let Some(parent) = item.full_path.parent().map(|p| p.to_path_buf()) {
-                item.full_path = parent.join(&updated_record.filename);
-                item.folder_path_str = parent.to_string_lossy().to_string().into();
-                item.folder_path_lower = parent.to_string_lossy().to_lowercase();
-            }
-            item.record = updated_record.clone();
+            item.set_record(updated_record.clone());
         }
         st.mark_list_bytes_dirty();
 

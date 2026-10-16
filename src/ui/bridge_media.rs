@@ -10,18 +10,17 @@ use super::browse_window::{
     sync_window, timed, update_tile,
 };
 use super::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
-use super::models::{format_timestamp, rgb8_to_shared_buffer};
+use super::models::rgb8_to_shared_buffer;
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::video_preview_animator::VideoPreviewAnimator;
 use super::virtual_folder_wording;
 use super::MainWindow;
 use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::Library;
-use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms, format_filesize_mb};
 use crate::media::metadata::MetadataExtractor;
 use crate::media::{MediaFormat, MediaHasher, MediaType};
 use crate::query::filters::IndexedMediaRecord;
-use crate::query::{MediaSorter, MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
+use crate::query::{FolderDir, MediaSorter, MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
     PipelineItem, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager, VideoPreviewRecord,
@@ -235,7 +234,7 @@ impl BridgeMedia {
                 let (format, full_path_opt) = {
                     let st_r = st.read();
                     if let Some(item) = st_r.all_folder_media.find(media_id) {
-                        (item.record.format, Some(item.full_path.clone()))
+                        (item.record.format, Some(item.full_path()))
                     } else {
                         (MediaFormat::Unknown, None)
                     }
@@ -872,80 +871,19 @@ impl BridgeMedia {
                         st.is_refreshing_media = false;
 
                         for item in &successful_items {
-                            let is_video = matches!(item.updated_record.media_type, MediaType::Video);
-                            let width_str: slint::SharedString = if item.updated_record.width > 0 {
-                                item.updated_record.width.to_string().into()
-                            } else {
-                                "-".into()
-                            };
-                            let height_str: slint::SharedString = if item.updated_record.height > 0 {
-                                item.updated_record.height.to_string().into()
-                            } else {
-                                "-".into()
-                            };
-                            let ar_str: slint::SharedString = approximate_aspect_ratio(
-                                item.updated_record.width,
-                                item.updated_record.height,
-                            ).into();
-                            let ar_value = if item.updated_record.height > 0 {
-                                item.updated_record.width as f32 / item.updated_record.height as f32
-                            } else {
-                                0.0
-                            };
-                            let duration_str: slint::SharedString = format_duration_hms_ms(
-                                item.updated_record.duration_ms,
-                                is_video,
-                            ).into();
-                            let duration_badge_str: slint::SharedString = format_duration_compact(
-                                item.updated_record.duration_ms,
-                                is_video,
-                            ).into();
-                            let filesize_mb_str: slint::SharedString = format_filesize_mb(item.updated_record.file_size).into();
-                            let modified_date_str: slint::SharedString = format_timestamp(item.updated_record.modification_time).into();
-                            let created_date_str: slint::SharedString = format_timestamp(item.updated_record.creation_time).into();
-                            let format_str: slint::SharedString = item.updated_record.format.default_extension().to_ascii_lowercase().into();
-
-                            let is_pending = item.updated_record.source.is_some() && (item.updated_record.file_size == 0 || item.updated_record.width == 0 || item.updated_record.height == 0);
-                            let flags_str: slint::SharedString = if is_pending {
-                                "Pending".into()
-                            } else if item.updated_record.is_deleted {
-                                "Deleted".into()
-                            } else if item.updated_record.is_corrupted {
-                                "Corrupted".into()
-                            } else {
-                                "OK".into()
-                            };
-
                             st.mark_list_bytes_dirty();
 
                             if let Some(target_indexed) = st.all_folder_media.find_mut(item.media_id) {
-                                target_indexed.record = item.updated_record.clone();
-                                target_indexed.width_str = width_str;
-                                target_indexed.height_str = height_str;
-                                target_indexed.ar_str = ar_str;
-                                target_indexed.ar_value = ar_value;
-                                target_indexed.duration_str = duration_str;
-                                target_indexed.duration_badge_str = duration_badge_str;
-                                target_indexed.filesize_mb_str = filesize_mb_str;
-                                target_indexed.modified_date_str = modified_date_str;
-                                target_indexed.created_date_str = created_date_str;
-                                target_indexed.format_str = format_str;
-                                target_indexed.flags_str = flags_str;
-                                target_indexed.is_corrupted = item.updated_record.is_corrupted;
-                                target_indexed.is_deleted = item.updated_record.is_deleted;
-                                target_indexed.is_pending = is_pending;
-                                target_indexed.tags_count = item.tags_count;
-                                target_indexed.tags_count_str = item.tags_count.to_string().into();
-                                target_indexed.has_tags = item.tags_count > 0;
+                                target_indexed.set_record(item.updated_record.clone());
+                                target_indexed.set_tags_count(item.tags_count);
                             }
                         }
 
                         for missing in &missing_files {
-                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path)
+                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.is_at(&missing.path))
                                 && !target_indexed.is_pending
                             {
-                                target_indexed.record.is_deleted = true;
-                                target_indexed.flags_str = "Deleted".into();
+                                target_indexed.mark_deleted();
                             }
                         }
                     }
@@ -1024,7 +962,7 @@ impl BridgeMedia {
 
             for &id in &selected_ids {
                 if let Some(item) = st.all_folder_media.find(id) {
-                    targets.push((id, item.full_path.clone(), item.record.clone()));
+                    targets.push((id, item.full_path(), item.record.clone()));
                 } else if let Some(ref folder_path) = folder_path_opt
                     && let Ok(Some(record)) = library.media().get(id)
                 {
@@ -1109,7 +1047,7 @@ impl BridgeMedia {
 
             for &id in &selected_ids {
                 if let Some(item) = st.all_folder_media.find(id) {
-                    targets.push((id, item.full_path.clone(), item.record.clone()));
+                    targets.push((id, item.full_path(), item.record.clone()));
                 } else if let Some(ref folder_path) = folder_path_opt
                     && let Ok(Some(record)) = library.media().get(id)
                 {
@@ -1465,82 +1403,21 @@ impl BridgeMedia {
                                 st.thumbs.insert(item.media_id, shared_buf.clone());
                             }
 
-                            let is_video = matches!(item.updated_record.media_type, MediaType::Video);
-                            let width_str: slint::SharedString = if item.updated_record.width > 0 {
-                                item.updated_record.width.to_string().into()
-                            } else {
-                                "-".into()
-                            };
-                            let height_str: slint::SharedString = if item.updated_record.height > 0 {
-                                item.updated_record.height.to_string().into()
-                            } else {
-                                "-".into()
-                            };
-                            let ar_str: slint::SharedString = approximate_aspect_ratio(
-                                item.updated_record.width,
-                                item.updated_record.height,
-                            ).into();
-                            let ar_value = if item.updated_record.height > 0 {
-                                item.updated_record.width as f32 / item.updated_record.height as f32
-                            } else {
-                                0.0
-                            };
-                            let duration_str: slint::SharedString = format_duration_hms_ms(
-                                item.updated_record.duration_ms,
-                                is_video,
-                            ).into();
-                            let duration_badge_str: slint::SharedString = format_duration_compact(
-                                item.updated_record.duration_ms,
-                                is_video,
-                            ).into();
-                            let filesize_mb_str: slint::SharedString = format_filesize_mb(item.updated_record.file_size).into();
-                            let modified_date_str: slint::SharedString = format_timestamp(item.updated_record.modification_time).into();
-                            let created_date_str: slint::SharedString = format_timestamp(item.updated_record.creation_time).into();
-                            let format_str: slint::SharedString = item.updated_record.format.default_extension().to_ascii_lowercase().into();
-
-                            let is_pending = item.updated_record.source.is_some() && (item.updated_record.file_size == 0 || item.updated_record.width == 0 || item.updated_record.height == 0);
-                            let flags_str: slint::SharedString = if is_pending {
-                                "Pending".into()
-                            } else if item.updated_record.is_deleted {
-                                "Deleted".into()
-                            } else if item.updated_record.is_corrupted {
-                                "Corrupted".into()
-                            } else {
-                                "OK".into()
-                            };
-
                             st.mark_list_bytes_dirty();
 
                             if let Some(target_indexed) = st.all_folder_media.find_mut(item.media_id) {
-                                target_indexed.record = item.updated_record.clone();
-                                target_indexed.width_str = width_str;
-                                target_indexed.height_str = height_str;
-                                target_indexed.ar_str = ar_str;
-                                target_indexed.ar_value = ar_value;
-                                target_indexed.duration_str = duration_str;
-                                target_indexed.duration_badge_str = duration_badge_str;
-                                target_indexed.filesize_mb_str = filesize_mb_str.clone();
-                                target_indexed.modified_date_str = modified_date_str;
-                                target_indexed.created_date_str = created_date_str;
-                                target_indexed.format_str = format_str;
-                                target_indexed.flags_str = flags_str;
-                                target_indexed.is_corrupted = item.updated_record.is_corrupted;
-                                target_indexed.is_deleted = item.updated_record.is_deleted;
-                                target_indexed.is_pending = is_pending;
-                                target_indexed.tags_count = item.tags_count;
-                                target_indexed.tags_count_str = item.tags_count.to_string().into();
-                                target_indexed.has_tags = item.tags_count > 0;
+                                target_indexed.set_record(item.updated_record.clone());
+                                target_indexed.set_tags_count(item.tags_count);
                             }
 
                             tab_mgr_arc.notify_media_refreshed(item.media_id, &item.updated_record);
                         }
 
                         for missing in &missing_files {
-                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.full_path == missing.path)
+                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.is_at(&missing.path))
                                 && !target_indexed.is_pending
                             {
-                                target_indexed.record.is_deleted = true;
-                                target_indexed.flags_str = "Deleted".into();
+                                target_indexed.mark_deleted();
                             }
                         }
                     }
@@ -1647,216 +1524,58 @@ impl BridgeMedia {
             .expect("Failed to spawn parallel media item refresher thread");
     }
 
-    pub fn preindex(
-        library: &Library,
-        raw_records: Vec<MediaRecord>,
-        folder_path: &Path,
-    ) -> Vec<IndexedMediaRecord> {
-        let folder_path_buf = folder_path.to_path_buf();
-        let folder_path_str: slint::SharedString = folder_path_buf.to_string_lossy().to_string().into();
-        let folder_path_lower = folder_path_buf.to_string_lossy().to_lowercase();
+    /// Drops records whose id was already seen (a record can be listed by more than one scope).
+    fn unique_by_id(raw_records: Vec<MediaRecord>) -> Vec<MediaRecord> {
+        let mut seen = HashSet::with_capacity(raw_records.len());
+        raw_records.into_iter().filter(|r| seen.insert(r.id)).collect()
+    }
 
-        let mut seen_ids = HashSet::new();
-        let mut unique_records = Vec::with_capacity(raw_records.len());
-        for r in raw_records {
-            if seen_ids.insert(r.id) {
-                unique_records.push(r);
-            }
-        }
-
-        let tag_counts_map: HashMap<MediaId, usize> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
-            unique_records
-                .iter()
-                .filter_map(|r| {
-                    if let Ok(Some(tags)) = library.raw_db().tags_by_media.get(&rtxn, &r.id) {
-                        Some((r.id, tags.len()))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        } else {
-            HashMap::new()
+    fn tag_counts(library: &Library, records: &[MediaRecord]) -> HashMap<MediaId, usize> {
+        let Ok(rtxn) = library.raw_db().env.read_txn() else {
+            return HashMap::new();
         };
-
-        unique_records
-            .into_par_iter()
-            .enumerate()
-            .map(|(index, r)| {
-                let modified_date_str: slint::SharedString = format_timestamp(r.modification_time).into();
-                let created_date_str: slint::SharedString = format_timestamp(r.creation_time).into();
-                let filesize_mb_str: slint::SharedString = format_filesize_mb(r.file_size).into();
-                let rating_str: slint::SharedString = r.rating.to_string().into();
-
-                let tags_count = tag_counts_map.get(&r.id).copied().unwrap_or(0);
-                let tags_count_str: slint::SharedString = tags_count.to_string().into();
-                let has_tags = tags_count > 0;
-
-                let width_str: slint::SharedString = if r.width > 0 { r.width.to_string().into() } else { "-".into() };
-                let height_str: slint::SharedString = if r.height > 0 { r.height.to_string().into() } else { "-".into() };
-                let ar_str: slint::SharedString = approximate_aspect_ratio(r.width, r.height).into();
-                let ar_value = if r.height > 0 { r.width as f32 / r.height as f32 } else { 0.0 };
-
-                let is_video = matches!(r.media_type, MediaType::Video);
-                let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
-                let duration_badge_str: slint::SharedString = format_duration_compact(r.duration_ms, is_video).into();
-                let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
-
-                let is_pending = r.source.is_some() && (r.file_size == 0 || r.width == 0 || r.height == 0 || r.is_corrupted);
-
-                let flags_str: slint::SharedString = if is_pending {
-                    "Pending".into()
-                } else if r.is_deleted {
-                    "Deleted".into()
-                } else if r.is_corrupted {
-                    "Corrupted".into()
-                } else {
-                    "OK".into()
-                };
-
-                let filename_slint: slint::SharedString = r.filename.clone().into();
-                let filename_lower = r.filename.to_lowercase();
-                let full_path = folder_path_buf.join(&r.filename);
-
-                IndexedMediaRecord {
-                    index,
-                    record: r.clone(),
-                    full_path,
-                    folder_path_str: folder_path_str.clone(),
-                    folder_path_lower: folder_path_lower.clone(),
-                    filename_lower,
-                    filename_slint,
-                    modified_date_str,
-                    created_date_str,
-                    filesize_mb_str,
-                    rating_str,
-                    tags_count,
-                    tags_count_str,
-                    width_str,
-                    height_str,
-                    ar_str,
-                    ar_value,
-                    duration_str,
-                    duration_badge_str,
-                    format_str,
-                    flags_str,
-                    is_corrupted: if is_pending { false } else { r.is_corrupted },
-                    is_deleted: r.is_deleted,
-                    is_pending,
-                    has_tags,
-                }
+        records
+            .iter()
+            .filter_map(|r| match library.raw_db().tags_by_media.get(&rtxn, &r.id) {
+                Ok(Some(tags)) => Some((r.id, tags.len())),
+                _ => None,
             })
             .collect()
     }
 
-    pub fn preindex_records(
-        library: &Library,
-        raw_records: Vec<MediaRecord>,
-    ) -> Vec<IndexedMediaRecord> {
-        let mut folder_path_cache: HashMap<FolderId, PathBuf> = HashMap::new();
+    pub fn preindex(library: &Library, raw_records: Vec<MediaRecord>, folder_path: &Path) -> Vec<IndexedMediaRecord> {
+        let folder = FolderDir::new(folder_path);
+        let records = Self::unique_by_id(raw_records);
+        let tag_counts = Self::tag_counts(library, &records);
 
-        let mut seen_ids = HashSet::new();
-        let mut unique_records = Vec::with_capacity(raw_records.len());
-        for r in raw_records {
-            if seen_ids.insert(r.id) {
-                unique_records.push(r);
-            }
-        }
+        records
+            .into_par_iter()
+            .enumerate()
+            .map(|(index, r)| {
+                let tags_count = tag_counts.get(&r.id).copied().unwrap_or(0);
+                IndexedMediaRecord::new(index, r, folder.clone(), tags_count)
+            })
+            .collect()
+    }
 
-        let tag_counts_map: HashMap<MediaId, usize> = if let Ok(rtxn) = library.raw_db().env.read_txn() {
-            unique_records
-                .iter()
-                .filter_map(|r| {
-                    if let Ok(Some(tags)) = library.raw_db().tags_by_media.get(&rtxn, &r.id) {
-                        Some((r.id, tags.len()))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        } else {
-            HashMap::new()
-        };
+    pub fn preindex_records(library: &Library, raw_records: Vec<MediaRecord>) -> Vec<IndexedMediaRecord> {
+        let records = Self::unique_by_id(raw_records);
+        let tag_counts = Self::tag_counts(library, &records);
+        let mut folders: HashMap<FolderId, Arc<FolderDir>> = HashMap::new();
 
-        unique_records
+        records
             .into_iter()
             .enumerate()
             .map(|(index, r)| {
-                let modified_date_str: slint::SharedString = format_timestamp(r.modification_time).into();
-                let created_date_str: slint::SharedString = format_timestamp(r.creation_time).into();
-                let filesize_mb_str: slint::SharedString = format_filesize_mb(r.file_size).into();
-                let rating_str: slint::SharedString = r.rating.to_string().into();
-
-                let tags_count = tag_counts_map.get(&r.id).copied().unwrap_or(0);
-                let tags_count_str: slint::SharedString = tags_count.to_string().into();
-                let has_tags = tags_count > 0;
-
-                let width_str: slint::SharedString = if r.width > 0 { r.width.to_string().into() } else { "-".into() };
-                let height_str: slint::SharedString = if r.height > 0 { r.height.to_string().into() } else { "-".into() };
-                let ar_str: slint::SharedString = approximate_aspect_ratio(r.width, r.height).into();
-                let ar_value = if r.height > 0 { r.width as f32 / r.height as f32 } else { 0.0 };
-
-                let is_video = matches!(r.media_type, MediaType::Video);
-                let duration_str: slint::SharedString = format_duration_hms_ms(r.duration_ms, is_video).into();
-                let duration_badge_str: slint::SharedString = format_duration_compact(r.duration_ms, is_video).into();
-                let format_str: slint::SharedString = r.format.default_extension().to_ascii_lowercase().into();
-
-                let is_pending = r.source.is_some() && (r.file_size == 0 || r.width == 0 || r.height == 0 || r.is_corrupted);
-
-                let flags_str: slint::SharedString = if is_pending {
-                    "Pending".into()
-                } else if r.is_deleted {
-                    "Deleted".into()
-                } else if r.is_corrupted {
-                    "Corrupted".into()
-                } else {
-                    "OK".into()
-                };
-
-                let filename_slint: slint::SharedString = r.filename.clone().into();
-                let filename_lower = r.filename.to_lowercase();
-
-                let folder_p = folder_path_cache.entry(r.folder_id).or_insert_with(|| {
-                    library
-                        .folders()
-                        .get_folder(r.folder_id)
-                        .ok()
-                        .flatten()
-                        .map(|f| PathBuf::from(f.path))
-                        .unwrap_or_default()
-                });
-
-                let folder_path_str: slint::SharedString = folder_p.to_string_lossy().to_string().into();
-                let folder_path_lower = folder_p.to_string_lossy().to_lowercase();
-                let full_path = folder_p.join(&r.filename);
-
-                IndexedMediaRecord {
-                    index,
-                    record: r.clone(),
-                    full_path,
-                    folder_path_str,
-                    folder_path_lower,
-                    filename_lower,
-                    filename_slint,
-                    modified_date_str,
-                    created_date_str,
-                    filesize_mb_str,
-                    rating_str,
-                    tags_count,
-                    tags_count_str,
-                    width_str,
-                    height_str,
-                    ar_str,
-                    ar_value,
-                    duration_str,
-                    duration_badge_str,
-                    format_str,
-                    flags_str,
-                    is_corrupted: if is_pending { false } else { r.is_corrupted },
-                    is_deleted: r.is_deleted,
-                    is_pending,
-                    has_tags,
-                }
+                let folder = folders
+                    .entry(r.folder_id)
+                    .or_insert_with(|| {
+                        let path = library.folders().get_folder(r.folder_id).ok().flatten().map(|f| PathBuf::from(f.path));
+                        FolderDir::new(path.unwrap_or_default())
+                    })
+                    .clone();
+                let tags_count = tag_counts.get(&r.id).copied().unwrap_or(0);
+                IndexedMediaRecord::new(index, r, folder, tags_count)
             })
             .collect()
     }

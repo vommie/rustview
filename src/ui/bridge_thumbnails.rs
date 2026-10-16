@@ -4,8 +4,6 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::browse_window::{apply_record, update_tile};
-use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms};
-use crate::media::MediaType;
 use crate::telemetry::BenchmarkReportFormatter;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
@@ -95,44 +93,30 @@ impl BridgeThumbnails {
 
             for item_data in batch {
                 let media_id = item_data.media_id;
+                let mut metadata_changed = false;
 
                 if (item_data.orig_width > 0 || item_data.orig_height > 0 || item_data.duration_ms > 0 || item_data.is_corrupted)
                     && let Some(item) = st.all_folder_media.find_mut(media_id)
                 {
-                    let mut meta_changed = false;
                     if item_data.orig_width > 0 && item.record.width == 0 {
                         item.record.width = item_data.orig_width;
-                        item.width_str = item_data.orig_width.to_string().into();
-                        meta_changed = true;
+                        metadata_changed = true;
                     }
                     if item_data.orig_height > 0 && item.record.height == 0 {
                         item.record.height = item_data.orig_height;
-                        item.height_str = item_data.orig_height.to_string().into();
-                        meta_changed = true;
+                        metadata_changed = true;
                     }
                     if item_data.duration_ms > 0 && item.record.duration_ms == 0 {
                         item.record.duration_ms = item_data.duration_ms;
-                        let is_video = matches!(item.record.media_type, MediaType::Video);
-                        item.duration_str = format_duration_hms_ms(item_data.duration_ms, is_video).into();
-                        item.duration_badge_str = format_duration_compact(item_data.duration_ms, is_video).into();
-                        meta_changed = true;
+                        metadata_changed = true;
                     }
                     if item_data.is_corrupted != item.is_corrupted {
                         regeneration_state_dirty = true;
                         item.record.is_corrupted = item_data.is_corrupted;
-                        item.is_corrupted = item_data.is_corrupted;
-                        item.flags_str = if item.record.is_deleted {
-                            "Deleted".into()
-                        } else if item.record.is_corrupted {
-                            "Corrupted".into()
-                        } else {
-                            "OK".into()
-                        };
-                        meta_changed = true;
+                        metadata_changed = true;
                     }
-                    if meta_changed {
-                        item.ar_str = approximate_aspect_ratio(item.record.width, item.record.height).into();
-                        item.ar_value = if item.record.height > 0 { item.record.width as f32 / item.record.height as f32 } else { 0.0 };
+                    if metadata_changed {
+                        item.refresh_derived();
                     }
                 }
 
@@ -143,7 +127,7 @@ impl BridgeThumbnails {
                     if !is_table {
                         row.thumbnail = picture.unwrap_or_default();
                     }
-                    if let Some(record) = record {
+                    if metadata_changed && let Some(record) = record {
                         apply_record(row, record);
                     }
                 });

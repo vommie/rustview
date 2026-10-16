@@ -99,55 +99,29 @@ mod tests {
     use super::*;
     use crate::library::models::MediaRecord;
     use crate::media::{MediaFormat, MediaType};
-    use slint::SharedString;
-    use std::path::PathBuf;
+    use crate::query::FolderDir;
 
     fn record(id: MediaId, index: usize) -> IndexedMediaRecord {
-        IndexedMediaRecord {
-            index,
-            record: MediaRecord {
-                id,
-                folder_id: 1,
-                filename: format!("{id}.webp"),
-                file_hash: [0; 16],
-                file_size: 1,
-                modification_time: 0,
-                media_type: MediaType::Image,
-                format: MediaFormat::Webp,
-                width: 0,
-                height: 0,
-                rating: 0,
-                last_seen: 0,
-                is_deleted: false,
-                creation_time: 0,
-                duration_ms: 0,
-                is_corrupted: false,
-                source: None,
-            },
-            full_path: PathBuf::new(),
-            folder_path_str: SharedString::default(),
-            folder_path_lower: String::new(),
-            filename_lower: String::new(),
-            filename_slint: SharedString::default(),
-            modified_date_str: SharedString::default(),
-            created_date_str: SharedString::default(),
-            filesize_mb_str: SharedString::default(),
-            rating_str: SharedString::default(),
-            tags_count: 0,
-            tags_count_str: SharedString::default(),
-            width_str: SharedString::default(),
-            height_str: SharedString::default(),
-            ar_str: SharedString::default(),
-            ar_value: 0.0,
-            duration_str: SharedString::default(),
-            duration_badge_str: SharedString::default(),
-            format_str: SharedString::default(),
-            flags_str: SharedString::default(),
-            is_corrupted: false,
+        let record = MediaRecord {
+            id,
+            folder_id: 1,
+            filename: format!("{id}.webp"),
+            file_hash: [0; 16],
+            file_size: 1,
+            modification_time: 0,
+            media_type: MediaType::Image,
+            format: MediaFormat::Webp,
+            width: 0,
+            height: 0,
+            rating: 0,
+            last_seen: 0,
             is_deleted: false,
-            is_pending: false,
-            has_tags: false,
-        }
+            creation_time: 0,
+            duration_ms: 0,
+            is_corrupted: false,
+            source: None,
+        };
+        IndexedMediaRecord::new(index, record, FolderDir::new("/m"), 0)
     }
 
     fn store(ids: &[MediaId]) -> MediaStore {

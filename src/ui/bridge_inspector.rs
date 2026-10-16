@@ -99,15 +99,11 @@ impl BridgeInspector {
 
     fn render_single(window: &MainWindow, item: &IndexedMediaRecord) {
         let full_filename = item.record.filename.clone();
-        window.set_info_filename(item.filename_slint.clone());
+        window.set_info_filename(item.record.filename.as_str().into());
         window.set_info_filename_tooltip(full_filename.into());
 
         window.set_info_path_label("Path:".into());
-        let parent_path_str = item
-            .full_path
-            .parent()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| "-".to_string());
+        let parent_path_str = item.folder.path().to_string_lossy().to_string();
         window.set_info_path(parent_path_str.clone().into());
         window.set_info_path_tooltip(parent_path_str.into());
 
@@ -166,16 +162,15 @@ impl BridgeInspector {
         // Group counts by folder path
         let mut folder_counts: HashMap<PathBuf, (String, usize, bool)> = HashMap::new();
         for item in selected_items {
-            if let Some(parent) = item.full_path.parent() {
-                let is_root = root_folder_opt.map(|r| r == parent).unwrap_or(false);
-                let folder_name = parent
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| parent.to_string_lossy().to_string());
+            let parent = item.folder.path();
+            let is_root = root_folder_opt.map(|r| r == parent).unwrap_or(false);
+            let folder_name = parent
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| parent.to_string_lossy().to_string());
 
-                let entry = folder_counts.entry(parent.to_path_buf()).or_insert((folder_name, 0, is_root));
-                entry.1 += 1;
-            }
+            let entry = folder_counts.entry(parent.to_path_buf()).or_insert((folder_name, 0, is_root));
+            entry.1 += 1;
         }
 
         let mut sorted_folders: Vec<(String, usize, bool)> = folder_counts.into_values().collect();

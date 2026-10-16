@@ -8,7 +8,7 @@ use crate::ui::bridge_state::UiState;
 /// no database or drive access happens: the stored path of the loaded record is used as is.
 pub fn selected_targets(st: &UiState) -> Vec<RegenerationTarget> {
     let targets: Vec<RegenerationTarget> = eligibility::eligible_items(st)
-        .map(|item| RegenerationTarget { media_id: item.record.id, path: item.full_path.clone() })
+        .map(|item| RegenerationTarget { media_id: item.record.id, path: item.full_path() })
         .collect();
     tracing::debug!(
         selected = st.file_selection.count(),

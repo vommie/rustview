@@ -6,15 +6,13 @@ use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::virtual_folder_wording;
-use super::models::{format_timestamp, rgb8_to_shared_buffer};
+use super::models::rgb8_to_shared_buffer;
 use super::MainWindow;
 use crate::icons::Icon;
 use crate::library::folders::{normalize_path, FolderScanOptions};
 use crate::library::models::{FolderHierarchySnapshot, FolderId, MediaId, MediaRecord};
 use crate::library::refresh::RefreshReport;
 use crate::library::Library;
-use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms, format_filesize_mb};
-use crate::media::MediaType;
 use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::telemetry::FolderLoadBenchmark;
 use crate::thumbnails::{ThumbnailConfig, ThumbnailManager};
@@ -960,22 +958,7 @@ impl BridgeFolders {
                                         st.mark_list_bytes_dirty();
 
                                         if let Some(target_indexed) = st.all_folder_media.find_mut(item.media_id) {
-                                            target_indexed.record = item.updated_record.clone();
-                                            target_indexed.width_str = if item.updated_record.width > 0 { item.updated_record.width.to_string().into() } else { "-".into() };
-                                            target_indexed.height_str = if item.updated_record.height > 0 { item.updated_record.height.to_string().into() } else { "-".into() };
-                                            target_indexed.ar_str = approximate_aspect_ratio(item.updated_record.width, item.updated_record.height).into();
-                                            target_indexed.ar_value = if item.updated_record.height > 0 { item.updated_record.width as f32 / item.updated_record.height as f32 } else { 0.0 };
-                                            let is_video = matches!(item.updated_record.media_type, MediaType::Video);
-                                            target_indexed.duration_str = format_duration_hms_ms(item.updated_record.duration_ms, is_video).into();
-                                            target_indexed.duration_badge_str = format_duration_compact(item.updated_record.duration_ms, is_video).into();
-                                            target_indexed.filesize_mb_str = format_filesize_mb(item.updated_record.file_size).into();
-                                            target_indexed.modified_date_str = format_timestamp(item.updated_record.modification_time).into();
-                                            target_indexed.created_date_str = format_timestamp(item.updated_record.creation_time).into();
-                                            target_indexed.format_str = item.updated_record.format.default_extension().to_ascii_lowercase().into();
-                                            target_indexed.is_corrupted = item.updated_record.is_corrupted;
-                                            target_indexed.is_deleted = item.updated_record.is_deleted;
-                                            target_indexed.is_pending = false;
-                                            target_indexed.flags_str = if item.updated_record.is_deleted { "Deleted".into() } else if item.updated_record.is_corrupted { "Corrupted".into() } else { "OK".into() };
+                                            target_indexed.set_record(item.updated_record.clone());
                                         }
                                     }
                                 }

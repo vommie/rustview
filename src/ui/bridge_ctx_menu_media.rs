@@ -135,7 +135,7 @@ impl MediaContextMenu {
             };
 
             let path = if let Some(item) = st.all_folder_media.find(single_id) {
-                Some(item.full_path.clone())
+                Some(item.full_path())
             } else {
                 library.resolve_media_path(single_id).ok()
             };
@@ -907,7 +907,7 @@ impl MediaContextMenu {
 
         for &id in target_ids {
             if let Some(item) = st.all_folder_media.find(id) {
-                paths.push(item.full_path.clone());
+                paths.push(item.full_path());
             } else if let Ok(p) = ctx.library.resolve_media_path(id) {
                 paths.push(p);
             }
@@ -1051,7 +1051,7 @@ impl MediaContextMenu {
         let (filename, full_path) = {
             let st = ctx.state.read();
             if let Some(item) = st.all_folder_media.find(single_id) {
-                (item.record.filename.clone(), item.full_path.clone())
+                (item.record.filename.clone(), item.full_path())
             } else if let Ok(p) = ctx.library.resolve_media_path(single_id) {
                 let name = p
                     .file_name()

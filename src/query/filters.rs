@@ -1,14 +1,14 @@
-use crate::library::models::{MediaRecord, TagId};
+use crate::library::models::TagId;
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE};
 use memchr::memmem;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
-use slint::SharedString;
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::time::Instant;
+
+pub use super::indexed_record::IndexedMediaRecord;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum MediaTypeFilter {
@@ -159,38 +159,6 @@ impl QueryFilter {
     pub fn is_query_filter_active(&self) -> bool {
         self.rating.map(|r| r > 0).unwrap_or(false) || !self.tag_ids.is_empty()
     }
-}
-
-/// Fully pre-indexed and pre-formatted media record holding zero-allocation Slint strings,
-/// precalculated filesystem paths, directory path string, original folder index, and tag cache.
-#[derive(Debug, Clone)]
-pub struct IndexedMediaRecord {
-    pub index: usize,
-    pub record: MediaRecord,
-    pub full_path: PathBuf,
-    pub folder_path_str: SharedString,
-    pub folder_path_lower: String,
-    pub filename_lower: String,
-    pub filename_slint: SharedString,
-    pub modified_date_str: SharedString,
-    pub created_date_str: SharedString,
-    pub filesize_mb_str: SharedString,
-    pub rating_str: SharedString,
-    pub tags_count: usize,
-    pub tags_count_str: SharedString,
-    pub width_str: SharedString,
-    pub height_str: SharedString,
-    pub ar_str: SharedString,
-    pub ar_value: f32,
-    pub duration_str: SharedString,
-    /// Compact duration for thumbnail badges (e.g. "5s", "04:30"); empty when no badge applies.
-    pub duration_badge_str: SharedString,
-    pub format_str: SharedString,
-    pub flags_str: SharedString,
-    pub is_corrupted: bool,
-    pub is_deleted: bool,
-    pub is_pending: bool,
-    pub has_tags: bool,
 }
 
 pub struct PreparedFilter {

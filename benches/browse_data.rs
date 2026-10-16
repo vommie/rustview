@@ -6,18 +6,18 @@
 //! structures that the ring/budget redesign replaced, kept here so that one run shows before and after.
 
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use rustview::library::models::MediaRecord;
-use rustview::media::{MediaFormat, MediaType};
 use rustview::query::filters::IndexedMediaRecord;
 use rustview::query::{MediaSorter, MediaStore, SortColumn, SortOrder};
-use rustview::thumbnails::ThumbnailRamCache;
+use rustview::thumbnails::{ThumbnailFormat, ThumbnailGenerator, ThumbnailRamCache};
 use rustview::ui::MediaItemView;
-use rustview::ui::browse_window::{RingWindow, ViewGeometry, build_view};
-use slint::{Image, Rgb8Pixel, SharedPixelBuffer, SharedString};
+use rustview::ui::browse_window::{RecordLabels, RingWindow, ViewGeometry, build_view};
+use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 use std::collections::{HashMap, VecDeque};
 use std::hint::black_box;
-use std::path::PathBuf;
 use std::sync::Arc;
+
+mod support;
+use support::synthetic_record;
 
 const THUMB: u32 = 200;
 const SLICE: usize = 120;
@@ -90,76 +90,27 @@ impl LegacyL1 {
     }
 }
 
-fn synthetic_record(i: usize) -> IndexedMediaRecord {
-    let filename = format!("IMG_{:07}_holiday_photo.webp", (i * 7919) % 10_000_000);
-    let record = MediaRecord {
-        id: i as u64 + 1,
-        folder_id: 1,
-        filename: filename.clone(),
-        file_hash: [0u8; 16],
-        file_size: 10_000 + (i as u64 * 31) % 5_000_000,
-        modification_time: 1_600_000_000 + i as i64 * 17,
-        media_type: MediaType::Image,
-        format: MediaFormat::Webp,
-        width: 300,
-        height: 200,
-        rating: (i % 6) as u8,
-        last_seen: 0,
-        is_deleted: false,
-        creation_time: 1_600_000_000 + i as i64 * 13,
-        duration_ms: 0,
-        is_corrupted: false,
-        source: None,
-    };
-    IndexedMediaRecord {
-        index: i,
-        full_path: PathBuf::from("/media/library/photos/2024").join(&filename),
-        folder_path_str: SharedString::from("/media/library/photos/2024"),
-        folder_path_lower: "/media/library/photos/2024".to_string(),
-        filename_lower: filename.to_lowercase(),
-        filename_slint: SharedString::from(filename.as_str()),
-        modified_date_str: SharedString::from("2024-05-17 12:34"),
-        created_date_str: SharedString::from("2024-05-17 12:30"),
-        filesize_mb_str: SharedString::from("1.23 MB"),
-        rating_str: SharedString::from("3"),
-        tags_count: 0,
-        tags_count_str: SharedString::from("0"),
-        width_str: SharedString::from("300"),
-        height_str: SharedString::from("200"),
-        ar_str: SharedString::from("3:2"),
-        ar_value: 1.5,
-        duration_str: SharedString::default(),
-        duration_badge_str: SharedString::default(),
-        format_str: SharedString::from("webp"),
-        flags_str: SharedString::from("OK"),
-        is_corrupted: false,
-        is_deleted: false,
-        is_pending: false,
-        has_tags: false,
-        record,
-    }
-}
-
-fn view_of(item: &IndexedMediaRecord, thumbnail: Image) -> MediaItemView {
+/// The row builder before the record compaction: the formatted strings were stored per record and only cloned into the row.
+fn legacy_view_of(item: &IndexedMediaRecord, labels: &RecordLabels, thumbnail: Image) -> MediaItemView {
     MediaItemView {
         id: item.record.id as i32,
         index: item.index as i32,
-        filename: item.filename_slint.clone(),
-        path_str: item.folder_path_str.clone(),
-        modified_date_str: item.modified_date_str.clone(),
-        created_date_str: item.created_date_str.clone(),
-        filesize_str: item.filesize_mb_str.clone(),
-        rating: item.record.rating as i32,
-        rating_str: item.rating_str.clone(),
+        filename: labels.filename.clone(),
+        path_str: item.folder.path_str().clone(),
+        modified_date_str: labels.modified_date.clone(),
+        created_date_str: labels.created_date.clone(),
+        filesize_str: labels.filesize.clone(),
+        rating: i32::from(item.record.rating),
+        rating_str: labels.rating.clone(),
         tags_count: item.tags_count as i32,
-        tags_str: item.tags_count_str.clone(),
-        width_str: item.width_str.clone(),
-        height_str: item.height_str.clone(),
-        ar_str: item.ar_str.clone(),
-        duration_str: item.duration_str.clone(),
-        duration_badge_str: item.duration_badge_str.clone(),
-        format_str: item.format_str.clone(),
-        flags_str: item.flags_str.clone(),
+        tags_str: labels.tags.clone(),
+        width_str: labels.width.clone(),
+        height_str: labels.height.clone(),
+        ar_str: labels.aspect_ratio.clone(),
+        duration_str: labels.duration.clone(),
+        duration_badge_str: labels.duration_badge.clone(),
+        format_str: labels.format.clone(),
+        flags_str: labels.flags.clone(),
         has_tags: item.has_tags,
         thumbnail,
         is_selected: false,
@@ -300,22 +251,65 @@ fn bench_ring(c: &mut Criterion) {
 
 fn bench_slice_build(c: &mut Criterion) {
     let records: Vec<IndexedMediaRecord> = (0..1000).map(synthetic_record).collect();
+    let stored_strings: Vec<RecordLabels> = records.iter().map(RecordLabels::of).collect();
     let shared = pixels();
-    c.bench_function("slice/build_120_item_views", |b| {
+    c.bench_function("legacy_slice/build_120_rows(stored strings)", |b| {
         b.iter(|| {
-            let views: Vec<MediaItemView> = records[200..200 + SLICE]
-                .iter()
-                .map(|item| view_of(item, Image::from_rgb8(shared.clone())))
+            let views: Vec<MediaItemView> = (200..200 + SLICE)
+                .map(|i| legacy_view_of(&records[i], &stored_strings[i], Image::from_rgb8(shared.clone())))
                 .collect();
             black_box(views)
         });
     });
-    c.bench_function("slice/build_one_item_view", |b| {
-        b.iter(|| black_box(view_of(&records[300], Image::from_rgb8(shared.clone()))));
+    c.bench_function("slice/build_120_rows(derived labels)", |b| {
+        b.iter(|| {
+            let views: Vec<MediaItemView> = records[200..200 + SLICE]
+                .iter()
+                .enumerate()
+                .map(|(i, item)| build_view(item, 200 + i, false, Image::from_rgb8(shared.clone())))
+                .collect();
+            black_box(views)
+        });
     });
-    c.bench_function("slice/build_view_one_row(browse_window)", |b| {
+    c.bench_function("legacy_slice/build_one_row(stored strings)", |b| {
+        b.iter(|| black_box(legacy_view_of(&records[300], &stored_strings[300], Image::from_rgb8(shared.clone()))));
+    });
+    c.bench_function("slice/build_one_row(derived labels)", |b| {
         b.iter(|| black_box(build_view(&records[300], 300, false, Image::from_rgb8(shared.clone()))));
     });
+}
+
+/// A 200 px thumbnail the way the library stores it (lossy WebP, ~8 KB for detailed content).
+fn stored_thumbnail() -> Vec<u8> {
+    let (width, height) = (200u32, 200u32);
+    let mut state = 0x9E37_79B9_7F4A_7C15u64;
+    let mut rgb = Vec::with_capacity((width * height * 3) as usize);
+    for y in 0..height {
+        for x in 0..width {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let noise = (state & 0x1f) as u32;
+            rgb.extend_from_slice(&[((x * 255 / width) + noise) as u8, ((y * 255 / height) + noise) as u8, (((x + y) / 2) + noise) as u8]);
+        }
+    }
+    ThumbnailGenerator::new().compress(&rgb, width, height, ThumbnailFormat::Webp, 80).expect("compress")
+}
+
+fn bench_thumbnail_decode(c: &mut Criterion) {
+    let stored = stored_thumbnail();
+    let generator = ThumbnailGenerator::new();
+    let mut group = c.benchmark_group("thumbnail_decode_200px");
+    group.bench_function("legacy_image_crate(image-webp)", |b| {
+        b.iter(|| {
+            let img = image::load_from_memory_with_format(black_box(&stored), image::ImageFormat::WebP).expect("decode");
+            black_box(img.into_rgb8().into_raw())
+        });
+    });
+    group.bench_function("libwebp(ThumbnailGenerator::decompress)", |b| {
+        b.iter(|| black_box(generator.decompress(black_box(&stored)).expect("decode")));
+    });
+    group.finish();
 }
 
 fn bench_sort(c: &mut Criterion) {
@@ -337,5 +331,5 @@ fn bench_sort(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_ui_store, bench_l1, bench_ram_cache, bench_media_store, bench_ring, bench_slice_build, bench_sort);
+criterion_group!(benches, bench_ui_store, bench_l1, bench_ram_cache, bench_media_store, bench_ring, bench_slice_build, bench_thumbnail_decode, bench_sort);
 criterion_main!(benches);

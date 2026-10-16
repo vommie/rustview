@@ -2,6 +2,8 @@ use super::filters::IndexedMediaRecord;
 use crate::library::models::MediaRecord;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortColumn {
@@ -186,68 +188,9 @@ impl MediaSorter {
         });
     }
 
-    pub fn sort_indexed(records: &mut [IndexedMediaRecord], column: SortColumn, order: SortOrder) {
+    pub fn sort_indexed_refs(records: &mut [&IndexedMediaRecord], column: SortColumn, order: SortOrder) {
         records.par_sort_unstable_by(|a, b| {
-            let cmp = match column {
-                SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
-                SortColumn::Path => a
-                    .folder_path_lower
-                    .cmp(&b.folder_path_lower)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::ModifiedDate => a
-                    .record
-                    .modification_time
-                    .cmp(&b.record.modification_time)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::CreatedDate => a
-                    .record
-                    .creation_time
-                    .cmp(&b.record.creation_time)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::FileSize => a
-                    .record
-                    .file_size
-                    .cmp(&b.record.file_size)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Rating => a
-                    .record
-                    .rating
-                    .cmp(&b.record.rating)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Tags => a
-                    .tags_count
-                    .cmp(&b.tags_count)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Width => a
-                    .record
-                    .width
-                    .cmp(&b.record.width)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Height => a
-                    .record
-                    .height
-                    .cmp(&b.record.height)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::AspectRatio => a
-                    .ar_value
-                    .total_cmp(&b.ar_value)
-                    .then_with(|| (a.record.width * a.record.height).cmp(&(b.record.width * b.record.height)))
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Duration => a
-                    .record
-                    .duration_ms
-                    .cmp(&b.record.duration_ms)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Format => a
-                    .format_str
-                    .cmp(&b.format_str)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Flags => a
-                    .flags_str
-                    .cmp(&b.flags_str)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-            };
-
+            let cmp = Self::compare_indexed(a, b, column);
             match order {
                 SortOrder::Ascending => cmp,
                 SortOrder::Descending => cmp.reverse(),
@@ -255,76 +198,101 @@ impl MediaSorter {
         });
     }
 
-    pub fn sort_indexed_refs(
-        records: &mut [&IndexedMediaRecord],
-        column: SortColumn,
-        order: SortOrder,
-    ) {
-        records.par_sort_unstable_by(|a, b| {
-            let cmp = match column {
-                SortColumn::Filename => a.filename_lower.cmp(&b.filename_lower),
-                SortColumn::Path => a
-                    .folder_path_lower
-                    .cmp(&b.folder_path_lower)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::ModifiedDate => a
-                    .record
-                    .modification_time
-                    .cmp(&b.record.modification_time)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::CreatedDate => a
-                    .record
-                    .creation_time
-                    .cmp(&b.record.creation_time)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::FileSize => a
-                    .record
-                    .file_size
-                    .cmp(&b.record.file_size)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Rating => a
-                    .record
-                    .rating
-                    .cmp(&b.record.rating)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Tags => a
-                    .tags_count
-                    .cmp(&b.tags_count)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Width => a
-                    .record
-                    .width
-                    .cmp(&b.record.width)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Height => a
-                    .record
-                    .height
-                    .cmp(&b.record.height)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::AspectRatio => a
-                    .ar_value
-                    .total_cmp(&b.ar_value)
-                    .then_with(|| (a.record.width * a.record.height).cmp(&(b.record.width * b.record.height)))
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Duration => a
-                    .record
-                    .duration_ms
-                    .cmp(&b.record.duration_ms)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Format => a
-                    .format_str
-                    .cmp(&b.format_str)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-                SortColumn::Flags => a
-                    .flags_str
-                    .cmp(&b.flags_str)
-                    .then_with(|| a.filename_lower.cmp(&b.filename_lower)),
-            };
-
-            match order {
-                SortOrder::Ascending => cmp,
-                SortOrder::Descending => cmp.reverse(),
+    /// The ascending order of two records for `column`; ties are broken by file name.
+    fn compare_indexed(a: &IndexedMediaRecord, b: &IndexedMediaRecord, column: SortColumn) -> Ordering {
+        let by_name = || a.filename_lower.cmp(&b.filename_lower);
+        let (ra, rb) = (&a.record, &b.record);
+        match column {
+            SortColumn::Filename => return by_name(),
+            SortColumn::Path => {
+                let by_dir = if Arc::ptr_eq(&a.folder, &b.folder) {
+                    Ordering::Equal
+                } else {
+                    a.folder.path_lower().cmp(b.folder.path_lower())
+                };
+                return by_dir.then_with(by_name);
             }
-        });
+            SortColumn::ModifiedDate => ra.modification_time.cmp(&rb.modification_time),
+            SortColumn::CreatedDate => ra.creation_time.cmp(&rb.creation_time),
+            SortColumn::FileSize => ra.file_size.cmp(&rb.file_size),
+            SortColumn::Rating => ra.rating.cmp(&rb.rating),
+            SortColumn::Tags => a.tags_count.cmp(&b.tags_count),
+            SortColumn::Width => ra.width.cmp(&rb.width),
+            SortColumn::Height => ra.height.cmp(&rb.height),
+            SortColumn::AspectRatio => a
+                .ar_value
+                .total_cmp(&b.ar_value)
+                .then_with(|| (ra.width * ra.height).cmp(&(rb.width * rb.height))),
+            SortColumn::Duration => ra.duration_ms.cmp(&rb.duration_ms),
+            SortColumn::Format => a.format_label().cmp(b.format_label()),
+            SortColumn::Flags => a.flags_label().cmp(b.flags_label()),
+        }
+        .then_with(by_name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::media::{MediaFormat, MediaType};
+    use crate::query::FolderDir;
+
+    fn item(id: u64, filename: &str, dir: &Arc<FolderDir>, width: u32) -> IndexedMediaRecord {
+        let record = MediaRecord {
+            id,
+            folder_id: 1,
+            filename: filename.to_string(),
+            file_hash: [0; 16],
+            file_size: id * 10,
+            modification_time: 1_600_000_000 + id as i64,
+            media_type: MediaType::Image,
+            format: MediaFormat::Png,
+            width,
+            height: 100,
+            rating: 0,
+            last_seen: 0,
+            is_deleted: false,
+            creation_time: 0,
+            duration_ms: 0,
+            is_corrupted: false,
+            source: None,
+        };
+        IndexedMediaRecord::new(id as usize, record, dir.clone(), 0)
+    }
+
+    fn sorted_names(items: &[IndexedMediaRecord], column: SortColumn, order: SortOrder) -> Vec<String> {
+        let mut refs: Vec<&IndexedMediaRecord> = items.iter().collect();
+        MediaSorter::sort_indexed_refs(&mut refs, column, order);
+        refs.iter().map(|i| i.record.filename.clone()).collect()
+    }
+
+    #[test]
+    fn ties_are_broken_by_the_file_name() {
+        let dir = FolderDir::new("/m");
+        let items = [item(1, "b.png", &dir, 300), item(2, "A.png", &dir, 300), item(3, "c.png", &dir, 100)];
+        assert_eq!(sorted_names(&items, SortColumn::Width, SortOrder::Ascending), ["c.png", "A.png", "b.png"]);
+        assert_eq!(sorted_names(&items, SortColumn::Width, SortOrder::Descending), ["b.png", "A.png", "c.png"]);
+        assert_eq!(sorted_names(&items, SortColumn::Filename, SortOrder::Ascending), ["A.png", "b.png", "c.png"]);
+    }
+
+    #[test]
+    fn the_path_order_groups_by_directory_then_name() {
+        let first = FolderDir::new("/Media/Alpha");
+        let second = FolderDir::new("/media/beta");
+        let items = [item(1, "z.png", &first, 1), item(2, "a.png", &second, 1), item(3, "b.png", &first, 1)];
+        assert_eq!(sorted_names(&items, SortColumn::Path, SortOrder::Ascending), ["b.png", "z.png", "a.png"]);
+    }
+
+    #[test]
+    fn the_flags_order_uses_the_visible_labels() {
+        let dir = FolderDir::new("/m");
+        let mut deleted = item(1, "a.png", &dir, 1);
+        deleted.mark_deleted();
+        let mut corrupt = item(2, "b.png", &dir, 1);
+        corrupt.record.is_corrupted = true;
+        corrupt.refresh_derived();
+        let fine = item(3, "c.png", &dir, 1);
+        let items = [deleted, corrupt, fine];
+        assert_eq!(sorted_names(&items, SortColumn::Flags, SortOrder::Ascending), ["b.png", "a.png", "c.png"]);
     }
 }

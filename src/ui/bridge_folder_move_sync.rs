@@ -10,9 +10,10 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::MainWindow;
 use crate::library::folder_move::{FolderMovePatch, FolderMoveReport};
 use crate::library::models::FolderId;
+use crate::query::FolderDir;
 use crate::settings::LogObscurer;
 use parking_lot::RwLock;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -168,18 +169,21 @@ impl BridgeFolderMoveSync {
         }
 
         let mut rebased_media = 0usize;
+        let mut rebased_dirs: HashMap<FolderId, Arc<FolderDir>> = HashMap::new();
         for item in st.all_folder_media.iter_mut() {
             if !subtree_ids.contains(&item.record.folder_id) {
                 continue;
             }
-            if let Some(new_full_path) = Self::rebase_path(&item.full_path, patch) {
-                let folder_dir = new_full_path
-                    .parent()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                item.full_path = new_full_path;
-                item.folder_path_lower = folder_dir.to_lowercase();
-                item.folder_path_str = folder_dir.into();
+            let folder_dir = match rebased_dirs.get(&item.record.folder_id) {
+                Some(dir) => Some(dir.clone()),
+                None => Self::rebase_path(item.folder.path(), patch).map(|new_dir| {
+                    let dir = FolderDir::new(new_dir);
+                    rebased_dirs.insert(item.record.folder_id, dir.clone());
+                    dir
+                }),
+            };
+            if let Some(dir) = folder_dir {
+                item.set_folder(dir);
                 rebased_media += 1;
             }
         }

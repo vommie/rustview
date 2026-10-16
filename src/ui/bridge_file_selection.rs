@@ -715,7 +715,7 @@ impl BridgeFileSelection {
                 .map(|m| {
                     (
                         m.record.filename.clone(),
-                        m.full_path.clone(),
+                        m.full_path(),
                         m.record.is_corrupted,
                     )
                 })

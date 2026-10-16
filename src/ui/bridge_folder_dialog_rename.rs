@@ -6,6 +6,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::{MainWindow, RenameFolderDialog};
 use crate::library::folder_operations::FolderOperations;
 use crate::library::models::FolderId;
+use crate::query::FolderDir;
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
@@ -220,11 +221,10 @@ impl RenameFolderDialogController {
             st.current_folder_path = Some(new_path.clone());
         }
 
+        let folder_dir = FolderDir::new(new_path);
         for item in st.all_folder_media.iter_mut() {
             if item.record.folder_id == folder_id {
-                item.full_path = new_path.join(&item.record.filename);
-                item.folder_path_str = new_path_str.to_string().into();
-                item.folder_path_lower = new_path_str.to_lowercase();
+                item.set_folder(folder_dir.clone());
             }
         }
 

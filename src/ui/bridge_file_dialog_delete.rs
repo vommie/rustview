@@ -101,7 +101,7 @@ impl DeleteFileDialogController {
             let st = ctx.state.read();
             for &id in media_ids {
                 if let Some(item) = st.all_folder_media.find(id) {
-                    paths_to_delete.push(item.full_path.clone());
+                    paths_to_delete.push(item.full_path());
                 } else if let Ok(p) = ctx.library.resolve_media_path(id) {
                     paths_to_delete.push(p);
                 } else if let Some(tab) = ctx.tab_manager.get_tab_by_media_id(id) {

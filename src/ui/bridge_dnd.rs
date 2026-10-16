@@ -105,13 +105,10 @@ impl BridgeDnd {
                 .map(|m| m.record.filename.clone())
                 .unwrap_or_else(|| format!("Media #{}", params.media_id));
 
-            let thumb_path_opt = first_item.and_then(|item| {
-                if matches!(item.record.media_type, MediaType::Image) && item.full_path.exists() {
-                    Some(item.full_path.clone())
-                } else {
-                    None
-                }
-            });
+            let thumb_path_opt = first_item
+                .filter(|item| matches!(item.record.media_type, MediaType::Image))
+                .map(|item| item.full_path())
+                .filter(|path| path.exists());
 
             let thumb = if let Some(buf) = st.thumbs.get(params.media_id) {
                 Image::from_rgb8(buf)
@@ -125,7 +122,7 @@ impl BridgeDnd {
                 name
             };
 
-            let mut paths: Vec<PathBuf> = ordered_selected.into_iter().map(|item| item.full_path.clone()).collect();
+            let mut paths: Vec<PathBuf> = ordered_selected.into_iter().map(|item| item.full_path()).collect();
             if paths.is_empty()
                 && let Ok(p) = params.library.resolve_media_path(params.media_id)
             {
@@ -594,7 +591,7 @@ impl BatchTransferRunner {
     fn resolve_media_path(&self, media_id: MediaId) -> PathBuf {
         let st = self.state.read();
         if let Some(item) = st.all_folder_media.find(media_id) {
-            return item.full_path.clone();
+            return item.full_path();
         }
         drop(st);
 

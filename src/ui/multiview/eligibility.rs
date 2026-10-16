@@ -129,7 +129,7 @@ pub fn plan_tile(item: &IndexedMediaRecord) -> TileSeed {
             item.record.height,
             MULTIVIEW_FALLBACK_ASPECT,
         ),
-        path: item.full_path.clone(),
+        path: item.full_path(),
         filename: item.record.filename.clone(),
     }
 }

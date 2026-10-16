@@ -126,9 +126,7 @@ impl DeleteFolderDialogController {
 
                     for item in st.all_folder_media.iter_mut() {
                         if deleted_fids_set.contains(&item.record.folder_id) || deleted_mids_set.contains(&item.record.id) {
-                            item.record.is_deleted = true;
-                            item.is_deleted = true;
-                            item.flags_str = "Deleted".into();
+                            item.mark_deleted();
                         }
                     }
                     st.file_selection.deselect_many(&deleted_mids_set);
