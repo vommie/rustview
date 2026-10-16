@@ -7,7 +7,8 @@
 
 use rustview::library::Library;
 use rustview::settings::schema::PerformanceSettings;
-use rustview::thumbnails::{PreparedTarget, ThumbnailConfig, ThumbnailManager};
+use rustview::media::MediaType;
+use rustview::thumbnails::{PipelineItem, ThumbnailConfig, ThumbnailManager};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -61,13 +62,12 @@ fn seed_folder(
         return Ok(());
     }
 
-    let targets: Vec<PreparedTarget> = media
+    let targets: Vec<PipelineItem> = media
         .iter()
-        .map(|m| PreparedTarget {
-            pipeline_id: 0,
-            folder_id: m.folder_id,
+        .map(|m| PipelineItem {
             media_id: m.id,
-            file_path: Path::new(&record.path).join(&m.filename),
+            folder_id: m.folder_id,
+            is_video: matches!(m.media_type, MediaType::Video),
         })
         .collect();
     let total = targets.len();

@@ -17,7 +17,7 @@ use crate::media::formats::{approximate_aspect_ratio, format_duration_compact, f
 use crate::media::MediaType;
 use crate::settings::{GridAspectRatio, LogObscurer, SettingsDialogController, SettingsManager};
 use crate::telemetry::FolderLoadBenchmark;
-use crate::thumbnails::{PreparedTarget, ThumbnailConfig, ThumbnailManager};
+use crate::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Model, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
@@ -1112,16 +1112,7 @@ impl BridgeFolders {
                     BridgeMedia::preindex(&lib_scanner, known, &target_p_scanner)
                 };
 
-                let all_targets: Vec<PreparedTarget> = indexed_media
-                    .iter()
-                    .filter(|item| !item.is_deleted && !item.is_pending)
-                    .map(|item| PreparedTarget {
-                        pipeline_id: 0,
-                        folder_id: item.record.folder_id,
-                        media_id: item.record.id,
-                        file_path: item.full_path.clone(),
-                    })
-                    .collect();
+                let pipeline_items = BridgeMedia::pipeline_items(&indexed_media);
 
                 let _ = w_weak_scanner.upgrade_in_event_loop(move |w| {
                     let is_still_current = {
@@ -1145,9 +1136,9 @@ impl BridgeFolders {
                         StatusBarBridge::info(&w, "Ready.");
                         StatusBarBridge::update_metrics(&w, &st_scanner);
 
-                        if !all_targets.is_empty() {
+                        if !pipeline_items.is_empty() {
                             let config = ThumbnailConfig::from_performance_settings(&set_scanner.get().performance);
-                            thumb_scanner.start_pipeline(folder_id, all_targets, config);
+                            thumb_scanner.start_pipeline(folder_id, pipeline_items, config);
                         }
                     }
                 });

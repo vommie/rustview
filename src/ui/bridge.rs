@@ -107,7 +107,7 @@ pub struct UiBridge {
     ctx_menu_dispatcher: Arc<CtxMenuDispatcher>,
     state: Arc<RwLock<UiState>>,
     last_click: Arc<Mutex<Option<LastClickRecord>>>,
-    _thumbnail_timer: Timer,
+    _thumbnail_timer: Rc<Timer>,
 }
 
 impl UiBridge {

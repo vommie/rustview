@@ -17,6 +17,7 @@ use crate::ui::sidebar_panel_tab_dnd::SidebarPanelTabDndSession;
 use crate::ui::tab_dnd::TabDndSession;
 use crate::ui::tab_grid::MasonryRect;
 use crate::viewer::TabId;
+use crate::thumbnails::ram_cache::IdBuildHasher;
 use crate::thumbnails::ThumbnailRamCache;
 use crate::ui::browse_window::{RingWindow, ViewGeometry};
 use std::collections::{HashMap, HashSet};
@@ -105,6 +106,9 @@ pub enum LastActivePanel {
     Favorite,
 }
 
+/// Media id -> position in the sorted list (the cheap id hasher: ids are dense counters).
+pub type RowMap = HashMap<MediaId, usize, IdBuildHasher>;
+
 const LIST_BYTES_DIRTY: u64 = u64::MAX;
 
 pub struct UiState {
@@ -131,7 +135,7 @@ pub struct UiState {
     pub active_sidebar_panel_tab: String,
     pub active_sidebar_panel_tab_dnd_session: Option<SidebarPanelTabDndSession>,
     pub is_inspector_collapsed: bool,
-    pub media_row_map: HashMap<MediaId, usize>,
+    pub media_row_map: RowMap,
     pub filter: QueryFilter,
     pub last_executed_query: String,
     pub sort_column: SortColumn,
@@ -203,7 +207,7 @@ impl Default for UiState {
             active_sidebar_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
             active_sidebar_panel_tab_dnd_session: None,
             is_inspector_collapsed: DEFAULT_IS_INSPECTOR_COLLAPSED,
-            media_row_map: HashMap::new(),
+            media_row_map: RowMap::default(),
             filter: QueryFilter::default(),
             last_executed_query: String::new(),
             sort_column: SortColumn::from_name(DEFAULT_SORT_COLUMN),

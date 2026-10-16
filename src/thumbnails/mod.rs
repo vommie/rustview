@@ -8,6 +8,7 @@ pub mod image;
 pub mod loader;
 pub mod progress;
 pub mod ram_cache;
+pub mod ready_queue;
 pub mod regeneration;
 pub mod store;
 pub mod types;
@@ -20,7 +21,7 @@ pub use error::ThumbnailError;
 pub use gc::ThumbnailGarbageCollector;
 pub use generator::ThumbnailGenerator;
 pub use gif::{AnimatedFrame, AnimatedPreview, GifThumbnailer};
-pub use loader::{PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
+pub use loader::{PipelineItem, PreparedTarget, ReadyThumbnailItem, ThumbnailScheduler};
 pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 pub use ram_cache::{CachedThumbnail, RamCacheStats, ThumbnailRamCache};
 pub use store::PackStore;
@@ -84,11 +85,10 @@ impl ThumbnailManager {
     pub fn start_pipeline(
         &self,
         folder_id: u64,
-        all_targets: Vec<PreparedTarget>,
+        items: Vec<PipelineItem>,
         config: ThumbnailConfig,
     ) {
-        self.scheduler
-            .start_folder_pipeline(folder_id, all_targets, config);
+        self.scheduler.start_folder_pipeline(folder_id, items, config);
     }
 
     /// Blocking lookup in the RAM cache, then in the pack store. Never call this on the UI thread: use
@@ -159,6 +159,11 @@ impl ThumbnailManager {
 
     pub fn active_benchmark(&self) -> Option<Arc<ThumbnailPipelineBenchmark>> {
         self.scheduler.active_benchmark()
+    }
+
+    /// Registers the function that is called (on a worker thread) whenever thumbnails become ready for the UI.
+    pub fn set_ready_notifier(&self, notifier: Arc<dyn Fn() + Send + Sync>) {
+        self.scheduler.set_ready_notifier(notifier);
     }
 
     pub fn drain_ready_batch(&self, max_items: usize) -> Vec<ReadyThumbnailItem> {

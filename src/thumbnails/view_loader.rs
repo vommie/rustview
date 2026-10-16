@@ -8,6 +8,7 @@
 use super::generator::ThumbnailGenerator;
 use super::loader::{ReadyThumbnailItem, VIEW_LOAD_PIPELINE_ID};
 use super::ram_cache::ThumbnailRamCache;
+use super::ready_queue::ReadyQueue;
 use super::store::PackStore;
 use crate::library::Library;
 use crate::library::models::MediaId;
@@ -91,7 +92,7 @@ pub struct ViewLoaderDeps {
     pub cache: Arc<ThumbnailRamCache>,
     pub store: Arc<PackStore>,
     pub generator: Arc<ThumbnailGenerator>,
-    pub ready: Arc<Mutex<Vec<ReadyThumbnailItem>>>,
+    pub ready: Arc<ReadyQueue>,
 }
 
 pub struct ViewLoader {
@@ -153,7 +154,7 @@ fn load_one(deps: &ViewLoaderDeps, id: MediaId) {
         },
     };
     let (width, height) = (pixels.width(), pixels.height());
-    deps.ready.lock().push(ReadyThumbnailItem {
+    deps.ready.push(ReadyThumbnailItem {
         pipeline_id: VIEW_LOAD_PIPELINE_ID,
         folder_id: 0,
         media_id: id,

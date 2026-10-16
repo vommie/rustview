@@ -119,6 +119,8 @@ struct JumpRun {
     remaining: u32,
     seed: u64,
     jumped_at: Option<Instant>,
+    /// List position of the current jump; the jump is complete when the tile pool holds it and every tile has its picture.
+    target: usize,
     first_id_before: i32,
     rested_until: Option<Instant>,
     latencies: IntervalStats,
@@ -373,6 +375,7 @@ impl Driver {
             remaining: count,
             seed: 0x2545_F491_4F6C_DD1D,
             jumped_at: None,
+            target: 0,
             first_id_before: -1,
             rested_until: Some(Instant::now() + SETTLE_AFTER_SWITCH),
             latencies: IntervalStats::default(),
@@ -382,6 +385,7 @@ impl Driver {
     }
 
     fn jump_tick(&mut self, window: &MainWindow) {
+        let pool_range = self.state.read().ring.range();
         let Some(Run::Jump(run)) = self.run.as_mut() else { return };
         let Some(stats) = run.stats.as_mut() else { return };
         let now = Instant::now();
@@ -393,7 +397,8 @@ impl Driver {
             run.rested_until = None;
         }
         if let Some(at) = run.jumped_at {
-            let moved = first_item_id(window) != run.first_id_before || at.elapsed() > UNCHANGED_AFTER / 3;
+            let moved = pool_range.contains(&run.target)
+                && (first_item_id(window) != run.first_id_before || at.elapsed() > UNCHANGED_AFTER / 3);
             if moved && pool_complete(window) {
                 run.latencies.record(at.elapsed());
                 run.jumped_at = None;
@@ -413,6 +418,7 @@ impl Driver {
         let target = ((run.seed >> 33) % total) as i32;
         run.remaining -= 1;
         run.first_id_before = first_item_id(window);
+        run.target = target as usize;
         run.jumped_at = Some(now);
         window.invoke_scroll_media_to_index(target, window.get_is_table_view());
     }
@@ -507,7 +513,8 @@ fn find_or_expand_folder(window: &MainWindow, name: &str) -> FolderLookup {
     let mut expandable = None;
     for i in 0..rows.row_count() {
         let Some(row) = rows.row_data(i) else { continue };
-        if row.name.as_str() == name {
+        // The row's name carries the folder metrics; the last component of its path is the folder's own name.
+        if std::path::Path::new(row.path.as_str()).file_name().is_some_and(|folder| folder == name) {
             return FolderLookup::Found(row.id, row.path.to_string());
         }
         if row.has_children && !row.is_expanded && expandable.is_none() {

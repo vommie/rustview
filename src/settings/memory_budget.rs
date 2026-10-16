@@ -115,11 +115,11 @@ impl MemoryPlan {
         let usable = system.usable_total_bytes();
         let automatic = setting_mb == 0;
         let budget_bytes = if automatic {
-            usable / 100 * AUTO_BUDGET_PERCENT
+            percent_of(usable, AUTO_BUDGET_PERCENT)
         } else {
             u64::from(setting_mb) * BYTES_PER_MB
         };
-        let mut thumbnail_cache_bytes = (budget_bytes / 100 * THUMBNAIL_CACHE_PERCENT).max(MIN_THUMBNAIL_CACHE_BYTES);
+        let mut thumbnail_cache_bytes = percent_of(budget_bytes, THUMBNAIL_CACHE_PERCENT).max(MIN_THUMBNAIL_CACHE_BYTES);
         if automatic {
             thumbnail_cache_bytes = thumbnail_cache_bytes.min(AUTO_THUMBNAIL_CACHE_CAP_BYTES);
         }
@@ -132,7 +132,7 @@ impl MemoryPlan {
             if system.available_bytes > 0 && budget_bytes > system.available_bytes {
                 warnings.push(MemoryWarning::AboveAvailable { budget_bytes, available_bytes: system.available_bytes });
             }
-            if usable > 0 && budget_bytes > usable / 100 * WARN_TOTAL_PERCENT {
+            if usable > 0 && budget_bytes > percent_of(usable, WARN_TOTAL_PERCENT) {
                 warnings.push(MemoryWarning::AboveTotalShare { budget_bytes, usable_bytes: usable });
             }
         }
@@ -175,6 +175,11 @@ impl MemoryPlan {
             .collect::<Vec<_>>()
             .join(" ")
     }
+}
+
+/// `value * percent / 100` without losing the remainder of an early division.
+fn percent_of(value: u64, percent: u64) -> u64 {
+    value.saturating_mul(percent) / 100
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -248,7 +253,7 @@ mod tests {
 
     #[test]
     fn a_manual_budget_above_the_free_ram_warns() {
-        let plan = MemoryPlan::resolve(20 * 1024, machine(32, 8));
+        let plan = MemoryPlan::resolve(28 * 1024, machine(32, 8));
         assert!(plan.warnings.iter().any(|w| matches!(w, MemoryWarning::AboveAvailable { .. })));
         assert!(plan.warnings.iter().any(|w| matches!(w, MemoryWarning::AboveTotalShare { .. })));
         assert!(!plan.warning_text().is_empty());

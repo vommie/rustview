@@ -4,6 +4,7 @@ use super::generator::ThumbnailGenerator;
 use super::gif::{AnimatedPreview, GifThumbnailer};
 use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 use super::ram_cache::{CachedThumbnail, ThumbnailRamCache};
+use super::ready_queue::ReadyQueue;
 use super::store::PackStore;
 use super::types::{
     ThumbnailConfig, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord,
@@ -16,7 +17,7 @@ use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
 use parking_lot::{Mutex, RwLock};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -43,6 +44,15 @@ struct BatchedDbWriteItem {
     preview_record: Option<VideoPreviewRecord>,
     probed_metadata: Option<ProbedMetadata>,
     is_corrupted: bool,
+}
+
+/// What the folder pipeline needs to know about one item. The file path is not part of it: the scan resolves it from the library
+/// for the few items that still need a thumbnail, so starting a pipeline for a folder of millions of items copies no paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PipelineItem {
+    pub media_id: MediaId,
+    pub folder_id: u64,
+    pub is_video: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -76,7 +86,7 @@ pub struct ThumbnailScheduler {
     pool: Arc<ThreadPool>,
     view_loader: Arc<ViewLoader>,
     tracker: Arc<ThumbnailProgressTracker>,
-    ready_drain_queue: Arc<Mutex<Vec<ReadyThumbnailItem>>>,
+    ready_drain_queue: Arc<ReadyQueue>,
     generation_queue: Arc<Mutex<VecDeque<PreparedTarget>>>,
     active_pipeline_id: Arc<AtomicUsize>,
     is_cancelled: Arc<AtomicBool>,
@@ -102,7 +112,7 @@ impl ThumbnailScheduler {
         );
 
         let generator = Arc::new(ThumbnailGenerator::new());
-        let ready_drain_queue = Arc::new(Mutex::new(Vec::with_capacity(2048)));
+        let ready_drain_queue = Arc::new(ReadyQueue::default());
         let active_pipeline_id = Arc::new(AtomicUsize::new(0));
         let view_loader = Arc::new(ViewLoader::new(
             ViewLoaderDeps {
@@ -151,20 +161,20 @@ impl ThumbnailScheduler {
     }
 
     pub fn is_drain_queue_empty(&self) -> bool {
-        self.ready_drain_queue.lock().is_empty()
+        self.ready_drain_queue.is_empty()
+    }
+
+    /// Registers the function that tells the UI that thumbnails are ready (called from the worker threads after every push).
+    pub fn set_ready_notifier(&self, notifier: Arc<dyn Fn() + Send + Sync>) {
+        self.ready_drain_queue.set_notifier(notifier);
     }
 
     pub fn drain_ready_batch(&self, max_items: usize) -> Vec<ReadyThumbnailItem> {
         let current_pipeline = self.active_pipeline_id.load(Ordering::Acquire);
-        let mut queue = self.ready_drain_queue.lock();
-        if queue.is_empty() {
-            return Vec::new();
+        let items = self.ready_drain_queue.drain_batch(current_pipeline, max_items);
+        if items.is_empty() {
+            return items;
         }
-
-        queue.retain(|item| item.pipeline_id == current_pipeline || item.pipeline_id == VIEW_LOAD_PIPELINE_ID);
-
-        let take_count = queue.len().min(max_items);
-        let items: Vec<ReadyThumbnailItem> = queue.drain(0..take_count).collect();
 
         let mut in_flight = self.active_in_flight.lock();
         for item in &items {
@@ -194,7 +204,7 @@ impl ThumbnailScheduler {
         self.is_cancelled.store(true, Ordering::Release);
         self.active_pipeline_id.fetch_add(1, Ordering::SeqCst);
         self.generation_queue.lock().clear();
-        self.ready_drain_queue.lock().retain(|item| item.pipeline_id == VIEW_LOAD_PIPELINE_ID);
+        self.ready_drain_queue.retain_view_items();
         self.active_in_flight.lock().clear();
         self.tracker.reset();
         *self.active_benchmark.write() = None;
@@ -301,12 +311,12 @@ impl ThumbnailScheduler {
     pub fn start_folder_pipeline(
         self: &Arc<Self>,
         folder_id: u64,
-        mut all_targets: Vec<PreparedTarget>,
+        items: Vec<PipelineItem>,
         config: ThumbnailConfig,
     ) {
         self.cancel_current_pipeline();
 
-        let total_items = all_targets.len();
+        let total_items = items.len();
         if total_items == 0 {
             return;
         }
@@ -326,11 +336,7 @@ impl ThumbnailScheduler {
 
         let bench = Arc::new(ThumbnailPipelineBenchmark::new(pipeline_id, folder_id, total_items));
         *self.active_benchmark.write() = Some(bench.clone());
-
-        for target in all_targets.iter_mut() {
-            target.pipeline_id = pipeline_id;
-            target.folder_id = folder_id;
-        }
+        self.ready_drain_queue.wake();
 
         let scheduler = self.clone();
         let bench_clone = bench;
@@ -338,18 +344,34 @@ impl ThumbnailScheduler {
             scheduler.execute_orchestration(
                 pipeline_id,
                 folder_id,
-                all_targets,
+                items,
                 config,
                 bench_clone,
             );
         });
     }
 
+    /// The file path of a media item from the library (folder path + file name), with the folder paths cached per scan.
+    fn item_path(
+        &self,
+        rtxn: &heed::RoTxn,
+        folder_paths: &mut HashMap<u64, PathBuf>,
+        media_id: MediaId,
+    ) -> Option<PathBuf> {
+        let db = self.library.raw_db();
+        let record = db.media.get(rtxn, &media_id).ok().flatten()?;
+        if !folder_paths.contains_key(&record.folder_id) {
+            let folder = db.folders.get(rtxn, &record.folder_id).ok().flatten()?;
+            folder_paths.insert(record.folder_id, PathBuf::from(folder.path));
+        }
+        Some(folder_paths.get(&record.folder_id)?.join(&record.filename))
+    }
+
     fn execute_orchestration(
         &self,
         pipeline_id: usize,
         folder_id: u64,
-        all_targets: Vec<PreparedTarget>,
+        items: Vec<PipelineItem>,
         config: ThumbnailConfig,
         benchmark: Arc<ThumbnailPipelineBenchmark>,
     ) {
@@ -372,16 +394,16 @@ impl ThumbnailScheduler {
                 }
             };
 
-            for target in all_targets {
+            let mut folder_paths: HashMap<u64, PathBuf> = HashMap::new();
+            for item in items {
                 if self.is_pipeline_stale(pipeline_id) {
                     return;
                 }
 
-                let is_video = MediaFormat::from_path(&target.file_path).media_type() == Some(MediaType::Video);
-                let has_primary = self.library.raw_db().thumbnails.get(&rtxn, &target.media_id).ok().flatten().is_some();
+                let has_primary = self.library.raw_db().thumbnails.get(&rtxn, &item.media_id).ok().flatten().is_some();
 
-                let previews_ok = if is_video && config.generate_video_previews {
-                    if let Ok(Some(prev)) = self.library.raw_db().video_previews.get(&rtxn, &target.media_id) {
+                let previews_ok = if item.is_video && config.generate_video_previews {
+                    if let Ok(Some(prev)) = self.library.raw_db().video_previews.get(&rtxn, &item.media_id) {
                         prev.frame_count >= config.preview_frame_count && !prev.frame_locations.is_empty()
                     } else {
                         false
@@ -392,8 +414,8 @@ impl ThumbnailScheduler {
 
                 if has_primary && previews_ok {
                     existing_count += 1;
-                } else {
-                    missing_targets.push(target);
+                } else if let Some(file_path) = self.item_path(&rtxn, &mut folder_paths, item.media_id) {
+                    missing_targets.push(PreparedTarget { pipeline_id, folder_id, media_id: item.media_id, file_path });
                 }
             }
         }
@@ -577,8 +599,7 @@ impl ThumbnailScheduler {
                                     .insert_rgb(target.media_id, primary.width, primary.height, &primary.rgb_pixels)
                                     .pixels;
 
-                                    let mut q = self.ready_drain_queue.lock();
-                                    q.push(ReadyThumbnailItem {
+                                    let depth = self.ready_drain_queue.push(ReadyThumbnailItem {
                                         pipeline_id,
                                         folder_id,
                                         media_id: target.media_id,
@@ -590,7 +611,7 @@ impl ThumbnailScheduler {
                                         duration_ms: video_res.duration_ms,
                                         is_corrupted: false,
                                     });
-                                    benchmark.record_queue_depth(q.len());
+                                    benchmark.record_queue_depth(depth);
                                 }
                             }
                         }
@@ -654,8 +675,7 @@ impl ThumbnailScheduler {
                                     .insert_rgb(target.media_id, frame.width, frame.height, &frame.rgb_pixels)
                                     .pixels;
 
-                                    let mut q = self.ready_drain_queue.lock();
-                                    q.push(ReadyThumbnailItem {
+                                    let depth = self.ready_drain_queue.push(ReadyThumbnailItem {
                                         pipeline_id,
                                         folder_id,
                                         media_id: target.media_id,
@@ -667,7 +687,7 @@ impl ThumbnailScheduler {
                                         duration_ms: 0,
                                         is_corrupted: false,
                                     });
-                                    benchmark.record_queue_depth(q.len());
+                                    benchmark.record_queue_depth(depth);
                                 }
                             }
                         }
@@ -688,8 +708,7 @@ impl ThumbnailScheduler {
                     is_corrupted: true,
                 });
 
-                let mut q = self.ready_drain_queue.lock();
-                q.push(ReadyThumbnailItem {
+                let depth = self.ready_drain_queue.push(ReadyThumbnailItem {
                     pipeline_id,
                     folder_id,
                     media_id: target.media_id,
@@ -701,7 +720,7 @@ impl ThumbnailScheduler {
                     duration_ms: 0,
                     is_corrupted: true,
                 });
-                benchmark.record_queue_depth(q.len());
+                benchmark.record_queue_depth(depth);
             }
 
             if batched_db_writes.len() >= config.batch_commit_size {

@@ -1,6 +1,6 @@
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_inspector::BridgeInspector;
-use super::bridge_state::{LastActivePanel, UiState};
+use super::bridge_state::{LastActivePanel, RowMap, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::{BridgeTags, TagActionContext};
@@ -24,7 +24,7 @@ use crate::query::filters::IndexedMediaRecord;
 use crate::query::{MediaSorter, MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
-    PreparedTarget, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager, VideoPreviewRecord,
+    PipelineItem, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager, VideoPreviewRecord,
 };
 use crate::viewer::{HighResImageLoader, ViewerTabManager};
 use parking_lot::RwLock;
@@ -1880,6 +1880,19 @@ impl BridgeMedia {
         );
     }
 
+    /// The items of the folder that can have a thumbnail (not deleted, not a pending stub), without their paths.
+    pub fn pipeline_items(records: &[IndexedMediaRecord]) -> Vec<PipelineItem> {
+        records
+            .iter()
+            .filter(|item| !item.is_deleted && !item.is_pending)
+            .map(|item| PipelineItem {
+                media_id: item.record.id,
+                folder_id: item.record.folder_id,
+                is_video: matches!(item.record.media_type, MediaType::Video),
+            })
+            .collect()
+    }
+
     pub fn reload_with_options(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -1972,7 +1985,7 @@ impl BridgeMedia {
 
         let t_map_start = Instant::now();
         let matched_len = sorted_refs.len();
-        let mut row_map = HashMap::with_capacity(matched_len);
+        let mut row_map = RowMap::with_capacity_and_hasher(matched_len, Default::default());
         let is_table = window.get_is_table_view();
 
         let mut matched_indices = Vec::with_capacity(matched_len);
@@ -2062,21 +2075,10 @@ impl BridgeMedia {
         if options.start_pipeline {
             let st_read = state.read();
             if let Some(f_id) = st_read.current_folder_id {
-                let all_targets: Vec<PreparedTarget> = st_read
-                    .all_folder_media
-                    .iter()
-                    .filter(|item| !item.is_deleted && !item.is_pending)
-                    .map(|item| PreparedTarget {
-                        pipeline_id: 0,
-                        folder_id: item.record.folder_id,
-                        media_id: item.record.id,
-                        file_path: item.full_path.clone(),
-                    })
-                    .collect();
-
-                if !all_targets.is_empty() {
+                let items = Self::pipeline_items(&st_read.all_folder_media);
+                if !items.is_empty() {
                     let config = ThumbnailConfig::from_performance_settings(&settings.get().performance);
-                    thumbnails.start_pipeline(f_id, all_targets, config);
+                    thumbnails.start_pipeline(f_id, items, config);
                 }
             }
         }
