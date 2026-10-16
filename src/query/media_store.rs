@@ -3,17 +3,47 @@
 //! The view code looks records up by id on every drained thumbnail, selection change and context menu; a linear scan per lookup
 //! turns a folder of a million items into a trillion comparisons. The store reads like a slice (iterate, `len`, `get`), and every
 //! operation that changes which records exist keeps the index in step.
+//!
+//! The records live behind an `Arc`, so a background job can work on a `snapshot` while the UI keeps reading and editing the store:
+//! the first edit while a snapshot is alive copies the records (copy-on-write), later edits do not. `generation` identifies the
+//! set of records and their order; it changes with every structural change (replace, clear, retain, remove) and never repeats, so
+//! a result computed from a snapshot can tell whether it still fits.
 
 use super::filters::IndexedMediaRecord;
 use crate::library::models::MediaId;
 use crate::thumbnails::ram_cache::IdBuildHasher;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-#[derive(Debug, Default, Clone)]
+static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+fn next_generation() -> u64 {
+    NEXT_GENERATION.fetch_add(1, Ordering::Relaxed)
+}
+
+type IdIndex = HashMap<MediaId, u32, IdBuildHasher>;
+
+#[derive(Debug, Clone)]
 pub struct MediaStore {
-    records: Vec<IndexedMediaRecord>,
-    by_id: HashMap<MediaId, u32, IdBuildHasher>,
+    records: Arc<Vec<IndexedMediaRecord>>,
+    by_id: Arc<IdIndex>,
+    generation: u64,
+}
+
+impl Default for MediaStore {
+    fn default() -> Self {
+        Self { records: Arc::default(), by_id: Arc::default(), generation: next_generation() }
+    }
+}
+
+fn index_of(records: &[IndexedMediaRecord]) -> IdIndex {
+    let mut by_id = IdIndex::with_capacity_and_hasher(records.len(), IdBuildHasher::default());
+    for (position, record) in records.iter().enumerate() {
+        by_id.insert(record.record.id, position as u32);
+    }
+    by_id
 }
 
 impl MediaStore {
@@ -21,23 +51,35 @@ impl MediaStore {
         Self::default()
     }
 
+    /// Builds a store (and its index) without touching any shared state, so it can be done off the UI thread.
+    pub fn from_records(records: Vec<IndexedMediaRecord>) -> Self {
+        let by_id = Arc::new(index_of(&records));
+        Self { records: Arc::new(records), by_id, generation: next_generation() }
+    }
+
     /// Replaces all records and rebuilds the index.
     pub fn replace(&mut self, records: Vec<IndexedMediaRecord>) {
-        self.records = records;
-        self.reindex();
+        *self = Self::from_records(records);
     }
 
     fn reindex(&mut self) {
-        self.by_id.clear();
-        self.by_id.reserve(self.records.len());
-        for (position, record) in self.records.iter().enumerate() {
-            self.by_id.insert(record.record.id, position as u32);
-        }
+        self.by_id = Arc::new(index_of(&self.records));
+        self.generation = next_generation();
     }
 
     pub fn clear(&mut self) {
-        self.records.clear();
-        self.by_id.clear();
+        *self = Self::default();
+    }
+
+    /// Identifies the records and their order; changes with every structural change and never repeats.
+    #[inline]
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// A cheap, immutable view of the current records for a background job.
+    pub fn snapshot(&self) -> Arc<Vec<IndexedMediaRecord>> {
+        self.records.clone()
     }
 
     /// The record of the media `id`.
@@ -49,7 +91,7 @@ impl MediaStore {
     #[inline]
     pub fn find_mut(&mut self, id: MediaId) -> Option<&mut IndexedMediaRecord> {
         let position = *self.by_id.get(&id)?;
-        self.records.get_mut(position as usize)
+        Arc::make_mut(&mut self.records).get_mut(position as usize)
     }
 
     /// Position of the record in the store.
@@ -59,12 +101,12 @@ impl MediaStore {
     }
 
     pub fn retain(&mut self, keep: impl FnMut(&IndexedMediaRecord) -> bool) {
-        self.records.retain(keep);
+        Arc::make_mut(&mut self.records).retain(keep);
         self.reindex();
     }
 
     pub fn remove(&mut self, position: usize) -> IndexedMediaRecord {
-        let removed = self.records.remove(position);
+        let removed = Arc::make_mut(&mut self.records).remove(position);
         self.reindex();
         removed
     }
@@ -90,7 +132,7 @@ impl Deref for MediaStore {
 
 impl DerefMut for MediaStore {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.records
+        Arc::make_mut(&mut self.records).as_mut_slice()
     }
 }
 
@@ -176,5 +218,31 @@ mod tests {
         let store = store(&[5, 6, 7]);
         assert_eq!(store.iter().map(|r| r.record.id).collect::<Vec<_>>(), vec![5, 6, 7]);
         assert_eq!(store.get(1).map(|r| r.record.id), Some(6));
+    }
+
+    #[test]
+    fn a_snapshot_is_unaffected_by_later_edits_and_generations_never_repeat() {
+        let mut store = store(&[1, 2, 3]);
+        let before = store.generation();
+        let snapshot = store.snapshot();
+
+        store.find_mut(2).unwrap().record.rating = 4;
+        assert_eq!(snapshot[1].record.rating, 0);
+        assert_eq!(store.generation(), before, "an edit of a record is not a structural change");
+
+        store.remove(0);
+        assert_ne!(store.generation(), before);
+        assert_eq!(snapshot.len(), 3);
+
+        let after_remove = store.generation();
+        store.replace(vec![record(9, 0)]);
+        assert!(store.generation() != after_remove && store.generation() != before);
+    }
+
+    #[test]
+    fn a_store_built_from_records_is_indexed() {
+        let store = MediaStore::from_records(vec![record(4, 0), record(8, 1)]);
+        assert_eq!(store.position_of(8), Some(1));
+        assert!(store.find(4).is_some());
     }
 }

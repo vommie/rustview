@@ -191,14 +191,19 @@ impl FileSelectionModel {
 
     /// Prunes IDs that no longer exist in the active dataset.
     pub fn prune_missing(&mut self, valid_ids: &HashSet<MediaId>) {
-        self.selected_ids.retain(|id| valid_ids.contains(id));
+        self.prune_where(|id| valid_ids.contains(id));
+    }
+
+    /// Keeps only the selected IDs (and anchor / last clicked item) for which `is_valid` holds; costs O(selection).
+    pub fn prune_where(&mut self, is_valid: impl Fn(&MediaId) -> bool) {
+        self.selected_ids.retain(|id| is_valid(id));
         if let Some(anchor) = self.anchor_id
-            && !valid_ids.contains(&anchor)
+            && !is_valid(&anchor)
         {
             self.anchor_id = None;
         }
         if let Some(last) = self.last_clicked_id
-            && !valid_ids.contains(&last)
+            && !is_valid(&last)
         {
             self.last_clicked_id = None;
         }

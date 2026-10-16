@@ -94,6 +94,7 @@ pub fn run(targets: &ShutdownTargets<'_>) {
 /// so that no new batch starts while the windows and players go away.
 fn stop_background_work(t: &ShutdownTargets<'_>) {
     t.thumbnails.cancel_pipeline();
+    crate::ui::list_loader::shutdown();
     if let Some(flag) = t.state.read().active_folder_cancel_flag.as_ref() {
         flag.store(true, Ordering::Release);
     }

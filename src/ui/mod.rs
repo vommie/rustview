@@ -48,6 +48,7 @@ pub mod fallback_view;
 pub mod favorites;
 pub mod file_selection;
 pub mod keyboard_navigation;
+pub mod list_loader;
 pub mod models;
 pub mod multiview;
 pub mod perf_probe;

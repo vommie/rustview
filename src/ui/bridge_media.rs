@@ -1,6 +1,6 @@
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_inspector::BridgeInspector;
-use super::bridge_state::{LastActivePanel, RowMap, UiState};
+use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::{BridgeTags, TagActionContext};
@@ -10,6 +10,7 @@ use super::browse_window::{
     sync_window, timed, update_tile,
 };
 use super::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
+use super::list_loader;
 use super::models::rgb8_to_shared_buffer;
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::video_preview_animator::VideoPreviewAnimator;
@@ -20,7 +21,7 @@ use crate::library::Library;
 use crate::media::metadata::MetadataExtractor;
 use crate::media::{MediaFormat, MediaHasher, MediaType};
 use crate::query::filters::IndexedMediaRecord;
-use crate::query::{FolderDir, MediaSorter, MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
+use crate::query::{FolderDir, ListLayout, ListRequest, MediaStore, MediaTypeFilter, ScopeMode, SortColumn, SortOrder, lay_out};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
     PipelineItem, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager, VideoPreviewRecord,
@@ -108,7 +109,7 @@ impl BridgeMedia {
             );
             st.write().last_active_panel = LastActivePanel::Media;
             st.write().filter.search_query = query.to_string();
-            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
+            Self::reload_deferred(&win, &lib, &thumb, &set, &st, MediaReloadOptions::new(false, false));
         });
 
         let win = window.clone_strong();
@@ -123,7 +124,7 @@ impl BridgeMedia {
             );
             st.write().last_active_panel = LastActivePanel::Media;
             st.write().filter.is_regex = enabled;
-            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
+            Self::reload_deferred(&win, &lib, &thumb, &set, &st, MediaReloadOptions::new(false, false));
         });
 
         ThumbnailRegeneration::register_callbacks(
@@ -179,7 +180,7 @@ impl BridgeMedia {
                     state: &st,
                 });
             } else {
-                Self::reload(&win, &lib, &thumb, &set, &st, false, false);
+                Self::reload_deferred(&win, &lib, &thumb, &set, &st, MediaReloadOptions::new(false, false));
             }
         });
 
@@ -212,7 +213,7 @@ impl BridgeMedia {
             win.set_sort_column_idx(new_col.to_index());
             win.set_sort_order_idx(new_ord.to_index());
 
-            Self::reload(&win, &lib, &thumb, &set, &st, false, false);
+            Self::reload_deferred(&win, &lib, &thumb, &set, &st, MediaReloadOptions::new(false, false));
         });
 
         let win = window.clone_strong();
@@ -355,7 +356,6 @@ impl BridgeMedia {
 
         let set_mode = settings;
         let win_mode = window.clone_strong();
-        let lib_mode = library;
         let thumb_mode = thumbnails;
         let st_mode = state;
 
@@ -365,7 +365,6 @@ impl BridgeMedia {
                 is_table,
                 top_item_idx as usize,
                 &win_mode,
-                &lib_mode,
                 &thumb_mode,
                 &set_mode,
                 &st_mode,
@@ -563,7 +562,6 @@ impl BridgeMedia {
         is_table: bool,
         anchor_item_idx: usize,
         window: &MainWindow,
-        library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
@@ -585,14 +583,7 @@ impl BridgeMedia {
         window.set_is_table_view(is_table);
         window.invoke_scroll_media_to_index(anchor_item_idx as i32, is_table);
 
-        Self::reload_with_options(
-            window,
-            library,
-            thumbnails,
-            settings,
-            state,
-            MediaReloadOptions::with_anchor(false, false, anchor_item_idx),
-        );
+        Self::refill_view(window, thumbnails, state, anchor_item_idx);
 
         let elapsed_us = t0.elapsed().as_micros();
         tracing::info!(
@@ -1612,6 +1603,83 @@ impl BridgeMedia {
             .collect()
     }
 
+    /// Refills the tile pool for the list that is already laid out (view mode switch); nothing is filtered or sorted again.
+    fn refill_view(window: &MainWindow, thumbnails: &ThumbnailManager, state: &RwLock<UiState>, anchor_index: usize) {
+        let is_table = window.get_is_table_view();
+        let total = usize::try_from(window.get_total_items_count()).unwrap_or(0);
+        let mut st = state.write();
+        st.invalidate_view_window();
+        let geometry = st
+            .view_geometry
+            .unwrap_or_else(|| ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table)));
+        let outcome = sync_window(window, &mut st, thumbnails, geometry, anchor_index / geometry.columns, total, true);
+        tracing::debug!(rows_written = outcome.rows_written, requested = outcome.requested, "[BrowseWindow: ViewMode] Tile pool refilled for the new view mode");
+    }
+
+    /// Shows an empty list at once (a large folder is loading): the tiles of the previous list must not stay on screen and clickable
+    /// while the records behind them are gone.
+    pub(super) fn show_empty_list(window: &MainWindow, thumbnails: &ThumbnailManager, state: &RwLock<UiState>) {
+        let is_table = window.get_is_table_view();
+        let mut st = state.write();
+        st.media_row_map.clear();
+        st.active_indices.clear();
+        st.invalidate_view_window();
+        let geometry = st
+            .view_geometry
+            .unwrap_or_else(|| ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table)));
+        window.set_total_items_count(0);
+        sync_window(window, &mut st, thumbnails, geometry, 0, 0, true);
+    }
+
+    /// The inputs of a layout (filter, sort, refinement) as the state holds them now.
+    pub(super) fn capture_request(state: &RwLock<UiState>) -> (ListRequest, String) {
+        let st = state.read();
+        let current_query = st.filter.search_query.trim().to_string();
+        let last_query = &st.last_executed_query;
+        let is_refinement = !current_query.is_empty() && !last_query.is_empty() && current_query.starts_with(last_query.as_str());
+        let request = ListRequest {
+            filter: st.filter.clone(),
+            sort_column: st.sort_column,
+            sort_order: st.sort_order,
+            refine_from: (is_refinement && !st.active_indices.is_empty()).then(|| st.active_indices.clone()),
+        };
+        (request, current_query)
+    }
+
+    /// Loads the records of the open folder from the library into the state (the sync path of a folder reload).
+    fn load_current_folder_records(library: &Library, state: &RwLock<UiState>) {
+        let (folder_id, path_opt, is_virtual_folder, is_query_active) = {
+            let s = state.read();
+            (s.current_folder_id, s.current_folder_path.clone(), s.is_virtual_folder_mode, s.is_query_active)
+        };
+        let (Some(f_id), Some(p)) = (folder_id, path_opt) else { return };
+        if is_query_active {
+            return;
+        }
+        let indexed = if is_virtual_folder {
+            let descendant_ids = library.folders().get_descendant_folder_ids(f_id).unwrap_or_else(|_| vec![f_id]);
+            let mut known = Vec::new();
+            let mut seen = HashSet::new();
+            if let Ok(rtxn) = library.raw_db().env.read_txn() {
+                for fid in descendant_ids {
+                    let Ok(Some(ids)) = library.raw_db().media_by_folder.get(&rtxn, &fid) else { continue };
+                    for mid in ids {
+                        if seen.insert(mid)
+                            && let Ok(Some(rec)) = library.raw_db().media.get(&rtxn, &mid)
+                        {
+                            known.push(rec);
+                        }
+                    }
+                }
+            }
+            Self::preindex_records(library, known)
+        } else {
+            let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
+            Self::preindex(library, raw_media, &p)
+        };
+        state.write().all_folder_media.replace(indexed);
+    }
+
     pub fn reload_with_options(
         window: &MainWindow,
         library: &Arc<Library>,
@@ -1620,126 +1688,113 @@ impl BridgeMedia {
         state: &Arc<RwLock<UiState>>,
         options: MediaReloadOptions,
     ) {
-        let (folder_id, filter, sort_col, sort_ord, last_query, is_query_active, bench_opt, is_virtual_folder) = {
-            let s = state.read();
-            (
-                s.current_folder_id,
-                s.filter.clone(),
-                s.sort_column,
-                s.sort_order,
-                s.last_executed_query.clone(),
-                s.is_query_active,
-                s.active_folder_bench.clone(),
-                s.is_virtual_folder_mode,
-            )
-        };
+        // A synchronous reload is the newest truth: a relayout that is still running must not overwrite it.
+        list_loader::supersede_relayouts();
 
-        let path_opt = state.read().current_folder_path.clone();
-        if options.reload_lmdb
-            && !is_query_active
-            && let Some(f_id) = folder_id
-            && let Some(ref p) = path_opt
-        {
-            if is_virtual_folder {
-                let descendant_ids = library.folders().get_descendant_folder_ids(f_id).unwrap_or_else(|_| vec![f_id]);
-                let mut media_ids = Vec::new();
-                if let Ok(rtxn) = library.raw_db().env.read_txn() {
-                    for fid in descendant_ids {
-                        if let Ok(Some(ids)) = library.raw_db().media_by_folder.get(&rtxn, &fid) {
-                            media_ids.extend(ids);
-                        }
-                    }
-                }
-                let mut known = Vec::new();
-                let mut seen = HashSet::new();
-                if let Ok(rtxn) = library.raw_db().env.read_txn() {
-                    for mid in media_ids {
-                        if seen.insert(mid)
-                            && let Ok(Some(rec)) = library.raw_db().media.get(&rtxn, &mid)
-                        {
-                            known.push(rec);
-                        }
-                    }
-                }
-                let indexed = Self::preindex_records(library, known);
-                state.write().all_folder_media.replace(indexed);
-            } else {
-                let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
-                let indexed = Self::preindex(library, raw_media, p);
-                state.write().all_folder_media.replace(indexed);
+        if options.reload_lmdb {
+            Self::load_current_folder_records(library, state);
+        }
+
+        let (request, current_query) = Self::capture_request(state);
+        let layout = {
+            let st = state.read();
+            lay_out(library, &st.all_folder_media, &request)
+        };
+        Self::commit_layout(window, library, thumbnails, settings, state, PendingList { store: None, layout, query: current_query }, options);
+    }
+
+    /// Like `reload_with_options` for a user action that changes only how the list is filtered or sorted: a large list is laid out on
+    /// the worker thread against a snapshot while the UI keeps responding, and the result is swapped in when it is ready.
+    pub fn reload_deferred(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        options: MediaReloadOptions,
+    ) {
+        let len = state.read().all_folder_media.len();
+        if options.reload_lmdb || len <= list_loader::ASYNC_ABOVE_RECORDS {
+            Self::reload_with_options(window, library, thumbnails, settings, state, options);
+            return;
+        }
+
+        let (request, current_query) = Self::capture_request(state);
+        let (snapshot, generation) = {
+            let st = state.read();
+            (st.all_folder_media.snapshot(), st.all_folder_media.generation())
+        };
+        let job = list_loader::begin_relayout();
+        tracing::debug!(job, records = len, "[ListLoader: Relayout] Large list; laying it out on the worker thread");
+
+        let weak = window.as_weak();
+        let (library, thumbnails, settings, state) = (library.clone(), thumbnails.clone(), settings.clone(), state.clone());
+        list_loader::worker().submit(move || {
+            if !list_loader::relayout_is_current(job) {
+                return;
             }
-        }
+            let layout = lay_out(&library, &snapshot, &request);
+            drop(snapshot);
+            let _ = weak.upgrade_in_event_loop(move |window| {
+                if !list_loader::relayout_is_current(job) {
+                    return;
+                }
+                if state.read().all_folder_media.generation() != generation {
+                    tracing::debug!(job, "[ListLoader: Relayout] The records changed while the list was laid out; laying out again");
+                    Self::reload_with_options(&window, &library, &thumbnails, &settings, &state, options);
+                    return;
+                }
+                let pending = PendingList { store: None, layout, query: current_query };
+                Self::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, options);
+            });
+        });
+    }
 
-        let current_query = filter.search_query.trim().to_string();
-        let is_refinement = !current_query.is_empty()
-            && !last_query.is_empty()
-            && current_query.starts_with(&last_query);
-
-        let st = state.read();
-        let total_active_dataset_count = st.all_folder_media.len();
-
-        let subset = if is_refinement && !st.active_indices.is_empty() {
-            Some(st.active_indices.as_slice())
-        } else {
-            None
+    /// Swaps a finished layout into the state and refills the tile pool; O(tile pool + selection), whatever the list size.
+    pub(super) fn commit_layout(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        pending: PendingList,
+        options: MediaReloadOptions,
+    ) {
+        let PendingList { store, layout, query } = pending;
+        let (filter, is_query_active, bench_opt, path_opt) = {
+            let s = state.read();
+            (s.filter.clone(), s.is_query_active, s.active_folder_bench.clone(), s.current_folder_path.clone())
         };
-
-        let t_filter_start = Instant::now();
-        let filtered_refs = filter.execute_indexed_refs(library, &st.all_folder_media, subset);
-        let filter_us = t_filter_start.elapsed().as_micros() as u64;
+        let matched_len = layout.indices.len();
 
         if let Some(ref bench) = bench_opt {
-            bench.filter_time_us.store(filter_us, Ordering::Relaxed);
-            bench.items_matched.store(filtered_refs.len(), Ordering::Relaxed);
+            bench.filter_time_us.store(layout.filter_us, Ordering::Relaxed);
+            bench.items_matched.store(matched_len, Ordering::Relaxed);
+            bench.sort_time_us.store(layout.sort_us, Ordering::Relaxed);
+            bench.view_model_map_time_us.store(layout.map_us, Ordering::Relaxed);
         }
 
-        let t_sort_start = Instant::now();
-        let mut sorted_refs = filtered_refs;
-        MediaSorter::sort_indexed_refs(&mut sorted_refs, sort_col, sort_ord);
-        let sort_us = t_sort_start.elapsed().as_micros() as u64;
-
-        if let Some(ref bench) = bench_opt {
-            bench.sort_time_us.store(sort_us, Ordering::Relaxed);
-        }
-
-        let t_map_start = Instant::now();
-        let matched_len = sorted_refs.len();
-        let mut row_map = RowMap::with_capacity_and_hasher(matched_len, Default::default());
         let is_table = window.get_is_table_view();
-
-        let mut matched_indices = Vec::with_capacity(matched_len);
-
-        for (row_idx, &item) in sorted_refs.iter().enumerate() {
-            matched_indices.push(item.index);
-            row_map.insert(item.record.id, row_idx);
-        }
-
-        drop(st);
-
-        let map_us = t_map_start.elapsed().as_micros() as u64;
-        if let Some(ref bench) = bench_opt {
-            bench.view_model_map_time_us.store(map_us, Ordering::Relaxed);
-        }
-
         let t_slint_start = Instant::now();
         let mut selection_pruned = false;
+        let total_active_dataset_count;
         {
             let mut st_write = state.write();
+            if let Some(store) = store {
+                st_write.all_folder_media = store;
+            }
+            total_active_dataset_count = st_write.all_folder_media.len();
 
             let prev_sel_count = st_write.file_selection.count();
             if prev_sel_count > 0 {
-                let valid_ids: HashSet<MediaId> = row_map.keys().copied().collect();
-                st_write.file_selection.prune_missing(&valid_ids);
-                let new_sel_count = st_write.file_selection.count();
-                if new_sel_count != prev_sel_count {
-                    selection_pruned = true;
-                }
+                st_write.file_selection.prune_where(|id| layout.row_map.contains_key(id));
+                selection_pruned = st_write.file_selection.count() != prev_sel_count;
             }
 
-            st_write.media_row_map = row_map;
-            st_write.active_indices = matched_indices;
-            st_write.last_executed_query = current_query.clone();
-            st_write.mark_list_bytes_dirty();
+            st_write.media_row_map = layout.row_map;
+            st_write.active_indices = layout.indices;
+            st_write.last_executed_query = query;
+            st_write.set_visible_total_bytes(layout.total_bytes);
             st_write.invalidate_view_window();
 
             let geometry = st_write
@@ -1778,9 +1833,8 @@ impl BridgeMedia {
         window.set_empty_state_description(fallback_state.description.into());
         window.set_empty_state_icon(crate::icons::to_slint(fallback_state.icon));
 
-        let commit_us = t_slint_start.elapsed().as_micros() as u64;
         if let Some(ref bench) = bench_opt {
-            bench.slint_commit_time_us.store(commit_us, Ordering::Relaxed);
+            bench.slint_commit_time_us.store(t_slint_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         }
 
         if selection_pruned {
@@ -1802,4 +1856,11 @@ impl BridgeMedia {
             }
         }
     }
+}
+
+/// A finished layout waiting to be committed; `store` carries freshly loaded records (folder switch) built off the UI thread.
+pub struct PendingList {
+    pub store: Option<MediaStore>,
+    pub layout: ListLayout,
+    pub query: String,
 }

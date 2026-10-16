@@ -17,10 +17,9 @@ use crate::ui::sidebar_panel_tab_dnd::SidebarPanelTabDndSession;
 use crate::ui::tab_dnd::TabDndSession;
 use crate::ui::tab_grid::MasonryRect;
 use crate::viewer::TabId;
-use crate::thumbnails::ram_cache::IdBuildHasher;
 use crate::thumbnails::ThumbnailRamCache;
 use crate::ui::browse_window::{RingWindow, ViewGeometry};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -106,8 +105,7 @@ pub enum LastActivePanel {
     Favorite,
 }
 
-/// Media id -> position in the sorted list (the cheap id hasher: ids are dense counters).
-pub type RowMap = HashMap<MediaId, usize, IdBuildHasher>;
+pub use crate::query::RowMap;
 
 const LIST_BYTES_DIRTY: u64 = u64::MAX;
 
@@ -253,6 +251,11 @@ impl UiState {
     #[inline]
     pub fn mark_list_bytes_dirty(&self) {
         self.list_total_bytes.store(LIST_BYTES_DIRTY, Ordering::Relaxed);
+    }
+
+    /// Stores the total size of the listed items when the code that built the list already summed it.
+    pub fn set_visible_total_bytes(&self, total: u64) {
+        self.list_total_bytes.store(total.min(LIST_BYTES_DIRTY - 1), Ordering::Relaxed);
     }
 
     /// Total size of the listed items; summed once after every change of the list, not on every selection click.
