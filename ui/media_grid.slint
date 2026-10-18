@@ -193,8 +193,8 @@ export component MediaTile inherits Rectangle {
                 }
             }
 
-            // Thumbnail badges (rating, tags, media type, duration): layout is computed by the Rust badge engine
-            if !item.is-folder : ThumbnailBadgeLayer {
+            // Thumbnail badges (rating, tags, media type, duration; folder states): layout is computed by the Rust badge engine
+            if !item.is-folder-up : ThumbnailBadgeLayer {
                 width: 100%;
                 height: 100%;
                 item: root.item;

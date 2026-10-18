@@ -12,7 +12,8 @@ use crate::ui::{MediaItemView, ThumbnailBadgeConfig, ThumbnailBadgeOrientation, 
 type BadgeProvider = fn(&MediaItemView, &ThumbnailBadgeConfig) -> Option<ThumbnailBadge>;
 
 /// All badge providers in automatic (registration) order.
-const PROVIDERS: [BadgeProvider; 4] = [tag_badge, rating_badge, media_type_badge, duration_badge];
+const PROVIDERS: [BadgeProvider; 6] =
+    [tag_badge, rating_badge, media_type_badge, duration_badge, folder_status_badge, folder_missing_badge];
 
 /// Collects the badges of one media item from all providers.
 pub fn collect_badges(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Vec<ThumbnailBadge> {
@@ -24,7 +25,7 @@ const TAG_BADGE_COLOR: BadgeColor = BadgeColor::rgba(0xe8, 0x95, 0x00, 0xff);
 
 /// Tag indicator icon (top-left) for items with assigned tags.
 fn tag_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
-    (config.show_tag && item.has_tags).then(|| {
+    (config.show_tag && !item.is_folder && item.has_tags).then(|| {
         ThumbnailBadge::icon("tag", Icon::TagFilled)
             .at(ThumbnailBadgeOrientation::TopLeft)
             .color(TAG_BADGE_COLOR)
@@ -33,7 +34,7 @@ fn tag_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<Thum
 
 /// Colored rating circle (top-right) for rated items.
 fn rating_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
-    (config.show_rating && item.rating > 0).then(|| {
+    (config.show_rating && !item.is_folder && item.rating > 0).then(|| {
         ThumbnailBadge::round("rating", item.rating.to_string())
             .at(ThumbnailBadgeOrientation::TopRight)
             .tone(rating_tone(item.rating))
@@ -54,7 +55,7 @@ fn rating_tone(rating: i32) -> ThumbnailBadgeTone {
 /// Media type / status label (bottom-left).
 /// Priority: Pending stub > Deleted > Corrupted > Video > GIF > Image.
 fn media_type_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
-    if !config.show_media_type {
+    if !config.show_media_type || item.is_folder {
         return None;
     }
     let (label, tone) = if item.is_pending {
@@ -75,8 +76,35 @@ fn media_type_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Opti
 
 /// Compact video duration (bottom-right). Only shown for videos with a known duration.
 fn duration_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
-    (config.show_duration && item.is_video && !item.duration_badge_str.is_empty()).then(|| {
+    (config.show_duration && !item.is_folder && item.is_video && !item.duration_badge_str.is_empty()).then(|| {
         ThumbnailBadge::text("duration", item.duration_badge_str.as_str()).at(ThumbnailBadgeOrientation::BottomRight)
+    })
+}
+
+/// Type / status label of a folder row (bottom-left), the folder counterpart of `media_type_badge` and governed by the same option.
+/// Priority: Missing > Hidden > Empty > Folder. The navigation entry "..." has none.
+fn folder_status_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
+    if !config.show_media_type || !item.is_folder || item.is_folder_up {
+        return None;
+    }
+    let (label, tone) = if item.is_deleted {
+        ("MISSING", ThumbnailBadgeTone::Muted)
+    } else if item.folder_hidden {
+        ("HIDDEN", ThumbnailBadgeTone::Info)
+    } else if item.folder_empty {
+        ("EMPTY", ThumbnailBadgeTone::Muted)
+    } else {
+        ("FOLDER", ThumbnailBadgeTone::Standard)
+    };
+    Some(ThumbnailBadge::text("folder_status", label).at(ThumbnailBadgeOrientation::BottomLeft).tone(tone))
+}
+
+/// "N MISSING" (bottom-right) on a folder that is there but has subfolders that are gone from the drive.
+fn folder_missing_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
+    (config.show_media_type && item.is_folder && !item.is_folder_up && !item.is_deleted && item.folder_missing_children > 0).then(|| {
+        ThumbnailBadge::text("folder_missing", format!("{} MISSING", item.folder_missing_children))
+            .at(ThumbnailBadgeOrientation::BottomRight)
+            .tone(ThumbnailBadgeTone::Danger)
     })
 }
 
@@ -150,6 +178,72 @@ mod tests {
         assert_eq!(label(base), "VIDEO");
         assert_eq!(label(MediaItemView { format_str: "gif".into(), ..Default::default() }), "GIF");
         assert_eq!(label(MediaItemView::default()), "IMAGE");
+    }
+
+    fn folder() -> MediaItemView {
+        MediaItemView { is_folder: true, ..Default::default() }
+    }
+
+    fn label(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<String> {
+        collect_badges(item, config).into_iter().find(|b| b.id == "folder_status").map(|b| match b.content {
+            super::super::badge::BadgeContent::Text(t) => t,
+            other => panic!("unexpected content {other:?}"),
+        })
+    }
+
+    #[test]
+    fn folders_show_a_type_label_and_no_media_badges() {
+        assert_eq!(ids(&folder(), &all_enabled()), ["folder_status"]);
+        assert_eq!(label(&folder(), &all_enabled()).unwrap(), "FOLDER");
+        // Ratings, tags and durations do not exist for folders, whatever the item carries.
+        let odd = MediaItemView { rating: 5, has_tags: true, is_video: true, duration_badge_str: "1s".into(), ..folder() };
+        assert_eq!(ids(&odd, &all_enabled()), ["folder_status"]);
+    }
+
+    #[test]
+    fn folder_status_priority_is_missing_hidden_empty_folder() {
+        let all = MediaItemView { is_deleted: true, folder_hidden: true, folder_empty: true, ..folder() };
+        assert_eq!(label(&all, &all_enabled()).unwrap(), "MISSING");
+        let hidden = MediaItemView { folder_hidden: true, folder_empty: true, ..folder() };
+        assert_eq!(label(&hidden, &all_enabled()).unwrap(), "HIDDEN");
+        let empty = MediaItemView { folder_empty: true, ..folder() };
+        assert_eq!(label(&empty, &all_enabled()).unwrap(), "EMPTY");
+    }
+
+    #[test]
+    fn folder_tones_match_the_state() {
+        let tone = |item: MediaItemView| collect_badges(&item, &all_enabled()).remove(0).tone;
+        assert_eq!(tone(MediaItemView { is_deleted: true, ..folder() }), ThumbnailBadgeTone::Muted);
+        assert_eq!(tone(MediaItemView { folder_hidden: true, ..folder() }), ThumbnailBadgeTone::Info);
+        assert_eq!(tone(folder()), ThumbnailBadgeTone::Standard);
+    }
+
+    #[test]
+    fn missing_subfolders_get_a_counter_in_the_other_corner() {
+        let item = MediaItemView { folder_missing_children: 3, ..folder() };
+        let badges = collect_badges(&item, &all_enabled());
+        assert_eq!(badges.iter().map(|b| b.id).collect::<Vec<_>>(), ["folder_status", "folder_missing"]);
+        assert_eq!(badges[1].content, super::super::badge::BadgeContent::Text("3 MISSING".into()));
+        assert_eq!(badges[1].orientation, ThumbnailBadgeOrientation::BottomRight);
+        // A missing folder is missing as a whole; no counter.
+        let missing = MediaItemView { is_deleted: true, folder_missing_children: 3, ..folder() };
+        assert_eq!(ids(&missing, &all_enabled()), ["folder_status"]);
+    }
+
+    #[test]
+    fn the_status_option_switches_every_folder_badge_off() {
+        let item = MediaItemView { folder_missing_children: 2, folder_hidden: true, ..folder() };
+        let off = ThumbnailBadgeConfig { show_media_type: false, ..all_enabled() };
+        assert!(ids(&item, &off).is_empty());
+        // The other options do not touch folders.
+        let only_media_type = ThumbnailBadgeConfig { show_rating: false, show_tag: false, show_duration: false, ..all_enabled() };
+        assert_eq!(ids(&item, &only_media_type), ["folder_status", "folder_missing"]);
+    }
+
+    #[test]
+    fn the_up_entry_has_no_badges() {
+        let up = MediaItemView { is_folder_up: true, ..folder() };
+        assert!(ids(&up, &all_enabled()).is_empty());
     }
 
     #[test]
