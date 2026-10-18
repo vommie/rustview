@@ -11,6 +11,8 @@ export component MediaTile inherits Rectangle {
     in property <MediaItemView> item;
     in property <int> thumb-width: 190;
     in property <int> thumb-aspect-idx: 1;
+    /// A dragged medium would be dropped into this folder row.
+    in property <bool> is-drop-target: false;
     in property <ThumbnailBadgeConfig> badge-config;
     in property <length> padding-h: 8px;
     in property <length> padding-v: 6px;
@@ -26,8 +28,8 @@ export component MediaTile inherits Rectangle {
     width: root.tile-width;
     height: root.tile-height;
 
-    // Strict State Priority: Selected > Pending External Stub > Deleted > Corrupted > Normal
-    background: item.is-selected ? Theme.surface-selected : (
+    // Strict State Priority: Drop target > Selected > Pending External Stub > Deleted > Corrupted > Normal
+    background: root.is-drop-target ? #89b4fa44 : item.is-selected ? Theme.surface-selected : (
         tile-touch.has-hover ? Theme.surface-hover : (
             item.is-pending ? #89dceb15 : (
                 item.is-deleted ? #31324440 : (
@@ -37,11 +39,11 @@ export component MediaTile inherits Rectangle {
         )
     );
 
-    border-width: item.is-selected ? Math.max(2px, root.border-width-val + 1px) : (
+    border-width: root.is-drop-target ? Math.max(2px, root.border-width-val + 1px) : item.is-selected ? Math.max(2px, root.border-width-val + 1px) : (
         (item.is-pending || item.is-deleted || item.is-corrupted) ? Math.max(1.5px, root.border-width-val) : root.border-width-val
     );
 
-    border-color: item.is-selected ? Theme.primary : (
+    border-color: root.is-drop-target ? Theme.accent : item.is-selected ? Theme.primary : (
         item.is-pending ? #89dceb : (
             item.is-deleted ? #6c7086 : (
                 item.is-corrupted ? #f38ba8 : (root.border-width-val > 0px ? Theme.border : transparent)
@@ -138,7 +140,7 @@ export component MediaTile inherits Rectangle {
             // A folder (or the "Up" entry) shows a large folder icon instead of a thumbnail.
             if item.is-folder : AppIcon {
                 icon: item.is-folder-up ? IconId.folder-up : IconId.folder;
-                color: item.is-deleted ? #6c7086 : (item.is-folder-up ? Theme.text-muted : Theme.primary);
+                color: root.is-drop-target ? Theme.accent : (item.is-deleted ? #6c7086 : (item.is-folder-up ? Theme.text-muted : Theme.primary));
                 size: Math.max(IconSize.xxl, Math.round(Math.min(root.item-thumb-w, root.item-thumb-h) * 0.55 / 8px) * 8px);
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
@@ -202,7 +204,7 @@ export component MediaTile inherits Rectangle {
 
         Text {
             text: item.filename;
-            color: item.is-selected ? Theme.primary : (
+            color: root.is-drop-target ? Theme.accent : item.is-selected ? Theme.primary : (
                 item.is-pending ? #89dceb : (
                     item.is-deleted ? #6c7086 : (
                         item.is-corrupted ? #f38ba8 : Theme.text
@@ -210,7 +212,7 @@ export component MediaTile inherits Rectangle {
                 )
             );
             font-size: 11px;
-            font-weight: item.is-selected ? 700 : 400;
+            font-weight: (item.is-selected || root.is-drop-target) ? 700 : 400;
             font-italic: item.is-pending || item.is-deleted;
             horizontal-alignment: center;
             overflow: elide;
@@ -225,6 +227,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
     in property <[MediaItemView]> media-items: [];
     in property <int> total-items-count: 0;
+    /// The folder row (negative id) that a dragged medium hovers, 0 = none.
+    in property <int> drop-target-row-id: 0;
     /// The view that is shown; the hidden one neither reports its viewport nor builds tiles.
     in property <bool> active: true;
 
@@ -288,6 +292,8 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-drag-started(int /* id */, length /* x */, length /* y */);
     callback item-drag-moved(length /* x */, length /* y */);
     callback item-drag-ended();
+    /// The id of the folder row under the pointer while a drag is going on, 0 = none (a medium is never a drop target).
+    callback item-drag-over-row(int /* id */);
     callback ensure-focus();
 
     // Rubberband selection callbacks
@@ -333,6 +339,28 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
     pure public function get-top-visible-index() -> int {
         return root.first-visible-row * root.columns;
+    }
+
+    /// The folder row that lies under the content point (cx, cy), 0 when there is none: Slint knows where its tiles are,
+    /// the ring pool keeps the item of list position g in slot g % pool.
+    pure function row-id-at(cx: length, cy: length) -> int {
+        let view-y = cy + scroll-area.clamped-y;
+        if cx < root.grid-padding || view-y < 0px || view-y > scroll-area.height || cx > scroll-area.width {
+            return 0;
+        }
+        let gx = cx - root.grid-padding;
+        let gy = cy - root.grid-padding;
+        if gy < 0px || root.media-items.length == 0 {
+            return 0;
+        }
+        let col = Math.floor(gx / root.column-stride);
+        let row = Math.floor(gy / root.row-stride);
+        if col >= root.columns || Math.mod(gx, root.column-stride) > root.item-tile-width || Math.mod(gy, root.row-stride) > root.item-tile-height {
+            return 0;
+        }
+        let position = row * root.columns + col;
+        let candidate = root.media-items[Math.mod(position, root.media-items.length)];
+        return (candidate.index == position && candidate.is-folder) ? candidate.id : 0;
     }
 
     function emit-viewport() {
@@ -453,6 +481,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                     visible: item.index >= 0;
                     thumb-width: root.thumb-size;
                     thumb-aspect-idx: root.thumb-aspect-idx;
+                    is-drop-target: item.is-folder && item.id == root.drop-target-row-id;
                     badge-config: root.badge-config;
                     padding-h: root.item-padding-h;
                     padding-v: root.item-padding-v;
@@ -482,6 +511,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
                             self.x + mx,
                             28px + self.y + my + scroll-area.clamped-y
                         );
+                        root.item-drag-over-row(root.row-id-at(self.x + mx, self.y + my));
                     }
                     drag-ended => {
                         root.item-drag-ended();

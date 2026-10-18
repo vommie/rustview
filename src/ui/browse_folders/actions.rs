@@ -52,6 +52,9 @@ impl BrowseFolders {
             }
         });
 
+        let (win, st) = (window.clone_strong(), state.clone());
+        window.on_media_drag_over_row(move |id| Self::handle_drag_over_row(id, &win, &st));
+
         let (win, lib, thumb, set, st) = (window.clone_strong(), library, thumbnails, settings, state);
         window.on_show_folders_toggled(move |on| Self::set_show_folders(on, &win, &lib, &thumb, &set, &st));
     }
@@ -81,6 +84,11 @@ impl BrowseFolders {
             return;
         }
 
+        Self::select_row(row, window, library, state);
+    }
+
+    /// Highlights a folder row and deselects the media (a click, or the right click that opens the folder menu).
+    pub fn select_row(row: FolderRowRef, window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
         let cleared_media = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;

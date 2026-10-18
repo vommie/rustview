@@ -5,6 +5,8 @@
 //! The media keep their own positions (`media_row_map`, `active_indices`); only the folder rows in front shift them by `front_len()`.
 
 use crate::library::models::{FolderHierarchySnapshot, FolderId};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 /// `MediaItemView::id` of the "Up" entry; folders use the negated folder id, media ids are never negative.
 pub const UP_ROW_ID: i32 = i32::MIN;
@@ -64,6 +66,9 @@ pub struct BrowseFolderRows {
     /// A folder was appended and the list was not rebuilt since: the next `rebuild` reports a change although the rows may equal
     /// what was there (the appended folder is already part of `tail`), so the view is refilled.
     dirty: bool,
+    /// Fingerprint of what the folder rows show (path, missing flag): a rename or a deletion in place changes it, so the tiles are
+    /// refilled although the rows are the same folders.
+    look: u64,
 }
 
 impl BrowseFolderRows {
@@ -183,7 +188,11 @@ impl BrowseFolderRows {
             .filter(|id| listed(id) && !tail.contains(id))
             .collect();
 
-        let mut rows = Self { up, front, tail, selected: None, dirty: false };
+        let mut hasher = DefaultHasher::new();
+        for child in front.iter().chain(&tail).filter_map(|id| snapshot.get_node(*id)) {
+            (child.id, &child.path, child.is_deleted).hash(&mut hasher);
+        }
+        let mut rows = Self { up, front, tail, selected: None, dirty: false, look: hasher.finish() };
         rows.selected = self.selected.filter(|row| rows.position_of(*row, 0).is_some());
         rows
     }

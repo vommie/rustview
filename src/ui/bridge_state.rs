@@ -302,6 +302,18 @@ impl UiState {
         self.folder_rows.rebuild(snapshot, request)
     }
 
+    /// The folder of the highlighted folder row of the Browse view while that view has the focus (F2 and Del act on it, like on
+    /// the selected folder of the tree). The "..." entry is no folder.
+    pub fn focused_browse_folder(&self) -> Option<FolderId> {
+        if self.last_active_panel != LastActivePanel::Media {
+            return None;
+        }
+        match self.folder_rows.selected() {
+            Some(crate::ui::browse_folders::FolderRowRef::Folder(id)) => Some(id),
+            _ => None,
+        }
+    }
+
     /// Rows in front of the media (folders and "Up"): the media positions of the list start after them.
     #[inline]
     pub fn folder_front_len(&self) -> usize {

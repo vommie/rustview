@@ -168,6 +168,8 @@ export component MainWindow inherits Window {
     in-out property <length> drag-x: 0px;
     in-out property <length> drag-y: 0px;
     in-out property <int> drop-target-folder-id: -1;
+    /// The folder row (negative view id) of the Browse view that a dragged medium hovers, 0 = none.
+    in-out property <int> drop-target-row-id: 0;
     out property <length> folder-tree-scroll-y: sidebar_left.folder-tree-scroll-y;
     out property <length> folder-tree-container-height: sidebar_left.folder-tree-container-height;
 
@@ -367,6 +369,8 @@ export component MainWindow inherits Window {
     callback media-drag-started(int /* id */, length /* x */, length /* y */);
     callback media-drag-moved(length /* x */, length /* y */);
     callback media-drag-ended();
+    callback media-drag-over-row(int /* folder row id under the pointer, 0 = none */);
+    callback folder-row-context-menu(int /* folder row id */, length /* x */, length /* y */);
     callback folder-row-hovered(int /* folder_id */);
     callback folder-row-unhovered(int /* folder_id */);
     callback media-dropped-on-folder(int /* target_folder_id */);
@@ -804,6 +808,7 @@ export component MainWindow inherits Window {
                         visible: root.active-view-mode == 0 && !root.is-table-view;
                         media-items: root.media-items;
                         total-items-count: root.total-items-count;
+                        drop-target-row-id: root.drop-target-row-id;
                         active: root.active-view-mode == 0 && !root.is-table-view;
                         thumb-size: root.thumb-size;
                         thumb-aspect-idx: root.thumb-aspect-idx;
@@ -844,6 +849,8 @@ export component MainWindow inherits Window {
                         item-context-menu(id, x, y) => {
                             if id >= 0 {
                                 root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
+                            } else {
+                                root.folder-row-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
                             }
                         }
                         item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
@@ -856,6 +863,7 @@ export component MainWindow inherits Window {
                         }
                         item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-ended => { root.media-drag-ended(); }
+                        item-drag-over-row(id) => { root.media-drag-over-row(id); }
 
                         rubberband-started(cx, cy, vx, vy, ctrl, shift) => {
                             root.rubberband-started(cx, cy, vx, vy, ctrl, shift);
@@ -876,6 +884,7 @@ export component MainWindow inherits Window {
                         sort-column: root.sort-column-idx;
                         sort-order: root.sort-order-idx;
 
+                        drop-target-row-id: root.drop-target-row-id;
                         rubberband-active: root.rubberband-active && root.is-table-view && root.active-view-mode == 0;
                         rubberband-x: root.rubberband-x;
                         rubberband-y: root.rubberband-y;
@@ -917,6 +926,8 @@ export component MainWindow inherits Window {
                         item-context-menu(id, x, y) => {
                             if id >= 0 {
                                 root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
+                            } else {
+                                root.folder-row-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
                             }
                         }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
@@ -930,6 +941,7 @@ export component MainWindow inherits Window {
                         }
                         item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-ended => { root.media-drag-ended(); }
+                        item-drag-over-row(id) => { root.media-drag-over-row(id); }
 
                         rubberband-started(cx, cy, vx, vy, ctrl, shift) => {
                             root.rubberband-started(cx, cy, vx, vy, ctrl, shift);

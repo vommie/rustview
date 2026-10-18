@@ -16,6 +16,7 @@ use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::multiview::MultiviewHandle;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
+use super::browse_folders::{BrowseFolders, FolderRowRef};
 use super::bridge_tag_dialogs::TagDialogController;
 use super::favorites::FavoriteManager;
 use super::{FileRenameDialog, MainWindow};
@@ -123,6 +124,37 @@ impl BridgeContextMenu {
         tab_manager: &Arc<ViewerTabManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        let (win_row, lib_row, th_row, set_row, favs_row, tm_row, st_row) = (
+            window.clone_strong(),
+            library.clone(),
+            thumbnails.clone(),
+            settings.clone(),
+            favorites.clone(),
+            tab_manager.clone(),
+            state.clone(),
+        );
+        // A folder row of the Browse view opens exactly the menu of the same folder in the tree ("..." has none).
+        window.on_folder_row_context_menu(move |id, x, y| {
+            let Some(FolderRowRef::Folder(folder_id)) = FolderRowRef::from_view_id(id) else {
+                return;
+            };
+            BrowseFolders::select_row(FolderRowRef::Folder(folder_id), &win_row, &lib_row, &st_row);
+            Self::show_folder_menu(
+                FolderMenuContext {
+                    window: &win_row,
+                    library: &lib_row,
+                    thumbnails: &th_row,
+                    settings: &set_row,
+                    favorites: &favs_row,
+                    tab_manager: &tm_row,
+                    state: &st_row,
+                },
+                folder_id,
+                x,
+                y,
+            );
+        });
+
         let win = window.clone_strong();
         let lib = library.clone();
         let th = thumbnails.clone();

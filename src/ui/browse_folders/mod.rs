@@ -2,6 +2,7 @@
 //! the "Show Folders" toggle, and the "New Folder" button state. The row data is `rows` (pure), `view` builds the Slint rows.
 
 mod actions;
+mod dnd;
 pub mod rows;
 pub mod view;
 

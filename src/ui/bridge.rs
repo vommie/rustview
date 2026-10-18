@@ -941,7 +941,9 @@ impl UiBridge {
         let is_folders_tab = active_sidebar_tab.as_str() == "folders";
         let is_favorites_tab = active_sidebar_tab.as_str() == "favorites";
 
+        let browse_folder = params.state.read().focused_browse_folder();
         let effective_panel = match last_panel {
+            _ if browse_folder.is_some() => LastActivePanel::Folder,
             LastActivePanel::Media => LastActivePanel::Media,
             LastActivePanel::Folder => {
                 if is_favorites_tab {
@@ -982,7 +984,7 @@ impl UiBridge {
         }
 
         if effective_panel == LastActivePanel::Folder {
-            let current_folder_id = params.state.read().current_folder_id;
+            let current_folder_id = browse_folder.or(params.state.read().current_folder_id);
             let Some(folder_id) = current_folder_id else {
                 StatusBarBridge::info(window, "No folder selected to delete (Del).");
                 return;
@@ -1122,7 +1124,9 @@ impl UiBridge {
         let is_folders_tab = active_sidebar_tab.as_str() == "folders";
         let is_favorites_tab = active_sidebar_tab.as_str() == "favorites";
 
+        let browse_folder = params.state.read().focused_browse_folder();
         let effective_panel = match last_panel {
+            _ if browse_folder.is_some() => LastActivePanel::Folder,
             LastActivePanel::Media => LastActivePanel::Media,
             LastActivePanel::Folder => {
                 if is_favorites_tab {
@@ -1168,7 +1172,7 @@ impl UiBridge {
         }
 
         if effective_panel == LastActivePanel::Folder {
-            let current_folder_id = params.state.read().current_folder_id;
+            let current_folder_id = browse_folder.or(params.state.read().current_folder_id);
             let Some(folder_id) = current_folder_id else {
                 StatusBarBridge::info(window, "No folder selected to rename (F2).");
                 return;

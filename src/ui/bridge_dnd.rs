@@ -2,6 +2,7 @@ use super::bridge_file_dialog_conflict::{ConflictDialogParams, FileOpsConflictDi
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folders::BridgeFolders;
+use super::browse_folders::BrowseFolders;
 use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
@@ -148,6 +149,7 @@ impl BridgeDnd {
         params.window.set_drag_x(params.start_x);
         params.window.set_drag_y(params.start_y);
         params.window.set_drop_target_folder_id(-1);
+        params.window.set_drop_target_row_id(0);
 
         let thumb_opt = thumb_path_opt
             .as_deref()
@@ -248,19 +250,27 @@ impl BridgeDnd {
         autoscroller: &DndFolderTreeAutoScroller,
     ) {
         autoscroller.stop();
-        let target_folder_id = window.get_drop_target_folder_id();
+        let tree_target_id = window.get_drop_target_folder_id();
+        let browse_row = window.get_drop_target_row_id();
         let is_dragging = window.get_is_dragging_media();
         let release_x = window.get_drag_x();
         let release_y = window.get_drag_y();
 
         window.set_is_dragging_media(false);
         window.set_drop_target_folder_id(-1);
+        window.set_drop_target_row_id(0);
 
         SystemDndHandler::cancel_ghost_overlay();
 
         if !is_dragging {
             return;
         }
+
+        // A folder row of the Browse view under the pointer wins; the pointer cannot be over the folder tree then.
+        let browse_target = (browse_row != 0)
+            .then(|| BrowseFolders::drop_target(&state.read(), browse_row))
+            .flatten();
+        let target_folder_id = browse_target.map_or(tree_target_id, |id| id as i32);
 
         if target_folder_id > 0
             && let Ok(Some(target_folder_rec)) = library.folders().get_folder(target_folder_id as FolderId)
@@ -269,8 +279,11 @@ impl BridgeDnd {
             let selected_count = state.read().file_selection.count();
             let sidebar_w = window.get_sidebar_left_width();
 
-            let popup_x = (sidebar_w + 4.0).min(release_x.max(8.0));
-            let popup_y = release_y.max(48.0);
+            let (popup_x, popup_y) = if browse_target.is_some() {
+                (release_x, release_y)
+            } else {
+                ((sidebar_w + 4.0).min(release_x.max(8.0)), release_y.max(48.0))
+            };
 
             window.set_choice_target_folder_id(target_folder_id);
             window.set_choice_target_folder_name(target_name.into());
