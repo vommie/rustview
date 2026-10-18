@@ -128,12 +128,61 @@ impl FolderContextMenu {
         }
 
         // 2. Refresh submenu (with disabled reason tooltips when busy or missing)
-        let can_refresh = !target_node.is_deleted && !is_busy;
         builder = builder.separator();
-        builder = builder.submenu("Refresh...", Some(Icon::Refresh), can_refresh, |sub| {
-            // Every tooltip keeps the description of the function; a disabled entry appends the reason.
+        builder = Self::append_refresh_submenu(builder, target_node.is_deleted, is_busy);
+
+        // 3. Add to Favorites (with disabled reason tooltip)
+        builder = builder.separator();
+        let can_favorite = !is_favorite && !target_node.is_deleted;
+        let favorite_description = "Bookmark this folder in the Favorites sidebar";
+        let favorite_tip = if is_favorite {
+            format!("{}\nDisabled: Folder is already added to Favorites", favorite_description)
+        } else if target_node.is_deleted {
+            format!("{}\nDisabled: Cannot add a missing or deleted folder to Favorites", favorite_description)
+        } else {
+            favorite_description.to_string()
+        };
+
+        builder = builder.action_with_tooltip(
+            CTX_FOLDER_ADD_TO_FAVORITES,
+            "Add to Favorites",
+            None,
+            Some(Icon::FavoriteAdd),
+            can_favorite,
+            favorite_tip,
+        );
+        builder = builder.separator();
+
+        if !is_root {
+            if target_node.is_deleted {
+                builder = builder.action(
+                    CTX_FOLDER_PURGE_DB,
+                    "Remove from Database...",
+                    Some("Del"),
+                    Some(Icon::DatabaseClean),
+                    true,
+                );
+            } else {
+                builder = builder.action(
+                    CTX_FOLDER_DELETE,
+                    "Delete Folder...",
+                    Some("Del"),
+                    Some(Icon::Delete),
+                    true,
+                );
+            }
+        }
+
+        builder.build()
+    }
+
+    /// The "Refresh..." submenu of a folder; every tooltip keeps the description of the function, a disabled entry appends the reason.
+    /// Shared by the menu of a folder and the menu of the free space of the Browse view.
+    pub fn append_refresh_submenu(builder: CtxMenuBuilder, is_deleted: bool, is_busy: bool) -> CtxMenuBuilder {
+        let can_refresh = !is_deleted && !is_busy;
+        builder.submenu("Refresh...", Some(Icon::Refresh), can_refresh, |sub| {
             let reason_tip = |description: &str| {
-                if target_node.is_deleted {
+                if is_deleted {
                     format!("{}\nDisabled: Folder does not exist on physical disk", description)
                 } else if is_busy {
                     format!("{}\n{}", description, DISABLED_BUSY_REASON)
@@ -185,51 +234,7 @@ impl FolderContextMenu {
                 can_refresh,
                 refresh_relative_tip,
             )
-        });
-
-        // 3. Add to Favorites (with disabled reason tooltip)
-        builder = builder.separator();
-        let can_favorite = !is_favorite && !target_node.is_deleted;
-        let favorite_description = "Bookmark this folder in the Favorites sidebar";
-        let favorite_tip = if is_favorite {
-            format!("{}\nDisabled: Folder is already added to Favorites", favorite_description)
-        } else if target_node.is_deleted {
-            format!("{}\nDisabled: Cannot add a missing or deleted folder to Favorites", favorite_description)
-        } else {
-            favorite_description.to_string()
-        };
-
-        builder = builder.action_with_tooltip(
-            CTX_FOLDER_ADD_TO_FAVORITES,
-            "Add to Favorites",
-            None,
-            Some(Icon::FavoriteAdd),
-            can_favorite,
-            favorite_tip,
-        );
-        builder = builder.separator();
-
-        if !is_root {
-            if target_node.is_deleted {
-                builder = builder.action(
-                    CTX_FOLDER_PURGE_DB,
-                    "Remove from Database...",
-                    Some("Del"),
-                    Some(Icon::DatabaseClean),
-                    true,
-                );
-            } else {
-                builder = builder.action(
-                    CTX_FOLDER_DELETE,
-                    "Delete Folder...",
-                    Some("Del"),
-                    Some(Icon::Delete),
-                    true,
-                );
-            }
-        }
-
-        builder.build()
+        })
     }
 
     /// Recursively builds the "Move to..." reparenting submenu directly from the in-memory SPoT snapshot with zero disk I/O.

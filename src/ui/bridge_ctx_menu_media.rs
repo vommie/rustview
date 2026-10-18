@@ -9,6 +9,7 @@ use super::bridge_inspector::BridgeInspector;
 use super::media_open_with::{MediaOpenWith, OpenWithChoice};
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
+use super::browse_folders::BrowseFolders;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
@@ -75,20 +76,25 @@ impl MediaContextMenu {
         state: &Arc<RwLock<UiState>>,
         media_id: MediaId,
     ) -> MediaSelectionMeta {
-        let (selected_count, changed_ids) = {
+        let (selected_count, changed_ids, folders_cleared) = {
             let mut st = state.write();
             let mut changed = Vec::new();
+            let mut folders_cleared = false;
             if !st.file_selection.is_selected(media_id) {
                 let prev = st.file_selection.selected_ids().clone();
-                st.file_selection.select_single(media_id);
+                folders_cleared = st.folder_rows.has_selection();
+                st.select_single_media(media_id);
                 let newly = st.file_selection.selected_ids().clone();
                 changed = FileSelectionModel::compute_selection_diff(&prev, &newly);
             }
-            (st.file_selection.count(), changed)
+            (st.file_selection.count(), changed, folders_cleared)
         };
 
         if !changed_ids.is_empty() {
             BridgeFileSelection::sync_selection_diff(window, state, &changed_ids);
+        }
+        if folders_cleared {
+            BrowseFolders::refresh_folder_tiles(window, state);
         }
         BridgeInspector::update(window, state);
         StatusBarBridge::update_metrics(window, state);

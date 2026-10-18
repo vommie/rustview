@@ -70,6 +70,7 @@ impl StatusBarBridge {
 
         let selected_ids = st.file_selection.selected_ids();
         let sel_count = selected_ids.len();
+        let folder_sel_count = st.folder_rows.selection_count();
 
         let total_bytes = st.visible_total_bytes();
         let selected_bytes: u64 = selected_ids
@@ -115,6 +116,7 @@ impl StatusBarBridge {
         window.set_status_visible_items(visible_count as i32);
         window.set_status_total_size(total_size_str.into());
         window.set_status_selection_count(sel_count as i32);
+        window.set_status_selection_folders(folder_sel_count as i32);
         window.set_status_selection_size(sel_size_str.into());
         window.set_is_virtual_folder(is_virtual);
         window.set_virtual_folder_count(virtual_count as i32);

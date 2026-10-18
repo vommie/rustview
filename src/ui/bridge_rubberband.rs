@@ -1,4 +1,7 @@
 use super::bridge_file_selection::BridgeFileSelection;
+use super::browse_folders::{BrowseItem, FolderRowRef, SelectionDelta};
+use crate::library::models::{FolderId, MediaId};
+use std::collections::HashSet;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
@@ -54,6 +57,7 @@ impl BridgeRubberband {
             let mut st = params.state.write();
             st.last_active_panel = LastActivePanel::Media;
             let current_sel = st.file_selection.selected_ids().clone();
+            let baseline_folders = st.folder_rows.selection_snapshot().0;
             st.rubberband_session.start(RubberbandStartParams {
                 start_content_x: params.start_content_x,
                 start_content_y: params.start_content_y,
@@ -62,6 +66,7 @@ impl BridgeRubberband {
                 is_ctrl: params.is_ctrl,
                 is_shift: params.is_shift,
                 baseline: current_sel.clone(),
+                baseline_folders,
             });
             current_sel
         };
@@ -155,21 +160,21 @@ impl BridgeRubberband {
     ) {
         let is_table = window.get_is_table_view();
 
-        let (rect, is_ctrl, is_shift, baseline) = {
+        let (rect, is_ctrl, is_shift, baseline, baseline_folders) = {
             let st = state.read();
             (
                 st.rubberband_session.content_rect(),
                 st.rubberband_session.is_ctrl,
                 st.rubberband_session.is_shift,
                 st.rubberband_session.baseline_selection.clone(),
+                st.rubberband_session.baseline_folders.clone(),
             )
         };
 
         let st = state.read();
-        let dataset = &st.all_folder_media;
-        let active_indices = &st.active_indices;
+        let total_items = st.view_len();
 
-        let intersected = if is_table {
+        let hits = if is_table {
             let col_w_sum = window.get_col_filename_width()
                 + window.get_col_path_width()
                 + window.get_col_modified_date_width()
@@ -184,12 +189,8 @@ impl BridgeRubberband {
                 + window.get_col_format_width()
                 + window.get_col_flags_width();
 
-            let config = TableLayoutConfig {
-                row_height: 28.0,
-                content_width: col_w_sum,
-                leading_cells: st.folder_front_len(),
-            };
-            RubberbandGeometry::compute_table_intersections(rect, dataset, active_indices, config)
+            let config = TableLayoutConfig { row_height: 28.0, content_width: col_w_sum };
+            RubberbandGeometry::table_hit_positions(rect, total_items, config)
         } else {
             let thumb_size = window.get_thumb_size() as f32;
             let aspect_idx = window.get_thumb_aspect_idx();
@@ -220,34 +221,52 @@ impl BridgeRubberband {
                 item_tile_height: tile_h,
                 grid_spacing: spacing,
                 grid_padding: padding,
-                leading_cells: st.folder_front_len(),
             };
-            RubberbandGeometry::compute_grid_intersections(rect, dataset, active_indices, config)
+            RubberbandGeometry::grid_hit_positions(rect, total_items, config)
         };
+
+        // What lies under the rectangle: media and folder rows ("..." is never selected by a rubber band).
+        let mut intersected: HashSet<MediaId> = HashSet::new();
+        let mut intersected_folders: HashSet<FolderId> = HashSet::new();
+        for position in hits {
+            match st.browse_item_at(position) {
+                Some(BrowseItem::Media(id)) => {
+                    intersected.insert(id);
+                }
+                Some(BrowseItem::Folder(FolderRowRef::Folder(id))) => {
+                    intersected_folders.insert(id);
+                }
+                _ => {}
+            }
+        }
 
         drop(st);
 
-        let target_selection = RubberbandGeometry::evaluate_modifier_selection(
-            &baseline,
-            &intersected,
-            is_ctrl,
-            is_shift,
-        );
+        let target_selection = RubberbandGeometry::evaluate_modifier_selection(&baseline, &intersected, is_ctrl, is_shift);
+        let target_folders =
+            RubberbandGeometry::evaluate_modifier_selection(&baseline_folders, &intersected_folders, is_ctrl, is_shift);
 
-        let changed_ids = {
+        let delta = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;
-            let prev = st.file_selection.selected_ids().clone();
+            let before_media = st.file_selection.selected_ids().clone();
+            let before_folders = st.folder_rows.selection_snapshot();
             st.file_selection.set_selection(target_selection);
-            FileSelectionModel::compute_selection_diff(&prev, st.file_selection.selected_ids())
+            st.folder_rows.set_folders(target_folders);
+            SelectionDelta {
+                media: FileSelectionModel::compute_selection_diff(&before_media, st.file_selection.selected_ids()),
+                folders_changed: before_folders != st.folder_rows.selection_snapshot(),
+            }
         };
 
-        if !changed_ids.is_empty() {
-            BridgeFileSelection::sync_selection_diff(window, state, &changed_ids);
+        if !delta.is_empty() {
+            BridgeFileSelection::sync_selection_delta(window, state, &delta);
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);
             StatusBarBridge::update_metrics(window, state);
-            multiview_handle::on_user_selection_changed(Pace::Settled);
+            if !delta.media.is_empty() {
+                multiview_handle::on_user_selection_changed(Pace::Settled);
+            }
         }
     }
 

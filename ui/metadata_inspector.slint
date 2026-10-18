@@ -130,9 +130,15 @@ export component MetadataInspector inherits CollapsiblePanel {
     in property <string> hash-or-rating: "-";
     in property <string> hash-tooltip: "";
     in property <int> selection-count: 0;
+    /// Row labels and the badge of the title; empty = the default for files (folders and mixed selections set them).
+    in property <string> size-label: "Size:";
+    in property <string> dimensions-label: "Dimensions:";
+    in property <string> format-label: "Format:";
+    in property <string> hash-label: "";
+    in property <string> badge-text: "";
 
     title: "INFO / METADATA";
-    count-badge: root.selection-count > 1 ? (root.selection-count + " Files") : "";
+    count-badge: root.badge-text != "" ? root.badge-text : (root.selection-count > 1 ? (root.selection-count + " Files") : "");
     body-height: 130px;
 
     VerticalLayout {
@@ -158,23 +164,23 @@ export component MetadataInspector inherits CollapsiblePanel {
         }
 
         MetadataRow {
-            label: "Size:";
+            label: root.size-label;
             value: root.filesize;
             tooltip: root.filesize-tooltip;
         }
 
         MetadataRow {
-            label: "Dimensions:";
+            label: root.dimensions-label;
             value: root.dimensions;
         }
 
         MetadataRow {
-            label: "Format:";
+            label: root.format-label;
             value: root.format-name;
         }
 
         MetadataRow {
-            label: root.selection-count > 1 ? "Details:" : "MD5:";
+            label: root.hash-label != "" ? root.hash-label : (root.selection-count > 1 ? "Details:" : "MD5:");
             value: root.hash-or-rating;
             value-font-size: 10px;
             tooltip: root.hash-tooltip;

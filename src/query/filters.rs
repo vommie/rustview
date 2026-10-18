@@ -203,6 +203,18 @@ impl PreparedFilter {
         }
     }
 
+    /// Whether `name` (of a folder) matches the search text of the filter: a regular expression when the regex toggle is on and the
+    /// text is a valid one, else a case-insensitive substring. An empty search text matches everything.
+    pub fn matches_name(&self, name: &str) -> bool {
+        if self.query_trimmed.is_empty() {
+            return true;
+        }
+        match &self.regex_matcher {
+            Some(re) => re.is_match(name),
+            None => name.to_lowercase().contains(&self.query_lower),
+        }
+    }
+
     #[inline]
     pub fn matches_indexed(
         &self,

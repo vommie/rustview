@@ -1,6 +1,7 @@
 use super::models::{format_bytes_with_locale, format_filesize};
 use super::MainWindow;
 use super::bridge_state::UiState;
+use super::browse_folders::{FolderStamp, stamp_labels};
 use super::file_selection::FileSelectionSummary;
 use crate::media::MediaHasher;
 use crate::query::filters::IndexedMediaRecord;
@@ -28,6 +29,12 @@ impl BridgeInspector {
             if Self::render_group(window, &st, &tab_items) {
                 return;
             }
+        }
+
+        let (folder_count, file_count) = st.browse_selection_counts();
+        if folder_count > 0 {
+            Self::render_folders(window, &st, folder_count, file_count);
+            return;
         }
 
         let selected_ids = st.file_selection.selected_ids();
@@ -66,6 +73,98 @@ impl BridgeInspector {
         Self::render_group(window, &st, &selected_items);
     }
 
+    /// The labels of the rows below the path and the badge of the title; "" = the default of files.
+    fn set_labels(window: &MainWindow, size: &str, dimensions: &str, format: &str, hash: &str, badge: &str) {
+        window.set_info_size_label(size.into());
+        window.set_info_dimensions_label(dimensions.into());
+        window.set_info_format_label(format.into());
+        window.set_info_hash_label(hash.into());
+        window.set_info_badge_text(badge.into());
+    }
+
+    fn plural(count: usize, one: &str, many: &str) -> String {
+        format!("{} {}", count, if count == 1 { one } else { many })
+    }
+
+    /// A selection with folders in it: one folder in detail, anything else as a summary.
+    fn render_folders(window: &MainWindow, st: &UiState, folder_count: usize, file_count: usize) {
+        let snapshot = st.folder_hierarchy.as_deref();
+        let ids = st.folder_rows.selected_folders_ordered();
+
+        if folder_count == 1 && file_count == 0 {
+            let Some(node) = ids.first().and_then(|&id| snapshot.and_then(|s| s.get_node(id))) else {
+                Self::render_empty(window);
+                return;
+            };
+            // The date of a selected folder is in the cache from its tile; a drive read only fills a gap (one folder, user action).
+            let stamp = st.folder_times.peek(node.id).unwrap_or_else(|| FolderStamp::read(&node.path));
+            let (modified, created) = stamp_labels(Some(stamp));
+            let dash = |text: slint::SharedString| if text.is_empty() { slint::SharedString::from("-") } else { text };
+
+            Self::set_labels(window, "Contents:", "Modified:", "Created:", "Type:", "Folder");
+            window.set_info_filename(node.name.as_str().into());
+            window.set_info_filename_tooltip(node.path.to_string_lossy().to_string().into());
+            window.set_info_path_label("Path:".into());
+            let parent = node.path.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "-".to_string());
+            window.set_info_path(parent.clone().into());
+            window.set_info_path_tooltip(parent.into());
+            window.set_info_size(
+                format!(
+                    "{}, {}",
+                    Self::plural(node.subfolder_count as usize, "folder", "folders"),
+                    Self::plural(node.media_count as usize, "file", "files")
+                )
+                .into(),
+            );
+            window.set_info_size_tooltip(
+                format!("{} in total, subfolders included", Self::plural(node.recursive_media_count as usize, "file", "files")).into(),
+            );
+            window.set_info_dimensions(dash(modified));
+            window.set_info_format(dash(created));
+            let kind = if node.is_deleted { "Folder (missing on disk)" } else { "Folder" };
+            window.set_info_hash(kind.into());
+            window.set_info_hash_tooltip(node.path.to_string_lossy().to_string().into());
+            window.set_info_selection_count(1);
+            return;
+        }
+
+        // Several items, folders among them.
+        let title = match (folder_count, file_count) {
+            (folders, 0) => format!("{} selected", Self::plural(folders, "folder", "folders")),
+            (folders, files) => format!("{}, {} selected", Self::plural(folders, "folder", "folders"), Self::plural(files, "file", "files")),
+        };
+        let size_label = if file_count > 0 { "Size:" } else { "Contents:" };
+        Self::set_labels(window, size_label, "Dimensions:", "Format:", "Details:", &title.replace(" selected", ""));
+        window.set_info_selection_count((folder_count + file_count) as i32);
+        window.set_info_filename(title.clone().into());
+        window.set_info_filename_tooltip(title.into());
+
+        window.set_info_path_label("Path:".into());
+        let here = st.current_folder_path.as_deref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "-".to_string());
+        window.set_info_path(here.clone().into());
+        window.set_info_path_tooltip(here.into());
+
+        if file_count > 0 {
+            let items = st.get_selected_media_ordered();
+            let summary = FileSelectionSummary::from_indexed_records(items.iter().copied());
+            window.set_info_size(format!("{} (files)", format_filesize(summary.total_size_bytes)).into());
+            window.set_info_size_tooltip(format_bytes_with_locale(summary.total_size_bytes).into());
+        } else {
+            let (subfolders, files) = ids
+                .iter()
+                .filter_map(|&id| snapshot.and_then(|s| s.get_node(id)))
+                .fold((0usize, 0usize), |(sub, media), node| (sub + node.subfolder_count as usize, media + node.media_count as usize));
+            window.set_info_size(
+                format!("{}, {}", Self::plural(subfolders, "subfolder", "subfolders"), Self::plural(files, "file", "files")).into(),
+            );
+            window.set_info_size_tooltip("The contents of the selected folders".into());
+        }
+        window.set_info_dimensions("-".into());
+        window.set_info_format("-".into());
+        window.set_info_hash("- (Mixed selection)".into());
+        window.set_info_hash_tooltip("".into());
+    }
+
     /// Shows one item in detail or several as an aggregate. Returns `false` (and shows nothing) for an empty group.
     fn render_group(window: &MainWindow, st: &UiState, items: &[&IndexedMediaRecord]) -> bool {
         match items {
@@ -83,6 +182,7 @@ impl BridgeInspector {
     }
 
     fn render_empty(window: &MainWindow) {
+        Self::set_labels(window, "Size:", "Dimensions:", "Format:", "", "");
         window.set_info_filename("- (No selection)".into());
         window.set_info_filename_tooltip("".into());
         window.set_info_path_label("Path:".into());
@@ -98,6 +198,7 @@ impl BridgeInspector {
     }
 
     fn render_single(window: &MainWindow, item: &IndexedMediaRecord) {
+        Self::set_labels(window, "Size:", "Dimensions:", "Format:", "", "");
         let full_filename = item.record.filename.clone();
         window.set_info_filename(item.record.filename.as_str().into());
         window.set_info_filename_tooltip(full_filename.into());
@@ -153,6 +254,7 @@ impl BridgeInspector {
         selected_items: &[&IndexedMediaRecord],
         root_folder_opt: Option<&Path>,
     ) {
+        Self::set_labels(window, "Size:", "Dimensions:", "Format:", "", "");
         window.set_info_selection_count(summary.count as i32);
         let multi_title = format!("{} multiple files selected", summary.count);
         window.set_info_filename(multi_title.clone().into());

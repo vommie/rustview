@@ -1,17 +1,28 @@
 //! The row of a folder or of the "Up" entry as the grid and the table show it. The data comes from the folder snapshot in memory.
 
 use super::rows::FolderRowRef;
+use super::times::{FolderStamp, FolderTimes};
 use crate::library::models::FolderHierarchySnapshot;
 use crate::ui::MediaItemView;
+use crate::ui::models::format_timestamp;
+use slint::SharedString;
+use std::sync::Arc;
 
 /// Name of the navigation entry that leads to the parent folder.
 pub const UP_LABEL: &str = "...";
+
+/// The date strings of a folder (empty where unknown).
+pub fn stamp_labels(stamp: Option<FolderStamp>) -> (SharedString, SharedString) {
+    let label = |secs: Option<i64>| secs.map(|s| SharedString::from(format_timestamp(s))).unwrap_or_default();
+    stamp.map(|s| (label(s.modified), label(s.created))).unwrap_or_default()
+}
 
 pub fn folder_row_view(
     snapshot: Option<&FolderHierarchySnapshot>,
     row: FolderRowRef,
     position: usize,
     is_selected: bool,
+    times: &Arc<FolderTimes>,
 ) -> MediaItemView {
     let mut view = MediaItemView {
         id: row.view_id(),
@@ -31,6 +42,8 @@ pub fn folder_row_view(
                 view.is_deleted = node.is_deleted;
                 if node.is_deleted {
                     view.flags_str = "Missing".into();
+                } else {
+                    (view.modified_date_str, view.created_date_str) = stamp_labels(times.get(id, &node.path));
                 }
             }
             view.format_str = "Folder".into();

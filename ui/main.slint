@@ -115,6 +115,7 @@ export component MainWindow inherits Window {
     in-out property <int> status-visible-items: 0;
     in-out property <string> status-total-size: "";
     in-out property <int> status-selection-count: 0;
+    in-out property <int> status-selection-folders: 0;
     in-out property <string> status-selection-size: "";
     in-out property <string> search-query: "";
     in-out property <bool> regex-mode: false;
@@ -170,6 +171,8 @@ export component MainWindow inherits Window {
     in-out property <int> drop-target-folder-id: -1;
     /// The folder row (negative view id) of the Browse view that a dragged medium hovers, 0 = none.
     in-out property <int> drop-target-row-id: 0;
+    /// Width of the Browse view (grid or table), for the edge zones of the drag auto-scroll.
+    out property <length> media-view-width: root.is-table-view ? table-view.width : grid-view.width;
     out property <length> folder-tree-scroll-y: sidebar_left.folder-tree-scroll-y;
     out property <length> folder-tree-container-height: sidebar_left.folder-tree-container-height;
 
@@ -283,6 +286,11 @@ export component MainWindow inherits Window {
     in property <string> info-hash: "-";
     in property <string> info-hash-tooltip: "";
     in property <int> info-selection-count: 0;
+    in property <string> info-size-label: "Size:";
+    in property <string> info-dimensions-label: "Dimensions:";
+    in property <string> info-format-label: "Format:";
+    in property <string> info-hash-label: "";
+    in property <string> info-badge-text: "";
     in-out property <bool> info-is-collapsed: false;
     callback info-collapsed-toggled(bool);
 
@@ -292,8 +300,17 @@ export component MainWindow inherits Window {
     callback regenerate-thumbs-clicked();
     callback new-folder-clicked();
     /// A row of a folder (or "Up") in the Browse view was clicked; `id` is negative.
-    callback folder-row-clicked(int /* id */);
-    callback folder-row-open-requested();
+    callback folder-row-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
+    /// Enter in the Browse view: opens the selected folder row or the selected medium.
+    /// A modal dialog closed (the lock of the main window was released).
+    callback modal-lock-released();
+    callback browse-enter-pressed();
+    /// Backspace / Alt+Up in the Browse view: shows the parent folder.
+    callback browse-go-up-requested();
+    /// Alt+Left (-1) / Alt+Right (+1) in the Browse view: back / forward through the visited folders.
+    callback browse-history-requested(int /* direction */);
+    /// A right click on the free space of the Browse view.
+    callback browse-background-context-menu(length /* x */, length /* y */);
     callback show-folders-toggled(bool);
     callback open-settings();
     callback browse-clicked();
@@ -475,6 +492,18 @@ export component MainWindow inherits Window {
         }
     }
 
+    /// The folder row of the Browse view under the window point (x, y), 0 when there is none: lets the drop target follow a scroll
+    /// that happens while the pointer rests.
+    pure public function drag-row-id-at(window-x: length, window-y: length) -> int {
+        let view-x = window-x - root.sidebar-left-width - resizer_left.width;
+        let view-y = window-y - 64px - 28px;
+        if root.is-table-view {
+            return table-view.row-id-at-viewport(view-x, view-y);
+        } else {
+            return grid-view.row-id-at-viewport(view-x, view-y);
+        }
+    }
+
     pure public function get-top-visible-index() -> int {
         if root.is-table-view {
             return table-view.get-top-visible-index();
@@ -485,6 +514,12 @@ export component MainWindow inherits Window {
 
     public function focus-search() {
         media-toolbar.focus-search();
+    }
+
+    changed is-modal-locked => {
+        if !root.is-modal-locked {
+            root.modal-lock-released();
+        }
     }
 
     forward-focus: main-window-focus;
@@ -560,9 +595,35 @@ export component MainWindow inherits Window {
                     return accept;
                 }
 
-                // 2b. Enter opens the selected folder row of the Browse view
+                // 2b. Enter opens the selected folder row (or medium) of the Browse view
                 if event.text == Key.Return && !event.modifiers.control && !event.modifiers.alt {
-                    root.folder-row-open-requested();
+                    root.browse-enter-pressed();
+                    return accept;
+                }
+
+                // 2c. Ctrl+Shift+N creates a new folder in the open folder (only where the toolbar button is enabled)
+                if (event.modifiers.control || event.modifiers.meta) && event.modifiers.shift && (event.text == "n" || event.text == "N" || event.text == "\u{0e}") {
+                    if root.is-new-folder-btn-enabled {
+                        root.new-folder-clicked();
+                    }
+                    return accept;
+                }
+
+                // 2d. Backspace and Alt+Up go to the parent folder, Alt+Left / Alt+Right go back / forward through the visited folders
+                if event.text == Key.Backspace && !event.modifiers.control && !event.modifiers.alt {
+                    root.browse-go-up-requested();
+                    return accept;
+                }
+                if event.modifiers.alt && !event.modifiers.control && event.text == Key.UpArrow {
+                    root.browse-go-up-requested();
+                    return accept;
+                }
+                if event.modifiers.alt && !event.modifiers.control && event.text == Key.LeftArrow {
+                    root.browse-history-requested(-1);
+                    return accept;
+                }
+                if event.modifiers.alt && !event.modifiers.control && event.text == Key.RightArrow {
+                    root.browse-history-requested(1);
                     return accept;
                 }
 
@@ -726,6 +787,11 @@ export component MainWindow inherits Window {
                 info-hash: root.info-hash;
                 info-hash-tooltip: root.info-hash-tooltip;
                 info-selection-count: root.info-selection-count;
+                info-size-label: root.info-size-label;
+                info-dimensions-label: root.info-dimensions-label;
+                info-format-label: root.info-format-label;
+                info-hash-label: root.info-hash-label;
+                info-badge-text: root.info-badge-text;
                 info-is-collapsed <=> root.info-is-collapsed;
                 info-collapsed-toggled(c) => { root.info-collapsed-toggled(c); }
             }
@@ -836,7 +902,7 @@ export component MainWindow inherits Window {
                         }
                         item-clicked(id, ctrl, shift) => {
                             if id < 0 {
-                                root.folder-row-clicked(id);
+                                root.folder-row-clicked(id, ctrl, shift);
                             } else {
                                 root.media-clicked(id, ctrl, shift);
                             }
@@ -856,6 +922,9 @@ export component MainWindow inherits Window {
                         item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
                         background-clicked => { root.background-clicked(); }
+                        background-context-menu(x, y) => {
+                            root.browse-background-context-menu(x + root.sidebar-left-width + resizer_left.width, y + 64px);
+                        }
                         item-drag-started(id, x, y) => {
                             if id >= 0 {
                                 root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
@@ -913,7 +982,7 @@ export component MainWindow inherits Window {
                         }
                         item-clicked(id, ctrl, shift) => {
                             if id < 0 {
-                                root.folder-row-clicked(id);
+                                root.folder-row-clicked(id, ctrl, shift);
                             } else {
                                 root.media-clicked(id, ctrl, shift);
                             }
@@ -934,6 +1003,9 @@ export component MainWindow inherits Window {
                         column-resized(idx, w) => { root.column-resized(idx, w); }
                         column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
                         background-clicked => { root.background-clicked(); }
+                        background-context-menu(x, y) => {
+                            root.browse-background-context-menu(x + root.sidebar-left-width + resizer_left.width, y + 64px);
+                        }
                         item-drag-started(id, x, y) => {
                             if id >= 0 {
                                 root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
@@ -1094,6 +1166,7 @@ export component MainWindow inherits Window {
             visible-items: root.status-visible-items;
             total-size-str: root.status-total-size;
             selection-count: root.status-selection-count;
+            selection-folders: root.status-selection-folders;
             selection-size-str: root.status-selection-size;
             is-virtual-folder: root.is-virtual-folder;
             virtual-folder-count: root.virtual-folder-count;

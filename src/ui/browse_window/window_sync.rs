@@ -50,8 +50,8 @@ fn build_row(st: &UiState, thumbnails: &ThumbnailManager, position: usize, is_ta
             None => placeholder_row(),
         },
         Slot::Folder(folder) => {
-            let selected = st.folder_rows.selected() == Some(folder);
-            folder_row_view(st.folder_hierarchy.as_deref(), folder, position, selected)
+            let selected = st.folder_rows.is_selected(folder);
+            folder_row_view(st.folder_hierarchy.as_deref(), folder, position, selected, &st.folder_times)
         }
         Slot::Empty => placeholder_row(),
     }

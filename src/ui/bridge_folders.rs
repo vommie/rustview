@@ -2,6 +2,7 @@ use super::bridge_favorites::BridgeFavorites;
 use super::bridge_folder_tree_sync::FolderTreeSync;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::{BridgeMedia, MediaReloadOptions, PendingList};
+use super::browse_folders::BrowseFolders;
 use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
@@ -670,6 +671,11 @@ impl BridgeFolders {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
+        {
+            let mut st = state.write();
+            let from = st.current_folder_id;
+            st.nav_history.record(from, folder_id);
+        }
         Self::select_folder_internal(
             folder_id,
             path,
@@ -804,7 +810,7 @@ impl BridgeFolders {
             st.all_folder_media.clear();
             // Opening a folder again puts its subfolders in name order and drops the highlight of a folder row.
             st.folder_rows.reset_tail();
-            st.folder_rows.select(None);
+            st.folder_rows.clear_selection();
 
             if !is_explicit_refresh {
                 st.file_selection.clear();
@@ -1006,6 +1012,7 @@ impl BridgeFolders {
             ..
         } = selection;
 
+        BrowseFolders::apply_pending_first_select(ctx.window, ctx.state, folder_id);
         BridgeInspector::update(ctx.window, ctx.state);
         BridgeTags::sync_tag_selection(ctx.window, ctx.library, ctx.state);
         BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);

@@ -2,6 +2,8 @@
 //! toggle, the "New Folder" button state and what follows a created folder. Everything works on the in-memory folder snapshot.
 
 use super::rows::FolderRowRef;
+use super::selection::{BrowseItem, SelectionDelta};
+use super::view::stamp_labels;
 use super::BrowseFolders;
 use crate::library::Library;
 use crate::library::models::{FolderId, FolderHierarchySnapshot};
@@ -17,6 +19,7 @@ use crate::ui::bridge_media::BridgeMedia;
 use crate::ui::bridge_state::{LastActivePanel, UiState};
 use crate::ui::bridge_status_bar::StatusBarBridge;
 use crate::ui::bridge_tags::BridgeTags;
+use crate::ui::multiview::handle::{self as multiview_handle, Pace};
 use crate::ui::browse_window::{DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, ViewGeometry, margin_rows_for, sync_window};
 use crate::ui::MainWindow;
 use parking_lot::{Mutex, RwLock};
@@ -42,15 +45,16 @@ impl BrowseFolders {
         let _ = THUMBNAILS.set(thumbnails.clone());
 
         let (win, lib, thumb, set, st) = (window.clone_strong(), library.clone(), thumbnails.clone(), settings.clone(), state.clone());
-        window.on_folder_row_clicked(move |id| Self::handle_click(id, &win, &lib, &thumb, &set, &st));
+        window.on_folder_row_clicked(move |id, ctrl, shift| Self::handle_click(id, ctrl, shift, &win, &lib, &thumb, &set, &st));
 
-        let (win, lib, thumb, set, st) = (window.clone_strong(), library.clone(), thumbnails.clone(), settings.clone(), state.clone());
-        window.on_folder_row_open_requested(move || {
-            let selected = st.read().folder_rows.selected();
-            if let Some(row) = selected {
-                Self::open_row(row, &win, &lib, &thumb, &set, &st);
-            }
-        });
+        // The date reader thread says that dates arrived: the tiles that show folders fill them in.
+        {
+            let (weak, st) = (window.as_weak(), state.clone());
+            state.read().folder_times.set_notifier(Box::new(move || {
+                let st = st.clone();
+                let _ = weak.upgrade_in_event_loop(move |window| Self::refresh_folder_dates(&window, &st));
+            }));
+        }
 
         let (win, st) = (window.clone_strong(), state.clone());
         window.on_media_drag_over_row(move |id| Self::handle_drag_over_row(id, &win, &st));
@@ -59,9 +63,13 @@ impl BrowseFolders {
         window.on_show_folders_toggled(move |on| Self::set_show_folders(on, &win, &lib, &thumb, &set, &st));
     }
 
-    /// A single click on a folder row selects it (and deselects the media); the second click of a double click opens it.
+    /// A click on a folder row: plain selects it (and deselects the rest), Ctrl toggles it, Shift selects the range from the anchor,
+    /// and the second plain click of a double click opens it.
+    #[allow(clippy::too_many_arguments)]
     pub fn handle_click(
         id: i32,
+        ctrl: bool,
+        shift: bool,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
@@ -72,50 +80,55 @@ impl BrowseFolders {
             return;
         };
 
-        let now = Instant::now();
-        let is_double = {
-            let mut last = LAST_CLICK.lock();
-            let double = last.is_some_and(|(last_id, at)| last_id == id && now.duration_since(at) < DOUBLE_CLICK);
-            *last = if double { None } else { Some((id, now)) };
-            double
-        };
-        if is_double {
-            Self::open_row(row, window, library, thumbnails, settings, state);
-            return;
+        if !ctrl && !shift {
+            let now = Instant::now();
+            let is_double = {
+                let mut last = LAST_CLICK.lock();
+                let double = last.is_some_and(|(last_id, at)| last_id == id && now.duration_since(at) < DOUBLE_CLICK);
+                *last = if double { None } else { Some((id, now)) };
+                double
+            };
+            if is_double {
+                Self::open_row(row, window, library, thumbnails, settings, state);
+                return;
+            }
+        } else {
+            *LAST_CLICK.lock() = None;
         }
 
-        Self::select_row(row, window, library, state);
-    }
-
-    /// Highlights a folder row and deselects the media (a click, or the right click that opens the folder menu).
-    pub fn select_row(row: FolderRowRef, window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
-        let cleared_media = {
+        let delta = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;
-            let previous: Vec<_> = st.file_selection.selected_ids().iter().copied().collect();
-            st.file_selection.clear();
-            previous
+            st.browse_click(BrowseItem::Folder(row), ctrl, shift)
         };
-        BridgeFileSelection::sync_selection_diff(window, state, &cleared_media);
+        Self::apply_selection_change(window, library, state, &delta);
+    }
 
-        let previous_row = {
-            let mut st = state.write();
-            let previous = st.folder_rows.selected();
-            st.folder_rows.select(Some(row));
-            previous
-        };
-        let st = state.read();
-        for changed in previous_row.into_iter().chain(std::iter::once(row)) {
-            Self::update_row_tile(window, &st, changed);
-        }
-        drop(st);
-
+    /// Brings the tiles and the panels (inspector, tags, status bar) in line with a selection change.
+    pub fn apply_selection_change(window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>, delta: &SelectionDelta) {
+        BridgeFileSelection::sync_selection_delta(window, state, delta);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
     }
 
+    /// The right click on a folder row: a row that is part of a selection of several items keeps that selection (the menu then
+    /// acts on all of them), any other row becomes the only selected item.
+    pub fn select_row_for_menu(row: FolderRowRef, window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
+        let delta = {
+            let mut st = state.write();
+            st.last_active_panel = LastActivePanel::Media;
+            let (folders, files) = st.browse_selection_counts();
+            if st.folder_rows.is_selected(row) && folders + files > 1 {
+                return;
+            }
+            st.browse_click(BrowseItem::Folder(row), false, false)
+        };
+        Self::apply_selection_change(window, library, state, &delta);
+    }
+
     /// Opens the folder behind a row: the folder is shown like a click in the folder tree would show it, and the tree reveals it.
+    /// Going up (the "..." row) selects the first element of the folder that is shown then.
     pub fn open_row(
         row: FolderRowRef,
         window: &MainWindow,
@@ -138,10 +151,89 @@ impl BrowseFolders {
         };
         tracing::info!(folder = %LogObscurer::folder(Some(folder_id), &path), up = row == FolderRowRef::Up, "[BrowseFolders: Open] Opening a folder from the media view");
 
-        if row != FolderRowRef::Up {
+        if row == FolderRowRef::Up {
+            state.write().pending_first_select = Some(folder_id);
+        } else {
             // The tree shows the folder below its parent: the parent must be expanded for the new selection to be visible.
             Self::expand_chain_to(state, folder_id);
         }
+        BridgeFolders::select_folder(folder_id, path, window, library, thumbnails, settings, state);
+    }
+
+    /// Enter: opens the folder row that is selected alone ("..." included). `false` when something else is selected.
+    pub fn open_selected_row(window: &MainWindow, library: &Arc<Library>, settings: &Arc<SettingsManager>, state: &Arc<RwLock<UiState>>) -> bool {
+        let row = {
+            let st = state.read();
+            if st.file_selection.count() > 0 {
+                return false;
+            }
+            st.folder_rows.single_selected()
+        };
+        let (Some(row), Some(thumbnails)) = (row, THUMBNAILS.get()) else {
+            return false;
+        };
+        Self::open_row(row, window, library, thumbnails, settings, state);
+        true
+    }
+
+    /// Backspace and Alt+Up: shows the parent of the open folder (nothing at the root).
+    pub fn go_up(window: &MainWindow, library: &Arc<Library>, settings: &Arc<SettingsManager>, state: &Arc<RwLock<UiState>>) {
+        let target = {
+            let st = state.read();
+            if !st.is_plain_folder_view() {
+                return;
+            }
+            let Some(snapshot) = st.folder_hierarchy.as_ref() else { return };
+            let node = st.current_folder_id.and_then(|id| snapshot.get_node(id));
+            node.filter(|n| !snapshot.root_ids.contains(&n.id)).and_then(|n| n.parent_id).filter(|p| snapshot.nodes.contains_key(p))
+        };
+        let (Some(parent), Some(thumbnails)) = (target, THUMBNAILS.get()) else {
+            return;
+        };
+        let path = state.read().folder_hierarchy.as_ref().and_then(|s| s.get_node(parent)).map(|n| n.path.clone());
+        if let Some(path) = path {
+            state.write().pending_first_select = Some(parent);
+            BridgeFolders::select_folder(parent, path, window, library, thumbnails, settings, state);
+        }
+    }
+
+    /// After going up: the first element of the folder that is shown now is selected ("..." when there is one, else the first folder
+    /// or medium). The request belongs to one folder; a request for any other folder is stale and dropped.
+    pub fn apply_pending_first_select(window: &MainWindow, state: &Arc<RwLock<UiState>>, folder_id: FolderId) {
+        let delta = {
+            let mut st = state.write();
+            match st.pending_first_select.take() {
+                Some(target) if target == folder_id => {}
+                _ => return,
+            }
+            let Some(first) = st.browse_item_at(0) else { return };
+            st.last_active_panel = LastActivePanel::Media;
+            st.browse_click(first, false, false)
+        };
+        BridgeFileSelection::sync_selection_delta(window, state, &delta);
+        if !delta.media.is_empty() {
+            multiview_handle::on_user_selection_changed(Pace::Settled);
+        }
+    }
+
+    /// Alt+Left (`direction` < 0) and Alt+Right: back / forward through the folders the user visited.
+    pub fn go_history(direction: i32, window: &MainWindow, library: &Arc<Library>, settings: &Arc<SettingsManager>, state: &Arc<RwLock<UiState>>) {
+        let Some(thumbnails) = THUMBNAILS.get() else { return };
+        let target = {
+            let mut st = state.write();
+            let (Some(current), Some(snapshot)) = (st.current_folder_id, st.folder_hierarchy.clone()) else {
+                return;
+            };
+            let valid = |id: FolderId| snapshot.get_node(id).is_some_and(|n| !n.is_deleted);
+            let step = if direction < 0 { st.nav_history.step_back(current, valid) } else { st.nav_history.step_forward(current, valid) };
+            step.and_then(|id| snapshot.get_node(id).map(|n| (id, n.path.clone())))
+        };
+        let Some((folder_id, path)) = target else {
+            StatusBarBridge::info(window, if direction < 0 { "No earlier folder." } else { "No later folder." });
+            return;
+        };
+        Self::expand_chain_to(state, folder_id);
+        state.write().last_active_panel = LastActivePanel::Media;
         BridgeFolders::select_folder(folder_id, path, window, library, thumbnails, settings, state);
     }
 
@@ -169,35 +261,50 @@ impl BrowseFolders {
         chain
     }
 
-    /// Updates the tile of a folder row in place when the pool holds it.
-    fn update_row_tile(window: &MainWindow, st: &UiState, row: FolderRowRef) {
-        let Some(position) = st.folder_rows.position_of(row, st.active_indices.len()) else {
-            return;
-        };
-        let Some(slot) = st.ring.slot_if_held(position) else {
-            return;
-        };
+    /// Updates the selection highlight of the folder tiles in the pool (O(pool), whatever the number of selected folders).
+    pub fn refresh_folder_tiles(window: &MainWindow, state: &RwLock<UiState>) {
+        let st = state.read();
         let model = window.get_media_items();
-        let Some(mut view) = model.row_data(slot) else {
-            return;
-        };
-        if view.id != row.view_id() {
-            return;
+        for slot in 0..model.row_count() {
+            let Some(mut view) = model.row_data(slot) else { continue };
+            let Some(row) = FolderRowRef::from_view_id(view.id).filter(|_| view.is_folder) else { continue };
+            let selected = st.folder_rows.is_selected(row);
+            if view.is_selected != selected {
+                view.is_selected = selected;
+                model.set_row_data(slot, view);
+            }
         }
-        view.is_selected = st.folder_rows.selected() == Some(row);
-        model.set_row_data(slot, view);
     }
 
-    /// Drops the highlight of the selected folder row (a medium was selected, or the selection was cleared).
+    /// Fills the dates of the folder tiles in the pool that were requested and have arrived (O(pool)).
+    pub fn refresh_folder_dates(window: &MainWindow, state: &RwLock<UiState>) {
+        let st = state.read();
+        let model = window.get_media_items();
+        for slot in 0..model.row_count() {
+            let Some(mut view) = model.row_data(slot) else { continue };
+            if !view.is_folder || view.is_folder_up || view.is_deleted {
+                continue;
+            }
+            let Some(FolderRowRef::Folder(id)) = FolderRowRef::from_view_id(view.id) else { continue };
+            let (modified, created) = stamp_labels(st.folder_times.peek(id));
+            if view.modified_date_str != modified || view.created_date_str != created {
+                view.modified_date_str = modified;
+                view.created_date_str = created;
+                model.set_row_data(slot, view);
+            }
+        }
+    }
+
+    /// Drops the highlight of every folder row (a medium was selected on its own, or the selection was cleared).
     pub fn clear_folder_selection(window: &MainWindow, state: &RwLock<UiState>) {
-        let previous = {
+        let changed = {
             let mut st = state.write();
-            let previous = st.folder_rows.selected();
-            st.folder_rows.select(None);
-            previous
+            let had = st.folder_rows.has_selection();
+            st.folder_rows.clear_selection();
+            had
         };
-        if let Some(row) = previous {
-            Self::update_row_tile(window, &state.read(), row);
+        if changed {
+            Self::refresh_folder_tiles(window, state);
         }
     }
 
@@ -211,19 +318,22 @@ impl BrowseFolders {
         state: &Arc<RwLock<UiState>>,
     ) {
         tracing::info!(on, "[BrowseFolders: Toggle] Show Folders switched");
+        window.set_show_folders(on);
         {
             let mut st = state.write();
             st.show_folders = on;
             st.last_active_panel = LastActivePanel::Media;
             // Showing the folders anew puts every folder in name order again, the "Up" entry first.
             st.folder_rows.reset_tail();
-            st.folder_rows.select(None);
+            st.folder_rows.clear_selection();
         }
         let mut app_settings = settings.get();
         app_settings.view.show_folders_in_browse = on;
         settings.save_quiet_async(&app_settings);
 
         Self::refresh_rows(window, library, thumbnails, settings, state);
+        BridgeInspector::update(window, state);
+        StatusBarBridge::update_metrics(window, state);
     }
 
     /// Recomputes the folder rows from the snapshot and, when they changed, refills the tile pool (O(tile pool)); the media are not
@@ -241,6 +351,8 @@ impl BrowseFolders {
         if changed {
             Self::resync_window(window, thumbnails, state);
             BridgeMedia::update_fallback_view(window, &app_settings, state);
+            // The rows may have taken selected folders with them.
+            BridgeInspector::update(window, state);
             StatusBarBridge::update_metrics(window, state);
         }
     }

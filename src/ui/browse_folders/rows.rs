@@ -5,6 +5,7 @@
 //! The media keep their own positions (`media_row_map`, `active_indices`); only the folder rows in front shift them by `front_len()`.
 
 use crate::library::models::{FolderHierarchySnapshot, FolderId};
+use std::collections::HashSet;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -62,7 +63,12 @@ pub struct BrowseFolderRows {
     front: Vec<FolderId>,
     /// Folders created while the view was open: after the media, so that nothing shifts, until the folder is opened again.
     tail: Vec<FolderId>,
-    selected: Option<FolderRowRef>,
+    /// The highlighted folder rows; the "..." entry is only ever highlighted alone (`up_selected`).
+    selection: HashSet<FolderId>,
+    up_selected: bool,
+    /// Where a Shift range starts, and the row the keys moved to last (the media keep their own, see `UiState::browse_anchor`).
+    anchor: Option<FolderRowRef>,
+    cursor: Option<FolderRowRef>,
     /// A folder was appended and the list was not rebuilt since: the next `rebuild` reports a change although the rows may equal
     /// what was there (the appended folder is already part of `tail`), so the view is refilled.
     dirty: bool,
@@ -83,6 +89,12 @@ impl BrowseFolderRows {
         self.tail.len()
     }
 
+    /// Number of listed folders ("..." not counted): what makes a folder "not empty" besides its media.
+    #[inline]
+    pub fn listed_folders(&self) -> usize {
+        self.front.len() + self.tail.len()
+    }
+
     /// Number of rows that are folders (the "Up" entry included).
     #[inline]
     pub fn folder_rows(&self) -> usize {
@@ -95,8 +107,67 @@ impl BrowseFolderRows {
     }
 
     #[inline]
-    pub fn selected(&self) -> Option<FolderRowRef> {
-        self.selected
+    pub fn is_selected(&self, row: FolderRowRef) -> bool {
+        match row {
+            FolderRowRef::Up => self.up_selected,
+            FolderRowRef::Folder(id) => self.selection.contains(&id),
+        }
+    }
+
+    /// Number of highlighted folders ("..." not counted).
+    #[inline]
+    pub fn selection_count(&self) -> usize {
+        self.selection.len()
+    }
+
+    #[inline]
+    pub fn has_selection(&self) -> bool {
+        self.up_selected || !self.selection.is_empty()
+    }
+
+    #[inline]
+    pub fn up_selected(&self) -> bool {
+        self.up_selected
+    }
+
+    /// The highlighted folders in list order (front rows, then the ones that wait at the end).
+    pub fn selected_folders_ordered(&self) -> Vec<FolderId> {
+        self.front.iter().chain(&self.tail).copied().filter(|id| self.selection.contains(id)).collect()
+    }
+
+    /// The row that is highlighted when exactly one row is ("..." or a folder).
+    pub fn single_selected(&self) -> Option<FolderRowRef> {
+        match (self.up_selected, self.selection.len()) {
+            (true, 0) => Some(FolderRowRef::Up),
+            (false, 1) => self.selection.iter().next().map(|&id| FolderRowRef::Folder(id)),
+            _ => None,
+        }
+    }
+
+    /// Every listed folder, "..." not included (Select All).
+    pub fn all_folders(&self) -> Vec<FolderId> {
+        self.front.iter().chain(&self.tail).copied().collect()
+    }
+
+    pub fn anchor(&self) -> Option<FolderRowRef> {
+        self.anchor
+    }
+
+    pub fn cursor(&self) -> Option<FolderRowRef> {
+        self.cursor
+    }
+
+    pub fn set_anchor(&mut self, row: Option<FolderRowRef>) {
+        self.anchor = row;
+    }
+
+    pub fn set_cursor(&mut self, row: Option<FolderRowRef>) {
+        self.cursor = row;
+    }
+
+    /// The highlight as it is, to compare with what it is afterwards.
+    pub fn selection_snapshot(&self) -> (HashSet<FolderId>, bool) {
+        (self.selection.clone(), self.up_selected)
     }
 
     /// Length of the whole list for `media_len` media.
@@ -138,8 +209,56 @@ impl BrowseFolderRows {
         }
     }
 
-    pub fn select(&mut self, row: Option<FolderRowRef>) {
-        self.selected = row;
+    /// Highlights exactly this row.
+    pub fn select_only(&mut self, row: FolderRowRef) {
+        self.selection.clear();
+        self.up_selected = false;
+        self.add(row);
+        self.anchor = Some(row);
+        self.cursor = Some(row);
+    }
+
+    /// Highlights a row next to the others; "..." replaces them (it is never part of a multi-selection), and any other row
+    /// removes the highlight of "...".
+    pub fn add(&mut self, row: FolderRowRef) {
+        match row {
+            FolderRowRef::Up => {
+                self.selection.clear();
+                self.up_selected = true;
+            }
+            FolderRowRef::Folder(id) => {
+                self.up_selected = false;
+                self.selection.insert(id);
+            }
+        }
+    }
+
+    /// Ctrl+click: a highlighted row loses it, any other gains it. "..." cannot be toggled into a selection.
+    pub fn toggle(&mut self, row: FolderRowRef) {
+        match row {
+            FolderRowRef::Up => self.select_only(row),
+            FolderRowRef::Folder(id) => {
+                if !self.selection.remove(&id) {
+                    self.add(row);
+                }
+                self.anchor = Some(row);
+                self.cursor = Some(row);
+            }
+        }
+    }
+
+    /// Replaces the highlighted folders (rubber band); "..." drops out.
+    pub fn set_folders(&mut self, ids: HashSet<FolderId>) {
+        self.up_selected = false;
+        self.selection = ids;
+    }
+
+    /// Drops every highlight (and where a range started).
+    pub fn clear_selection(&mut self) {
+        self.selection.clear();
+        self.up_selected = false;
+        self.anchor = None;
+        self.cursor = None;
     }
 
     /// Forgets the folders that were appended: they take their place in name order (the folder was opened again, or the folders
@@ -160,13 +279,13 @@ impl BrowseFolderRows {
 
     /// Recomputes the rows from the snapshot (memory only). Appended folders stay appended while they still exist. Returns
     /// whether anything changed.
-    pub fn rebuild(&mut self, snapshot: &FolderHierarchySnapshot, request: FolderRowsRequest) -> bool {
+    pub fn rebuild(&mut self, snapshot: &FolderHierarchySnapshot, request: FolderRowsRequest, name_matches: &dyn Fn(&str) -> bool) -> bool {
         let previous = self.clone();
-        *self = self.computed(snapshot, request);
+        *self = self.computed(snapshot, request, name_matches);
         *self != previous
     }
 
-    fn computed(&self, snapshot: &FolderHierarchySnapshot, request: FolderRowsRequest) -> Self {
+    fn computed(&self, snapshot: &FolderHierarchySnapshot, request: FolderRowsRequest, name_matches: &dyn Fn(&str) -> bool) -> Self {
         let Some(node) = request.current.filter(|_| request.enabled).and_then(|id| snapshot.get_node(id)) else {
             return Self::default();
         };
@@ -178,7 +297,7 @@ impl BrowseFolderRows {
         let listed = |id: &FolderId| {
             snapshot
                 .get_node(*id)
-                .is_some_and(|child| (request.show_hidden || !child.is_hidden) && (request.show_deleted || !child.is_deleted))
+                .is_some_and(|child| (request.show_hidden || !child.is_hidden) && (request.show_deleted || !child.is_deleted) && name_matches(&child.name))
         };
         let tail: Vec<FolderId> = self.tail.iter().copied().filter(|id| listed(id) && node.children.contains(id)).collect();
         let front: Vec<FolderId> = node
@@ -192,8 +311,30 @@ impl BrowseFolderRows {
         for child in front.iter().chain(&tail).filter_map(|id| snapshot.get_node(*id)) {
             (child.id, &child.path, child.is_deleted).hash(&mut hasher);
         }
-        let mut rows = Self { up, front, tail, selected: None, dirty: false, look: hasher.finish() };
-        rows.selected = self.selected.filter(|row| rows.position_of(*row, 0).is_some());
+        let mut rows = Self {
+            up,
+            front,
+            tail,
+            selection: HashSet::new(),
+            up_selected: self.up_selected && up.is_some(),
+            anchor: None,
+            cursor: None,
+            dirty: false,
+            look: hasher.finish(),
+        };
+        if !self.selection.is_empty() {
+            let listed: HashSet<FolderId> = rows.front.iter().chain(&rows.tail).copied().collect();
+            rows.selection = self.selection.iter().copied().filter(|id| listed.contains(id)).collect();
+            let still_there = |row: &Option<FolderRowRef>| row.filter(|r| match r {
+                FolderRowRef::Up => up.is_some(),
+                FolderRowRef::Folder(id) => listed.contains(id),
+            });
+            rows.anchor = still_there(&self.anchor);
+            rows.cursor = still_there(&self.cursor);
+        } else {
+            rows.anchor = self.anchor.filter(|r| matches!(r, FolderRowRef::Up) && up.is_some());
+            rows.cursor = self.cursor.filter(|r| matches!(r, FolderRowRef::Up) && up.is_some());
+        }
         rows
     }
 }

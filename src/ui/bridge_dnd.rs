@@ -2,7 +2,7 @@ use super::bridge_file_dialog_conflict::{ConflictDialogParams, FileOpsConflictDi
 use super::bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
 use super::bridge_file_selection::BridgeFileSelection;
 use super::bridge_folders::BridgeFolders;
-use super::browse_folders::BrowseFolders;
+use super::browse_folders::{BrowseDragScroller, BrowseFolders};
 use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
@@ -42,6 +42,7 @@ pub struct DragStartParams<'a> {
     pub thumbnails: &'a Arc<ThumbnailManager>,
     pub state: &'a Arc<RwLock<UiState>>,
     pub autoscroller: &'a DndFolderTreeAutoScroller,
+    pub browse_scroller: &'a BrowseDragScroller,
     pub fullscreen: &'a MultiviewHandle,
 }
 
@@ -62,6 +63,7 @@ impl BridgeDnd {
     pub fn handle_drag_started(params: DragStartParams<'_>) {
         let t0 = Instant::now();
         params.autoscroller.stop();
+        params.browse_scroller.stop();
 
         // A fullscreen that is isolated from the Browse view locks the main window; a Multiview that follows the Browse
         // selection does not, so dragging works next to it.
@@ -78,7 +80,7 @@ impl BridgeDnd {
             let mut changed = Vec::new();
             if !st.file_selection.is_selected(params.media_id) {
                 let prev = st.file_selection.selected_ids().clone();
-                st.file_selection.select_single(params.media_id);
+                st.select_single_media(params.media_id);
                 let newly = st.file_selection.selected_ids().clone();
                 changed = super::file_selection::FileSelectionModel::compute_selection_diff(&prev, &newly);
             }
@@ -86,6 +88,7 @@ impl BridgeDnd {
         };
 
         if !changed_selection.is_empty() {
+            BrowseFolders::refresh_folder_tiles(params.window, params.state);
             BridgeFileSelection::sync_selection_diff(params.window, params.state, &changed_selection);
             BridgeInspector::update(params.window, params.state);
             BridgeTags::sync_tag_selection(params.window, params.library, params.state);
@@ -162,8 +165,9 @@ impl BridgeDnd {
         current_y: f32,
         window: &MainWindow,
         _library: &Arc<Library>,
-        _state: &Arc<RwLock<UiState>>,
+        state: &Arc<RwLock<UiState>>,
         autoscroller: &DndFolderTreeAutoScroller,
+        browse_scroller: &BrowseDragScroller,
     ) {
         if !window.get_is_dragging_media() {
             return;
@@ -173,6 +177,7 @@ impl BridgeDnd {
         window.set_drag_y(current_y);
 
         autoscroller.update_cursor(window, current_x, current_y);
+        browse_scroller.update(window, state, current_x, current_y);
 
         if !autoscroller.is_active() {
             let active_panel_tab = window.get_active_sidebar_panel_tab();
@@ -248,8 +253,10 @@ impl BridgeDnd {
         library: &Arc<Library>,
         state: &Arc<RwLock<UiState>>,
         autoscroller: &DndFolderTreeAutoScroller,
+        browse_scroller: &BrowseDragScroller,
     ) {
         autoscroller.stop();
+        browse_scroller.stop();
         let tree_target_id = window.get_drop_target_folder_id();
         let browse_row = window.get_drop_target_row_id();
         let is_dragging = window.get_is_dragging_media();

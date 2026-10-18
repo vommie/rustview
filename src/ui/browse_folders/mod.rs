@@ -3,11 +3,18 @@
 
 mod actions;
 mod dnd;
+mod history;
 pub mod rows;
+pub mod times;
+pub mod selection;
 pub mod view;
 
+pub use dnd::BrowseDragScroller;
+pub use history::NavigationHistory;
+pub use times::{FolderStamp, FolderTimes};
+pub use selection::{BrowseItem, SelectionDelta};
 pub use rows::{BrowseFolderRows, FolderRowRef, FolderRowsRequest, Slot, UP_ROW_ID};
-pub use view::folder_row_view;
+pub use view::{folder_row_view, stamp_labels};
 
 use crate::library::Library;
 use crate::library::models::FolderHierarchySnapshot;

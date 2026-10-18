@@ -1,5 +1,4 @@
-use crate::library::models::MediaId;
-use crate::query::filters::IndexedMediaRecord;
+use crate::library::models::{FolderId, MediaId};
 use crate::ui::MainWindow;
 use slint::{ComponentHandle, Timer};
 use std::cell::RefCell;
@@ -66,8 +65,6 @@ pub struct GridLayoutConfig {
     pub item_tile_height: f32,
     pub grid_spacing: f32,
     pub grid_padding: f32,
-    /// Cells in front of the first medium (the folder rows of the Browse view); a rubber band never selects them.
-    pub leading_cells: usize,
 }
 
 /// Geometric layout parameters for Table View row bounding box projection.
@@ -75,26 +72,17 @@ pub struct GridLayoutConfig {
 pub struct TableLayoutConfig {
     pub row_height: f32,
     pub content_width: f32,
-    /// Rows in front of the first medium (the folder rows of the Browse view); a rubber band never selects them.
-    pub leading_cells: usize,
 }
 
 /// Pure geometric intersection evaluator for virtualized media views.
 pub struct RubberbandGeometry;
 
 impl RubberbandGeometry {
-    /// Computes which media items in a Grid View intersect the selection rectangle in Content Space.
-    /// Strictly respects active visible items: if no items are currently visible, returns an empty set.
-    pub fn compute_grid_intersections(
-        rect: RectF32,
-        dataset: &[IndexedMediaRecord],
-        active_indices: &[usize],
-        config: GridLayoutConfig,
-    ) -> HashSet<MediaId> {
-        let total_items = active_indices.len() + config.leading_cells;
-
-        if active_indices.is_empty() || config.columns == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
-            return HashSet::new();
+    /// The list positions of the cells of a Grid View that the selection rectangle (Content Space) touches; `total_items` is the length
+    /// of the whole list (folder rows and media). O(cells under the rectangle).
+    pub fn grid_hit_positions(rect: RectF32, total_items: usize, config: GridLayoutConfig) -> Vec<usize> {
+        if total_items == 0 || config.columns == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
+            return Vec::new();
         }
 
         let col_stride = config.item_tile_width + config.grid_spacing;
@@ -111,7 +99,7 @@ impl RubberbandGeometry {
         let max_c = ((rect_right - config.grid_padding).max(0.0) / col_stride.max(1.0)).floor() as usize;
 
         let max_c_clamped = max_c.min(config.columns.saturating_sub(1));
-        let mut intersected = HashSet::new();
+        let mut hits = Vec::new();
 
         for r in min_r..=max_r {
             let row_y = config.grid_padding + (r as f32 * row_stride);
@@ -128,70 +116,44 @@ impl RubberbandGeometry {
                 }
 
                 let item_x = config.grid_padding + (c as f32 * col_stride);
-                let item_w = config.item_tile_width;
-
-                let item_rect = RectF32::new(item_x, row_y, item_w, item_h);
-                if rect.intersects(&item_rect)
-                    && let Some(media_row) = item_idx.checked_sub(config.leading_cells)
-                    && let Some(&orig_idx) = active_indices.get(media_row)
-                    && let Some(m) = dataset.get(orig_idx)
-                {
-                    intersected.insert(m.record.id);
+                let item_rect = RectF32::new(item_x, row_y, config.item_tile_width, item_h);
+                if rect.intersects(&item_rect) {
+                    hits.push(item_idx);
                 }
             }
         }
 
-        intersected
+        hits
     }
 
-    /// Computes which media rows in a Table View intersect the selection rectangle in Content Space.
-    /// Strictly respects active visible items: if no items are currently visible, returns an empty set.
-    pub fn compute_table_intersections(
-        rect: RectF32,
-        dataset: &[IndexedMediaRecord],
-        active_indices: &[usize],
-        config: TableLayoutConfig,
-    ) -> HashSet<MediaId> {
-        let total_items = active_indices.len() + config.leading_cells;
-
-        if active_indices.is_empty() || config.row_height <= 0.0 || rect.width <= 0.0 || rect.height <= 0.0 {
-            return HashSet::new();
+    /// The list positions of the rows of a Table View that the selection rectangle (Content Space) touches.
+    pub fn table_hit_positions(rect: RectF32, total_items: usize, config: TableLayoutConfig) -> Vec<usize> {
+        if total_items == 0 || config.row_height <= 0.0 || rect.width <= 0.0 || rect.height <= 0.0 {
+            return Vec::new();
         }
 
         // Verify horizontal overlap with table content width
         if rect.x >= config.content_width || (rect.x + rect.width) <= 0.0 {
-            return HashSet::new();
+            return Vec::new();
         }
 
         let min_r = (rect.y.max(0.0) / config.row_height).floor() as usize;
         let max_r = ((rect.y + rect.height).max(0.0) / config.row_height).floor() as usize;
         let max_r_clamped = max_r.min(total_items.saturating_sub(1));
 
-        let mut intersected = HashSet::new();
-        for r in min_r..=max_r_clamped {
-            let row_y = r as f32 * config.row_height;
-            let row_rect = RectF32::new(0.0, row_y, config.content_width, config.row_height);
-
-            if rect.intersects(&row_rect)
-                && let Some(media_row) = r.checked_sub(config.leading_cells)
-                && let Some(&orig_idx) = active_indices.get(media_row)
-                && let Some(m) = dataset.get(orig_idx)
-            {
-                intersected.insert(m.record.id);
-            }
-        }
-
-        intersected
+        (min_r..=max_r_clamped)
+            .filter(|&r| rect.intersects(&RectF32::new(0.0, r as f32 * config.row_height, config.content_width, config.row_height)))
+            .collect()
     }
 
     /// Applies modifier arithmetic to derive the target selection set from the baseline and intersected items.
     #[inline]
-    pub fn evaluate_modifier_selection(
-        baseline: &HashSet<MediaId>,
-        intersected: &HashSet<MediaId>,
+    pub fn evaluate_modifier_selection<T: Copy + Eq + std::hash::Hash>(
+        baseline: &HashSet<T>,
+        intersected: &HashSet<T>,
         is_ctrl: bool,
         is_shift: bool,
-    ) -> HashSet<MediaId> {
+    ) -> HashSet<T> {
         if is_ctrl {
             // Invert / Toggle / Symmetric Difference: (Baseline \ Intersected) ∪ (Intersected \ Baseline)
             let mut result = baseline.clone();
@@ -225,6 +187,7 @@ pub struct RubberbandStartParams {
     pub is_ctrl: bool,
     pub is_shift: bool,
     pub baseline: HashSet<MediaId>,
+    pub baseline_folders: HashSet<FolderId>,
 }
 
 /// Active Rubberband Selection drag state session.
@@ -240,6 +203,7 @@ pub struct RubberbandSession {
     pub is_ctrl: bool,
     pub is_shift: bool,
     pub baseline_selection: HashSet<MediaId>,
+    pub baseline_folders: HashSet<FolderId>,
 }
 
 impl RubberbandSession {
@@ -254,6 +218,7 @@ impl RubberbandSession {
         self.is_ctrl = params.is_ctrl;
         self.is_shift = params.is_shift;
         self.baseline_selection = params.baseline;
+        self.baseline_folders = params.baseline_folders;
     }
 
     #[inline]
@@ -285,6 +250,7 @@ impl RubberbandSession {
         self.is_ctrl = false;
         self.is_shift = false;
         self.baseline_selection.clear();
+        self.baseline_folders.clear();
     }
 }
 
@@ -330,18 +296,25 @@ impl RubberbandAutoScroller {
         let window_h = window.window().size().height as f32;
         let viewport_top = MEDIA_HEADER_BAR_HEIGHT_PX; // ~28px header
         let viewport_bottom = window_h - 28.0; // ~28px status bar
+        self.update_cursor_in(view_y, viewport_top, viewport_bottom, on_tick);
+    }
 
+    /// The same for a viewport that spans `top..bottom` in the coordinate space of `y` (the drag of media uses window coordinates).
+    pub fn update_cursor_in<F>(&self, y: f32, top: f32, bottom: f32, on_tick: F)
+    where
+        F: Fn(f32) + 'static,
+    {
         // 1. Top Hot Zone (Scroll UP)
-        if view_y <= viewport_top + RUBBERBAND_AUTOSCROLL_EDGE_ZONE_PX && view_y >= viewport_top - 20.0 {
-            let dist = (view_y - viewport_top).max(0.0);
+        if y <= top + RUBBERBAND_AUTOSCROLL_EDGE_ZONE_PX && y >= top - 20.0 {
+            let dist = (y - top).max(0.0);
             let proximity = 1.0 - (dist / RUBBERBAND_AUTOSCROLL_EDGE_ZONE_PX).clamp(0.0, 1.0);
             self.set_active_zone(RubberbandScrollDirection::Up, proximity, on_tick);
             return;
         }
 
         // 2. Bottom Hot Zone (Scroll DOWN)
-        if view_y >= viewport_bottom - RUBBERBAND_AUTOSCROLL_EDGE_ZONE_PX && view_y <= viewport_bottom + 20.0 {
-            let dist = (viewport_bottom - view_y).max(0.0);
+        if y >= bottom - RUBBERBAND_AUTOSCROLL_EDGE_ZONE_PX && y <= bottom + 20.0 {
+            let dist = (bottom - y).max(0.0);
             let proximity = 1.0 - (dist / RUBBERBAND_AUTOSCROLL_EDGE_ZONE_PX).clamp(0.0, 1.0);
             self.set_active_zone(RubberbandScrollDirection::Down, proximity, on_tick);
             return;

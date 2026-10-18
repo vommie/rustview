@@ -285,6 +285,7 @@ export component VirtualizedMediaGrid inherits Rectangle {
     callback item-context-menu(int /* id */, length /* x */, length /* y */);
     callback sort-clicked(int /* column_index */);
     callback background-clicked();
+    callback background-context-menu(length /* x */, length /* y */);
     callback item-hover-changed(int /* id */, bool /* is_hover */);
     /// The viewport moved or changed size: Rust keeps the tiles around it filled (see `ui::browse_window`).
     callback viewport-changed(int /* first-row */, int /* visible-rows */, int /* columns */, int /* total */);
@@ -339,6 +340,11 @@ export component VirtualizedMediaGrid inherits Rectangle {
 
     pure public function get-top-visible-index() -> int {
         return root.first-visible-row * root.columns;
+    }
+
+    /// `row-id-at` for a point given relative to the viewport (below the header), as the pointer reports it.
+    pure public function row-id-at-viewport(vx: length, vy: length) -> int {
+        return root.row-id-at(vx, vy - scroll-area.clamped-y);
     }
 
     /// The folder row that lies under the content point (cx, cy), 0 when there is none: Slint knows where its tiles are,
@@ -410,6 +416,10 @@ export component VirtualizedMediaGrid inherits Rectangle {
                 }
 
                 pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                        root.ensure-focus();
+                        root.background-context-menu(self.mouse-x, 28px + self.mouse-y + scroll-area.clamped-y);
+                    }
                     if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                         root.ensure-focus();
                         self.press-x = self.mouse-x;

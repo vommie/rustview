@@ -16,6 +16,7 @@ use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::multiview::MultiviewHandle;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
+use super::bridge_ctx_menu_browse::{BrowseActionContext, BrowseContextMenus, BrowseMenuContext};
 use super::browse_folders::{BrowseFolders, FolderRowRef};
 use super::bridge_tag_dialogs::TagDialogController;
 use super::favorites::FavoriteManager;
@@ -97,8 +98,25 @@ impl BridgeContextMenu {
         let tm = tab_manager.clone();
         let set = settings.clone();
         let st = state.clone();
+        let lib_sel = library.clone();
+        let th_sel = thumbnails.clone();
+        let tm_sel = tab_manager.clone();
+        let win_sel = window.clone_strong();
         window.on_media_context_menu(move |id, x, y| {
             st.write().last_active_panel = LastActivePanel::Media;
+            // A medium that is part of a selection with folders in it: the menu of the whole selection.
+            let in_mixed_selection = {
+                let st = st.read();
+                st.file_selection.is_selected(id as u64) && BrowseContextMenus::is_mixed_selection(&st)
+            };
+            if in_mixed_selection {
+                BrowseContextMenus::show_selection_menu(
+                    BrowseMenuContext { window: &win_sel, library: &lib_sel, thumbnails: &th_sel, tab_manager: &tm_sel, state: &st },
+                    x,
+                    y,
+                );
+                return;
+            }
             Self::show_media_menu(
                 MediaMenuContext {
                     window: &win,
@@ -133,12 +151,22 @@ impl BridgeContextMenu {
             tab_manager.clone(),
             state.clone(),
         );
-        // A folder row of the Browse view opens exactly the menu of the same folder in the tree ("..." has none).
+        // A folder row of the Browse view opens exactly the menu of the same folder in the tree ("..." has none); a row inside a
+        // selection of several items opens the menu of that selection.
+        let (win_ctx, lib_ctx, th_ctx, tm_ctx) = (window.clone_strong(), library.clone(), thumbnails.clone(), tab_manager.clone());
         window.on_folder_row_context_menu(move |id, x, y| {
             let Some(FolderRowRef::Folder(folder_id)) = FolderRowRef::from_view_id(id) else {
                 return;
             };
-            BrowseFolders::select_row(FolderRowRef::Folder(folder_id), &win_row, &lib_row, &st_row);
+            BrowseFolders::select_row_for_menu(FolderRowRef::Folder(folder_id), &win_row, &lib_row, &st_row);
+            if BrowseContextMenus::is_mixed_selection(&st_row.read()) {
+                BrowseContextMenus::show_selection_menu(
+                    BrowseMenuContext { window: &win_ctx, library: &lib_ctx, thumbnails: &th_ctx, tab_manager: &tm_ctx, state: &st_row },
+                    x,
+                    y,
+                );
+                return;
+            }
             Self::show_folder_menu(
                 FolderMenuContext {
                     window: &win_row,
@@ -150,6 +178,15 @@ impl BridgeContextMenu {
                     state: &st_row,
                 },
                 folder_id,
+                x,
+                y,
+            );
+        });
+
+        let (win_bg, lib_bg, th_bg, tm_bg, st_bg) = (window.clone_strong(), library.clone(), thumbnails.clone(), tab_manager.clone(), state.clone());
+        window.on_browse_background_context_menu(move |x, y| {
+            BrowseContextMenus::show_background_menu(
+                BrowseMenuContext { window: &win_bg, library: &lib_bg, thumbnails: &th_bg, tab_manager: &tm_bg, state: &st_bg },
                 x,
                 y,
             );
@@ -286,6 +323,27 @@ impl BridgeContextMenu {
                     let path = std::path::PathBuf::from(&rec.path);
                     let _ = BridgeFavorites::add_favorite(&win, &favs, path, None);
                 }
+                return;
+            }
+
+            // 2b. Actions that only the menus of the free space and of a mixed selection have
+            if (CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER..=CTX_BROWSE_TOGGLE_FOLDERS).contains(&action_u64) {
+                BrowseContextMenus::handle_action(
+                    action_u64,
+                    &win,
+                    BrowseActionContext {
+                        library: &lib,
+                        thumbnails: &thumb,
+                        tab_manager: &tab_mgr,
+                        settings: &set,
+                        state: &st,
+                        favorites: &favs,
+                        delete_file_dialog: &delete_file_dlg,
+                        remove_orphaned_file_dialog: &remove_orphaned_dlg,
+                        folder_dialogs: &fld_dlg,
+                        fullscreen: &fs_ctrl,
+                    },
+                );
                 return;
             }
 

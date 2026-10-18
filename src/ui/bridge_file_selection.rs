@@ -7,9 +7,8 @@ use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
-use super::browse_folders::BrowseFolders;
+use super::browse_folders::{BrowseFolders, BrowseItem, SelectionDelta};
 use super::browse_window::update_tile;
-use super::file_selection::FileSelectionModel;
 use super::multiview::handle::{self as multiview_handle, Pace};
 use crate::library::Library;
 use crate::library::models::MediaId;
@@ -98,6 +97,23 @@ impl BridgeFileSelection {
             );
         });
 
+        let (win_enter, lib_enter, set_enter, st_enter, tm_enter, fs_enter) =
+            (window.clone_strong(), library.clone(), settings.clone(), state.clone(), tab_manager.clone(), fullscreen.clone());
+        window.on_browse_enter_pressed(move || {
+            if BrowseFolders::open_selected_row(&win_enter, &lib_enter, &set_enter, &st_enter) {
+                return;
+            }
+            let single = {
+                let st = st_enter.read();
+                (st.file_selection.count() == 1 && !st.folder_rows.has_selection())
+                    .then(|| st.file_selection.selected_ids().iter().next().copied())
+                    .flatten()
+            };
+            if let Some(media_id) = single {
+                Self::handle_double_click(media_id, &st_enter, &lib_enter, &set_enter, &tm_enter, &win_enter, &fs_enter);
+            }
+        });
+
         let win_mid = window.clone_strong();
         let lib_mid = library.clone();
         let set_mid = settings;
@@ -153,16 +169,12 @@ impl BridgeFileSelection {
             "[FileSelection: MiddleClick] Fullscreen requested directly on a media item (non-modal)"
         );
 
-        let (changed_ids, _) = {
+        let delta = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;
-            let prev_selected = st.file_selection.selected_ids().clone();
-            st.file_selection.select_single(media_id);
-            let newly_selected = st.file_selection.selected_ids();
-            let changed = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
-            (changed, st.file_selection.count())
+            st.browse_click(BrowseItem::Media(media_id), false, false)
         };
-        Self::sync_selection_diff(window, state, &changed_ids);
+        Self::sync_selection_delta(window, state, &delta);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
@@ -190,18 +202,17 @@ impl BridgeFileSelection {
     ) {
         let t_start = Instant::now();
 
-        let (changed_ids, target_visual_idx_opt) = {
+        let (delta, target_visual_idx_opt) = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;
-            let prev_selected = st.file_selection.selected_ids().clone();
-            st.file_selection.select_single(media_id);
-            let newly_selected = st.file_selection.selected_ids();
-            let changed = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
-
+            let delta = st.browse_click(BrowseItem::Media(media_id), false, false);
             let visual_idx = st.row_of(media_id).map(|row| row + st.folder_front_len());
-
-            (changed, visual_idx)
+            (delta, visual_idx)
         };
+        let changed_ids = delta.media;
+        if delta.folders_changed {
+            BrowseFolders::refresh_folder_tiles(window, state);
+        }
 
         if let Some(target_idx) = target_visual_idx_opt {
             let need_slice_reanchor = !state.read().ring.range().contains(&target_idx);
@@ -277,12 +288,13 @@ impl BridgeFileSelection {
         }
 
         // 2. Selection Mutation Math
-        let (changed_ids, sel_count) = Self::mutate_selection(event, ctx.state);
+        let (delta, sel_count) = Self::mutate_selection(event, ctx.state);
+        let changed_ids = &delta.media;
         let t_math = t_start.elapsed();
 
         // 3. Fast In-Place Slint Model Mutation with Viewport Translation
         let t_sync_start = Instant::now();
-        Self::sync_selection_diff(ctx.window, ctx.state, &changed_ids);
+        Self::sync_selection_delta(ctx.window, ctx.state, &delta);
         let t_sync = t_sync_start.elapsed();
 
         // 4. Update Inspector Fields, Synchronize TagTree Highlight/Counts, and Update Status Bar
@@ -337,35 +349,20 @@ impl BridgeFileSelection {
         DoubleClickKind::None
     }
 
-    fn mutate_selection(
-        event: FileClickEvent,
-        state: &Arc<RwLock<UiState>>,
-    ) -> (Vec<MediaId>, usize) {
+    fn mutate_selection(event: FileClickEvent, state: &Arc<RwLock<UiState>>) -> (SelectionDelta, usize) {
         let mut st = state.write();
         st.last_active_panel = LastActivePanel::Media;
-        let prev_selected = st.file_selection.selected_ids().clone();
-
-        if event.is_shift {
-            let visible_ids: Vec<MediaId> = st
-                .active_indices
-                .iter()
-                .filter_map(|&idx| st.all_folder_media.get(idx))
-                .map(|item| item.record.id)
-                .collect();
-
-            let additive = event.is_ctrl;
-            st.file_selection
-                .select_range(event.media_id, &visible_ids, additive);
-        } else if event.is_ctrl {
-            st.file_selection.toggle(event.media_id);
-        } else {
-            st.file_selection.select_single(event.media_id);
-        }
-
-        let newly_selected = st.file_selection.selected_ids();
-        let changed = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
+        let delta = st.browse_click(BrowseItem::Media(event.media_id), event.is_ctrl, event.is_shift);
         let count = st.file_selection.count();
-        (changed, count)
+        (delta, count)
+    }
+
+    /// Redraws the tiles a selection change touched, media and folder rows.
+    pub fn sync_selection_delta(window: &MainWindow, state: &RwLock<UiState>, delta: &SelectionDelta) {
+        Self::sync_selection_diff(window, state, &delta.media);
+        if delta.folders_changed {
+            BrowseFolders::refresh_folder_tiles(window, state);
+        }
     }
 
     /// Surgically modifies only changed rows in the Slint Model translating global indices to local viewport offsets.
@@ -379,9 +376,6 @@ impl BridgeFileSelection {
         if changed_ids.is_empty() {
             return;
         }
-        // A medium was (de)selected: a highlighted folder row gives way.
-        BrowseFolders::clear_folder_selection(window, state);
-
         let media_model = window.get_media_items();
         let visible_count = media_model.row_count();
         let st = state.read();
@@ -409,13 +403,12 @@ impl BridgeFileSelection {
         }
     }
 
-    /// Selects all visible media items in the current Browse View (Ctrl+A).
+    /// Selects everything the Browse view lists: all media and, when folders are shown, all folder rows ("..." excepted).
     pub fn select_all(window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
         let t_start = Instant::now();
-        let (changed_ids, total_count) = {
+        let (delta, folder_count, file_count) = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;
-            let prev_selected = st.file_selection.selected_ids().clone();
 
             let visible_ids: Vec<MediaId> = if !st.active_indices.is_empty() {
                 st.active_indices
@@ -430,30 +423,34 @@ impl BridgeFileSelection {
                 st.all_folder_media.iter().map(|m| m.record.id).collect()
             };
 
-            st.file_selection.select_all(&visible_ids);
-            let newly_selected = st.file_selection.selected_ids();
-            let diff = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
-            let count = st.file_selection.count();
-            (diff, count)
+            let delta = st.browse_select_all(&visible_ids);
+            let (folders, files) = st.browse_selection_counts();
+            (delta, folders, files)
         };
 
-        Self::sync_selection_diff(window, state, &changed_ids);
+        Self::sync_selection_delta(window, state, &delta);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
         multiview_handle::on_user_selection_changed(Pace::Immediate);
 
-        if total_count > 0 {
-            StatusBarBridge::info(window, format!("Selected all {} media file(s).", total_count));
+        if folder_count + file_count > 0 {
+            let message = match (folder_count, file_count) {
+                (0, files) => format!("Selected all {} media file(s).", files),
+                (folders, 0) => format!("Selected all {} folder(s).", folders),
+                (folders, files) => format!("Selected all: {} folder(s) and {} media file(s).", folders, files),
+            };
+            StatusBarBridge::info(window, message);
         } else {
-            StatusBarBridge::info(window, "No media files to select.");
+            StatusBarBridge::info(window, "Nothing to select.");
         }
 
         tracing::info!(
-            selected_count = total_count,
-            changed_rows = changed_ids.len(),
+            selected_files = file_count,
+            selected_folders = folder_count,
+            changed_rows = delta.media.len(),
             elapsed_us = t_start.elapsed().as_micros(),
-            "[FileSelection: SelectAll] Selected all visible media items in Browse view"
+            "[FileSelection: SelectAll] Selected all visible items in Browse view"
         );
     }
 
@@ -480,36 +477,39 @@ impl BridgeFileSelection {
         tracing::info!(media_id, "[FileSelection: Deselect] Media item deselected");
     }
 
-    /// Deselects all media items in the current Browse View (Ctrl+Shift+A / Esc).
+    /// Deselects everything in the current Browse View (Ctrl+Shift+A / Esc): media and folder rows.
     pub fn clear_selection(
         window: &MainWindow,
         library: &Arc<Library>,
         state: &Arc<RwLock<UiState>>,
     ) {
         let t_start = Instant::now();
-        BrowseFolders::clear_folder_selection(window, state);
-        let (changed_ids, prev_count) = {
+        let (delta, prev_media, prev_folders) = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;
-            let prev = st.file_selection.selected_ids().clone();
-            let prev_count = prev.len();
-            st.file_selection.clear();
-            (prev.into_iter().collect::<Vec<MediaId>>(), prev_count)
+            let (folders, files) = st.browse_selection_counts();
+            (st.clear_browse_selection(), files, folders)
         };
 
-        Self::sync_selection_diff(window, state, &changed_ids);
+        Self::sync_selection_delta(window, state, &delta);
         BridgeInspector::update(window, state);
         BridgeTags::sync_tag_selection(window, library, state);
         StatusBarBridge::update_metrics(window, state);
 
-        if prev_count > 0 {
-            StatusBarBridge::info(window, format!("Deselected {} media file(s).", prev_count));
+        if prev_media + prev_folders > 0 {
+            let message = match (prev_folders, prev_media) {
+                (0, files) => format!("Deselected {} media file(s).", files),
+                (folders, 0) => format!("Deselected {} folder(s).", folders),
+                (folders, files) => format!("Deselected {} folder(s) and {} media file(s).", folders, files),
+            };
+            StatusBarBridge::info(window, message);
         }
 
         tracing::info!(
-            cleared_count = prev_count,
+            cleared_files = prev_media,
+            cleared_folders = prev_folders,
             elapsed_us = t_start.elapsed().as_micros(),
-            "[FileSelection: ClearSelection] Cleared media selection in Browse view"
+            "[FileSelection: ClearSelection] Cleared the selection in Browse view"
         );
     }
 

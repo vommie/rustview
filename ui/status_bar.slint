@@ -37,6 +37,7 @@ export component StatusBar inherits Rectangle {
     in property <int> visible-items: 0;
     in property <string> total-size-str: "";
     in property <int> selection-count: 0;
+    in property <int> selection-folders: 0;
     in property <string> selection-size-str: "";
 
     // Virtual Folder / Recursive Subfolders View Indicator Properties
@@ -216,7 +217,7 @@ export component StatusBar inherits Rectangle {
             if !root.is-tab-view && root.is-virtual-folder : StatusBarSeparator {}
 
             // 3. Selection Metric Badge (Browse Mode Only, visible when >= 1 files are selected)
-            if !root.is-tab-view && root.selection-count > 0 : VerticalLayout {
+            if !root.is-tab-view && (root.selection-count + root.selection-folders) > 0 : VerticalLayout {
                 alignment: center;
                 Rectangle {
                     height: 18px;
@@ -232,7 +233,7 @@ export component StatusBar inherits Rectangle {
                         alignment: center;
 
                         Text {
-                            text: "Selected: " + root.selection-count + (root.total-items > 0 ? (" of " + root.total-items) : "") + (root.selection-size-str != "" ? (" (" + root.selection-size-str + ")") : "");
+                            text: "Selected: " + (root.selection-folders > 0 ? (root.selection-folders + (root.selection-folders == 1 ? " folder" : " folders") + (root.selection-count > 0 ? ", " : "")) : "") + (root.selection-count > 0 ? (root.selection-count + (root.total-items > 0 ? (" of " + root.total-items) : "")) : "") + (root.selection-size-str != "" ? (" (" + root.selection-size-str + ")") : "");
                             font-size: 10.5px;
                             font-weight: 700;
                             color: #cba6f7;
@@ -242,7 +243,7 @@ export component StatusBar inherits Rectangle {
                 }
             }
 
-            if !root.is-tab-view && root.selection-count > 0 : StatusBarSeparator {}
+            if !root.is-tab-view && (root.selection-count + root.selection-folders) > 0 : StatusBarSeparator {}
 
             // 4. Total / Filtered View Items Metric Badge (Browse Mode Only)
             if !root.is-tab-view : VerticalLayout {

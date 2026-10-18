@@ -64,6 +64,11 @@ export component SidebarLeft inherits Rectangle {
     in property <string> info-hash: "-";
     in property <string> info-hash-tooltip: "";
     in property <int> info-selection-count: 0;
+    in property <string> info-size-label: "Size:";
+    in property <string> info-dimensions-label: "Dimensions:";
+    in property <string> info-format-label: "Format:";
+    in property <string> info-hash-label: "";
+    in property <string> info-badge-text: "";
     in-out property <bool> info-is-collapsed: false;
     callback info-collapsed-toggled(bool);
 
@@ -150,6 +155,11 @@ export component SidebarLeft inherits Rectangle {
             hash-or-rating: root.info-hash;
             hash-tooltip: root.info-hash-tooltip;
             selection-count: root.info-selection-count;
+            size-label: root.info-size-label;
+            dimensions-label: root.info-dimensions-label;
+            format-label: root.info-format-label;
+            hash-label: root.info-hash-label;
+            badge-text: root.info-badge-text;
             is-collapsed <=> root.info-is-collapsed;
             collapsed-toggled(c) => { root.info-collapsed-toggled(c); }
         }

@@ -438,6 +438,7 @@ export component MediaTableView inherits Rectangle {
     callback column-resized(int /* column_index */, length /* new_width */);
     callback column-resize-finished(int /* column_index */, length /* final_width */);
     callback background-clicked();
+    callback background-context-menu(length /* x */, length /* y */);
     /// The viewport moved or changed size: Rust keeps the rows around it filled (see `ui::browse_window`).
     callback viewport-changed(int /* first-row */, int /* visible-rows */, int /* columns */, int /* total */);
 
@@ -512,6 +513,11 @@ export component MediaTableView inherits Rectangle {
 
     pure public function get-top-visible-index() -> int {
         return root.first-visible-row;
+    }
+
+    /// `row-id-at` for a point given relative to the viewport (below the header), as the pointer reports it.
+    pure public function row-id-at-viewport(vx: length, vy: length) -> int {
+        return root.row-id-at(vx, vy - scroll-area.clamped-y);
     }
 
     /// The folder row that lies under the content row at `cy` (the pointer at view x `vx`), 0 when there is none: the ring pool
@@ -603,6 +609,10 @@ export component MediaTableView inherits Rectangle {
                 }
 
                 pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                        root.ensure-focus();
+                        root.background-context-menu(self.mouse-x + scroll-area.clamped-x, 28px + self.mouse-y + scroll-area.clamped-y);
+                    }
                     if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                         root.ensure-focus();
                         self.press-x = self.mouse-x;

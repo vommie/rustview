@@ -1,6 +1,6 @@
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId};
 use crate::library::models::{FolderHierarchySnapshot, FolderId, MediaId, TagId};
-use crate::query::filters::IndexedMediaRecord;
+use crate::query::filters::{IndexedMediaRecord, PreparedFilter};
 use crate::query::MediaStore;
 use crate::query::{QueryFilter, SortColumn, SortOrder};
 use crate::settings::{
@@ -18,7 +18,7 @@ use crate::ui::tab_dnd::TabDndSession;
 use crate::ui::tab_grid::MasonryRect;
 use crate::viewer::TabId;
 use crate::thumbnails::ThumbnailRamCache;
-use crate::ui::browse_folders::{BrowseFolderRows, FolderRowsRequest, Slot};
+use crate::ui::browse_folders::{BrowseFolderRows, FolderRowsRequest, FolderTimes, NavigationHistory, Slot};
 use crate::ui::browse_window::{RingWindow, ViewGeometry};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -76,6 +76,10 @@ pub const CTX_FOLDER_REFRESH_TREE_FULL: CtxMenuActionId = 3006;
 pub const CTX_FOLDER_REFRESH_TREE_RELATIVE: CtxMenuActionId = 3007;
 pub const CTX_FOLDER_ADD_TO_FAVORITES: CtxMenuActionId = 3008;
 pub const CTX_FOLDER_NEW: CtxMenuActionId = 3009;
+// Menus of the Browse view that belong to no single item: a mixed selection of folders and files, the free space.
+pub const CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 3020;
+pub const CTX_BROWSE_SELECTION_DELETE: CtxMenuActionId = 3021;
+pub const CTX_BROWSE_TOGGLE_FOLDERS: CtxMenuActionId = 3022;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 // Media Batch Destination Action IDs
@@ -128,6 +132,12 @@ pub struct UiState {
     pub show_folders: bool,
     /// The folder rows of the Browse view (empty unless `show_folders` and the view is a plain folder).
     pub folder_rows: BrowseFolderRows,
+    /// Going up to this folder selects its first element once its list is shown (see `BrowseFolders::go_up`).
+    pub pending_first_select: Option<FolderId>,
+    /// Folders shown before the open one (Alt+Left) and after it (Alt+Right); see `NavigationHistory`.
+    pub nav_history: NavigationHistory,
+    /// Created / modified time of folders, read off the UI thread.
+    pub folder_times: Arc<FolderTimes>,
     /// Sum of the file sizes of the listed items (`LIST_BYTES_DIRTY` = not computed since the list or a size changed).
     list_total_bytes: AtomicU64,
     pub file_selection: FileSelectionModel,
@@ -204,6 +214,9 @@ impl Default for UiState {
             active_indices: Vec::new(),
             show_folders: false,
             folder_rows: BrowseFolderRows::default(),
+            pending_first_select: None,
+            nav_history: NavigationHistory::default(),
+            folder_times: FolderTimes::new(),
             list_total_bytes: AtomicU64::new(LIST_BYTES_DIRTY),
             file_selection: FileSelectionModel::new(),
             last_active_panel: LastActivePanel::Media,
@@ -299,19 +312,18 @@ impl UiState {
             show_hidden,
             show_deleted,
         };
-        self.folder_rows.rebuild(snapshot, request)
+        // The filter field filters the folders by name as well (a regular expression when the regex toggle is on).
+        let name_filter = PreparedFilter::from_filter(&self.filter);
+        self.folder_rows.rebuild(snapshot, request, &|name| name_filter.matches_name(name))
     }
 
-    /// The folder of the highlighted folder row of the Browse view while that view has the focus (F2 and Del act on it, like on
-    /// the selected folder of the tree). The "..." entry is no folder.
-    pub fn focused_browse_folder(&self) -> Option<FolderId> {
+    /// The highlighted folders of the Browse view while that view has the focus, in list order (F2 and Del act on them, like on the
+    /// selected folder of the tree). The "..." entry is no folder.
+    pub fn focused_browse_folders(&self) -> Vec<FolderId> {
         if self.last_active_panel != LastActivePanel::Media {
-            return None;
+            return Vec::new();
         }
-        match self.folder_rows.selected() {
-            Some(crate::ui::browse_folders::FolderRowRef::Folder(id)) => Some(id),
-            _ => None,
-        }
+        self.folder_rows.selected_folders_ordered()
     }
 
     /// Rows in front of the media (folders and "Up"): the media positions of the list start after them.

@@ -12,7 +12,7 @@ use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogControlle
 use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
 use super::bridge_file_selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
-use super::browse_folders::BrowseFolders;
+use super::browse_folders::{BrowseDragScroller, BrowseFolders};
 use super::bridge_folders::BridgeFolders;
 use super::multiview::{self, MultiviewHandle, bar_overlay};
 use crate::viewer::multiview::prefs;
@@ -21,6 +21,7 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
 use super::bridge_sidebar_panel_tabs::BridgeSidebarPanelTabs;
 use super::bridge_state::*;
+use super::bridge_selection_delete::SelectionDelete;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tag_dialogs::TagDialogController;
@@ -102,6 +103,7 @@ pub struct UiBridge {
     remove_orphaned_dialog: RemoveOrphanedFileDialogController,
     conflict_dialog: FileOpsConflictDialogController,
     dnd_foldertree_autoscroller: DndFolderTreeAutoScroller,
+    dnd_browse_scroller: BrowseDragScroller,
     rubberband_autoscroller: RubberbandAutoScroller,
     tag_dialogs: TagDialogController,
     folder_dialogs: FolderDialogController,
@@ -135,6 +137,7 @@ impl UiBridge {
         let remove_orphaned_dialog = RemoveOrphanedFileDialogController::new();
         let conflict_dialog = FileOpsConflictDialogController::new();
         let dnd_foldertree_autoscroller = DndFolderTreeAutoScroller::new();
+        let dnd_browse_scroller = BrowseDragScroller::new();
         let rubberband_autoscroller = RubberbandAutoScroller::new();
         let tag_dialogs = TagDialogController::new();
         let folder_dialogs = FolderDialogController::new();
@@ -341,6 +344,7 @@ impl UiBridge {
             remove_orphaned_dialog,
             conflict_dialog,
             dnd_foldertree_autoscroller,
+            dnd_browse_scroller,
             rubberband_autoscroller,
             tag_dialogs,
             folder_dialogs,
@@ -854,6 +858,11 @@ impl UiBridge {
             self.state.clone(),
         );
 
+        let (win, lib, set, st) = (self.window.clone_strong(), self.library.clone(), self.settings.clone(), self.state.clone());
+        self.window.on_browse_go_up_requested(move || BrowseFolders::go_up(&win, &lib, &set, &st));
+        let (win, lib, set, st) = (self.window.clone_strong(), self.library.clone(), self.settings.clone(), self.state.clone());
+        self.window.on_browse_history_requested(move |direction| BrowseFolders::go_history(direction, &win, &lib, &set, &st));
+
         let win = self.window.clone_strong();
         let ctx = FolderDialogContext {
             library: self.library.clone(),
@@ -873,6 +882,11 @@ impl UiBridge {
     }
 
     fn register_delete_callbacks(&self) {
+        // The callback runs while Slint evaluates the property change; the next dialog must not open inside of it.
+        self.window.on_modal_lock_released(|| {
+            let _ = slint::invoke_from_event_loop(SelectionDelete::on_modal_lock_released);
+        });
+
         let win = self.window.clone_strong();
         let lib = self.library.clone();
         let thumb = self.thumbnails.clone();
@@ -941,9 +955,9 @@ impl UiBridge {
         let is_folders_tab = active_sidebar_tab.as_str() == "folders";
         let is_favorites_tab = active_sidebar_tab.as_str() == "favorites";
 
-        let browse_folder = params.state.read().focused_browse_folder();
+        let browse_folders = params.state.read().focused_browse_folders();
         let effective_panel = match last_panel {
-            _ if browse_folder.is_some() => LastActivePanel::Folder,
+            _ if !browse_folders.is_empty() => LastActivePanel::Folder,
             LastActivePanel::Media => LastActivePanel::Media,
             LastActivePanel::Folder => {
                 if is_favorites_tab {
@@ -984,67 +998,20 @@ impl UiBridge {
         }
 
         if effective_panel == LastActivePanel::Folder {
-            let current_folder_id = browse_folder.or(params.state.read().current_folder_id);
+            // Folders highlighted in the Browse view: one folder alone goes through its own dialog, any larger selection through the
+            // dialogs of its files and folders, one after the other.
+            let files = params.state.read().get_selected_ids_ordered();
+            if browse_folders.len() > 1 || (!browse_folders.is_empty() && !files.is_empty()) {
+                SelectionDelete::start(&params, browse_folders, files);
+                return;
+            }
+
+            let current_folder_id = browse_folders.first().copied().or(params.state.read().current_folder_id);
             let Some(folder_id) = current_folder_id else {
                 StatusBarBridge::info(window, "No folder selected to delete (Del).");
                 return;
             };
-
-            let is_root = {
-                let app_settings = params.settings.get();
-                if let Some(ref root_p) = app_settings.general.root_folder
-                    && let Ok(Some(folder_rec)) = params.library.folders().get_folder(folder_id)
-                {
-                    normalize_path(Path::new(&folder_rec.path)) == normalize_path(root_p)
-                } else {
-                    false
-                }
-            };
-
-            if is_root {
-                StatusBarBridge::info(window, "Cannot delete the library root directory.");
-                return;
-            }
-
-            let folder_rec_opt = params.library.folders().get_folder(folder_id).ok().flatten();
-            let Some(folder_rec) = folder_rec_opt else {
-                StatusBarBridge::error(window, "Folder record not found in database.");
-                return;
-            };
-
-            let folder_name = folder_rec.name.clone();
-
-            let folder_ctx = FolderDialogContext {
-                library: params.library.clone(),
-                thumbnails: params.thumbnails.clone(),
-                tab_manager: params.tab_manager.clone(),
-                settings: params.settings.clone(),
-                state: params.state.clone(),
-            };
-
-            if folder_rec.is_deleted {
-                tracing::info!(
-                    folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
-                    "[UiBridge: DeleteAction] DEL key pressed on missing folder: opening remove_orphaned folder dialog"
-                );
-                params.folder_dialogs.show_remove_orphaned(
-                    window,
-                    folder_id,
-                    &folder_name,
-                    folder_ctx,
-                );
-            } else {
-                tracing::info!(
-                    folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
-                    "[UiBridge: DeleteAction] DEL key pressed on active folder: opening delete folder dialog"
-                );
-                params.folder_dialogs.show_delete(
-                    window,
-                    folder_id,
-                    &folder_name,
-                    folder_ctx,
-                );
-            }
+            Self::open_folder_delete_dialog(&params, folder_id);
             return;
         }
 
@@ -1057,9 +1024,59 @@ impl UiBridge {
         Self::open_media_delete_dialog(&params, selected_ids, None);
     }
 
+    /// Opens the dialog that deletes a folder (or, for a folder that is missing on disk, the one that removes it from the database).
+    pub(crate) fn open_folder_delete_dialog(params: &DeleteActionParams<'_>, folder_id: FolderId) {
+        let window = params.window;
+        let is_root = {
+            let app_settings = params.settings.get();
+            if let Some(ref root_p) = app_settings.general.root_folder
+                && let Ok(Some(folder_rec)) = params.library.folders().get_folder(folder_id)
+            {
+                normalize_path(Path::new(&folder_rec.path)) == normalize_path(root_p)
+            } else {
+                false
+            }
+        };
+
+        if is_root {
+            StatusBarBridge::info(window, "Cannot delete the library root directory.");
+            return;
+        }
+
+        let folder_rec_opt = params.library.folders().get_folder(folder_id).ok().flatten();
+        let Some(folder_rec) = folder_rec_opt else {
+            StatusBarBridge::error(window, "Folder record not found in database.");
+            return;
+        };
+
+        let folder_name = folder_rec.name.clone();
+
+        let folder_ctx = FolderDialogContext {
+            library: params.library.clone(),
+            thumbnails: params.thumbnails.clone(),
+            tab_manager: params.tab_manager.clone(),
+            settings: params.settings.clone(),
+            state: params.state.clone(),
+        };
+
+        if folder_rec.is_deleted {
+            tracing::info!(
+                folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
+                "[UiBridge: DeleteAction] Delete requested on a missing folder: opening remove_orphaned folder dialog"
+            );
+            params.folder_dialogs.show_remove_orphaned(window, folder_id, &folder_name, folder_ctx);
+        } else {
+            tracing::info!(
+                folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
+                "[UiBridge: DeleteAction] Delete requested on an active folder: opening delete folder dialog"
+            );
+            params.folder_dialogs.show_delete(window, folder_id, &folder_name, folder_ctx);
+        }
+    }
+
     /// Opens the dialog that deletes `media_ids` (or, when every one of them is already missing on disk, the one that only
     /// removes them from the database). `followup` runs after a confirmed deletion.
-    fn open_media_delete_dialog(
+    pub(crate) fn open_media_delete_dialog(
         params: &DeleteActionParams<'_>,
         media_ids: Vec<MediaId>,
         followup: Option<DeleteFollowup>,
@@ -1124,9 +1141,9 @@ impl UiBridge {
         let is_folders_tab = active_sidebar_tab.as_str() == "folders";
         let is_favorites_tab = active_sidebar_tab.as_str() == "favorites";
 
-        let browse_folder = params.state.read().focused_browse_folder();
+        let browse_folders = params.state.read().focused_browse_folders();
         let effective_panel = match last_panel {
-            _ if browse_folder.is_some() => LastActivePanel::Folder,
+            _ if !browse_folders.is_empty() => LastActivePanel::Folder,
             LastActivePanel::Media => LastActivePanel::Media,
             LastActivePanel::Folder => {
                 if is_favorites_tab {
@@ -1172,7 +1189,12 @@ impl UiBridge {
         }
 
         if effective_panel == LastActivePanel::Folder {
-            let current_folder_id = browse_folder.or(params.state.read().current_folder_id);
+            let file_count = params.state.read().file_selection.count();
+            if browse_folders.len() > 1 || (!browse_folders.is_empty() && file_count > 0) {
+                StatusBarBridge::warn(window, "Cannot rename several items at once. Select a single item.");
+                return;
+            }
+            let current_folder_id = browse_folders.first().copied().or(params.state.read().current_folder_id);
             let Some(folder_id) = current_folder_id else {
                 StatusBarBridge::info(window, "No folder selected to rename (F2).");
                 return;
@@ -1475,6 +1497,7 @@ impl UiBridge {
         let thumb_start = self.thumbnails.clone();
         let st_start = self.state.clone();
         let autoscroll_start = self.dnd_foldertree_autoscroller.clone();
+        let browse_scroll_start = self.dnd_browse_scroller.clone();
         let fs_start = self.fullscreen.clone();
         self.window.on_media_drag_started(move |id, x, y| {
             BridgeDnd::handle_drag_started(DragStartParams {
@@ -1486,6 +1509,7 @@ impl UiBridge {
                 thumbnails: &thumb_start,
                 state: &st_start,
                 autoscroller: &autoscroll_start,
+                browse_scroller: &browse_scroll_start,
                 fullscreen: &fs_start,
             });
         });
@@ -1494,6 +1518,7 @@ impl UiBridge {
         let lib_move = self.library.clone();
         let st_move = self.state.clone();
         let autoscroll_move = self.dnd_foldertree_autoscroller.clone();
+        let browse_scroll_move = self.dnd_browse_scroller.clone();
         self.window.on_media_drag_moved(move |x, y| {
             BridgeDnd::handle_drag_moved(
                 x,
@@ -1502,6 +1527,7 @@ impl UiBridge {
                 &lib_move,
                 &st_move,
                 &autoscroll_move,
+                &browse_scroll_move,
             );
         });
 
@@ -1520,12 +1546,14 @@ impl UiBridge {
         let lib_end = self.library.clone();
         let st_end = self.state.clone();
         let autoscroll_end = self.dnd_foldertree_autoscroller.clone();
+        let browse_scroll_end = self.dnd_browse_scroller.clone();
         self.window.on_media_drag_ended(move || {
             BridgeDnd::handle_drag_ended(
                 &win_end,
                 &lib_end,
                 &st_end,
                 &autoscroll_end,
+                &browse_scroll_end,
             );
         });
 

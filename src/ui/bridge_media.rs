@@ -1795,7 +1795,7 @@ impl BridgeMedia {
                 st.current_folder_path.clone(),
                 st.all_folder_media.len(),
                 // Folder rows are content too: a folder that only holds subfolders is not "empty".
-                st.active_indices.len() + st.folder_rows.folder_rows(),
+                st.active_indices.len() + st.folder_rows.listed_folders(),
             )
         };
         let has_root = app_settings.general.root_folder.is_some();
@@ -1831,6 +1831,8 @@ impl BridgeMedia {
         options: MediaReloadOptions,
     ) {
         let PendingList { store, layout, query } = pending;
+        // Folder dates are read again for the rows that show them (the old ones stay until the new ones arrive).
+        state.read().folder_times.mark_stale();
         let bench_opt = state.read().active_folder_bench.clone();
         let matched_len = layout.indices.len();
 

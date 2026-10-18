@@ -2,6 +2,7 @@ slint::include_modules!();
 
 pub mod bridge;
 pub mod bridge_ctx_menu;
+pub mod bridge_ctx_menu_browse;
 pub mod bridge_ctx_menu_favorite;
 pub mod bridge_ctx_menu_folder;
 pub mod bridge_ctx_menu_media;
@@ -31,6 +32,7 @@ pub mod bridge_folders;
 pub mod bridge_inspector;
 pub mod bridge_media;
 pub mod bridge_rubberband;
+pub mod bridge_selection_delete;
 pub mod bridge_sidebar_panel_tabs;
 pub mod bridge_state;
 pub mod bridge_status_bar;

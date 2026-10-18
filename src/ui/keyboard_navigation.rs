@@ -3,12 +3,11 @@ use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::{BridgeMedia, MediaReloadOptions};
 use super::bridge_state::{LastActivePanel, UiState};
+use super::browse_folders::BrowseItem;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
-use super::file_selection::FileSelectionModel;
 use super::MainWindow;
 use super::multiview::handle::{self as multiview_handle, Pace};
-use crate::library::models::MediaId;
 use crate::library::Library;
 use crate::settings::SettingsManager;
 use crate::thumbnails::ThumbnailManager;
@@ -171,7 +170,8 @@ pub fn calculate_target_index(
     Some(target)
 }
 
-/// Central orchestrator handling media item keyboard navigation events from Slint UI.
+/// Central orchestrator handling keyboard navigation events from Slint UI. The keys move over the whole list of the view, folder rows
+/// ("..." included) and media alike; with Shift the selection grows from the anchor over everything in between.
 pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
     let t0 = Instant::now();
 
@@ -179,41 +179,13 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
         return;
     };
 
-    // The folder rows in front of the media take list positions: the arithmetic of the grid runs on list positions, while the
-    // selection only ever moves between media (a folder row is never the target of a key).
-    let (total_items, front_len, current_visual_idx_opt) = {
+    let (view_len, current_position) = {
         let st = params.state.read();
-        let total = st.active_indices.len();
+        let total = st.view_len();
         if total == 0 {
             return;
         }
-        let front = st.folder_front_len();
-
-        let mut idx_opt = None;
-
-        // 1. Prioritize last clicked/focused item
-        if let Some(last_id) = st.file_selection.last_clicked_id()
-            && let Some(&row_idx) = st.media_row_map.get(&last_id)
-            && row_idx < total
-        {
-            idx_opt = Some(row_idx);
-        }
-
-        // 2. Fall back to anchor item
-        if idx_opt.is_none()
-            && let Some(anchor_id) = st.file_selection.anchor_id()
-            && let Some(&row_idx) = st.media_row_map.get(&anchor_id)
-            && row_idx < total
-        {
-            idx_opt = Some(row_idx);
-        }
-
-        // 3. Fall back to first selected item in visual order
-        if idx_opt.is_none() {
-            idx_opt = st.file_selection.selected_ids().iter().filter_map(|id| st.media_row_map.get(id).copied()).min();
-        }
-
-        (total, front, idx_opt.map(|row| row + front))
+        (total, st.browse_cursor().and_then(|item| st.browse_position_of(item)))
     };
 
     let is_table = params.window.get_is_table_view();
@@ -223,62 +195,31 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
         (params.window.get_grid_columns() as usize).max(1)
     };
 
-    let target_idx = match current_visual_idx_opt {
-        Some(cur_idx) => {
-            match calculate_target_index(
-                cur_idx,
-                direction,
-                front_len + total_items,
-                columns,
-                params.page_rows.max(1) as usize,
-            ) {
-                Some(t) => t.clamp(front_len, front_len + total_items - 1),
-                None => return,
-            }
-        }
+    let target_idx = match current_position {
+        Some(current) => match calculate_target_index(current, direction, view_len, columns, params.page_rows.max(1) as usize) {
+            Some(target) => target.min(view_len - 1),
+            None => return,
+        },
         None => {
             if direction == NavigationDirection::End {
-                front_len + total_items.saturating_sub(1)
+                view_len - 1
             } else {
-                front_len
+                0
             }
         }
     };
-    if Some(target_idx) == current_visual_idx_opt {
+    if Some(target_idx) == current_position {
         return;
     }
-    let target_row = target_idx - front_len;
-
-    let target_media_id = {
-        let st = params.state.read();
-        let orig_idx = st.active_indices[target_row];
-        st.all_folder_media[orig_idx].record.id
-    };
 
     // Update selection state and mark last active panel as Media
-    let (changed_ids, sel_count) = {
+    let (delta, target_item) = {
         let mut st = params.state.write();
+        let Some(item) = st.browse_item_at(target_idx) else {
+            return;
+        };
         st.last_active_panel = LastActivePanel::Media;
-        let prev_selected = st.file_selection.selected_ids().clone();
-
-        if params.is_shift {
-            let visible_ids: Vec<MediaId> = st
-                .active_indices
-                .iter()
-                .filter_map(|&idx| st.all_folder_media.get(idx))
-                .map(|item| item.record.id)
-                .collect();
-
-            st.file_selection
-                .select_range(target_media_id, &visible_ids, false);
-        } else {
-            st.file_selection.select_single(target_media_id);
-        }
-
-        let newly_selected = st.file_selection.selected_ids();
-        let changed = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
-        let count = st.file_selection.count();
-        (changed, count)
+        (st.browse_click(item, false, params.is_shift), item)
     };
 
     let need_slice_reanchor = !params.state.read().ring.range().contains(&target_idx);
@@ -292,8 +233,8 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
             params.state,
             MediaReloadOptions::with_anchor(false, false, target_idx),
         );
-    } else if !changed_ids.is_empty() {
-        BridgeFileSelection::sync_selection_diff(params.window, params.state, &changed_ids);
+    } else {
+        BridgeFileSelection::sync_selection_delta(params.window, params.state, &delta);
     }
 
     params.window.invoke_scroll_media_item_into_view(target_idx as i32);
@@ -301,18 +242,19 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
     BridgeInspector::update(params.window, params.state);
     BridgeTags::sync_tag_selection(params.window, params.library, params.state);
     StatusBarBridge::update_metrics(params.window, params.state);
-    multiview_handle::on_user_selection_changed(Pace::Immediate);
+    if !delta.media.is_empty() || matches!(target_item, BrowseItem::Media(_)) {
+        multiview_handle::on_user_selection_changed(Pace::Immediate);
+    }
 
     tracing::debug!(
         direction = ?direction,
         is_shift = params.is_shift,
         target_visual_idx = target_idx,
-        target_media_id,
-        selected_count = sel_count,
+        target = ?target_item,
         columns,
         page_rows = params.page_rows,
         is_table,
         elapsed_us = t0.elapsed().as_micros(),
-        "[KeyboardNavigation: Move] Media item navigated successfully via keyboard"
+        "[KeyboardNavigation: Move] Browse item navigated successfully via keyboard"
     );
 }
