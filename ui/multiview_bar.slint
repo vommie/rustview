@@ -6,6 +6,8 @@ import { MultiviewBarButtonView } from "multiview_types.slint";
 
 component MultiviewBarButton inherits Rectangle {
     in property <MultiviewBarButtonView> action;
+    // The button has its menu open: it stays highlighted and shows no tooltip.
+    in property <bool> open: false;
     in property <length> size: 28px;
 
     callback activated();
@@ -13,13 +15,14 @@ component MultiviewBarButton inherits Rectangle {
     width: root.size;
     height: root.size;
     border-radius: 6px;
-    background: root.action.attention ? Theme.accent.with-alpha(0.7) : (area.has-hover ? Theme.surface-hover : transparent);
+    background: root.action.attention ? Theme.accent.with-alpha(0.7) : (root.open ? Theme.primary.with-alpha(0.28) : (area.has-hover ? Theme.surface-hover : transparent));
     animate background { duration: 90ms; }
 
     area := TooltipArea {
         width: 100%;
         height: 100%;
         text: root.action.tooltip;
+        tooltip-enabled: !root.open;
 
         clicked => {
             root.activated();
@@ -30,7 +33,7 @@ component MultiviewBarButton inherits Rectangle {
             y: (parent.height - self.height) / 2;
             icon: root.action.icon;
             size: IconSize.lg;
-            color: root.action.attention ? Theme.background : (!root.action.enabled ? Theme.text-muted.with-alpha(0.5) : ((root.action.toggle && root.action.active) || area.has-hover ? Theme.primary : Theme.text));
+            color: root.action.attention ? Theme.background : (!root.action.enabled ? Theme.text-muted.with-alpha(0.5) : ((root.action.toggle && root.action.active) || root.open || area.has-hover ? Theme.primary : Theme.text));
         }
 
         ButtonFeedbackOverlay {
@@ -47,6 +50,8 @@ export component MultiviewBar inherits Rectangle {
     // Glass: the window is blended with what is below it. Without a compositing manager the window cannot be blended, so
     // the bar is solid then.
     in property <bool> translucent: true;
+    // Position of the button whose menu is open (-1 = none).
+    in property <int> menu-owner-index: -1;
 
     callback action-clicked(int /* action id */);
 
@@ -55,6 +60,11 @@ export component MultiviewBar inherits Rectangle {
     property <length> button-size: 28px;
     property <length> button-spacing: 2px;
     property <length> inset: 3px;
+
+    /// Center of the button at `index`, from the left edge of the bar (the layout is plain arithmetic, see `width`).
+    public pure function button-center-x(index: int) -> length {
+        return root.inset + index * (root.button-size + root.button-spacing) + root.button-size / 2;
+    }
 
     width: root.actions.length * root.button-size + Math.max(root.actions.length - 1, 0) * root.button-spacing + 2 * root.inset;
     height: root.button-size + 2 * root.inset;
@@ -67,8 +77,9 @@ export component MultiviewBar inherits Rectangle {
         padding: root.inset;
         spacing: root.button-spacing;
 
-        for action in root.actions : MultiviewBarButton {
+        for action[index] in root.actions : MultiviewBarButton {
             action: action;
+            open: index == root.menu-owner-index;
             size: root.button-size;
 
             activated => {

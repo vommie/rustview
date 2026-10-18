@@ -2,10 +2,8 @@ import { MultiviewBarButtonView } from "multiview_types.slint";
 import { MultiviewBar } from "multiview_bar.slint";
 import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
-import { Theme } from "styles.slint";
 import { ContextMenuItemModel } from "types.slint";
-import { ContextMenuItemRow } from "context_menu.slint";
-import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { MultiviewBarMenu } from "multiview_bar_menu.slint";
 
 /// A bar (the media action bar of the hovered medium, or the primary action bar of the view), in a frameless transparent window of its own that floats above the Multiview.
 /// Native video windows are children of the Multiview window, so nothing drawn there can blend with them; a window of its
@@ -31,18 +29,20 @@ export component MultiviewBarWindow inherits Window {
     // The rows of the drop-down (the same items and rows as in a context menu); the menu is shown while it has any.
     in property <[ContextMenuItemModel]> menu-items;
     in property <bool> menu-open: false;
+    // Position in `actions` of the button that opened the menu (-1 = none): it shows as open and the bubble points at it.
+    in property <int> menu-owner-index: -1;
     out property <length> bar-width: bar.width;
     out property <length> bar-height: bar.height;
     out property <length> bar-radius: bar.border-radius;
     out property <length> tooltip-radius: TooltipSettings.default-corner-radius;
-    out property <length> menu-radius: 6px;
+    out property <length> menu-radius: bubble.corner-radius;
 
     callback action-clicked(int /* tile index */, int /* action id */);
     // The tooltip bubble appeared, moved or went away (logical pixels in this window).
     // A row of the drop-down was clicked (the tile and the id of the item).
     callback menu-item-clicked(int /* tile index */, int /* item id */);
     // The drop-down appeared, changed its size or went away (logical pixels in this window).
-    callback menu-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
+    callback menu-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */, length /* caret center x */, length /* caret height */);
     callback tooltip-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
 
     // Called when the window is hidden: a tooltip that was open must not be there when the window comes back.
@@ -62,6 +62,7 @@ export component MultiviewBarWindow inherits Window {
         y: 0px;
         actions: root.actions;
         translucent: root.translucent;
+        menu-owner-index: root.menu-open ? root.menu-owner-index : -1;
 
         action-clicked(id) => {
             root.action-clicked(root.tile, id);
@@ -69,62 +70,33 @@ export component MultiviewBarWindow inherits Window {
     }
 
     property <length> menu-width: 230px;
-    property <length> menu-gap: 4px;
-    property <length> menu-x: root.align-left ? bar.x : bar.x + bar.width - root.menu-width;
+    property <length> menu-gap: 2px;
+    // The bubble is centered under the opener where the window leaves room for it.
+    property <length> opener-x: bar.x + bar.button-center-x(root.menu-owner-index);
+    property <length> menu-x: Math.max(0px, Math.min(root.width - root.menu-width, root.opener-x - root.menu-width / 2));
     property <length> menu-y: bar.y + bar.height + root.menu-gap;
     property <bool> menu-shown: root.menu-open && root.menu-items.length > 0;
-    property <length> menu-height: root.menu-shown
-        ? Math.min(menu-layout.preferred-height + 8px, Math.max(root.height - root.menu-y - 2px, 0px))
-        : 0px;
+    property <length> menu-height: root.menu-shown ? bubble.content-height : 0px;
 
     changed menu-shown => {
-        root.menu-changed(root.menu-shown, root.menu-x, root.menu-y, root.menu-width, root.menu-height);
+        root.menu-changed(root.menu-shown, root.menu-x, root.menu-y, root.menu-width, root.menu-height, root.menu-x + bubble.caret-center-x, bubble.caret-height);
     }
     changed menu-height => {
-        root.menu-changed(root.menu-shown, root.menu-x, root.menu-y, root.menu-width, root.menu-height);
+        root.menu-changed(root.menu-shown, root.menu-x, root.menu-y, root.menu-width, root.menu-height, root.menu-x + bubble.caret-center-x, bubble.caret-height);
     }
 
-    menu := Rectangle {
+    bubble := MultiviewBarMenu {
         visible: root.menu-shown;
         x: root.menu-x;
         y: root.menu-y;
         width: root.menu-width;
-        height: root.menu-height;
-        background: Theme.surface;
-        border-radius: root.menu-radius;
-        border-width: 1px;
-        border-color: Theme.border;
-        clip: true;
+        max-content-height: Math.max(root.height - root.menu-y - 2px, 0px);
+        items: root.menu-items;
+        anchor-x: root.opener-x - root.menu-x;
+        translucent: root.translucent;
 
-        // Swallows the clicks on the gaps between rows.
-        TouchArea { }
-
-        menu-scroll := SmoothScrollArea {
-            width: 100%;
-            height: 100%;
-            enable-horizontal: false;
-            enable-vertical: true;
-            scrollbar-size: 5px;
-            scrollbar-padding: 2px;
-            content-width: self.width;
-            content-height: menu-layout.preferred-height;
-
-            menu-layout := VerticalLayout {
-                padding: 4px;
-                spacing: 1px;
-
-                for item in root.menu-items : ContextMenuItemRow {
-                    item: item;
-
-                    scrolled(dx, dy) => {
-                        menu-scroll.handle-scroll(dx, dy);
-                    }
-
-                    clicked => {
-                        root.menu-item-clicked(root.tile, item.id);
-                    }
-                }
-            }
+        item-clicked(id) => {
+            root.menu-item-clicked(root.tile, id);
         }
     }
 

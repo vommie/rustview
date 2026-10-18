@@ -13,14 +13,16 @@
 use super::views::sync_model;
 use crate::ctx_menu::{CtxMenuDispatcher, CtxMenuItem};
 use crate::ui::{ContextMenuItemModel, MultiviewBarButtonView, MultiviewBarWindow};
+use crate::viewer::multiview::bar_menu::OutsidePress;
 use crate::viewer::multiview::bar_placement::{BarCorner, BarPlacement, in_reveal_zone, place_bar_in, rounded_region};
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::{OverlayServer, XRectangle, get_raw_window_xid};
 use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
 use slint::winit_030::winit::window::WindowAttributes;
-use slint::{ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, VecModel};
+use slint::{ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer, TimerMode, VecModel};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::time::Duration;
 
 /// Which host shows the bar. The window is shared, so a host may only hide a bar it shows itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,7 +89,13 @@ pub struct BarRequest {
     pub on_action: ActionHandler,
 }
 
+/// While a menu is open the pointer is polled this often: a click is shorter than a tick of the host, and a press that
+/// started and ended between two polls would be missed.
+const MENU_POLL_MS: u64 = 16;
+
 thread_local! {
+    /// Polls the pointer while the menu of the media bar is open.
+    static MENU_TIMER: Timer = Timer::default();
     static OVERLAYS: [RefCell<Option<Overlay>>; 2] = const { [RefCell::new(None), RefCell::new(None)] };
     /// The native windows of the bars: a pointer on any of them still counts as being on the Multiview.
     static OVERLAY_XIDS: Cell<[Option<u64>; 2]> = const { Cell::new([None; 2]) };
@@ -138,13 +146,45 @@ pub fn show(request: &BarRequest) -> bool {
 
 /// Opens the drop-down menu below the bar `kind` (the items are shown with the rows of a context menu); the next click on an
 /// item calls the bar's action handler with the id of the item. A bar that is not shown ignores this.
-pub fn open_menu(kind: BarKind, items: &[CtxMenuItem]) {
+pub fn open_menu(kind: BarKind, opener_action: i32, items: &[CtxMenuItem]) {
     with_overlay(kind, |overlay| {
         if overlay.shown {
+            let opener = overlay.last_actions.iter().position(|a| a.id == opener_action);
+            overlay.window.set_menu_owner_index(opener.map_or(-1, |i| i as i32));
             overlay.window.set_menu_items(CtxMenuDispatcher::items_to_slint_model(items, 0));
             overlay.window.set_menu_open(true);
+            let down = overlay.pointer_state().is_some_and(|(_, down)| down);
+            overlay.outside.arm(down);
         }
     });
+    MENU_TIMER.with(|timer| {
+        timer.start(TimerMode::Repeated, Duration::from_millis(MENU_POLL_MS), move || {
+            if !poll_menu(kind) {
+                MENU_TIMER.with(Timer::stop);
+            }
+        });
+    });
+}
+
+/// One poll of the open menu of `kind`, whoever shows the bar. Returns whether the menu is still open.
+fn poll_menu(kind: BarKind) -> bool {
+    OVERLAYS.with(|cells| {
+        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
+            return true;
+        };
+        slot.as_mut().is_some_and(Overlay::service_menu)
+    })
+}
+
+/// While the menu of the bar `kind`, shown by `owner`, is open: the bar stays where it is whatever the pointer does, and a click
+/// outside the bar and the menu closes the menu. Called on every tick of the host. Returns whether the menu is open.
+pub fn service_menu(kind: BarKind, owner: BarOwner) -> bool {
+    OVERLAYS.with(|cells| {
+        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
+            return false;
+        };
+        slot.as_mut().filter(|overlay| overlay.owner == Some(owner)).is_some_and(Overlay::service_menu)
+    })
 }
 
 /// Closes the drop-down menu of the bar `kind`. Returns whether one was open.
@@ -224,8 +264,10 @@ struct XState {
     placed: Option<BarPlacement>,
     /// The tooltip bubble inside the window, physical pixels relative to the window.
     tooltip: Option<Rect>,
-    /// The drop-down menu inside the window, physical pixels relative to the window.
+    /// The drop-down menu inside the window, physical pixels relative to the window (the caret zone on top included).
     menu: Option<Rect>,
+    /// The caret of the menu: its center x (relative to the window) and its height, physical pixels.
+    menu_caret: (i32, i32),
     bar_radius: i32,
     tooltip_radius: i32,
     menu_radius: i32,
@@ -257,7 +299,13 @@ impl XState {
             region.extend(rounded_region(tooltip, self.tooltip_radius));
         }
         if let Some(menu) = self.menu {
-            region.extend(rounded_region(menu, self.menu_radius));
+            let (caret_x, caret_h) = self.menu_caret;
+            let body = Rect::new(menu.x, menu.y + caret_h, menu.w, (menu.h - caret_h).max(1));
+            region.extend(rounded_region(body, self.menu_radius));
+            // The caret is a 45 degree triangle: row i from its tip is 2 * (i + 1) pixels wide.
+            for i in 0..caret_h.max(0) {
+                region.push(xrectangle(Rect::new(caret_x - (i + 1), menu.y + i, 2 * (i + 1), 1)));
+            }
         }
         server.set_bounding_region(xid, Some(&region));
     }
@@ -266,6 +314,7 @@ impl XState {
 /// Closes the drop-down of `window` and forgets the area it took.
 fn clear_menu(window: &MultiviewBarWindow, shared: &Shared) {
     window.set_menu_open(false);
+    window.set_menu_owner_index(-1);
     window.set_menu_items(ModelRc::<ContextMenuItemModel>::default());
     if let Ok(mut state) = shared.x.try_borrow_mut() {
         state.menu = None;
@@ -290,6 +339,7 @@ struct Overlay {
     owner: Option<BarOwner>,
     shown: bool,
     last_actions: Vec<MultiviewBarButtonView>,
+    outside: OutsidePress,
 }
 
 impl Overlay {
@@ -335,13 +385,14 @@ impl Overlay {
             state.apply_shape();
         });
         let for_menu = shared.clone();
-        window.on_menu_changed(move |visible, x, y, w, h| {
+        window.on_menu_changed(move |visible, x, y, w, h, caret_x, caret_h| {
             let Ok(mut state) = for_menu.x.try_borrow_mut() else {
                 return;
             };
             let scale = state.scale.max(0.5);
             let px = |logical: f32| (logical * scale).round() as i32;
             state.menu = (visible && w > 2.0 && h > 2.0).then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
+            state.menu_caret = (px(caret_x), px(caret_h));
             state.apply_shape();
         });
         let for_menu_click = shared.clone();
@@ -364,6 +415,7 @@ impl Overlay {
             owner: None,
             shown: false,
             last_actions: Vec::new(),
+            outside: OutsidePress::default(),
         };
         overlay.apply_tooltip_settings();
         tracing::info!(bar = kind.label(), "[Multiview: Overlay] Bar window created");
@@ -420,6 +472,35 @@ impl Overlay {
             menu.w,
             placement.window.y + menu.y + menu.h - top,
         ))
+    }
+
+    fn pointer_state(&self) -> Option<((i32, i32), bool)> {
+        self.shared.x.borrow().server.as_ref()?.pointer_and_buttons()
+    }
+
+    /// See `service_menu`.
+    fn service_menu(&mut self) -> bool {
+        if !self.window.get_menu_open() {
+            return false;
+        }
+        let Some((pointer, down)) = self.pointer_state() else {
+            return true;
+        };
+        let inside: Vec<Rect> = {
+            let state = self.shared.x.borrow();
+            match state.placed {
+                Some(placed) => std::iter::once(placed.bar)
+                    .chain(state.menu.map(|m| Rect::new(placed.window.x + m.x, placed.window.y + m.y, m.w, m.h)))
+                    .collect(),
+                None => Vec::new(),
+            }
+        };
+        if self.outside.poll(pointer, down, &inside) {
+            tracing::debug!("[Multiview: Overlay] Click outside the bar menu; closing it");
+            self.close_menu();
+            return false;
+        }
+        true
     }
 
     /// Closes the drop-down. Returns whether one was open.

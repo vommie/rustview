@@ -7,6 +7,7 @@
 
 pub mod media_actions;
 pub mod audio;
+pub mod bar_menu;
 pub mod bar_placement;
 pub mod click;
 pub mod container;

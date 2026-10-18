@@ -21,6 +21,7 @@ use crate::ui::media_open_with::{MediaOpenWith, OpenWithChoice};
 use crate::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
 use crate::viewer::multiview::click::{ClickDetector, ClickKind};
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
+use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::view::Navigation;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::{Mutex, RwLock};
@@ -428,7 +429,7 @@ impl MultiviewHandle {
             return;
         };
         let apps = MediaOpenWith::discover_apps(&app.state, &path);
-        bar_overlay::open_menu(BarKind::Media, &MediaOpenWith::menu_items(&apps));
+        bar_overlay::open_menu(BarKind::Media, MediaActionId::OpenWith.code(), &MediaOpenWith::menu_items(&apps));
     }
 
     /// An item of the "Open With" drop-down was chosen: the medium is opened with that application, or the native chooser

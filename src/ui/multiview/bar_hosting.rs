@@ -25,7 +25,9 @@ pub(super) fn update(host: &BarHost, instance: &SharedInstance, active: bool) ->
     } else {
         (None, None)
     };
-    let media_shown = media.is_some_and(|target| {
+    // An open menu keeps its bar where it is, however far the pointer is, until the user clicks elsewhere.
+    let media_menu_open = active && bar_overlay::service_menu(BarKind::Media, host.owner);
+    let media_shown = media_menu_open || media.is_some_and(|target| {
         bar_overlay::show(&BarRequest {
             kind: BarKind::Media,
             owner: host.owner,

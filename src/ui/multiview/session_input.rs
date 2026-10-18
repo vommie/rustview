@@ -2,7 +2,7 @@
 //! Everything here translates a UI event into a call on the instance and syncs the result into the window.
 
 use super::bar_hosting::{self, BarHost};
-use super::bar_overlay::BarOwner;
+use super::bar_overlay::{self, BarKind, BarOwner};
 use super::cursor;
 use super::eligibility;
 use super::session::Session;
@@ -141,6 +141,8 @@ impl Session {
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what
     /// that means is decided by the routing table.
     pub(super) fn on_click(&mut self, is_ctrl: bool) -> UiAction {
+        // A click on the Multiview itself dismisses an open bar menu (the pointer poll of the bar can miss a very short click).
+        bar_overlay::close_menu(BarKind::Media);
         let (click, origin) = {
             let mut instance = self.instance.lock();
             (instance.register_click(is_ctrl), instance.origin())

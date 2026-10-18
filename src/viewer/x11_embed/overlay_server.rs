@@ -95,6 +95,28 @@ impl OverlayServer {
         (ok != 0).then_some((x, y))
     }
 
+    /// The pointer in screen coordinates and whether a mouse button is held down (one round trip, `XQueryPointer`).
+    pub fn pointer_and_buttons(&self) -> Option<((i32, i32), bool)> {
+        const BUTTON_MASK: c_uint = (1 << 8) | (1 << 9) | (1 << 10);
+        let (mut root_ret, mut child_ret): (WindowId, WindowId) = (0, 0);
+        let (mut root_x, mut root_y, mut win_x, mut win_y): (c_int, c_int, c_int, c_int) = (0, 0, 0, 0);
+        let mut mask: c_uint = 0;
+        let on_screen = unsafe {
+            (self.api.x_query_pointer)(
+                self.display,
+                self.root,
+                &mut root_ret,
+                &mut child_ret,
+                &mut root_x,
+                &mut root_y,
+                &mut win_x,
+                &mut win_y,
+                &mut mask,
+            )
+        };
+        (on_screen != 0).then_some(((root_x, root_y), mask & BUTTON_MASK != 0))
+    }
+
     /// The top level window (a child of the root window) that is in front at the pointer, or `None` if the pointer is on
     /// another screen. A window of another application that covers the pointer position is the answer then, not the
     /// window below it.

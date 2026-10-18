@@ -183,6 +183,7 @@ fn route_for(event: RoutedEvent, click: ClickKind) -> UiAction {
 
 /// Two quick clicks with the same modifier state are a double click; the routing table decides what that means here.
 fn on_click(is_ctrl: bool) {
+    bar_overlay::close_menu(bar_overlay::BarKind::Media);
     let Some(instance) = current_instance() else {
         return;
     };
