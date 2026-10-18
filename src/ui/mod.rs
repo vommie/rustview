@@ -51,7 +51,6 @@ pub mod keyboard_navigation;
 pub mod list_loader;
 pub mod models;
 pub mod multiview;
-pub mod perf_probe;
 pub mod rubberband_selection;
 pub mod shutdown;
 pub mod sidebar_panel_tab_dnd;

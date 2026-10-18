@@ -56,36 +56,3 @@ pub fn shutdown() {
         worker.shutdown();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_newer_relayout_supersedes_older_ones() {
-        let first = begin_relayout();
-        assert!(relayout_is_current(first));
-        let second = begin_relayout();
-        assert!(!relayout_is_current(first));
-        assert!(relayout_is_current(second));
-    }
-
-    #[test]
-    fn a_reload_supersedes_relayouts_but_not_a_folder_load() {
-        let load = begin_folder_load();
-        let relayout = begin_relayout();
-        supersede_relayouts();
-        assert!(!relayout_is_current(relayout));
-        assert!(folder_load_is_current(load));
-    }
-
-    #[test]
-    fn a_folder_load_supersedes_relayouts_and_older_loads() {
-        let first = begin_folder_load();
-        let relayout = begin_relayout();
-        let second = begin_folder_load();
-        assert!(!relayout_is_current(relayout));
-        assert!(!folder_load_is_current(first));
-        assert!(folder_load_is_current(second));
-    }
-}

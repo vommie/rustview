@@ -1,8 +1,12 @@
 # Browse view performance project: results
 
 Branch `claude/sharp-faraday-xyc14n`, version 0.3.46. **No database migration** (no schema, LMDB or pack-store change; the old
-`l1_cache_slots` setting is simply ignored when present). Raw measurement files: `docs/perf/results/`; prior-art research:
-`docs/perf/research_thumbnail_grids.md`; tools: `scripts/perf/`, `examples/perf_seed.rs`, `examples/perf_scale.rs`, `benches/browse_data.rs`.
+`l1_cache_slots` setting is simply ignored when present). Prior-art research: `docs/perf/research_thumbnail_grids.md`.
+
+**Measurement tools:** the scripted scroll probe (`RUSTVIEW_PERF`, `src/ui/perf_probe/`), the interval statistics, `scripts/perf/`,
+`examples/perf_seed.rs`, `examples/perf_scale.rs`, `benches/browse_data.rs` (criterion, including the `legacy_*` copies of the replaced structures)
+and the new unit tests were scaffolding. They were removed from the tree after the work was accepted and are available in git history
+(last commit that contains them: `927225e`). The tables below are the recorded results of those tools.
 
 ## What changed (and why)
 | Finding in the baseline (362d290) | Change |
@@ -46,7 +50,7 @@ The host of the VM changed between sessions (host B: `base_b`, `new1`, `new2`, `
 Not better: grid 1500 px/s (noise level, the floor dominates). More slice updates in the new build are intended (one per row instead of one
 per ~120-item slice), each costs 0.1-0.7 ms instead of 0.2-23 ms.
 
-Final build on host C (faster host, not comparable to the table above), two full runs: `main3`/`main4` in `docs/perf/results/`:
+Final build on host C (faster host, not comparable to the table above), two full runs:
 nr p99 18-24 ms in the grid, 20-23 ms in the table, over-50 ms ticks: 0 in all 14 runs, reproducible between the two runs.
 
 ## 2. Idle, same host (host C), 1000-item folder shown, 20 s, interleaved
@@ -87,7 +91,7 @@ with `perf` and removed: folder switch `nr max` 56-100 ms -> 22-26 ms.
 
 At 1M records the work that used to block the UI thread (index, sort, filter, row map ~ 1.1 s) now runs on the worker; the commit stays O(tile pool).
 
-## 5. Micro benchmarks (criterion, `cargo bench --profile dev --bench browse_data`, host C; full output `bench_browse_data_full.txt`)
+## 5. Micro benchmarks (criterion, `cargo bench --profile dev --bench browse_data`, host C)
 | benchmark | before (legacy copy) | after |
 |---|---|---|
 | thumbnail decode 200 px (lossy WebP, ~8 KB) | 2.85 ms (image-webp) | **1.08 ms** (libwebp) |
@@ -100,8 +104,8 @@ At 1M records the work that used to block the UI thread (index, sort, filter, ro
 | sort 100k records by file name | - | 14.0 ms (parallel) |
 
 ## 6. Tests and checks
-- targeted unit tests of the last state: 79 passed, 0 failed (`unit_tests_final.txt`; includes records, store snapshots, list loader jobs,
-  latest-job worker, labels, sorting, libwebp round trip, memory budget, RAM cache, view loader, ring window, probe plan);
+- targeted unit tests of the last state before the cleanup: 79 passed, 0 failed (records, store snapshots, list loader jobs, latest-job worker, labels,
+  sorting, libwebp round trip, memory budget, RAM cache, view loader, ring window, probe plan); removed afterwards as scaffolding;
 - screenshots (grid, table, toggle keeps the scroll position, folder switch, query typing at 100k, rating query with and without results,
   restore after clearing, rubber band, select all, keyboard navigation, settings page with the RAM budget card incl. manual mode);
 - **not verified:** clippy (not run in the sandbox by project rule), real GPU rendering, Wayland, KWin, a library on slow disks, a baseline scroll

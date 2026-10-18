@@ -1661,11 +1661,6 @@ impl UiBridge {
         );
     }
 
-    /// Starts the scripted scroll scenarios when `RUSTVIEW_PERF` asks for them (developer probe, see `ui::perf_probe`).
-    pub fn start_perf_probe(&self) {
-        super::perf_probe::start_if_requested(&self.window, &self.state, &self.thumbnails);
-    }
-
     /// Closes every window and releases the native resources, see `ui::shutdown`. The caller has claimed the shutdown with
     /// `shutdown::begin`. UI thread only.
     pub fn shutdown(&self) {

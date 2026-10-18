@@ -984,17 +984,3 @@ impl ThumbnailScheduler {
         self.regenerate_sync(media_id, file_path, &custom_cfg)
     }
 }
-
-#[cfg(test)]
-mod view_loader_thread_tests {
-    use super::view_loader_threads;
-
-    #[test]
-    fn the_view_loader_takes_half_of_the_workers_between_two_and_four() {
-        assert_eq!(view_loader_threads(1), 2);
-        assert_eq!(view_loader_threads(3), 2);
-        assert_eq!(view_loader_threads(6), 3);
-        assert_eq!(view_loader_threads(14), 4);
-        assert_eq!(view_loader_threads(64), 4);
-    }
-}

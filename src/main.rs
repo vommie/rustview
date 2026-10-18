@@ -178,14 +178,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             slint::RenderingState::AfterRendering => {
-                rustview::ui::perf_probe::note_rendering_state(&state);
                 startup_clock::mark_first_frame();
                 let pending = after_first_frame_render.borrow_mut().take();
                 if let Some(start) = pending {
                     start();
                 }
             }
-            slint::RenderingState::BeforeRendering => rustview::ui::perf_probe::note_rendering_state(&state),
             _ => {}
         })
     {
@@ -402,7 +400,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("RustView UI & Storage Engine Ready.");
     startup_clock::mark("BridgeReady");
-    bridge.start_perf_probe();
 
     startup_clock::mark("EventLoop");
     let result = main_window.run();

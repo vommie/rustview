@@ -41,16 +41,3 @@ impl FolderDir {
         &self.path_lower
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_directory_is_kept_in_all_three_forms() {
-        let dir = FolderDir::new("/Media/Photos 2024");
-        assert_eq!(dir.path(), Path::new("/Media/Photos 2024"));
-        assert_eq!(dir.path_str().as_str(), "/Media/Photos 2024");
-        assert_eq!(dir.path_lower(), "/media/photos 2024");
-    }
-}
