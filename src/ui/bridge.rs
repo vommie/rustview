@@ -6,7 +6,7 @@ use super::bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
 use super::bridge_favorite_dialog_rename::FavoriteRenameDialogController;
 use super::bridge_favorites::BridgeFavorites;
 use super::bridge_file_dialog_conflict::FileOpsConflictDialogController;
-use super::bridge_file_dialog_delete::DeleteFileDialogController;
+use super::bridge_file_dialog_delete::{DeleteFileDialogController, DeleteFollowup};
 use super::bridge_file_dialog_missing::MissingFileDialogController;
 use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
 use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
@@ -83,6 +83,7 @@ pub struct DeleteActionParams<'a> {
     pub delete_file_dialog: &'a DeleteFileDialogController,
     pub remove_orphaned_file_dialog: &'a RemoveOrphanedFileDialogController,
     pub folder_dialogs: &'a FolderDialogController,
+    pub fullscreen: &'a MultiviewHandle,
 }
 
 pub struct UiBridge {
@@ -850,6 +851,7 @@ impl UiBridge {
         let del_file_dlg = self.delete_file_dialog.clone();
         let orph_file_dlg = self.remove_orphaned_dialog.clone();
         let fld_dlg = self.folder_dialogs.clone();
+        let fs_ctrl = self.fullscreen.clone();
 
         self.window.on_request_delete(move || {
             Self::trigger_delete_action(DeleteActionParams {
@@ -863,6 +865,7 @@ impl UiBridge {
                 delete_file_dialog: &del_file_dlg,
                 remove_orphaned_file_dialog: &orph_file_dlg,
                 folder_dialogs: &fld_dlg,
+                fullscreen: &fs_ctrl,
             });
         });
     }
@@ -870,8 +873,11 @@ impl UiBridge {
     pub fn trigger_delete_action(params: DeleteActionParams<'_>) {
         let window = params.window;
         let active_mode = window.get_active_view_mode();
+        // DEL or the delete button in the fullscreen window acts on the medium there; DEL in the main window always acts on
+        // what the main window shows, even while a Multiview is open next to it.
+        let fullscreen_target = super::multiview::handle::delete_requested_from_fullscreen();
 
-        if active_mode != 0 {
+        if fullscreen_target.is_none() && active_mode != 0 {
             tracing::debug!(
                 active_mode,
                 "[UiBridge: DeleteAction] DEL key pressed outside Browse View (mode != 0); operation safely bypassed"
@@ -884,6 +890,17 @@ impl UiBridge {
                 window,
                 "Cannot delete: an active operation is in progress.",
             );
+            return;
+        }
+
+        if let Some(media_id) = fullscreen_target {
+            tracing::info!(
+                media_id,
+                "[UiBridge: DeleteAction] Delete requested in the fullscreen: opening delete files dialog for its medium"
+            );
+            let fullscreen = params.fullscreen.clone();
+            let followup: DeleteFollowup = Rc::new(move |ids| fullscreen.drop_deleted(ids));
+            Self::open_media_delete_dialog(&params, vec![media_id], Some(followup));
             return;
         }
 
@@ -1003,12 +1020,22 @@ impl UiBridge {
             return;
         }
 
+        Self::open_media_delete_dialog(&params, selected_ids, None);
+    }
+
+    /// Opens the dialog that deletes `media_ids` (or, when every one of them is already missing on disk, the one that only
+    /// removes them from the database). `followup` runs after a confirmed deletion.
+    fn open_media_delete_dialog(
+        params: &DeleteActionParams<'_>,
+        media_ids: Vec<MediaId>,
+        followup: Option<DeleteFollowup>,
+    ) {
+        let window = params.window;
         let all_selected_deleted = {
             let st = params.state.read();
-            selected_ids.iter().all(|&id| {
+            media_ids.iter().all(|&id| {
                 st.all_folder_media
-                    .iter()
-                    .find(|m| m.record.id == id)
+                    .find(id)
                     .map(|m| m.record.is_deleted)
                     .unwrap_or(false)
             })
@@ -1024,16 +1051,16 @@ impl UiBridge {
 
         if all_selected_deleted {
             tracing::info!(
-                count = selected_ids.len(),
+                count = media_ids.len(),
                 "[UiBridge: DeleteAction] DEL pressed on media selection (all missing): opening remove_orphaned files dialog"
             );
-            params.remove_orphaned_file_dialog.show(window, selected_ids, dialog_ctx);
+            params.remove_orphaned_file_dialog.show(window, media_ids, dialog_ctx);
         } else {
             tracing::info!(
-                count = selected_ids.len(),
+                count = media_ids.len(),
                 "[UiBridge: DeleteAction] DEL pressed on media selection: opening delete files dialog"
             );
-            params.delete_file_dialog.show(window, selected_ids, dialog_ctx);
+            params.delete_file_dialog.show_with_followup(window, media_ids, dialog_ctx, followup);
         }
     }
 

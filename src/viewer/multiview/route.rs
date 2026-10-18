@@ -49,6 +49,12 @@ pub enum UiAction {
     /// Action button: a medium left the Multiview of a tab, so everything that follows the tab's media (tab bar, inspector,
     /// tag and rating targets) has to catch up.
     TabMemberRemoved,
+    /// Action button (or DEL on a single medium): the delete dialog opens for the medium.
+    DeleteTile(u64),
+    /// Action button "Open With": the drop-down with the applications of the medium opens, or closes if it is open.
+    ToggleOpenWith(u64),
+    /// An item of the "Open With" drop-down was chosen (the id the item has in the menu).
+    OpenWithItem(u64, i32),
     /// Primary bar button: the mouse cursor hiding after it rested is switched on or off (a setting of the application).
     SetIdleCursorHide(bool),
     /// Previous/next medium of the single image the Multiview shows (keys and mouse wheel).

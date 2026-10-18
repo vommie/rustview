@@ -49,6 +49,7 @@ pub mod favorites;
 pub mod file_selection;
 pub mod keyboard_navigation;
 pub mod list_loader;
+pub mod media_open_with;
 pub mod models;
 pub mod multiview;
 pub mod rubberband_selection;

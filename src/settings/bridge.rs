@@ -273,6 +273,8 @@ impl SettingsDialogController {
         window.set_fullscreen_media_bar_show_mute(bar.show_mute);
         window.set_fullscreen_media_bar_show_sticky(bar.show_sticky);
         window.set_fullscreen_media_bar_show_open_as_tab(bar.show_open_as_tab);
+        window.set_fullscreen_media_bar_show_open_with(bar.show_open_with);
+        window.set_fullscreen_media_bar_show_delete(bar.show_delete);
         window.set_fullscreen_media_bar_show_remove(bar.show_remove);
         window.set_fullscreen_media_bar_reveal_distance_px(bar.reveal_distance_px as i32);
 
@@ -315,6 +317,8 @@ impl SettingsDialogController {
         bar.show_mute = window.get_fullscreen_media_bar_show_mute();
         bar.show_sticky = window.get_fullscreen_media_bar_show_sticky();
         bar.show_open_as_tab = window.get_fullscreen_media_bar_show_open_as_tab();
+        bar.show_open_with = window.get_fullscreen_media_bar_show_open_with();
+        bar.show_delete = window.get_fullscreen_media_bar_show_delete();
         bar.show_remove = window.get_fullscreen_media_bar_show_remove();
         bar.reveal_distance_px = u32::try_from(window.get_fullscreen_media_bar_reveal_distance_px())
             .unwrap_or(0)

@@ -62,7 +62,11 @@ impl MediaStore {
         *self = Self::from_records(records);
     }
 
+    /// Renumbers `IndexedMediaRecord::index` (the layout stores these positions in `active_indices`) and rebuilds the id index.
     fn reindex(&mut self) {
+        for (position, record) in Arc::make_mut(&mut self.records).iter_mut().enumerate() {
+            record.index = position;
+        }
         self.by_id = Arc::new(index_of(&self.records));
         self.generation = next_generation();
     }
@@ -133,5 +137,52 @@ impl Deref for MediaStore {
 impl DerefMut for MediaStore {
     fn deref_mut(&mut self) -> &mut Self::Target {
         Arc::make_mut(&mut self.records).as_mut_slice()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::models::MediaRecord;
+    use crate::media::{MediaFormat, MediaType};
+    use crate::query::folder_dir::FolderDir;
+
+    fn record(id: MediaId, index: usize) -> IndexedMediaRecord {
+        let record = MediaRecord {
+            id,
+            folder_id: 1,
+            filename: format!("{id}.jpg"),
+            file_hash: [0; 16],
+            file_size: 1,
+            modification_time: 0,
+            media_type: MediaType::Image,
+            format: MediaFormat::Jpeg,
+            width: 1,
+            height: 1,
+            rating: 0,
+            last_seen: 0,
+            is_deleted: false,
+            creation_time: 0,
+            duration_ms: 0,
+            is_corrupted: false,
+            source: None,
+        };
+        IndexedMediaRecord::new(index, record, FolderDir::new("/tmp"), 0)
+    }
+
+    #[test]
+    fn retain_renumbers_the_record_positions() {
+        let mut store = MediaStore::from_records((0..5).map(|i| record(i + 10, i as usize)).collect());
+        store.retain(|m| m.record.id != 11 && m.record.id != 13);
+        let positions: Vec<(MediaId, usize)> = store.iter().map(|m| (m.record.id, m.index)).collect();
+        assert_eq!(positions, vec![(10, 0), (12, 1), (14, 2)]);
+        assert_eq!(store.position_of(14), Some(2));
+    }
+
+    #[test]
+    fn remove_renumbers_the_record_positions() {
+        let mut store = MediaStore::from_records((0..3).map(|i| record(i + 1, i as usize)).collect());
+        store.remove(0);
+        assert!(store.iter().enumerate().all(|(position, m)| m.index == position));
     }
 }

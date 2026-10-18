@@ -350,6 +350,16 @@ impl UiState {
                 || self.is_query_active)
     }
 
+    /// Drops deleted media from the open folder. The positions the previous layout stored are void afterwards, so the next
+    /// reload must lay the list out from scratch.
+    pub fn remove_media(&mut self, ids: &HashSet<MediaId>) {
+        self.all_folder_media.retain(|m| !ids.contains(&m.record.id));
+        self.file_selection.clear();
+        self.active_indices.clear();
+        self.last_executed_query.clear();
+        self.mark_list_bytes_dirty();
+    }
+
     /// The tiles hold nothing valid any more: the next viewport update refills every one of them.
     #[inline]
     pub fn invalidate_view_window(&mut self) {

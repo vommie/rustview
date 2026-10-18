@@ -15,6 +15,8 @@ pub enum PlayerEvent {
     ToggleFullscreen,
     CloseTab,
     RenameRequested(MediaId),
+    /// DEL was pressed in a video's window.
+    DeleteRequested,
     /// The mute state of the player of this medium changed (a hotkey or the on-screen controller of mpv, or us).
     MuteChanged {
         media_id: MediaId,

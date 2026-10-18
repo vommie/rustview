@@ -391,12 +391,7 @@ impl FileRenameDialogController {
         }
         st.mark_list_bytes_dirty();
 
-        // 3. Re-index all items to maintain sequential 0..N indices
-        for (i, item) in st.all_folder_media.iter_mut().enumerate() {
-            item.index = i;
-        }
-
-        // 4. Invalidate search cache and slice to guarantee full clean reload
+        // 3. Invalidate search cache and slice to guarantee full clean reload
         st.active_indices.clear();
         st.mark_list_bytes_dirty();
         st.last_executed_query.clear();

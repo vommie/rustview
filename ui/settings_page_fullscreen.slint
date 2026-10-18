@@ -21,6 +21,8 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <bool> media-bar-show-mute: true;
     in-out property <bool> media-bar-show-sticky: true;
     in-out property <bool> media-bar-show-open-as-tab: true;
+    in-out property <bool> media-bar-show-open-with: true;
+    in-out property <bool> media-bar-show-delete: true;
     in-out property <bool> media-bar-show-remove: true;
     in-out property <int> media-bar-reveal-distance-px: 15;
 
@@ -259,6 +261,22 @@ export component SettingsPageFullscreen inherits VerticalLayout {
             tooltip: "Open the medium in a viewer tab of its own, without leaving the fullscreen.";
             enabled: root.media-bar-enabled;
             checked <=> root.media-bar-show-open-as-tab;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Open with...";
+            tooltip: "A drop-down with the applications that can open the medium, like Open With in the context menu of a medium.";
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-open-with;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Delete";
+            tooltip: "Delete the medium (to the trash or permanently), after the usual confirmation. Del does the same on a single medium.";
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-delete;
         }
 
         SettingsSwitchRow {

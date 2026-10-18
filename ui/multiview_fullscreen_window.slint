@@ -24,6 +24,7 @@ export component MultiviewFullscreenWindow inherits Window {
 
     callback request-close();
     callback request-rename();
+    callback request-delete();
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
     callback background-clicked(bool /* is_ctrl */);
     callback middle-clicked();
@@ -63,6 +64,10 @@ export component MultiviewFullscreenWindow inherits Window {
             }
             if event.text == Key.F2 {
                 root.request-rename();
+                return accept;
+            }
+            if event.text == Key.Delete {
+                root.request-delete();
                 return accept;
             }
             if root.navigation != 0 {

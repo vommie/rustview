@@ -6,6 +6,7 @@ use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, 
 use super::bridge_file_selection::BridgeFileSelection;
 use super::multiview::MultiviewHandle;
 use super::bridge_inspector::BridgeInspector;
+use super::media_open_with::{MediaOpenWith, OpenWithChoice};
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
@@ -24,7 +25,7 @@ use crate::library::models::{FileTransferKind, FolderHierarchySnapshot, FolderId
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
-use crate::system::{DesktopApp, DesktopIntegration, SystemClipboard, SystemFileHandler};
+use crate::system::{DesktopApp, SystemClipboard, SystemFileHandler};
 use crate::thumbnails::ThumbnailManager;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
@@ -152,13 +153,13 @@ impl MediaContextMenu {
             !all_selected_deleted
         };
 
-        let associated_apps = if target_file_exists && let Some(ref path) = target_path_opt {
-            DesktopIntegration::get_associated_apps(path)
-        } else {
-            Vec::new()
+        let associated_apps = match target_path_opt {
+            Some(ref path) if target_file_exists => MediaOpenWith::discover_apps(state, path),
+            _ => {
+                state.write().active_associated_apps = Vec::new();
+                Vec::new()
+            }
         };
-
-        state.write().active_associated_apps = associated_apps.clone();
 
         tracing::debug!(
             selected_count,
@@ -202,29 +203,8 @@ impl MediaContextMenu {
 
         if can_open && !associated_apps.is_empty() {
             let apps = associated_apps.to_vec();
-            builder = builder.submenu("Open With...", Some(Icon::OpenWith), true, move |mut sub| {
-                for (idx, app) in apps.iter().enumerate() {
-                    let action_id = CTX_ACTION_OPEN_WITH_APP_BASE + (idx as CtxMenuActionId);
-                    sub = sub.action_with_icon_path(
-                        action_id,
-                        app.name.clone(),
-                        None,
-                        app.icon_path.clone(),
-                        true,
-                    );
-                }
-
-                if !apps.is_empty() {
-                    sub = sub.separator();
-                }
-
-                sub.action(
-                    CTX_ACTION_OPEN_WITH_OTHER,
-                    "Other Application...",
-                    None,
-                    Some(Icon::OpenWith),
-                    true,
-                )
+            builder = builder.submenu("Open With...", Some(Icon::OpenWith), true, move |sub| {
+                MediaOpenWith::append_menu_items(sub, &apps)
             });
         } else {
             builder = builder.action(
@@ -616,8 +596,7 @@ impl MediaContextMenu {
         }
 
         // 3. Open With Desktop App clicked
-        if (CTX_ACTION_OPEN_WITH_APP_BASE..CTX_ACTION_OPEN_WITH_APP_BASE + 500).contains(&action_id) {
-            let app_idx = (action_id - CTX_ACTION_OPEN_WITH_APP_BASE) as usize;
+        if let Some(OpenWithChoice::App(app_idx)) = MediaOpenWith::choice_of(action_id) {
             Self::handle_open_with_specific_app(window, ctx, target_ids, app_idx);
             return;
         }
@@ -844,34 +823,8 @@ impl MediaContextMenu {
         target_ids: &[MediaId],
         app_idx: usize,
     ) {
-        let app_opt = ctx.state.read().active_associated_apps.get(app_idx).cloned();
-        let Some(app) = app_opt else {
-            tracing::warn!(app_idx, "[MediaContextMenu] Target desktop app index not found");
-            return;
-        };
-
         let paths = Self::collect_paths_for_ids(ctx, target_ids);
-        if paths.is_empty() {
-            tracing::warn!(app = %app.name, "[MediaContextMenu] No file paths found to open with app");
-            return;
-        }
-
-        tracing::info!(
-            app = %app.name,
-            paths_count = paths.len(),
-            first_path = %LogObscurer::path(&paths[0]),
-            "[MediaContextMenu] Launching selected file(s) with specific desktop app"
-        );
-
-        if let Err(e) = DesktopIntegration::launch_app(&app, &paths) {
-            tracing::error!(error = %e, app = %app.name, "[MediaContextMenu] Failed to launch desktop app");
-            StatusBarBridge::error(window, format!("Failed to launch '{}': {}", app.name, e));
-        } else {
-            StatusBarBridge::success(
-                window,
-                format!("Launched '{}' with {} file(s).", app.name, paths.len()),
-            );
-        }
+        MediaOpenWith::launch(window, ctx.state, &paths, app_idx);
     }
 
     fn handle_open_with_other_action(
@@ -880,39 +833,14 @@ impl MediaContextMenu {
         target_ids: &[MediaId],
     ) {
         let paths = Self::collect_paths_for_ids(ctx, target_ids);
-        let Some(first_path) = paths.first() else {
-            tracing::warn!("[MediaContextMenu] No valid file path found for application chooser");
-            return;
-        };
-
-        tracing::info!(
-            target_file = %LogObscurer::path(first_path),
-            "[MediaContextMenu] 'Other Application...' triggered"
-        );
-
-        if let Err(e) = DesktopIntegration::open_with_dialog(first_path) {
-            tracing::error!(error = %e, "[MediaContextMenu] Failed to open native app chooser");
-            StatusBarBridge::error(window, format!("Failed to open application chooser: {}", e));
-        } else {
-            StatusBarBridge::info(window, "Opened native application chooser dialog.");
-        }
+        MediaOpenWith::choose_application(window, &paths);
     }
 
     pub fn collect_paths_for_ids(
         ctx: &MediaActionContext<'_>,
         target_ids: &[MediaId],
     ) -> Vec<PathBuf> {
-        let mut paths = Vec::with_capacity(target_ids.len());
-        let st = ctx.state.read();
-
-        for &id in target_ids {
-            if let Some(item) = st.all_folder_media.find(id) {
-                paths.push(item.full_path());
-            } else if let Ok(p) = ctx.library.resolve_media_path(id) {
-                paths.push(p);
-            }
-        }
-        paths
+        MediaOpenWith::paths_for(ctx.state, ctx.library, target_ids)
     }
 
     fn handle_open_in_file_manager_action(

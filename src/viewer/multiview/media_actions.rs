@@ -17,6 +17,29 @@ pub enum MediaActionId {
     OpenAsTab,
     Remove,
     Close,
+    OpenWith,
+    Delete,
+}
+
+/// What a click in the media bar window means: a button, or an item of the drop-down menu that hangs below the bar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BarClick {
+    Action(MediaActionId),
+    /// The id of the clicked menu item (the application defines them; they never collide with the button codes).
+    MenuItem(i32),
+}
+
+impl BarClick {
+    /// Button codes are small numbers; menu items start here.
+    const FIRST_MENU_ITEM: i32 = 1000;
+
+    pub fn from_code(code: i32) -> Option<Self> {
+        if code >= Self::FIRST_MENU_ITEM {
+            Some(Self::MenuItem(code))
+        } else {
+            MediaActionId::from_code(code).map(Self::Action)
+        }
+    }
 }
 
 impl MediaActionId {
@@ -28,6 +51,8 @@ impl MediaActionId {
             Self::OpenAsTab => 2,
             Self::Remove => 3,
             Self::Close => 4,
+            Self::OpenWith => 5,
+            Self::Delete => 6,
         }
     }
 
@@ -38,6 +63,8 @@ impl MediaActionId {
             Self::OpenAsTab,
             Self::Remove,
             Self::Close,
+            Self::OpenWith,
+            Self::Delete,
         ]
         .into_iter()
         .find(|id| id.code() == code)
@@ -71,7 +98,7 @@ pub struct MediaActionSpec {
 type Provider = fn(&MediaBarContext) -> Option<MediaActionSpec>;
 
 /// Order of the buttons in the bar, left to right.
-const PROVIDERS: &[Provider] = &[mute, sticky, open_as_tab, remove, close];
+const PROVIDERS: &[Provider] = &[mute, sticky, open_as_tab, open_with, delete, remove, close];
 
 /// The bar exists in the fullscreen window and in the viewer tab; the tab-grid miniature is a picture.
 fn interactive(ctx: &MediaBarContext) -> bool {
@@ -123,6 +150,24 @@ fn open_as_tab(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     })
 }
 
+fn open_with(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    interactive(ctx).then_some(MediaActionSpec {
+        id: MediaActionId::OpenWith,
+        icon: Icon::OpenWith,
+        tooltip: "Open with...",
+        active: None,
+    })
+}
+
+fn delete(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    interactive(ctx).then_some(MediaActionSpec {
+        id: MediaActionId::Delete,
+        icon: Icon::Delete,
+        tooltip: "Delete file...",
+        active: None,
+    })
+}
+
 fn remove(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     (interactive(ctx) && ctx.tile_count > 1).then_some(MediaActionSpec {
         id: MediaActionId::Remove,
@@ -153,4 +198,44 @@ fn close(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
 
 pub fn media_actions_for(ctx: &MediaBarContext) -> Vec<MediaActionSpec> {
     PROVIDERS.iter().filter_map(|provider| provider(ctx)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ctx(host: HostMode, tile_count: usize) -> MediaBarContext {
+        MediaBarContext {
+            host,
+            origin: OriginKind::Browse,
+            tile_count,
+            kind: TileKind::Image,
+            muted: None,
+            sticky: false,
+            single_tab: false,
+        }
+    }
+
+    #[test]
+    fn open_with_and_delete_sit_before_remove_on_every_interactive_host() {
+        for host in [HostMode::Fullscreen, HostMode::TabView] {
+            for tiles in [1, 3] {
+                let ids: Vec<MediaActionId> = media_actions_for(&ctx(host, tiles)).iter().map(|a| a.id).collect();
+                let at = |id| ids.iter().position(|&x| x == id).expect("button present");
+                assert!(at(MediaActionId::OpenWith) < at(MediaActionId::Delete));
+                let last = if tiles > 1 { MediaActionId::Remove } else { MediaActionId::Close };
+                assert!(at(MediaActionId::Delete) < at(last));
+            }
+        }
+        let grid: Vec<MediaActionId> = media_actions_for(&ctx(HostMode::TabGrid, 2)).iter().map(|a| a.id).collect();
+        assert!(grid.is_empty());
+    }
+
+    #[test]
+    fn bar_clicks_tell_buttons_from_menu_items() {
+        assert_eq!(BarClick::from_code(MediaActionId::Delete.code()), Some(BarClick::Action(MediaActionId::Delete)));
+        assert_eq!(BarClick::from_code(1050), Some(BarClick::MenuItem(1050)));
+        assert_eq!(BarClick::from_code(10_003), Some(BarClick::MenuItem(10_003)));
+        assert_eq!(BarClick::from_code(99), None);
+    }
 }

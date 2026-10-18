@@ -15,7 +15,7 @@ use crate::library::models::MediaId;
 use crate::settings::schema::MULTIVIEW_TICK_MS;
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
-use crate::viewer::multiview::media_actions::MediaActionId;
+use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
@@ -91,7 +91,7 @@ fn act(f: impl FnOnce(&mut MultiviewInstance)) {
 
 /// A button of the hover bar was clicked; what the application has to do about it runs after the instance lock is released.
 fn on_action(tile: i32, action: i32) {
-    let (Some(instance), Some(action)) = (current_instance(), MediaActionId::from_code(action)) else {
+    let (Some(instance), Some(click)) = (current_instance(), BarClick::from_code(action)) else {
         return;
     };
     let outcome = {
@@ -102,8 +102,19 @@ fn on_action(tile: i32, action: i32) {
         else {
             return;
         };
-        guard.perform_action(media_id, action)
+        guard.perform_click(media_id, click)
     };
+    drop(instance);
+    refresh();
+    run(outcome);
+}
+
+/// The user deleted media through the Multiview of the shown tab: their tiles leave the view.
+pub fn drop_deleted(ids: &[MediaId]) {
+    let Some(instance) = current_instance() else {
+        return;
+    };
+    let outcome = instance.lock().drop_deleted(ids);
     drop(instance);
     refresh();
     run(outcome);

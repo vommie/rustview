@@ -120,6 +120,8 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-media-bar-show-mute: true;
     in-out property <bool> fullscreen-media-bar-show-sticky: true;
     in-out property <bool> fullscreen-media-bar-show-open-as-tab: true;
+    in-out property <bool> fullscreen-media-bar-show-open-with: true;
+    in-out property <bool> fullscreen-media-bar-show-delete: true;
     in-out property <bool> fullscreen-media-bar-show-remove: true;
     in-out property <int> fullscreen-media-bar-reveal-distance-px: 15;
     in-out property <bool> fullscreen-primary-bar-enabled: true;
@@ -289,6 +291,8 @@ export component SettingsWindow inherits Window {
                             media-bar-show-mute <=> root.fullscreen-media-bar-show-mute;
                             media-bar-show-sticky <=> root.fullscreen-media-bar-show-sticky;
                             media-bar-show-open-as-tab <=> root.fullscreen-media-bar-show-open-as-tab;
+                            media-bar-show-open-with <=> root.fullscreen-media-bar-show-open-with;
+                            media-bar-show-delete <=> root.fullscreen-media-bar-show-delete;
                             media-bar-show-remove <=> root.fullscreen-media-bar-show-remove;
                             media-bar-reveal-distance-px <=> root.fullscreen-media-bar-reveal-distance-px;
                             primary-bar-enabled <=> root.fullscreen-primary-bar-enabled;

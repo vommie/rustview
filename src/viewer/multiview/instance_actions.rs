@@ -1,7 +1,7 @@
 //! Instance behavior around the action buttons of the hover bar: which buttons a tile offers, what a click does to the
 //! Multiview itself (sticky, sound, remove) and what the application has to do about it (open as tab, deselect, close).
 
-use super::media_actions::{MediaBarContext, MediaActionId, media_actions_for};
+use super::media_actions::{BarClick, MediaBarContext, MediaActionId, media_actions_for};
 use super::follow::FollowPlan;
 use super::instance::MultiviewInstance;
 use super::model::TileKind;
@@ -54,6 +54,15 @@ impl MultiviewInstance {
             .collect()
     }
 
+    /// A click in the media bar window of tile `id`: a button, or an item of its "Open With" drop-down.
+    pub fn perform_click(&mut self, id: MediaId, click: BarClick) -> UiAction {
+        match click {
+            BarClick::Action(action) => self.perform_action(id, action),
+            BarClick::MenuItem(item) if self.tile_index(id).is_some() => UiAction::OpenWithItem(id, item),
+            BarClick::MenuItem(_) => UiAction::None,
+        }
+    }
+
     /// A click on an action button of tile `id`. Buttons the tile does not offer (a stale click) are ignored. The result
     /// is what the application has to do on top of the change the Multiview made to itself.
     pub fn perform_action(&mut self, id: MediaId, action: MediaActionId) -> UiAction {
@@ -79,8 +88,19 @@ impl MultiviewInstance {
                 UiAction::None
             }
             MediaActionId::OpenAsTab => UiAction::OpenTileAsTab(id),
+            MediaActionId::OpenWith => UiAction::ToggleOpenWith(id),
+            MediaActionId::Delete => UiAction::DeleteTile(id),
             MediaActionId::Remove => self.remove_tile(index),
             MediaActionId::Close => self.close_action(),
+        }
+    }
+
+    /// DEL deletes the single medium the Multiview shows. With several media there is no telling which one DEL means; the
+    /// delete buttons of the tiles are the way then.
+    pub fn delete_single(&self) -> UiAction {
+        match self.solo_tile() {
+            Some((id, _, _)) => UiAction::DeleteTile(id),
+            None => UiAction::None,
         }
     }
 
@@ -113,17 +133,7 @@ impl MultiviewInstance {
             return self.close_action();
         }
         let id = self.tiles[index].media_id;
-        let plan = FollowPlan {
-            remove: vec![id],
-            slots: self
-                .tiles
-                .iter()
-                .map(|t| t.media_id)
-                .filter(|&m| m != id)
-                .collect(),
-            ..FollowPlan::default()
-        };
-        self.apply_follow(&plan, HashMap::new());
+        self.leave_view(&[id]);
         match self.origin {
             OriginKind::Browse => UiAction::DeselectInBrowse(id),
             OriginKind::Tab => {
@@ -134,6 +144,44 @@ impl MultiviewInstance {
                 );
                 UiAction::TabMemberRemoved
             }
+        }
+    }
+
+    /// Takes the tiles of `ids` out of the view; the other tiles keep running.
+    fn leave_view(&mut self, ids: &[MediaId]) {
+        let plan = FollowPlan {
+            remove: ids.to_vec(),
+            slots: self
+                .tiles
+                .iter()
+                .map(|t| t.media_id)
+                .filter(|m| !ids.contains(m))
+                .collect(),
+            ..FollowPlan::default()
+        };
+        self.apply_follow(&plan, HashMap::new());
+    }
+
+    /// The user deleted media through this Multiview (button or DEL): their tiles leave the view instead of staying behind
+    /// as error tiles. The last medium cannot leave, so what shows the Multiview closes. The Browse selection was cleared
+    /// by the deletion itself, a tab's other members only need the application to catch up.
+    pub fn drop_deleted(&mut self, ids: &[MediaId]) -> UiAction {
+        let gone: Vec<MediaId> = ids.iter().copied().filter(|&id| self.tile_index(id).is_some()).collect();
+        if gone.is_empty() {
+            return UiAction::None;
+        }
+        if gone.len() >= self.tiles.len() {
+            return self.close_action();
+        }
+        self.leave_view(&gone);
+        tracing::info!(
+            deleted = gone.len(),
+            remaining = self.tiles.len(),
+            "[Multiview: Actions] Deleted media left the view"
+        );
+        match self.origin {
+            OriginKind::Browse => UiAction::None,
+            OriginKind::Tab => UiAction::TabMemberRemoved,
         }
     }
 

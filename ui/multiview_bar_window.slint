@@ -2,13 +2,18 @@ import { MultiviewBarButtonView } from "multiview_types.slint";
 import { MultiviewBar } from "multiview_bar.slint";
 import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
+import { Theme } from "styles.slint";
+import { ContextMenuItemModel } from "types.slint";
+import { ContextMenuItemRow } from "context_menu.slint";
+import { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 /// A bar (the media action bar of the hovered medium, or the primary action bar of the view), in a frameless transparent window of its own that floats above the Multiview.
 /// Native video windows are children of the Multiview window, so nothing drawn there can blend with them; a window of its
 /// own is blended with everything below it by the compositing manager (glass), and a tooltip drawn in it is never covered
 /// by a video. Rust places the window so that the bar (top right corner of this window) sits in the corner of the tile.
 /// The window is larger than the bar to leave room for the tooltip bubble below it; Rust limits the pointer input of the
-/// window to the bar, so the rest of it is invisible to the pointer.
+/// window to the bar, so the rest of it is invisible to the pointer. A drop-down menu (the "Open With" applications) hangs
+/// below the bar in the same room; while it is open it takes the pointer too.
 export component MultiviewBarWindow inherits Window {
     title: "RustView - Multiview bar";
     no-frame: true;
@@ -23,13 +28,21 @@ export component MultiviewBarWindow inherits Window {
     in property <bool> align-left: false;
     in property <bool> enable-tooltips: true;
     in property <int> tooltip-delay-ms: 750;
+    // The rows of the drop-down (the same items and rows as in a context menu); the menu is shown while it has any.
+    in property <[ContextMenuItemModel]> menu-items;
+    in property <bool> menu-open: false;
     out property <length> bar-width: bar.width;
     out property <length> bar-height: bar.height;
     out property <length> bar-radius: bar.border-radius;
     out property <length> tooltip-radius: TooltipSettings.default-corner-radius;
+    out property <length> menu-radius: 6px;
 
     callback action-clicked(int /* tile index */, int /* action id */);
     // The tooltip bubble appeared, moved or went away (logical pixels in this window).
+    // A row of the drop-down was clicked (the tile and the id of the item).
+    callback menu-item-clicked(int /* tile index */, int /* item id */);
+    // The drop-down appeared, changed its size or went away (logical pixels in this window).
+    callback menu-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
     callback tooltip-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
 
     // Called when the window is hidden: a tooltip that was open must not be there when the window comes back.
@@ -52,6 +65,66 @@ export component MultiviewBarWindow inherits Window {
 
         action-clicked(id) => {
             root.action-clicked(root.tile, id);
+        }
+    }
+
+    property <length> menu-width: 230px;
+    property <length> menu-gap: 4px;
+    property <length> menu-x: root.align-left ? bar.x : bar.x + bar.width - root.menu-width;
+    property <length> menu-y: bar.y + bar.height + root.menu-gap;
+    property <bool> menu-shown: root.menu-open && root.menu-items.length > 0;
+    property <length> menu-height: root.menu-shown
+        ? Math.min(menu-layout.preferred-height + 8px, Math.max(root.height - root.menu-y - 2px, 0px))
+        : 0px;
+
+    changed menu-shown => {
+        root.menu-changed(root.menu-shown, root.menu-x, root.menu-y, root.menu-width, root.menu-height);
+    }
+    changed menu-height => {
+        root.menu-changed(root.menu-shown, root.menu-x, root.menu-y, root.menu-width, root.menu-height);
+    }
+
+    menu := Rectangle {
+        visible: root.menu-shown;
+        x: root.menu-x;
+        y: root.menu-y;
+        width: root.menu-width;
+        height: root.menu-height;
+        background: Theme.surface;
+        border-radius: root.menu-radius;
+        border-width: 1px;
+        border-color: Theme.border;
+        clip: true;
+
+        // Swallows the clicks on the gaps between rows.
+        TouchArea { }
+
+        menu-scroll := SmoothScrollArea {
+            width: 100%;
+            height: 100%;
+            enable-horizontal: false;
+            enable-vertical: true;
+            scrollbar-size: 5px;
+            scrollbar-padding: 2px;
+            content-width: self.width;
+            content-height: menu-layout.preferred-height;
+
+            menu-layout := VerticalLayout {
+                padding: 4px;
+                spacing: 1px;
+
+                for item in root.menu-items : ContextMenuItemRow {
+                    item: item;
+
+                    scrolled(dx, dy) => {
+                        menu-scroll.handle-scroll(dx, dy);
+                    }
+
+                    clicked => {
+                        root.menu-item-clicked(root.tile, item.id);
+                    }
+                }
+            }
         }
     }
 

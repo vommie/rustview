@@ -91,11 +91,7 @@ impl RemoveOrphanedFileDialogController {
         }
 
         let id_set: HashSet<MediaId> = media_ids.iter().copied().collect();
-        {
-            let mut st = ctx.state.write();
-            st.all_folder_media.retain(|m| !id_set.contains(&m.record.id));
-            st.file_selection.clear();
-        }
+        ctx.state.write().remove_media(&id_set);
 
         self.close(window);
 

@@ -189,6 +189,7 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
         close_by_user();
     });
     win.on_request_rename(|| run(Session::rename_hovered));
+    win.on_request_delete(|| run(Session::delete_single));
     win.on_tile_clicked(|_, is_ctrl| run(|s| s.on_click(is_ctrl)));
     win.on_background_clicked(|is_ctrl| run(|s| s.on_click(is_ctrl)));
     win.on_middle_clicked(|| {

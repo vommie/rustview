@@ -239,6 +239,8 @@ pub const DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB: bool = true;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH: bool = true;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE: bool = true;
 /// The bar appears when the pointer comes this close (logical pixels) to the place of the bar.
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 15;
@@ -301,7 +303,8 @@ pub const MULTIVIEW_MIN_VIDEO_WINDOW_PX: i32 = 16;
 /// corner of the hovered tile, and the size of the window, which leaves room for a tooltip below the bar.
 pub const MULTIVIEW_BAR_MARGIN_LOGICAL_PX: f32 = 8.0;
 pub const MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX: f32 = 360.0;
-pub const MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX: f32 = 124.0;
+/// Room below the bar for a tooltip bubble and for the "Open With" drop-down.
+pub const MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX: f32 = 344.0;
 /// Base title of a tab that holds a Multiview; further ones get the usual numbered suffix.
 pub const MULTIVIEW_TAB_TITLE: &str = "Multiview";
 
@@ -731,6 +734,8 @@ pub struct FullscreenMediaBarSettings {
     pub show_mute: bool,
     pub show_sticky: bool,
     pub show_open_as_tab: bool,
+    pub show_open_with: bool,
+    pub show_delete: bool,
     /// Remove (several media) and Close (the last medium) are one button that changes its role.
     pub show_remove: bool,
     pub reveal_distance_px: u32,
@@ -743,6 +748,8 @@ impl Default for FullscreenMediaBarSettings {
             show_mute: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE,
             show_sticky: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY,
             show_open_as_tab: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
+            show_open_with: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH,
+            show_delete: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE,
             show_remove: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE,
             reveal_distance_px: DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
         }

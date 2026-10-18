@@ -122,6 +122,7 @@ pub(super) fn connect_callbacks(
     player.on_rename_requested(forward(sink, me, move || {
         PlayerEvent::RenameRequested(media.load(Ordering::SeqCst))
     }));
+    player.on_delete_requested(forward(sink, me, || PlayerEvent::DeleteRequested));
     let media = current_media.clone();
     let (mute_sink, mute_me) = (Arc::clone(sink), me.clone());
     player.on_mute_changed(move |muted| {

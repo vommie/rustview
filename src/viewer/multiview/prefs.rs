@@ -14,7 +14,8 @@ use crate::settings::schema::{
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB, DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
-    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY, FullscreenSettings,
 };
 use parking_lot::RwLock;
@@ -26,6 +27,8 @@ pub struct MediaBarPrefs {
     pub mute: bool,
     pub sticky: bool,
     pub open_as_tab: bool,
+    pub open_with: bool,
+    pub delete: bool,
     /// Remove and Close are one button that changes its role with the number of media.
     pub remove: bool,
     /// Logical pixels around the place of the bar in which the pointer reveals it.
@@ -38,6 +41,8 @@ impl MediaBarPrefs {
         mute: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE,
         sticky: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY,
         open_as_tab: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
+        open_with: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH,
+        delete: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE,
         remove: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE,
         reveal_distance_px: DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     };
@@ -49,6 +54,8 @@ impl MediaBarPrefs {
                 MediaActionId::Mute => self.mute,
                 MediaActionId::Sticky => self.sticky,
                 MediaActionId::OpenAsTab => self.open_as_tab,
+                MediaActionId::OpenWith => self.open_with,
+                MediaActionId::Delete => self.delete,
                 MediaActionId::Remove | MediaActionId::Close => self.remove,
             }
     }
@@ -138,6 +145,8 @@ impl MultiviewPrefs {
                 mute: bar.show_mute,
                 sticky: bar.show_sticky,
                 open_as_tab: bar.show_open_as_tab,
+                open_with: bar.show_open_with,
+                delete: bar.show_delete,
                 remove: bar.show_remove,
                 reveal_distance_px: bar.reveal_distance_px,
             },

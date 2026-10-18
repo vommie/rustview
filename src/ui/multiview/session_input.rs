@@ -10,7 +10,7 @@ use crate::library::models::MediaId;
 use crate::system::MonitorInfo;
 use crate::viewer::PointerProbe;
 use crate::viewer::multiview::HostSurface;
-use crate::viewer::multiview::media_actions::MediaActionId;
+use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
@@ -85,7 +85,7 @@ impl Session {
     /// A button of the hover bar was clicked. What the application has to do about it runs after the session borrow is
     /// released.
     pub(super) fn on_action(&mut self, tile: i32, action: i32) -> UiAction {
-        let Some(action) = MediaActionId::from_code(action) else {
+        let Some(click) = BarClick::from_code(action) else {
             return UiAction::None;
         };
         let outcome = {
@@ -96,7 +96,7 @@ impl Session {
             else {
                 return UiAction::None;
             };
-            instance.perform_action(media_id, action)
+            instance.perform_click(media_id, click)
         };
         self.refresh();
         outcome
@@ -167,6 +167,18 @@ impl Session {
             Some(_) => UiAction::RequestRename,
             None => UiAction::None,
         }
+    }
+
+    /// DEL in the fullscreen window.
+    pub(super) fn delete_single(&mut self) -> UiAction {
+        self.instance.lock().delete_single()
+    }
+
+    /// The user deleted media through the Multiview: their tiles leave the view.
+    pub(super) fn drop_deleted(&mut self, ids: &[MediaId]) -> UiAction {
+        let outcome = self.instance.lock().drop_deleted(ids);
+        self.refresh();
+        outcome
     }
 
     /// Brings the tiles in line with the current selection: tiles that are not sticky and no longer selected leave, new

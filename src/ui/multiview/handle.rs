@@ -2,8 +2,10 @@
 //! the rest of the application holds: open/close requests, the F2 rename target and the "is a Multiview open" flag that the
 //! drag-and-drop lock, dialogs and the tab embedding ask about.
 
+use super::bar_overlay::{self, BarKind};
 use super::eligibility;
 use super::navigation;
+use super::tab_host;
 use super::tab_single;
 use super::session::{self, Session, TabReturn};
 use crate::library::Library;
@@ -15,6 +17,7 @@ use crate::ui::bridge_file_selection::BridgeFileSelection;
 use crate::ui::bridge_state::UiState;
 use crate::ui::bridge_tab_grid::BridgeTabGrid;
 use crate::ui::bridge_viewer_tabs::BridgeViewerTabs;
+use crate::ui::media_open_with::{MediaOpenWith, OpenWithChoice};
 use crate::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
 use crate::viewer::multiview::click::{ClickDetector, ClickKind};
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
@@ -30,6 +33,9 @@ static OPEN: AtomicBool = AtomicBool::new(false);
 static ISOLATED: AtomicBool = AtomicBool::new(false);
 /// The rename request that is being handled comes from the fullscreen window (F2 there), not from the main window.
 static RENAME_FROM_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+/// The medium the delete request that is being handled was made for in the fullscreen window (DEL there, or the delete
+/// button of a tile); `None` for a delete request of the main window.
+static DELETE_FROM_FULLSCREEN: Mutex<Option<MediaId>> = Mutex::new(None);
 
 pub(super) fn set_open(open: bool) {
     OPEN.store(open, Ordering::SeqCst);
@@ -45,6 +51,11 @@ pub(super) fn set_isolated(isolated: bool) {
 /// True while the F2 rename request that is being handled was made in the fullscreen window.
 pub fn rename_requested_from_fullscreen() -> bool {
     RENAME_FROM_FULLSCREEN.load(Ordering::SeqCst)
+}
+
+/// The medium the delete request that is being handled was made for in the fullscreen window, if it was made there.
+pub fn delete_requested_from_fullscreen() -> Option<MediaId> {
+    *DELETE_FROM_FULLSCREEN.lock()
 }
 
 /// What the Multiview needs from the application to act on the Browse view and the tabs.
@@ -378,6 +389,72 @@ impl MultiviewHandle {
                 RENAME_FROM_FULLSCREEN.store(false, Ordering::SeqCst);
             });
         }
+    }
+
+    /// DEL on the single medium or the delete button of a tile: asks the main window for the regular delete dialog (the same
+    /// flow as DEL in the Browse view) for `media_id`. The request is marked as coming from the fullscreen window while it is
+    /// handled; DEL in the main window always means the Browse selection, even with a Multiview open.
+    pub fn request_delete(&self, media_id: MediaId) {
+        if let Some(main_window) = self.shared.main_window.lock().clone() {
+            let _ = main_window.upgrade_in_event_loop(move |w| {
+                *DELETE_FROM_FULLSCREEN.lock() = Some(media_id);
+                w.invoke_request_delete();
+                *DELETE_FROM_FULLSCREEN.lock() = None;
+            });
+        }
+    }
+
+    /// Media were deleted through the Multiview (the dialog opened by `request_delete` did its work): their tiles leave the
+    /// Multiview that shows them, the last one closes it. UI thread only.
+    pub fn drop_deleted(&self, ids: &[MediaId]) {
+        if self.is_open() {
+            session::run(|s| s.drop_deleted(ids));
+        } else {
+            tab_host::drop_deleted(ids);
+        }
+    }
+
+    /// The "Open With" button of a tile: the drop-down with the applications of the medium opens below the bar, or closes if
+    /// it is open. The applications are looked up now, on the click, never while the bar is merely shown. UI thread only.
+    pub(super) fn toggle_open_with(&self, media_id: MediaId) {
+        if bar_overlay::close_menu(BarKind::Media) {
+            return;
+        }
+        let Some((app, _)) = self.app_and_window() else {
+            return;
+        };
+        let Some(path) = self.media_path(&app, media_id) else {
+            tracing::warn!(media_id, "[Multiview: OpenWith] No file path known for the medium");
+            return;
+        };
+        let apps = MediaOpenWith::discover_apps(&app.state, &path);
+        bar_overlay::open_menu(BarKind::Media, &MediaOpenWith::menu_items(&apps));
+    }
+
+    /// An item of the "Open With" drop-down was chosen: the medium is opened with that application, or the native chooser
+    /// opens, exactly like the same items of the context menu of a medium.
+    pub(super) fn open_with_item(&self, media_id: MediaId, item: i32) {
+        let item = u64::try_from(item).unwrap_or_default();
+        let Some((app, window)) = self.app_and_window() else {
+            return;
+        };
+        let Some(path) = self.media_path(&app, media_id) else {
+            return;
+        };
+        let paths = [path];
+        match MediaOpenWith::choice_of(item) {
+            Some(OpenWithChoice::App(index)) => MediaOpenWith::launch(&window, &app.state, &paths, index),
+            Some(OpenWithChoice::Other) => MediaOpenWith::choose_application(&window, &paths),
+            None => tracing::debug!(item, "[Multiview: OpenWith] Ignored an unknown menu item"),
+        }
+    }
+
+    /// The file of a medium: the loaded folder or the library know it, else the tab that shows it.
+    fn media_path(&self, app: &AppContext, media_id: MediaId) -> Option<std::path::PathBuf> {
+        MediaOpenWith::paths_for(&app.state, &app.library, &[media_id])
+            .into_iter()
+            .next()
+            .or_else(|| app.tab_manager.get_tab_by_media_id(media_id).map(|tab| tab.file_path.clone()))
     }
 
     /// Closes the tab that is shown in the main window (Ctrl+W on a video of a Multiview tab).

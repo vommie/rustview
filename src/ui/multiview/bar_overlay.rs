@@ -11,7 +11,8 @@
 //! into window calls.
 
 use super::views::sync_model;
-use crate::ui::{MultiviewBarButtonView, MultiviewBarWindow};
+use crate::ctx_menu::{CtxMenuDispatcher, CtxMenuItem};
+use crate::ui::{ContextMenuItemModel, MultiviewBarButtonView, MultiviewBarWindow};
 use crate::viewer::multiview::bar_placement::{BarCorner, BarPlacement, in_reveal_zone, place_bar_in, rounded_region};
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::{OverlayServer, XRectangle, get_raw_window_xid};
@@ -135,6 +136,27 @@ pub fn show(request: &BarRequest) -> bool {
     with_overlay(request.kind, |overlay| overlay.show(request)).unwrap_or(false)
 }
 
+/// Opens the drop-down menu below the bar `kind` (the items are shown with the rows of a context menu); the next click on an
+/// item calls the bar's action handler with the id of the item. A bar that is not shown ignores this.
+pub fn open_menu(kind: BarKind, items: &[CtxMenuItem]) {
+    with_overlay(kind, |overlay| {
+        if overlay.shown {
+            overlay.window.set_menu_items(CtxMenuDispatcher::items_to_slint_model(items, 0));
+            overlay.window.set_menu_open(true);
+        }
+    });
+}
+
+/// Closes the drop-down menu of the bar `kind`. Returns whether one was open.
+pub fn close_menu(kind: BarKind) -> bool {
+    OVERLAYS.with(|cells| {
+        let Ok(slot) = cells[kind.index()].try_borrow() else {
+            return false;
+        };
+        slot.as_ref().is_some_and(|overlay| overlay.close_menu())
+    })
+}
+
 /// Hides the bars `owner` shows (a host may only hide a bar it shows itself).
 pub fn hide(owner: BarOwner) {
     for kind in [BarKind::Media, BarKind::Primary] {
@@ -202,8 +224,11 @@ struct XState {
     placed: Option<BarPlacement>,
     /// The tooltip bubble inside the window, physical pixels relative to the window.
     tooltip: Option<Rect>,
+    /// The drop-down menu inside the window, physical pixels relative to the window.
+    menu: Option<Rect>,
     bar_radius: i32,
     tooltip_radius: i32,
+    menu_radius: i32,
     scale: f32,
 }
 
@@ -220,7 +245,9 @@ impl XState {
             placed.bar.w,
             placed.bar.h,
         );
-        server.set_input_region(xid, &[xrectangle(bar)]);
+        let mut input = vec![xrectangle(bar)];
+        input.extend(self.menu.map(xrectangle));
+        server.set_input_region(xid, &input);
         if self.translucent {
             server.set_bounding_region(xid, None);
             return;
@@ -229,7 +256,20 @@ impl XState {
         if let Some(tooltip) = self.tooltip {
             region.extend(rounded_region(tooltip, self.tooltip_radius));
         }
+        if let Some(menu) = self.menu {
+            region.extend(rounded_region(menu, self.menu_radius));
+        }
         server.set_bounding_region(xid, Some(&region));
+    }
+}
+
+/// Closes the drop-down of `window` and forgets the area it took.
+fn clear_menu(window: &MultiviewBarWindow, shared: &Shared) {
+    window.set_menu_open(false);
+    window.set_menu_items(ModelRc::<ContextMenuItemModel>::default());
+    if let Ok(mut state) = shared.x.try_borrow_mut() {
+        state.menu = None;
+        state.apply_shape();
     }
 }
 
@@ -294,6 +334,27 @@ impl Overlay {
                 .then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
             state.apply_shape();
         });
+        let for_menu = shared.clone();
+        window.on_menu_changed(move |visible, x, y, w, h| {
+            let Ok(mut state) = for_menu.x.try_borrow_mut() else {
+                return;
+            };
+            let scale = state.scale.max(0.5);
+            let px = |logical: f32| (logical * scale).round() as i32;
+            state.menu = (visible && w > 2.0 && h > 2.0).then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
+            state.apply_shape();
+        });
+        let for_menu_click = shared.clone();
+        let weak = window.as_weak();
+        window.on_menu_item_clicked(move |tile, id| {
+            if let Some(window) = weak.upgrade() {
+                clear_menu(&window, &for_menu_click);
+            }
+            let handler = for_menu_click.on_action.borrow().clone();
+            if let Some(handler) = handler {
+                handler(tile, id);
+            }
+        });
         window.set_align_left(kind == BarKind::Primary);
         let overlay = Self {
             kind,
@@ -323,10 +384,12 @@ impl Overlay {
             self.hide();
             return false;
         };
+        let menu_zone = self.menu_zone_in_host(in_host);
         let revealed = request.forced
-            || request
-                .pointer
-                .is_some_and(|p| in_reveal_zone(in_host.bar, p, request.scale, request.reveal_distance_px));
+            || request.pointer.is_some_and(|p| {
+                in_reveal_zone(in_host.bar, p, request.scale, request.reveal_distance_px)
+                    || menu_zone.is_some_and(|zone| zone.contains(p.0, p.1))
+            });
         if !revealed {
             self.hide();
             return false;
@@ -343,6 +406,27 @@ impl Overlay {
         self.owner = Some(request.owner);
         self.place(in_host.translated(origin.0, origin.1), request.scale);
         true
+    }
+
+    /// While the drop-down is open: the area it covers in host window coordinates, including the gap up to the bar, so the
+    /// bar stays while the pointer travels from the bar to the menu.
+    fn menu_zone_in_host(&self, placement: BarPlacement) -> Option<Rect> {
+        let menu = self.shared.x.borrow().menu?;
+        let bar_bottom = placement.bar.y + placement.bar.h;
+        let top = (placement.window.y + menu.y).min(bar_bottom);
+        Some(Rect::new(
+            placement.window.x + menu.x,
+            top,
+            menu.w,
+            placement.window.y + menu.y + menu.h - top,
+        ))
+    }
+
+    /// Closes the drop-down. Returns whether one was open.
+    fn close_menu(&self) -> bool {
+        let was_open = self.window.get_menu_open();
+        clear_menu(&self.window, &self.shared);
+        was_open
     }
 
     /// Where the host window is on the screen, and whether it is in front at the pointer. The overlay window itself counts
@@ -364,6 +448,9 @@ impl Overlay {
         if self.last_actions != request.actions {
             sync_model(&self.model, request.actions.clone());
             self.last_actions.clone_from(&request.actions);
+        }
+        if self.window.get_tile() != request.tile {
+            self.close_menu();
         }
         self.window.set_tile(request.tile);
     }
@@ -396,6 +483,7 @@ impl Overlay {
         state.scale = scale;
         state.bar_radius = (self.window.get_bar_radius() * scale).round() as i32;
         state.tooltip_radius = (self.window.get_tooltip_radius() * scale).round() as i32;
+        state.menu_radius = (self.window.get_menu_radius() * scale).round() as i32;
         state.placed = Some(placement);
         let first_xid = state.xid.is_none();
         if first_xid {
@@ -441,6 +529,7 @@ impl Overlay {
             return;
         }
         self.window.invoke_reset_tooltip();
+        self.close_menu();
         if let Err(e) = self.window.hide() {
             tracing::warn!(error = %e, "[Multiview: Overlay] A bar window could not be hidden");
         }

@@ -15,6 +15,14 @@ pub type MpvCloseTabCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvGridClickCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvRenameCallback = Arc<dyn Fn() + Send + Sync>;
+pub type MpvDeleteCallback = Arc<dyn Fn() + Send + Sync>;
+
+/// The message mpv sends to the application when DEL is pressed in its window (`script-message` reaches every client).
+const DELETE_KEY_MESSAGE: &str = "rustview-delete";
+
+fn bind_delete_key(mpv: &Mpv) {
+    let _ = mpv.command("keybind", &["DEL", &format!("script-message {DELETE_KEY_MESSAGE}")]);
+}
 /// Called from the observer thread when the mute state changed (a hotkey, the on-screen controller or `set_mute`).
 pub type MpvMuteCallback = Arc<dyn Fn(bool) + Send + Sync>;
 /// Called from the observer thread when the user's pause state changed (`true` = paused). A pause that only comes from
@@ -40,6 +48,7 @@ pub struct MpvPlayer {
     grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
     rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>>,
+    delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
     pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>>,
     observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -127,6 +136,9 @@ impl MpvPlayer {
         let _ = mpv_instance.command("keybind", &["F2", "no-osd cycle snap-window"]);
         let _ = mpv_instance.command("keybind", &["f2", "no-osd cycle snap-window"]);
 
+        // DEL is reported to the application as a client message; the Multiview turns it into its delete flow
+        bind_delete_key(&mpv_instance);
+
         // Bind Ctrl+Click and Ctrl+DoubleClick in MPV to toggle window-maximized
         let convert_keys = [
             "Ctrl+MBTN_LEFT",
@@ -207,6 +219,8 @@ impl MpvPlayer {
             Arc::new(RwLock::new(Vec::new()));
         let rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>> =
             Arc::new(RwLock::new(Vec::new()));
+        let delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>> =
+            Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>> = Arc::new(RwLock::new(Vec::new()));
 
@@ -228,6 +242,7 @@ impl MpvPlayer {
             grid_wheel_down_callbacks: grid_wheel_down_callbacks.clone(),
             convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
             rename_callbacks: rename_callbacks.clone(),
+            delete_callbacks: delete_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
             pause_callbacks: pause_callbacks.clone(),
             observer_handle: Mutex::new(None),
@@ -314,6 +329,7 @@ impl MpvPlayer {
             let _ = self
                 .mpv
                 .command("keybind", &["f2", "no-osd cycle snap-window"]);
+            bind_delete_key(&self.mpv);
 
             let convert_keys = [
                 "Ctrl+MBTN_LEFT",
@@ -633,6 +649,15 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
+    pub fn on_delete_requested<F>(&self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut cbs = self.delete_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
     pub fn on_grid_left_click<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
@@ -723,6 +748,7 @@ impl MpvPlayer {
         let grid_wheel_down_callbacks = self.grid_wheel_down_callbacks.clone();
         let convert_callbacks = self.convert_to_tab_callbacks.clone();
         let rename_callbacks = self.rename_callbacks.clone();
+        let delete_callbacks = self.delete_callbacks.clone();
         let mute_callbacks = self.mute_callbacks.clone();
         let pause_callbacks = self.pause_callbacks.clone();
 
@@ -745,7 +771,14 @@ impl MpvPlayer {
                     } else {
                         MPV_OBSERVER_ACTIVE_POLL_MS
                     };
-                    let _ = mpv.wait_event(poll_ms as f64 / 1000.0);
+                    if let Some(Ok(libmpv2::events::Event::ClientMessage(args))) = mpv.wait_event(poll_ms as f64 / 1000.0)
+                        && args.first() == Some(&DELETE_KEY_MESSAGE)
+                    {
+                        let delete_cbs = delete_callbacks.read().clone();
+                        for cb in delete_cbs {
+                            cb();
+                        }
+                    }
 
                     let in_grid = is_tab_grid_mode.load(Ordering::Relaxed);
 

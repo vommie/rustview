@@ -14,6 +14,10 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+/// What runs once the dialog deleted the files, before the viewers are told (UI thread); the Multiview uses it to drop the tiles it
+/// asked to delete.
+pub type DeleteFollowup = Rc<dyn Fn(&[MediaId])>;
+
 /// Specialized controller managing active media file deletion (Trash / Permanent Delete).
 #[derive(Default, Clone)]
 pub struct DeleteFileDialogController {
@@ -31,6 +35,17 @@ impl DeleteFileDialogController {
         window: &MainWindow,
         media_ids: Vec<MediaId>,
         ctx: FileDialogContext,
+    ) {
+        self.show_with_followup(window, media_ids, ctx, None);
+    }
+
+    /// Like `show`; `followup` runs once the files are deleted (not when the dialog is cancelled).
+    pub fn show_with_followup(
+        &self,
+        window: &MainWindow,
+        media_ids: Vec<MediaId>,
+        ctx: FileDialogContext,
+        followup: Option<DeleteFollowup>,
     ) {
         if media_ids.is_empty() {
             return;
@@ -66,7 +81,7 @@ impl DeleteFileDialogController {
         };
 
         if let Some(ref win) = *self.dialog.borrow() {
-            self.bind_dialog_events(win, window, media_ids, ctx);
+            self.bind_dialog_events(win, window, media_ids, ctx, followup);
 
             win.set_file_name(first_name.into());
             win.set_files_count(count as i32);
@@ -93,6 +108,7 @@ impl DeleteFileDialogController {
         to_trash: bool,
         ctx: &FileDialogContext,
         window: &MainWindow,
+        followup: Option<&DeleteFollowup>,
     ) {
         let count = media_ids.len();
         let mut paths_to_delete = Vec::with_capacity(count);
@@ -132,17 +148,17 @@ impl DeleteFileDialogController {
         // 2. Database Purge
         let _ = ctx.library.file_operations().purge_media_from_db(media_ids);
 
-        // 3. Notify Viewer Tab Manager
+        // 3. The Multiview that asked for the deletion lets the tiles leave by its regular way (a playing player torn down
+        // as an error tile under a visible window ended the application), then the viewers hear about it.
+        if let Some(followup) = followup {
+            followup(media_ids);
+        }
         for &id in media_ids {
             ctx.tab_manager.notify_media_deleted(id);
         }
 
         let id_set: HashSet<MediaId> = media_ids.iter().copied().collect();
-        {
-            let mut st = ctx.state.write();
-            st.all_folder_media.retain(|m| !id_set.contains(&m.record.id));
-            st.file_selection.clear();
-        }
+        ctx.state.write().remove_media(&id_set);
 
         self.close(window);
 
@@ -204,14 +220,16 @@ impl DeleteFileDialogController {
         window: &MainWindow,
         media_ids: Vec<MediaId>,
         ctx: FileDialogContext,
+        followup: Option<DeleteFollowup>,
     ) {
         let ctrl_trash = self.clone();
         let win_trash = window.clone_strong();
         let ids_trash = media_ids.clone();
         let ctx_trash = ctx.clone();
+        let followup_trash = followup.clone();
 
         win.on_move_to_trash_confirmed(move || {
-            ctrl_trash.execute(&ids_trash, true, &ctx_trash, &win_trash);
+            ctrl_trash.execute(&ids_trash, true, &ctx_trash, &win_trash, followup_trash.as_ref());
         });
 
         let ctrl_perm = self.clone();
@@ -220,7 +238,7 @@ impl DeleteFileDialogController {
         let ctx_perm = ctx;
 
         win.on_permanent_delete_confirmed(move || {
-            ctrl_perm.execute(&ids_perm, false, &ctx_perm, &win_perm);
+            ctrl_perm.execute(&ids_perm, false, &ctx_perm, &win_perm, followup.as_ref());
         });
 
         let ctrl_cancel = self.clone();

@@ -72,6 +72,17 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
             instance.lock().note_rename_target(media_id);
             (RoutedEvent::Rename, ClickKind::None)
         }
+        PlayerEvent::DeleteRequested => {
+            let (mode, action) = {
+                let guard = instance.lock();
+                (guard.host_mode(), guard.delete_single())
+            };
+            drop(instance);
+            if mode == HostMode::Fullscreen {
+                execute(action, handle, None);
+            }
+            return;
+        }
         PlayerEvent::CtrlClick => {
             let click = instance.lock().register_click(true);
             (RoutedEvent::CtrlClick, click)
@@ -117,6 +128,9 @@ pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: O
         }
         (UiAction::SetIdleCursorHide(on), _) => handle.set_idle_cursor_hide(on),
         (UiAction::RequestRename, _) => handle.request_rename(),
+        (UiAction::DeleteTile(media_id), _) => handle.request_delete(media_id),
+        (UiAction::ToggleOpenWith(media_id), _) => handle.toggle_open_with(media_id),
+        (UiAction::OpenWithItem(media_id, item), _) => handle.open_with_item(media_id, item),
         (UiAction::CloseActiveTab, _) => handle.close_active_tab(),
         (UiAction::OpenTabFullscreen, Some(id)) => handle.open_tab_fullscreen(id),
         (UiAction::ActivateTab, Some(id)) => handle.activate_tab(id),
