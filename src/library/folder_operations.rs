@@ -4,6 +4,7 @@ use super::folder_move::FolderMoveExecutor;
 use super::folders::FolderManager;
 use super::models::{FolderId, FolderRecord, MediaId};
 use crate::settings::LogObscurer;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -56,7 +57,15 @@ pub struct FolderSubtreeMetrics {
     pub subfolders_count: usize,
     pub media_files_count: usize,
     pub affected_folder_ids: Vec<FolderId>,
+    /// Subfolders (below the folder) that are flagged as missing on disk already.
+    pub missing_subfolders: usize,
+    /// Media records in the subtree that are flagged as missing already (not part of `media_files_count`).
+    pub missing_media: usize,
 }
+
+/// Missing folders by parent (see `FolderOperations::missing_children`).
+#[derive(Debug, Clone, Default)]
+pub struct MissingChildren(HashMap<FolderId, Vec<FolderId>>);
 
 #[derive(Debug, Clone, Default)]
 pub struct FolderDeleteReport {
@@ -76,8 +85,29 @@ impl<'a> FolderOperations<'a> {
         Self { db }
     }
 
-    /// Computes subtree metrics using relational parent indices.
+    /// The folders that a scan flagged as missing, by parent. A scan rebuilds the child list of a parent from what exists on disk, so a
+    /// missing folder is no longer in `folders_by_parent`; this is the one place that still finds it (one pass over the folder table).
+    pub fn missing_children(&self) -> Result<MissingChildren, LibraryError> {
+        let rtxn = self.db.env.read_txn()?;
+        let mut by_parent: HashMap<FolderId, Vec<FolderId>> = HashMap::new();
+        for entry in self.db.folders.iter(&rtxn)? {
+            let (id, record) = entry?;
+            if record.is_deleted
+                && let Some(parent) = record.parent_id
+            {
+                by_parent.entry(parent).or_default().push(id);
+            }
+        }
+        Ok(MissingChildren(by_parent))
+    }
+
+    /// Computes subtree metrics using relational parent indices, missing subfolders included.
     pub fn get_metrics(&self, folder_id: FolderId) -> Result<FolderSubtreeMetrics, LibraryError> {
+        self.get_metrics_with(folder_id, &self.missing_children()?)
+    }
+
+    /// `get_metrics` with the missing folders looked up once for many calls.
+    pub fn get_metrics_with(&self, folder_id: FolderId, missing: &MissingChildren) -> Result<FolderSubtreeMetrics, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let folder = self
             .db
@@ -87,11 +117,13 @@ impl<'a> FolderOperations<'a> {
 
         let folder_path = PathBuf::from(&folder.path);
         let mut affected_folders = vec![folder_id];
+        let mut seen: HashSet<FolderId> = HashSet::from([folder_id]);
         let mut queue = vec![folder_id];
 
         while let Some(current) = queue.pop() {
-            if let Some(children) = self.db.folders_by_parent.get(&rtxn, &current)? {
-                for cid in children {
+            let indexed = self.db.folders_by_parent.get(&rtxn, &current)?.unwrap_or_default();
+            for cid in indexed.into_iter().chain(missing.0.get(&current).into_iter().flatten().copied()) {
+                if seen.insert(cid) {
                     affected_folders.push(cid);
                     queue.push(cid);
                 }
@@ -99,13 +131,23 @@ impl<'a> FolderOperations<'a> {
         }
 
         let mut total_media = 0;
+        let mut missing_media = 0;
+        let mut missing_subfolders = 0;
         for &id in &affected_folders {
+            // Everything below a folder that is missing is missing with it, whatever its own flag says.
+            let folder_is_missing = id != folder_id
+                && self.db.folders.get(&rtxn, &id)?.is_some_and(|rec| rec.is_deleted);
+            if folder_is_missing {
+                missing_subfolders += 1;
+            }
             if let Some(media_ids) = self.db.media_by_folder.get(&rtxn, &id)? {
                 for media_id in media_ids {
-                    if let Some(media_rec) = self.db.media.get(&rtxn, &media_id)?
-                        && !media_rec.is_deleted
-                    {
-                        total_media += 1;
+                    if let Some(media_rec) = self.db.media.get(&rtxn, &media_id)? {
+                        if media_rec.is_deleted || folder_is_missing {
+                            missing_media += 1;
+                        } else {
+                            total_media += 1;
+                        }
                     }
                 }
             }
@@ -119,6 +161,8 @@ impl<'a> FolderOperations<'a> {
             subfolders_count,
             media_files_count: total_media,
             affected_folder_ids: affected_folders,
+            missing_subfolders,
+            missing_media,
         })
     }
 

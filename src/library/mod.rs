@@ -32,7 +32,7 @@ pub use folder_diagnostics::FolderDiagnostics;
 pub use folder_mount_filter::FolderMountFilter;
 pub use folder_move::{FolderMoveExecutor, FolderMovePatch};
 pub use folder_operations::{
-    FolderDeleteReport, FolderMoveReport, FolderOperations, FolderSubtreeMetrics, FolderValidator,
+    FolderDeleteReport, FolderMoveReport, FolderOperations, FolderSubtreeMetrics, FolderValidator, MissingChildren,
 };
 // TEMPORARY DEBUG FEATURE: remove together with src/library/folder_reset.rs
 pub use folder_reset::FolderTreeReset;

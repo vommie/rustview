@@ -30,6 +30,30 @@ fn count(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
+/// For a folder that is deleted: which part of its subtree is gone from the drive already (`None` when nothing is).
+pub fn missing_in_subtree_hint(missing_subfolders: usize, missing_media: usize) -> Option<String> {
+    let mut parts = Vec::new();
+    if missing_subfolders > 0 {
+        parts.push(count(missing_subfolders, "subfolder", "subfolders"));
+    }
+    if missing_media > 0 {
+        parts.push(count(missing_media, "media file", "media files"));
+    }
+    let verb = if missing_subfolders + missing_media == 1 { "is" } else { "are" };
+    (!parts.is_empty()).then(|| format!("Of these, {} {verb} already missing on disk.", parts.join(" and ")))
+}
+
+/// For files that are deleted: how many of them are gone from the drive already (`None` when none or when all are, which has its own dialog).
+pub fn missing_files_hint(missing: usize, total: usize) -> Option<String> {
+    (missing > 0 && missing < total).then(|| {
+        format!(
+            "{missing} of the {total} files {} already missing on disk and {} only removed from the database.",
+            if missing == 1 { "is" } else { "are" },
+            if missing == 1 { "is" } else { "are" }
+        )
+    })
+}
+
 /// Every text of the dialog, derived from the plan alone (unit tested).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DialogTexts {
@@ -95,6 +119,11 @@ impl DialogTexts {
                 count(subfolders, "subfolder", "subfolders"),
                 count(media, "media file", "media files")
             ));
+            let missing_subfolders: usize = present_folders.iter().map(|f| f.missing_subfolders).sum();
+            let missing_media: usize = present_folders.iter().map(|f| f.missing_media).sum();
+            if let Some(hint) = missing_in_subtree_hint(missing_subfolders, missing_media) {
+                texts.details.push(hint);
+            }
         }
 
         // What is only cleaned from the database.
@@ -370,7 +399,7 @@ mod tests {
     }
 
     fn folder(name: &str, state: FolderState, subfolders: usize, media: usize) -> FolderPlan {
-        FolderPlan { id: 2, name: name.into(), path: PathBuf::from(format!("/m/{name}")), state, subfolders, media_files: media, affected: vec![2] }
+        FolderPlan { id: 2, name: name.into(), path: PathBuf::from(format!("/m/{name}")), state, subfolders, media_files: media, missing_subfolders: 0, missing_media: 0, affected: vec![2] }
     }
 
     fn plan(files: Vec<FilePlan>, folders: Vec<FolderPlan>) -> SelectionDeletePlan {
@@ -418,6 +447,30 @@ mod tests {
         assert_eq!(texts.details[1], "2 folders with 3 subfolders and 12 media files");
         assert!(texts.database_details.is_empty());
         assert!(!texts.database_only);
+    }
+
+    #[test]
+    fn hints_name_only_what_is_missing() {
+        assert_eq!(missing_in_subtree_hint(0, 0), None);
+        assert_eq!(missing_in_subtree_hint(1, 0).unwrap(), "Of these, 1 subfolder is already missing on disk.");
+        assert_eq!(missing_in_subtree_hint(0, 3).unwrap(), "Of these, 3 media files are already missing on disk.");
+        assert_eq!(missing_in_subtree_hint(2, 1).unwrap(), "Of these, 2 subfolders and 1 media file are already missing on disk.");
+        assert_eq!(missing_files_hint(0, 5), None);
+        assert_eq!(missing_files_hint(5, 5), None, "all missing has its own dialog");
+        assert_eq!(missing_files_hint(1, 4).unwrap(), "1 of the 4 files is already missing on disk and is only removed from the database.");
+        assert_eq!(missing_files_hint(2, 4).unwrap(), "2 of the 4 files are already missing on disk and are only removed from the database.");
+    }
+
+    #[test]
+    fn present_folders_mention_missing_parts_of_their_subtree() {
+        let mut d = folder("x", FolderState::Present, 3, 5);
+        d.missing_subfolders = 1;
+        d.missing_media = 2;
+        let texts = DialogTexts::of(&plan(vec![], vec![d]), 0);
+        assert_eq!(texts.details.len(), 2);
+        assert_eq!(texts.details[1], "Of these, 1 subfolder and 2 media files are already missing on disk.");
+        let plain = DialogTexts::of(&plan(vec![], vec![folder("y", FolderState::Present, 3, 5)]), 0);
+        assert_eq!(plain.details.len(), 1);
     }
 
     #[test]

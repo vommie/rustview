@@ -1,6 +1,7 @@
 use super::bridge_folder_dialog_missing_delete::MissingFolderDeleteDialogController;
 use super::bridge_folder_dialogs::FolderDialogContext;
 use super::bridge_folders::BridgeFolders;
+use super::bridge_selection_delete::missing_in_subtree_hint;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
@@ -240,6 +241,7 @@ impl DeleteFolderDialogController {
         win.set_folder_name(folder_name.into());
         win.set_subfolders_count(metrics.subfolders_count as i32);
         win.set_files_count(metrics.media_files_count as i32);
+        win.set_missing_note(missing_in_subtree_hint(metrics.missing_subfolders, metrics.missing_media).unwrap_or_default().into());
         win.set_error_message("".into());
     }
 }

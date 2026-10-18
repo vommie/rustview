@@ -53,6 +53,9 @@ pub struct FolderPlan {
     pub state: FolderState,
     pub subfolders: usize,
     pub media_files: usize,
+    /// Of the subfolders / media above: how many are flagged missing on disk already.
+    pub missing_subfolders: usize,
+    pub missing_media: usize,
     /// The folder itself and every folder below it.
     pub affected: Vec<FolderId>,
 }
@@ -117,6 +120,7 @@ impl SelectionDeletePlanner {
         protected: &HashSet<FolderId>,
     ) -> Result<SelectionDeletePlan, LibraryError> {
         let mut plan = SelectionDeletePlan::default();
+        let missing_children = library.folder_operations().missing_children()?;
 
         // Folders: unique, known, not protected.
         let mut seen = HashSet::new();
@@ -133,7 +137,7 @@ impl SelectionDeletePlanner {
                 plan.unknown_items += 1;
                 continue;
             };
-            let metrics = library.folder_operations().get_metrics(id)?;
+            let metrics = library.folder_operations().get_metrics_with(id, &missing_children)?;
             let path = PathBuf::from(&record.path);
             let state = match (path.exists(), record.is_deleted) {
                 (true, false) => FolderState::Present,
@@ -151,6 +155,8 @@ impl SelectionDeletePlanner {
                 subfolders: metrics.subfolders_count,
                 // The records of a folder that was never opened are not in the database yet; the counters of the tree know the files.
                 media_files: metrics.media_files_count.max(record.recursive_media_count as usize),
+                missing_subfolders: metrics.missing_subfolders,
+                missing_media: metrics.missing_media,
                 affected: metrics.affected_folder_ids,
             });
         }
@@ -473,6 +479,80 @@ mod tests {
         assert_eq!(plan.nested_folders, 1);
         assert_eq!(plan.files_in_folders, 2);
         assert_eq!(plan.files.len(), 1);
+    }
+
+    #[test]
+    fn plan_reports_parts_of_a_present_folder_that_are_missing_already() {
+        let fx = fixture();
+        let clean = fx.plan(&[], &["a"]);
+        assert_eq!((clean.folders[0].missing_subfolders, clean.folders[0].missing_media), (0, 0));
+
+        fx.library.folders().set_deleted(fx.folder("a/sub"), true).unwrap();
+        fx.library.media().set_deleted(fx.media("a/sub/s1.jpg"), true).unwrap();
+        let plan = fx.plan(&[], &["a"]);
+        assert_eq!(plan.folders[0].state, FolderState::Present);
+        assert_eq!((plan.folders[0].missing_subfolders, plan.folders[0].missing_media), (1, 1));
+        assert_eq!(plan.folders[0].subfolders, 1, "the missing subfolder is still a subfolder of the tree");
+    }
+
+    /// What a scan does to a folder that vanished: flagged missing, and no longer in its parent's child list.
+    fn vanish_like_a_scan(fx: &Fixture, rel: &str) {
+        let id = fx.folder(rel);
+        let record = fx.library.folders().get_folder(id).unwrap().unwrap();
+        fs::remove_dir_all(fx.root.join(rel)).unwrap();
+        fx.library.folders().set_deleted(id, true).unwrap();
+        let parent = record.parent_id.unwrap();
+        let rtxn = fx.library.raw_db().env.read_txn().unwrap();
+        let mut children = fx.library.raw_db().folders_by_parent.get(&rtxn, &parent).unwrap().unwrap();
+        drop(rtxn);
+        children.retain(|&c| c != id);
+        let mut wtxn = fx.library.raw_db().env.write_txn().unwrap();
+        fx.library.raw_db().folders_by_parent.put(&mut wtxn, &parent, &children).unwrap();
+        wtxn.commit().unwrap();
+    }
+
+    #[test]
+    fn metrics_find_missing_subfolders_that_a_scan_unlinked() {
+        let fx = fixture();
+        let a = fx.folder("a");
+        let sub = fx.folder("a/sub");
+        let before = fx.library.folder_operations().get_metrics(a).unwrap();
+        assert_eq!((before.subfolders_count, before.media_files_count, before.missing_subfolders, before.missing_media), (1, 3, 0, 0));
+
+        vanish_like_a_scan(&fx, "a/sub");
+        let after = fx.library.folder_operations().get_metrics(a).unwrap();
+        assert_eq!(after.subfolders_count, 1, "the missing subfolder is still part of the subtree");
+        assert!(after.affected_folder_ids.contains(&sub));
+        assert_eq!((after.missing_subfolders, after.missing_media, after.media_files_count), (1, 1, 2));
+    }
+
+    #[test]
+    fn deleting_a_folder_also_takes_its_unlinked_missing_subfolders_along() {
+        let fx = fixture();
+        let sub = fx.folder("a/sub");
+        let s1 = fx.media("a/sub/s1.jpg");
+        vanish_like_a_scan(&fx, "a/sub");
+        let plan = fx.plan(&[], &["a"]);
+        assert_eq!((plan.folders[0].missing_subfolders, plan.folders[0].missing_media), (1, 1));
+        let report = SelectionDeleteExecutor::execute(&fx.library, &plan, DeleteMode::Permanent);
+        assert_eq!(report.failures(), 0);
+        assert!(report.folders_deleted.contains(&sub));
+        assert!(fx.library.media().get(s1).unwrap().unwrap().is_deleted);
+    }
+
+    #[test]
+    fn purging_a_missing_folder_leaves_no_records_of_its_missing_subfolders() {
+        let fx = fixture();
+        let (a, sub, s1) = (fx.folder("a"), fx.folder("a/sub"), fx.media("a/sub/s1.jpg"));
+        vanish_like_a_scan(&fx, "a/sub");
+        fs::remove_dir_all(fx.root.join("a")).unwrap();
+        let plan = fx.plan(&[], &["a"]);
+        assert_eq!(plan.folders[0].state, FolderState::Missing);
+        let report = SelectionDeleteExecutor::execute(&fx.library, &plan, DeleteMode::Permanent);
+        assert_eq!(report.failures(), 0);
+        assert!(fx.library.folders().get_folder(a).unwrap().is_none());
+        assert!(fx.library.folders().get_folder(sub).unwrap().is_none(), "no dangling subfolder record");
+        assert!(fx.library.media().get(s1).unwrap().is_none());
     }
 
     #[test]
