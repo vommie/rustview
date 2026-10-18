@@ -15,7 +15,6 @@ export component DeleteFileDialog inherits Window {
 
     in-out property <string> file-name: "";
     in-out property <int> files-count: 1;
-    in-out property <string> file-size-str: "";
     in-out property <string> missing-note: "";
     in property <string> error-message: "";
 
@@ -52,8 +51,8 @@ export component DeleteFileDialog inherits Window {
 
                 Text {
                     text: root.files-count > 1
-                        ? ("Are you sure you want to delete the " + root.files-count + " selected files (" + root.file-size-str + ")?")
-                        : ("Are you sure you want to delete '" + root.file-name + "' (" + root.file-size-str + ")?");
+                        ? ("Are you sure you want to delete the " + root.files-count + " selected files?")
+                        : ("Are you sure you want to delete '" + root.file-name + "'?");
                     font-size: 12px;
                     color: Theme.text;
                     wrap: word-wrap;

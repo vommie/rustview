@@ -14,7 +14,6 @@ use super::bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
-use super::models::format_filesize;
 use super::{DeleteSelectionDialog, MainWindow};
 use crate::library::models::{FolderId, MediaId};
 use crate::library::selection_delete::{
@@ -87,11 +86,10 @@ impl DialogTexts {
         let mut texts = Self { window_title: format!("RustView - {heading}"), heading, database_only, ..Self::default() };
 
         // Question and the list of what is deleted on disk.
-        let size = format_filesize(plan.present_file_bytes());
         let file_phrase = match present_files.as_slice() {
             [] => None,
-            [one] => Some(format!("the file '{}' ({size})", one.name)),
-            many => Some(format!("the {} selected files ({size})", many.len())),
+            [one] => Some(format!("the file '{}'", one.name)),
+            many => Some(format!("the {} selected files", many.len())),
         };
         let folder_phrase = match present_folders.as_slice() {
             [] => None,
@@ -106,7 +104,7 @@ impl DialogTexts {
 
         if !present_files.is_empty() {
             texts.details.push(format!(
-                "{} ({size}), with their records, thumbnails and preview caches",
+                "{}, with their records, thumbnails and preview caches",
                 count(present_files.len(), "file", "files")
             ));
         }
@@ -394,8 +392,8 @@ mod tests {
     use crate::library::selection_delete::{FilePlan, FolderPlan, ItemFailure};
     use std::path::PathBuf;
 
-    fn file(name: &str, size: u64, missing: bool) -> FilePlan {
-        FilePlan { id: 1, name: name.into(), path: PathBuf::from(format!("/m/{name}")), size, missing }
+    fn file(name: &str, missing: bool) -> FilePlan {
+        FilePlan { id: 1, name: name.into(), path: PathBuf::from(format!("/m/{name}")), missing }
     }
 
     fn folder(name: &str, state: FolderState, subfolders: usize, media: usize) -> FolderPlan {
@@ -409,7 +407,7 @@ mod tests {
     #[test]
     fn titles_follow_singular_and_plural_of_each_kind() {
         let heading = |files, folders| DialogTexts::of(&plan(files, folders), 0).heading;
-        let f = |n: usize| (0..n).map(|i| file(&format!("f{i}"), 10, false)).collect::<Vec<_>>();
+        let f = |n: usize| (0..n).map(|i| file(&format!("f{i}"), false)).collect::<Vec<_>>();
         let d = |n: usize| (0..n).map(|i| folder(&format!("d{i}"), FolderState::Present, 0, 0)).collect::<Vec<_>>();
         assert_eq!(heading(f(1), d(1)), "Delete File & Folder");
         assert_eq!(heading(f(1), d(2)), "Delete File & Folders");
@@ -421,29 +419,29 @@ mod tests {
 
     #[test]
     fn the_window_title_matches_the_heading() {
-        let texts = DialogTexts::of(&plan(vec![file("a", 1, false)], vec![folder("d", FolderState::Present, 0, 0)]), 0);
+        let texts = DialogTexts::of(&plan(vec![file("a", false)], vec![folder("d", FolderState::Present, 0, 0)]), 0);
         assert_eq!(texts.window_title, "RustView - Delete File & Folder");
     }
 
     #[test]
     fn question_names_single_items_and_counts_several() {
-        let one = DialogTexts::of(&plan(vec![file("a.jpg", 2048, false)], vec![folder("Trips", FolderState::Present, 2, 5)]), 0);
-        assert_eq!(one.question, "Are you sure you want to delete the file 'a.jpg' (2.00 KB) and the folder 'Trips'?");
+        let one = DialogTexts::of(&plan(vec![file("a.jpg", false)], vec![folder("Trips", FolderState::Present, 2, 5)]), 0);
+        assert_eq!(one.question, "Are you sure you want to delete the file 'a.jpg' and the folder 'Trips'?");
         let many = DialogTexts::of(
-            &plan(vec![file("a", 1024, false), file("b", 1024, false)], vec![folder("x", FolderState::Present, 0, 0), folder("y", FolderState::Present, 0, 0)]),
+            &plan(vec![file("a", false), file("b", false)], vec![folder("x", FolderState::Present, 0, 0), folder("y", FolderState::Present, 0, 0)]),
             0,
         );
-        assert_eq!(many.question, "Are you sure you want to delete the 2 selected files (2.00 KB) and the 2 selected folders?");
+        assert_eq!(many.question, "Are you sure you want to delete the 2 selected files and the 2 selected folders?");
     }
 
     #[test]
     fn details_sum_up_folders() {
         let texts = DialogTexts::of(
-            &plan(vec![file("a", 1, false)], vec![folder("x", FolderState::Present, 2, 5), folder("y", FolderState::Present, 1, 7)]),
+            &plan(vec![file("a", false)], vec![folder("x", FolderState::Present, 2, 5), folder("y", FolderState::Present, 1, 7)]),
             0,
         );
         assert_eq!(texts.details.len(), 2);
-        assert!(texts.details[0].starts_with("1 file ("));
+        assert_eq!(texts.details[0], "1 file, with their records, thumbnails and preview caches");
         assert_eq!(texts.details[1], "2 folders with 3 subfolders and 12 media files");
         assert!(texts.database_details.is_empty());
         assert!(!texts.database_only);
@@ -476,7 +474,7 @@ mod tests {
     #[test]
     fn missing_items_are_listed_apart_and_not_counted_as_deleted() {
         let texts = DialogTexts::of(
-            &plan(vec![file("a", 5, false), file("gone", 9, true)], vec![folder("x", FolderState::Present, 0, 1), folder("lost", FolderState::Missing, 1, 4)]),
+            &plan(vec![file("a", false), file("gone", true)], vec![folder("x", FolderState::Present, 0, 1), folder("lost", FolderState::Missing, 1, 4)]),
             0,
         );
         assert!(texts.question.contains("the file 'a'"), "{}", texts.question);
@@ -487,7 +485,7 @@ mod tests {
 
     #[test]
     fn everything_missing_offers_the_database_cleanup_only() {
-        let texts = DialogTexts::of(&plan(vec![file("gone", 9, true)], vec![folder("lost", FolderState::Missing, 0, 0)]), 0);
+        let texts = DialogTexts::of(&plan(vec![file("gone", true)], vec![folder("lost", FolderState::Missing, 0, 0)]), 0);
         assert!(texts.database_only);
         assert_eq!(texts.heading, "Remove File & Folder from Database");
         assert!(texts.details.is_empty());
@@ -496,7 +494,7 @@ mod tests {
 
     #[test]
     fn notes_explain_covered_items_reborn_folders_and_the_root() {
-        let mut p = plan(vec![file("a", 1, false)], vec![folder("x", FolderState::Present, 0, 0)]);
+        let mut p = plan(vec![file("a", false)], vec![folder("x", FolderState::Present, 0, 0)]);
         p.nested_folders = 1;
         p.files_in_folders = 2;
         p.protected_folders = 1;
@@ -505,7 +503,7 @@ mod tests {
         assert!(note.contains("3 selected items lie inside selected folders"));
         assert!(note.contains("2 folders were found on disk again and restored; not deleted."));
         assert!(note.contains("The library root cannot be deleted."));
-        let one = DialogTexts::of(&plan(vec![file("a", 1, false)], vec![]), 1).note;
+        let one = DialogTexts::of(&plan(vec![file("a", false)], vec![]), 1).note;
         assert!(one.contains("1 folder was found on disk again"));
     }
 

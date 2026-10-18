@@ -6,7 +6,6 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
-use super::models::format_filesize;
 use super::{DeleteFileDialog, MainWindow};
 use crate::library::models::MediaId;
 use crate::settings::LogObscurer;
@@ -56,9 +55,8 @@ impl DeleteFileDialogController {
         self.ensure_dialog_instantiated();
 
         let count = media_ids.len();
-        let (first_name, total_bytes, missing) = {
+        let (first_name, missing) = {
             let st = ctx.state.read();
-            let mut total = 0u64;
             let mut name = String::new();
             let mut missing = 0usize;
             for (idx, &id) in media_ids.iter().enumerate() {
@@ -66,7 +64,6 @@ impl DeleteFileDialogController {
                     if idx == 0 {
                         name = item.record.filename.clone();
                     }
-                    total += item.record.file_size;
                     // Flagged by a refresh, or gone from the drive since (the same test the combined dialog makes).
                     if item.record.is_deleted || !item.full_path().exists() {
                         missing += 1;
@@ -75,7 +72,6 @@ impl DeleteFileDialogController {
                     if idx == 0 {
                         name = rec.filename.clone();
                     }
-                    total += rec.file_size;
                     if rec.is_deleted || ctx.library.resolve_media_path(id).map(|p| !p.exists()).unwrap_or(false) {
                         missing += 1;
                     }
@@ -83,13 +79,12 @@ impl DeleteFileDialogController {
                     if idx == 0 {
                         name = tab.filename.clone();
                     }
-                    total += tab.record.file_size;
                     if !tab.file_path.exists() {
                         missing += 1;
                     }
                 }
             }
-            (name, total, missing)
+            (name, missing)
         };
 
         if let Some(ref win) = *self.dialog.borrow() {
@@ -97,7 +92,6 @@ impl DeleteFileDialogController {
 
             win.set_file_name(first_name.into());
             win.set_files_count(count as i32);
-            win.set_file_size_str(format_filesize(total_bytes).into());
             win.set_missing_note(missing_files_hint(missing, count).unwrap_or_default().into());
             win.set_error_message("".into());
 

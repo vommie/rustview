@@ -30,7 +30,6 @@ pub struct FilePlan {
     pub id: MediaId,
     pub name: String,
     pub path: PathBuf,
-    pub size: u64,
     /// Gone from the drive already (or flagged so): only its record is removed.
     pub missing: bool,
 }
@@ -86,10 +85,6 @@ impl SelectionDeletePlan {
 
     pub fn folders_in(&self, state: FolderState) -> impl Iterator<Item = &FolderPlan> {
         self.folders.iter().filter(move |f| f.state == state)
-    }
-
-    pub fn present_file_bytes(&self) -> u64 {
-        self.present_files().map(|f| f.size).sum()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -190,7 +185,7 @@ impl SelectionDeletePlanner {
             }
             let path = library.resolve_media_path(id)?;
             let missing = record.is_deleted || !path.exists();
-            plan.files.push(FilePlan { id, name: record.filename, path, size: record.file_size, missing });
+            plan.files.push(FilePlan { id, name: record.filename, path, missing });
         }
 
         Ok(plan)
@@ -452,7 +447,6 @@ mod tests {
         let a = plan.folders.iter().find(|f| f.name == "a").unwrap();
         assert_eq!((a.state.clone(), a.subfolders, a.media_files), (FolderState::Present, 1, 3));
         assert!(!plan.is_database_only());
-        assert!(plan.present_file_bytes() > 0);
     }
 
     #[test]

@@ -133,7 +133,7 @@ export component MediaTile inherits Rectangle {
         Rectangle {
             width: root.item-thumb-w;
             height: root.item-thumb-h;
-            background: item.is-folder ? (item.is-deleted ? #1e1e2e : #000000) : (item.is-pending ? #182232 : (item.is-deleted ? #1e1e2e : (item.is-corrupted ? #2d161d : #000000)));
+            background: item.is-folder ? (item.is-deleted ? Theme.surface : Theme.surface-variant) : (item.is-pending ? #182232 : (item.is-deleted ? #1e1e2e : (item.is-corrupted ? #2d161d : #000000)));
             border-radius: Math.max(0px, root.corner-radius-val - 2px);
             clip: true;
 
