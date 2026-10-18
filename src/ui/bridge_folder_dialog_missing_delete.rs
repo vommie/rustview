@@ -95,7 +95,7 @@ impl MissingFolderDeleteDialogController {
                     })
                     .unwrap_or_else(|| ("Folder".to_string(), "".to_string()));
 
-                BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
+                BridgeFolders::reload_tree_after_restore(window, &ctx.library, &ctx.settings, &ctx.state);
                 StatusBarBridge::info(window, "Folder re-detected on disk and restored.");
 
                 let reborn_ctrl = RebornFolderWarnDialogController::new();

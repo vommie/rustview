@@ -32,6 +32,7 @@ export { RenameTagDialog } from "rename_tag_dialog.slint";
 export { DeleteTagDialog } from "delete_tag_dialog.slint";
 export { RenameFolderDialog } from "rename_folder_dialog.slint";
 export { DeleteFolderDialog } from "delete_folder_dialog.slint";
+export { DeleteSelectionDialog } from "delete_selection_dialog.slint";
 export { NewFolderDialog } from "new_folder_dialog.slint";
 export { MoveFolderToDialog } from "move_folder_to_dialog.slint";
 export { RemoveOrphanedFolderDialog } from "remove_orphaned_folder_dialog.slint";
@@ -302,8 +303,6 @@ export component MainWindow inherits Window {
     /// A row of a folder (or "Up") in the Browse view was clicked; `id` is negative.
     callback folder-row-clicked(int /* id */, bool /* ctrl */, bool /* shift */);
     /// Enter in the Browse view: opens the selected folder row or the selected medium.
-    /// A modal dialog closed (the lock of the main window was released).
-    callback modal-lock-released();
     callback browse-enter-pressed();
     /// Backspace / Alt+Up in the Browse view: shows the parent folder.
     callback browse-go-up-requested();
@@ -514,12 +513,6 @@ export component MainWindow inherits Window {
 
     public function focus-search() {
         media-toolbar.focus-search();
-    }
-
-    changed is-modal-locked => {
-        if !root.is-modal-locked {
-            root.modal-lock-released();
-        }
     }
 
     forward-focus: main-window-focus;

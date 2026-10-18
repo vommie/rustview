@@ -21,7 +21,6 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
 use super::bridge_sidebar_panel_tabs::BridgeSidebarPanelTabs;
 use super::bridge_state::*;
-use super::bridge_selection_delete::SelectionDelete;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tag_dialogs::TagDialogController;
@@ -882,11 +881,6 @@ impl UiBridge {
     }
 
     fn register_delete_callbacks(&self) {
-        // The callback runs while Slint evaluates the property change; the next dialog must not open inside of it.
-        self.window.on_modal_lock_released(|| {
-            let _ = slint::invoke_from_event_loop(SelectionDelete::on_modal_lock_released);
-        });
-
         let win = self.window.clone_strong();
         let lib = self.library.clone();
         let thumb = self.thumbnails.clone();
@@ -999,10 +993,22 @@ impl UiBridge {
 
         if effective_panel == LastActivePanel::Folder {
             // Folders highlighted in the Browse view: one folder alone goes through its own dialog, any larger selection through the
-            // dialogs of its files and folders, one after the other.
+            // combined dialog for files and folders.
             let files = params.state.read().get_selected_ids_ordered();
             if browse_folders.len() > 1 || (!browse_folders.is_empty() && !files.is_empty()) {
-                SelectionDelete::start(&params, browse_folders, files);
+                let ctx = FolderDialogContext {
+                    library: params.library.clone(),
+                    thumbnails: params.thumbnails.clone(),
+                    tab_manager: params.tab_manager.clone(),
+                    settings: params.settings.clone(),
+                    state: params.state.clone(),
+                };
+                tracing::info!(
+                    folders = browse_folders.len(),
+                    files = files.len(),
+                    "[UiBridge: DeleteAction] Delete requested on a selection of folders and files: opening the combined dialog"
+                );
+                params.folder_dialogs.show_delete_selection(window, files, browse_folders, ctx);
                 return;
             }
 
@@ -1025,7 +1031,7 @@ impl UiBridge {
     }
 
     /// Opens the dialog that deletes a folder (or, for a folder that is missing on disk, the one that removes it from the database).
-    pub(crate) fn open_folder_delete_dialog(params: &DeleteActionParams<'_>, folder_id: FolderId) {
+    fn open_folder_delete_dialog(params: &DeleteActionParams<'_>, folder_id: FolderId) {
         let window = params.window;
         let is_root = {
             let app_settings = params.settings.get();
@@ -1076,7 +1082,7 @@ impl UiBridge {
 
     /// Opens the dialog that deletes `media_ids` (or, when every one of them is already missing on disk, the one that only
     /// removes them from the database). `followup` runs after a confirmed deletion.
-    pub(crate) fn open_media_delete_dialog(
+    fn open_media_delete_dialog(
         params: &DeleteActionParams<'_>,
         media_ids: Vec<MediaId>,
         followup: Option<DeleteFollowup>,

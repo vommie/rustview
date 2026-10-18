@@ -19,6 +19,7 @@ pub mod models;
 pub mod refresh;
 pub mod refresh_media_files;
 pub mod schema;
+pub mod selection_delete;
 pub mod tags;
 
 pub use db::LibraryDatabase;

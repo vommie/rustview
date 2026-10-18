@@ -1317,6 +1317,14 @@ impl BridgeFolders {
         FolderTreeSync::refresh(window, library, settings, state);
     }
 
+    /// A folder was restored in the database behind the cached snapshot: the snapshot is read again, the tree, the folder rows of the
+    /// Browse view and the Inspector show the folder as present.
+    pub fn reload_tree_after_restore(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
+        state.write().invalidate_folder_hierarchy();
+        Self::reload_tree(window, library, settings, state);
+        BridgeInspector::update(window, state);
+    }
+
     /// Clears the whole browsing view for the "no root directory" situation.
     pub fn clear_view(window: &MainWindow, state: &Arc<RwLock<UiState>>, status_msg: &str) {
         state.write().invalidate_folder_hierarchy();

@@ -22,6 +22,7 @@ pub const WINDOWS: &[(&str, &str)] = &[
     ("RenameFolderDialog", "FolderDialogController::close_rename"),
     ("NewFolderDialog", "FolderDialogController::close_new"),
     ("DeleteFolderDialog", "FolderDialogController::close_delete"),
+    ("DeleteSelectionDialog", "FolderDialogController::close_delete_selection"),
     ("MissingFolderDeleteDialog", "FolderDialogController::close_missing_delete"),
     ("RemoveOrphanedFolderDialog", "FolderDialogController::close_remove_orphaned"),
     ("RebornFolderDeleteWarnDialog", "FolderDialogController::close_reborn_warn"),

@@ -126,6 +126,7 @@ fn close_windows(t: &ShutdownTargets<'_>) {
     t.folder_dialogs.close_new(window);
     t.folder_dialogs.close_rename(window);
     t.folder_dialogs.close_delete(window);
+    t.folder_dialogs.close_delete_selection(window);
     t.folder_dialogs.close_missing_delete(window);
     t.folder_dialogs.close_remove_orphaned(window);
     t.folder_dialogs.close_reborn_warn(window);

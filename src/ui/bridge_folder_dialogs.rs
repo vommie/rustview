@@ -4,6 +4,7 @@ pub use super::bridge_folder_dialog_move::MoveFolderDialogController;
 pub use super::bridge_folder_dialog_new::NewFolderDialogController;
 pub use super::bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
 pub use super::bridge_folder_dialog_remove_orphaned::RemoveOrphanedFolderDialogController;
+pub use super::bridge_selection_delete::DeleteSelectionDialogController;
 pub use super::bridge_folder_dialog_rename::RenameFolderDialogController;
 
 use super::bridge_state::UiState;
@@ -32,6 +33,7 @@ pub struct FolderDialogController {
     pub rename: RenameFolderDialogController,
     pub new_folder: NewFolderDialogController,
     pub delete: DeleteFolderDialogController,
+    pub delete_selection: DeleteSelectionDialogController,
     pub missing_delete: MissingFolderDeleteDialogController,
     pub move_folder: MoveFolderDialogController,
     pub remove_orphaned: RemoveOrphanedFolderDialogController,
@@ -84,6 +86,23 @@ impl FolderDialogController {
     #[inline]
     pub fn close_delete(&self, window: &MainWindow) {
         self.delete.close(window);
+    }
+
+    /// The combined dialog for a selection of folders and files.
+    #[inline]
+    pub fn show_delete_selection(
+        &self,
+        window: &MainWindow,
+        files: Vec<crate::library::models::MediaId>,
+        folders: Vec<FolderId>,
+        ctx: FolderDialogContext,
+    ) {
+        self.delete_selection.show(window, files, folders, ctx, &self.reborn_warn);
+    }
+
+    #[inline]
+    pub fn close_delete_selection(&self, window: &MainWindow) {
+        self.delete_selection.close(window);
     }
 
     #[inline]

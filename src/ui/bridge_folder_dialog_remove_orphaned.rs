@@ -50,7 +50,7 @@ impl RemoveOrphanedFolderDialogController {
                     .map(|f| f.path)
                     .unwrap_or_default();
 
-                BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
+                BridgeFolders::reload_tree_after_restore(window, &ctx.library, &ctx.settings, &ctx.state);
                 StatusBarBridge::info(window, "Folder re-detected on disk and restored.");
                 reborn_warn.show(window, folder_name, &path_str);
                 return;
@@ -127,7 +127,7 @@ impl RemoveOrphanedFolderDialogController {
                     })
                     .unwrap_or_else(|| ("Folder".to_string(), "".to_string()));
 
-                BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
+                BridgeFolders::reload_tree_after_restore(window, &ctx.library, &ctx.settings, &ctx.state);
                 StatusBarBridge::info(window, "Folder re-detected on disk and restored.");
                 reborn_warn.show(window, &f_name, &path_str);
                 return;

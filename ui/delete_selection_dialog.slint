@@ -1,0 +1,177 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { BulletItem } from "bullet_item.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
+
+/// Deletes a selection that holds folders (and usually files): one dialog for all of it. Rust writes every text, so the singular and
+/// plural forms and the lists of what happens stay in one place.
+export component DeleteSelectionDialog inherits Window {
+    title: root.window-title;
+    preferred-width: 540px;
+    preferred-height: 340px;
+    min-width: 460px;
+    min-height: 280px;
+    always-on-top: true;
+    background: Theme.background;
+
+    in-out property <string> window-title: "RustView - Delete Files & Folders";
+    in-out property <string> heading: "Delete Files & Folders";
+    in-out property <string> question: "";
+    /// What will be deleted on disk and in the database, one entry per line.
+    in-out property <[string]> details: [];
+    /// What is only cleaned from the database because it is gone from the drive already.
+    in-out property <[string]> database-details: [];
+    in-out property <string> note: "";
+    /// Nothing is left on the drive: only the database cleanup is offered.
+    in-out property <bool> database-only: false;
+    in property <string> error-message: "";
+
+    callback move-to-trash-confirmed();
+    callback permanent-delete-confirmed();
+    callback remove-from-database-confirmed();
+    callback cancelled();
+
+    forward-focus: dialog-focus;
+
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 0px;
+            spacing: 0px;
+            alignment: space-between;
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 12px;
+                vertical-stretch: 1;
+
+                DialogHeading {
+                    icon: root.database-only ? IconId.database-clean : IconId.status-warning;
+                    text: root.heading;
+                    color: root.database-only ? Theme.accent : #f38ba8;
+                }
+
+                Text {
+                    text: root.question;
+                    font-size: 12px;
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+
+                if root.details.length > 0 : Rectangle {
+                    background: #f38ba818;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #f38ba844;
+
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 4px;
+
+                        Text {
+                            text: "Will be deleted:";
+                            font-size: 11px;
+                            font-weight: 700;
+                            color: #f38ba8;
+                        }
+
+                        for line in root.details : BulletItem {
+                            text: line;
+                            color: Theme.text;
+                        }
+                    }
+                }
+
+                if root.database-details.length > 0 : Rectangle {
+                    background: #f9e2af18;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #f9e2af44;
+
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 4px;
+
+                        Text {
+                            text: "Missing on disk, only removed from the database:";
+                            font-size: 11px;
+                            font-weight: 700;
+                            color: #f9e2af;
+                        }
+
+                        for line in root.database-details : BulletItem {
+                            text: line;
+                            color: Theme.text;
+                        }
+                    }
+                }
+
+                if root.note != "" : Text {
+                    text: root.note;
+                    font-size: 11px;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+
+                if root.error-message != "" : Text {
+                    text: root.error-message;
+                    font-size: 11px;
+                    color: #ff5555;
+                    wrap: word-wrap;
+                }
+            }
+
+            // Action Buttons Bar
+            Rectangle {
+                height: 48px;
+                background: Theme.surface;
+                vertical-stretch: 0;
+
+                Rectangle {
+                    y: 0px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    padding-top: 6px;
+                    padding-bottom: 6px;
+                    spacing: 10px;
+                    alignment: end;
+
+                    Button {
+                        text: "Cancel";
+                        clicked => { root.cancelled(); }
+                    }
+
+                    if !root.database-only : Button {
+                        text: "Permanently Delete";
+                        clicked => { root.permanent-delete-confirmed(); }
+                    }
+
+                    if !root.database-only : Button {
+                        text: "Move to Trash";
+                        primary: true;
+                        clicked => { root.move-to-trash-confirmed(); }
+                    }
+
+                    if root.database-only : Button {
+                        text: "Remove from Database";
+                        primary: true;
+                        clicked => { root.remove-from-database-confirmed(); }
+                    }
+                }
+            }
+        }
+    }
+}

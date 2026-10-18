@@ -1,164 +1,486 @@
-//! Deleting a selection that holds folders (Del, or "Delete..." in the menu of such a selection). The dialogs are the ones that
-//! exist for files and for one folder; they run one after the other: first the files, then each folder. Cancelling one dialog ends
-//! the sequence. A dialog that closes releases the modal lock of the main window; that is the signal to go on.
+//! The combined "Delete Files & Folders" dialog: deleting a selection of the Browse view that holds folders.
+//!
+//! What gets deleted, and how, is `library::selection_delete` (the same operations and checks as the single dialogs: Trash or
+//! permanent delete of what is on disk, database cleanup of what is gone, a folder that is back on disk is restored and kept). This
+//! module only shows the plan, asks, and brings the tree, the list, the viewers and the panels in line with the result.
 
-use super::MainWindow;
-use super::bridge::{DeleteActionParams, UiBridge};
-use super::bridge_file_dialog_delete::DeleteFileDialogController;
-use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
-use super::bridge_folder_dialogs::FolderDialogController;
-use super::bridge_state::UiState;
-use super::favorites::FavoriteManager;
-use super::multiview::MultiviewHandle;
-use crate::library::Library;
+use super::bridge_file_dialogs::FileDialogContext;
+use super::bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
+use super::bridge_folder_dialogs::FolderDialogContext;
+use super::bridge_folders::BridgeFolders;
+use super::bridge_inspector::BridgeInspector;
+use super::bridge_media::BridgeMedia;
+use super::bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
+use super::bridge_tab_grid::BridgeTabGrid;
+use super::bridge_tags::BridgeTags;
+use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::models::format_filesize;
+use super::{DeleteSelectionDialog, MainWindow};
 use crate::library::models::{FolderId, MediaId};
-use crate::settings::SettingsManager;
-use crate::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
-use slint::ComponentHandle;
+use crate::library::selection_delete::{
+    DeleteMode, FolderState, SelectionDeleteExecutor, SelectionDeletePlan, SelectionDeletePlanner, SelectionDeleteReport,
+};
+use crate::library::folders::normalize_path;
+use slint::{CloseRequestResponse, ComponentHandle, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::rc::Rc;
 
-enum Step {
-    /// The selected media; `all_missing`: they are all gone from the drive already (the dialog only removes them from the database).
-    Files { ids: Vec<MediaId>, all_missing: bool },
-    Folder { id: FolderId, was_missing: bool },
+fn count(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
 }
 
-struct Job {
-    window: MainWindow,
-    library: Arc<Library>,
-    thumbnails: Arc<ThumbnailManager>,
-    tab_manager: Arc<ViewerTabManager>,
-    settings: Arc<SettingsManager>,
-    state: Arc<RwLock<UiState>>,
-    favorites: Arc<RwLock<FavoriteManager>>,
-    delete_file_dialog: DeleteFileDialogController,
-    remove_orphaned_file_dialog: RemoveOrphanedFileDialogController,
-    folder_dialogs: FolderDialogController,
-    fullscreen: MultiviewHandle,
-    steps: VecDeque<Step>,
-    awaiting: Option<Step>,
+/// Every text of the dialog, derived from the plan alone (unit tested).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DialogTexts {
+    pub window_title: String,
+    pub heading: String,
+    pub question: String,
+    pub details: Vec<String>,
+    pub database_details: Vec<String>,
+    pub note: String,
+    pub database_only: bool,
 }
 
-thread_local! {
-    static JOB: RefCell<Option<Job>> = const { RefCell::new(None) };
-}
+impl DialogTexts {
+    /// `reborn`: how many selected folders turned out to exist on disk again and were restored (they are not part of the plan).
+    pub fn of(plan: &SelectionDeletePlan, reborn: usize) -> Self {
+        let present_files: Vec<_> = plan.present_files().collect();
+        let missing_files: Vec<_> = plan.missing_files().collect();
+        let present_folders: Vec<_> = plan.folders_in(FolderState::Present).collect();
+        let missing_folders: Vec<_> = plan.folders_in(FolderState::Missing).collect();
+        let database_only = plan.is_database_only();
 
-pub struct SelectionDelete;
-
-impl SelectionDelete {
-    /// Starts the sequence for `files` and `folders` (the Browse selection).
-    pub fn start(params: &DeleteActionParams<'_>, folders: Vec<FolderId>, files: Vec<MediaId>) {
-        let mut steps = VecDeque::new();
-        if !files.is_empty() {
-            let all_missing = {
-                let st = params.state.read();
-                files.iter().all(|&id| st.all_folder_media.find(id).map(|m| m.record.is_deleted).unwrap_or(false))
-            };
-            steps.push_back(Step::Files { ids: files, all_missing });
-        }
-        for id in folders {
-            let was_missing = params.library.folders().get_folder(id).ok().flatten().map(|r| r.is_deleted).unwrap_or(false);
-            steps.push_back(Step::Folder { id, was_missing });
-        }
-        tracing::info!(steps = steps.len(), "[SelectionDelete: Start] Deleting a selection of folders and files, one dialog after the other");
-
-        let job = Job {
-            window: params.window.clone_strong(),
-            library: params.library.clone(),
-            thumbnails: params.thumbnails.clone(),
-            tab_manager: params.tab_manager.clone(),
-            settings: params.settings.clone(),
-            state: params.state.clone(),
-            favorites: params.favorites.clone(),
-            delete_file_dialog: params.delete_file_dialog.clone(),
-            remove_orphaned_file_dialog: params.remove_orphaned_file_dialog.clone(),
-            folder_dialogs: params.folder_dialogs.clone(),
-            fullscreen: params.fullscreen.clone(),
-            steps,
-            awaiting: None,
+        // The title names everything the selection holds, as the user sees it.
+        let (files, folders) = (plan.files.len(), plan.folders.len());
+        let kinds = match (files, folders) {
+            (0, f) => count_word(f, "Folder", "Folders"),
+            (n, 0) => count_word(n, "File", "Files"),
+            (n, f) => format!("{} & {}", count_word(n, "File", "Files"), count_word(f, "Folder", "Folders")),
         };
-        JOB.with(|slot| *slot.borrow_mut() = Some(job));
-        Self::advance();
-    }
+        let heading = if database_only { format!("Remove {kinds} from Database") } else { format!("Delete {kinds}") };
 
-    /// A dialog released the modal lock: the step it belonged to either did its work (go on) or was cancelled (stop).
-    pub fn on_modal_lock_released() {
-        let proceed = JOB.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            let Some(job) = slot.as_mut() else { return false };
-            let Some(step) = job.awaiting.take() else { return false };
-            if job.is_done(&step) {
-                true
-            } else {
-                tracing::info!("[SelectionDelete: Cancelled] A dialog was cancelled; the rest of the selection stays");
-                *slot = None;
-                false
-            }
-        });
-        if proceed {
-            Self::advance();
-        }
-    }
+        let mut texts = Self { window_title: format!("RustView - {heading}"), heading, database_only, ..Self::default() };
 
-    /// Opens the dialog of the next step; a step whose dialog does not open is skipped.
-    fn advance() {
-        loop {
-            let Some(mut job) = JOB.with(|slot| slot.borrow_mut().take()) else { return };
-            let Some(step) = job.steps.pop_front() else {
-                return;
-            };
-            job.open(&step);
-            let opened = job.window.get_is_modal_locked();
-            if opened {
-                job.awaiting = Some(step);
-            }
-            JOB.with(|slot| *slot.borrow_mut() = Some(job));
-            if opened {
-                return;
-            }
+        // Question and the list of what is deleted on disk.
+        let size = format_filesize(plan.present_file_bytes());
+        let file_phrase = match present_files.as_slice() {
+            [] => None,
+            [one] => Some(format!("the file '{}' ({size})", one.name)),
+            many => Some(format!("the {} selected files ({size})", many.len())),
+        };
+        let folder_phrase = match present_folders.as_slice() {
+            [] => None,
+            [one] => Some(format!("the folder '{}'", one.name)),
+            many => Some(format!("the {} selected folders", many.len())),
+        };
+        texts.question = match (file_phrase, folder_phrase) {
+            (Some(f), Some(d)) => format!("Are you sure you want to delete {f} and {d}?"),
+            (Some(f), None) | (None, Some(f)) => format!("Are you sure you want to delete {f}?"),
+            (None, None) => "None of the selected items exists on disk any more. Remove them from the library database?".to_string(),
+        };
+
+        if !present_files.is_empty() {
+            texts.details.push(format!(
+                "{} ({size}), with their records, thumbnails and preview caches",
+                count(present_files.len(), "file", "files")
+            ));
         }
+        if !present_folders.is_empty() {
+            let subfolders: usize = present_folders.iter().map(|f| f.subfolders).sum();
+            let media: usize = present_folders.iter().map(|f| f.media_files).sum();
+            texts.details.push(format!(
+                "{} with {} and {}",
+                count(present_folders.len(), "folder", "folders"),
+                count(subfolders, "subfolder", "subfolders"),
+                count(media, "media file", "media files")
+            ));
+        }
+
+        // What is only cleaned from the database.
+        if !missing_files.is_empty() {
+            texts.database_details.push(count(missing_files.len(), "missing file", "missing files"));
+        }
+        if !missing_folders.is_empty() {
+            let subfolders: usize = missing_folders.iter().map(|f| f.subfolders).sum();
+            let media: usize = missing_folders.iter().map(|f| f.media_files).sum();
+            texts.database_details.push(format!(
+                "{} with {} and {} cached",
+                count(missing_folders.len(), "missing folder", "missing folders"),
+                count(subfolders, "subfolder", "subfolders"),
+                count(media, "media file", "media files")
+            ));
+        }
+
+        let mut notes = Vec::new();
+        if !present_folders.is_empty() {
+            notes.push("Folders and their media are deleted on disk and flagged in the library database.".to_string());
+        }
+        let covered = plan.nested_folders + plan.files_in_folders;
+        if covered > 0 {
+            notes.push(format!(
+                "{} lie inside selected folders and are deleted with them.",
+                count(covered, "selected item", "selected items")
+            ));
+        }
+        if reborn > 0 {
+            notes.push(format!("{} found on disk again and restored; not deleted.", count(reborn, "folder was", "folders were")));
+        }
+        if plan.protected_folders > 0 {
+            notes.push("The library root cannot be deleted.".to_string());
+        }
+        texts.note = notes.join("\n");
+        texts
     }
 }
 
-impl Job {
-    fn params(&self) -> DeleteActionParams<'_> {
-        DeleteActionParams {
-            window: &self.window,
-            library: &self.library,
-            thumbnails: &self.thumbnails,
-            tab_manager: &self.tab_manager,
-            settings: &self.settings,
-            state: &self.state,
-            favorites: &self.favorites,
-            delete_file_dialog: &self.delete_file_dialog,
-            remove_orphaned_file_dialog: &self.remove_orphaned_file_dialog,
-            folder_dialogs: &self.folder_dialogs,
-            fullscreen: &self.fullscreen,
+fn count_word(n: usize, one: &str, many: &str) -> String {
+    (if n == 1 { one } else { many }).to_string()
+}
+
+/// The status bar line for a finished deletion and whether it is a warning.
+pub fn summary(report: &SelectionDeleteReport, mode: DeleteMode) -> (String, StatusMessageLevel) {
+    let mut parts = Vec::new();
+    let on_disk = |files: usize, folders: usize| match (files, folders) {
+        (0, 0) => None,
+        (f, 0) => Some(count(f, "file", "files")),
+        (0, d) => Some(count(d, "folder", "folders")),
+        (f, d) => Some(format!("{} and {}", count(f, "file", "files"), count(d, "folder", "folders"))),
+    };
+    if let Some(done) = on_disk(report.files_deleted.len(), report.top_level_folders_deleted) {
+        let verb = if mode == DeleteMode::Trash { "Moved to Trash" } else { "Permanently deleted" };
+        parts.push(format!("{verb} {done}."));
+    }
+    if let Some(done) = on_disk(report.files_purged.len(), report.top_level_folders_purged) {
+        parts.push(format!("Removed {done} from database (missing on disk)."));
+    }
+    if !report.folders_reborn.is_empty() {
+        parts.push(format!("{} found on disk again and restored.", count(report.folders_reborn.len(), "folder was", "folders were")));
+    }
+    let failures = report.failures();
+    if failures > 0 {
+        let first = report.file_failures.iter().chain(&report.folder_failures).next();
+        let detail = first.map(|f| format!(" ({}: {})", f.name, f.reason)).unwrap_or_default();
+        parts.push(format!("{} failed{detail}.", count(failures, "item", "items")));
+    }
+    if parts.is_empty() {
+        parts.push("Nothing was deleted.".to_string());
+    }
+    let level = if failures > 0 || !report.folders_reborn.is_empty() { StatusMessageLevel::Warning } else { StatusMessageLevel::Success };
+    (parts.join(" "), level)
+}
+
+/// The dialog and what it does when confirmed.
+#[derive(Default, Clone)]
+pub struct DeleteSelectionDialogController {
+    dialog: Rc<RefCell<Option<DeleteSelectionDialog>>>,
+}
+
+impl DeleteSelectionDialogController {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Plans the deletion of `files` and `folders` and asks the user. Nothing happens on disk before a button is pressed.
+    pub fn show(
+        &self,
+        window: &MainWindow,
+        files: Vec<MediaId>,
+        folders: Vec<FolderId>,
+        ctx: FolderDialogContext,
+        reborn_warn: &RebornFolderWarnDialogController,
+    ) {
+        window.set_is_context_menu_open(false);
+
+        let protected = Self::protected_folders(&ctx);
+        let mut plan = match SelectionDeletePlanner::build(&ctx.library, &files, &folders, &protected) {
+            Ok(plan) => plan,
+            Err(e) => {
+                tracing::error!(error = %e, "[DeleteSelectionDialog: Plan] The selection could not be planned");
+                StatusBarBridge::error(window, format!("Cannot delete the selection: {e}"));
+                return;
+            }
+        };
+
+        // Folders flagged missing that are on disk again are restored right away, like the single dialogs do.
+        let reborn = plan.take_reborn();
+        let mut reborn_restored = 0;
+        for folder in &reborn {
+            if ctx.library.folder_operations().check_and_restore_if_exists(folder.id).is_ok() {
+                reborn_restored += 1;
+            }
+        }
+        if reborn_restored > 0 {
+            BridgeFolders::reload_tree_after_restore(window, &ctx.library, &ctx.settings, &ctx.state);
+        }
+
+        if plan.is_empty() {
+            match reborn.first() {
+                Some(folder) => {
+                    StatusBarBridge::info(window, "Folder re-detected on disk and restored.");
+                    reborn_warn.show(window, &folder.name, &folder.path.to_string_lossy());
+                }
+                None => StatusBarBridge::info(window, "Nothing to delete: the selection is not part of the library any more."),
+            }
+            return;
+        }
+
+        self.ensure_dialog_instantiated();
+        if let Some(ref win) = *self.dialog.borrow() {
+            self.populate(win, &DialogTexts::of(&plan, reborn_restored));
+            self.bind_dialog_events(win, window, Rc::new(plan), ctx);
+            window.set_is_modal_locked(true);
+            let _ = win.show();
         }
     }
 
-    fn open(&self, step: &Step) {
-        match step {
-            Step::Files { ids, .. } => UiBridge::open_media_delete_dialog(&self.params(), ids.clone(), None),
-            Step::Folder { id, .. } => UiBridge::open_folder_delete_dialog(&self.params(), *id),
+    /// Hides the dialog and releases the modal lock of the main window.
+    pub fn close(&self, window: &MainWindow) {
+        if let Some(ref win) = *self.dialog.borrow() {
+            let _ = win.hide();
+        }
+        window.set_is_modal_locked(false);
+    }
+
+    fn protected_folders(ctx: &FolderDialogContext) -> HashSet<FolderId> {
+        let mut protected = HashSet::new();
+        if let Some(root) = ctx.settings.get().general.root_folder
+            && let Ok(Some(record)) = ctx.library.folders().get_folder_by_path(&normalize_path(&root))
+        {
+            protected.insert(record.id);
+        }
+        protected
+    }
+
+    fn populate(&self, win: &DeleteSelectionDialog, texts: &DialogTexts) {
+        let list = |lines: &[String]| ModelRc::new(VecModel::from(lines.iter().map(|l| SharedString::from(l.as_str())).collect::<Vec<_>>()));
+        win.set_window_title(texts.window_title.as_str().into());
+        win.set_heading(texts.heading.as_str().into());
+        win.set_question(texts.question.as_str().into());
+        win.set_details(list(&texts.details));
+        win.set_database_details(list(&texts.database_details));
+        win.set_note(texts.note.as_str().into());
+        win.set_database_only(texts.database_only);
+        win.set_error_message("".into());
+    }
+
+    /// Carries the deletion out and brings the application in line with what happened.
+    fn execute(&self, plan: &SelectionDeletePlan, mode: DeleteMode, ctx: &FolderDialogContext, window: &MainWindow) {
+        // Where the view goes if the open folder is part of the deletion (it cannot be for a selection of the Browse view).
+        let affected: Vec<FolderId> = plan.folders.iter().flat_map(|f| f.affected.iter().copied()).collect();
+        let successor = plan.folders.first().and_then(|first| {
+            BridgeFolders::find_visible_successor_folder(first.id, &affected, &ctx.library, &ctx.settings, &ctx.state)
+        });
+
+        let report = SelectionDeleteExecutor::execute(&ctx.library, plan, mode);
+
+        // Nothing worked: the dialog stays, with the reason.
+        if !report.changed_anything() && report.failures() > 0 {
+            let reasons: Vec<String> = report.file_failures.iter().chain(&report.folder_failures).map(|f| format!("{}: {}", f.name, f.reason)).collect();
+            if let Some(ref win) = *self.dialog.borrow() {
+                win.set_error_message(format!("Nothing could be deleted. {}", reasons.join("; ")).into());
+            }
+            return;
+        }
+
+        self.close(window);
+        Self::sync_application(window, ctx, &report, successor);
+
+        let (message, level) = summary(&report, mode);
+        StatusBarBridge::set_message(window, message, level);
+        StatusBarBridge::update_metrics(window, &ctx.state);
+    }
+
+    fn sync_application(window: &MainWindow, ctx: &FolderDialogContext, report: &SelectionDeleteReport, successor: Option<(FolderId, std::path::PathBuf)>) {
+        let gone_files: HashSet<MediaId> = report.files_deleted.iter().chain(&report.files_purged).chain(&report.folder_media_purged).copied().collect();
+        let flagged: HashSet<MediaId> = report.folder_media_flagged.iter().copied().collect();
+
+        for &id in gone_files.iter().chain(&flagged) {
+            ctx.tab_manager.notify_media_deleted(id);
+        }
+
+        {
+            let mut st = ctx.state.write();
+            st.remove_media(&gone_files);
+            for item in st.all_folder_media.iter_mut() {
+                if flagged.contains(&item.record.id) {
+                    item.mark_deleted();
+                }
+            }
+            st.file_selection.clear();
+            st.folder_rows.clear_selection();
+        }
+
+        let folder_ids = report.all_folder_ids();
+        BridgeFolders::prune_expanded_folders(&folder_ids, &ctx.settings, &ctx.state);
+        BridgeFolders::navigate_to_successor_if_affected(successor, &folder_ids, window, &ctx.library, &ctx.thumbnails, &ctx.settings, &ctx.state);
+
+        let file_ctx = FileDialogContext {
+            library: ctx.library.clone(),
+            thumbnails: ctx.thumbnails.clone(),
+            tab_manager: ctx.tab_manager.clone(),
+            settings: ctx.settings.clone(),
+            state: ctx.state.clone(),
+        };
+        BridgeViewerTabs::sync_ui(window, &file_ctx.tab_manager, &file_ctx.library, &file_ctx.settings, &file_ctx.state);
+        BridgeMedia::reload(window, &file_ctx.library, &file_ctx.thumbnails, &file_ctx.settings, &file_ctx.state, false, false);
+        BridgeInspector::update(window, &ctx.state);
+        BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
+        if window.get_active_view_mode() == 2 {
+            BridgeTabGrid::sync_tab_grid_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
         }
     }
 
-    /// Whether the dialog of `step` did its work: the folder or the files are gone from the library or from the drive.
-    fn is_done(&self, step: &Step) -> bool {
-        match step {
-            Step::Files { ids, all_missing } => ids.iter().all(|&id| match self.library.resolve_media_path(id) {
-                Err(_) => true,
-                Ok(path) => !all_missing && !path.exists(),
-            }),
-            Step::Folder { id, was_missing } => match self.library.folders().get_folder(*id) {
-                Ok(Some(record)) => !was_missing && record.is_deleted,
-                _ => true,
-            },
+    fn ensure_dialog_instantiated(&self) {
+        let mut d_ref = self.dialog.borrow_mut();
+        if d_ref.is_none() {
+            *d_ref = Some(DeleteSelectionDialog::new().expect("Failed to instantiate DeleteSelectionDialog"));
         }
+    }
+
+    fn bind_dialog_events(&self, win: &DeleteSelectionDialog, window: &MainWindow, plan: Rc<SelectionDeletePlan>, ctx: FolderDialogContext) {
+        let confirm = |mode: DeleteMode| {
+            let (ctrl, plan, ctx, window) = (self.clone(), plan.clone(), ctx.clone(), window.clone_strong());
+            move || ctrl.execute(&plan, mode, &ctx, &window)
+        };
+        win.on_move_to_trash_confirmed(confirm(DeleteMode::Trash));
+        win.on_permanent_delete_confirmed(confirm(DeleteMode::Permanent));
+        // Only reached when nothing is left on the drive, so the mode does not matter.
+        win.on_remove_from_database_confirmed(confirm(DeleteMode::Permanent));
+
+        let (ctrl, window_cancel) = (self.clone(), window.clone_strong());
+        win.on_cancelled(move || ctrl.close(&window_cancel));
+
+        let (ctrl, window_close) = (self.clone(), window.clone_strong());
+        win.window().on_close_requested(move || {
+            ctrl.close(&window_close);
+            CloseRequestResponse::HideWindow
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::selection_delete::{FilePlan, FolderPlan, ItemFailure};
+    use std::path::PathBuf;
+
+    fn file(name: &str, size: u64, missing: bool) -> FilePlan {
+        FilePlan { id: 1, name: name.into(), path: PathBuf::from(format!("/m/{name}")), size, missing }
+    }
+
+    fn folder(name: &str, state: FolderState, subfolders: usize, media: usize) -> FolderPlan {
+        FolderPlan { id: 2, name: name.into(), path: PathBuf::from(format!("/m/{name}")), state, subfolders, media_files: media, affected: vec![2] }
+    }
+
+    fn plan(files: Vec<FilePlan>, folders: Vec<FolderPlan>) -> SelectionDeletePlan {
+        SelectionDeletePlan { files, folders, ..Default::default() }
+    }
+
+    #[test]
+    fn titles_follow_singular_and_plural_of_each_kind() {
+        let heading = |files, folders| DialogTexts::of(&plan(files, folders), 0).heading;
+        let f = |n: usize| (0..n).map(|i| file(&format!("f{i}"), 10, false)).collect::<Vec<_>>();
+        let d = |n: usize| (0..n).map(|i| folder(&format!("d{i}"), FolderState::Present, 0, 0)).collect::<Vec<_>>();
+        assert_eq!(heading(f(1), d(1)), "Delete File & Folder");
+        assert_eq!(heading(f(1), d(2)), "Delete File & Folders");
+        assert_eq!(heading(f(3), d(1)), "Delete Files & Folder");
+        assert_eq!(heading(f(3), d(2)), "Delete Files & Folders");
+        assert_eq!(heading(vec![], d(2)), "Delete Folders");
+        assert_eq!(heading(f(2), vec![]), "Delete Files");
+    }
+
+    #[test]
+    fn the_window_title_matches_the_heading() {
+        let texts = DialogTexts::of(&plan(vec![file("a", 1, false)], vec![folder("d", FolderState::Present, 0, 0)]), 0);
+        assert_eq!(texts.window_title, "RustView - Delete File & Folder");
+    }
+
+    #[test]
+    fn question_names_single_items_and_counts_several() {
+        let one = DialogTexts::of(&plan(vec![file("a.jpg", 2048, false)], vec![folder("Trips", FolderState::Present, 2, 5)]), 0);
+        assert_eq!(one.question, "Are you sure you want to delete the file 'a.jpg' (2.00 KB) and the folder 'Trips'?");
+        let many = DialogTexts::of(
+            &plan(vec![file("a", 1024, false), file("b", 1024, false)], vec![folder("x", FolderState::Present, 0, 0), folder("y", FolderState::Present, 0, 0)]),
+            0,
+        );
+        assert_eq!(many.question, "Are you sure you want to delete the 2 selected files (2.00 KB) and the 2 selected folders?");
+    }
+
+    #[test]
+    fn details_sum_up_folders() {
+        let texts = DialogTexts::of(
+            &plan(vec![file("a", 1, false)], vec![folder("x", FolderState::Present, 2, 5), folder("y", FolderState::Present, 1, 7)]),
+            0,
+        );
+        assert_eq!(texts.details.len(), 2);
+        assert!(texts.details[0].starts_with("1 file ("));
+        assert_eq!(texts.details[1], "2 folders with 3 subfolders and 12 media files");
+        assert!(texts.database_details.is_empty());
+        assert!(!texts.database_only);
+    }
+
+    #[test]
+    fn missing_items_are_listed_apart_and_not_counted_as_deleted() {
+        let texts = DialogTexts::of(
+            &plan(vec![file("a", 5, false), file("gone", 9, true)], vec![folder("x", FolderState::Present, 0, 1), folder("lost", FolderState::Missing, 1, 4)]),
+            0,
+        );
+        assert!(texts.question.contains("the file 'a'"), "{}", texts.question);
+        assert!(!texts.question.contains("gone") && !texts.question.contains("lost"));
+        assert_eq!(texts.database_details, vec!["1 missing file", "1 missing folder with 1 subfolder and 4 media files cached"]);
+        assert_eq!(texts.heading, "Delete Files & Folders");
+    }
+
+    #[test]
+    fn everything_missing_offers_the_database_cleanup_only() {
+        let texts = DialogTexts::of(&plan(vec![file("gone", 9, true)], vec![folder("lost", FolderState::Missing, 0, 0)]), 0);
+        assert!(texts.database_only);
+        assert_eq!(texts.heading, "Remove File & Folder from Database");
+        assert!(texts.details.is_empty());
+        assert!(texts.question.contains("Remove them from the library database"));
+    }
+
+    #[test]
+    fn notes_explain_covered_items_reborn_folders_and_the_root() {
+        let mut p = plan(vec![file("a", 1, false)], vec![folder("x", FolderState::Present, 0, 0)]);
+        p.nested_folders = 1;
+        p.files_in_folders = 2;
+        p.protected_folders = 1;
+        let note = DialogTexts::of(&p, 2).note;
+        assert!(note.contains("deleted on disk and flagged"));
+        assert!(note.contains("3 selected items lie inside selected folders"));
+        assert!(note.contains("2 folders were found on disk again and restored; not deleted."));
+        assert!(note.contains("The library root cannot be deleted."));
+        let one = DialogTexts::of(&plan(vec![file("a", 1, false)], vec![]), 1).note;
+        assert!(one.contains("1 folder was found on disk again"));
+    }
+
+    #[test]
+    fn summary_reports_every_outcome() {
+        let mut report = SelectionDeleteReport { files_deleted: vec![1, 2], top_level_folders_deleted: 1, ..Default::default() };
+        let (text, level) = summary(&report, DeleteMode::Trash);
+        assert_eq!(text, "Moved to Trash 2 files and 1 folder.");
+        assert_eq!(level, StatusMessageLevel::Success);
+        let (text, _) = summary(&report, DeleteMode::Permanent);
+        assert_eq!(text, "Permanently deleted 2 files and 1 folder.");
+
+        report.files_purged = vec![3];
+        report.top_level_folders_purged = 2;
+        let (text, _) = summary(&report, DeleteMode::Trash);
+        assert_eq!(text, "Moved to Trash 2 files and 1 folder. Removed 1 file and 2 folders from database (missing on disk).");
+
+        report.folders_reborn = vec![folder("d", FolderState::Reborn, 0, 0)];
+        report.file_failures = vec![ItemFailure { name: "x.jpg".into(), reason: "denied".into() }];
+        let (text, level) = summary(&report, DeleteMode::Trash);
+        assert!(text.contains("1 folder was found on disk again and restored."));
+        assert!(text.ends_with("1 item failed (x.jpg: denied)."), "{text}");
+        assert_eq!(level, StatusMessageLevel::Warning);
+    }
+
+    #[test]
+    fn summary_of_nothing_is_not_a_success_claim() {
+        let (text, _) = summary(&SelectionDeleteReport::default(), DeleteMode::Trash);
+        assert_eq!(text, "Nothing was deleted.");
     }
 }

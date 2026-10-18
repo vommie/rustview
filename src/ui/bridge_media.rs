@@ -1846,6 +1846,7 @@ impl BridgeMedia {
         let is_table = window.get_is_table_view();
         let t_slint_start = Instant::now();
         let mut selection_pruned = false;
+        let folder_selection_before = state.read().folder_rows.selection_snapshot();
         let app_settings = settings.get();
         let folder_snapshot = BrowseFolders::snapshot_if_wanted(library, state);
         let folder_row_count;
@@ -1891,7 +1892,9 @@ impl BridgeMedia {
             bench.slint_commit_time_us.store(t_slint_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         }
 
-        if selection_pruned {
+        // Folder rows the new list no longer shows (filter, hidden folders) took their highlight with them.
+        let folders_pruned = state.read().folder_rows.selection_snapshot() != folder_selection_before;
+        if selection_pruned || folders_pruned {
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);
         }
