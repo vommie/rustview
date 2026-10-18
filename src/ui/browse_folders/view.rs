@@ -5,7 +5,7 @@ use crate::library::models::FolderHierarchySnapshot;
 use crate::ui::MediaItemView;
 
 /// Name of the navigation entry that leads to the parent folder.
-pub const UP_LABEL: &str = "Up";
+pub const UP_LABEL: &str = "...";
 
 pub fn folder_row_view(
     snapshot: Option<&FolderHierarchySnapshot>,

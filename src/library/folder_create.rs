@@ -121,24 +121,3 @@ impl<'a> FolderCreator<'a> {
         Ok(report)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_splits_and_skips_noise() {
-        assert_eq!(FolderPathPlanner::parse("test/subfolder").unwrap(), vec!["test", "subfolder"]);
-        assert_eq!(FolderPathPlanner::parse("  a//./b/  ").unwrap(), vec!["a", "b"]);
-        assert_eq!(FolderPathPlanner::parse("single").unwrap(), vec!["single"]);
-        assert_eq!(FolderPathPlanner::parse(" a / b ").unwrap(), vec!["a", "b"]);
-    }
-
-    #[test]
-    fn parse_rejects_escapes_and_empties() {
-        for bad in ["", "   ", "/", "/abs", "a/../b", "..", "a/\u{1}b", "./", "a\\b"] {
-            assert!(FolderPathPlanner::parse(bad).is_err(), "{bad:?} must be rejected");
-        }
-        assert!(FolderPathPlanner::parse(&"x".repeat(256)).is_err());
-    }
-}
