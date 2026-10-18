@@ -72,7 +72,7 @@ impl ThumbnailProgressTracker {
 
     pub fn decrement_active_workers(&self) {
         self.active_workers
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |val| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |val| {
                 Some(val.saturating_sub(1))
             })
             .ok();
