@@ -891,7 +891,7 @@ impl TagActionHandler {
             let (ready_stubs, still_pending, sources) = ctx
                 .library
                 .external_media_completer()
-                .find_pending_stubs_in_records(&search_results);
+                .find_pending_stubs_in_records(search_results);
 
             if !ready_stubs.is_empty() {
                 let stubs_count = ready_stubs.len();

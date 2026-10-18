@@ -83,7 +83,7 @@ impl TickStats {
             self.nonrender.record(gap.saturating_sub(Duration::from_micros(render_us)));
             note_worst(&mut self.worst, gap.as_micros() as u64, self.tick_count, viewport_y);
         }
-        if self.tick_count % RSS_SAMPLE_EVERY_TICKS == 0 {
+        if self.tick_count.is_multiple_of(RSS_SAMPLE_EVERY_TICKS) {
             self.rss_peak_mb = self.rss_peak_mb.max(get_system_memory_metrics().process_rss_mb);
         }
         self.tick_count += 1;
@@ -569,7 +569,7 @@ fn first_screen_ready(window: &MainWindow, total: i32) -> bool {
 
 fn note_worst(worst: &mut Vec<(u64, u64, f32)>, gap_us: u64, tick: u64, y: f32) {
     worst.push((gap_us, tick, y));
-    worst.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+    worst.sort_unstable_by_key(|entry| std::cmp::Reverse(entry.0));
     worst.truncate(WORST_TICKS_KEPT);
 }
 

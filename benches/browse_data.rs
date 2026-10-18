@@ -59,8 +59,10 @@ impl LegacyLruStore {
 /// write lock and the caller copies the 120 KB into a fresh buffer.
 struct LegacyL1 {
     capacity: usize,
-    inner: parking_lot::RwLock<(HashMap<u64, Arc<Vec<u8>>>, VecDeque<u64>)>,
+    inner: parking_lot::RwLock<LegacyL1State>,
 }
+
+type LegacyL1State = (HashMap<u64, Arc<Vec<u8>>>, VecDeque<u64>);
 
 impl LegacyL1 {
     fn new(capacity: usize) -> Self {

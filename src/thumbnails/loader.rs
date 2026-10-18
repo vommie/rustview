@@ -17,6 +17,7 @@ use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
 use parking_lot::{Mutex, RwLock};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -363,11 +364,14 @@ impl ThumbnailScheduler {
     ) -> Option<PathBuf> {
         let db = self.library.raw_db();
         let record = db.media.get(rtxn, &media_id).ok().flatten()?;
-        if !folder_paths.contains_key(&record.folder_id) {
-            let folder = db.folders.get(rtxn, &record.folder_id).ok().flatten()?;
-            folder_paths.insert(record.folder_id, PathBuf::from(folder.path));
-        }
-        Some(folder_paths.get(&record.folder_id)?.join(&record.filename))
+        let folder_dir = match folder_paths.entry(record.folder_id) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                let folder = db.folders.get(rtxn, &record.folder_id).ok().flatten()?;
+                entry.insert(PathBuf::from(folder.path))
+            }
+        };
+        Some(folder_dir.join(&record.filename))
     }
 
     fn execute_orchestration(
