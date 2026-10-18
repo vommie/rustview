@@ -55,6 +55,10 @@ status_error = { tabler = "circle-x", doc = "Error status" }
 folder = { tabler = "folder", doc = "Single folder (also: query scope 'current folder')" }
 folder_open = { tabler = "folder-open", doc = "Open folder / show in file manager" }
 folders = { tabler = "folders", doc = "Folder including its subfolders", aliases = ["subfolders"] }
+folder_plus = { tabler = "folder-plus", doc = "Create a new folder", aliases = ["new_folder"] }
+folder_up = { tabler = "folder-up", doc = "Navigate to the parent folder (the \"Up\" entry of the Browse view)" }
+browse_folders_on = { tabler = "folders", doc = "List the subfolders in the Browse view (toggle is off)" }
+browse_folders_off = { tabler = "folders-off", doc = "Hide the subfolders in the Browse view (toggle is on)" }
 world = { tabler = "world", doc = "Global scope (all folders)", aliases = ["global"] }
 file = { tabler = "file", doc = "Generic file" }
 file_missing = { tabler = "file-x", doc = "Missing or deleted file", aliases = ["missing", "deleted"] }

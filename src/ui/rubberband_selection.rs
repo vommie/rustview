@@ -66,6 +66,8 @@ pub struct GridLayoutConfig {
     pub item_tile_height: f32,
     pub grid_spacing: f32,
     pub grid_padding: f32,
+    /// Cells in front of the first medium (the folder rows of the Browse view); a rubber band never selects them.
+    pub leading_cells: usize,
 }
 
 /// Geometric layout parameters for Table View row bounding box projection.
@@ -73,6 +75,8 @@ pub struct GridLayoutConfig {
 pub struct TableLayoutConfig {
     pub row_height: f32,
     pub content_width: f32,
+    /// Rows in front of the first medium (the folder rows of the Browse view); a rubber band never selects them.
+    pub leading_cells: usize,
 }
 
 /// Pure geometric intersection evaluator for virtualized media views.
@@ -87,9 +91,9 @@ impl RubberbandGeometry {
         active_indices: &[usize],
         config: GridLayoutConfig,
     ) -> HashSet<MediaId> {
-        let total_items = active_indices.len();
+        let total_items = active_indices.len() + config.leading_cells;
 
-        if total_items == 0 || config.columns == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
+        if active_indices.is_empty() || config.columns == 0 || rect.width <= 0.0 || rect.height <= 0.0 {
             return HashSet::new();
         }
 
@@ -128,7 +132,8 @@ impl RubberbandGeometry {
 
                 let item_rect = RectF32::new(item_x, row_y, item_w, item_h);
                 if rect.intersects(&item_rect)
-                    && let Some(&orig_idx) = active_indices.get(item_idx)
+                    && let Some(media_row) = item_idx.checked_sub(config.leading_cells)
+                    && let Some(&orig_idx) = active_indices.get(media_row)
                     && let Some(m) = dataset.get(orig_idx)
                 {
                     intersected.insert(m.record.id);
@@ -147,9 +152,9 @@ impl RubberbandGeometry {
         active_indices: &[usize],
         config: TableLayoutConfig,
     ) -> HashSet<MediaId> {
-        let total_items = active_indices.len();
+        let total_items = active_indices.len() + config.leading_cells;
 
-        if total_items == 0 || config.row_height <= 0.0 || rect.width <= 0.0 || rect.height <= 0.0 {
+        if active_indices.is_empty() || config.row_height <= 0.0 || rect.width <= 0.0 || rect.height <= 0.0 {
             return HashSet::new();
         }
 
@@ -168,7 +173,8 @@ impl RubberbandGeometry {
             let row_rect = RectF32::new(0.0, row_y, config.content_width, config.row_height);
 
             if rect.intersects(&row_rect)
-                && let Some(&orig_idx) = active_indices.get(r)
+                && let Some(media_row) = r.checked_sub(config.leading_cells)
+                && let Some(&orig_idx) = active_indices.get(media_row)
                 && let Some(m) = dataset.get(orig_idx)
             {
                 intersected.insert(m.record.id);

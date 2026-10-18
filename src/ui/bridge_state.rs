@@ -18,6 +18,7 @@ use crate::ui::tab_dnd::TabDndSession;
 use crate::ui::tab_grid::MasonryRect;
 use crate::viewer::TabId;
 use crate::thumbnails::ThumbnailRamCache;
+use crate::ui::browse_folders::{BrowseFolderRows, FolderRowsRequest, Slot};
 use crate::ui::browse_window::{RingWindow, ViewGeometry};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -74,6 +75,7 @@ pub const CTX_FOLDER_REFRESH_FILES_META: CtxMenuActionId = 3005;
 pub const CTX_FOLDER_REFRESH_TREE_FULL: CtxMenuActionId = 3006;
 pub const CTX_FOLDER_REFRESH_TREE_RELATIVE: CtxMenuActionId = 3007;
 pub const CTX_FOLDER_ADD_TO_FAVORITES: CtxMenuActionId = 3008;
+pub const CTX_FOLDER_NEW: CtxMenuActionId = 3009;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 // Media Batch Destination Action IDs
@@ -122,6 +124,10 @@ pub struct UiState {
     /// The one RAM cache of decoded thumbnails, shared with the thumbnail loader.
     pub thumbs: Arc<ThumbnailRamCache>,
     pub active_indices: Vec<usize>,
+    /// "Show Folders" is switched on in the Browse toolbar.
+    pub show_folders: bool,
+    /// The folder rows of the Browse view (empty unless `show_folders` and the view is a plain folder).
+    pub folder_rows: BrowseFolderRows,
     /// Sum of the file sizes of the listed items (`LIST_BYTES_DIRTY` = not computed since the list or a size changed).
     list_total_bytes: AtomicU64,
     pub file_selection: FileSelectionModel,
@@ -196,6 +202,8 @@ impl Default for UiState {
             all_folder_media: MediaStore::new(),
             thumbs: Arc::new(ThumbnailRamCache::new(0)),
             active_indices: Vec::new(),
+            show_folders: false,
+            folder_rows: BrowseFolderRows::default(),
             list_total_bytes: AtomicU64::new(LIST_BYTES_DIRTY),
             file_selection: FileSelectionModel::new(),
             last_active_panel: LastActivePanel::Media,
@@ -277,7 +285,48 @@ impl UiState {
         total
     }
 
-    /// The record at `position` of the sorted, filtered list the grid and the table show.
+    /// The folder view is a plain folder: no query, no recursive view.
+    #[inline]
+    pub fn is_plain_folder_view(&self) -> bool {
+        self.current_folder_id.is_some() && !self.is_virtual_folder_mode && !self.is_query_active
+    }
+
+    /// Recomputes the folder rows from the snapshot (memory only). Returns whether they changed.
+    pub fn rebuild_folder_rows(&mut self, snapshot: &FolderHierarchySnapshot, show_hidden: bool, show_deleted: bool) -> bool {
+        let request = FolderRowsRequest {
+            enabled: self.show_folders && self.is_plain_folder_view(),
+            current: self.current_folder_id,
+            show_hidden,
+            show_deleted,
+        };
+        self.folder_rows.rebuild(snapshot, request)
+    }
+
+    /// Rows in front of the media (folders and "Up"): the media positions of the list start after them.
+    #[inline]
+    pub fn folder_front_len(&self) -> usize {
+        self.folder_rows.front_len()
+    }
+
+    /// Length of the list the grid and the table show: folders, media and the folders created meanwhile.
+    #[inline]
+    pub fn view_len(&self) -> usize {
+        self.folder_rows.view_len(self.active_indices.len())
+    }
+
+    /// What the tile at list `position` shows.
+    #[inline]
+    pub fn slot_at(&self, position: usize) -> Slot {
+        self.folder_rows.slot_at(position, self.active_indices.len())
+    }
+
+    /// The list position of a medium, folder rows in front included (O(1)).
+    #[inline]
+    pub fn view_position_of(&self, media_id: MediaId) -> Option<usize> {
+        self.media_row_map.get(&media_id).map(|&row| row + self.folder_front_len())
+    }
+
+    /// The record at `position` of the sorted, filtered media list (the folder rows in front are not counted, see `slot_at`).
     #[inline]
     pub fn item_at(&self, position: usize) -> Option<&IndexedMediaRecord> {
         if self.active_indices.is_empty() {

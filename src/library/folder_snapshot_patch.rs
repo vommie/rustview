@@ -73,6 +73,47 @@ impl FolderHierarchySnapshot {
         Ok(stats)
     }
 
+    /// Adds freshly created folders (`records` from the top of a created path down) to the snapshot. Records that are known
+    /// already only refresh their flags; a record whose parent is not in the snapshot (outside the tree's root) is skipped.
+    /// Returns the number of inserted nodes.
+    pub fn apply_folders_created(&mut self, records: &[FolderRecord]) -> usize {
+        let mut inserted = 0usize;
+        for rec in records {
+            if let Some(node) = self.nodes.get_mut(&rec.id) {
+                node.is_hidden = rec.is_hidden;
+                node.is_deleted = rec.is_deleted;
+                continue;
+            }
+            let Some(parent_id) = rec.parent_id.filter(|pid| self.nodes.contains_key(pid)) else {
+                continue;
+            };
+            let path = PathBuf::from(&rec.path);
+            self.path_index.insert(path.clone(), rec.id);
+            self.nodes.insert(
+                rec.id,
+                CachedFolderNode {
+                    id: rec.id,
+                    parent_id: rec.parent_id,
+                    name: rec.name.clone(),
+                    path,
+                    depth: rec.depth,
+                    is_hidden: rec.is_hidden,
+                    is_deleted: rec.is_deleted,
+                    subfolder_count: 0,
+                    media_count: rec.media_count,
+                    recursive_media_count: rec.recursive_media_count,
+                    children: Vec::new(),
+                },
+            );
+            self.insert_child_sorted(parent_id, rec.id);
+            if let Some(parent) = self.nodes.get_mut(&parent_id) {
+                parent.subfolder_count = parent.children.len() as u32;
+            }
+            inserted += 1;
+        }
+        inserted
+    }
+
     /// Removes a subtree (nodes, path index, child links) from the snapshot. Returns the number of removed nodes.
     fn detach_subtree(&mut self, root: FolderId) -> usize {
         if !self.nodes.contains_key(&root) {

@@ -179,12 +179,15 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
         return;
     };
 
-    let (total_items, current_visual_idx_opt) = {
+    // The folder rows in front of the media take list positions: the arithmetic of the grid runs on list positions, while the
+    // selection only ever moves between media (a folder row is never the target of a key).
+    let (total_items, front_len, current_visual_idx_opt) = {
         let st = params.state.read();
         let total = st.active_indices.len();
         if total == 0 {
             return;
         }
+        let front = st.folder_front_len();
 
         let mut idx_opt = None;
 
@@ -210,7 +213,7 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
             idx_opt = st.file_selection.selected_ids().iter().filter_map(|id| st.media_row_map.get(id).copied()).min();
         }
 
-        (total, idx_opt)
+        (total, front, idx_opt.map(|row| row + front))
     };
 
     let is_table = params.window.get_is_table_view();
@@ -225,26 +228,30 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
             match calculate_target_index(
                 cur_idx,
                 direction,
-                total_items,
+                front_len + total_items,
                 columns,
                 params.page_rows.max(1) as usize,
             ) {
-                Some(t) => t,
+                Some(t) => t.clamp(front_len, front_len + total_items - 1),
                 None => return,
             }
         }
         None => {
             if direction == NavigationDirection::End {
-                total_items.saturating_sub(1)
+                front_len + total_items.saturating_sub(1)
             } else {
-                0
+                front_len
             }
         }
     };
+    if Some(target_idx) == current_visual_idx_opt {
+        return;
+    }
+    let target_row = target_idx - front_len;
 
     let target_media_id = {
         let st = params.state.read();
-        let orig_idx = st.active_indices[target_idx];
+        let orig_idx = st.active_indices[target_row];
         st.all_folder_media[orig_idx].record.id
     };
 

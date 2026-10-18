@@ -6,7 +6,7 @@ import { ToolbarSearchField } from "toolbar_search_field.slint";
 import { TooltipReasons } from "tooltips.slint";
 
 /// Persistent, unified toolbar for the central Media Area.
-/// Houses the Thumbnail Width Slider (visible in Grid View), Regenerate Thumbnails button, Virtual Folder Toggle, Media Type Selector,
+/// Houses the Thumbnail Width Slider (visible in Grid View), New Folder button, Regenerate Thumbnails button, Virtual Folder Toggle, Media Type Selector,
 /// Filter Search (with embedded Regex & Clear), Refresh button, and instant View Mode Switcher.
 export component MediaPanelToolbar inherits PanelToolbar {
     in-out property <int> thumb-width: 190;
@@ -20,6 +20,9 @@ export component MediaPanelToolbar inherits PanelToolbar {
     in property <bool> is-regenerate-thumbs-enabled: false;
     in property <string> regenerate-thumbs-tooltip: "";
     in-out property <int> media-type-filter-idx: 2;
+    in property <bool> is-new-folder-enabled: false;
+    in property <string> new-folder-tooltip: "";
+    in-out property <bool> show-folders: false;
 
     out property <bool> search-has-focus: search-field.has-focus;
 
@@ -30,6 +33,8 @@ export component MediaPanelToolbar inherits PanelToolbar {
     callback media-type-filter-changed(int);
     callback refresh-clicked();
     callback regenerate-thumbs-clicked();
+    callback new-folder-clicked();
+    callback show-folders-toggled(bool);
     callback view-mode-toggled(bool /* target_is_table */);
 
     forward-focus: search-field;
@@ -49,7 +54,17 @@ export component MediaPanelToolbar inherits PanelToolbar {
     // 2. Expander / Spacer (Pushes search & view actions to the right)
     ToolbarSpacer {}
 
-    // 3a. Regenerate Thumbnail(s) of the selection (videos at a random position)
+    // 3a. Create a new folder in the open folder
+    ToolbarButton {
+        icon: IconId.folder-plus;
+        tooltip: root.new-folder-tooltip + (root.is-busy ? "\n" + TooltipReasons.busy : "");
+        is-enabled: root.is-new-folder-enabled && !root.is-busy;
+        clicked => { root.new-folder-clicked(); }
+    }
+
+    ToolbarSeparator {}
+
+    // 3b. Regenerate Thumbnail(s) of the selection (videos at a random position)
     ToolbarButton {
         icon: IconId.regenerate-thumbnail;
         tooltip: root.regenerate-thumbs-tooltip + (root.is-busy ? "\n" + TooltipReasons.busy : "");
@@ -59,7 +74,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
 
     ToolbarSeparator {}
 
-    // 3b. Virtual Folder / Recursive Subfolders View Toggle Button
+    // 3c. Virtual Folder / Recursive Subfolders View Toggle Button
     ToolbarButton {
         icon: root.is-virtual-folder ? IconId.virtual-folder-off : IconId.virtual-folder-on;
         // The text from Rust already contains the function description and, if disabled, the reason (see `virtual_folder_wording`).
@@ -79,7 +94,22 @@ export component MediaPanelToolbar inherits PanelToolbar {
 
     ToolbarSeparator {}
 
-    // 4. Media Type Filter Select Button
+    // 4a. Show Folders Toggle: lists the subfolders of the open folder in front of the media
+    ToolbarButton {
+        icon: root.show-folders ? IconId.browse-folders-off : IconId.browse-folders-on;
+        tooltip: (root.show-folders
+            ? "Hide folders in the media view"
+            : "Show folders in the media view (hidden folders only if they are shown in the folder tree)")
+            + (root.is-busy ? "\n" + TooltipReasons.busy : "");
+        is-active: root.show-folders;
+        is-enabled: !root.is-busy;
+        clicked => {
+            root.show-folders = !root.show-folders;
+            root.show-folders-toggled(root.show-folders);
+        }
+    }
+
+    // 4b. Media Type Filter Select Button (in the same group as the folder toggle)
     ToolbarSelectButton {
         current-index <=> root.media-type-filter-idx;
         is-enabled: !root.is-busy;

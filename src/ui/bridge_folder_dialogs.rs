@@ -1,6 +1,7 @@
 pub use super::bridge_folder_dialog_delete::DeleteFolderDialogController;
 pub use super::bridge_folder_dialog_missing_delete::MissingFolderDeleteDialogController;
 pub use super::bridge_folder_dialog_move::MoveFolderDialogController;
+pub use super::bridge_folder_dialog_new::NewFolderDialogController;
 pub use super::bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
 pub use super::bridge_folder_dialog_remove_orphaned::RemoveOrphanedFolderDialogController;
 pub use super::bridge_folder_dialog_rename::RenameFolderDialogController;
@@ -29,6 +30,7 @@ pub struct FolderDialogContext {
 #[derive(Default, Clone)]
 pub struct FolderDialogController {
     pub rename: RenameFolderDialogController,
+    pub new_folder: NewFolderDialogController,
     pub delete: DeleteFolderDialogController,
     pub missing_delete: MissingFolderDeleteDialogController,
     pub move_folder: MoveFolderDialogController,
@@ -39,6 +41,16 @@ pub struct FolderDialogController {
 impl FolderDialogController {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[inline]
+    pub fn show_new(&self, window: &MainWindow, parent_folder_id: FolderId, ctx: FolderDialogContext) {
+        self.new_folder.show(window, parent_folder_id, ctx);
+    }
+
+    #[inline]
+    pub fn close_new(&self, window: &MainWindow) {
+        self.new_folder.close(window);
     }
 
     #[inline]

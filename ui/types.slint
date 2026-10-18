@@ -28,6 +28,9 @@ export struct MediaItemView {
     is_corrupted: bool,
     is_deleted: bool,
     is_pending: bool,
+    /// A subfolder of the open folder listed in the Browse view (`id` is negative), or the navigation entry "Up".
+    is_folder: bool,
+    is_folder_up: bool,
 }
 
 export struct FolderNodeView {

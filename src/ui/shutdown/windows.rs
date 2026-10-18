@@ -20,6 +20,7 @@ pub const WINDOWS: &[(&str, &str)] = &[
     ("RenameTagDialog", "TagDialogController::close_rename"),
     ("DeleteTagDialog", "TagDialogController::close_delete"),
     ("RenameFolderDialog", "FolderDialogController::close_rename"),
+    ("NewFolderDialog", "FolderDialogController::close_new"),
     ("DeleteFolderDialog", "FolderDialogController::close_delete"),
     ("MissingFolderDeleteDialog", "FolderDialogController::close_missing_delete"),
     ("RemoveOrphanedFolderDialog", "FolderDialogController::close_remove_orphaned"),

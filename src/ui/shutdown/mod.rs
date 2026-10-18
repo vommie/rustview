@@ -123,6 +123,7 @@ fn close_windows(t: &ShutdownTargets<'_>) {
     t.tag_dialogs.close_add(window);
     t.tag_dialogs.close_rename(window);
     t.tag_dialogs.close_delete(window);
+    t.folder_dialogs.close_new(window);
     t.folder_dialogs.close_rename(window);
     t.folder_dialogs.close_delete(window);
     t.folder_dialogs.close_missing_delete(window);

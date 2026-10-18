@@ -187,6 +187,7 @@ impl BridgeRubberband {
             let config = TableLayoutConfig {
                 row_height: 28.0,
                 content_width: col_w_sum,
+                leading_cells: st.folder_front_len(),
             };
             RubberbandGeometry::compute_table_intersections(rect, dataset, active_indices, config)
         } else {
@@ -219,6 +220,7 @@ impl BridgeRubberband {
                 item_tile_height: tile_h,
                 grid_spacing: spacing,
                 grid_padding: padding,
+                leading_cells: st.folder_front_len(),
             };
             RubberbandGeometry::compute_grid_intersections(rect, dataset, active_indices, config)
         };

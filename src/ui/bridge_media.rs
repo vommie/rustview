@@ -5,6 +5,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::{BridgeTags, TagActionContext};
 use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::browse_folders::BrowseFolders;
 use super::browse_window::{
     DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, GRID_MARGIN_ROWS, TABLE_MARGIN_ROWS, ViewGeometry, apply_record, margin_rows_for,
     sync_window, timed, update_tile,
@@ -404,6 +405,8 @@ impl BridgeMedia {
 
         window.set_is_virtual_folder_btn_enabled(is_enabled);
         window.set_virtual_folder_tooltip(virtual_folder_wording::tooltip(is_virtual, disabled_reason).into());
+        // The New Folder button depends on the same view state (no query, no recursive view, a folder that exists).
+        BrowseFolders::update_new_folder_button(window, state);
     }
 
     pub fn toggle_virtual_folder_mode(
@@ -1781,6 +1784,42 @@ impl BridgeMedia {
         });
     }
 
+    /// Shows or hides the empty-state overlay of the Browse view for what the state holds now (memory only, except the check of
+    /// the root folder when the folder holds nothing at all).
+    pub(super) fn update_fallback_view(window: &MainWindow, app_settings: &crate::settings::AppSettings, state: &RwLock<UiState>) {
+        let (filter, is_query_active, path_opt, total_in_dataset, matched_count) = {
+            let st = state.read();
+            (
+                st.filter.clone(),
+                st.is_query_active,
+                st.current_folder_path.clone(),
+                st.all_folder_media.len(),
+                // Folder rows are content too: a folder that only holds subfolders is not "empty".
+                st.active_indices.len() + st.folder_rows.folder_rows(),
+            )
+        };
+        let has_root = app_settings.general.root_folder.is_some();
+        // The root is only probed when the folder holds nothing at all; any record proves that the root was there.
+        let root_exists =
+            total_in_dataset > 0 || app_settings.general.root_folder.as_ref().map(|p| p.is_dir()).unwrap_or(false);
+        let current_folder_name = path_opt.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str());
+
+        let fallback_state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
+            total_in_dataset,
+            matched_count,
+            is_query_active,
+            filter: &filter,
+            has_root,
+            root_exists,
+            current_folder_name,
+        });
+
+        window.set_empty_state_active(fallback_state.is_active);
+        window.set_empty_state_title(fallback_state.title.into());
+        window.set_empty_state_description(fallback_state.description.into());
+        window.set_empty_state_icon(crate::icons::to_slint(fallback_state.icon));
+    }
+
     /// Swaps a finished layout into the state and refills the tile pool; O(tile pool + selection), whatever the list size.
     pub(super) fn commit_layout(
         window: &MainWindow,
@@ -1792,10 +1831,7 @@ impl BridgeMedia {
         options: MediaReloadOptions,
     ) {
         let PendingList { store, layout, query } = pending;
-        let (filter, is_query_active, bench_opt, path_opt) = {
-            let s = state.read();
-            (s.filter.clone(), s.is_query_active, s.active_folder_bench.clone(), s.current_folder_path.clone())
-        };
+        let bench_opt = state.read().active_folder_bench.clone();
         let matched_len = layout.indices.len();
 
         if let Some(ref bench) = bench_opt {
@@ -1808,13 +1844,14 @@ impl BridgeMedia {
         let is_table = window.get_is_table_view();
         let t_slint_start = Instant::now();
         let mut selection_pruned = false;
-        let total_active_dataset_count;
+        let app_settings = settings.get();
+        let folder_snapshot = BrowseFolders::snapshot_if_wanted(library, state);
+        let folder_row_count;
         {
             let mut st_write = state.write();
             if let Some(store) = store {
                 st_write.all_folder_media = store;
             }
-            total_active_dataset_count = st_write.all_folder_media.len();
 
             let prev_sel_count = st_write.file_selection.count();
             if prev_sel_count > 0 {
@@ -1827,42 +1864,26 @@ impl BridgeMedia {
             st_write.last_executed_query = query;
             st_write.set_visible_total_bytes(layout.total_bytes);
             st_write.invalidate_view_window();
+            BrowseFolders::rebuild_rows(&mut st_write, folder_snapshot.as_deref(), &app_settings.folders);
+            let view_len = st_write.view_len();
+            folder_row_count = st_write.folder_rows.folder_rows();
 
             let geometry = st_write
                 .view_geometry
                 .unwrap_or_else(|| ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table)));
             let first_row = options.anchor_index.unwrap_or(0) / geometry.columns;
-            window.set_total_items_count(matched_len as i32);
-            let outcome = sync_window(window, &mut st_write, thumbnails, geometry, first_row, matched_len, true);
+            window.set_total_items_count(view_len as i32);
+            let outcome = sync_window(window, &mut st_write, thumbnails, geometry, first_row, view_len, true);
             tracing::debug!(
                 items = matched_len,
+                folder_rows = folder_row_count,
                 rows_written = outcome.rows_written,
                 requested = outcome.requested,
                 "[BrowseWindow: Reload] Tile pool refilled for the new list"
             );
         }
 
-        let app_settings = settings.get();
-        let has_root = app_settings.general.root_folder.is_some();
-        // The root is only probed when the folder holds nothing at all; any record proves that the root was there.
-        let root_exists = total_active_dataset_count > 0
-            || app_settings.general.root_folder.as_ref().map(|p| p.is_dir()).unwrap_or(false);
-        let current_folder_name = path_opt.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str());
-
-        let fallback_state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
-            total_in_dataset: total_active_dataset_count,
-            matched_count: matched_len,
-            is_query_active,
-            filter: &filter,
-            has_root,
-            root_exists,
-            current_folder_name,
-        });
-
-        window.set_empty_state_active(fallback_state.is_active);
-        window.set_empty_state_title(fallback_state.title.into());
-        window.set_empty_state_description(fallback_state.description.into());
-        window.set_empty_state_icon(crate::icons::to_slint(fallback_state.icon));
+        Self::update_fallback_view(window, &app_settings, state);
 
         if let Some(ref bench) = bench_opt {
             bench.slint_commit_time_us.store(t_slint_start.elapsed().as_micros() as u64, Ordering::Relaxed);

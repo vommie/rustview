@@ -2,6 +2,7 @@ pub mod db;
 pub mod error;
 pub mod external_media_completer;
 pub mod file_operations;
+pub mod folder_create;
 pub mod folder_diagnostics;
 pub mod folder_mount_filter;
 pub mod folder_move;
@@ -62,6 +63,10 @@ impl Library {
 
     pub fn folders(&self) -> FolderManager<'_> {
         FolderManager::new(&self.db)
+    }
+
+    pub fn folder_creator(&self) -> folder_create::FolderCreator<'_> {
+        folder_create::FolderCreator::new(&self.db)
     }
 
     pub fn folder_operations(&self) -> FolderOperations<'_> {

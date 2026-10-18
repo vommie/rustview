@@ -73,6 +73,8 @@ pub const DEFAULT_IS_TABLE_VIEW: bool = false;
 pub const DEFAULT_SORT_COLUMN: &str = "Filename";
 pub const DEFAULT_SORT_ORDER: &str = "Ascending";
 pub const DEFAULT_MEDIA_TYPE_FILTER: &str = "Videos & Images";
+/// Subfolders of the open folder are listed in the Browse view (grid and table) in front of the media.
+pub const DEFAULT_SHOW_FOLDERS_IN_BROWSE: bool = false;
 pub const DEFAULT_IS_INSPECTOR_COLLAPSED: bool = false;
 
 // Tab Grid View Defaults
@@ -537,6 +539,7 @@ pub struct ViewSettings {
     pub sort_column: String,
     pub sort_order: String,
     pub media_type_filter: String,
+    pub show_folders_in_browse: bool,
     pub is_inspector_collapsed: bool,
 
     // Tab Grid Settings
@@ -573,6 +576,7 @@ impl Default for ViewSettings {
             sort_column: DEFAULT_SORT_COLUMN.to_string(),
             sort_order: DEFAULT_SORT_ORDER.to_string(),
             media_type_filter: DEFAULT_MEDIA_TYPE_FILTER.to_string(),
+            show_folders_in_browse: DEFAULT_SHOW_FOLDERS_IN_BROWSE,
             is_inspector_collapsed: DEFAULT_IS_INSPECTOR_COLLAPSED,
 
             tab_grid_columns: DEFAULT_TAB_GRID_COLUMNS,

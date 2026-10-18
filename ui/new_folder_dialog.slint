@@ -1,0 +1,119 @@
+import { LineEdit } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
+import { ButtonBar } from "button_bar.slint";
+
+/// Asks for the name of a new folder, or for a relative path whose missing folders are all created (like `mkdir -p`).
+export component NewFolderDialog inherits Window {
+    title: "RustView - New Folder";
+    preferred-width: 480px;
+    preferred-height: 240px;
+    min-width: 400px;
+    min-height: 200px;
+    always-on-top: true;
+    background: Theme.background;
+
+    /// Where the folder is created (shown, not editable).
+    in property <string> parent-path: "";
+    in-out property <string> folder-path <=> name-input.text;
+    /// Why the typed text cannot be used (empty = fine); filled while typing.
+    in property <string> error-message: "";
+
+    callback confirmed(string);
+    callback cancelled();
+    callback text-edited(string);
+
+    forward-focus: name-input;
+
+    /// Puts the cursor into the input (called each time the dialog is shown).
+    public function focus-input() {
+        name-input.focus();
+    }
+
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 0px;
+            spacing: 0px;
+            alignment: space-between;
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 10px;
+                vertical-stretch: 1;
+
+                DialogHeading {
+                    icon: IconId.folder-plus;
+                    text: "New Folder";
+                    color: Theme.primary;
+                    font-size: 14px;
+                }
+
+                Text {
+                    text: "Name of the new folder, or a relative path such as photos/2025/trip (missing folders are created, existing ones are kept):";
+                    font-size: 11px;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+
+                name-input := LineEdit {
+                    placeholder-text: "Folder name or path...";
+                    height: 32px;
+                    vertical-stretch: 0;
+                    edited => {
+                        root.text-edited(self.text);
+                    }
+                    accepted => {
+                        if self.text != "" && root.error-message == "" {
+                            root.confirmed(self.text);
+                        }
+                    }
+                    key-pressed(event) => {
+                        if event.text == Key.Escape {
+                            root.cancelled();
+                            return accept;
+                        }
+                        return reject;
+                    }
+                }
+
+                Text {
+                    text: "In: " + root.parent-path;
+                    font-size: 10px;
+                    color: Theme.text-muted;
+                    overflow: elide;
+                }
+
+                if root.error-message != "" : Text {
+                    text: root.error-message;
+                    font-size: 11px;
+                    color: #ff5555;
+                    wrap: word-wrap;
+                }
+            }
+
+            ButtonBar {
+                vertical-stretch: 0;
+                bar-height: 48px;
+                show-cancel: true;
+                show-save: true;
+                text-save: "Create";
+                text-cancel: "Cancel";
+                cancel-clicked => { root.cancelled(); }
+                save-clicked => {
+                    if name-input.text != "" && root.error-message == "" {
+                        root.confirmed(name-input.text);
+                    }
+                }
+            }
+        }
+    }
+}

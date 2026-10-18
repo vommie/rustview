@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { IconId, IconSize, IconSlot } from "icons.slint";
 import { MediaItemView } from "types.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { MediaHeaderBar } from "media_header_bar.slint";
@@ -118,7 +119,14 @@ export component MediaTableRow inherits Rectangle {
             HorizontalLayout {
                 padding-left: 10px;
                 padding-right: 10px;
+                spacing: 6px;
                 alignment: start;
+
+                if item.is-folder : IconSlot {
+                    icon: item.is-folder-up ? IconId.folder-up : IconId.folder;
+                    color: item.is-deleted ? #6c7086 : (item.is-folder-up ? Theme.text-muted : Theme.primary);
+                    size: IconSize.md;
+                }
 
                 Text {
                     text: item.filename;

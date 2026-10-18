@@ -32,6 +32,7 @@ export { RenameTagDialog } from "rename_tag_dialog.slint";
 export { DeleteTagDialog } from "delete_tag_dialog.slint";
 export { RenameFolderDialog } from "rename_folder_dialog.slint";
 export { DeleteFolderDialog } from "delete_folder_dialog.slint";
+export { NewFolderDialog } from "new_folder_dialog.slint";
 export { MoveFolderToDialog } from "move_folder_to_dialog.slint";
 export { RemoveOrphanedFolderDialog } from "remove_orphaned_folder_dialog.slint";
 export { RebornFolderDeleteWarnDialog } from "reborn_folder_delete_warn_dialog.slint";
@@ -119,6 +120,9 @@ export component MainWindow inherits Window {
     in-out property <bool> regex-mode: false;
     in-out property <bool> is-virtual-folder: false;
     in property <bool> is-virtual-folder-btn-enabled: false;
+    in property <bool> is-new-folder-btn-enabled: false;
+    in property <string> new-folder-tooltip: "";
+    in-out property <bool> show-folders: false;
     in property <string> virtual-folder-tooltip: "";
     in property <bool> is-regenerate-thumbs-enabled: false;
     in property <string> regenerate-thumbs-tooltip: "";
@@ -284,6 +288,11 @@ export component MainWindow inherits Window {
 
     callback refresh-folder();
     callback regenerate-thumbs-clicked();
+    callback new-folder-clicked();
+    /// A row of a folder (or "Up") in the Browse view was clicked; `id` is negative.
+    callback folder-row-clicked(int /* id */);
+    callback folder-row-open-requested();
+    callback show-folders-toggled(bool);
     callback open-settings();
     callback browse-clicked();
     callback tab-grid-clicked();
@@ -547,6 +556,12 @@ export component MainWindow inherits Window {
                     return accept;
                 }
 
+                // 2b. Enter opens the selected folder row of the Browse view
+                if event.text == Key.Return && !event.modifiers.control && !event.modifiers.alt {
+                    root.folder-row-open-requested();
+                    return accept;
+                }
+
                 // 3. Quick Escape in Browse View clears selection if no popups or dialogs are active
                 if event.text == Key.Escape {
                     root.clear-media-selection();
@@ -749,6 +764,9 @@ export component MainWindow inherits Window {
                         virtual-folder-tooltip: root.virtual-folder-tooltip;
                         is-regenerate-thumbs-enabled: root.is-regenerate-thumbs-enabled;
                         regenerate-thumbs-tooltip: root.regenerate-thumbs-tooltip;
+                        is-new-folder-enabled: root.is-new-folder-btn-enabled;
+                        new-folder-tooltip: root.new-folder-tooltip;
+                        show-folders <=> root.show-folders;
                         media-type-filter-idx <=> root.media-type-filter-idx;
                         thumb-width-changed(w) => { }
                         search-changed(t) => { root.search-query-changed(t); }
@@ -757,6 +775,8 @@ export component MainWindow inherits Window {
                         media-type-filter-changed(m) => { root.media-type-filter-changed(m); }
                         refresh-clicked => { root.refresh-folder(); }
                         regenerate-thumbs-clicked => { root.regenerate-thumbs-clicked(); }
+                        new-folder-clicked => { root.new-folder-clicked(); }
+                        show-folders-toggled(on) => { root.show-folders-toggled(on); }
                         view-mode-toggled(new-is-table) => {
                             let anchor-top-idx = new-is-table ? grid-view.get-top-visible-index() : table-view.get-top-visible-index();
                             root.is-table-view = new-is-table;
@@ -809,13 +829,31 @@ export component MainWindow inherits Window {
                         viewport-changed(first-row, visible-rows, columns, total) => {
                             root.viewport-changed(first-row, visible-rows, columns, total);
                         }
-                        item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                        item-middle-clicked(id) => { root.media-middle-clicked(id); }
-                        item-context-menu(id, x, y) => { root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
+                        item-clicked(id, ctrl, shift) => {
+                            if id < 0 {
+                                root.folder-row-clicked(id);
+                            } else {
+                                root.media-clicked(id, ctrl, shift);
+                            }
+                        }
+                        item-middle-clicked(id) => {
+                            if id >= 0 {
+                                root.media-middle-clicked(id);
+                            }
+                        }
+                        item-context-menu(id, x, y) => {
+                            if id >= 0 {
+                                root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
+                            }
+                        }
                         item-hover-changed(id, hover) => { root.media-hover-changed(id, hover); }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
                         background-clicked => { root.background-clicked(); }
-                        item-drag-started(id, x, y) => { root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
+                        item-drag-started(id, x, y) => {
+                            if id >= 0 {
+                                root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
+                            }
+                        }
                         item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-ended => { root.media-drag-ended(); }
 
@@ -864,14 +902,32 @@ export component MainWindow inherits Window {
                         viewport-changed(first-row, visible-rows, columns, total) => {
                             root.viewport-changed(first-row, visible-rows, columns, total);
                         }
-                        item-clicked(id, ctrl, shift) => { root.media-clicked(id, ctrl, shift); }
-                        item-middle-clicked(id) => { root.media-middle-clicked(id); }
-                        item-context-menu(id, x, y) => { root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
+                        item-clicked(id, ctrl, shift) => {
+                            if id < 0 {
+                                root.folder-row-clicked(id);
+                            } else {
+                                root.media-clicked(id, ctrl, shift);
+                            }
+                        }
+                        item-middle-clicked(id) => {
+                            if id >= 0 {
+                                root.media-middle-clicked(id);
+                            }
+                        }
+                        item-context-menu(id, x, y) => {
+                            if id >= 0 {
+                                root.media-context-menu(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
+                            }
+                        }
                         sort-clicked(idx) => { root.sort-column-clicked(idx); }
                         column-resized(idx, w) => { root.column-resized(idx, w); }
                         column-resize-finished(idx, w) => { root.column-resize-finished(idx, w); }
                         background-clicked => { root.background-clicked(); }
-                        item-drag-started(id, x, y) => { root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px); }
+                        item-drag-started(id, x, y) => {
+                            if id >= 0 {
+                                root.media-drag-started(id, x + root.sidebar-left-width + resizer_left.width, y + 64px);
+                            }
+                        }
                         item-drag-moved(x, y) => { root.media-drag-moved(x + root.sidebar-left-width + resizer_left.width, y + 64px); }
                         item-drag-ended => { root.media-drag-ended(); }
 

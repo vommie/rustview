@@ -7,7 +7,7 @@ use slint::Model;
 
 /// The model row that shows `media_id`, if a tile holds it right now.
 pub fn slot_of_media(state: &UiState, media_id: MediaId) -> Option<usize> {
-    let position = *state.media_row_map.get(&media_id)?;
+    let position = state.view_position_of(media_id)?;
     state.ring.slot_if_held(position)
 }
 

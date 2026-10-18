@@ -802,6 +802,9 @@ impl BridgeFolders {
             st.active_indices.clear();
             st.mark_list_bytes_dirty();
             st.all_folder_media.clear();
+            // Opening a folder again puts its subfolders in name order and drops the highlight of a folder row.
+            st.folder_rows.reset_tail();
+            st.folder_rows.select(None);
 
             if !is_explicit_refresh {
                 st.file_selection.clear();

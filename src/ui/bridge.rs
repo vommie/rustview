@@ -12,6 +12,7 @@ use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogControlle
 use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
 use super::bridge_file_selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
+use super::browse_folders::BrowseFolders;
 use super::bridge_folders::BridgeFolders;
 use super::multiview::{self, MultiviewHandle, bar_overlay};
 use crate::viewer::multiview::prefs;
@@ -172,6 +173,8 @@ impl UiBridge {
         let initial_media_type_filter = MediaTypeFilter::from_str_name(&v_settings.media_type_filter);
         initial_state.filter.media_type_filter = initial_media_type_filter;
         window.set_media_type_filter_idx(initial_media_type_filter.to_index());
+        initial_state.show_folders = v_settings.show_folders_in_browse;
+        window.set_show_folders(v_settings.show_folders_in_browse);
 
         initial_state.tab_grid_columns = v_settings.tab_grid_columns;
         initial_state.tab_grid_auto_columns = v_settings.tab_grid_auto_columns;
@@ -739,6 +742,7 @@ impl UiBridge {
 
         self.register_rename_callbacks();
         self.register_delete_callbacks();
+        self.register_browse_folder_callbacks();
         self.register_keyboard_navigation_callbacks();
         self.register_tab_grid_callbacks();
         self.register_dnd_callbacks();
@@ -837,6 +841,34 @@ impl UiBridge {
                 folder_dialogs: &fld_dlg,
                 fullscreen: &fs_ctrl,
             });
+        });
+    }
+
+    /// The folder rows of the Browse view, the "Show Folders" toggle and the "New Folder" button of the toolbar.
+    fn register_browse_folder_callbacks(&self) {
+        BrowseFolders::register_callbacks(
+            &self.window,
+            self.library.clone(),
+            self.thumbnails.clone(),
+            self.settings.clone(),
+            self.state.clone(),
+        );
+
+        let win = self.window.clone_strong();
+        let ctx = FolderDialogContext {
+            library: self.library.clone(),
+            thumbnails: self.thumbnails.clone(),
+            tab_manager: self.tab_manager.clone(),
+            settings: self.settings.clone(),
+            state: self.state.clone(),
+        };
+        let dialogs = self.folder_dialogs.clone();
+        self.window.on_new_folder_clicked(move || {
+            let folder = ctx.state.read().current_folder_id;
+            match folder {
+                Some(folder_id) => dialogs.show_new(&win, folder_id, ctx.clone()),
+                None => StatusBarBridge::info(&win, "Select a folder to create a new folder in."),
+            }
         });
     }
 

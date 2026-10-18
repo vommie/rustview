@@ -7,6 +7,7 @@ use super::bridge_state::{LastActivePanel, UiState};
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tags::BridgeTags;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
+use super::browse_folders::BrowseFolders;
 use super::browse_window::update_tile;
 use super::file_selection::FileSelectionModel;
 use super::multiview::handle::{self as multiview_handle, Pace};
@@ -197,7 +198,7 @@ impl BridgeFileSelection {
             let newly_selected = st.file_selection.selected_ids();
             let changed = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
 
-            let visual_idx = st.row_of(media_id);
+            let visual_idx = st.row_of(media_id).map(|row| row + st.folder_front_len());
 
             (changed, visual_idx)
         };
@@ -378,6 +379,8 @@ impl BridgeFileSelection {
         if changed_ids.is_empty() {
             return;
         }
+        // A medium was (de)selected: a highlighted folder row gives way.
+        BrowseFolders::clear_folder_selection(window, state);
 
         let media_model = window.get_media_items();
         let visible_count = media_model.row_count();
@@ -484,6 +487,7 @@ impl BridgeFileSelection {
         state: &Arc<RwLock<UiState>>,
     ) {
         let t_start = Instant::now();
+        BrowseFolders::clear_folder_selection(window, state);
         let (changed_ids, prev_count) = {
             let mut st = state.write();
             st.last_active_panel = LastActivePanel::Media;

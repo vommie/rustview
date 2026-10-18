@@ -131,9 +131,18 @@ export component MediaTile inherits Rectangle {
         Rectangle {
             width: root.item-thumb-w;
             height: root.item-thumb-h;
-            background: item.is-pending ? #182232 : (item.is-deleted ? #1e1e2e : (item.is-corrupted ? #2d161d : #000000));
+            background: item.is-folder ? transparent : (item.is-pending ? #182232 : (item.is-deleted ? #1e1e2e : (item.is-corrupted ? #2d161d : #000000)));
             border-radius: Math.max(0px, root.corner-radius-val - 2px);
             clip: true;
+
+            // A folder (or the "Up" entry) shows a large folder icon instead of a thumbnail.
+            if item.is-folder : AppIcon {
+                icon: item.is-folder-up ? IconId.folder-up : IconId.folder;
+                color: item.is-deleted ? #6c7086 : (item.is-folder-up ? Theme.text-muted : Theme.primary);
+                size: Math.max(IconSize.xxl, Math.round(Math.min(root.item-thumb-w, root.item-thumb-h) * 0.55 / 8px) * 8px);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+            }
 
             if item.thumbnail.width > 0 : Image {
                 source: item.thumbnail;
@@ -144,7 +153,7 @@ export component MediaTile inherits Rectangle {
             }
 
             // Fallback Vector SVG icon when no thumbnail image exists (Priority: Pending Stub > Deleted > Corrupted > Default)
-            if item.thumbnail.width == 0 : Rectangle {
+            if item.thumbnail.width == 0 && !item.is-folder : Rectangle {
                 width: 100%;
                 height: 100%;
                 background: transparent;
@@ -183,7 +192,7 @@ export component MediaTile inherits Rectangle {
             }
 
             // Thumbnail badges (rating, tags, media type, duration): layout is computed by the Rust badge engine
-            ThumbnailBadgeLayer {
+            if !item.is-folder : ThumbnailBadgeLayer {
                 width: 100%;
                 height: 100%;
                 item: root.item;

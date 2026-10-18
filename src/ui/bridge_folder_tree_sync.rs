@@ -7,6 +7,7 @@
 
 use super::bridge_folders::BridgeFolders;
 use super::bridge_state::UiState;
+use super::browse_folders::BrowseFolders;
 use super::{FolderNodeView, MainWindow};
 use crate::library::models::FolderId;
 use crate::library::Library;
@@ -55,6 +56,9 @@ impl FolderTreeSync {
 
         let row_count = rows.len();
         let stats = Self::apply_rows(window, rows);
+
+        // The Browse view lists subfolders of the open folder: they follow the tree.
+        BrowseFolders::on_tree_changed(window, library, settings, state);
 
         tracing::debug!(
             rows = row_count,

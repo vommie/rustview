@@ -69,6 +69,36 @@ impl FolderContextMenu {
         };
         builder = builder.separator();
 
+        // New Folder: also at the root; not in a folder that is missing on disk, not while a scan or refresh runs.
+        builder = if target_node.is_deleted {
+            builder.action_with_tooltip(
+                CTX_FOLDER_NEW,
+                "New Folder...",
+                None,
+                Some(Icon::FolderPlus),
+                false,
+                "Disabled: Cannot create a folder in a folder that does not exist on physical disk",
+            )
+        } else if is_busy {
+            builder.action_with_tooltip(
+                CTX_FOLDER_NEW,
+                "New Folder...",
+                None,
+                Some(Icon::FolderPlus),
+                false,
+                format!("Create a new folder (or a path of folders) in this folder\n{}", DISABLED_BUSY_REASON),
+            )
+        } else {
+            builder.action_with_tooltip(
+                CTX_FOLDER_NEW,
+                "New Folder...",
+                None,
+                Some(Icon::FolderPlus),
+                true,
+                "Create a new folder (or a path of folders) in this folder",
+            )
+        };
+
         if !is_root {
             builder = if target_node.is_deleted {
                 builder.action_with_tooltip(
@@ -312,6 +342,8 @@ impl FolderContextMenu {
                     &ctx.settings,
                     &ctx.state,
                 );
+            } else if action_id == CTX_FOLDER_NEW {
+                folder_dialogs.show_new(window, fid, ctx);
             } else if action_id == CTX_FOLDER_RENAME {
                 folder_dialogs.show_rename(window, fid, &name, ctx);
             } else if action_id == CTX_FOLDER_DELETE {

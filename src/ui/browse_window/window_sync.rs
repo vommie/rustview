@@ -10,6 +10,7 @@ use super::view_builder::build_view;
 use crate::library::models::MediaId;
 use crate::thumbnails::ThumbnailManager;
 use crate::ui::bridge_state::UiState;
+use crate::ui::browse_folders::{Slot, folder_row_view};
 use crate::ui::{MainWindow, MediaItemView};
 use slint::{Image, Model, ModelRc, VecModel};
 use std::rc::Rc;
@@ -40,12 +41,19 @@ fn tile_image(thumbnails: &ThumbnailManager, id: MediaId, is_table: bool) -> Ima
 }
 
 fn build_row(st: &UiState, thumbnails: &ThumbnailManager, position: usize, is_table: bool) -> MediaItemView {
-    match st.item_at(position) {
-        Some(item) => {
-            let image = tile_image(thumbnails, item.record.id, is_table);
-            build_view(item, position, st.file_selection.is_selected(item.record.id), image)
+    match st.slot_at(position) {
+        Slot::Media(row) => match st.item_at(row) {
+            Some(item) => {
+                let image = tile_image(thumbnails, item.record.id, is_table);
+                build_view(item, position, st.file_selection.is_selected(item.record.id), image)
+            }
+            None => placeholder_row(),
+        },
+        Slot::Folder(folder) => {
+            let selected = st.folder_rows.selected() == Some(folder);
+            folder_row_view(st.folder_hierarchy.as_deref(), folder, position, selected)
         }
-        None => placeholder_row(),
+        Slot::Empty => placeholder_row(),
     }
 }
 
@@ -102,7 +110,8 @@ fn request_missing_thumbnails(
     let mut missing: Vec<(usize, MediaId)> = window
         .clone()
         .filter_map(|position| {
-            let id = st.item_at(position)?.record.id;
+            let Slot::Media(row) = st.slot_at(position) else { return None };
+            let id = st.item_at(row)?.record.id;
             (!thumbnails.cache().contains(id)).then_some((position.abs_diff(center), id))
         })
         .collect();
