@@ -64,6 +64,9 @@ impl MpvPlayer {
             let _ = init.set_property("vo", "null");
             let _ = init.set_property("force-window", "no");
             let _ = init.set_property("hwdec", "auto-safe");
+            // Without it `vo=gpu` refuses a software GL renderer (llvmpipe, e.g. in a VM) and the video stays black; on a real GPU
+            // the flag changes nothing.
+            let _ = init.set_property("gpu-sw", "yes");
 
             // 2. Audio & playback lifecycle
             let _ = init.set_property("keep-open", "yes");
@@ -265,7 +268,9 @@ impl MpvPlayer {
             .set_property("wid", wid as i64)
             .map_err(|e| ViewerError::Mpv(format!("Failed to set MPV 'wid' property: {:?}", e)))?;
 
-        let _ = self.mpv.set_property("vo", "gpu");
+        if let Err(e) = self.mpv.set_property("vo", "gpu") {
+            tracing::warn!(wid, error = ?e, "[MpvPlayer: Attach] Failed to switch the video output to 'gpu'");
+        }
         *self.attached_wid.write() = Some(wid);
 
         tracing::info!(
