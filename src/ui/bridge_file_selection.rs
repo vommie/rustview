@@ -197,13 +197,7 @@ impl BridgeFileSelection {
             let newly_selected = st.file_selection.selected_ids();
             let changed = FileSelectionModel::compute_selection_diff(&prev_selected, newly_selected);
 
-            let visual_idx = if !st.active_indices.is_empty() {
-                st.active_indices.iter().position(|&idx| {
-                    st.all_folder_media.get(idx).map(|m| m.record.id == media_id).unwrap_or(false)
-                })
-            } else {
-                st.all_folder_media.position_of(media_id)
-            };
+            let visual_idx = st.row_of(media_id);
 
             (changed, visual_idx)
         };

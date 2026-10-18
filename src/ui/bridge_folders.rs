@@ -53,6 +53,8 @@ struct FolderSelection {
 struct LoadedFolder {
     indexed: Vec<IndexedMediaRecord>,
     is_empty_in_db: bool,
+    /// The records tagged with an external source application: the only ones the external stub completion has to look at.
+    stub_candidates: Vec<MediaRecord>,
 }
 
 pub struct BridgeFolders;
@@ -869,14 +871,14 @@ impl BridgeFolders {
         }
 
         let loaded = Self::load_folder_records(ctx.library, &selection, media_ids);
-        let is_empty_in_db = loaded.is_empty_in_db;
+        let (is_empty_in_db, stub_candidates) = (loaded.is_empty_in_db, loaded.stub_candidates);
         {
             let mut s = ctx.state.write();
             s.all_folder_media.replace(loaded.indexed);
         }
 
         BridgeMedia::reload(ctx.window, ctx.library, ctx.thumbnails, ctx.settings, ctx.state, false, false);
-        Self::after_folder_list_ready(&ctx, selection, is_empty_in_db);
+        Self::after_folder_list_ready(&ctx, selection, is_empty_in_db, stub_candidates);
     }
 
     /// The ids of the media of the selected folder(s); a cheap index read, it decides whether the list is built on the worker.
@@ -914,6 +916,7 @@ impl BridgeFolders {
         bench.total_records_fetched.store(known_media.len(), Ordering::Relaxed);
 
         let is_empty_in_db = known_media.is_empty();
+        let stub_candidates: Vec<MediaRecord> = known_media.iter().filter(|r| r.source.is_some()).cloned().collect();
         let t_pre = Instant::now();
         let indexed = if selection.is_virtual_folder {
             BridgeMedia::preindex_records(library, known_media)
@@ -921,7 +924,7 @@ impl BridgeFolders {
             BridgeMedia::preindex(library, known_media, &selection.normalized_path)
         };
         bench.preindex_time_us.store(t_pre.elapsed().as_micros() as u64, Ordering::Relaxed);
-        LoadedFolder { indexed, is_empty_in_db }
+        LoadedFolder { indexed, is_empty_in_db, stub_candidates }
     }
 
     /// A large folder: the view shows an empty list while a worker thread loads, filters and sorts the records; the UI thread only
@@ -936,6 +939,7 @@ impl BridgeFolders {
         );
         BridgeMedia::show_empty_list(ctx.window, ctx.thumbnails, ctx.state);
         StatusBarBridge::info(ctx.window, format!("Loading {} items...", media_ids.len()));
+        let started = Instant::now();
 
         let weak = ctx.window.as_weak();
         let (library, thumbnails, settings, state) = (ctx.library.clone(), ctx.thumbnails.clone(), ctx.settings.clone(), ctx.state.clone());
@@ -944,7 +948,7 @@ impl BridgeFolders {
                 return;
             }
             let loaded = Self::load_folder_records(&library, &selection, media_ids);
-            let is_empty_in_db = loaded.is_empty_in_db;
+            let (is_empty_in_db, stub_candidates) = (loaded.is_empty_in_db, loaded.stub_candidates);
             let store = MediaStore::from_records(loaded.indexed);
             if !list_loader::folder_load_is_current(job) || selection.cancel_flag.load(Ordering::Acquire) {
                 return;
@@ -952,34 +956,51 @@ impl BridgeFolders {
             let (mut request, query) = BridgeMedia::capture_request(&state);
             request.refine_from = None;
             let layout = lay_out(&library, &store, &request);
+            let worker_ms = started.elapsed().as_secs_f64() * 1000.0;
 
             let _ = weak.upgrade_in_event_loop(move |window| {
                 let still_selected = list_loader::folder_load_is_current(job) && state.read().active_folder_token == selection.request_token;
                 if !still_selected {
+                    tracing::debug!(job, "[ListLoader: FolderLoad] Superseded by a newer selection; the result is dropped");
                     return;
                 }
+                let records = store.len();
+                let t_commit = Instant::now();
                 let pending = PendingList { store: Some(store), layout, query };
                 BridgeMedia::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, MediaReloadOptions::new(false, false));
+                tracing::info!(
+                    job,
+                    records,
+                    worker_ms = format!("{worker_ms:.1}"),
+                    commit_ms = format!("{:.1}", t_commit.elapsed().as_secs_f64() * 1000.0),
+                    total_ms = format!("{:.1}", started.elapsed().as_secs_f64() * 1000.0),
+                    "[ListLoader: FolderLoad] Folder list ready"
+                );
                 let ctx = FolderNavigationContext { window: &window, library: &library, thumbnails: &thumbnails, settings: &settings, state: &state };
-                Self::after_folder_list_ready(&ctx, selection, is_empty_in_db);
+                Self::after_folder_list_ready(&ctx, selection, is_empty_in_db, stub_candidates);
             });
         });
     }
 
     /// What follows once the list of the selected folder is shown: inspector and status, then, when the folder is new to the library
     /// or the user asked for a refresh, the scan of the drive (a refresh is the only thing that reads the folder from disk).
-    fn after_folder_list_ready(ctx: &FolderNavigationContext<'_>, selection: FolderSelection, is_empty_in_db: bool) {
+    fn after_folder_list_ready(
+        ctx: &FolderNavigationContext<'_>,
+        selection: FolderSelection,
+        is_empty_in_db: bool,
+        stub_candidates: Vec<MediaRecord>,
+    ) {
         let FolderSelection {
             folder_id,
             normalized_path,
             folder_name,
             is_virtual_folder,
             virtual_count,
-            target_folder_ids,
             cancel_flag,
             bench,
             is_explicit_refresh,
             request_token,
+            ..
         } = selection;
 
         BridgeInspector::update(ctx.window, ctx.state);
@@ -994,7 +1015,7 @@ impl BridgeFolders {
                 let (ready_stubs, still_pending, sources) = ctx
                     .library
                     .external_media_completer()
-                    .find_pending_stubs_by_folder_ids(&target_folder_ids);
+                    .find_pending_stubs_in_records(&stub_candidates);
 
                 if !ready_stubs.is_empty() {
                     let stubs_count = ready_stubs.len();

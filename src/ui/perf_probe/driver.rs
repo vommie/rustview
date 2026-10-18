@@ -457,7 +457,9 @@ impl Driver {
             run.count_ready = Some(elapsed);
         }
         let unchanged_long_enough = !changed && elapsed > UNCHANGED_AFTER;
-        if (changed || unchanged_long_enough) && first_screen_ready(window, total) {
+        // A large folder shows an empty list while it loads in the background; that is not "visible" yet.
+        let still_loading = matches!(run.scenario, Scenario::Switch { .. }) && total <= 0;
+        if (changed || unchanged_long_enough) && !still_loading && first_screen_ready(window, total) {
             run.visible_ready = Some(elapsed);
         }
         if run.visible_ready.is_some() || elapsed > LOAD_TIMEOUT {

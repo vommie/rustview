@@ -1646,18 +1646,25 @@ impl BridgeMedia {
         (request, current_query)
     }
 
-    /// Loads the records of the open folder from the library into the state (the sync path of a folder reload).
-    fn load_current_folder_records(library: &Library, state: &RwLock<UiState>) {
-        let (folder_id, path_opt, is_virtual_folder, is_query_active) = {
-            let s = state.read();
-            (s.current_folder_id, s.current_folder_path.clone(), s.is_virtual_folder_mode, s.is_query_active)
+    /// How many records the folder (or, for the recursive view, its whole subtree) holds; a cheap index read.
+    pub(super) fn folder_record_count(library: &Library, folder_id: FolderId, is_virtual_folder: bool) -> usize {
+        let folder_ids = if is_virtual_folder {
+            library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
+        } else {
+            vec![folder_id]
         };
-        let (Some(f_id), Some(p)) = (folder_id, path_opt) else { return };
-        if is_query_active {
-            return;
-        }
-        let indexed = if is_virtual_folder {
-            let descendant_ids = library.folders().get_descendant_folder_ids(f_id).unwrap_or_else(|_| vec![f_id]);
+        let Ok(rtxn) = library.raw_db().env.read_txn() else { return 0 };
+        folder_ids
+            .iter()
+            .filter_map(|fid| library.raw_db().media_by_folder.get(&rtxn, fid).ok().flatten())
+            .map(|ids| ids.len())
+            .sum()
+    }
+
+    /// The indexed records of a folder (or of its whole subtree), read from the library; no UI access, safe on any thread.
+    pub(super) fn fetch_folder_records(library: &Library, folder_id: FolderId, folder_path: &Path, is_virtual_folder: bool) -> Vec<IndexedMediaRecord> {
+        if is_virtual_folder {
+            let descendant_ids = library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id]);
             let mut known = Vec::new();
             let mut seen = HashSet::new();
             if let Ok(rtxn) = library.raw_db().env.read_txn() {
@@ -1674,9 +1681,22 @@ impl BridgeMedia {
             }
             Self::preindex_records(library, known)
         } else {
-            let raw_media = library.media().get_all_by_folder(f_id).unwrap_or_default();
-            Self::preindex(library, raw_media, &p)
+            let raw_media = library.media().get_all_by_folder(folder_id).unwrap_or_default();
+            Self::preindex(library, raw_media, folder_path)
+        }
+    }
+
+    /// Loads the records of the open folder from the library into the state (the sync path of a folder reload).
+    fn load_current_folder_records(library: &Library, state: &RwLock<UiState>) {
+        let (folder_id, path_opt, is_virtual_folder, is_query_active) = {
+            let s = state.read();
+            (s.current_folder_id, s.current_folder_path.clone(), s.is_virtual_folder_mode, s.is_query_active)
         };
+        let (Some(f_id), Some(p)) = (folder_id, path_opt) else { return };
+        if is_query_active {
+            return;
+        }
+        let indexed = Self::fetch_folder_records(library, f_id, &p, is_virtual_folder);
         state.write().all_folder_media.replace(indexed);
     }
 
@@ -1726,6 +1746,7 @@ impl BridgeMedia {
         };
         let job = list_loader::begin_relayout();
         tracing::debug!(job, records = len, "[ListLoader: Relayout] Large list; laying it out on the worker thread");
+        let started = Instant::now();
 
         let weak = window.as_weak();
         let (library, thumbnails, settings, state) = (library.clone(), thumbnails.clone(), settings.clone(), state.clone());
@@ -1744,8 +1765,18 @@ impl BridgeMedia {
                     Self::reload_with_options(&window, &library, &thumbnails, &settings, &state, options);
                     return;
                 }
+                let matched = layout.indices.len();
+                let layout_ms = started.elapsed().as_secs_f64() * 1000.0;
+                let t_commit = Instant::now();
                 let pending = PendingList { store: None, layout, query: current_query };
                 Self::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, options);
+                tracing::info!(
+                    job,
+                    matched,
+                    layout_ms = format!("{layout_ms:.1}"),
+                    commit_ms = format!("{:.1}", t_commit.elapsed().as_secs_f64() * 1000.0),
+                    "[ListLoader: Relayout] List laid out on the worker thread and committed"
+                );
             });
         });
     }

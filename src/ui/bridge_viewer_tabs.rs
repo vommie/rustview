@@ -854,18 +854,7 @@ impl BridgeViewerTabs {
 
         let target_media_id_opt = {
             let st = state.read();
-            let current_pos = if !st.active_indices.is_empty() {
-                st.active_indices.iter().position(|&idx| {
-                    st.all_folder_media
-                        .get(idx)
-                        .map(|m| m.record.id == active_media_id)
-                        .unwrap_or(false)
-                })
-            } else {
-                st.all_folder_media
-                    .iter()
-                    .position(|m| m.record.id == active_media_id)
-            };
+            let current_pos = st.row_of(active_media_id);
 
             if let Some(pos) = current_pos {
                 let target_pos = if is_next {
@@ -1649,18 +1638,7 @@ impl BridgeViewerTabs {
                 (false, false)
             } else {
                 let st = state.read();
-                let current_pos = if !st.active_indices.is_empty() {
-                    st.active_indices.iter().position(|&idx| {
-                        st.all_folder_media
-                            .get(idx)
-                            .map(|m| m.record.id == active_tab.media_id)
-                            .unwrap_or(false)
-                    })
-                } else {
-                    st.all_folder_media
-                        .iter()
-                        .position(|m| m.record.id == active_tab.media_id)
-                };
+                let current_pos = st.row_of(active_tab.media_id);
 
                 let total_available = if !st.active_indices.is_empty() {
                     st.active_indices.len()

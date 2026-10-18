@@ -1,7 +1,8 @@
 use super::bridge_ctx_menu::BridgeContextMenu;
 use super::bridge_ctx_menu_tag::TagContextMenu;
 use super::bridge_inspector::BridgeInspector;
-use super::bridge_media::BridgeMedia;
+use super::bridge_media::{BridgeMedia, MediaReloadOptions, PendingList};
+use super::list_loader;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tag_history::BridgeTagHistory;
@@ -10,9 +11,9 @@ use super::browse_window::update_tile;
 use super::models::rgb8_to_shared_buffer;
 use super::{MainWindow, TagColumnView, TagNodeView};
 use crate::ctx_menu::CtxMenuActionId;
-use crate::library::models::{MediaId, MediaSearchParams, TagId, TagRecord};
+use crate::library::models::{FolderId, MediaId, MediaRecord, MediaSearchParams, TagId, TagRecord};
 use crate::library::Library;
-use crate::query::{MatchMode, ScopeMode};
+use crate::query::{MatchMode, MediaStore, ScopeMode, lay_out};
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use crate::viewer::ViewerTabManager;
@@ -20,6 +21,7 @@ use parking_lot::RwLock;
 use regex::{Regex, RegexBuilder};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -392,6 +394,14 @@ impl TagTreeSync {
 
 pub struct TagActionHandler;
 
+/// Timings of a tag or rating query for the benchmark log.
+struct QueryTimings {
+    t_flow_start: Instant,
+    db_search_us: u128,
+    preindex_us: u128,
+    t_reload: Instant,
+}
+
 impl TagActionHandler {
     pub fn toggle_tag(
         tag_id: TagId,
@@ -750,40 +760,25 @@ impl TagActionHandler {
         if !is_query_active {
             let t_restore = Instant::now();
             let is_virt = ctx.state.read().is_virtual_folder_mode;
-            {
+            let restore_target = {
                 let mut st = ctx.state.write();
                 st.is_query_active = false;
-                if let (Some(f_id), Some(path)) = (st.current_folder_id, current_folder_p.as_ref()) {
-                    if is_virt {
-                        let descendant_ids = ctx.library.folders().get_descendant_folder_ids(f_id).unwrap_or_else(|_| vec![f_id]);
-                        let mut media_ids = Vec::new();
-                        if let Ok(rtxn) = ctx.library.raw_db().env.read_txn() {
-                            for fid in descendant_ids {
-                                if let Ok(Some(ids)) = ctx.library.raw_db().media_by_folder.get(&rtxn, &fid) {
-                                    media_ids.extend(ids);
-                                }
-                            }
-                        }
-                        let mut known = Vec::new();
-                        let mut seen = HashSet::new();
-                        if let Ok(rtxn) = ctx.library.raw_db().env.read_txn() {
-                            for mid in media_ids {
-                                if seen.insert(mid)
-                                    && let Ok(Some(rec)) = ctx.library.raw_db().media.get(&rtxn, &mid)
-                                {
-                                    known.push(rec);
-                                }
-                            }
-                        }
-                        st.all_folder_media.replace(BridgeMedia::preindex_records(ctx.library, known));
-                    } else {
-                        let raw_media = ctx.library.media().get_all_by_folder(f_id).unwrap_or_default();
-                        st.all_folder_media.replace(BridgeMedia::preindex(ctx.library, raw_media, path));
-                    }
-                    let valid_ids: HashSet<MediaId> =
-                        st.all_folder_media.iter().map(|m| m.record.id).collect();
-                    st.file_selection.prune_missing(&valid_ids);
-                }
+                st.current_folder_id.zip(current_folder_p.clone())
+            };
+
+            if let Some((f_id, path)) = restore_target.as_ref()
+                && BridgeMedia::folder_record_count(ctx.library, *f_id, is_virt) > list_loader::ASYNC_ABOVE_RECORDS
+            {
+                Self::restore_folder_deferred(ctx, *f_id, path.clone(), is_virt, t_flow_start, t_restore);
+                return;
+            }
+
+            if let Some((f_id, path)) = restore_target.as_ref() {
+                let indexed = BridgeMedia::fetch_folder_records(ctx.library, *f_id, path, is_virt);
+                let valid_ids: HashSet<MediaId> = indexed.iter().map(|m| m.record.id).collect();
+                let mut st = ctx.state.write();
+                st.all_folder_media.replace(indexed);
+                st.file_selection.prune_missing(&valid_ids);
             }
 
             TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
@@ -796,23 +791,26 @@ impl TagActionHandler {
                 false,
                 false,
             );
-            BridgeInspector::update(ctx.window, ctx.state);
-            BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
-            StatusBarBridge::update_metrics(ctx.window, ctx.state);
-            StatusBarBridge::info(ctx.window, "Query cleared. Regular folder view active.");
+            Self::finish_restore(ctx, t_flow_start, t_restore);
+            return;
+        }
 
-            tracing::info!(
-                restore_us = t_restore.elapsed().as_micros(),
-                total_flow_us = t_flow_start.elapsed().as_micros(),
-                "[QueryFlow: Inactive] Restored default folder dataset"
-            );
+        let total_records = ctx
+            .library
+            .raw_db()
+            .env
+            .read_txn()
+            .ok()
+            .and_then(|rtxn| ctx.library.raw_db().media.len(&rtxn).ok())
+            .map_or(0, |len| len as usize);
+        if total_records > list_loader::ASYNC_ABOVE_RECORDS {
+            Self::query_deferred(ctx, params, t_flow_start);
             return;
         }
 
         let t_db = Instant::now();
         let search_results = ctx.library.media().search(&params).unwrap_or_default();
         let db_search_us = t_db.elapsed().as_micros();
-        let result_count = search_results.len();
 
         let t_preindex = Instant::now();
         let indexed_results = BridgeMedia::preindex_records(ctx.library, search_results.clone());
@@ -837,12 +835,24 @@ impl TagActionHandler {
             false,
             false,
         );
+        Self::finish_query(
+            ctx,
+            &params,
+            &search_results,
+            QueryTimings { t_flow_start, db_search_us, preindex_us, t_reload },
+        );
+    }
+
+    /// Everything that follows once a tag or rating query is shown: inspector, status and benchmark log, then the automatic
+    /// completion of external stubs among the results.
+    fn finish_query(ctx: &TagActionContext<'_>, params: &MediaSearchParams, search_results: &[MediaRecord], timings: QueryTimings) {
+        let result_count = search_results.len();
         BridgeInspector::update(ctx.window, ctx.state);
         BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
         StatusBarBridge::update_metrics(ctx.window, ctx.state);
-        let reload_us = t_reload.elapsed().as_micros();
+        let reload_us = timings.t_reload.elapsed().as_micros();
 
-        let total_flow_us = t_flow_start.elapsed().as_micros();
+        let total_flow_us = timings.t_flow_start.elapsed().as_micros();
 
         let scope_str = params.scope_mode.as_str();
         if result_count == 0 {
@@ -869,8 +879,8 @@ impl TagActionHandler {
             scope_mode = ?params.scope_mode,
             media_type_filter = ?params.media_type_filter,
             matched_count = result_count,
-            db_search_us = db_search_us,
-            preindex_us = preindex_us,
+            db_search_us = timings.db_search_us,
+            preindex_us = timings.preindex_us,
             view_reload_us = reload_us,
             total_flow_us = total_flow_us,
             "[Benchmark: QueryFlow] Query evaluation completed and rendered"
@@ -978,6 +988,119 @@ impl TagActionHandler {
                     .ok();
             }
         }
+    }
+
+    /// The status, inspector and log after the default folder view was restored (query cleared).
+    fn finish_restore(ctx: &TagActionContext<'_>, t_flow_start: Instant, t_restore: Instant) {
+        BridgeInspector::update(ctx.window, ctx.state);
+        BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
+        StatusBarBridge::update_metrics(ctx.window, ctx.state);
+        StatusBarBridge::info(ctx.window, "Query cleared. Regular folder view active.");
+
+        tracing::info!(
+            restore_us = t_restore.elapsed().as_micros(),
+            total_flow_us = t_flow_start.elapsed().as_micros(),
+            "[QueryFlow: Inactive] Restored default folder dataset"
+        );
+    }
+
+    /// The query runs over a large library: the view shows an empty list while a worker thread searches, indexes, filters and
+    /// sorts the results; the UI thread only swaps them in. A newer folder selection or query supersedes it.
+    fn query_deferred(ctx: &TagActionContext<'_>, params: MediaSearchParams, t_flow_start: Instant) {
+        let job = list_loader::begin_folder_load();
+        tracing::info!(job, "[ListLoader: Query] Large library; running the query on the worker thread");
+        BridgeMedia::show_empty_list(ctx.window, ctx.thumbnails, ctx.state);
+        StatusBarBridge::info(ctx.window, "Searching...");
+
+        let weak = ctx.window.as_weak();
+        let (library, thumbnails, tab_manager, settings, state) =
+            (ctx.library.clone(), ctx.thumbnails.clone(), ctx.tab_manager.clone(), ctx.settings.clone(), ctx.state.clone());
+        list_loader::worker().submit(move || {
+            if !list_loader::folder_load_is_current(job) {
+                return;
+            }
+            let t_db = Instant::now();
+            let search_results = library.media().search(&params).unwrap_or_default();
+            let db_search_us = t_db.elapsed().as_micros();
+
+            let t_preindex = Instant::now();
+            let store = MediaStore::from_records(BridgeMedia::preindex_records(&library, search_results.clone()));
+            let preindex_us = t_preindex.elapsed().as_micros();
+            if !list_loader::folder_load_is_current(job) {
+                return;
+            }
+            let (mut request, query) = BridgeMedia::capture_request(&state);
+            request.refine_from = None;
+            let layout = lay_out(&library, &store, &request);
+
+            let _ = weak.upgrade_in_event_loop(move |window| {
+                if !list_loader::folder_load_is_current(job) {
+                    return;
+                }
+                let t_reload = Instant::now();
+                let pending = PendingList { store: Some(store), layout, query };
+                BridgeMedia::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, MediaReloadOptions::new(false, false));
+                let ctx = TagActionContext {
+                    window: &window,
+                    library: &library,
+                    thumbnails: &thumbnails,
+                    tab_manager: &tab_manager,
+                    settings: &settings,
+                    state: &state,
+                };
+                TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
+                Self::finish_query(&ctx, &params, &search_results, QueryTimings { t_flow_start, db_search_us, preindex_us, t_reload });
+            });
+        });
+    }
+
+    /// Restoring a large folder after a query was cleared: the same worker path as a folder switch.
+    fn restore_folder_deferred(
+        ctx: &TagActionContext<'_>,
+        folder_id: FolderId,
+        folder_path: PathBuf,
+        is_virtual_folder: bool,
+        t_flow_start: Instant,
+        t_restore: Instant,
+    ) {
+        let job = list_loader::begin_folder_load();
+        tracing::info!(job, folder_id, "[ListLoader: Query] Large folder; restoring it on the worker thread");
+        BridgeMedia::show_empty_list(ctx.window, ctx.thumbnails, ctx.state);
+        StatusBarBridge::info(ctx.window, "Loading...");
+
+        let weak = ctx.window.as_weak();
+        let (library, thumbnails, tab_manager, settings, state) =
+            (ctx.library.clone(), ctx.thumbnails.clone(), ctx.tab_manager.clone(), ctx.settings.clone(), ctx.state.clone());
+        list_loader::worker().submit(move || {
+            if !list_loader::folder_load_is_current(job) {
+                return;
+            }
+            let store = MediaStore::from_records(BridgeMedia::fetch_folder_records(&library, folder_id, &folder_path, is_virtual_folder));
+            if !list_loader::folder_load_is_current(job) {
+                return;
+            }
+            let (mut request, query) = BridgeMedia::capture_request(&state);
+            request.refine_from = None;
+            let layout = lay_out(&library, &store, &request);
+
+            let _ = weak.upgrade_in_event_loop(move |window| {
+                if !list_loader::folder_load_is_current(job) {
+                    return;
+                }
+                let pending = PendingList { store: Some(store), layout, query };
+                BridgeMedia::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, MediaReloadOptions::new(false, false));
+                let ctx = TagActionContext {
+                    window: &window,
+                    library: &library,
+                    thumbnails: &thumbnails,
+                    tab_manager: &tab_manager,
+                    settings: &settings,
+                    state: &state,
+                };
+                TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
+                Self::finish_restore(&ctx, t_flow_start, t_restore);
+            });
+        });
     }
 }
 

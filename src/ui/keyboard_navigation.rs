@@ -207,12 +207,7 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
 
         // 3. Fall back to first selected item in visual order
         if idx_opt.is_none() {
-            idx_opt = st.active_indices.iter().position(|&orig_idx| {
-                st.all_folder_media
-                    .get(orig_idx)
-                    .map(|m| st.file_selection.is_selected(m.record.id))
-                    .unwrap_or(false)
-            });
+            idx_opt = st.file_selection.selected_ids().iter().filter_map(|id| st.media_row_map.get(id).copied()).min();
         }
 
         (total, idx_opt)

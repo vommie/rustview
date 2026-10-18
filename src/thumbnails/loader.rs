@@ -23,8 +23,11 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Threads that decode the thumbnails the Browse view shows (small decodes, latency matters more than throughput).
-const VIEW_LOADER_THREADS: usize = 2;
+/// Threads that decode the thumbnails the Browse view shows (small decodes, latency matters more than throughput): half of the
+/// worker threads, between 2 and 4, so a scrollbar jump on a many-core machine fills its tiles faster without starving the UI.
+fn view_loader_threads(worker_threads: usize) -> usize {
+    (worker_threads / 2).clamp(2, 4)
+}
 
 /// Pipeline id of the thumbnails that the view loader delivers: they belong to no folder pipeline, so starting or cancelling
 /// one never discards them (the view applies a thumbnail only if its tile still exists).
@@ -122,7 +125,7 @@ impl ThumbnailScheduler {
                 generator: generator.clone(),
                 ready: ready_drain_queue.clone(),
             },
-            VIEW_LOADER_THREADS,
+            view_loader_threads(threads),
         ));
 
         Self {
@@ -975,5 +978,19 @@ impl ThumbnailScheduler {
     ) -> Result<CachedThumbnail, ThumbnailError> {
         let custom_cfg = config.with_video_offset_percent(offset_percent);
         self.regenerate_sync(media_id, file_path, &custom_cfg)
+    }
+}
+
+#[cfg(test)]
+mod view_loader_thread_tests {
+    use super::view_loader_threads;
+
+    #[test]
+    fn the_view_loader_takes_half_of_the_workers_between_two_and_four() {
+        assert_eq!(view_loader_threads(1), 2);
+        assert_eq!(view_loader_threads(3), 2);
+        assert_eq!(view_loader_threads(6), 3);
+        assert_eq!(view_loader_threads(14), 4);
+        assert_eq!(view_loader_threads(64), 4);
     }
 }

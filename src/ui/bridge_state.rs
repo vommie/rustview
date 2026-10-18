@@ -293,21 +293,32 @@ impl UiState {
         self.item_at(*self.media_row_map.get(&media_id)?)
     }
 
+    /// The list position of a media item (O(1)); `None` for an item the view does not show.
+    #[inline]
+    pub fn row_of(&self, media_id: MediaId) -> Option<usize> {
+        match self.media_row_map.get(&media_id) {
+            Some(&row) => Some(row),
+            None if self.active_indices.is_empty() => self.all_folder_media.position_of(media_id),
+            None => None,
+        }
+    }
+
+    /// The selected records in list order; costs O(selection), not O(list).
     pub fn get_selected_media_ordered(&self) -> Vec<&IndexedMediaRecord> {
         let selected_ids = self.file_selection.selected_ids();
         if selected_ids.is_empty() || self.active_indices.is_empty() {
             return Vec::new();
         }
 
-        let mut ordered = Vec::with_capacity(selected_ids.len());
-        for &idx in &self.active_indices {
-            if let Some(item) = self.all_folder_media.get(idx)
-                && selected_ids.contains(&item.record.id)
-            {
-                ordered.push(item);
-            }
-        }
-        ordered
+        let mut rows: Vec<(usize, &IndexedMediaRecord)> = selected_ids
+            .iter()
+            .filter_map(|id| {
+                let row = *self.media_row_map.get(id)?;
+                Some((row, self.item_at(row)?))
+            })
+            .collect();
+        rows.sort_unstable_by_key(|&(row, _)| row);
+        rows.into_iter().map(|(_, item)| item).collect()
     }
 
     pub fn get_selected_paths_ordered(&self) -> Vec<PathBuf> {
