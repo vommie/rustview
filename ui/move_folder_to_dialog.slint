@@ -6,10 +6,9 @@ import { ButtonBar } from "button_bar.slint";
 
 export component MoveFolderToDialog inherits Window {
     title: "RustView - Move Folder";
-    preferred-width: 480px;
-    preferred-height: 230px;
-    min-width: 420px;
-    min-height: 210px;
+    width: 480px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
     background: Theme.background;
 
     in-out property <string> source-folder-name: "";
@@ -32,12 +31,14 @@ export component MoveFolderToDialog inherits Window {
             return reject;
         }
 
-        VerticalLayout {
+        dialog-layout := VerticalLayout {
+            width: root.width;
             padding: 0px;
             spacing: 0px;
             alignment: space-between;
 
             VerticalLayout {
+                width: root.width;
                 padding: 16px;
                 spacing: 12px;
                 vertical-stretch: 1;

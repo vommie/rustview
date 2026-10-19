@@ -7,10 +7,9 @@ import { ButtonBar } from "button_bar.slint";
 /// Asks for the name of a new folder, or for a relative path whose missing folders are all created (like `mkdir -p`).
 export component NewFolderDialog inherits Window {
     title: "RustView - New Folder";
-    preferred-width: 480px;
-    preferred-height: 240px;
-    min-width: 400px;
-    min-height: 200px;
+    width: 480px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
     always-on-top: true;
     background: Theme.background;
 
@@ -40,12 +39,14 @@ export component NewFolderDialog inherits Window {
             return reject;
         }
 
-        VerticalLayout {
+        dialog-layout := VerticalLayout {
+            width: root.width;
             padding: 0px;
             spacing: 0px;
             alignment: space-between;
 
             VerticalLayout {
+                width: root.width;
                 padding: 16px;
                 spacing: 10px;
                 vertical-stretch: 1;

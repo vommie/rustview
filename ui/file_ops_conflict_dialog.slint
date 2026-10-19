@@ -5,10 +5,9 @@ import { ConflictFileView } from "types.slint";
 
 export component FileOpsConflictDialog inherits Window {
     title: "RustView - File Name Conflict";
-    preferred-width: 760px;
-    preferred-height: 400px;
-    min-width: 680px;
-    min-height: 380px;
+    width: 760px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
     background: Theme.background;
 
     in property <ConflictFileView> source-file;
@@ -40,7 +39,8 @@ export component FileOpsConflictDialog inherits Window {
             return reject;
         }
 
-        VerticalLayout {
+        dialog-layout := VerticalLayout {
+            width: root.width;
             padding: 0px;
             spacing: 0px;
             alignment: space-between;
@@ -122,6 +122,7 @@ export component FileOpsConflictDialog inherits Window {
 
             // Side-by-Side Split View Comparison Area
             HorizontalLayout {
+                width: root.width;
                 padding-left: 16px;
                 padding-right: 16px;
                 padding-top: 12px;

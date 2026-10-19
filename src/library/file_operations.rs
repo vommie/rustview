@@ -59,7 +59,26 @@ struct RenamePaths {
     validated_name: String,
 }
 
+/// Moves a symbolic link to `dst` so that it keeps pointing at the same file: a relative target is made absolute first (a plain rename
+/// would leave it dangling in the new folder). The file the link points to is never touched.
+fn move_symlink(src: &Path, dst: &Path) -> std::io::Result<()> {
+    let target = std::fs::read_link(src)?;
+    let absolute = if target.is_absolute() { target } else { src.parent().unwrap_or(Path::new("/")).join(target) };
+    std::os::unix::fs::symlink(&absolute, dst)?;
+    if let Err(e) = std::fs::remove_file(src) {
+        let _ = std::fs::remove_file(dst);
+        return Err(e);
+    }
+    Ok(())
+}
+
 pub fn robust_move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if std::fs::symlink_metadata(src).is_ok_and(|m| m.file_type().is_symlink()) {
+        if dst.exists() || std::fs::symlink_metadata(dst).is_ok() {
+            return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "the destination exists already"));
+        }
+        return move_symlink(src, dst);
+    }
     if is_same_file_path(src, dst) {
         return Ok(());
     }
@@ -74,7 +93,9 @@ pub fn robust_move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
             );
             Ok(())
         }
-        Err(err) => {
+        // Only a move across file systems is carried out by copying; any other failure (no permission, a missing folder, ...)
+        // is reported as it is and leaves both sides untouched.
+        Err(err) if err.kind() == std::io::ErrorKind::CrossesDevices => {
             tracing::info!(
                 src = %LogObscurer::path(src),
                 dst = %LogObscurer::path(dst),
@@ -84,7 +105,11 @@ pub fn robust_move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
             let t_copy = Instant::now();
             let bytes = std::fs::copy(src, dst)?;
             let copy_dur = t_copy.elapsed();
-            std::fs::remove_file(src)?;
+            if let Err(remove_err) = std::fs::remove_file(src) {
+                // The original cannot be removed (read-only folder): do not leave a second copy behind.
+                let _ = std::fs::remove_file(dst);
+                return Err(remove_err);
+            }
             tracing::info!(
                 bytes_copied = bytes,
                 copy_time_ms = copy_dur.as_millis(),
@@ -93,6 +118,7 @@ pub fn robust_move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
             );
             Ok(())
         }
+        Err(err) => Err(err),
     }
 }
 
@@ -860,5 +886,85 @@ impl<'a> FileOperations<'a> {
             new_path,
             validated_name,
         })
+    }
+}
+
+#[cfg(test)]
+mod symlink_tests {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn a_moved_relative_link_keeps_pointing_at_its_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("from")).unwrap();
+        fs::create_dir_all(dir.path().join("to")).unwrap();
+        fs::write(dir.path().join("from/real.jpg"), b"pixels").unwrap();
+        symlink("real.jpg", dir.path().join("from/link.jpg")).unwrap();
+
+        robust_move_file(&dir.path().join("from/link.jpg"), &dir.path().join("to/link.jpg")).unwrap();
+
+        assert!(!dir.path().join("from/link.jpg").exists());
+        assert_eq!(fs::read(dir.path().join("to/link.jpg")).unwrap(), b"pixels", "the link still works");
+        assert!(fs::symlink_metadata(dir.path().join("to/link.jpg")).unwrap().file_type().is_symlink());
+        assert!(dir.path().join("from/real.jpg").exists(), "the file stays");
+    }
+
+    #[test]
+    fn moving_a_link_onto_an_existing_file_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("real.jpg"), b"a").unwrap();
+        fs::write(dir.path().join("taken.jpg"), b"b").unwrap();
+        symlink(dir.path().join("real.jpg"), dir.path().join("link.jpg")).unwrap();
+        let err = robust_move_file(&dir.path().join("link.jpg"), &dir.path().join("taken.jpg")).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(dir.path().join("taken.jpg")).unwrap(), b"b");
+    }
+
+    #[test]
+    fn moving_out_of_a_read_only_folder_fails_and_changes_nothing() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("locked")).unwrap();
+        fs::create_dir_all(dir.path().join("open")).unwrap();
+        fs::write(dir.path().join("locked/a.jpg"), b"a").unwrap();
+        fs::set_permissions(dir.path().join("locked"), fs::Permissions::from_mode(0o555)).unwrap();
+
+        let result = robust_move_file(&dir.path().join("locked/a.jpg"), &dir.path().join("open/a.jpg"));
+
+        fs::set_permissions(dir.path().join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
+        let as_root = fs::metadata("/proc/self").map(|m| std::os::unix::fs::MetadataExt::uid(&m) == 0).unwrap_or(false);
+        if !as_root {
+            assert!(result.is_err(), "no permission must be an error");
+            assert!(dir.path().join("locked/a.jpg").exists(), "the source stays");
+            assert!(!dir.path().join("open/a.jpg").exists(), "no half-done copy is left behind");
+        }
+    }
+
+    #[test]
+    fn moving_into_a_read_only_folder_fails_and_changes_nothing() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("locked")).unwrap();
+        fs::write(dir.path().join("a.jpg"), b"a").unwrap();
+        fs::set_permissions(dir.path().join("locked"), fs::Permissions::from_mode(0o555)).unwrap();
+
+        let result = robust_move_file(&dir.path().join("a.jpg"), &dir.path().join("locked/a.jpg"));
+
+        fs::set_permissions(dir.path().join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
+        let as_root = fs::metadata("/proc/self").map(|m| std::os::unix::fs::MetadataExt::uid(&m) == 0).unwrap_or(false);
+        if !as_root {
+            assert!(result.is_err());
+            assert!(dir.path().join("a.jpg").exists());
+        }
+    }
+
+    #[test]
+    fn plain_files_still_move_by_rename() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.jpg"), b"a").unwrap();
+        robust_move_file(&dir.path().join("a.jpg"), &dir.path().join("b.jpg")).unwrap();
+        assert!(!dir.path().join("a.jpg").exists() && dir.path().join("b.jpg").exists());
     }
 }

@@ -22,13 +22,14 @@ use crate::library::models::{
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
+use crate::system::fs_access::can_write_directory;
 use crate::system::SystemDndHandler;
 use crate::thumbnails::ThumbnailManager;
 use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, Model, Timer};
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
@@ -60,6 +61,22 @@ pub struct BatchTransferParams<'a> {
 pub struct BridgeDnd;
 
 impl BridgeDnd {
+    /// Why files must not be dropped into a folder right now, if so. The scan check is memory only (it also keeps the drop target from
+    /// lighting up); `target` adds what a drop needs from the drive: the folder is there and the user may write to it.
+    pub fn transfer_block_reason(window: &MainWindow, state: &RwLock<UiState>, target: Option<(&str, &Path)>) -> Option<String> {
+        if BridgeMedia::is_scan_running(window, state) {
+            return Some("Cannot move or copy files while a scan or refresh is running.".to_string());
+        }
+        let (name, path) = target?;
+        if !path.exists() {
+            return Some("Target folder no longer exists on physical disk.".to_string());
+        }
+        if !can_write_directory(path) {
+            return Some(format!("Cannot move or copy files: the folder '{name}' is read-only."));
+        }
+        None
+    }
+
     pub fn handle_drag_started(params: DragStartParams<'_>) {
         let t0 = Instant::now();
         params.autoscroller.stop();
@@ -180,6 +197,12 @@ impl BridgeDnd {
         browse_scroller.update(window, state, current_x, current_y);
 
         if !autoscroller.is_active() {
+            if BridgeMedia::is_scan_running(window, state) {
+                if window.get_drop_target_folder_id() != -1 {
+                    window.set_drop_target_folder_id(-1);
+                }
+                return;
+            }
             let active_panel_tab = window.get_active_sidebar_panel_tab();
             if active_panel_tab.as_str() != "folders" {
                 if window.get_drop_target_folder_id() != -1 {
@@ -224,7 +247,7 @@ impl BridgeDnd {
         }
 
         let active_panel_tab = window.get_active_sidebar_panel_tab();
-        if active_panel_tab.as_str() != "folders" {
+        if active_panel_tab.as_str() != "folders" || BridgeMedia::is_scan_running(window, state) {
             return;
         }
 
@@ -283,6 +306,11 @@ impl BridgeDnd {
             && let Ok(Some(target_folder_rec)) = library.folders().get_folder(target_folder_id as FolderId)
         {
             let target_name = target_folder_rec.name.clone();
+            if let Some(reason) = Self::transfer_block_reason(window, state, Some((&target_name, Path::new(&target_folder_rec.path)))) {
+                tracing::info!(target = %LogObscurer::folder(Some(target_folder_id as FolderId), Path::new(&target_folder_rec.path)), %reason, "[MediaDrag: Blocked] Drop refused");
+                StatusBarBridge::warn(window, reason);
+                return;
+            }
             let selected_count = state.read().file_selection.count();
             let sidebar_w = window.get_sidebar_left_width();
 
@@ -299,6 +327,16 @@ impl BridgeDnd {
             window.set_choice_popup_y(popup_y);
             window.set_is_choice_popup_open(true);
         } else {
+            // While a scan runs no folder is a drop target (nothing lights up); a release over the folder tree or a folder row of the
+            // Browse view still gets an answer instead of being taken for a drop onto another application.
+            if BridgeMedia::is_scan_running(window, state) {
+                let over_tree = window.get_active_sidebar_panel_tab().as_str() == "folders" && release_x <= window.get_sidebar_left_width();
+                let over_folder_row = window.invoke_drag_row_id_at(release_x, release_y) != 0;
+                if over_tree || over_folder_row {
+                    StatusBarBridge::warn(window, "Cannot move or copy files while a scan or refresh is running.");
+                    return;
+                }
+            }
             let ordered_paths = state.read().get_selected_paths_ordered();
             let existing_paths: Vec<PathBuf> = ordered_paths.into_iter().filter(|p| p.exists()).collect();
 
@@ -316,12 +354,13 @@ impl BridgeDnd {
         };
 
         let target_folder_path = PathBuf::from(&target_folder_rec.path);
-        if !target_folder_path.exists() {
-            StatusBarBridge::warn(params.window, "Target folder no longer exists on physical disk.");
+        let target_folder_name = target_folder_rec.name.clone();
+        // The popup can stay open while a scan starts or the folder changes: the check is made again before anything moves.
+        if let Some(reason) = Self::transfer_block_reason(params.window, params.state, Some((&target_folder_name, &target_folder_path))) {
+            StatusBarBridge::warn(params.window, reason);
             return;
         }
 
-        let target_folder_name = target_folder_rec.name.clone();
         let ordered_selected_ids = params.state.read().get_selected_ids_ordered();
         if ordered_selected_ids.is_empty() {
             return;
@@ -370,6 +409,7 @@ impl BridgeDnd {
             moved_media_ids: HashSet::new(),
             remembered_resolution: None,
             start_time: t_start,
+            first_failure: None,
         };
 
         runner.step();
@@ -394,6 +434,8 @@ struct BatchTransferRunner {
     moved_media_ids: HashSet<MediaId>,
     remembered_resolution: Option<FileConflictResolution>,
     start_time: Instant,
+    /// Why the first item failed, for the final message.
+    first_failure: Option<String>,
 }
 
 impl BatchTransferRunner {
@@ -487,7 +529,7 @@ impl BatchTransferRunner {
                         }
                     }
                     Err(LibraryError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
-                        self.summary.failed_count += 1;
+                        self.note_failure(&e);
                         let missing_path = self.resolve_media_path(media_id);
                         self.missing_dialog.show(
                             &self.window,
@@ -500,7 +542,7 @@ impl BatchTransferRunner {
                     }
                     Err(e) => {
                         tracing::error!(media_id = media_id, error = %e, "[BatchTransfer: Error] Direct transfer failed");
-                        self.summary.failed_count += 1;
+                        self.note_failure(&e);
                     }
                 }
                 self.current_index += 1;
@@ -508,7 +550,7 @@ impl BatchTransferRunner {
             }
             Err(e) => {
                 tracing::error!(media_id = media_id, error = %e, "[BatchTransfer: Error] Failed to check conflict");
-                self.summary.failed_count += 1;
+                self.note_failure(&e);
                 self.current_index += 1;
                 Timer::single_shot(std::time::Duration::from_millis(1), move || self.step());
             }
@@ -564,7 +606,7 @@ impl BatchTransferRunner {
                     }
                     Err(e) => {
                         tracing::error!(media_id = media_id, error = %e, "[BatchTransfer: AutoRename Error] Failed to transfer auto-renamed file");
-                        self.summary.failed_count += 1;
+                        self.note_failure(&e);
                     }
                 }
                 self.current_index += 1;
@@ -596,7 +638,7 @@ impl BatchTransferRunner {
                     }
                     Err(e) => {
                         tracing::error!(media_id = media_id, error = %e, "[BatchTransfer: Overwrite Error] Failed to overwrite destination file");
-                        self.summary.failed_count += 1;
+                        self.note_failure(&e);
                     }
                 }
                 self.current_index += 1;
@@ -606,6 +648,11 @@ impl BatchTransferRunner {
                 self.finish();
             }
         }
+    }
+
+    fn note_failure(&mut self, error: &dyn std::fmt::Display) {
+        self.summary.failed_count += 1;
+        self.first_failure.get_or_insert_with(|| error.to_string());
     }
 
     fn resolve_media_path(&self, media_id: MediaId) -> PathBuf {
@@ -657,7 +704,8 @@ impl BatchTransferRunner {
             details.push(format!("{} skipped", self.summary.skipped_count));
         }
         if self.summary.failed_count > 0 {
-            details.push(format!("{} failed", self.summary.failed_count));
+            let reason = self.first_failure.as_deref().map(|r| format!(": {r}")).unwrap_or_default();
+            details.push(format!("{} failed{reason}", self.summary.failed_count));
         }
 
         let detail_str = if details.is_empty() {
@@ -671,7 +719,11 @@ impl BatchTransferRunner {
             verb_past, self.summary.moved_count, self.target_folder_name, elapsed_ms, detail_str
         );
 
-        StatusBarBridge::success(&self.window, msg);
+        if self.summary.failed_count > 0 {
+            StatusBarBridge::warn(&self.window, msg);
+        } else {
+            StatusBarBridge::success(&self.window, msg);
+        }
         StatusBarBridge::update_metrics(&self.window, &self.state);
     }
 }

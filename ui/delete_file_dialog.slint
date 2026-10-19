@@ -6,10 +6,9 @@ import { DialogHeading } from "dialog_heading.slint";
 
 export component DeleteFileDialog inherits Window {
     title: "RustView - Delete File";
-    preferred-width: 500px;
-    preferred-height: 290px;
-    min-width: 440px;
-    min-height: 270px;
+    width: 500px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
     always-on-top: true;
     background: Theme.background;
 
@@ -33,12 +32,14 @@ export component DeleteFileDialog inherits Window {
             return reject;
         }
 
-        VerticalLayout {
+        dialog-layout := VerticalLayout {
+            width: root.width;
             padding: 0px;
             spacing: 0px;
             alignment: space-between;
 
             VerticalLayout {
+                width: root.width;
                 padding: 16px;
                 spacing: 12px;
                 vertical-stretch: 1;

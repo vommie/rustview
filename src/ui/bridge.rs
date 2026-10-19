@@ -975,8 +975,13 @@ impl UiBridge {
                 params.state.read().current_folder_path.clone()
             });
 
-            if let Some(path) = path_to_remove
-                && let Some(entry) = params.favorites.read().get_by_path(&path)
+            // The entry is copied out first: a read guard in the `if let` would live through the block, where the favorite is
+            // changed under the write lock.
+            let found = path_to_remove.and_then(|path| {
+                let entry = params.favorites.read().get_by_path(&path).cloned();
+                entry.map(|entry| (path, entry))
+            });
+            if let Some((path, entry)) = found
             {
                 tracing::info!(
                     path = %LogObscurer::path(&path),
@@ -1173,8 +1178,13 @@ impl UiBridge {
                 params.state.read().current_folder_path.clone()
             });
 
-            if let Some(path) = path_to_rename
-                && let Some(entry) = params.favorites.read().get_by_path(&path)
+            // The entry is copied out first: a read guard in the `if let` would live through the block, where the favorite is
+            // changed under the write lock.
+            let found = path_to_rename.and_then(|path| {
+                let entry = params.favorites.read().get_by_path(&path).cloned();
+                entry.map(|entry| (path, entry))
+            });
+            if let Some((path, entry)) = found
             {
                 tracing::info!(
                     path = %LogObscurer::path(&path),

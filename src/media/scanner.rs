@@ -46,3 +46,31 @@ impl DirectoryScanner {
         results
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn symlink_loops_end_and_links_to_files_are_found_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("root");
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("a.jpg"), b"x").unwrap();
+        fs::write(root.join("sub/b.jpg"), b"x").unwrap();
+        symlink(&root, root.join("sub/loop")).unwrap();
+        symlink(root.join("a.jpg"), root.join("linked.jpg")).unwrap();
+
+        let shallow: Vec<String> = DirectoryScanner::scan(&root, false).into_iter().map(|f| f.filename).collect();
+        let mut shallow_sorted = shallow.clone();
+        shallow_sorted.sort();
+        assert_eq!(shallow_sorted, ["a.jpg", "linked.jpg"], "a folder is scanned alone, links to folders are not entered");
+
+        // The recursive walk meets the loop, reports it as an error entry and goes on; it must end.
+        let deep = DirectoryScanner::scan(&root, true);
+        assert!(deep.iter().any(|f| f.filename == "b.jpg"));
+        assert!(deep.len() < 100, "the loop must not multiply the files ({} found)", deep.len());
+    }
+}

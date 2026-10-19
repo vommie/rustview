@@ -6,6 +6,7 @@ use super::BrowseFolders;
 use super::rows::FolderRowRef;
 use crate::library::models::FolderId;
 use crate::ui::MainWindow;
+use crate::ui::bridge_media::BridgeMedia;
 use crate::ui::bridge_state::UiState;
 use crate::ui::rubberband_selection::{MEDIA_HEADER_BAR_HEIGHT_PX, RubberbandAutoScroller};
 use parking_lot::RwLock;
@@ -83,7 +84,9 @@ impl BrowseFolders {
         if !window.get_is_dragging_media() {
             return;
         }
-        let row = if Self::drop_target(&state.read(), row_id).is_some() { row_id } else { 0 };
+        // No drop target while a scan runs (memory only; the drive is checked when the files are dropped).
+        let blocked = BridgeMedia::is_scan_running(window, state);
+        let row = if !blocked && Self::drop_target(&state.read(), row_id).is_some() { row_id } else { 0 };
         if window.get_drop_target_row_id() != row {
             window.set_drop_target_row_id(row);
         }

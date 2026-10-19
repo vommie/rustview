@@ -542,6 +542,17 @@ impl BridgeMedia {
         }
     }
 
+    /// A scan, refresh or indexing run is going on (the thumbnail pipeline is not counted). Operations that move files must not run
+    /// next to it: the scan would index files while they change place.
+    pub fn is_scan_running(window: &MainWindow, state: &RwLock<UiState>) -> bool {
+        if let Some(st) = state.try_read()
+            && (st.is_refreshing_media || st.is_refreshing_folders)
+        {
+            return true;
+        }
+        window.get_is_indexing_media() || window.get_is_refreshing_folders()
+    }
+
     pub fn is_system_busy(
         window: &MainWindow,
         thumbnails: &ThumbnailManager,

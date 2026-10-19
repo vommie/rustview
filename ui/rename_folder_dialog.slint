@@ -7,10 +7,9 @@ import { ButtonBar } from "button_bar.slint";
 
 export component RenameFolderDialog inherits Window {
     title: "RustView - Rename Folder";
-    preferred-width: 480px;
-    preferred-height: 230px;
-    min-width: 400px;
-    min-height: 190px;
+    width: 480px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
     always-on-top: true;
     background: Theme.background;
 
@@ -43,12 +42,14 @@ export component RenameFolderDialog inherits Window {
             return reject;
         }
 
-        VerticalLayout {
+        dialog-layout := VerticalLayout {
+            width: root.width;
             padding: 0px;
             spacing: 0px;
             alignment: space-between;
 
             VerticalLayout {
+                width: root.width;
                 padding: 16px;
                 spacing: 10px;
                 vertical-stretch: 1;

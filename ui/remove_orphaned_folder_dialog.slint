@@ -6,10 +6,9 @@ import { ButtonBar } from "button_bar.slint";
 
 export component RemoveOrphanedFolderDialog inherits Window {
     title: "RustView - Remove Missing Folder from Database";
-    preferred-width: 500px;
-    preferred-height: 310px;
-    min-width: 440px;
-    min-height: 290px;
+    width: 500px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
     background: Theme.background;
 
     in-out property <string> folder-name: "";
@@ -32,12 +31,14 @@ export component RemoveOrphanedFolderDialog inherits Window {
             return reject;
         }
 
-        VerticalLayout {
+        dialog-layout := VerticalLayout {
+            width: root.width;
             padding: 0px;
             spacing: 0px;
             alignment: space-between;
 
             VerticalLayout {
+                width: root.width;
                 padding: 16px;
                 spacing: 12px;
                 vertical-stretch: 1;
