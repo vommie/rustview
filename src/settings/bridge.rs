@@ -4,6 +4,7 @@ use super::schema::{
     AppSettings, FullscreenSettings, MAX_MEMORY_BUDGET_MB, MIN_MEMORY_BUDGET_MB, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
     DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
+    MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MIN_TYPE_AHEAD_TIMEOUT_MS,
 };
 use crate::util::hex_color;
 use crate::system::{MonitorInfo, SystemDisplayService};
@@ -119,6 +120,12 @@ impl SettingsDialogController {
         let tooltips = window.global::<TooltipSettings>();
         tooltips.set_enabled(settings.appearance.enable_tooltips);
         tooltips.set_default_delay(i64::from(settings.appearance.tooltip_delay_ms));
+        window.set_type_ahead_enabled(settings.appearance.type_ahead_enabled);
+        window.set_type_ahead_timeout_ms(settings.appearance.type_ahead_timeout_ms as i32);
+        window.set_type_ahead_new_search_gap_ms(settings.appearance.type_ahead_new_search_gap_ms as i32);
+        window.set_type_ahead_include_folders(settings.appearance.type_ahead_include_folders);
+        window.set_type_ahead_cycle_repeated_keys(settings.appearance.type_ahead_cycle_repeated_keys);
+        window.set_type_ahead_center_target(settings.appearance.type_ahead_center_target);
 
         // Grid Items Layout properties
         window.set_grid_item_padding_h(settings.appearance.grid_item_padding_horizontal as i32);
@@ -479,6 +486,18 @@ impl SettingsDialogController {
                 current.appearance.enable_tooltips = w.get_enable_tooltips();
                 current.appearance.tooltip_delay_ms =
                     w.get_tooltip_delay_ms().clamp(50, 2000) as u32;
+                current.appearance.type_ahead_enabled = w.get_type_ahead_enabled();
+                current.appearance.type_ahead_timeout_ms = w
+                    .get_type_ahead_timeout_ms()
+                    .clamp(MIN_TYPE_AHEAD_TIMEOUT_MS as i32, MAX_TYPE_AHEAD_TIMEOUT_MS as i32)
+                    as u32;
+                current.appearance.type_ahead_new_search_gap_ms = w
+                    .get_type_ahead_new_search_gap_ms()
+                    .clamp(0, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS as i32)
+                    as u32;
+                current.appearance.type_ahead_include_folders = w.get_type_ahead_include_folders();
+                current.appearance.type_ahead_cycle_repeated_keys = w.get_type_ahead_cycle_repeated_keys();
+                current.appearance.type_ahead_center_target = w.get_type_ahead_center_target();
 
                 // Save Grid Items Layout Properties
                 current.appearance.grid_item_padding_horizontal =

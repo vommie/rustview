@@ -41,12 +41,20 @@ pub const DEFAULT_TOOLTIP_DELAY_MS: u32 = 750;
 pub const MIN_TOOLTIP_DELAY_MS: u32 = 50;
 pub const MAX_TOOLTIP_DELAY_MS: u32 = 2000;
 
-/// Type-ahead find in the Browse view: keys typed with less than this pause between them form ONE search string (Dolphin and
-/// Windows Explorer use one second, Qt 400 ms); a longer pause starts a new search.
-pub const TYPE_AHEAD_TIMEOUT_MS: u64 = 1000;
+// Type-ahead find in the Browse view
+pub const DEFAULT_TYPE_AHEAD_ENABLED: bool = true;
+/// Keys typed with less than this pause between them form ONE search string (Dolphin and Windows Explorer use one second,
+/// Qt 400 ms); a longer pause starts a new search.
+pub const DEFAULT_TYPE_AHEAD_TIMEOUT_MS: u32 = 1000;
+pub const MIN_TYPE_AHEAD_TIMEOUT_MS: u32 = 300;
+pub const MAX_TYPE_AHEAD_TIMEOUT_MS: u32 = 3000;
 /// A key typed after a pause this long that does not continue the search string (no name starts with it) is taken for the
-/// start of a NEW search; the same key typed faster is a typo inside a word and moves nothing.
-pub const TYPE_AHEAD_NEW_SEARCH_GAP_MS: u64 = 500;
+/// start of a NEW search; the same key typed faster is a typo inside a word and moves nothing. 0 = never.
+pub const DEFAULT_TYPE_AHEAD_NEW_SEARCH_GAP_MS: u32 = 500;
+pub const MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS: u32 = 1500;
+pub const DEFAULT_TYPE_AHEAD_INCLUDE_FOLDERS: bool = true;
+pub const DEFAULT_TYPE_AHEAD_CYCLE_REPEATED_KEYS: bool = true;
+pub const DEFAULT_TYPE_AHEAD_CENTER_TARGET: bool = true;
 
 // Grid Items Layout - Single Point of Truth Constants
 pub const DEFAULT_GRID_ITEM_PADDING_H: u32 = 8;
@@ -506,6 +514,15 @@ pub struct AppearanceSettings {
     pub enable_tooltips: bool,
     pub tooltip_delay_ms: u32,
 
+    // Type-ahead find (Browse view)
+    pub type_ahead_enabled: bool,
+    pub type_ahead_timeout_ms: u32,
+    /// 0 = a key that continues no name never starts a new search.
+    pub type_ahead_new_search_gap_ms: u32,
+    pub type_ahead_include_folders: bool,
+    pub type_ahead_cycle_repeated_keys: bool,
+    pub type_ahead_center_target: bool,
+
     // Grid Items Layout
     pub grid_item_padding_horizontal: u32,
     pub grid_item_padding_vertical: u32,
@@ -530,6 +547,12 @@ impl Default for AppearanceSettings {
             dark_theme: DEFAULT_DARK_THEME,
             enable_tooltips: DEFAULT_ENABLE_TOOLTIPS,
             tooltip_delay_ms: DEFAULT_TOOLTIP_DELAY_MS,
+            type_ahead_enabled: DEFAULT_TYPE_AHEAD_ENABLED,
+            type_ahead_timeout_ms: DEFAULT_TYPE_AHEAD_TIMEOUT_MS,
+            type_ahead_new_search_gap_ms: DEFAULT_TYPE_AHEAD_NEW_SEARCH_GAP_MS,
+            type_ahead_include_folders: DEFAULT_TYPE_AHEAD_INCLUDE_FOLDERS,
+            type_ahead_cycle_repeated_keys: DEFAULT_TYPE_AHEAD_CYCLE_REPEATED_KEYS,
+            type_ahead_center_target: DEFAULT_TYPE_AHEAD_CENTER_TARGET,
             grid_item_padding_horizontal: DEFAULT_GRID_ITEM_PADDING_H,
             grid_item_padding_vertical: DEFAULT_GRID_ITEM_PADDING_V,
             grid_spacing: DEFAULT_GRID_SPACING,

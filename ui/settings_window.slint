@@ -68,6 +68,14 @@ export component SettingsWindow inherits Window {
     in-out property <bool> enable-tooltips: true;
     in-out property <int> tooltip-delay-ms: 750;
 
+    // Type-ahead find options
+    in-out property <bool> type-ahead-enabled: true;
+    in-out property <int> type-ahead-timeout-ms: 1000;
+    in-out property <int> type-ahead-new-search-gap-ms: 500;
+    in-out property <bool> type-ahead-include-folders: true;
+    in-out property <bool> type-ahead-cycle-repeated-keys: true;
+    in-out property <bool> type-ahead-center-target: true;
+
     // Grid Items Layout options
     in-out property <int> grid-item-padding-h: 8;
     in-out property <int> grid-item-padding-v: 6;
@@ -236,6 +244,12 @@ export component SettingsWindow inherits Window {
                             enable-hover-previews <=> root.enable-hover-previews;
                             enable-tooltips <=> root.enable-tooltips;
                             tooltip-delay-ms <=> root.tooltip-delay-ms;
+                            type-ahead-enabled <=> root.type-ahead-enabled;
+                            type-ahead-timeout-ms <=> root.type-ahead-timeout-ms;
+                            type-ahead-new-search-gap-ms <=> root.type-ahead-new-search-gap-ms;
+                            type-ahead-include-folders <=> root.type-ahead-include-folders;
+                            type-ahead-cycle-repeated-keys <=> root.type-ahead-cycle-repeated-keys;
+                            type-ahead-center-target <=> root.type-ahead-center-target;
                             grid-item-padding-h <=> root.grid-item-padding-h;
                             grid-item-padding-v <=> root.grid-item-padding-v;
                             grid-spacing <=> root.grid-spacing;

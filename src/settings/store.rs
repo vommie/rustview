@@ -9,7 +9,8 @@ use super::schema::{
     MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_MAX_HISTORY_TAGS, MAX_MEMORY_BUDGET_MB, MAX_MAXIMIZED_WINDOW_SIZE,
     MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH,
     MAX_TAB_GRID_COLUMNS, MAX_TAG_HISTORY_HEIGHT, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH,
-    MAX_TOOLTIP_DELAY_MS, MAX_VIDEO_OFFSET_PERCENT, MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE,
+    MAX_TOOLTIP_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MAX_VIDEO_OFFSET_PERCENT,
+    MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE, MIN_TYPE_AHEAD_TIMEOUT_MS,
     MIN_COL_WIDTH, MIN_GRID_ITEM_BORDER_WIDTH, MIN_GRID_ITEM_CORNER_RADIUS, MIN_GRID_ITEM_PADDING_H,
     MIN_GRID_ITEM_PADDING_V, MIN_GRID_PADDING, MIN_GRID_SPACING, MIN_MEMORY_BUDGET_MB,
     MIN_MAX_HISTORY_TAGS, MIN_PREVIEW_FRAME_COUNT, MIN_QUALITY,
@@ -126,6 +127,15 @@ impl SettingsStore {
             .appearance
             .tooltip_delay_ms
             .clamp(MIN_TOOLTIP_DELAY_MS, MAX_TOOLTIP_DELAY_MS);
+
+        settings.appearance.type_ahead_timeout_ms = settings
+            .appearance
+            .type_ahead_timeout_ms
+            .clamp(MIN_TYPE_AHEAD_TIMEOUT_MS, MAX_TYPE_AHEAD_TIMEOUT_MS);
+        settings.appearance.type_ahead_new_search_gap_ms = settings
+            .appearance
+            .type_ahead_new_search_gap_ms
+            .min(MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS);
 
         // Grid Items Layout sanitization
         settings.appearance.grid_item_padding_horizontal = settings

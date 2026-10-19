@@ -588,6 +588,14 @@ export component MainWindow inherits Window {
                 }
             }
 
+            // F3 puts the cursor into the filter field, like Ctrl+F
+            if event.text == Key.F3 && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
+                if root.active-view-mode == 0 {
+                    media-toolbar.focus-search();
+                    return accept;
+                }
+            }
+
             // Selection & Keyboard navigation in Browse View (Disabled while editing text input fields)
             if root.active-view-mode == 0 && !root.is-text-input-focused {
                 // 0. Type-ahead find: printable keys jump to the item whose name starts with what was typed; Backspace and Escape

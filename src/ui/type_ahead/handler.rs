@@ -1,5 +1,6 @@
 //! Joins the type-ahead search to the Browse list: names from memory, the jump through the cursor move of the arrow keys.
 
+use super::config;
 use super::session::{Cursor, NameSource, Reaction, TypeAhead, classify};
 use crate::library::Library;
 use crate::settings::SettingsManager;
@@ -33,23 +34,26 @@ pub struct TypeAheadParams<'a> {
 
 /// The names of the list positions as the Browse view shows them: media by their lower-cased file name (the key of the text
 /// filter, built when the record was loaded), folders by their name in the folder snapshot; "..." has none.
-struct ListNames<'a>(&'a UiState);
+struct ListNames<'a> {
+    state: &'a UiState,
+    include_folders: bool,
+}
 
 impl NameSource for ListNames<'_> {
     fn count(&self) -> usize {
-        self.0.view_len()
+        self.state.view_len()
     }
 
     fn starts_with(&self, position: usize, needle: &str) -> bool {
-        match self.0.slot_at(position) {
-            Slot::Media(row) => self.0.item_at(row).is_some_and(|item| item.filename_lower.starts_with(needle)),
-            Slot::Folder(FolderRowRef::Folder(id)) => self
-                .0
+        match self.state.slot_at(position) {
+            Slot::Media(row) => self.state.item_at(row).is_some_and(|item| item.filename_lower.starts_with(needle)),
+            Slot::Folder(FolderRowRef::Folder(id)) if self.include_folders => self
+                .state
                 .folder_hierarchy
                 .as_ref()
                 .and_then(|snapshot| snapshot.get_node(id))
                 .is_some_and(|node| lower_starts_with(&node.name, needle)),
-            Slot::Folder(FolderRowRef::Up) | Slot::Empty => false,
+            Slot::Folder(_) | Slot::Empty => false,
         }
     }
 }
@@ -63,13 +67,24 @@ fn lower_starts_with(name: &str, needle: &str) -> bool {
 /// A key press of the Browse view. Returns whether the search took the key (the caller then does not handle it any further).
 pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
     let started = Instant::now();
+    let config = config::current();
+    if !config.enabled {
+        params.search.borrow_mut().reset();
+        return false;
+    }
     let class = classify(params.text, params.command);
 
     let (reaction, in_place, landed) = {
         let st = params.state.read();
         let item = st.browse_cursor();
         let cursor = Cursor { item, position: item.and_then(|item| st.browse_position_of(item)) };
-        let reaction = params.search.borrow_mut().key(class, started, cursor, &ListNames(&st));
+        let reaction = params.search.borrow_mut().key(
+            class,
+            started,
+            cursor,
+            &ListNames { state: &st, include_folders: config.include_folders },
+            &config,
+        );
         let landed = match reaction {
             Reaction::Jump(position) => st.browse_item_at(position),
             _ => item,
@@ -95,7 +110,7 @@ pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
                 },
                 position,
                 false,
-                Reveal::Centered,
+                if config.center_target { Reveal::Centered } else { Reveal::IntoView },
                 Pace::Settled,
             );
         }

@@ -1,8 +1,8 @@
 //! The type-ahead search state machine (pure: no Slint, no list, no clock of its own).
 
-use crate::settings::schema::{TYPE_AHEAD_NEW_SEARCH_GAP_MS, TYPE_AHEAD_TIMEOUT_MS};
+use super::config::TypeAheadConfig;
 use crate::ui::browse_folders::BrowseItem;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// The names of the Browse list by list position.
 pub trait NameSource {
@@ -105,13 +105,13 @@ impl TypeAhead {
         self.buffer.is_empty()
     }
 
-    fn is_running(&self, now: Instant, cursor: Option<BrowseItem>) -> bool {
+    fn is_running(&self, now: Instant, cursor: Option<BrowseItem>, config: &TypeAheadConfig) -> bool {
         !self.buffer.is_empty()
             && self.landed == cursor
-            && self.last_input.is_some_and(|last| now.saturating_duration_since(last) <= Duration::from_millis(TYPE_AHEAD_TIMEOUT_MS))
+            && self.last_input.is_some_and(|last| now.saturating_duration_since(last) <= config.timeout)
     }
 
-    pub fn key(&mut self, class: KeyClass<'_>, now: Instant, cursor: Cursor, names: &dyn NameSource) -> Reaction {
+    pub fn key(&mut self, class: KeyClass<'_>, now: Instant, cursor: Cursor, names: &dyn NameSource, config: &TypeAheadConfig) -> Reaction {
         match class {
             KeyClass::Modifier => Reaction::NotHandled,
             KeyClass::Other => {
@@ -119,12 +119,12 @@ impl TypeAhead {
                 Reaction::NotHandled
             }
             KeyClass::Escape => {
-                let running = self.is_running(now, cursor.item);
+                let running = self.is_running(now, cursor.item, config);
                 self.reset();
                 if running { Reaction::Consumed } else { Reaction::NotHandled }
             }
             KeyClass::Backspace => {
-                if !self.is_running(now, cursor.item) {
+                if !self.is_running(now, cursor.item, config) {
                     self.reset();
                     return Reaction::NotHandled;
                 }
@@ -143,12 +143,12 @@ impl TypeAhead {
                     None => Reaction::Consumed,
                 }
             }
-            KeyClass::Text(text) => self.text(text, now, cursor, names),
+            KeyClass::Text(text) => self.text(text, now, cursor, names, config),
         }
     }
 
-    fn text(&mut self, text: &str, now: Instant, cursor: Cursor, names: &dyn NameSource) -> Reaction {
-        let running = self.is_running(now, cursor.item);
+    fn text(&mut self, text: &str, now: Instant, cursor: Cursor, names: &dyn NameSource, config: &TypeAheadConfig) -> Reaction {
+        let running = self.is_running(now, cursor.item, config);
         let gap = self.last_input.map(|last| now.saturating_duration_since(last));
         if !running {
             self.reset();
@@ -177,11 +177,13 @@ impl TypeAhead {
 
         if running {
             // 2. A run of one key ("aaa") that matches no name cycles through the names that start with it.
-            if let Some(position) = self.cycle(names, next) {
+            if config.cycle_repeated_keys
+                && let Some(position) = self.cycle(names, next)
+            {
                 return Reaction::Jump(position);
             }
             // 3. After a real pause the key starts a new search; typed quickly it is a typo inside a word and moves nothing.
-            if gap.is_some_and(|gap| gap > Duration::from_millis(TYPE_AHEAD_NEW_SEARCH_GAP_MS)) {
+            if gap.zip(config.new_search_gap).is_some_and(|(gap, limit)| gap > limit) {
                 self.buffer = key;
                 self.last_success.clear();
                 if let Some(position) = find(names, &self.buffer, next) {
@@ -231,6 +233,7 @@ fn find(names: &dyn NameSource, needle: &str, start: usize) -> Option<usize> {
 mod tests {
     use super::*;
     use crate::library::models::MediaId;
+    use std::time::Duration;
 
     struct Names(Vec<&'static str>);
 
@@ -252,17 +255,18 @@ mod tests {
         search: TypeAhead,
         now: Instant,
         cursor: Option<usize>,
+        config: TypeAheadConfig,
     }
 
     impl Typist {
         fn new(cursor: Option<usize>) -> Self {
-            Self { search: TypeAhead::default(), now: Instant::now(), cursor }
+            Self { search: TypeAhead::default(), now: Instant::now(), cursor, config: TypeAheadConfig::default() }
         }
 
         fn press(&mut self, class: KeyClass<'_>, gap_ms: u64, names: &Names) -> Reaction {
             self.now += Duration::from_millis(gap_ms);
             let cursor = Cursor { item: self.cursor.map(item), position: self.cursor };
-            let reaction = self.search.key(class, self.now, cursor, names);
+            let reaction = self.search.key(class, self.now, cursor, names, &self.config);
             if let Reaction::Jump(position) = reaction {
                 self.cursor = Some(position);
             }
@@ -402,6 +406,29 @@ mod tests {
         let mut t = Typist::new(None);
         t.type_str("Ä", 100, &names);
         assert_eq!(t.cursor, Some(7));
+    }
+
+    #[test]
+    fn options_change_the_timing_and_the_cycling() {
+        let names = files();
+        let mut t = Typist::new(None);
+        t.config.timeout = Duration::from_millis(300);
+        t.type_str("ha", 100, &names);
+        t.type_str("l", 400, &names);
+        assert_eq!(t.cursor, Some(3), "400 ms is past the 300 ms timeout: 'l' is a new search and finds nothing");
+        assert_eq!(t.search.len(), 1);
+
+        let mut t = Typist::new(None);
+        t.config.new_search_gap = None;
+        t.type_str("ha", 100, &names);
+        t.type_str("z", 900, &names);
+        assert_eq!(t.cursor, Some(3), "without a new-search gap a slow key that fits nothing stays a typo");
+
+        let mut t = Typist::new(None);
+        t.config.cycle_repeated_keys = false;
+        t.type_str("a", 100, &names);
+        t.type_str("a", 100, &names);
+        assert_eq!(t.cursor, Some(0), "'aa' matches nothing and does not cycle on");
     }
 
     #[test]

@@ -35,7 +35,7 @@ use super::shutdown::ShutdownTargets;
 use super::multiview::tab_host;
 use super::rubberband_selection::RubberbandAutoScroller;
 use super::thumbnail_badges::ThumbnailBadgeBridge;
-use super::type_ahead::{TypeAheadParams, TypeAheadState, handle_type_ahead_key};
+use super::type_ahead::{self, TypeAheadParams, TypeAheadState, handle_type_ahead_key};
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
 use crate::library::folders::normalize_path;
@@ -219,6 +219,7 @@ impl UiBridge {
             app_settings.appearance.enable_tooltips,
             app_settings.appearance.tooltip_delay_ms as i32,
         );
+        type_ahead::config::apply(&app_settings.appearance);
         prefs::apply(&app_settings.fullscreen);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 
@@ -491,6 +492,10 @@ impl UiBridge {
                         new_clone.appearance.enable_tooltips,
                         new_clone.appearance.tooltip_delay_ms as i32,
                     );
+                }
+
+                if diff_clone.type_ahead_changed {
+                    type_ahead::config::apply(&new_clone.appearance);
                 }
 
                 if diff_clone.fullscreen_settings_changed || diff_clone.viewer_settings_changed {

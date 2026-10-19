@@ -3,12 +3,12 @@
 Typing in the grid or the table jumps to the first item whose name starts with the typed text. There is no visible field.
 
 ## Behavior (modeled on Dolphin, Windows Explorer, Qt/GTK item views, WAI-ARIA listbox)
-- Keys typed less than `TYPE_AHEAD_TIMEOUT_MS` (1000 ms; Dolphin 1 s, Qt 400 ms) apart form one search string; the match is case-insensitive and
+- Keys typed less than the search timeout (default 1000 ms, 300-3000; Dolphin 1 s, Qt 400 ms) apart form one search string; the match is case-insensitive and
   starts at the beginning of the name. Folder rows take part, "..." never matches.
 - A new search starts AFTER the cursor (typing the same letter again moves on to the next item of that letter) and wraps around; a running search starts
   AT the cursor, so refining the string keeps the item while it still fits.
 - A run of one key that matches no name cycles through the names starting with it (`444` keeps cycling `44...` names, as Dolphin does).
-- A key that continues no name: typed fast (< `TYPE_AHEAD_NEW_SEARCH_GAP_MS`) it is a typo and moves nothing; after a pause it starts a new search.
+- A key that continues no name: typed fast (< the new-search pause, default 500 ms, 0 = never) it is a typo and moves nothing; after a pause it starts a new search.
 - Space never starts a search, only continues one. Shift is a capital letter (no backward search). Modifier keys alone do not interrupt a search.
 - Backspace removes the last character and Escape cancels the search, both only while a search runs; otherwise they keep their meaning
   (parent folder, clear selection). Every other key (arrows, Enter, Tab, F-keys, Ctrl/Alt/Meta shortcuts) ends the search.
@@ -16,6 +16,9 @@ Typing in the grid or the table jumps to the first item whose name starts with t
 - Not active: while the filter or tag filter field has focus, a dialog, menu or drag is open, in viewer tabs and the tab grid.
 - The jump selects the item like an arrow key does and centers it when it is not completely visible; the Multiview that follows the selection is
   updated settled (not once per typed letter).
+
+## Options (Settings > Appearance & Grid > Type-Ahead Find, `appearance.type_ahead_*`)
+Enable, search timeout, new search after a pause (0 = off), also find folders, repeating a letter cycles, center the found item (else scroll only as far as needed).
 
 ## Measured (debug profile = opt-level 3, VM, synthetic records with 24-character names, no match = scans the whole list)
 | records | no match, full scan |

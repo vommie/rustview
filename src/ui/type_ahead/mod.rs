@@ -8,8 +8,10 @@
 //!
 //! Nothing here touches the drive or runs a timer: a search expires lazily, when the next key arrives.
 
+pub mod config;
 mod handler;
 pub mod session;
 
+pub use config::TypeAheadConfig;
 pub use handler::{TypeAheadParams, TypeAheadState, handle_type_ahead_key};
 pub use session::{KeyClass, NameSource, Reaction, TypeAhead};

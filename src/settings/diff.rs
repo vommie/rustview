@@ -18,6 +18,7 @@ pub struct SettingsDiff {
     // Appearance & Grid Subsystem
     pub appearance_grid_changed: bool,
     pub tooltip_settings_changed: bool,
+    pub type_ahead_changed: bool,
     pub hover_previews_changed: bool,
 
     // Performance & Pipeline Subsystem
@@ -89,6 +90,13 @@ impl SettingsDiff {
         let tooltip_settings_changed = old.appearance.enable_tooltips != new.appearance.enable_tooltips
             || old.appearance.tooltip_delay_ms != new.appearance.tooltip_delay_ms;
 
+        let type_ahead_changed = old.appearance.type_ahead_enabled != new.appearance.type_ahead_enabled
+            || old.appearance.type_ahead_timeout_ms != new.appearance.type_ahead_timeout_ms
+            || old.appearance.type_ahead_new_search_gap_ms != new.appearance.type_ahead_new_search_gap_ms
+            || old.appearance.type_ahead_include_folders != new.appearance.type_ahead_include_folders
+            || old.appearance.type_ahead_cycle_repeated_keys != new.appearance.type_ahead_cycle_repeated_keys
+            || old.appearance.type_ahead_center_target != new.appearance.type_ahead_center_target;
+
         let hover_previews_changed = old.appearance.enable_hover_previews != new.appearance.enable_hover_previews;
 
         let performance_cache_changed = old.performance.memory_budget_mb != new.performance.memory_budget_mb;
@@ -130,6 +138,7 @@ impl SettingsDiff {
             || folder_expansion_changed
             || appearance_grid_changed
             || tooltip_settings_changed
+            || type_ahead_changed
             || hover_previews_changed
             || performance_cache_changed
             || performance_pipeline_changed
@@ -152,6 +161,7 @@ impl SettingsDiff {
             folder_expansion_changed,
             appearance_grid_changed,
             tooltip_settings_changed,
+            type_ahead_changed,
             hover_previews_changed,
             performance_cache_changed,
             performance_pipeline_changed,
@@ -322,6 +332,17 @@ impl SettingsDiff {
             changes.push(format!(
                 "Appearance: tooltip_delay_ms ({}ms -> {}ms)",
                 old.appearance.tooltip_delay_ms, new.appearance.tooltip_delay_ms
+            ));
+        }
+        if self.type_ahead_changed {
+            changes.push(format!(
+                "Appearance: type_ahead (enabled {} -> {}, timeout {}ms -> {}ms, new_search_gap {}ms -> {}ms, folders {} -> {}, cycle {} -> {}, center {} -> {})",
+                old.appearance.type_ahead_enabled, new.appearance.type_ahead_enabled,
+                old.appearance.type_ahead_timeout_ms, new.appearance.type_ahead_timeout_ms,
+                old.appearance.type_ahead_new_search_gap_ms, new.appearance.type_ahead_new_search_gap_ms,
+                old.appearance.type_ahead_include_folders, new.appearance.type_ahead_include_folders,
+                old.appearance.type_ahead_cycle_repeated_keys, new.appearance.type_ahead_cycle_repeated_keys,
+                old.appearance.type_ahead_center_target, new.appearance.type_ahead_center_target
             ));
         }
 
