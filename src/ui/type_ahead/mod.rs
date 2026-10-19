@@ -10,6 +10,7 @@
 
 pub mod config;
 mod handler;
+mod notice;
 pub mod session;
 
 pub use config::TypeAheadConfig;

@@ -1,6 +1,7 @@
 use super::models::format_filesize;
 use super::thumbnail_regeneration::ThumbnailRegeneration;
 use super::MainWindow;
+use crate::settings::LogObscurer;
 use crate::thumbnails::ThumbnailProgressSnapshot;
 use crate::ui::bridge_state::UiState;
 use parking_lot::RwLock;
@@ -30,7 +31,7 @@ impl StatusBarBridge {
         let msg = message.into();
         tracing::debug!(
             level = ?level,
-            message = %msg,
+            message = %LogObscurer::query(&msg),
             "[StatusBar: Message] Updated status bar message"
         );
         window.set_status_level(level as i32);

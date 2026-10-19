@@ -22,6 +22,8 @@ export component SettingsPageAppearance inherits VerticalLayout {
     in-out property <bool> type-ahead-include-folders: true;
     in-out property <bool> type-ahead-cycle-repeated-keys: true;
     in-out property <bool> type-ahead-center-target: true;
+    in-out property <bool> type-ahead-show-no-match: true;
+    in-out property <int> type-ahead-multiview-delay-ms: 400;
 
     // Grid Items Layout Configuration
     in-out property <int> grid-item-padding-h: 8;
@@ -375,6 +377,40 @@ export component SettingsPageAppearance inherits VerticalLayout {
         if root.type-ahead-enabled : CheckBox {
             text: "Center the found item in the view (otherwise scroll only as far as needed)";
             checked <=> root.type-ahead-center-target;
+        }
+
+        if root.type-ahead-enabled : CheckBox {
+            text: "Show \"No match\" in the status bar when nothing starts with the typed text";
+            checked <=> root.type-ahead-show-no-match;
+        }
+
+        if root.type-ahead-enabled : HorizontalLayout {
+            Text {
+                text: "Open Multiview follows the selection after:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Slider {
+                width: 140px;
+                minimum: 0;
+                maximum: 2000;
+                value: root.type-ahead-multiview-delay-ms;
+                changed(v) => { root.type-ahead-multiview-delay-ms = Math.round(v / 50) * 50; }
+            }
+            Text {
+                text: root.type-ahead-multiview-delay-ms == 0 ? "At once" : (root.type-ahead-multiview-delay-ms + " ms");
+                color: Theme.primary;
+                width: 60px;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+            }
+        }
+
+        if root.type-ahead-enabled : Text {
+            text: "Only for items selected by typing: the item is selected at once, a Multiview that follows the selection waits, so no video is opened for every letter.";
+            color: Theme.text-muted;
+            wrap: word-wrap;
         }
     }
 }

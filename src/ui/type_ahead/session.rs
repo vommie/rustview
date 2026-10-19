@@ -58,8 +58,10 @@ fn is_name_char(c: char) -> bool {
 pub enum Reaction {
     /// The key is none of the search's business: normal key handling goes on.
     NotHandled,
-    /// The search took the key but nothing moves (no match, search cancelled).
+    /// The search took the key but nothing moves (search cancelled, empty list).
     Consumed,
+    /// The search took the key and no name starts with the search string (see `TypeAhead::query`).
+    NoMatch,
     /// Move the cursor to this list position (it may be the one it is on).
     Jump(usize),
 }
@@ -101,6 +103,11 @@ impl TypeAhead {
         self.buffer.chars().count()
     }
 
+    /// The search string (lower case).
+    pub fn query(&self) -> &str {
+        &self.buffer
+    }
+
     pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
@@ -140,7 +147,7 @@ impl TypeAhead {
                         self.last_success.clone_from(&self.buffer);
                         Reaction::Jump(position)
                     }
-                    None => Reaction::Consumed,
+                    None => Reaction::NoMatch,
                 }
             }
             KeyClass::Text(text) => self.text(text, now, cursor, names, config),
@@ -192,7 +199,7 @@ impl TypeAhead {
                 }
             }
         }
-        Reaction::Consumed
+        Reaction::NoMatch
     }
 
     fn cycle(&self, names: &dyn NameSource, next: usize) -> Option<usize> {
@@ -429,6 +436,18 @@ mod tests {
         t.type_str("a", 100, &names);
         t.type_str("a", 100, &names);
         assert_eq!(t.cursor, Some(0), "'aa' matches nothing and does not cycle on");
+    }
+
+    #[test]
+    fn nothing_found_is_reported_with_the_search_string() {
+        let names = files();
+        let mut t = Typist::new(None);
+        t.type_str("ha", 100, &names);
+        assert_eq!(t.press(classify("z", false), 100, &names), Reaction::NoMatch);
+        assert_eq!(t.search.query(), "haz");
+        let mut t = Typist::new(None);
+        assert_eq!(t.press(classify("q", false), 100, &names), Reaction::NoMatch);
+        assert_eq!(t.press(KeyClass::Backspace, 100, &names), Reaction::Consumed, "empty search string ends the search");
     }
 
     #[test]

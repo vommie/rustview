@@ -55,6 +55,14 @@ pub const MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS: u32 = 1500;
 pub const DEFAULT_TYPE_AHEAD_INCLUDE_FOLDERS: bool = true;
 pub const DEFAULT_TYPE_AHEAD_CYCLE_REPEATED_KEYS: bool = true;
 pub const DEFAULT_TYPE_AHEAD_CENTER_TARGET: bool = true;
+/// A status bar message "No match for ..." when nothing starts with the typed text.
+pub const DEFAULT_TYPE_AHEAD_NO_MATCH_MESSAGE: bool = true;
+/// How long that message stays before the status bar shows what it showed before.
+pub const TYPE_AHEAD_NO_MATCH_MESSAGE_MS: u64 = 2500;
+/// An open Multiview that follows the selection waits this long after the last item type-ahead selected (0 = follows at once),
+/// so it does not open a video for every letter typed.
+pub const DEFAULT_TYPE_AHEAD_MULTIVIEW_DELAY_MS: u32 = 400;
+pub const MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS: u32 = 2000;
 
 // Grid Items Layout - Single Point of Truth Constants
 pub const DEFAULT_GRID_ITEM_PADDING_H: u32 = 8;
@@ -522,6 +530,8 @@ pub struct AppearanceSettings {
     pub type_ahead_include_folders: bool,
     pub type_ahead_cycle_repeated_keys: bool,
     pub type_ahead_center_target: bool,
+    pub type_ahead_show_no_match: bool,
+    pub type_ahead_multiview_delay_ms: u32,
 
     // Grid Items Layout
     pub grid_item_padding_horizontal: u32,
@@ -553,6 +563,8 @@ impl Default for AppearanceSettings {
             type_ahead_include_folders: DEFAULT_TYPE_AHEAD_INCLUDE_FOLDERS,
             type_ahead_cycle_repeated_keys: DEFAULT_TYPE_AHEAD_CYCLE_REPEATED_KEYS,
             type_ahead_center_target: DEFAULT_TYPE_AHEAD_CENTER_TARGET,
+            type_ahead_show_no_match: DEFAULT_TYPE_AHEAD_NO_MATCH_MESSAGE,
+            type_ahead_multiview_delay_ms: DEFAULT_TYPE_AHEAD_MULTIVIEW_DELAY_MS,
             grid_item_padding_horizontal: DEFAULT_GRID_ITEM_PADDING_H,
             grid_item_padding_vertical: DEFAULT_GRID_ITEM_PADDING_V,
             grid_spacing: DEFAULT_GRID_SPACING,

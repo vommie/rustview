@@ -95,7 +95,9 @@ impl SettingsDiff {
             || old.appearance.type_ahead_new_search_gap_ms != new.appearance.type_ahead_new_search_gap_ms
             || old.appearance.type_ahead_include_folders != new.appearance.type_ahead_include_folders
             || old.appearance.type_ahead_cycle_repeated_keys != new.appearance.type_ahead_cycle_repeated_keys
-            || old.appearance.type_ahead_center_target != new.appearance.type_ahead_center_target;
+            || old.appearance.type_ahead_center_target != new.appearance.type_ahead_center_target
+            || old.appearance.type_ahead_show_no_match != new.appearance.type_ahead_show_no_match
+            || old.appearance.type_ahead_multiview_delay_ms != new.appearance.type_ahead_multiview_delay_ms;
 
         let hover_previews_changed = old.appearance.enable_hover_previews != new.appearance.enable_hover_previews;
 
@@ -336,13 +338,15 @@ impl SettingsDiff {
         }
         if self.type_ahead_changed {
             changes.push(format!(
-                "Appearance: type_ahead (enabled {} -> {}, timeout {}ms -> {}ms, new_search_gap {}ms -> {}ms, folders {} -> {}, cycle {} -> {}, center {} -> {})",
+                "Appearance: type_ahead (enabled {} -> {}, timeout {}ms -> {}ms, new_search_gap {}ms -> {}ms, folders {} -> {}, cycle {} -> {}, center {} -> {}, no_match_message {} -> {}, multiview_delay {}ms -> {}ms)",
                 old.appearance.type_ahead_enabled, new.appearance.type_ahead_enabled,
                 old.appearance.type_ahead_timeout_ms, new.appearance.type_ahead_timeout_ms,
                 old.appearance.type_ahead_new_search_gap_ms, new.appearance.type_ahead_new_search_gap_ms,
                 old.appearance.type_ahead_include_folders, new.appearance.type_ahead_include_folders,
                 old.appearance.type_ahead_cycle_repeated_keys, new.appearance.type_ahead_cycle_repeated_keys,
-                old.appearance.type_ahead_center_target, new.appearance.type_ahead_center_target
+                old.appearance.type_ahead_center_target, new.appearance.type_ahead_center_target,
+                old.appearance.type_ahead_show_no_match, new.appearance.type_ahead_show_no_match,
+                old.appearance.type_ahead_multiview_delay_ms, new.appearance.type_ahead_multiview_delay_ms
             ));
         }
 

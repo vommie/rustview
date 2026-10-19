@@ -546,6 +546,9 @@ pub enum Pace {
     Immediate,
     /// A continuous gesture (rubber band): applied once the selection has been quiet for a moment.
     Settled,
+    /// A burst of keys that each move the selection (type-ahead find): applied once the selection has been quiet for this long,
+    /// so a video is not opened for every letter typed.
+    After(Duration),
 }
 
 /// The user changed the selection in the Browse view (click, keys, rubber band, select all). Only these actions drive a

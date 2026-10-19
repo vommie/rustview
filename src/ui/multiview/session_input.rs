@@ -217,6 +217,7 @@ impl Session {
                 .map(|&id| eligibility::plan_tile_for(&st, id))
                 .collect()
         };
+        tracing::debug!(added = plan.add.len(), "[Multiview: Follow] Following the Browse selection");
         let mut instance = self.instance.lock();
         instance.apply_follow(&plan, seeds);
         {

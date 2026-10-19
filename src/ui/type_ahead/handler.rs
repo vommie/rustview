@@ -1,6 +1,7 @@
 //! Joins the type-ahead search to the Browse list: names from memory, the jump through the cursor move of the arrow keys.
 
-use super::config;
+use super::config::{self, TypeAheadConfig};
+use super::notice;
 use super::session::{Cursor, NameSource, Reaction, TypeAhead, classify};
 use crate::library::Library;
 use crate::settings::SettingsManager;
@@ -64,6 +65,18 @@ fn lower_starts_with(name: &str, needle: &str) -> bool {
     needle.chars().all(|expected| lower.next() == Some(expected))
 }
 
+/// An open Multiview follows an item selected by typing after a delay (so a burst of keys opens no video per letter); only this
+/// selection path is delayed, the item itself is selected at once.
+fn pace_for(config: &TypeAheadConfig) -> Pace {
+    if config.multiview_delay.is_zero() { Pace::Immediate } else { Pace::After(config.multiview_delay) }
+}
+
+fn show_no_match(params: &TypeAheadParams<'_>, config: &TypeAheadConfig) {
+    if config.show_no_match {
+        notice::show(params.window, format!("No match for \"{}\"", params.search.borrow().query()));
+    }
+}
+
 /// A key press of the Browse view. Returns whether the search took the key (the caller then does not handle it any further).
 pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
     let started = Instant::now();
@@ -97,9 +110,11 @@ pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
 
     match reaction {
         Reaction::NotHandled => return false,
-        Reaction::Consumed => {}
-        Reaction::Jump(_) if in_place => {}
+        Reaction::Consumed => notice::clear(params.window),
+        Reaction::NoMatch => show_no_match(&params, &config),
+        Reaction::Jump(_) if in_place => notice::clear(params.window),
         Reaction::Jump(position) => {
+            notice::clear(params.window);
             move_browse_cursor(
                 &CursorMove {
                     window: params.window,
@@ -111,7 +126,7 @@ pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
                 position,
                 false,
                 if config.center_target { Reveal::Centered } else { Reveal::IntoView },
-                Pace::Settled,
+                pace_for(&config),
             );
         }
     }

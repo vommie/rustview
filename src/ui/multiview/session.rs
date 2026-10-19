@@ -136,6 +136,7 @@ pub(super) fn schedule_follow(pace: Pace) {
                 Duration::from_millis(MULTIVIEW_SELECTION_DEBOUNCE_MS),
                 || with_session(Session::follow_now),
             ),
+            Pace::After(delay) => s.debounce.start(TimerMode::SingleShot, delay, || with_session(Session::follow_now)),
         }
     });
 }

@@ -4,7 +4,7 @@ use super::schema::{
     AppSettings, FullscreenSettings, MAX_MEMORY_BUDGET_MB, MIN_MEMORY_BUDGET_MB, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
     DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
-    MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MIN_TYPE_AHEAD_TIMEOUT_MS,
+    MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MIN_TYPE_AHEAD_TIMEOUT_MS,
 };
 use crate::util::hex_color;
 use crate::system::{MonitorInfo, SystemDisplayService};
@@ -126,6 +126,8 @@ impl SettingsDialogController {
         window.set_type_ahead_include_folders(settings.appearance.type_ahead_include_folders);
         window.set_type_ahead_cycle_repeated_keys(settings.appearance.type_ahead_cycle_repeated_keys);
         window.set_type_ahead_center_target(settings.appearance.type_ahead_center_target);
+        window.set_type_ahead_show_no_match(settings.appearance.type_ahead_show_no_match);
+        window.set_type_ahead_multiview_delay_ms(settings.appearance.type_ahead_multiview_delay_ms as i32);
 
         // Grid Items Layout properties
         window.set_grid_item_padding_h(settings.appearance.grid_item_padding_horizontal as i32);
@@ -498,6 +500,11 @@ impl SettingsDialogController {
                 current.appearance.type_ahead_include_folders = w.get_type_ahead_include_folders();
                 current.appearance.type_ahead_cycle_repeated_keys = w.get_type_ahead_cycle_repeated_keys();
                 current.appearance.type_ahead_center_target = w.get_type_ahead_center_target();
+                current.appearance.type_ahead_show_no_match = w.get_type_ahead_show_no_match();
+                current.appearance.type_ahead_multiview_delay_ms = w
+                    .get_type_ahead_multiview_delay_ms()
+                    .clamp(0, MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS as i32)
+                    as u32;
 
                 // Save Grid Items Layout Properties
                 current.appearance.grid_item_padding_horizontal =

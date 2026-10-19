@@ -75,6 +75,8 @@ export component SettingsWindow inherits Window {
     in-out property <bool> type-ahead-include-folders: true;
     in-out property <bool> type-ahead-cycle-repeated-keys: true;
     in-out property <bool> type-ahead-center-target: true;
+    in-out property <bool> type-ahead-show-no-match: true;
+    in-out property <int> type-ahead-multiview-delay-ms: 400;
 
     // Grid Items Layout options
     in-out property <int> grid-item-padding-h: 8;
@@ -250,6 +252,8 @@ export component SettingsWindow inherits Window {
                             type-ahead-include-folders <=> root.type-ahead-include-folders;
                             type-ahead-cycle-repeated-keys <=> root.type-ahead-cycle-repeated-keys;
                             type-ahead-center-target <=> root.type-ahead-center-target;
+                            type-ahead-show-no-match <=> root.type-ahead-show-no-match;
+                            type-ahead-multiview-delay-ms <=> root.type-ahead-multiview-delay-ms;
                             grid-item-padding-h <=> root.grid-item-padding-h;
                             grid-item-padding-v <=> root.grid-item-padding-v;
                             grid-spacing <=> root.grid-spacing;
