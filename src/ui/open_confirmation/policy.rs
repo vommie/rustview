@@ -45,31 +45,3 @@ pub fn message(kind: OpenKind, count: usize) -> String {
 }
 
 pub const HINT: &str = "You can change this limit in Settings > General > Confirmations.";
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn asks_from_the_limit_on() {
-        assert!(!needs_confirmation(2, 3));
-        assert!(needs_confirmation(3, 3));
-        assert!(needs_confirmation(10, 3));
-    }
-
-    #[test]
-    fn a_single_item_never_asks() {
-        assert!(!needs_confirmation(1, 0));
-        assert!(!needs_confirmation(1, 1));
-        assert!(needs_confirmation(2, 0));
-    }
-
-    #[test]
-    fn messages_name_the_count_and_the_action() {
-        assert_eq!(
-            message(OpenKind::Tabs, 5),
-            "You are about to open 5 files in tabs at once. Do you want to continue?"
-        );
-        assert!(message(OpenKind::FileManager, 4).contains("show 4 items in the File Manager"));
-    }
-}

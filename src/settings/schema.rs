@@ -7,7 +7,7 @@ use std::path::PathBuf;
 pub const DEFAULT_REMEMBER_LAST_FOLDER: bool = true;
 pub const DEFAULT_CONFIRM_ON_FILE_DELETE: bool = true;
 /// An "Open" entry (not the Multiview, which has its own limit) that would open this many files or more at once asks first.
-pub const DEFAULT_CONFIRM_OPEN_FILE_COUNT: u32 = 3;
+pub const DEFAULT_CONFIRM_OPEN_FILE_COUNT: u32 = 5;
 pub const MIN_CONFIRM_OPEN_FILE_COUNT: u32 = 2;
 pub const MAX_CONFIRM_OPEN_FILE_COUNT: u32 = 500;
 pub const DEFAULT_DELETION_MODE: DeletionMode = DeletionMode::Trash;
