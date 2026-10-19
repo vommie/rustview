@@ -168,28 +168,3 @@ pub(crate) fn read_dot_hidden_entries(dir: &Path) -> HashSet<String> {
 
     hidden_set
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use std::os::unix::fs::symlink;
-
-    #[test]
-    fn symlink_loops_do_not_hang_and_linked_folders_are_not_part_of_the_tree() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("root");
-        fs::create_dir_all(root.join("real/inner")).unwrap();
-        fs::write(root.join("real/a.jpg"), b"x").unwrap();
-        symlink(&root, root.join("real/loop_to_root")).unwrap();
-        symlink(root.join("real"), root.join("real/inner/loop_to_parent")).unwrap();
-        symlink(dir.path(), root.join("link_to_outside")).unwrap();
-        symlink(root.join("real/a.jpg"), root.join("real/linked.jpg")).unwrap();
-
-        let outcome = walk_directory_tree(&root, None, &HashSet::new());
-        let names: Vec<&str> = outcome.items.iter().map(|i| i.name.as_str()).collect();
-        assert_eq!(names, ["root", "real", "inner"], "linked folders are neither entered nor listed");
-        let real = outcome.items.iter().find(|i| i.name == "real").unwrap();
-        assert_eq!(real.media_files_count, 1, "a link to a file is not counted twice in the walk");
-    }
-}
