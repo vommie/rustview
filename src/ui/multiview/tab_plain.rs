@@ -274,6 +274,12 @@ fn update_bar_overlay() {
     .flatten() else {
         return;
     };
+    // While a dialog (or the settings window) locks the main window, no bar is shown, so none can be used.
+    if window.get_is_modal_locked() {
+        bar_overlay::hide(BarOwner::TabView);
+        sync_cursor(&window, false);
+        return;
+    }
     let host = BarHost {
         owner: BarOwner::TabView,
         host_xid,

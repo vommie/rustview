@@ -134,8 +134,18 @@ impl Session {
             media_click: self.bar_click.clone(),
             primary_click: self.primary_click.clone(),
         };
-        let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(&self.instance, true), true);
-        cursor::sync(win.window(), &self.instance, bars_visible, &mut self.cursor_hidden);
+        // While a dialog (or the settings window) locks the main window, no bar is shown, so none can be used.
+        let dialog_open = self
+            .handle
+            .main_window()
+            .and_then(|main| main.upgrade())
+            .is_some_and(|main| main.get_is_modal_locked());
+        let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(&self.instance, !dialog_open), !dialog_open);
+        if dialog_open {
+            cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
+        } else {
+            cursor::sync(win.window(), &self.instance, bars_visible, &mut self.cursor_hidden);
+        }
     }
 
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what

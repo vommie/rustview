@@ -147,7 +147,8 @@ fn update_bar_overlay() {
         bar_overlay::hide(BarOwner::TabView);
         return;
     };
-    let in_tab_view = instance.lock().host_mode() == HostMode::TabView;
+    // While a dialog (or the settings window) locks the main window, no bar is shown, so none can be used.
+    let in_tab_view = instance.lock().host_mode() == HostMode::TabView && !window.get_is_modal_locked();
     let host = BarHost {
         owner: BarOwner::TabView,
         host_xid,

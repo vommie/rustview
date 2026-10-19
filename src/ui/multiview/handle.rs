@@ -487,7 +487,7 @@ impl MultiviewHandle {
         if let (Some(handler), Some(main_window)) = (handler, main_window) {
             let _ = main_window.upgrade_in_event_loop(move |w| match tab {
                 Some(tab) => {
-                    w.set_is_modal_locked(false);
+                    w.set_is_fullscreen_locked(false);
                     handler(tab.origin_mode, Some(tab.tab_id));
                 }
                 None => handler(KEEP_VIEW, None),

@@ -338,7 +338,7 @@ fn launch(
     // second window next to it.
     if isolated && let Some(mw) = main_window.upgrade() {
         handle::set_isolated(true);
-        mw.set_is_modal_locked(true);
+        mw.set_is_fullscreen_locked(true);
     }
     if let Err(e) = win.show() {
         tracing::error!(error = %e, "[Multiview: Open] Failed to show the window");

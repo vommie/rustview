@@ -100,6 +100,9 @@ export component MainWindow inherits Window {
 
     in-out property <bool> is-table-view: false;
     in-out property <bool> is-modal-locked: false;
+    // A fullscreen that belongs to a tab is open above the main window. Kept apart from `is-modal-locked` (a dialog or the
+    // settings window is open) so that closing a dialog does not release this lock, and the action bars know about dialogs.
+    in-out property <bool> is-fullscreen-locked: false;
     in-out property <int> thumb-size: 190;
     in-out property <int> thumb-aspect-idx: 1;
     in-out property <ThumbnailBadgeConfig> thumbnail-badge-config: {
@@ -518,7 +521,7 @@ export component MainWindow inherits Window {
     forward-focus: main-window-focus;
     main-window-focus := FocusScope {
         key-pressed(event) => {
-            if root.is-modal-locked {
+            if root.is-modal-locked || root.is-fullscreen-locked {
                 if event.text == Key.Escape {
                     root.modal-dismiss-requested();
                     return accept;
@@ -1209,7 +1212,7 @@ export component MainWindow inherits Window {
         }
     }
 
-    if root.is-modal-locked : Rectangle {
+    if root.is-modal-locked || root.is-fullscreen-locked : Rectangle {
         background: #00000066;
 
         modal-touch := TouchArea {
