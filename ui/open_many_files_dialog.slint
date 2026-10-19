@@ -1,0 +1,79 @@
+import { Theme } from "styles.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
+import { ButtonBar } from "button_bar.slint";
+
+export component OpenManyFilesDialog inherits Window {
+    title: "RustView - Open Many Files";
+    width: 460px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
+    always-on-top: true;
+    background: Theme.background;
+
+    in property <string> message: "";
+    in property <string> hint: "";
+
+    callback confirmed();
+    callback cancelled();
+
+    forward-focus: dialog-focus;
+
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancelled();
+                return accept;
+            }
+            if event.text == Key.Return {
+                root.confirmed();
+                return accept;
+            }
+            return reject;
+        }
+
+        dialog-layout := VerticalLayout {
+            width: root.width;
+            padding: 0px;
+            spacing: 0px;
+            alignment: space-between;
+
+            VerticalLayout {
+                width: root.width;
+                padding: 16px;
+                spacing: 12px;
+                vertical-stretch: 1;
+
+                DialogHeading {
+                    icon: IconId.status-warning;
+                    text: "Open Many Files?";
+                    color: #fab387;
+                }
+
+                Text {
+                    text: root.message;
+                    font-size: 12px;
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    text: root.hint;
+                    font-size: 11px;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+            }
+
+            ButtonBar {
+                vertical-stretch: 0;
+                bar-height: 48px;
+                show-cancel: true;
+                show-ok: true;
+                text-ok: "Continue";
+                cancel-clicked => { root.cancelled(); }
+                ok-clicked => { root.confirmed(); }
+            }
+        }
+    }
+}

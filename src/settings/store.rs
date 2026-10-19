@@ -10,6 +10,7 @@ use super::schema::{
     MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH,
     MAX_TAB_GRID_COLUMNS, MAX_TAG_HISTORY_HEIGHT, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH,
     MAX_TOOLTIP_DELAY_MS, MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MAX_VIDEO_OFFSET_PERCENT,
+    MAX_CONFIRM_OPEN_FILE_COUNT, MIN_CONFIRM_OPEN_FILE_COUNT,
     MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE, MIN_TYPE_AHEAD_TIMEOUT_MS,
     MIN_COL_WIDTH, MIN_GRID_ITEM_BORDER_WIDTH, MIN_GRID_ITEM_CORNER_RADIUS, MIN_GRID_ITEM_PADDING_H,
     MIN_GRID_ITEM_PADDING_V, MIN_GRID_PADDING, MIN_GRID_SPACING, MIN_MEMORY_BUDGET_MB,
@@ -103,6 +104,11 @@ impl SettingsStore {
     }
 
     fn validate_and_sanitize(&self, settings: &mut AppSettings) {
+        settings.general.confirm_open_file_count = settings
+            .general
+            .confirm_open_file_count
+            .clamp(MIN_CONFIRM_OPEN_FILE_COUNT, MAX_CONFIRM_OPEN_FILE_COUNT);
+
         // Appearance sanitization
         settings.appearance.default_thumbnail_size = settings
             .appearance

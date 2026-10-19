@@ -1,4 +1,4 @@
-import { Button, LineEdit, CheckBox } from "std-widgets.slint";
+import { Button, LineEdit, CheckBox, SpinBox } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
@@ -9,6 +9,7 @@ export component SettingsPageGeneral inherits VerticalLayout {
     in-out property <bool> ignore-nested-mounts: true;
     in-out property <bool> remember-last-folder: true;
     in-out property <bool> confirm-delete: true;
+    in-out property <int> confirm-open-file-count: 3;
     in-out property <int> deletion-mode-idx: 0;
 
     callback browse-root-folder();
@@ -40,16 +41,47 @@ export component SettingsPageGeneral inherits VerticalLayout {
     }
 
     SettingsCard {
-        title: "Startup & File Management";
+        title: "Session";
 
         CheckBox {
             text: "Remember last opened folder on startup";
             checked <=> root.remember-last-folder;
         }
+    }
+
+    SettingsCard {
+        title: "Confirmations";
+        description: "Actions that ask for your confirmation before they run.";
 
         CheckBox {
             text: "Confirm before deleting files";
             checked <=> root.confirm-delete;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                text: "Confirm before opening this many files at once or more:";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                wrap: word-wrap;
+            }
+
+            SpinBox {
+                width: 90px;
+                minimum: 2;
+                maximum: 500;
+                value <=> root.confirm-open-file-count;
+            }
+        }
+
+        Text {
+            text: "Applies to Open, Open With, Open in File Manager and Open in (Background) Tabs. Open in Fullscreen has its own limit and never asks.";
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
         }
     }
 }

@@ -57,6 +57,7 @@ pub mod media_open_with;
 pub mod models;
 pub mod multiview;
 pub mod rubberband_selection;
+pub mod open_confirmation;
 pub mod shutdown;
 pub mod sidebar_panel_tab_dnd;
 pub mod tab_dnd;

@@ -58,6 +58,7 @@ impl SettingsDiff {
 
         let general_behavior_changed = old.general.remember_last_folder != new.general.remember_last_folder
             || old.general.confirm_on_file_delete != new.general.confirm_on_file_delete
+            || old.general.confirm_open_file_count != new.general.confirm_open_file_count
             || old.general.deletion_mode != new.general.deletion_mode
             || old.general.ignore_nested_mounts != new.general.ignore_nested_mounts;
 
@@ -200,6 +201,12 @@ impl SettingsDiff {
             changes.push(format!(
                 "General: confirm_on_file_delete ({} -> {})",
                 old.general.confirm_on_file_delete, new.general.confirm_on_file_delete
+            ));
+        }
+        if old.general.confirm_open_file_count != new.general.confirm_open_file_count {
+            changes.push(format!(
+                "General: confirm_open_file_count ({} -> {})",
+                old.general.confirm_open_file_count, new.general.confirm_open_file_count
             ));
         }
         if old.general.ignore_nested_mounts != new.general.ignore_nested_mounts {

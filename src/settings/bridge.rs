@@ -1,7 +1,7 @@
 use super::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
 use super::registry::SettingsManager;
 use super::schema::{
-    AppSettings, FullscreenSettings, MAX_MEMORY_BUDGET_MB, MIN_MEMORY_BUDGET_MB, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
+    AppSettings, FullscreenSettings, MAX_CONFIRM_OPEN_FILE_COUNT, MIN_CONFIRM_OPEN_FILE_COUNT, MAX_MEMORY_BUDGET_MB, MIN_MEMORY_BUDGET_MB, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
     DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
     MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MIN_TYPE_AHEAD_TIMEOUT_MS,
@@ -92,6 +92,7 @@ impl SettingsDialogController {
         window.set_ignore_nested_mounts(settings.general.ignore_nested_mounts);
         window.set_remember_last_folder(settings.general.remember_last_folder);
         window.set_confirm_delete(settings.general.confirm_on_file_delete);
+        window.set_confirm_open_file_count(settings.general.confirm_open_file_count as i32);
 
         window.set_auto_reveal_remembered_folder(settings.folders.auto_reveal_remembered_folder);
         window.set_persist_folder_tree_state(settings.folders.persist_folder_tree_state);
@@ -462,6 +463,10 @@ impl SettingsDialogController {
 
                 current.general.remember_last_folder = w.get_remember_last_folder();
                 current.general.confirm_on_file_delete = w.get_confirm_delete();
+                current.general.confirm_open_file_count = w
+                    .get_confirm_open_file_count()
+                    .clamp(MIN_CONFIRM_OPEN_FILE_COUNT as i32, MAX_CONFIRM_OPEN_FILE_COUNT as i32)
+                    as u32;
                 current.general.ignore_nested_mounts = w.get_ignore_nested_mounts();
 
                 current.folders.auto_reveal_remembered_folder =

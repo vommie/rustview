@@ -23,6 +23,7 @@ use crate::settings::{SettingsDialogController, SettingsManager};
 use crate::system::SystemDndHandler;
 use crate::system::termination;
 use crate::thumbnails::ThumbnailManager;
+use crate::ui::open_confirmation::OpenConfirmation;
 use crate::ui::{
     FavoriteRenameDialogController, FileOpsConflictDialogController, FileRenameDialog, FolderDialogController,
     DeleteFileDialogController, MainWindow, MissingFileDialogController, MultiviewHandle,
@@ -118,6 +119,7 @@ fn close_windows(t: &ShutdownTargets<'_>) {
     t.favorite_rename_dialog.close(window);
     t.missing_file_dialog.close(window);
     t.delete_file_dialog.close(window);
+    OpenConfirmation::close(window);
     t.remove_orphaned_dialog.close(window);
     t.conflict_dialog.close(window);
     t.tag_dialogs.close_add(window);

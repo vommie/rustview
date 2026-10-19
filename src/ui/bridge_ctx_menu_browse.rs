@@ -14,6 +14,7 @@ use super::bridge_status_bar::StatusBarBridge;
 use super::browse_folders::BrowseFolders;
 use super::favorites::FavoriteManager;
 use super::multiview::MultiviewHandle;
+use super::open_confirmation::{OpenConfirmation, OpenKind};
 use super::MainWindow;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
 use crate::icons::Icon;
@@ -23,6 +24,7 @@ use crate::system::SystemFileHandler;
 use crate::thumbnails::ThumbnailManager;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
+use slint::ComponentHandle;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -260,7 +262,14 @@ impl BrowseContextMenus {
             StatusBarBridge::warn(window, "Nothing to show: the selected items do not exist on disk.");
             return;
         }
-        match SystemFileHandler::reveal_in_file_manager(&paths) {
+        let win = window.clone_strong();
+        OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::FileManager, paths.len(), move || {
+            Self::reveal_in_file_manager(&win, &paths);
+        });
+    }
+
+    fn reveal_in_file_manager(window: &MainWindow, paths: &[PathBuf]) {
+        match SystemFileHandler::reveal_in_file_manager(paths) {
             Ok(()) => StatusBarBridge::success(window, format!("Opened {} item(s) in File Manager.", paths.len())),
             Err(e) => {
                 tracing::error!(error = %e, "[BrowseContextMenu] Failed to open the selection in the File Manager");

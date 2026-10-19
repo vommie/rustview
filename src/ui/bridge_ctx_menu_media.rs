@@ -5,6 +5,7 @@ use super::bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogControlle
 use super::bridge_file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
 use super::bridge_file_selection::BridgeFileSelection;
 use super::multiview::MultiviewHandle;
+use super::open_confirmation::{OpenConfirmation, OpenKind};
 use super::bridge_inspector::BridgeInspector;
 use super::media_open_with::{MediaOpenWith, OpenWithChoice};
 use super::bridge_media::BridgeMedia;
@@ -621,31 +622,8 @@ impl MediaContextMenu {
             CTX_ACTION_OPEN => {
                 Self::handle_open_action(window, ctx, target_ids);
             }
-            CTX_ACTION_OPEN_IN_TAB => {
-                if !target_ids.is_empty() {
-                    BridgeViewerTabs::open_multiple_media_tabs(
-                        target_ids,
-                        window,
-                        ctx.tab_manager,
-                        ctx.library,
-                        ctx.settings,
-                        ctx.state,
-                        ctx.fullscreen,
-                    );
-                }
-            }
-            CTX_ACTION_OPEN_IN_BG_TAB => {
-                if !target_ids.is_empty() {
-                    BridgeViewerTabs::open_multiple_media_tabs_background(
-                        target_ids,
-                        window,
-                        ctx.tab_manager,
-                        ctx.library,
-                        ctx.settings,
-                        ctx.state,
-                    );
-                }
-            }
+            CTX_ACTION_OPEN_IN_TAB => Self::handle_open_in_tabs_action(window, ctx, target_ids, false),
+            CTX_ACTION_OPEN_IN_BG_TAB => Self::handle_open_in_tabs_action(window, ctx, target_ids, true),
             CTX_ACTION_OPEN_IN_FULLSCREEN => {
                 Self::handle_open_in_fullscreen_action(window, ctx, target_ids);
             }
@@ -818,9 +796,40 @@ impl MediaContextMenu {
             "[MediaContextMenu] 'Open' action triggered from context menu"
         );
 
-        for &id in target_ids {
-            BridgeFileSelection::open_media(id, ctx.state, ctx.library, window);
+        let (ids, state, library, win) = (target_ids.to_vec(), ctx.state.clone(), ctx.library.clone(), window.clone_strong());
+        OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::Default, ids.len(), move || {
+            for id in ids {
+                BridgeFileSelection::open_media(id, &state, &library, &win);
+            }
+        });
+    }
+
+    fn handle_open_in_tabs_action(
+        window: &MainWindow,
+        ctx: &MediaActionContext<'_>,
+        target_ids: &[MediaId],
+        background: bool,
+    ) {
+        if target_ids.is_empty() {
+            return;
         }
+        let ids = target_ids.to_vec();
+        let (win, tab_manager, library, settings, state, fullscreen) = (
+            window.clone_strong(),
+            ctx.tab_manager.clone(),
+            ctx.library.clone(),
+            ctx.settings.clone(),
+            ctx.state.clone(),
+            ctx.fullscreen.clone(),
+        );
+        let kind = if background { OpenKind::BackgroundTabs } else { OpenKind::Tabs };
+        OpenConfirmation::run_or_ask(window, ctx.settings, kind, ids.len(), move || {
+            if background {
+                BridgeViewerTabs::open_multiple_media_tabs_background(&ids, &win, &tab_manager, &library, &settings, &state);
+            } else {
+                BridgeViewerTabs::open_multiple_media_tabs(&ids, &win, &tab_manager, &library, &settings, &state, &fullscreen);
+            }
+        });
     }
 
     fn handle_open_with_specific_app(
@@ -829,8 +838,11 @@ impl MediaContextMenu {
         target_ids: &[MediaId],
         app_idx: usize,
     ) {
-        let paths = Self::collect_paths_for_ids(ctx, target_ids);
-        MediaOpenWith::launch(window, ctx.state, &paths, app_idx);
+        let (ids, state, library, win) = (target_ids.to_vec(), ctx.state.clone(), ctx.library.clone(), window.clone_strong());
+        OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::OpenWith, ids.len(), move || {
+            let paths = MediaOpenWith::paths_for(&state, &library, &ids);
+            MediaOpenWith::launch(&win, &state, &paths, app_idx);
+        });
     }
 
     fn handle_open_with_other_action(
@@ -838,8 +850,11 @@ impl MediaContextMenu {
         ctx: &MediaActionContext<'_>,
         target_ids: &[MediaId],
     ) {
-        let paths = Self::collect_paths_for_ids(ctx, target_ids);
-        MediaOpenWith::choose_application(window, &paths);
+        let (ids, state, library, win) = (target_ids.to_vec(), ctx.state.clone(), ctx.library.clone(), window.clone_strong());
+        OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::OpenWith, ids.len(), move || {
+            let paths = MediaOpenWith::paths_for(&state, &library, &ids);
+            MediaOpenWith::choose_application(&win, &paths);
+        });
     }
 
     pub fn collect_paths_for_ids(
@@ -854,7 +869,14 @@ impl MediaContextMenu {
         ctx: &MediaActionContext<'_>,
         target_ids: &[MediaId],
     ) {
-        let paths = Self::collect_paths_for_ids(ctx, target_ids);
+        let (ids, state, library, win) = (target_ids.to_vec(), ctx.state.clone(), ctx.library.clone(), window.clone_strong());
+        OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::FileManager, ids.len(), move || {
+            let paths = MediaOpenWith::paths_for(&state, &library, &ids);
+            Self::reveal_paths_in_file_manager(&win, &paths);
+        });
+    }
+
+    fn reveal_paths_in_file_manager(window: &MainWindow, paths: &[PathBuf]) {
         if paths.is_empty() {
             tracing::warn!("[MediaContextMenu] No file paths found to reveal in File Manager");
             return;
@@ -867,7 +889,7 @@ impl MediaContextMenu {
             "[MediaContextMenu] Revealing file(s) in File Manager"
         );
 
-        match SystemFileHandler::reveal_in_file_manager(&paths) {
+        match SystemFileHandler::reveal_in_file_manager(paths) {
             Ok(()) => {
                 if count == 1 {
                     let name = paths[0]

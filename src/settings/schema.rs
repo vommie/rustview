@@ -6,6 +6,10 @@ use std::path::PathBuf;
 // =============================================================================
 pub const DEFAULT_REMEMBER_LAST_FOLDER: bool = true;
 pub const DEFAULT_CONFIRM_ON_FILE_DELETE: bool = true;
+/// An "Open" entry (not the Multiview, which has its own limit) that would open this many files or more at once asks first.
+pub const DEFAULT_CONFIRM_OPEN_FILE_COUNT: u32 = 3;
+pub const MIN_CONFIRM_OPEN_FILE_COUNT: u32 = 2;
+pub const MAX_CONFIRM_OPEN_FILE_COUNT: u32 = 500;
 pub const DEFAULT_DELETION_MODE: DeletionMode = DeletionMode::Trash;
 /// Skip mount points located below the root directory during manual folder tree scans.
 pub const DEFAULT_IGNORE_NESTED_MOUNTS: bool = true;
@@ -461,6 +465,7 @@ pub struct GeneralSettings {
     pub remember_last_folder: bool,
     pub last_folder_path: Option<PathBuf>,
     pub confirm_on_file_delete: bool,
+    pub confirm_open_file_count: u32,
     pub deletion_mode: DeletionMode,
     /// If enabled, mount points located below the root directory are skipped by folder tree scans.
     pub ignore_nested_mounts: bool,
@@ -473,6 +478,7 @@ impl Default for GeneralSettings {
             remember_last_folder: DEFAULT_REMEMBER_LAST_FOLDER,
             last_folder_path: None,
             confirm_on_file_delete: DEFAULT_CONFIRM_ON_FILE_DELETE,
+            confirm_open_file_count: DEFAULT_CONFIRM_OPEN_FILE_COUNT,
             deletion_mode: DEFAULT_DELETION_MODE,
             ignore_nested_mounts: DEFAULT_IGNORE_NESTED_MOUNTS,
         }
