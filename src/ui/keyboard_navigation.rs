@@ -170,6 +170,64 @@ pub fn calculate_target_index(
     Some(target)
 }
 
+/// How the view scrolls to the item the cursor moved to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reveal {
+    /// The nearest edge when the item is cut off or outside (arrow keys).
+    IntoView,
+    /// The middle of the view when the item is not completely visible (jumps over a distance, e.g. type-ahead find).
+    Centered,
+}
+
+/// What the cursor move needs from the application.
+pub struct CursorMove<'a> {
+    pub window: &'a MainWindow,
+    pub library: &'a Arc<Library>,
+    pub thumbnails: &'a Arc<ThumbnailManager>,
+    pub settings: &'a Arc<SettingsManager>,
+    pub state: &'a Arc<RwLock<UiState>>,
+}
+
+/// Moves the cursor to the list position `target_idx` the way a key press does: selects it (with Shift the range from the anchor),
+/// re-anchors the tile pool when the target lies outside it, scrolls it into view and refreshes everything that follows the
+/// selection. Returns the item reached, `None` when the position holds nothing.
+pub fn move_browse_cursor(ctx: &CursorMove<'_>, target_idx: usize, is_shift: bool, reveal: Reveal, pace: Pace) -> Option<BrowseItem> {
+    let (delta, target_item) = {
+        let mut st = ctx.state.write();
+        let item = st.browse_item_at(target_idx)?;
+        st.last_active_panel = LastActivePanel::Media;
+        (st.browse_click(item, false, is_shift), item)
+    };
+
+    let need_slice_reanchor = !ctx.state.read().ring.range().contains(&target_idx);
+
+    if need_slice_reanchor {
+        BridgeMedia::reload_with_options(
+            ctx.window,
+            ctx.library,
+            ctx.thumbnails,
+            ctx.settings,
+            ctx.state,
+            MediaReloadOptions::with_anchor(false, false, target_idx),
+        );
+    } else {
+        BridgeFileSelection::sync_selection_delta(ctx.window, ctx.state, &delta);
+    }
+
+    match reveal {
+        Reveal::IntoView => ctx.window.invoke_scroll_media_item_into_view(target_idx as i32),
+        Reveal::Centered => ctx.window.invoke_scroll_media_item_centered(target_idx as i32),
+    }
+
+    BridgeInspector::update(ctx.window, ctx.state);
+    BridgeTags::sync_tag_selection(ctx.window, ctx.library, ctx.state);
+    StatusBarBridge::update_metrics(ctx.window, ctx.state);
+    if !delta.media.is_empty() || matches!(target_item, BrowseItem::Media(_)) {
+        multiview_handle::on_user_selection_changed(pace);
+    }
+    Some(target_item)
+}
+
 /// Central orchestrator handling keyboard navigation events from Slint UI. The keys move over the whole list of the view, folder rows
 /// ("..." included) and media alike; with Shift the selection grows from the anchor over everything in between.
 pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
@@ -212,39 +270,22 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
         return;
     }
 
-    // Update selection state and mark last active panel as Media
-    let (delta, target_item) = {
-        let mut st = params.state.write();
-        let Some(item) = st.browse_item_at(target_idx) else {
-            return;
-        };
-        st.last_active_panel = LastActivePanel::Media;
-        (st.browse_click(item, false, params.is_shift), item)
+    let target_item = move_browse_cursor(
+        &CursorMove {
+            window: params.window,
+            library: params.library,
+            thumbnails: params.thumbnails,
+            settings: params.settings,
+            state: params.state,
+        },
+        target_idx,
+        params.is_shift,
+        Reveal::IntoView,
+        Pace::Immediate,
+    );
+    let Some(target_item) = target_item else {
+        return;
     };
-
-    let need_slice_reanchor = !params.state.read().ring.range().contains(&target_idx);
-
-    if need_slice_reanchor {
-        BridgeMedia::reload_with_options(
-            params.window,
-            params.library,
-            params.thumbnails,
-            params.settings,
-            params.state,
-            MediaReloadOptions::with_anchor(false, false, target_idx),
-        );
-    } else {
-        BridgeFileSelection::sync_selection_delta(params.window, params.state, &delta);
-    }
-
-    params.window.invoke_scroll_media_item_into_view(target_idx as i32);
-
-    BridgeInspector::update(params.window, params.state);
-    BridgeTags::sync_tag_selection(params.window, params.library, params.state);
-    StatusBarBridge::update_metrics(params.window, params.state);
-    if !delta.media.is_empty() || matches!(target_item, BrowseItem::Media(_)) {
-        multiview_handle::on_user_selection_changed(Pace::Immediate);
-    }
 
     tracing::debug!(
         direction = ?direction,

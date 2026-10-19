@@ -41,6 +41,13 @@ pub const DEFAULT_TOOLTIP_DELAY_MS: u32 = 750;
 pub const MIN_TOOLTIP_DELAY_MS: u32 = 50;
 pub const MAX_TOOLTIP_DELAY_MS: u32 = 2000;
 
+/// Type-ahead find in the Browse view: keys typed with less than this pause between them form ONE search string (Dolphin and
+/// Windows Explorer use one second, Qt 400 ms); a longer pause starts a new search.
+pub const TYPE_AHEAD_TIMEOUT_MS: u64 = 1000;
+/// A key typed after a pause this long that does not continue the search string (no name starts with it) is taken for the
+/// start of a NEW search; the same key typed faster is a typo inside a word and moves nothing.
+pub const TYPE_AHEAD_NEW_SEARCH_GAP_MS: u64 = 500;
+
 // Grid Items Layout - Single Point of Truth Constants
 pub const DEFAULT_GRID_ITEM_PADDING_H: u32 = 8;
 pub const MIN_GRID_ITEM_PADDING_H: u32 = 0;

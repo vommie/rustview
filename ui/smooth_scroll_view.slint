@@ -97,6 +97,18 @@ export component SmoothScrollArea inherits Rectangle {
         }
     }
 
+    /// Centers the range [target-y, target-y + target-height] in the viewport, unless it is completely visible already (then nothing moves).
+    public function scroll-to-center-unless-visible(target-y: length, target-height: length) {
+        if !root.has-vertical-scrollbar {
+            return;
+        }
+        let cur-top = 0px - root.clamped-y;
+        if target-y >= cur-top && target-y + target-height <= cur-top + self.height {
+            return;
+        }
+        root.viewport-y = Math.max(root.min-y, Math.min(0px, 0px - (target-y - (self.height - target-height) / 2)));
+    }
+
     /// Programmatically scrolls the viewport to ensure the target horizontal item range [target-x, target-x + target-width] is visible in the viewport.
     public function scroll-into-view-horizontal(target-x: length, target-width: length) {
         if !root.has-horizontal-scrollbar {

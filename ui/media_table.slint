@@ -494,6 +494,13 @@ export component MediaTableView inherits Rectangle {
         }
     }
 
+    /// Centers the row at item-idx when it is not completely visible (jumps over a distance such as type-ahead find)
+    public function scroll-item-centered(item-idx: int) {
+        if item-idx >= 0 && item-idx < root.total-items-count {
+            scroll-area.scroll-to-center-unless-visible(item-idx * root.row-height, root.row-height);
+        }
+    }
+
     public function scroll-to-top() {
         scroll-area.scroll-to-top();
     }

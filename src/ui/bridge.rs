@@ -35,6 +35,7 @@ use super::shutdown::ShutdownTargets;
 use super::multiview::tab_host;
 use super::rubberband_selection::RubberbandAutoScroller;
 use super::thumbnail_badges::ThumbnailBadgeBridge;
+use super::type_ahead::{TypeAheadParams, TypeAheadState, handle_type_ahead_key};
 use super::{FileRenameDialog, MainWindow};
 use crate::ctx_menu::CtxMenuDispatcher;
 use crate::library::folders::normalize_path;
@@ -748,6 +749,7 @@ impl UiBridge {
         self.register_delete_callbacks();
         self.register_browse_folder_callbacks();
         self.register_keyboard_navigation_callbacks();
+        self.register_type_ahead_callbacks();
         self.register_tab_grid_callbacks();
         self.register_dnd_callbacks();
         self.register_rubberband_callbacks();
@@ -1322,6 +1324,28 @@ impl UiBridge {
                 state: &st,
                 fullscreen: &fs,
             });
+        });
+    }
+
+    fn register_type_ahead_callbacks(&self) {
+        let win = self.window.clone_strong();
+        let lib = self.library.clone();
+        let thumb = self.thumbnails.clone();
+        let set = self.settings.clone();
+        let st = self.state.clone();
+        let search: TypeAheadState = TypeAheadState::default();
+
+        self.window.on_type_ahead_key(move |text, command| {
+            handle_type_ahead_key(TypeAheadParams {
+                text: text.as_str(),
+                command,
+                search: &search,
+                window: &win,
+                library: &lib,
+                thumbnails: &thumb,
+                settings: &set,
+                state: &st,
+            })
         });
     }
 

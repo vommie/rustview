@@ -65,6 +65,7 @@ pub mod tab_icon;
 pub mod tag_history;
 pub mod thumbnail_badges;
 pub mod thumbnail_regeneration;
+pub mod type_ahead;
 pub mod video_preview_animator;
 pub mod virtual_folder_wording;
 

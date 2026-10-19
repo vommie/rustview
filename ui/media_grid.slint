@@ -318,6 +318,17 @@ export component VirtualizedMediaGrid inherits Rectangle {
         }
     }
 
+    /// Centers the item at item-idx when it is not completely visible (jumps over a distance such as type-ahead find)
+    public function scroll-item-centered(item-idx: int) {
+        if root.columns > 0 && item-idx >= 0 && item-idx < root.total-items-count {
+            let target-row = Math.floor(item-idx / root.columns);
+            let target-y = (target-row == 0) ? 0px : (root.grid-padding + (target-row * root.row-stride));
+            let is-last-row = (target-row >= root.total-rows - 1);
+            let target-h = is-last-row ? (root.item-tile-height + root.grid-padding) : root.item-tile-height;
+            scroll-area.scroll-to-center-unless-visible(target-y, target-h);
+        }
+    }
+
     public function scroll-to-top() {
         scroll-area.scroll-to-top();
     }
