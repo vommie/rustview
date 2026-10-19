@@ -15,6 +15,7 @@ import { ResizerBar } from "resizer_bar.slint";
 import { FloatingChoicePopup } from "floating_choice_popup.slint";
 import { MediaPanelToolbar } from "media_panel_toolbar.slint";
 import { ImageTabPanelToolbar } from "image_tab_panel_toolbar.slint";
+import { AwayPanel } from "fullscreen_away.slint";
 import { ImageViewer } from "image_viewer.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
 import { MultiviewTabBus } from "multiview_tab_bus.slint";
@@ -238,6 +239,8 @@ export component MainWindow inherits Window {
     in-out property <int> media-index-total: 0;
     /// The tab whose content is shown in the fullscreen window right now (-1 = none); its tab-grid item shows a placeholder.
     in-out property <int> fullscreen-tab-id: -1;
+    /// The tab the tab view shows (-1 = none), to tell whether it is the one in the fullscreen.
+    in-out property <int> viewer-tab-id: -1;
 
     in-out property <bool> is-preloading: false;
     in-out property <int> preload-current: 0;
@@ -1095,6 +1098,13 @@ export component MainWindow inherits Window {
                         gutter-drag-finished(index) => { MultiviewTabBus.gutter-drag-finished(index); }
                         gutter-reset => { MultiviewTabBus.gutter-reset(); }
                         gutter-swap(index) => { MultiviewTabBus.gutter-swap(index); }
+                    }
+
+                    // The tab of the tab view is shown in the fullscreen window: the whole inner area is a placeholder.
+                    AwayPanel {
+                        visible: root.active-view-mode == 1 && root.fullscreen-tab-id >= 0 && root.fullscreen-tab-id == root.viewer-tab-id;
+                        width: 100%;
+                        height: 100%;
                     }
 
                     tab-grid-view := TabGridView {

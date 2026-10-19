@@ -25,6 +25,7 @@ use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::view::Navigation;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::{Mutex, RwLock};
+use slint::ComponentHandle;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -484,14 +485,23 @@ impl MultiviewHandle {
     pub(super) fn notify_closed(&self, tab: Option<TabReturn>) {
         let handler = self.shared.close_handler.lock().clone();
         let main_window = self.shared.main_window.lock().clone();
-        if let (Some(handler), Some(main_window)) = (handler, main_window) {
-            let _ = main_window.upgrade_in_event_loop(move |w| match tab {
-                Some(tab) => {
-                    w.set_is_fullscreen_locked(false);
-                    handler(tab.origin_mode, Some(tab.tab_id));
-                }
-                None => handler(KEEP_VIEW, None),
-            });
+        match (handler, main_window) {
+            (Some(handler), Some(main_window)) => {
+                let _ = main_window.upgrade_in_event_loop(move |w| match tab {
+                    Some(tab) => {
+                        w.set_is_fullscreen_locked(false);
+                        handler(tab.origin_mode, Some(tab.tab_id));
+                        // The handler shows the tab again in an event of its own, queued just now: the placeholders of the
+                        // fullscreen go away after it, not before (no gap with a stale or empty picture).
+                        let _ = w.as_weak().upgrade_in_event_loop(|w| w.set_fullscreen_tab_id(-1));
+                    }
+                    None => handler(KEEP_VIEW, None),
+                });
+            }
+            (None, Some(main_window)) => {
+                let _ = main_window.upgrade_in_event_loop(|w| w.set_fullscreen_tab_id(-1));
+            }
+            _ => {}
         }
     }
 

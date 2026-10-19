@@ -2,49 +2,7 @@ import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconLookup, IconSize, IconSlot } from "icons.slint";
 import { TabGridItemModel } from "types.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
-
-/// The stand-in for a video whose player is in the fullscreen window right now (a native mpv window cannot be in two places, so the
-/// item would otherwise show an empty black area): a discreet badge with a "shown elsewhere" icon, and a caption where there is room.
-component AwayBadge inherits Rectangle {
-    background: #000000;
-
-    property <bool> roomy: root.width >= 110px && root.height >= 72px;
-    property <bool> tiny: root.width < 44px || root.height < 44px;
-
-    VerticalLayout {
-        alignment: center;
-        spacing: 6px;
-
-        HorizontalLayout {
-            alignment: center;
-
-            Rectangle {
-                width: root.tiny ? 0px : (root.roomy ? 40px : 32px);
-                height: self.width;
-                border-radius: self.width / 2;
-                background: #ffffff14;
-                border-width: 1px;
-                border-color: #ffffff2e;
-
-                AppIcon {
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    icon: IconId.playing-elsewhere;
-                    size: root.roomy ? IconSize.xl : IconSize.lg;
-                    color: #ffffff9e;
-                }
-            }
-        }
-
-        if root.roomy : Text {
-            text: "Playing in fullscreen";
-            font-size: 10px;
-            color: #ffffff85;
-            horizontal-alignment: center;
-            overflow: elide;
-        }
-    }
-}
+import { AwayBadge } from "fullscreen_away.slint";
 
 /// Standalone Masonry Tile item for the TabGridView.
 /// Displays live loaded image buffers or solid video subwindow placeholders with full aspect ratio preservation.

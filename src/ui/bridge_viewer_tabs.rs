@@ -1622,6 +1622,7 @@ impl BridgeViewerTabs {
             let is_video = active_tab.is_video();
             window.set_viewer_is_video(is_video);
             window.set_viewer_is_multiview(active_tab.is_multiview());
+            window.set_viewer_tab_id(active_tab.id as i32);
             window.set_viewer_filename(active_tab.title.clone().into());
 
             let (display_w, display_h) = if active_tab.is_multiview() {
@@ -1693,6 +1694,7 @@ impl BridgeViewerTabs {
         } else {
             window.set_viewer_is_video(false);
             window.set_viewer_is_multiview(false);
+            window.set_viewer_tab_id(-1);
             {
                 let mut st = state.write();
                 st.active_tab_media_ids.clear();

@@ -474,7 +474,10 @@ pub(super) fn finish_close(session: Session, notify: bool) {
             "[Multiview: Close] The windows could not return to the tab"
         );
     }
+    // The placeholders stay until the main window has shown the tab again (`notify_closed`); without that notification (another
+    // fullscreen replaces this one, which sets the id itself) nothing would clear them.
     if tab_return.is_some()
+        && !notify
         && let Some(main_window) = handle.main_window().and_then(|w| w.upgrade())
     {
         main_window.set_fullscreen_tab_id(-1);
