@@ -99,6 +99,8 @@ layout_reset = { tabler = "layout-grid-remove", doc = "Reset the arrangement of 
 cursor_visible = { tabler = "pointer", doc = "Mouse cursor stays visible" }
 cursor_hidden = { tabler = "pointer-off", doc = "Idle mouse cursor is hidden" }
 copy = { tabler = "copy", doc = "Copy / duplicate" }
+cut = { tabler = "cut", doc = "Cut to the clipboard" }
+paste = { tabler = "clipboard-plus", doc = "Paste from the clipboard" }
 move_to = { tabler = "arrow-move-right", doc = "Move to another location" }
 rename = { tabler = "pencil", doc = "Rename / edit", aliases = ["edit"] }
 delete = { tabler = "trash", doc = "Delete", aliases = ["trash"] }

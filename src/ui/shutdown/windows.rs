@@ -15,6 +15,7 @@ pub const WINDOWS: &[(&str, &str)] = &[
     ("MissingFileDialog", "MissingFileDialogController::close"),
     ("DeleteFileDialog", "DeleteFileDialogController::close"),
     ("RemoveOrphanedFileDialog", "RemoveOrphanedFileDialogController::close"),
+    ("NoticeDialog", "NoticeDialogController::close"),
     ("FileOpsConflictDialog", "FileOpsConflictDialogController::close"),
     ("AddTagDialog", "TagDialogController::close_add"),
     ("RenameTagDialog", "TagDialogController::close_rename"),

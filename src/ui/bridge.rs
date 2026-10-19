@@ -2,6 +2,8 @@ use super::multiview::handle::{AppContext, KEEP_VIEW};
 use super::bridge_ctx_menu::{
     BridgeContextMenu, ContextMenuRegistration, MediaMenuContext,
 };
+use super::bridge_notice_dialog::NoticeDialogController;
+use super::clipboard::ClipboardBridge;
 use super::bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
 use super::bridge_favorite_dialog_rename::FavoriteRenameDialogController;
 use super::bridge_favorites::BridgeFavorites;
@@ -101,6 +103,7 @@ pub struct UiBridge {
     delete_file_dialog: DeleteFileDialogController,
     remove_orphaned_dialog: RemoveOrphanedFileDialogController,
     conflict_dialog: FileOpsConflictDialogController,
+    notice_dialog: NoticeDialogController,
     dnd_foldertree_autoscroller: DndFolderTreeAutoScroller,
     dnd_browse_scroller: BrowseDragScroller,
     rubberband_autoscroller: RubberbandAutoScroller,
@@ -135,6 +138,7 @@ impl UiBridge {
         let delete_file_dialog = DeleteFileDialogController::new();
         let remove_orphaned_dialog = RemoveOrphanedFileDialogController::new();
         let conflict_dialog = FileOpsConflictDialogController::new();
+        let notice_dialog = NoticeDialogController::new();
         let dnd_foldertree_autoscroller = DndFolderTreeAutoScroller::new();
         let dnd_browse_scroller = BrowseDragScroller::new();
         let rubberband_autoscroller = RubberbandAutoScroller::new();
@@ -342,6 +346,7 @@ impl UiBridge {
             delete_file_dialog,
             remove_orphaned_dialog,
             conflict_dialog,
+            notice_dialog,
             dnd_foldertree_autoscroller,
             dnd_browse_scroller,
             rubberband_autoscroller,
@@ -355,6 +360,16 @@ impl UiBridge {
         };
 
         bridge.register_subsystem_callbacks();
+        ClipboardBridge::new(
+            &bridge.window,
+            bridge.library.clone(),
+            bridge.thumbnails.clone(),
+            bridge.settings.clone(),
+            bridge.state.clone(),
+            bridge.conflict_dialog.clone(),
+            bridge.notice_dialog.clone(),
+        )
+        .install(&bridge.window);
         bridge.register_settings_subscriber();
 
         BridgeFavorites::init(&bridge.window, &bridge.favorites);
@@ -1785,6 +1800,7 @@ impl UiBridge {
             delete_file_dialog: &self.delete_file_dialog,
             remove_orphaned_dialog: &self.remove_orphaned_dialog,
             conflict_dialog: &self.conflict_dialog,
+            notice_dialog: &self.notice_dialog,
             tag_dialogs: &self.tag_dialogs,
             folder_dialogs: &self.folder_dialogs,
         });

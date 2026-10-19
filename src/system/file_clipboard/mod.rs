@@ -41,6 +41,48 @@ impl FileClipboard {
         x11::clear_if_ours();
     }
 
+    /// Empties the clipboard whoever filled it (after a cut was pasted, like a file manager does).
+    pub fn empty() {
+        if Self::is_supported() {
+            x11::empty();
+        }
+    }
+
+    /// Follows the clipboard: `on_change` is called on a worker thread, once now and after every change, with the files on the
+    /// clipboard (`None` when it holds none). Changes that follow each other quickly are read once. Returns false when the session
+    /// cannot report changes; the caller then reads on demand.
+    pub fn watch(on_change: impl Fn(Option<ClipboardFiles>) + Send + 'static) -> bool {
+        if !Self::is_supported() {
+            return false;
+        }
+        let (wake, signals) = std::sync::mpsc::channel::<()>();
+        let wake = std::sync::Mutex::new(wake);
+        let hook: Box<dyn Fn() + Send + Sync> = Box::new(move || {
+            if let Ok(wake) = wake.lock() {
+                let _ = wake.send(());
+            }
+        });
+        if !x11::set_change_hook(hook) {
+            return false;
+        }
+        let spawned = std::thread::Builder::new().name("file-clipboard-watch".into()).spawn(move || {
+            let read = || match x11::read_files() {
+                Ok(files) => files,
+                Err(e) => {
+                    tracing::debug!(error = %e, "[FileClipboard: Watch] The clipboard could not be read");
+                    None
+                }
+            };
+            on_change(read());
+            while signals.recv().is_ok() {
+                // A copy often changes the owner twice (the manager takes over): read the settled state once.
+                while signals.recv_timeout(std::time::Duration::from_millis(60)).is_ok() {}
+                on_change(read());
+            }
+        });
+        spawned.is_ok()
+    }
+
     /// Hands what RustView put on the clipboard to the clipboard manager, so that it survives the exit.
     pub fn hand_over_to_manager() {
         x11::hand_over_to_manager();

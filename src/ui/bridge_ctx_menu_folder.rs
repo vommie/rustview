@@ -4,6 +4,7 @@ use super::bridge_folders::BridgeFolders;
 use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
+use super::clipboard::{ClipboardBridge, PasteEntry};
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
 use crate::icons::Icon;
 use crate::library::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
@@ -27,6 +28,7 @@ impl FolderContextMenu {
         show_hidden_folders: bool,
         is_busy: bool,
         is_favorite: bool,
+        paste: PasteEntry,
     ) -> CtxMenu {
         tracing::debug!(
             folder = %LogObscurer::folder(Some(target_node.id), &target_node.path),
@@ -98,6 +100,8 @@ impl FolderContextMenu {
                 "Create a new folder (or a path of folders) in this folder",
             )
         };
+
+        builder = paste.append(builder, CTX_FOLDER_PASTE, None);
 
         if !is_root {
             builder = if target_node.is_deleted {
@@ -299,6 +303,13 @@ impl FolderContextMenu {
             && let Ok(Some(rec)) = ctx.library.folders().get_folder(fid)
         {
             let name = rec.name.clone();
+
+            if action_id == CTX_FOLDER_PASTE {
+                if let Some(bridge) = ClipboardBridge::current() {
+                    bridge.paste_into_folder(fid);
+                }
+                return;
+            }
 
             if action_id == CTX_FOLDER_OPEN_IN_FILE_MANAGER {
                 tracing::info!(

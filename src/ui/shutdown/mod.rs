@@ -20,11 +20,12 @@ pub use windows::WINDOWS;
 
 use crate::settings::schema::SHUTDOWN_WATCHDOG_MS;
 use crate::settings::{SettingsDialogController, SettingsManager};
+use crate::system::file_clipboard::FileClipboard;
 use crate::system::SystemDndHandler;
 use crate::system::termination;
 use crate::thumbnails::ThumbnailManager;
 use crate::ui::{
-    FavoriteRenameDialogController, FileOpsConflictDialogController, FileRenameDialog, FolderDialogController,
+    FavoriteRenameDialogController, FileOpsConflictDialogController, FileRenameDialog, NoticeDialogController, FolderDialogController,
     DeleteFileDialogController, MainWindow, MissingFileDialogController, MultiviewHandle,
     RemoveOrphanedFileDialogController, TagDialogController, UiState, color_picker,
 };
@@ -67,6 +68,7 @@ pub struct ShutdownTargets<'a> {
     pub delete_file_dialog: &'a DeleteFileDialogController,
     pub remove_orphaned_dialog: &'a RemoveOrphanedFileDialogController,
     pub conflict_dialog: &'a FileOpsConflictDialogController,
+    pub notice_dialog: &'a NoticeDialogController,
     pub tag_dialogs: &'a TagDialogController,
     pub folder_dialogs: &'a FolderDialogController,
 }
@@ -120,6 +122,7 @@ fn close_windows(t: &ShutdownTargets<'_>) {
     t.delete_file_dialog.close(window);
     t.remove_orphaned_dialog.close(window);
     t.conflict_dialog.close(window);
+    t.notice_dialog.close(window);
     t.tag_dialogs.close_add(window);
     t.tag_dialogs.close_rename(window);
     t.tag_dialogs.close_delete(window);
@@ -140,5 +143,7 @@ fn close_windows(t: &ShutdownTargets<'_>) {
 fn release_resources(t: &ShutdownTargets<'_>) {
     t.tab_manager.shutdown();
     SystemDndHandler::cancel_ghost_overlay();
+    // What RustView put on the clipboard is handed to the clipboard manager so that it can still be pasted after the exit.
+    FileClipboard::hand_over_to_manager();
     t.settings.flush();
 }

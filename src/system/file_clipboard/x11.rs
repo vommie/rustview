@@ -17,6 +17,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use x11rb::connection::{Connection, RequestConnection};
+use x11rb::protocol::xfixes::{self, ConnectionExt as _, SelectionEventMask};
 use x11rb::protocol::xproto::{
     AtomEnum, ClientMessageEvent, ConnectionExt, CreateWindowAux, EventMask, PropMode, Property, SelectionNotifyEvent, SelectionRequestEvent,
     WindowClass, SELECTION_NOTIFY_EVENT,
@@ -111,6 +112,8 @@ impl OwnedContent {
 enum Command {
     Set(Arc<OwnedContent>, Sender<Result<()>>),
     Clear(Sender<()>),
+    /// Takes the clipboard over and leaves it empty (what a file manager does after a cut was pasted).
+    Empty(Sender<()>),
     Handover(Sender<()>),
 }
 
@@ -122,9 +125,15 @@ struct Owner {
     owned: Mutex<Option<Arc<OwnedContent>>>,
     commands: Mutex<Sender<Command>>,
     alive: AtomicBool,
+    /// The server reports clipboard changes (XFixes), so a watcher needs no polling.
+    reports_changes: bool,
 }
 
 static OWNER: Mutex<Option<Arc<Owner>>> = Mutex::new(None);
+
+/// Called from the owner thread whenever the owner of the clipboard changes; it must not block.
+type ChangeHook = Box<dyn Fn() + Send + Sync>;
+static CHANGE_HOOK: Mutex<Option<ChangeHook>> = Mutex::new(None);
 
 fn connect() -> Result<(Arc<RustConnection>, u32, Atoms)> {
     let (conn, screen) = RustConnection::connect(None)?;
@@ -155,7 +164,16 @@ fn owner() -> Result<Arc<Owner>> {
     }
     let (conn, window, atoms) = connect()?;
     let (tx, rx) = mpsc::channel();
-    let owner = Arc::new(Owner { conn, window, atoms, owned: Mutex::new(None), commands: Mutex::new(tx), alive: AtomicBool::new(true) });
+    let reports_changes = subscribe_to_changes(&conn, window, &atoms);
+    let owner = Arc::new(Owner {
+        conn,
+        window,
+        atoms,
+        owned: Mutex::new(None),
+        commands: Mutex::new(tx),
+        alive: AtomicBool::new(true),
+        reports_changes,
+    });
     let for_thread = owner.clone();
     std::thread::Builder::new()
         .name("file-clipboard".into())
@@ -168,6 +186,21 @@ fn owner() -> Result<Arc<Owner>> {
         })?;
     *slot = Some(owner.clone());
     Ok(owner)
+}
+
+/// Asks the server to tell us when the owner of the clipboard changes; false when the extension is missing.
+fn subscribe_to_changes(conn: &RustConnection, window: u32, atoms: &Atoms) -> bool {
+    let subscribed = (|| -> Result<()> {
+        conn.xfixes_query_version(5, 0)?.reply()?;
+        let mask = SelectionEventMask::SET_SELECTION_OWNER | SelectionEventMask::SELECTION_WINDOW_DESTROY | SelectionEventMask::SELECTION_CLIENT_CLOSE;
+        xfixes::select_selection_input(conn, window, atoms.CLIPBOARD, mask)?;
+        conn.flush()?;
+        Ok(())
+    })();
+    if let Err(e) = &subscribed {
+        tracing::info!(error = %e, "[FileClipboard: Watch] The X server does not report clipboard changes");
+    }
+    subscribed.is_ok()
 }
 
 impl Owner {
@@ -186,6 +219,15 @@ impl Owner {
                 Event::SelectionClear(clear) if clear.selection == self.atoms.CLIPBOARD && clear.owner == self.window => {
                     // Another application copied something: what we served is no longer on the clipboard.
                     *self.owned.lock() = None;
+                }
+                Event::XfixesSelectionNotify(change) if change.selection == self.atoms.CLIPBOARD => {
+                    if change.owner != self.window {
+                        // Somebody else owns it now (also when this was announced before our SelectionClear arrived).
+                        *self.owned.lock() = None;
+                    }
+                    if let Some(hook) = CHANGE_HOOK.lock().as_ref() {
+                        hook();
+                    }
                 }
                 Event::ClientMessage(message) if message.type_ == self.atoms.RV_CLIPBOARD_WAKE => {
                     while let Ok(command) = commands.try_recv() {
@@ -208,6 +250,12 @@ impl Owner {
                     self.conn.set_selection_owner(NONE, self.atoms.CLIPBOARD, CURRENT_TIME)?;
                     self.conn.flush()?;
                 }
+                let _ = reply.send(());
+            }
+            Command::Empty(reply) => {
+                *self.owned.lock() = None;
+                self.conn.set_selection_owner(self.window, self.atoms.CLIPBOARD, CURRENT_TIME)?;
+                self.conn.flush()?;
                 let _ = reply.send(());
             }
             Command::Handover(reply) => {
@@ -363,6 +411,30 @@ pub fn clear_if_ours() {
     if owner.send_command(Command::Clear(tx)).is_ok() {
         let _ = rx.recv_timeout(REQUEST_TIMEOUT);
     }
+}
+
+/// Empties the clipboard whoever filled it: RustView takes it over and offers nothing (what a file manager does after a cut was pasted).
+pub fn empty() {
+    let Ok(owner) = owner() else {
+        return;
+    };
+    let (tx, rx) = mpsc::channel();
+    if owner.send_command(Command::Empty(tx)).is_ok() {
+        let _ = rx.recv_timeout(REQUEST_TIMEOUT);
+    }
+}
+
+/// Registers what is called (on the clipboard thread; it must not block) when the clipboard changes. Returns false when the server
+/// does not report changes.
+pub fn set_change_hook(hook: ChangeHook) -> bool {
+    let Ok(owner) = owner() else {
+        return false;
+    };
+    if !owner.reports_changes {
+        return false;
+    }
+    *CHANGE_HOOK.lock() = Some(hook);
+    true
 }
 
 /// Hands the clipboard to the clipboard manager (on exit), so that it outlives the process.
@@ -606,5 +678,35 @@ mod tests {
         let targets = reader.offered_targets().unwrap();
         assert!(targets.contains(&reader.atoms.TEXT_URI_LIST) && targets.contains(&reader.atoms.GNOME_COPIED_FILES));
         clear_if_ours();
+    }
+
+    #[test]
+    fn changes_are_reported_and_an_empty_clipboard_reads_as_no_files() {
+        let Some(_g) = guard() else { return };
+        let changes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = changes.clone();
+        assert!(set_change_hook(Box::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        })));
+        let wait_for = |n: usize| {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while changes.load(Ordering::SeqCst) < n && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            changes.load(Ordering::SeqCst) >= n
+        };
+        set(&paths(&["x.jpg"]), ClipboardMode::Cut).unwrap();
+        assert!(wait_for(1), "taking the clipboard was not reported");
+        // Another application takes it, then a cut was pasted there: we empty it whoever filled it.
+        let (conn, window, atoms) = connect().unwrap();
+        conn.set_selection_owner(window, atoms.CLIPBOARD, CURRENT_TIME).unwrap();
+        conn.flush().unwrap();
+        assert!(wait_for(2), "the change of the owner was not reported");
+        empty();
+        assert!(wait_for(3));
+        assert!(own_files().is_none());
+        assert!(read_files().unwrap().is_none());
+        assert!(read_as_other_application().is_none());
+        *CHANGE_HOOK.lock() = None;
     }
 }

@@ -7,6 +7,7 @@ export component MediaIndexProgress inherits HorizontalLayout {
     in property <int> current-val: 0;
     in property <int> total-val: 0;
     in property <length> bar-width: 175px;
+    in property <string> label: "Scanning Media: ";
 
     alignment: end;
 
@@ -20,7 +21,7 @@ export component MediaIndexProgress inherits HorizontalLayout {
         bar-radius: 0px;
         fill-color: #cba6f788;
         bar-border-color: #cba6f7aa;
-        overlay-text: "Scanning Media: " + root.current-val + "/" + root.total-val;
+        overlay-text: root.label + root.current-val + "/" + root.total-val;
         overlay-text-color: #ffffff;
     }
 }

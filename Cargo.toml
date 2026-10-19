@@ -1,6 +1,6 @@
 [package]
 name = "rustview"
-version = "0.3.57"
+version = "0.3.58"
 edition = "2024"
 build = "build.rs"
 
@@ -35,7 +35,7 @@ arboard = "3"
 num-format = { version = "0.4", features = ["with-system-locale"] }
 # SVG rasterizer (already used by Slint); renders icons for native helper windows outside of Slint.
 resvg = { version = "0.47", default-features = false }
-x11rb = "0.13"
+x11rb = { version = "0.13", features = ["xfixes"] }
 
 [build-dependencies]
 slint-build = "1"
