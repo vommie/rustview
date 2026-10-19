@@ -4870,6 +4870,7 @@ dependencies = [
  "trash",
  "walkdir",
  "webp",
+ "x11rb",
 ]
 
 [[package]]

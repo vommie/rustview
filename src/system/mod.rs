@@ -3,6 +3,7 @@ pub mod desktop;
 pub mod display;
 pub mod dnd;
 pub mod error;
+pub mod file_clipboard;
 pub mod file_handler;
 pub mod fs_access;
 pub mod mounts;

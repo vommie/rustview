@@ -819,6 +819,22 @@ impl<'a> FileOperations<'a> {
         Ok(new_record)
     }
 
+    /// Flags a record as missing on disk (`is_deleted`, the flag a refresh sets for a file that is gone). Returns whether it changed.
+    /// Folder counts, tags, rating and thumbnail stay as they are.
+    pub fn flag_media_missing(&self, media_id: MediaId) -> Result<bool, LibraryError> {
+        let mut wtxn = self.db.env.write_txn()?;
+        let Some(mut record) = self.db.media.get(&wtxn, &media_id)? else {
+            return Ok(false);
+        };
+        if record.is_deleted {
+            return Ok(false);
+        }
+        record.is_deleted = true;
+        self.db.media.put(&mut wtxn, &media_id, &record)?;
+        wtxn.commit()?;
+        Ok(true)
+    }
+
     /// Purges media records completely from LMDB storage and adjusts folder count rollups.
     pub fn purge_media_from_db(&self, media_ids: &[MediaId]) -> Result<usize, LibraryError> {
         let mut wtxn = self.db.env.write_txn()?;
