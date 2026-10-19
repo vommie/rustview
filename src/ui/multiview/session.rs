@@ -315,6 +315,10 @@ fn launch(
 
     let monitor = resolve_monitor(settings, &main_window);
     let isolated = matches!(source, Source::Tab { .. });
+    let tab_in_fullscreen = match &source {
+        Source::Tab { tab, .. } => Some(tab.tab_id),
+        Source::Plan { .. } => None,
+    };
     let session = Session::new(handle, window, monitor, source);
     let generation = session.generation;
     let tile_count = session.instance.lock().tile_count();
@@ -340,6 +344,8 @@ fn launch(
     if isolated && let Some(mw) = main_window.upgrade() {
         handle::set_isolated(true);
         mw.set_is_fullscreen_locked(true);
+        // The tab grid shows a placeholder where this tab's videos were (their players are in the fullscreen now).
+        mw.set_fullscreen_tab_id(tab_in_fullscreen.map_or(-1, |id| id as i32));
     }
     if let Err(e) = win.show() {
         tracing::error!(error = %e, "[Multiview: Open] Failed to show the window");
@@ -467,6 +473,11 @@ pub(super) fn finish_close(session: Session, notify: bool) {
             reason,
             "[Multiview: Close] The windows could not return to the tab"
         );
+    }
+    if tab_return.is_some()
+        && let Some(main_window) = handle.main_window().and_then(|w| w.upgrade())
+    {
+        main_window.set_fullscreen_tab_id(-1);
     }
     if let Some(tab) = tab_return {
         let alive = handle

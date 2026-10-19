@@ -3,6 +3,49 @@ import { AppIcon, IconId, IconLookup, IconSize, IconSlot } from "icons.slint";
 import { TabGridItemModel } from "types.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
 
+/// The stand-in for a video whose player is in the fullscreen window right now (a native mpv window cannot be in two places, so the
+/// item would otherwise show an empty black area): a discreet badge with a "shown elsewhere" icon, and a caption where there is room.
+component AwayBadge inherits Rectangle {
+    background: #000000;
+
+    property <bool> roomy: root.width >= 110px && root.height >= 72px;
+    property <bool> tiny: root.width < 44px || root.height < 44px;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 6px;
+
+        HorizontalLayout {
+            alignment: center;
+
+            Rectangle {
+                width: root.tiny ? 0px : (root.roomy ? 40px : 32px);
+                height: self.width;
+                border-radius: self.width / 2;
+                background: #ffffff14;
+                border-width: 1px;
+                border-color: #ffffff2e;
+
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: IconId.playing-elsewhere;
+                    size: root.roomy ? IconSize.xl : IconSize.lg;
+                    color: #ffffff9e;
+                }
+            }
+        }
+
+        if root.roomy : Text {
+            text: "Playing in fullscreen";
+            font-size: 10px;
+            color: #ffffff85;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
 /// Standalone Masonry Tile item for the TabGridView.
 /// Displays live loaded image buffers or solid video subwindow placeholders with full aspect ratio preservation.
 export component TabGridItemView inherits Rectangle {
@@ -12,6 +55,8 @@ export component TabGridItemView inherits Rectangle {
     in property <length> border-width-val: 1px;
     in property <length> corner-radius-val: 4px;
     in property <int> background-mode: 0;
+    /// The content of this tab is shown in the fullscreen window: its videos are not here, and say so.
+    in property <bool> away: false;
 
     callback left-clicked(int /* tab_id */);
     callback middle-clicked(int /* tab_id */);
@@ -202,10 +247,29 @@ export component TabGridItemView inherits Rectangle {
                 outer-color: #000000;
             }
 
+            // The video tiles of a Multiview that is in the fullscreen: their players are over there.
+            if root.item.is-multiview && root.away : Rectangle {
+                width: 100%;
+                height: 100%;
+
+                for mv-tile in root.item.mv-tiles : AwayBadge {
+                    visible: mv-tile.kind == 1;
+                    x: mv-tile.x;
+                    y: mv-tile.y;
+                    width: mv-tile.width;
+                    height: mv-tile.height;
+                }
+            }
+
             // Video Viewport Area: Solid black background ensures Slint's canvas is 100% opaque.
             // When XShape cutouts punch through the MPV window, Slint's opaque background and menus are revealed,
             // guaranteeing the desktop never shines through.
-            if root.item.is-video && root.item.error-message == "" : Rectangle {
+            if root.item.is-video && root.item.error-message == "" && root.away : AwayBadge {
+                width: 100%;
+                height: 100%;
+            }
+
+            if root.item.is-video && root.item.error-message == "" && !root.away : Rectangle {
                 width: 100%;
                 height: 100%;
                 background: #000000;

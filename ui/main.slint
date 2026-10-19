@@ -236,6 +236,8 @@ export component MainWindow inherits Window {
     in-out property <bool> is-indexing-media: false;
     in-out property <int> media-index-current: 0;
     in-out property <int> media-index-total: 0;
+    /// The tab whose content is shown in the fullscreen window right now (-1 = none); its tab-grid item shows a placeholder.
+    in-out property <int> fullscreen-tab-id: -1;
 
     in-out property <bool> is-preloading: false;
     in-out property <int> preload-current: 0;
@@ -1098,6 +1100,7 @@ export component MainWindow inherits Window {
                     tab-grid-view := TabGridView {
                         visible: root.active-view-mode == 2;
                         items: root.tab-grid-items;
+                        away-tab-id: root.fullscreen-tab-id;
                         total-content-height: root.tab-grid-content-height;
                         columns <=> root.tab-grid-columns;
                         auto-columns <=> root.tab-grid-auto-columns;
