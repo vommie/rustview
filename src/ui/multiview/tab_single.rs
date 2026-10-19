@@ -27,27 +27,27 @@ pub(super) fn instance_for_tab(
         TabPayload::Multiview(_) => return None,
     };
     let media_id = tab.media_id;
-    let seed = TileSeed {
+    let seed = TileSeed::new(
         media_id,
         kind,
-        aspect: aspect_from_size(tab.record.width, tab.record.height, MULTIVIEW_FALLBACK_ASPECT),
-        path: tab.file_path.clone(),
-        filename: tab.filename.clone(),
-    };
+        aspect_from_size(tab.record.width, tab.record.height, MULTIVIEW_FALLBACK_ASPECT),
+        tab.file_path.clone(),
+        tab.filename.clone(),
+    );
     let instance = MultiviewInstance::create(Arc::new(UiEventSink::new(handle.clone())), vec![seed]);
     {
         let mut guard = instance.lock();
         guard.set_origin(OriginKind::Tab);
         guard.set_single_tab(true);
+        let key = guard.tile_key_of(media_id);
         match &tab.payload {
             TabPayload::Image(image) => {
-                if !image.error_message.is_empty() {
-                    guard.on_image_loaded(media_id, Err(image.error_message.clone()));
-                } else if let Some(pixels) = &image.high_res_pixels {
-                    guard.on_image_loaded(
-                        media_id,
-                        Ok((image.orig_width, image.orig_height, pixels.clone())),
-                    );
+                if let Some(key) = key {
+                    if !image.error_message.is_empty() {
+                        guard.on_image_loaded(key, Err(image.error_message.clone()));
+                    } else if let Some(pixels) = &image.high_res_pixels {
+                        guard.on_image_loaded(key, Ok((image.orig_width, image.orig_height, pixels.clone())));
+                    }
                 }
             }
             TabPayload::Video(video) => {
@@ -66,7 +66,7 @@ pub(super) fn instance_for_tab(
                                 window,
                                 native_mute,
                                 last_mute: native_mute,
-                                current_media: Arc::new(AtomicU64::new(media_id)),
+                                current_tile: Arc::new(AtomicU64::new(key.unwrap_or_default())),
                                 loan: Some(video.subwindow.clone()),
                             },
                         );

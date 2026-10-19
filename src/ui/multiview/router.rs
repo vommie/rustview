@@ -36,30 +36,30 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
         return;
     };
     let (routed, click) = match event {
-        PlayerEvent::ImageDecoded { media_id, result } => {
+        PlayerEvent::ImageDecoded { tile, result } => {
             let mode = {
                 let mut guard = instance.lock();
-                guard.on_image_loaded(media_id, result);
+                guard.on_image_loaded(tile, result);
                 guard.host_mode()
             };
             drop(instance);
             refresh_host(mode);
             return;
         }
-        PlayerEvent::MuteChanged { media_id, muted } => {
+        PlayerEvent::MuteChanged { tile, muted } => {
             let mode = {
                 let mut guard = instance.lock();
-                guard.on_player_mute_changed(media_id, muted);
+                guard.on_player_mute_changed(tile, muted);
                 guard.host_mode()
             };
             drop(instance);
             refresh_host(mode);
             return;
         }
-        PlayerEvent::PauseChanged { media_id, paused } => {
+        PlayerEvent::PauseChanged { tile, paused } => {
             let mode = {
                 let mut guard = instance.lock();
-                guard.on_player_pause_changed(media_id, paused);
+                guard.on_player_pause_changed(tile, paused);
                 guard.host_mode()
             };
             drop(instance);
@@ -68,8 +68,8 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
         }
         PlayerEvent::ToggleFullscreen => (RoutedEvent::ToggleFullscreen, ClickKind::None),
         PlayerEvent::CloseTab => (RoutedEvent::CloseTab, ClickKind::None),
-        PlayerEvent::RenameRequested(media_id) => {
-            instance.lock().note_rename_target(media_id);
+        PlayerEvent::RenameRequested(tile) => {
+            instance.lock().note_rename_target_of_tile(tile);
             (RoutedEvent::Rename, ClickKind::None)
         }
         PlayerEvent::DeleteRequested => {

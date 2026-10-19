@@ -6,6 +6,7 @@
 use super::media_actions::MediaActionId;
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
+use super::follow::TileKey;
 use super::instance::WeakInstance;
 use super::layout::Rect;
 use super::model::{AspectSource, TileKind};
@@ -26,9 +27,9 @@ pub struct VideoTile {
     pub native_mute: bool,
     /// Last mute state known, to tell our own changes from changes made inside mpv (`m`, OSC).
     pub last_mute: bool,
-    /// The medium the player currently shows. A recycled player moves on to another medium, and the callbacks that were
-    /// installed once at creation read this instead of the id they were created for.
-    pub current_media: Arc<AtomicU64>,
+    /// The tile the player currently serves (`TileKey`). A recycled player moves on to another tile, and the callbacks that
+    /// were installed once at creation read this instead of the key they were created for.
+    pub current_tile: Arc<AtomicU64>,
     /// Set while the player and window belong to a viewer tab that lent them to the fullscreen: they go back to the tab
     /// (not into a teardown) when the fullscreen closes.
     pub loan: Option<Arc<Mutex<Option<X11VideoSubwindow>>>>,
@@ -43,9 +44,36 @@ pub struct TileSeed {
     pub aspect: f32,
     pub path: PathBuf,
     pub filename: String,
+    /// Already decoded pixels of an image (a duplicate of a tile that has them shares the buffer instead of decoding again).
+    pub pixels: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    pub sticky: bool,
+}
+
+impl TileSeed {
+    /// A medium that is not shown yet: nothing decoded, not sticky.
+    pub fn new(media_id: MediaId, kind: TileKind, aspect: f32, path: PathBuf, filename: String) -> Self {
+        Self {
+            media_id,
+            kind,
+            aspect,
+            path,
+            filename,
+            pixels: None,
+            sticky: false,
+        }
+    }
+}
+
+static NEXT_TILE_KEY: AtomicU64 = AtomicU64::new(1);
+
+/// A key no other tile has had in this process.
+pub fn next_tile_key() -> TileKey {
+    NEXT_TILE_KEY.fetch_add(1, Ordering::Relaxed)
 }
 
 pub struct TileState {
+    /// Identity of the tile. The same medium can be shown by several tiles; only the key tells them apart.
+    pub key: TileKey,
     pub media_id: MediaId,
     pub kind: TileKind,
     pub filename: String,
@@ -78,19 +106,21 @@ pub struct StaleProbe {
 impl TileState {
     pub fn from_seed(seed: TileSeed) -> Self {
         let is_video = seed.kind == TileKind::Video;
+        let decoded = !is_video && seed.pixels.is_some();
         Self {
+            key: next_tile_key(),
             media_id: seed.media_id,
             kind: seed.kind,
             filename: seed.filename,
             path: seed.path,
             aspect: seed.aspect,
-            aspect_source: AspectSource::Library,
-            pixels: None,
-            is_loading: !is_video,
+            aspect_source: if decoded { AspectSource::Probed } else { AspectSource::Library },
+            pixels: seed.pixels,
+            is_loading: !is_video && !decoded,
             error: None,
             video: None,
             audio: is_video.then(TileAudio::native),
-            sticky: false,
+            sticky: seed.sticky,
             pin: None,
             feedback: HashMap::new(),
             stale_probe: None,
@@ -114,26 +144,26 @@ pub(super) fn connect_callbacks(
     player: &MpvPlayer,
     sink: &Arc<dyn MultiviewEventSink>,
     me: &WeakInstance,
-    current_media: &Arc<AtomicU64>,
+    current_tile: &Arc<AtomicU64>,
 ) {
     player.on_toggle_fullscreen(forward(sink, me, || PlayerEvent::ToggleFullscreen));
     player.on_close_tab(forward(sink, me, || PlayerEvent::CloseTab));
-    let media = Arc::clone(current_media);
+    let tile = Arc::clone(current_tile);
     player.on_rename_requested(forward(sink, me, move || {
-        PlayerEvent::RenameRequested(media.load(Ordering::SeqCst))
+        PlayerEvent::RenameRequested(tile.load(Ordering::SeqCst))
     }));
     player.on_delete_requested(forward(sink, me, || PlayerEvent::DeleteRequested));
-    let media = current_media.clone();
+    let tile = current_tile.clone();
     let (mute_sink, mute_me) = (Arc::clone(sink), me.clone());
     player.on_mute_changed(move |muted| {
-        let media_id = media.load(Ordering::SeqCst);
-        mute_sink.post(mute_me.clone(), PlayerEvent::MuteChanged { media_id, muted });
+        let tile = tile.load(Ordering::SeqCst);
+        mute_sink.post(mute_me.clone(), PlayerEvent::MuteChanged { tile, muted });
     });
-    let media = current_media.clone();
+    let tile = current_tile.clone();
     let (pause_sink, pause_me) = (Arc::clone(sink), me.clone());
     player.on_user_pause_changed(move |paused| {
-        let media_id = media.load(Ordering::SeqCst);
-        pause_sink.post(pause_me.clone(), PlayerEvent::PauseChanged { media_id, paused });
+        let tile = tile.load(Ordering::SeqCst);
+        pause_sink.post(pause_me.clone(), PlayerEvent::PauseChanged { tile, paused });
     });
     player.on_convert_to_background_tab(forward(sink, me, || PlayerEvent::CtrlClick));
     player.on_grid_left_click(forward(sink, me, || PlayerEvent::GridLeftClick));
@@ -148,7 +178,7 @@ pub fn create_video(
     me: &WeakInstance,
     parent_xid: u64,
     rect: Rect,
-    media_id: MediaId,
+    tile: TileKey,
     path: &Path,
 ) -> Result<VideoTile, String> {
     let mut window = X11VideoSubwindow::new(
@@ -163,8 +193,8 @@ pub fn create_video(
     window.show();
 
     let player = Arc::new(MpvPlayer::new().map_err(|e| e.to_string())?);
-    let current_media = Arc::new(AtomicU64::new(media_id));
-    connect_callbacks(&player, sink, me, &current_media);
+    let current_tile = Arc::new(AtomicU64::new(tile));
+    connect_callbacks(&player, sink, me, &current_tile);
 
     let started = player.attach_to_window(wid).and_then(|()| {
         player.set_tab_grid_mode(false);
@@ -185,14 +215,14 @@ pub fn create_video(
         window,
         native_mute,
         last_mute: native_mute,
-        current_media,
+        current_tile,
         loan: None,
     })
 }
 
-/// Plays another medium in the player of `video`: one player and one window, `loadfile replace`, so volume, speed and loop
-/// settings carry over.
-pub fn reload_video(video: &VideoTile, media_id: MediaId, path: &Path) -> Result<(), String> {
-    video.current_media.store(media_id, Ordering::SeqCst);
+/// Plays another medium in the player of `video`, now serving `tile`: one player and one window, `loadfile replace`, so
+/// volume, speed and loop settings carry over.
+pub fn reload_video(video: &VideoTile, tile: TileKey, path: &Path) -> Result<(), String> {
+    video.current_tile.store(tile, Ordering::SeqCst);
     video.player.load_file(path).map_err(|e| e.to_string())
 }

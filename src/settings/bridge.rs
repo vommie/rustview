@@ -272,6 +272,7 @@ impl SettingsDialogController {
         window.set_fullscreen_media_bar_enabled(bar.enabled);
         window.set_fullscreen_media_bar_show_mute(bar.show_mute);
         window.set_fullscreen_media_bar_show_sticky(bar.show_sticky);
+        window.set_fullscreen_media_bar_show_duplicate(bar.show_duplicate);
         window.set_fullscreen_media_bar_show_open_as_tab(bar.show_open_as_tab);
         window.set_fullscreen_media_bar_show_open_with(bar.show_open_with);
         window.set_fullscreen_media_bar_show_delete(bar.show_delete);
@@ -316,6 +317,7 @@ impl SettingsDialogController {
         bar.enabled = window.get_fullscreen_media_bar_enabled();
         bar.show_mute = window.get_fullscreen_media_bar_show_mute();
         bar.show_sticky = window.get_fullscreen_media_bar_show_sticky();
+        bar.show_duplicate = window.get_fullscreen_media_bar_show_duplicate();
         bar.show_open_as_tab = window.get_fullscreen_media_bar_show_open_as_tab();
         bar.show_open_with = window.get_fullscreen_media_bar_show_open_with();
         bar.show_delete = window.get_fullscreen_media_bar_show_delete();

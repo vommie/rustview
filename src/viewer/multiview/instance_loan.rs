@@ -23,7 +23,9 @@ impl MultiviewInstance {
         else {
             return false;
         };
-        tile::connect_callbacks(&video.player, &self.sink, &self.me, &video.current_media);
+        let key = self.tiles[index].key;
+        video.current_tile.store(key, std::sync::atomic::Ordering::SeqCst);
+        tile::connect_callbacks(&video.player, &self.sink, &self.me, &video.current_tile);
         video.player.set_user_paused(false);
         if let Err(e) = video.player.play() {
             tracing::warn!(media_id, error = %e, "[Multiview: Loan] The lent player did not resume");
@@ -43,10 +45,14 @@ impl MultiviewInstance {
 
     /// The tile of `media_id` cannot show its medium (for example a tab whose file is missing).
     pub fn fail_tile(&mut self, media_id: MediaId, text: String) {
-        if let Some(tile) = self.tiles.iter_mut().find(|t| t.media_id == media_id) {
-            tile.error = Some(text);
+        let mut changed = false;
+        for tile in self.tiles.iter_mut().filter(|t| t.media_id == media_id) {
+            tile.error = Some(text.clone());
             tile.is_loading = false;
             tile.audio = None;
+            changed = true;
+        }
+        if changed {
             self.bump();
         }
     }

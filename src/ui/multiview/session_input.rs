@@ -16,7 +16,6 @@ use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
 use slint::ComponentHandle;
-use std::collections::HashMap;
 
 /// The pointer in the coordinates of the fullscreen window, which covers its monitor.
 fn pointer_in_window(probe: &Option<PointerProbe>, monitor: &MonitorInfo) -> Option<(i32, i32)> {
@@ -90,13 +89,10 @@ impl Session {
         };
         let outcome = {
             let mut instance = self.instance.lock();
-            let Some(media_id) = usize::try_from(tile)
-                .ok()
-                .and_then(|index| instance.member_ids().get(index).copied())
-            else {
+            let Some(key) = usize::try_from(tile).ok().and_then(|index| instance.tile_key_at(index)) else {
                 return UiAction::None;
             };
-            instance.perform_click(media_id, click)
+            instance.perform_click(key, click)
         };
         self.refresh();
         outcome
@@ -214,12 +210,11 @@ impl Session {
             }
             return;
         }
-        let seeds: HashMap<MediaId, TileSeed> = {
+        let seeds: Vec<Option<TileSeed>> = {
             let st = state.read();
             plan.add
                 .iter()
-                .filter_map(|&id| eligibility::plan_tile_for(&st, id))
-                .map(|seed| (seed.media_id, seed))
+                .map(|&id| eligibility::plan_tile_for(&st, id))
                 .collect()
         };
         let mut instance = self.instance.lock();

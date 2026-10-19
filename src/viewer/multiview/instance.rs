@@ -7,12 +7,13 @@
 //! tears the players down in the safe order, so nobody has to remember an explicit teardown.
 //!
 //! The behavior is split over `instance_host` (placement and projection), `instance_layout` (arrangement, gutters),
-//! `instance_tiles` (tile lifecycle), `instance_follow` (following the Browse selection), `instance_actions` (the action
-//! buttons), `instance_sound` (mute state) and `instance_hover` (pointer, mute badge, aspect probing).
+//! `instance_tiles` (tile lifecycle), `instance_follow` (every change of the tile set: following the Browse selection,
+//! duplicating a tile, `instance_clone`), `instance_actions` (the action buttons), `instance_sound` (mute state) and `instance_hover` (pointer, mute badge, aspect probing).
 
 use super::click::{ClickDetector, ClickKind};
 use super::container::Container;
 use super::events::MultiviewEventSink;
+use super::follow::TileKey;
 use super::instance_host::HostState;
 use super::instance_layout::{DragState, layout_params};
 use super::layout::{Layout, LayoutParams, Rect};
@@ -129,9 +130,31 @@ impl MultiviewInstance {
         self.single_tab = single_tab;
     }
 
-    /// The media ids of the tiles in slot order.
+    /// The media the Multiview shows, each once and in slot order (a medium shown by several tiles is one member).
     pub fn member_ids(&self) -> Vec<MediaId> {
+        let mut ids: Vec<MediaId> = Vec::with_capacity(self.tiles.len());
+        for tile in &self.tiles {
+            if !ids.contains(&tile.media_id) {
+                ids.push(tile.media_id);
+            }
+        }
+        ids
+    }
+
+    /// The medium of every tile in slot order (a medium shown twice appears twice).
+    pub(super) fn slot_media_ids(&self) -> Vec<MediaId> {
         self.tiles.iter().map(|t| t.media_id).collect()
+    }
+
+    /// The key of the tile in slot `index` (the bar and the layout address tiles by slot, which changes whenever tiles come
+    /// and go; the key does not).
+    pub fn tile_key_at(&self, index: usize) -> Option<TileKey> {
+        self.tiles.get(index).map(|t| t.key)
+    }
+
+    /// The first tile that shows `media_id`.
+    pub fn tile_key_of(&self, media_id: MediaId) -> Option<TileKey> {
+        self.tiles.iter().find(|t| t.media_id == media_id).map(|t| t.key)
     }
 
     pub fn has_member(&self, id: MediaId) -> bool {
@@ -174,10 +197,12 @@ impl MultiviewInstance {
         self.rename_target
     }
 
-    /// A player reported F2: the next rename request acts on that tile.
-    pub fn note_rename_target(&mut self, id: MediaId) {
-        self.rename_target = Some(id);
-        self.rename_pinned = true;
+    /// A player reported F2: the next rename request acts on that tile's medium.
+    pub fn note_rename_target_of_tile(&mut self, key: TileKey) {
+        if let Some(tile) = self.tiles.iter().find(|t| t.key == key) {
+            self.rename_target = Some(tile.media_id);
+            self.rename_pinned = true;
+        }
     }
 
     /// The tile a rename request acts on: the one a player named, else the one under the pointer (see `rename_hovered`).

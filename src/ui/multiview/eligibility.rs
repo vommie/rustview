@@ -117,21 +117,21 @@ pub fn wanted(st: &UiState) -> Vec<Wanted> {
 }
 
 pub fn plan_tile(item: &IndexedMediaRecord) -> TileSeed {
-    TileSeed {
-        media_id: item.record.id,
-        kind: if matches!(item.record.media_type, MediaType::Video) {
+    TileSeed::new(
+        item.record.id,
+        if matches!(item.record.media_type, MediaType::Video) {
             TileKind::Video
         } else {
             TileKind::Image
         },
-        aspect: aspect_from_size(
+        aspect_from_size(
             item.record.width,
             item.record.height,
             MULTIVIEW_FALLBACK_ASPECT,
         ),
-        path: item.full_path(),
-        filename: item.record.filename.clone(),
-    }
+        item.full_path(),
+        item.record.filename.clone(),
+    )
 }
 
 /// The tiles to open with: the first `MULTIVIEW_MAX_TILES` playable items in view order.

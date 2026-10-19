@@ -20,6 +20,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <bool> media-bar-enabled: true;
     in-out property <bool> media-bar-show-mute: true;
     in-out property <bool> media-bar-show-sticky: true;
+    in-out property <bool> media-bar-show-duplicate: true;
     in-out property <bool> media-bar-show-open-as-tab: true;
     in-out property <bool> media-bar-show-open-with: true;
     in-out property <bool> media-bar-show-delete: true;
@@ -253,6 +254,14 @@ export component SettingsPageFullscreen inherits VerticalLayout {
             tooltip: "Keep a medium in view when the selection changes. Shown when the fullscreen follows the selection of the media view.";
             enabled: root.media-bar-enabled;
             checked <=> root.media-bar-show-sticky;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Duplicate";
+            tooltip: "Show the medium a second time, as a tile of its own next to the original. Disabled while the view already shows the maximum number of media.";
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-duplicate;
         }
 
         SettingsSwitchRow {

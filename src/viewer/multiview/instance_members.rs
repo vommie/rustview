@@ -11,13 +11,17 @@ use crate::settings::LogObscurer;
 
 impl MultiviewInstance {
     pub fn member_renamed(&mut self, id: MediaId, new_filename: &str) {
-        let Some(tile) = self.tiles.iter_mut().find(|t| t.media_id == id) else {
-            return;
-        };
-        if let Some(parent) = tile.path.parent() {
-            tile.path = parent.join(new_filename);
+        let mut found = false;
+        for tile in self.tiles.iter_mut().filter(|t| t.media_id == id) {
+            if let Some(parent) = tile.path.parent() {
+                tile.path = parent.join(new_filename);
+            }
+            tile.filename = new_filename.to_string();
+            found = true;
         }
-        tile.filename = new_filename.to_string();
+        if !found {
+            return;
+        }
         tracing::debug!(
             media_id = id,
             filename = %LogObscurer::filename(new_filename),
@@ -28,11 +32,9 @@ impl MultiviewInstance {
     /// The file of a member is gone: its player is shut down, its tile shows an error and the sound moves on if it
     /// carried it.
     pub fn member_deleted(&mut self, id: MediaId) {
-        let Some(index) = self.tiles.iter().position(|t| t.media_id == id) else {
-            return;
-        };
-        let video = {
-            let tile = &mut self.tiles[index];
+        let mut videos = Vec::new();
+        let mut found = false;
+        for tile in self.tiles.iter_mut().filter(|t| t.media_id == id) {
             tile.error = Some(format!(
                 "Media file not found on disk:\n{}",
                 tile.path.display()
@@ -40,9 +42,13 @@ impl MultiviewInstance {
             tile.is_loading = false;
             tile.pixels = None;
             tile.audio = None;
-            tile.video.take()
-        };
-        teardown_videos(video.into_iter().collect());
+            videos.extend(tile.video.take());
+            found = true;
+        }
+        if !found {
+            return;
+        }
+        teardown_videos(videos);
         self.clear_hover();
         let mut slots: Vec<Option<TileAudio>> = self.tiles.iter().map(|t| t.audio).collect();
         audio::after_reconcile(&mut slots, &[], &prefs::current().audio);
@@ -64,16 +70,15 @@ impl MultiviewInstance {
             self.member_deleted(id);
             return;
         }
-        let Some(tile) = self.tiles.iter_mut().find(|t| t.media_id == id) else {
-            return;
-        };
-        tile.filename = record.filename.clone();
         let mut relayout = false;
-        if tile.aspect_source == AspectSource::Library {
-            let aspect = aspect_from_size(record.width, record.height, tile.aspect);
-            if aspect_differs(aspect, tile.aspect) {
-                tile.aspect = aspect;
-                relayout = true;
+        for tile in self.tiles.iter_mut().filter(|t| t.media_id == id) {
+            tile.filename = record.filename.clone();
+            if tile.aspect_source == AspectSource::Library {
+                let aspect = aspect_from_size(record.width, record.height, tile.aspect);
+                if aspect_differs(aspect, tile.aspect) {
+                    tile.aspect = aspect;
+                    relayout = true;
+                }
             }
         }
         if relayout {

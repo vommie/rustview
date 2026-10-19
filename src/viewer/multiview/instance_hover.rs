@@ -79,7 +79,7 @@ impl MultiviewInstance {
     /// target.
     pub fn rename_hovered(&mut self, pointer: Option<(i32, i32)>) -> Option<MediaId> {
         let under_pointer = pointer.and_then(|(x, y)| self.tile_at_host(x, y));
-        let ids = self.member_ids();
+        let ids = self.slot_media_ids();
         let target = pick_target(under_pointer, self.hovered, self.last_hovered, &ids);
         if let Some(id) = target {
             self.rename_target = Some(id);

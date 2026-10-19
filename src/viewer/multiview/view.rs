@@ -3,6 +3,7 @@
 //! The instance builds this description from its single state; the presenters of the hosts only convert it into their
 //! own view structs, so no host keeps a second copy of the arrangement.
 
+use super::follow::TileKey;
 use super::media_actions::MediaActionId;
 use super::primary_actions::PrimaryActionId;
 use super::layout::Rect;
@@ -13,6 +14,7 @@ use crate::library::models::MediaId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 pub struct TileView {
+    pub key: TileKey,
     pub media_id: MediaId,
     pub rect: Rect,
     pub kind: TileKind,
@@ -22,12 +24,13 @@ pub struct TileView {
 }
 
 /// One button of the hover bar of a tile.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MediaActionView {
     pub id: MediaActionId,
     pub icon: Icon,
-    pub tooltip: &'static str,
+    pub tooltip: String,
     pub active: Option<bool>,
+    pub enabled: bool,
     pub feedback: ButtonFeedback,
 }
 

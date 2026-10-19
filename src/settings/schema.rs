@@ -240,6 +240,7 @@ pub const DEFAULT_FULLSCREEN_FALLBACK_TARGET: &str = "same"; // "same" or "diffe
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY: bool = true;
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DUPLICATE: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE: bool = true;
@@ -737,6 +738,7 @@ pub struct FullscreenMediaBarSettings {
     pub enabled: bool,
     pub show_mute: bool,
     pub show_sticky: bool,
+    pub show_duplicate: bool,
     pub show_open_as_tab: bool,
     pub show_open_with: bool,
     pub show_delete: bool,
@@ -751,6 +753,7 @@ impl Default for FullscreenMediaBarSettings {
             enabled: DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED,
             show_mute: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE,
             show_sticky: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY,
+            show_duplicate: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DUPLICATE,
             show_open_as_tab: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
             show_open_with: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH,
             show_delete: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE,

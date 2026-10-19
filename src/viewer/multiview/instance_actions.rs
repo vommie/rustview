@@ -2,7 +2,7 @@
 //! Multiview itself (sticky, sound, remove) and what the application has to do about it (open as tab, deselect, close).
 
 use super::media_actions::{BarClick, MediaBarContext, MediaActionId, media_actions_for};
-use super::follow::FollowPlan;
+use super::follow::{FollowPlan, Slot, TileKey};
 use super::instance::MultiviewInstance;
 use super::model::TileKind;
 use super::prefs;
@@ -10,11 +10,10 @@ use super::route::{HostMode, OriginKind, UiAction};
 use super::view::{MediaActionView, Navigation};
 use crate::ui::button_feedback::FeedbackKind;
 use crate::library::models::MediaId;
-use std::collections::HashMap;
 
 impl MultiviewInstance {
-    fn tile_index(&self, id: MediaId) -> Option<usize> {
-        self.tiles.iter().position(|t| t.media_id == id)
+    pub(super) fn tile_index(&self, key: TileKey) -> Option<usize> {
+        self.tiles.iter().position(|t| t.key == key)
     }
 
     fn action_context(&self, index: usize) -> Option<MediaBarContext> {
@@ -31,6 +30,7 @@ impl MultiviewInstance {
                 .map(|video| video.last_mute),
             sticky: tile.sticky,
             single_tab: self.single_tab,
+            broken: tile.error.is_some(),
         })
     }
 
@@ -49,27 +49,31 @@ impl MultiviewInstance {
                 icon: spec.icon,
                 tooltip: spec.tooltip,
                 active: spec.active,
+                enabled: spec.enabled,
                 feedback: tile.feedback.get(&spec.id).copied().unwrap_or_default(),
             })
             .collect()
     }
 
-    /// A click in the media bar window of tile `id`: a button, or an item of its "Open With" drop-down.
-    pub fn perform_click(&mut self, id: MediaId, click: BarClick) -> UiAction {
+    /// A click in the media bar window of tile `key`: a button, or an item of its "Open With" drop-down.
+    pub fn perform_click(&mut self, key: TileKey, click: BarClick) -> UiAction {
         match click {
-            BarClick::Action(action) => self.perform_action(id, action),
-            BarClick::MenuItem(item) if self.tile_index(id).is_some() => UiAction::OpenWithItem(id, item),
-            BarClick::MenuItem(_) => UiAction::None,
+            BarClick::Action(action) => self.perform_action(key, action),
+            BarClick::MenuItem(item) => match self.tile_index(key) {
+                Some(index) => UiAction::OpenWithItem(self.tiles[index].media_id, item),
+                None => UiAction::None,
+            },
         }
     }
 
-    /// A click on an action button of tile `id`. Buttons the tile does not offer (a stale click) are ignored. The result
-    /// is what the application has to do on top of the change the Multiview made to itself.
-    pub fn perform_action(&mut self, id: MediaId, action: MediaActionId) -> UiAction {
-        let Some(index) = self.tile_index(id) else {
+    /// A click on an action button of tile `key`. Buttons the tile does not offer or that are disabled (a stale click) are
+    /// ignored. The result is what the application has to do on top of the change the Multiview made to itself.
+    pub fn perform_action(&mut self, key: TileKey, action: MediaActionId) -> UiAction {
+        let Some(index) = self.tile_index(key) else {
             return UiAction::None;
         };
-        if !self.action_views(index).iter().any(|a| a.id == action) {
+        let id = self.tiles[index].media_id;
+        if !self.action_views(index).iter().any(|a| a.id == action && a.enabled) {
             tracing::debug!(
                 media_id = id,
                 ?action,
@@ -85,6 +89,10 @@ impl MultiviewInstance {
             }
             MediaActionId::Sticky => {
                 self.toggle_sticky_at(index);
+                UiAction::None
+            }
+            MediaActionId::Duplicate => {
+                self.duplicate_tile(key);
                 UiAction::None
             }
             MediaActionId::OpenAsTab => UiAction::OpenTileAsTab(id),
@@ -126,15 +134,17 @@ impl MultiviewInstance {
     }
 
     /// Takes the tile out of the view (the last tile cannot leave: the button is a close button then). A Multiview that
-    /// follows the Browse selection has the medium deselected there afterwards; the Multiview of a tab just loses a member,
-    /// and the application lets everything that follows the tab's media catch up.
+    /// follows the Browse selection has the medium deselected there afterwards, unless another tile still shows it (a
+    /// duplicate): then the selection is still what the view shows. The Multiview of a tab just loses a tile, and the
+    /// application lets everything that follows the tab's media catch up.
     fn remove_tile(&mut self, index: usize) -> UiAction {
         if self.tiles.len() <= 1 {
             return self.close_action();
         }
-        let id = self.tiles[index].media_id;
-        self.leave_view(&[id]);
+        let (key, id) = (self.tiles[index].key, self.tiles[index].media_id);
+        self.leave_tiles(&[key]);
         match self.origin {
+            OriginKind::Browse if self.tiles.iter().any(|t| t.media_id == id) => UiAction::None,
             OriginKind::Browse => UiAction::DeselectInBrowse(id),
             OriginKind::Tab => {
                 tracing::info!(
@@ -147,33 +157,39 @@ impl MultiviewInstance {
         }
     }
 
-    /// Takes the tiles of `ids` out of the view; the other tiles keep running.
-    fn leave_view(&mut self, ids: &[MediaId]) {
+    /// Takes the tiles of `keys` out of the view; the other tiles keep running.
+    fn leave_tiles(&mut self, keys: &[TileKey]) {
         let plan = FollowPlan {
-            remove: ids.to_vec(),
+            remove: keys.to_vec(),
             slots: self
                 .tiles
                 .iter()
-                .map(|t| t.media_id)
-                .filter(|m| !ids.contains(m))
+                .map(|t| t.key)
+                .filter(|key| !keys.contains(key))
+                .map(Slot::Keep)
                 .collect(),
             ..FollowPlan::default()
         };
-        self.apply_follow(&plan, HashMap::new());
+        self.apply_follow(&plan, Vec::new());
     }
 
-    /// The user deleted media through this Multiview (button or DEL): their tiles leave the view instead of staying behind
-    /// as error tiles. The last medium cannot leave, so what shows the Multiview closes. The Browse selection was cleared
-    /// by the deletion itself, a tab's other members only need the application to catch up.
+    /// The user deleted media through this Multiview (button or DEL): every tile that shows them leaves the view instead of
+    /// staying behind as an error tile. The last tile cannot leave, so what shows the Multiview closes. The Browse selection
+    /// was cleared by the deletion itself, a tab's other members only need the application to catch up.
     pub fn drop_deleted(&mut self, ids: &[MediaId]) -> UiAction {
-        let gone: Vec<MediaId> = ids.iter().copied().filter(|&id| self.tile_index(id).is_some()).collect();
+        let gone: Vec<TileKey> = self
+            .tiles
+            .iter()
+            .filter(|t| ids.contains(&t.media_id))
+            .map(|t| t.key)
+            .collect();
         if gone.is_empty() {
             return UiAction::None;
         }
         if gone.len() >= self.tiles.len() {
             return self.close_action();
         }
-        self.leave_view(&gone);
+        self.leave_tiles(&gone);
         tracing::info!(
             deleted = gone.len(),
             remaining = self.tiles.len(),
@@ -185,17 +201,17 @@ impl MultiviewInstance {
         }
     }
 
-    /// Plays the feedback of a button (success or error flash).
+    /// Plays the feedback of a button of every tile that shows `id` (success or error flash). Only the bar of the hovered
+    /// tile is ever drawn, so the others flash unseen.
     pub fn trigger_feedback(&mut self, id: MediaId, action: MediaActionId, kind: FeedbackKind) {
-        let Some(index) = self.tile_index(id) else {
-            return;
-        };
-        self.tiles[index]
-            .feedback
-            .entry(action)
-            .or_default()
-            .trigger(kind);
-        self.bump();
+        let mut found = false;
+        for tile in self.tiles.iter_mut().filter(|t| t.media_id == id) {
+            tile.feedback.entry(action).or_default().trigger(kind);
+            found = true;
+        }
+        if found {
+            self.bump();
+        }
     }
 
     /// The application finished what a button asked for: the button flashes green, or red if it failed.

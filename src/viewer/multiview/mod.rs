@@ -16,6 +16,7 @@ pub mod follow;
 pub mod image_decode;
 pub mod instance;
 mod instance_actions;
+mod instance_clone;
 mod instance_follow;
 mod instance_host;
 mod instance_hover;

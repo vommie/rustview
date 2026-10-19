@@ -409,6 +409,7 @@ impl MultiviewInstance {
             .iter()
             .zip(&self.layout.tiles)
             .map(|(tile, placed)| TileView {
+                key: tile.key,
                 media_id: tile.media_id,
                 rect: relative(projection.rect(placed.content)),
                 kind: tile.kind,

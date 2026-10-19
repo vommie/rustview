@@ -96,13 +96,10 @@ fn on_action(tile: i32, action: i32) {
     };
     let outcome = {
         let mut guard = instance.lock();
-        let Some(media_id) = usize::try_from(tile)
-            .ok()
-            .and_then(|index| guard.member_ids().get(index).copied())
-        else {
+        let Some(key) = usize::try_from(tile).ok().and_then(|index| guard.tile_key_at(index)) else {
             return;
         };
-        guard.perform_click(media_id, click)
+        guard.perform_click(key, click)
     };
     drop(instance);
     refresh();

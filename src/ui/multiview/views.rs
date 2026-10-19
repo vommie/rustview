@@ -1,10 +1,10 @@
 //! Conversion of the Slint-free description of a Multiview (physical pixels) into the Slint view structs (logical pixels).
 
-use crate::library::models::MediaId;
 use crate::ui::button_feedback_bridge;
 use crate::ui::{
     MultiviewBarButtonView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView,
 };
+use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::model::TileKind;
 use crate::ui::button_feedback::ButtonFeedback;
@@ -22,7 +22,7 @@ fn logical(px: i32, dpi: f32) -> f32 {
 /// which keeps the renderer from uploading the texture again on every sync.
 #[derive(Default)]
 pub struct ImageCache {
-    entries: HashMap<MediaId, (usize, slint::Image)>,
+    entries: HashMap<TileKey, (usize, slint::Image)>,
 }
 
 impl ImageCache {
@@ -31,19 +31,19 @@ impl ImageCache {
             return slint::Image::default();
         };
         let key = pixels.as_bytes().as_ptr() as usize;
-        if let Some((cached_key, image)) = self.entries.get(&tile.media_id)
+        if let Some((cached_key, image)) = self.entries.get(&tile.key)
             && *cached_key == key
         {
             return image.clone();
         }
         let image = slint::Image::from_rgb8(pixels.clone());
-        self.entries.insert(tile.media_id, (key, image.clone()));
+        self.entries.insert(tile.key, (key, image.clone()));
         image
     }
 
     fn retain(&mut self, tiles: &[TileView]) {
         self.entries
-            .retain(|id, _| tiles.iter().any(|t| t.media_id == *id));
+            .retain(|key, _| tiles.iter().any(|t| t.key == *key));
     }
 }
 
@@ -84,10 +84,10 @@ fn action_view(action: &MediaActionView) -> MultiviewBarButtonView {
     MultiviewBarButtonView {
         id: action.id.code(),
         icon: action.icon.to_slint(),
-        tooltip: action.tooltip.into(),
+        tooltip: action.tooltip.as_str().into(),
         toggle: action.active.is_some(),
         active: action.active.unwrap_or(false),
-        enabled: true,
+        enabled: action.enabled,
         attention: false,
         feedback: button_feedback_bridge::to_slint(action.feedback),
     }

@@ -3,6 +3,7 @@
 use super::audio::{self, TileAudio};
 use super::prefs;
 use super::events::{DecodedImage, PlayerEvent};
+use super::follow::TileKey;
 use super::image_decode;
 use super::instance::MultiviewInstance;
 use super::model::{AspectSource, TileKind, aspect_differs, aspect_from_size};
@@ -49,24 +50,25 @@ impl MultiviewInstance {
     }
 
     pub(super) fn start_tile(&mut self, index: usize) {
-        match self.tiles.get(index).map(|t| (t.kind, t.video.is_some())) {
-            Some((TileKind::Video, true)) => self.reload_video(index),
-            Some((TileKind::Video, false)) => self.start_video(index),
-            Some((TileKind::Image, _)) => self.start_image(index),
-            None => {}
+        match self.tiles.get(index).map(|t| (t.kind, t.video.is_some(), t.is_loading)) {
+            Some((TileKind::Video, true, _)) => self.reload_video(index),
+            Some((TileKind::Video, false, _)) => self.start_video(index),
+            // An image that came with its pixels (a duplicate) has nothing to decode.
+            Some((TileKind::Image, _, true)) => self.start_image(index),
+            Some((TileKind::Image, _, false)) | None => {}
         }
     }
 
     /// A video tile took over the player of the tile it replaced: the player plays the new file in its existing window.
     fn reload_video(&mut self, index: usize) {
-        let (media_id, path) = {
+        let (media_id, key, path) = {
             let tile = &self.tiles[index];
-            (tile.media_id, tile.path.clone())
+            (tile.media_id, tile.key, tile.path.clone())
         };
         let Some(video) = self.tiles[index].video.as_ref() else {
             return;
         };
-        match tile::reload_video(video, media_id, &path) {
+        match tile::reload_video(video, key, &path) {
             Ok(()) => tracing::info!(
                 media_id,
                 index,
@@ -87,16 +89,16 @@ impl MultiviewInstance {
 
     fn start_video(&mut self, index: usize) {
         let content = self.host_content(index).unwrap_or_default();
-        let (media_id, path) = {
+        let (media_id, key, path) = {
             let tile = &self.tiles[index];
-            (tile.media_id, tile.path.clone())
+            (tile.media_id, tile.key, tile.path.clone())
         };
         let created = tile::create_video(
             &self.sink,
             &self.me,
             self.host.surface.parent_xid,
             content,
-            media_id,
+            key,
             &path,
         );
         match created {
@@ -125,9 +127,9 @@ impl MultiviewInstance {
     }
 
     fn start_image(&mut self, index: usize) {
-        let (media_id, path) = {
+        let (media_id, key, path) = {
             let tile = &self.tiles[index];
-            (tile.media_id, tile.path.clone())
+            (tile.media_id, tile.key, tile.path.clone())
         };
         let (max_w, max_h) = (
             self.container.width.max(1) as u32,
@@ -138,31 +140,35 @@ impl MultiviewInstance {
             .name("multiview-image".into())
             .spawn(move || {
                 let result: DecodedImage = image_decode::load_scaled(&path, max_w, max_h);
-                sink.post(me, PlayerEvent::ImageDecoded { media_id, result });
+                sink.post(me, PlayerEvent::ImageDecoded { tile: key, result });
             });
         if let Err(e) = spawned {
             tracing::error!(media_id, error = %e, "[Multiview: Tile] Could not start the image decoder thread");
-            self.on_image_loaded(media_id, Err("This image could not be loaded".to_string()));
+            self.on_image_loaded(key, Err("This image could not be loaded".to_string()));
         }
     }
 
     /// Shows `pixels` (a thumbnail the application already holds) in an image tile whose decode is still running, so
     /// browsing does not flash an empty tile. The decoded image replaces it.
     pub fn set_placeholder(&mut self, media_id: MediaId, pixels: SharedPixelBuffer<Rgb8Pixel>) {
-        let Some(tile) = self.tiles.iter_mut().find(|t| t.media_id == media_id) else {
-            return;
-        };
-        if tile.kind == TileKind::Image && tile.is_loading && tile.pixels.is_none() {
-            tile.pixels = Some(pixels);
+        let mut changed = false;
+        for tile in self.tiles.iter_mut().filter(|t| t.media_id == media_id) {
+            if tile.kind == TileKind::Image && tile.is_loading && tile.pixels.is_none() {
+                tile.pixels = Some(pixels.clone());
+                changed = true;
+            }
+        }
+        if changed {
             self.bump();
         }
     }
 
     /// Result of a background decode. Ignored if the tile left in the meantime.
-    pub fn on_image_loaded(&mut self, media_id: MediaId, result: DecodedImage) {
-        let Some(tile) = self.tiles.iter_mut().find(|t| t.media_id == media_id) else {
+    pub fn on_image_loaded(&mut self, key: TileKey, result: DecodedImage) {
+        let Some(tile) = self.tiles.iter_mut().find(|t| t.key == key) else {
             return;
         };
+        let media_id = tile.media_id;
         tile.is_loading = false;
         let mut relayout = false;
         match result {

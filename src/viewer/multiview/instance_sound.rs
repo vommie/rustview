@@ -3,7 +3,7 @@
 
 use super::audio::{AudioMode, AudioOrigin, TileAudio};
 use super::instance::MultiviewInstance;
-use crate::library::models::MediaId;
+use super::follow::TileKey;
 
 impl MultiviewInstance {
     /// Pushes the mute state demanded by the audio rules to every video player whose actual state differs.
@@ -37,12 +37,13 @@ impl MultiviewInstance {
         }
     }
 
-    /// The player of `media_id` reports its mute state. A change that did not come from us (key `m`, mpv on-screen
+    /// The player of tile `key` reports its mute state. A change that did not come from us (key `m`, mpv on-screen
     /// controller) counts as the user's choice and the sound rules leave it alone from then on.
-    pub fn on_player_mute_changed(&mut self, media_id: MediaId, muted: bool) {
-        let Some(tile) = self.tiles.iter_mut().find(|t| t.media_id == media_id) else {
+    pub fn on_player_mute_changed(&mut self, key: TileKey, muted: bool) {
+        let Some(tile) = self.tiles.iter_mut().find(|t| t.key == key) else {
             return;
         };
+        let media_id = tile.media_id;
         let (Some(video), Some(audio)) = (tile.video.as_mut(), tile.audio.as_mut()) else {
             return;
         };
@@ -62,11 +63,11 @@ impl MultiviewInstance {
         self.bump();
     }
 
-    /// The player of `media_id` reports a change of the user's pause state (the bar reads the state live; this only makes
+    /// The player of tile `key` reports a change of the user's pause state (the bar reads the state live; this only makes
     /// the hosts redraw).
-    pub fn on_player_pause_changed(&mut self, media_id: MediaId, paused: bool) {
-        if self.tiles.iter().any(|t| t.media_id == media_id && t.video.is_some()) {
-            tracing::debug!(media_id, paused, "[Multiview: Playback] Pause state changed");
+    pub fn on_player_pause_changed(&mut self, key: TileKey, paused: bool) {
+        if let Some(tile) = self.tiles.iter().find(|t| t.key == key && t.video.is_some()) {
+            tracing::debug!(media_id = tile.media_id, paused, "[Multiview: Playback] Pause state changed");
             self.bump();
         }
     }

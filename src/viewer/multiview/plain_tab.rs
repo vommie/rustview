@@ -58,8 +58,9 @@ impl PlainTabState {
             kind: self.kind,
             muted: self.muted,
             sticky: false,
-            // The tab already exists: there is nothing to open as a tab.
+            // The tab already exists: there is nothing to open as a tab, and no arrangement to extend.
             single_tab: true,
+            broken: false,
         }
     }
 
@@ -91,6 +92,7 @@ impl PlainTabState {
                 icon: spec.icon,
                 tooltip: spec.tooltip,
                 active: spec.active,
+                enabled: spec.enabled,
                 feedback: ButtonFeedback::default(),
             })
             .collect()
@@ -162,7 +164,9 @@ impl PlainTabState {
                     MediaActionId::OpenWith => PlainOutcome::Ui(UiAction::ToggleOpenWith(id)),
                     MediaActionId::Delete => PlainOutcome::Ui(UiAction::DeleteTile(id)),
                     MediaActionId::Close => PlainOutcome::Ui(UiAction::CloseActiveTab),
-                    MediaActionId::Sticky | MediaActionId::OpenAsTab | MediaActionId::Remove => PlainOutcome::None,
+                    MediaActionId::Sticky | MediaActionId::Duplicate | MediaActionId::OpenAsTab | MediaActionId::Remove => {
+                        PlainOutcome::None
+                    }
                 }
             }
         }

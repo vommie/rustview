@@ -1,14 +1,16 @@
 //! The action buttons of the hover bar (pure).
 //!
-//! Rust decides *which* buttons a hovered medium gets and in which order; the Slint action bar only draws them. A new
-//! action is one provider function appended to `PROVIDERS`. Providers look at where the Multiview is shown and what it
-//! was opened from: a Multiview that follows the Browse selection offers sticky/remove/open-as-tab; a Multiview that
+//! Rust decides *which* buttons a hovered medium gets, in which order and whether each is enabled (a disabled button
+//! explains why in its tooltip); the Slint action bar only draws them. A new action is one provider function appended to
+//! `PROVIDERS`. Providers look at where the Multiview is shown and what it was opened from: a Multiview that follows the Browse selection offers sticky/remove/open-as-tab; a Multiview that
 //! belongs to a tab (shown in the tab or in the fullscreen) offers remove/open-as-tab too, but no sticky (a tab has no
 //! Browse selection to stay independent of). On the last medium remove turns into a close button that fits the host.
 
+use super::follow::{DuplicateRefusal, duplicate_refusal};
 use super::model::TileKind;
 use super::route::{HostMode, OriginKind};
 use crate::icons::Icon;
+use crate::settings::schema::MULTIVIEW_MAX_TILES;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MediaActionId {
@@ -19,6 +21,7 @@ pub enum MediaActionId {
     Close,
     OpenWith,
     Delete,
+    Duplicate,
 }
 
 /// What a click in the media bar window means: a button, or an item of the drop-down menu that hangs below the bar.
@@ -53,6 +56,7 @@ impl MediaActionId {
             Self::Close => 4,
             Self::OpenWith => 5,
             Self::Delete => 6,
+            Self::Duplicate => 7,
         }
     }
 
@@ -65,6 +69,7 @@ impl MediaActionId {
             Self::Close,
             Self::OpenWith,
             Self::Delete,
+            Self::Duplicate,
         ]
         .into_iter()
         .find(|id| id.code() == code)
@@ -84,21 +89,37 @@ pub struct MediaBarContext {
     /// The Multiview is only the fullscreen view of a normal image or video tab: that tab already exists, so there is
     /// nothing to open as a tab.
     pub single_tab: bool,
+    /// The tile shows an error instead of its medium (the file is gone, the video could not be played).
+    pub broken: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaActionSpec {
     pub id: MediaActionId,
     pub icon: Icon,
-    pub tooltip: &'static str,
+    pub tooltip: String,
     /// `Some(on)` for buttons that show a toggle state.
     pub active: Option<bool>,
+    /// A disabled button is drawn dimmed and does nothing; its tooltip says why.
+    pub enabled: bool,
+}
+
+impl MediaActionSpec {
+    fn on(id: MediaActionId, icon: Icon, tooltip: impl Into<String>) -> Self {
+        Self {
+            id,
+            icon,
+            tooltip: tooltip.into(),
+            active: None,
+            enabled: true,
+        }
+    }
 }
 
 type Provider = fn(&MediaBarContext) -> Option<MediaActionSpec>;
 
 /// Order of the buttons in the bar, left to right.
-const PROVIDERS: &[Provider] = &[mute, sticky, open_as_tab, open_with, delete, remove, close];
+const PROVIDERS: &[Provider] = &[mute, sticky, duplicate, open_as_tab, open_with, delete, remove, close];
 
 /// The bar exists in the fullscreen window and in the viewer tab; the tab-grid miniature is a picture.
 fn interactive(ctx: &MediaBarContext) -> bool {
@@ -112,87 +133,89 @@ fn is_workspace(ctx: &MediaBarContext) -> bool {
 
 fn mute(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     let muted = ctx.muted.filter(|_| interactive(ctx))?;
-    Some(MediaActionSpec {
-        id: MediaActionId::Mute,
-        icon: if muted {
-            Icon::VolumeOff
-        } else {
-            Icon::VolumeOn
-        },
-        tooltip: if muted { "Unmute" } else { "Mute" },
-        active: None,
-    })
+    Some(MediaActionSpec::on(
+        MediaActionId::Mute,
+        if muted { Icon::VolumeOff } else { Icon::VolumeOn },
+        if muted { "Unmute" } else { "Mute" },
+    ))
 }
 
 fn sticky(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
-    is_workspace(ctx).then_some(MediaActionSpec {
-        id: MediaActionId::Sticky,
-        icon: if ctx.sticky {
-            Icon::MultiviewStickyOn
-        } else {
-            Icon::MultiviewSticky
-        },
-        tooltip: if ctx.sticky {
-            "Sticky: stays when the selection changes (click to release)"
-        } else {
-            "Make sticky: keep this medium when the selection changes"
-        },
+    is_workspace(ctx).then(|| MediaActionSpec {
         active: Some(ctx.sticky),
+        ..MediaActionSpec::on(
+            MediaActionId::Sticky,
+            if ctx.sticky { Icon::MultiviewStickyOn } else { Icon::MultiviewSticky },
+            if ctx.sticky {
+                "Sticky: stays when the selection changes (click to release)"
+            } else {
+                "Make sticky: keep this medium when the selection changes"
+            },
+        )
+    })
+}
+
+/// Shows the medium a second time, as a tile of its own next to this one. A view that shows a normal tab's medium
+/// (`single_tab`) has no arrangement to extend. The button is there whenever it could ever work and is disabled, with the
+/// reason as tooltip, while it cannot: the view is full, or the tile has nothing to show. The rule itself lives in
+/// `follow::duplicate_refusal`, which the click goes through as well.
+fn duplicate(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    if !interactive(ctx) || ctx.single_tab {
+        return None;
+    }
+    let refusal = duplicate_refusal(ctx.tile_count, ctx.broken, MULTIVIEW_MAX_TILES);
+    let tooltip = match refusal {
+        None => "Show this medium a second time (as a tile of its own next to this one)".to_string(),
+        Some(DuplicateRefusal::Full) => format!(
+            "Show this medium a second time (disabled: the view already shows the maximum of {MULTIVIEW_MAX_TILES} media, remove one first)"
+        ),
+        Some(DuplicateRefusal::Broken | DuplicateRefusal::UnknownTile) => {
+            "Show this medium a second time (disabled: this medium cannot be shown)".to_string()
+        }
+    };
+    Some(MediaActionSpec {
+        enabled: refusal.is_none(),
+        ..MediaActionSpec::on(MediaActionId::Duplicate, Icon::MultiviewDuplicate, tooltip)
     })
 }
 
 fn open_as_tab(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
-    (interactive(ctx) && !ctx.single_tab).then_some(MediaActionSpec {
-        id: MediaActionId::OpenAsTab,
-        icon: Icon::OpenInBackgroundTab,
-        tooltip: "Open in a background tab",
-        active: None,
+    (interactive(ctx) && !ctx.single_tab).then(|| {
+        MediaActionSpec::on(MediaActionId::OpenAsTab, Icon::OpenInBackgroundTab, "Open in a background tab")
     })
 }
 
 fn open_with(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
-    interactive(ctx).then_some(MediaActionSpec {
-        id: MediaActionId::OpenWith,
-        icon: Icon::OpenWith,
-        tooltip: "Open with...",
-        active: None,
-    })
+    interactive(ctx).then(|| MediaActionSpec::on(MediaActionId::OpenWith, Icon::OpenWith, "Open with..."))
 }
 
 fn delete(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
-    interactive(ctx).then_some(MediaActionSpec {
-        id: MediaActionId::Delete,
-        icon: Icon::Delete,
-        tooltip: "Delete file...",
-        active: None,
-    })
+    interactive(ctx).then(|| MediaActionSpec::on(MediaActionId::Delete, Icon::Delete, "Delete file..."))
 }
 
 fn remove(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
-    (interactive(ctx) && ctx.tile_count > 1).then_some(MediaActionSpec {
-        id: MediaActionId::Remove,
-        icon: Icon::MultiviewRemove,
-        tooltip: if ctx.origin == OriginKind::Browse {
-            "Remove from this view and deselect"
-        } else {
-            "Remove from this tab"
-        },
-        active: None,
+    (interactive(ctx) && ctx.tile_count > 1).then(|| {
+        MediaActionSpec::on(
+            MediaActionId::Remove,
+            Icon::MultiviewRemove,
+            if ctx.origin == OriginKind::Browse {
+                "Remove from this view and deselect"
+            } else {
+                "Remove from this tab"
+            },
+        )
     })
 }
 
 /// The last remaining medium cannot be removed (the view is never empty), so the button closes what shows it instead:
 /// the fullscreen, or the tab.
 fn close(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
-    (interactive(ctx) && ctx.tile_count <= 1).then_some(MediaActionSpec {
-        id: MediaActionId::Close,
-        icon: Icon::Close,
-        tooltip: if ctx.host == HostMode::Fullscreen {
-            "Close fullscreen"
-        } else {
-            "Close tab"
-        },
-        active: None,
+    (interactive(ctx) && ctx.tile_count <= 1).then(|| {
+        MediaActionSpec::on(
+            MediaActionId::Close,
+            Icon::Close,
+            if ctx.host == HostMode::Fullscreen { "Close fullscreen" } else { "Close tab" },
+        )
     })
 }
 
