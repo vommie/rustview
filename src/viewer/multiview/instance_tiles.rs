@@ -131,9 +131,11 @@ impl MultiviewInstance {
             let tile = &self.tiles[index];
             (tile.media_id, tile.key, tile.path.clone())
         };
+        // Large enough for the display and for the area of the tab view (a lone image fills all of it).
+        let area = self.host.surface.rect;
         let (max_w, max_h) = (
-            self.container.width.max(1) as u32,
-            self.container.height.max(1) as u32,
+            self.container.width.max(area.w).max(1) as u32,
+            self.container.height.max(area.h).max(1) as u32,
         );
         let (sink, me) = (self.sink.clone(), self.me.clone());
         let spawned = std::thread::Builder::new()

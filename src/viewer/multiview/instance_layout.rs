@@ -3,7 +3,7 @@
 //! The widths the user sets by dragging a gutter are pins on the two neighboring tiles (`TileState::pin`), so they stay
 //! with the tiles when media join or leave; everything the user never touched adapts automatically.
 
-use super::container::Container;
+use super::container::{Container, lone_medium_fills_host};
 use super::instance::MultiviewInstance;
 use super::layout::{self, Gutter, GutterKind, Layout, LayoutParams};
 use super::layout_pins::{self, Pins};
@@ -34,13 +34,16 @@ impl MultiviewInstance {
     /// The aspect ratios the layout is solved with. A lone video fills the whole display (mpv letterboxes inside its
     /// window, so wheel, keys and on-screen controller work everywhere); it is laid out with the aspect of the container,
     /// which makes its window the whole container.
+    ///
+    /// In the tab view every lone medium (also an image) takes the whole tab area: its tile is laid out with the aspect of the
+    /// solving container, which is the shape of that area (`lone_medium_fills_host`), and an image is fitted inside the tile.
     fn aspects(&self) -> Vec<f32> {
         if let [only] = self.tiles.as_slice()
-            && only.kind == TileKind::Video
-            && only.error.is_none()
+            && ((only.kind == TileKind::Video && only.error.is_none()) || lone_medium_fills_host(self.host.surface.mode, 1))
         {
-            let height = self.container.height.max(1);
-            return vec![self.container.width.max(1) as f32 / height as f32];
+            let container = self.solving_container();
+            let height = container.height.max(1);
+            return vec![container.width.max(1) as f32 / height as f32];
         }
         self.tiles.iter().map(|t| t.aspect).collect()
     }
@@ -69,6 +72,7 @@ impl MultiviewInstance {
 
     /// Solves the layout again (after tiles, aspects, pins or container changed) and places the windows.
     pub(super) fn apply_layout(&mut self) {
+        self.refresh_geometry();
         self.solve_layout();
         self.reproject();
     }
@@ -152,5 +156,117 @@ impl MultiviewInstance {
         }
         self.apply_layout();
         tracing::debug!(gutter = index, "[Multiview: Layout] Tiles swapped");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
+    use crate::viewer::multiview::follow::Wanted;
+    use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
+    use crate::viewer::multiview::instance_host::HostSurface;
+    use crate::viewer::multiview::layout::Rect;
+    use crate::viewer::multiview::tile::TileSeed;
+    use slint::{Rgb8Pixel, SharedPixelBuffer};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    struct NullSink;
+
+    impl MultiviewEventSink for NullSink {
+        fn post(&self, _instance: WeakInstance, _event: PlayerEvent) {}
+    }
+
+    fn seed(id: u64, kind: TileKind, aspect: f32) -> TileSeed {
+        let mut seed = TileSeed::new(id, kind, aspect, PathBuf::from(format!("/x/{id}")), format!("{id}.jpg"));
+        if kind == TileKind::Image {
+            seed.pixels = Some(SharedPixelBuffer::<Rgb8Pixel>::new(4, 3));
+        }
+        seed
+    }
+
+    fn follow(instance: &SharedInstance, ids: &[u64]) {
+        let mut mv = instance.lock();
+        let wanted: Vec<Wanted> = ids.iter().map(|&id| Wanted { id, is_video: false }).collect();
+        let plan = mv.plan_follow(&wanted);
+        let seeds = plan.add.iter().map(|a| Some(seed(*a, TileKind::Image, 1.5))).collect();
+        mv.apply_follow(&plan, seeds);
+    }
+
+    /// The tab area of the main window (4:3) next to a 16:9 display of the Multiview.
+    const TAB_AREA: Rect = Rect::new(240, 80, 1200, 900);
+
+    fn in_tab_view(seeds: Vec<TileSeed>) -> SharedInstance {
+        let instance = MultiviewInstance::create(Arc::new(NullSink), seeds);
+        instance.lock().set_host(&HostSurface::tab_view(1, TAB_AREA, 1.0, Vec::new()));
+        instance
+    }
+
+    #[test]
+    fn a_lone_image_and_a_lone_video_cover_the_whole_tab_area() {
+        for kind in [TileKind::Image, TileKind::Video] {
+            let instance = in_tab_view(vec![seed(1, kind, 16.0 / 9.0)]);
+            let view = instance.lock().view();
+            let all = Rect::new(0, 0, TAB_AREA.w, TAB_AREA.h);
+            assert_eq!(view.screen, all, "{kind:?}: no bars around the display");
+            assert_eq!(view.tiles[0].rect, all, "{kind:?}: the tile is the whole area");
+            assert!(view.gutters.is_empty());
+        }
+    }
+
+    #[test]
+    fn several_media_keep_the_miniature_of_the_display() {
+        let instance = in_tab_view(vec![seed(1, TileKind::Image, 1.5), seed(2, TileKind::Image, 1.5)]);
+        let view = instance.lock().view();
+        // The 16:9 display scaled into the 4:3 area: full width, bars above and below.
+        assert_eq!(view.screen.w, TAB_AREA.w);
+        assert!(view.screen.h < TAB_AREA.h, "{:?}", view.screen);
+        assert_eq!(view.tiles.len(), 2);
+    }
+
+    #[test]
+    fn the_layout_follows_the_number_of_media_both_ways() {
+        let instance = in_tab_view(vec![seed(1, TileKind::Image, 1.5)]);
+        let all = Rect::new(0, 0, TAB_AREA.w, TAB_AREA.h);
+        assert_eq!(instance.lock().view().screen, all);
+
+        // A second medium joins: the arrangement of the display's shape takes over.
+        follow(&instance, &[1, 2]);
+        let two = instance.lock().view();
+        assert_eq!(two.tiles.len(), 2);
+        assert!(two.screen.h < TAB_AREA.h, "{:?}", two.screen);
+
+        // It leaves again: the remaining medium fills the area at once.
+        follow(&instance, &[1]);
+        let one = instance.lock().view();
+        assert_eq!(one.tiles.len(), 1);
+        assert_eq!(one.screen, all);
+        assert_eq!(one.tiles[0].rect, all);
+    }
+
+    #[test]
+    fn the_area_changing_while_a_medium_is_alone_is_followed() {
+        let instance = in_tab_view(vec![seed(1, TileKind::Image, 1.5)]);
+        let wider = Rect::new(100, 60, 1500, 700);
+        instance.lock().set_host(&HostSurface::tab_view(1, wider, 1.0, Vec::new()));
+        let view = instance.lock().view();
+        assert_eq!(view.screen, Rect::new(0, 0, 1500, 700));
+        assert_eq!(view.tiles[0].rect, Rect::new(0, 0, 1500, 700));
+    }
+
+    #[test]
+    fn the_fullscreen_and_the_tab_grid_never_use_the_special_case() {
+        let instance = MultiviewInstance::create(Arc::new(NullSink), vec![seed(1, TileKind::Image, 1.5)]);
+        instance.lock().set_host(&HostSurface::fullscreen(1, 2560, 1440, 1.0));
+        let full = instance.lock().view();
+        // The display itself: the image is fitted into it by its own aspect.
+        assert_eq!(full.screen, Rect::new(0, 0, 2560, 1440));
+        assert!(full.tiles[0].rect.w < 2560, "{:?}", full.tiles[0].rect);
+        let grid = HostSurface::tab_grid(1, Rect::new(0, 0, 400, 400), 1.0, Rect::new(0, 0, 400, 400), Vec::new());
+        instance.lock().set_host(&grid);
+        let miniature = instance.lock().view();
+        assert_eq!(miniature.screen.w, 400);
+        assert!(miniature.screen.h < 400, "{:?}", miniature.screen);
     }
 }

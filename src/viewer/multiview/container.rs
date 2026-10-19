@@ -6,6 +6,7 @@
 //! in a tab is an exact miniature of the fullscreen arrangement and resizer drags convert back without distortion.
 
 use super::layout::{LayoutParams, Rect};
+use super::route::HostMode;
 
 /// Pixel size and scale factor of the virtual display. Width and height are at least 1, the dpi at least 0.5.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -23,6 +24,11 @@ impl Container {
             height: height.max(1),
             dpi,
         }
+    }
+
+    /// A container with the shape of a host rectangle: the Multiview is solved directly in it and projected 1:1.
+    pub fn of_host(rect: Rect, dpi: f32) -> Self {
+        Self::new(rect.w, rect.h, dpi)
     }
 
     pub fn aspect(&self) -> f32 {
@@ -50,6 +56,15 @@ impl Container {
             min_wide_aspect,
         }
     }
+}
+
+/// A lone medium in the tab view uses the whole area of the tab instead of the miniature of the display: the display is a
+/// stand-in for the fullscreen arrangement of several media, and scaled into a tab area of another shape it would leave bars
+/// around a medium that has no neighbors to be arranged with. Two or more tiles are always arranged in the display's shape,
+/// so the tab shows the miniature of the fullscreen arrangement. The decision is made again whenever the tile count or the
+/// host changes (see `MultiviewInstance::apply_layout`).
+pub fn lone_medium_fills_host(mode: HostMode, tile_count: usize) -> bool {
+    mode == HostMode::TabView && tile_count == 1
 }
 
 /// Smallest gutter (in container pixels) that is still `host_gutter_px` wide in the host after scaling by `scale`.
@@ -124,5 +139,49 @@ impl Projection {
     /// Converts a distance in host pixels (drag delta, snap radius) to container pixels.
     pub fn length_to_container(&self, host_px: f32) -> f32 {
         (f64::from(host_px) / self.scale) as f32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::layout;
+    use crate::viewer::multiview::layout_pins::Pins;
+
+    const DISPLAY: Container = Container { width: 1920, height: 1080, dpi: 1.0 };
+
+    #[test]
+    fn only_a_lone_medium_in_the_tab_view_fills_its_host() {
+        assert!(lone_medium_fills_host(HostMode::TabView, 1));
+        for tiles in [0, 2, 3, 4] {
+            assert!(!lone_medium_fills_host(HostMode::TabView, tiles), "{tiles} tiles");
+        }
+        for mode in [HostMode::Fullscreen, HostMode::TabGrid, HostMode::Hidden] {
+            assert!(!lone_medium_fills_host(mode, 1), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn a_container_of_the_host_is_projected_without_bars() {
+        // A tab area of 4:3 inside a main window, next to a 16:9 display.
+        let host = Rect::new(250, 90, 1200, 900);
+        let container = Container::of_host(host, 1.5);
+        let projection = Projection::fit(&container, host);
+        assert_eq!(projection.screen(), host);
+        assert_eq!(projection.scale(), 1.0);
+        // The display container would leave bars above and below.
+        let miniature = Projection::fit(&DISPLAY, host).screen();
+        assert!(miniature.h < host.h && miniature.w == host.w, "{miniature:?}");
+    }
+
+    #[test]
+    fn a_lone_tile_laid_out_with_the_aspect_of_its_host_covers_all_of_it() {
+        let host = Rect::new(0, 0, 1200, 900);
+        let container = Container::of_host(host, 1.0);
+        let params = container.layout_params(8.0, 100.0, 1.2, 0);
+        let solved = layout::solve(&params, &[container.aspect()], &Pins::default());
+        assert_eq!(solved.tiles.len(), 1);
+        assert_eq!(solved.tiles[0].content, Rect::new(0, 0, 1200, 900));
+        assert!(solved.gutters.is_empty());
     }
 }

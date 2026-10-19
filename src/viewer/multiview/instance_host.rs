@@ -4,10 +4,10 @@
 //! `set_host` is the only place that decides where windows go and which flags the players get; every host (the fullscreen
 //! window, a viewer tab, a tab-grid tile) just hands in its rectangle.
 
-use super::container::{Container, Projection, gutter_floor};
+use super::container::{Container, Projection, gutter_floor, lone_medium_fills_host};
 use super::instance::MultiviewInstance;
 use super::instance_layout::layout_params;
-use super::layout::{GutterKind, Rect};
+use super::layout::{GutterKind, LayoutParams, Rect};
 use super::route::HostMode;
 use super::view::{GutterView, HostedView, TileView};
 use crate::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
@@ -120,8 +120,7 @@ impl MultiviewInstance {
         if surface.mode == HostMode::Fullscreen {
             self.container = Container::new(surface.rect.w, surface.rect.h, surface.dpi);
         }
-        let projection = Projection::fit(&self.container, surface.rect);
-        let params = layout_params(&self.container, self.gutter_floor_in(surface, &projection));
+        let (projection, params) = self.geometry_in(surface.mode, surface.rect, surface.dpi);
         let relayout = params != self.params || self.layout.tiles.len() != self.tiles.len();
         self.params = params;
         self.host.surface = surface.clone();
@@ -148,13 +147,45 @@ impl MultiviewInstance {
         true
     }
 
+    /// The container the arrangement is solved in at the moment: the display's, except for a lone medium in the tab view, which
+    /// gets the shape of the tab area so that it covers all of it (see `lone_medium_fills_host`).
+    pub(super) fn solving_container(&self) -> Container {
+        self.solving_container_in(self.host.surface.mode, self.host.surface.rect, self.host.surface.dpi)
+    }
+
+    fn solving_container_in(&self, mode: HostMode, rect: Rect, dpi: f32) -> Container {
+        if lone_medium_fills_host(mode, self.tiles.len()) {
+            Container::of_host(rect, dpi)
+        } else {
+            self.container
+        }
+    }
+
+    /// The projection of the solving container into a host rectangle and the layout parameters for it.
+    fn geometry_in(&self, mode: HostMode, rect: Rect, dpi: f32) -> (Projection, LayoutParams) {
+        let container = self.solving_container_in(mode, rect, dpi);
+        let projection = Projection::fit(&container, rect);
+        let params = layout_params(&container, Self::gutter_floor_in(mode, dpi, &projection));
+        (projection, params)
+    }
+
+    /// Fits projection and layout parameters to the current host and tile count. Called before every layout solve: the tile
+    /// count decides the solving container, so the switch between a lone medium and an arrangement happens right where tiles
+    /// come and go.
+    pub(super) fn refresh_geometry(&mut self) {
+        let surface = &self.host.surface;
+        let (projection, params) = self.geometry_in(surface.mode, surface.rect, surface.dpi);
+        self.host.projection = projection;
+        self.params = params;
+    }
+
     /// The interactive tab view keeps its gutters wide enough to grab even when the container is scaled down a lot; every
     /// other host shows the exact miniature.
-    fn gutter_floor_in(&self, surface: &HostSurface, projection: &Projection) -> i32 {
-        if surface.mode != HostMode::TabView {
+    fn gutter_floor_in(mode: HostMode, dpi: f32, projection: &Projection) -> i32 {
+        if mode != HostMode::TabView {
             return 0;
         }
-        let host_gutter = (MULTIVIEW_GUTTER_LOGICAL_PX * surface.dpi).round() as i32;
+        let host_gutter = (MULTIVIEW_GUTTER_LOGICAL_PX * dpi).round() as i32;
         gutter_floor(host_gutter, projection.scale())
     }
 
