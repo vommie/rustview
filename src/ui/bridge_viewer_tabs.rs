@@ -5,7 +5,7 @@ use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::BridgeTags;
-use super::multiview::tab_host;
+use super::multiview::{tab_host, tab_plain};
 use super::tab_dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
 use super::tab_icon::tab_icon;
 use super::{MainWindow, TabItemModel};
@@ -683,6 +683,8 @@ impl BridgeViewerTabs {
         fullscreen: &MultiviewHandle,
         settings: &Arc<SettingsManager>,
     ) {
+        tab_plain::refresh(window, tab_manager);
+
         // Only a fullscreen that is isolated from the Browse view (it shows a tab's own player) owns the video windows; a
         // Multiview that follows the Browse selection leaves the embedding of tab videos alone.
         if fullscreen.is_isolated_open() {
@@ -1699,5 +1701,6 @@ impl BridgeViewerTabs {
             BridgeTags::sync_tag_selection(window, library, state);
             StatusBarBridge::update_metrics(window, state);
         }
+        tab_plain::refresh(window, tab_manager);
     }
 }

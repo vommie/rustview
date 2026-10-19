@@ -5,7 +5,7 @@
 //! tick for the hover bar while the tab is shown and turns the events of the canvas into instance calls and UI actions.
 //! All state lives on the UI thread; the instance stays the only copy of the Multiview itself.
 
-use super::bar_hosting::{self, BarHost};
+use super::bar_hosting::{self, BarHost, BarTargets};
 use super::bar_overlay::{self, BarOwner};
 use super::cursor;
 use super::handle::MultiviewHandle;
@@ -155,7 +155,7 @@ fn update_bar_overlay() {
         media_click: Rc::new(on_action),
         primary_click: Rc::new(|_, action| on_primary_action(action)),
     };
-    let bars_visible = bar_hosting::update(&host, &instance, in_tab_view);
+    let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(&instance, in_tab_view), in_tab_view);
     let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);
     if in_tab_view {
         cursor::sync(window.window(), &instance, bars_visible, &mut window_hidden);
@@ -245,6 +245,11 @@ pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &Shar
 
 /// The Multiview is no longer the shown content (another tab, the Browse view, the grid or a fullscreen took over).
 pub fn suspend() {
+    // Called on every embedding sync, also while a normal tab owns the bars: only a host that was active lets go of them.
+    let active = with_host(|h| h.tick.running() || h.shown.is_some() || h.instance.upgrade().is_some()).unwrap_or(true);
+    if !active {
+        return;
+    }
     bar_overlay::hide(BarOwner::TabView);
     if let Some(window) = with_host(|h| h.window.clone()).flatten().and_then(|w| w.upgrade()) {
         let instance = with_host(|h| h.instance.upgrade()).flatten();

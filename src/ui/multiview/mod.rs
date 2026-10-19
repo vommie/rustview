@@ -1,7 +1,7 @@
 //! Multiview presenters: the glue between the Multiview core (`crate::viewer::multiview`) and the UI.
 //!
 //! `eligibility` decides from in-memory library state what is shown, `session*` present a Multiview in its own frameless
-//! Slint window, `tab_host` shows it in a viewer tab, `router` turns player events into UI actions and `handle` is the thread-safe face used by the rest of
+//! Slint window, `tab_host` shows it in a viewer tab, `tab_plain` gives a normal image or video tab the same action bars, `router` turns player events into UI actions and `handle` is the thread-safe face used by the rest of
 //! the application. The state and logic of a running Multiview live in `crate::viewer::multiview::instance`.
 
 mod bar_hosting;
@@ -17,6 +17,7 @@ mod session_convert;
 mod session_input;
 mod tab_single;
 pub mod tab_host;
+pub mod tab_plain;
 mod views;
 
 pub use eligibility::OpenSummary;

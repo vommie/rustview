@@ -1,7 +1,7 @@
 //! Session behavior around input: window geometry, the tick, clicks, gutter drag, swap, rename and the live selection.
 //! Everything here translates a UI event into a call on the instance and syncs the result into the window.
 
-use super::bar_hosting::{self, BarHost};
+use super::bar_hosting::{self, BarHost, BarTargets};
 use super::bar_overlay::{self, BarKind, BarOwner};
 use super::cursor;
 use super::eligibility;
@@ -134,7 +134,7 @@ impl Session {
             media_click: self.bar_click.clone(),
             primary_click: self.primary_click.clone(),
         };
-        let bars_visible = bar_hosting::update(&host, &self.instance, true);
+        let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(&self.instance, true), true);
         cursor::sync(win.window(), &self.instance, bars_visible, &mut self.cursor_hidden);
     }
 

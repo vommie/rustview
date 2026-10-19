@@ -286,6 +286,7 @@ pub(super) fn open_tab(
     main_window: slint::Weak<MainWindow>,
 ) -> bool {
     tab_host::suspend();
+    super::tab_plain::suspend();
     instance.lock().deactivate();
     launch(
         handle,

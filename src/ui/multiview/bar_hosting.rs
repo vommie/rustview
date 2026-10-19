@@ -5,6 +5,7 @@
 use super::bar_overlay::{self, BarKind, BarOwner, BarRequest};
 use super::views;
 use crate::viewer::multiview::instance::SharedInstance;
+use crate::viewer::multiview::view::{MediaBarTarget, PrimaryBarTarget};
 use std::rc::Rc;
 
 /// What a host is: where its window is and how its bars react to clicks.
@@ -16,15 +17,31 @@ pub(super) struct BarHost {
     pub primary_click: Rc<dyn Fn(i32, i32)>,
 }
 
-/// Shows, moves or hides both bars. With `active` false (the host does not show this instance) both go away. Returns whether
-/// any bar is visible now.
-pub(super) fn update(host: &BarHost, instance: &SharedInstance, active: bool) -> bool {
-    let (media, primary) = if active {
+/// What the content of a host offers its two bars right now.
+#[derive(Default)]
+pub(super) struct BarTargets {
+    pub media: Option<MediaBarTarget>,
+    pub primary: Option<PrimaryBarTarget>,
+}
+
+impl BarTargets {
+    /// What the Multiview `instance` offers; nothing while the host does not show it (`active` false).
+    pub fn of_instance(instance: &SharedInstance, active: bool) -> Self {
+        if !active {
+            return Self::default();
+        }
         let guard = instance.lock();
-        (guard.media_bar_target(), guard.primary_bar_target())
-    } else {
-        (None, None)
-    };
+        Self {
+            media: guard.media_bar_target(),
+            primary: guard.primary_bar_target(),
+        }
+    }
+}
+
+/// Shows, moves or hides both bars. With `active` false (the host does not show its content) both go away. Returns whether
+/// any bar is visible now.
+pub(super) fn update(host: &BarHost, targets: BarTargets, active: bool) -> bool {
+    let BarTargets { media, primary } = targets;
     // An open menu keeps its bar where it is, however far the pointer is, until the user clicks elsewhere.
     let media_menu_open = active && bar_overlay::service_menu(BarKind::Media, host.owner);
     let media_shown = media_menu_open || media.is_some_and(|target| {

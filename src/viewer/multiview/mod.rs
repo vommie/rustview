@@ -29,6 +29,7 @@ pub mod layout;
 pub mod layout_pins;
 pub mod model;
 pub mod navigation;
+pub mod plain_tab;
 pub mod prefs;
 pub mod primary_actions;
 pub mod route;

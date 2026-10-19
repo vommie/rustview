@@ -267,6 +267,7 @@ impl UiBridge {
             window.as_weak(),
         );
         tab_host::bind(&window, fullscreen.clone());
+        super::multiview::tab_plain::bind(fullscreen.clone());
 
         let win_fs_close = window.as_weak();
         let tm_fs_close = tab_manager.clone();

@@ -369,6 +369,7 @@ impl MultiviewHandle {
     pub fn shutdown(&self) {
         session::shutdown();
         super::tab_host::shutdown();
+        super::tab_plain::shutdown();
         super::bar_overlay::shutdown();
     }
 
@@ -412,6 +413,19 @@ impl MultiviewHandle {
             session::run(|s| s.drop_deleted(ids));
         } else {
             tab_host::drop_deleted(ids);
+            self.close_plain_tab_of(ids);
+        }
+    }
+
+    /// A normal image or video tab whose medium was deleted through its action bar closes, like the last medium of a Multiview
+    /// does. Only the active tab can have asked: the bar belongs to the tab that is shown.
+    fn close_plain_tab_of(&self, ids: &[MediaId]) {
+        let Some(tab) = self.tab_manager().and_then(|tm| tm.get_active_tab()) else {
+            return;
+        };
+        if !tab.is_multiview() && ids.contains(&tab.media_id) {
+            tracing::info!(media_id = tab.media_id, "[Multiview: PlainTab] The medium of the tab was deleted: closing the tab");
+            self.close_active_tab();
         }
     }
 
