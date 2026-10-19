@@ -226,6 +226,7 @@ export component TagPanel inherits VerticalLayout {
     callback reset-clicked();
     callback rating-selected(int);
     callback tag-filter-changed(string);
+    callback tag-filter-escape-pressed();
     callback tag-regex-toggled(bool);
     callback tag-clicked(int);
     callback tag-toggle-expand(int);
@@ -269,6 +270,7 @@ export component TagPanel inherits VerticalLayout {
         placeholder-text: "Filter tags...";
         search-changed(text) => { root.tag-filter-changed(text); }
         regex-toggled(r) => { root.tag-regex-toggled(r); }
+        escape-pressed => { root.tag-filter-escape-pressed(); }
     }
 
     // d. Tags Tree: Hierarchical Tree View (stretches vertically to fill main panel area)

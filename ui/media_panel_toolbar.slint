@@ -28,6 +28,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
 
     callback thumb-width-changed(int);
     callback search-changed(string);
+    callback search-escape-pressed();
     callback regex-toggled(bool);
     callback virtual-folder-toggled(bool);
     callback media-type-filter-changed(int);
@@ -150,6 +151,7 @@ export component MediaPanelToolbar inherits PanelToolbar {
         is-regex <=> root.regex-mode;
         search-changed(txt) => { root.search-changed(txt); }
         regex-toggled(r) => { root.regex-toggled(r); }
+        escape-pressed => { root.search-escape-pressed(); }
     }
 
     // 6. Separator

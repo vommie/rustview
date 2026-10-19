@@ -861,6 +861,7 @@ export component MainWindow inherits Window {
                         media-type-filter-idx <=> root.media-type-filter-idx;
                         thumb-width-changed(w) => { }
                         search-changed(t) => { root.search-query-changed(t); }
+                        search-escape-pressed => { main-window-focus.focus(); }
                         regex-toggled(r) => { root.regex-mode-toggled(r); }
                         virtual-folder-toggled(v) => { root.virtual-folder-toggled(v); }
                         media-type-filter-changed(m) => { root.media-type-filter-changed(m); }
@@ -1170,6 +1171,7 @@ export component MainWindow inherits Window {
                 tag-context-menu(id, x, y) => { root.tag-context-menu(id, sidebar_right.x + x, 38px + sidebar_right.y + y); }
                 root-context-menu(x, y) => { root.tag-root-context-menu(sidebar_right.x + x, 38px + sidebar_right.y + y); }
                 tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
+                tag-filter-escape-pressed => { main-window-focus.focus(); }
                 tag-regex-toggled(r) => { root.tag-regex-toggled(r); }
                 match-mode-changed(m) => { root.match-mode-changed(m); }
                 scope-mode-changed(s) => { root.scope-mode-changed(s); }

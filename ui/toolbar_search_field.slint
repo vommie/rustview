@@ -21,6 +21,7 @@ export component ToolbarSearchField inherits Rectangle {
     callback regex-toggled(bool);
     callback accepted(string);
     callback cleared();
+    callback escape-pressed();
 
     forward-focus: field;
 
@@ -57,5 +58,6 @@ export component ToolbarSearchField inherits Rectangle {
         regex-toggled(r) => { root.regex-toggled(r); }
         accepted(t) => { root.accepted(t); }
         cleared => { root.cleared(); }
+        escape-pressed => { root.escape-pressed(); }
     }
 }

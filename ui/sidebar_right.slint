@@ -46,6 +46,7 @@ export component SidebarRight inherits Rectangle {
     callback tag-context-menu(int, length, length);
     callback root-context-menu(length, length);
     callback tag-filter-changed(string);
+    callback tag-filter-escape-pressed();
     callback tag-regex-toggled(bool);
     callback match-mode-changed(int);
     callback scope-mode-changed(int);
@@ -107,6 +108,7 @@ export component SidebarRight inherits Rectangle {
                 reset-clicked => { root.reset-clicked(); }
                 rating-selected(r) => { root.rating-selected(r); }
                 tag-filter-changed(txt) => { root.tag-filter-changed(txt); }
+                tag-filter-escape-pressed => { root.tag-filter-escape-pressed(); }
                 tag-regex-toggled(r) => { root.tag-regex-toggled(r); }
                 tag-clicked(id) => { root.tag-clicked(id); }
                 tag-toggle-expand(id) => { root.tag-toggle-expand(id); }

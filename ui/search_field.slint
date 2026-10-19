@@ -43,6 +43,8 @@ export component SearchField inherits Rectangle {
     callback regex-toggled(bool /* is_regex_active */);
     callback accepted(string /* current_text */);
     callback cleared();
+    /// Escape was pressed in the field (after it cleared its text): the owner takes the focus away from it.
+    callback escape-pressed();
 
     // Focus forwarding: ensures any focus received by SearchField is passed directly to TextInput
     forward-focus: input;
@@ -149,8 +151,9 @@ export component SearchField inherits Rectangle {
                             root.text = "";
                             root.search-changed("");
                             root.cleared();
-                            return accept;
                         }
+                        root.escape-pressed();
+                        return accept;
                     }
                     if event.text == Key.Return {
                         root.accepted(self.text);
