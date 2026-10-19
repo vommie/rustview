@@ -15,7 +15,6 @@ use super::bridge_favorites::BridgeFavorites;
 use super::bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
 use super::multiview::MultiviewHandle;
 use super::bridge_media::BridgeMedia;
-use super::clipboard::ClipboardBridge;
 use super::bridge_state::*;
 use super::bridge_ctx_menu_browse::{BrowseActionContext, BrowseContextMenus, BrowseMenuContext};
 use super::browse_folders::{BrowseFolders, FolderRowRef};
@@ -328,7 +327,7 @@ impl BridgeContextMenu {
             }
 
             // 2b. Actions that only the menus of the free space and of a mixed selection have
-            if (CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER..=CTX_BROWSE_PASTE).contains(&action_u64) {
+            if (CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER..=CTX_BROWSE_TOGGLE_FOLDERS).contains(&action_u64) {
                 BrowseContextMenus::handle_action(
                     action_u64,
                     &win,
@@ -517,7 +516,6 @@ impl BridgeContextMenu {
             show_hidden_folders,
             is_busy,
             is_favorite,
-            ClipboardBridge::folder_entry(ctx.window, ctx.thumbnails, ctx.state, target_node.is_deleted),
         );
 
         Self::open_custom_menu(ctx.window, ctx.state, ctx.tab_manager, menu, x, y);

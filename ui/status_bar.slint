@@ -52,7 +52,6 @@ export component StatusBar inherits Rectangle {
     in property <bool> is-indexing-media: false;
     in property <int> media-index-current: 0;
     in property <int> media-index-total: 0;
-    in property <string> media-index-label: "Scanning Media: ";
 
     // Thumbnail Pipeline Progress Properties
     in property <bool> is-preloading: false;
@@ -169,7 +168,6 @@ export component StatusBar inherits Rectangle {
                     is-indexing: root.is-indexing-media;
                     current-val: root.media-index-current;
                     total-val: root.media-index-total;
-                    label: root.media-index-label;
                 }
             }
 

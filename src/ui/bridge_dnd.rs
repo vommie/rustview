@@ -65,7 +65,7 @@ impl BridgeDnd {
     /// lighting up); `target` adds what a drop needs from the drive: the folder is there and the user may write to it.
     pub fn transfer_block_reason(window: &MainWindow, state: &RwLock<UiState>, target: Option<(&str, &Path)>) -> Option<String> {
         if BridgeMedia::is_scan_running(window, state) {
-            return Some("Cannot move or copy files while a scan, refresh or paste is running.".to_string());
+            return Some("Cannot move or copy files while a scan or refresh is running.".to_string());
         }
         let (name, path) = target?;
         if !path.exists() {

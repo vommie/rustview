@@ -36,7 +36,6 @@ export { DeleteSelectionDialog } from "delete_selection_dialog.slint";
 export { NewFolderDialog } from "new_folder_dialog.slint";
 export { MoveFolderToDialog } from "move_folder_to_dialog.slint";
 export { RemoveOrphanedFolderDialog } from "remove_orphaned_folder_dialog.slint";
-export { NoticeDialog } from "notice_dialog.slint";
 export { RebornFolderDeleteWarnDialog } from "reborn_folder_delete_warn_dialog.slint";
 export { MissingFolderDeleteDialog } from "missing_folder_delete_dialog.slint";
 export { MissingFileDialog } from "missing_file_dialog.slint";
@@ -233,7 +232,6 @@ export component MainWindow inherits Window {
     in-out property <bool> is-indexing-media: false;
     in-out property <int> media-index-current: 0;
     in-out property <int> media-index-total: 0;
-    in-out property <string> media-index-label: "Scanning Media: ";
 
     in-out property <bool> is-preloading: false;
     in-out property <int> preload-current: 0;
@@ -363,10 +361,6 @@ export component MainWindow inherits Window {
 
     // Global Media Selection Callbacks (Ctrl+A & Ctrl+Shift+A)
     callback select-all-media();
-    // Clipboard shortcuts of the Browse view (Ctrl+X / Ctrl+C / Ctrl+V); Rust decides what is possible.
-    callback cut-selection-requested();
-    callback copy-selection-requested();
-    callback paste-requested();
     callback clear-media-selection();
 
     callback folder-selected(int, string);
@@ -591,20 +585,6 @@ export component MainWindow inherits Window {
                 // 2. Select All: Ctrl+A
                 if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.shift && (event.text == "a" || event.text == "A" || event.text == "\u{01}") {
                     root.select-all-media();
-                    return accept;
-                }
-
-                // 2a. Clipboard: Ctrl+X cuts, Ctrl+C copies, Ctrl+V pastes into the open folder (never depends on the focused panel)
-                if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.shift && !event.modifiers.alt && (event.text == "x" || event.text == "X" || event.text == "\u{18}") {
-                    root.cut-selection-requested();
-                    return accept;
-                }
-                if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.shift && !event.modifiers.alt && (event.text == "c" || event.text == "C" || event.text == "\u{03}") {
-                    root.copy-selection-requested();
-                    return accept;
-                }
-                if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.shift && !event.modifiers.alt && (event.text == "v" || event.text == "V" || event.text == "\u{16}") {
-                    root.paste-requested();
                     return accept;
                 }
 
@@ -1188,7 +1168,6 @@ export component MainWindow inherits Window {
             is-indexing-media: root.is-indexing-media;
             media-index-current: root.media-index-current;
             media-index-total: root.media-index-total;
-            media-index-label: root.media-index-label;
             is-preloading: root.is-preloading;
             preload-val: root.preload-current;
             preload-max: root.preload-total;

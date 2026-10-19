@@ -16,7 +16,6 @@ pub mod folder_walker;
 pub mod folders;
 pub mod media;
 pub mod models;
-pub mod paste;
 pub mod refresh;
 pub mod refresh_media_files;
 pub mod schema;

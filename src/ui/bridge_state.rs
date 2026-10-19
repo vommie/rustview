@@ -45,8 +45,6 @@ pub const CTX_ACTION_RATE_5: CtxMenuActionId = 1015;
 pub const CTX_ACTION_REMOVE_FROM_DB: CtxMenuActionId = 1016;
 pub const CTX_ACTION_REFRESH_FILES: CtxMenuActionId = 1017;
 pub const CTX_ACTION_REGENERATE_THUMB_RANDOM: CtxMenuActionId = 1018;
-pub const CTX_ACTION_CUT: CtxMenuActionId = 1030;
-pub const CTX_ACTION_COPY_FILES: CtxMenuActionId = 1031;
 pub const CTX_ACTION_OPEN_IN_TAB: CtxMenuActionId = 1020;
 pub const CTX_ACTION_OPEN_IN_BG_TAB: CtxMenuActionId = 1021;
 pub const CTX_ACTION_OPEN_IN_FULLSCREEN: CtxMenuActionId = 1022;
@@ -78,12 +76,10 @@ pub const CTX_FOLDER_REFRESH_TREE_FULL: CtxMenuActionId = 3006;
 pub const CTX_FOLDER_REFRESH_TREE_RELATIVE: CtxMenuActionId = 3007;
 pub const CTX_FOLDER_ADD_TO_FAVORITES: CtxMenuActionId = 3008;
 pub const CTX_FOLDER_NEW: CtxMenuActionId = 3009;
-pub const CTX_FOLDER_PASTE: CtxMenuActionId = 3010;
 // Menus of the Browse view that belong to no single item: a mixed selection of folders and files, the free space.
 pub const CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 3020;
 pub const CTX_BROWSE_SELECTION_DELETE: CtxMenuActionId = 3021;
 pub const CTX_BROWSE_TOGGLE_FOLDERS: CtxMenuActionId = 3022;
-pub const CTX_BROWSE_PASTE: CtxMenuActionId = 3023;
 pub const CTX_FOLDER_MOVE_BASE: CtxMenuActionId = 300_000;
 
 // Media Batch Destination Action IDs
@@ -162,8 +158,6 @@ pub struct UiState {
     pub is_query_active: bool,
     pub selected_rating: u8,
     pub is_refreshing_media: bool,
-    /// Clipboard files are being pasted (locks the same controls as a scan does).
-    pub is_pasting: bool,
     pub active_file_rename_target: Option<MediaId>,
     pub active_associated_apps: Vec<DesktopApp>,
     pub active_tab_dialog_target: Option<TabId>,
@@ -254,7 +248,6 @@ impl Default for UiState {
             view_geometry: None,
             folder_hierarchy: None,
             expanded_folder_ids: HashSet::new(),
-            is_pasting: false,
             is_refreshing_folders: false,
             folder_scan_count: 0,
             active_folder_dialog_target: None,

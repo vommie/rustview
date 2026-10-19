@@ -12,7 +12,6 @@ use super::bridge_media::BridgeMedia;
 use super::bridge_state::*;
 use super::bridge_status_bar::StatusBarBridge;
 use super::browse_folders::BrowseFolders;
-use super::clipboard::{ClipboardBridge, PasteEntry};
 use super::favorites::FavoriteManager;
 use super::multiview::MultiviewHandle;
 use super::MainWindow;
@@ -57,7 +56,6 @@ struct BackgroundMenuInfo {
     is_busy: bool,
     show_folders: bool,
     has_items: bool,
-    paste: PasteEntry,
 }
 
 pub struct BrowseContextMenus;
@@ -174,10 +172,7 @@ impl BrowseContextMenus {
                     "Create a new folder (or a path of folders) in this folder",
                 )
             };
-            builder = info.paste.clone().append(builder, CTX_BROWSE_PASTE, Some("Ctrl+V")).separator();
-        } else {
-            // A search result or the recursive view: the entry is there, disabled, and says why.
-            builder = info.paste.clone().append(builder, CTX_BROWSE_PASTE, Some("Ctrl+V")).separator();
+            builder = builder.separator();
         }
 
         builder = builder
@@ -197,8 +192,6 @@ impl BrowseContextMenus {
         BridgeFileSelection::clear_selection(ctx.window, ctx.library, ctx.state);
 
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
-        // Decided before the state is locked for writing: it reads the state itself.
-        let paste = ClipboardBridge::background_entry(ctx.window, ctx.thumbnails, ctx.state);
         let info = {
             let mut st = ctx.state.write();
             st.active_tab_dialog_target = None;
@@ -213,7 +206,6 @@ impl BrowseContextMenus {
                 is_busy,
                 show_folders: st.show_folders,
                 has_items: st.view_len() > 0,
-                paste,
             }
         };
         let menu = Self::build_background_menu(&info);
@@ -237,11 +229,6 @@ impl BrowseContextMenus {
                 folder_dialogs: ctx.folder_dialogs,
                 fullscreen: ctx.fullscreen,
             }),
-            CTX_BROWSE_PASTE => {
-                if let Some(bridge) = ClipboardBridge::current() {
-                    bridge.paste_into_visible_folder();
-                }
-            }
             CTX_BROWSE_TOGGLE_FOLDERS => {
                 let on = !ctx.state.read().show_folders;
                 window.set_show_folders(on);

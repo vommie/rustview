@@ -22,7 +22,6 @@ use crate::ctx_menu::{
     CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuContext, CtxMenuDispatcher,
 };
 use crate::icons::Icon;
-use crate::system::file_clipboard::ClipboardMode;
 use crate::library::models::{FileTransferKind, FolderHierarchySnapshot, FolderId, MediaId};
 use crate::library::Library;
 use crate::media::MediaType;
@@ -420,31 +419,7 @@ impl MediaContextMenu {
             )
             .separator();
 
-        // 3. Cut / Copy to the clipboard, then Move To... / Copy To... Submenus Projected directly from SPoT with zero disk I/O
-        let clipboard_tip = |what: &str| {
-            if can_open {
-                what.to_string()
-            } else {
-                format!("{what}\nDisabled: the selected files do not exist on physical disk")
-            }
-        };
-        builder = builder
-            .action_with_tooltip(
-                CTX_ACTION_CUT,
-                "Cut",
-                Some("Ctrl+X"),
-                Some(Icon::Cut),
-                can_open,
-                clipboard_tip("Put the files on the clipboard; pasting them moves them (also in other applications)"),
-            )
-            .action_with_tooltip(
-                CTX_ACTION_COPY_FILES,
-                "Copy",
-                Some("Ctrl+C"),
-                Some(Icon::Copy),
-                can_open,
-                clipboard_tip("Put the files on the clipboard; pasting them copies them (also in other applications)"),
-            );
+        // 3. Move To... / Copy To... Submenus Projected directly from SPoT with zero disk I/O
         if let Some(snap) = snapshot {
             let copy_menu_items = snap.project_target_folder_menu(
                 CTX_ACTION_COPY_TO_BASE,
@@ -679,12 +654,6 @@ impl MediaContextMenu {
             }
             CTX_ACTION_OPEN_IN_FILE_MANAGER => {
                 Self::handle_open_in_file_manager_action(window, ctx, target_ids);
-            }
-            CTX_ACTION_CUT => {
-                super::clipboard::ClipboardBridge::put_ids_on_clipboard(window, ctx.library, ctx.state, target_ids, ClipboardMode::Cut);
-            }
-            CTX_ACTION_COPY_FILES => {
-                super::clipboard::ClipboardBridge::put_ids_on_clipboard(window, ctx.library, ctx.state, target_ids, ClipboardMode::Copy);
             }
             CTX_ACTION_COPY_NAME => {
                 Self::handle_copy_name_action(window, ctx, target_ids);

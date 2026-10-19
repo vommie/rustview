@@ -546,7 +546,7 @@ impl BridgeMedia {
     /// next to it: the scan would index files while they change place.
     pub fn is_scan_running(window: &MainWindow, state: &RwLock<UiState>) -> bool {
         if let Some(st) = state.try_read()
-            && (st.is_refreshing_media || st.is_refreshing_folders || st.is_pasting)
+            && (st.is_refreshing_media || st.is_refreshing_folders)
         {
             return true;
         }
@@ -559,7 +559,7 @@ impl BridgeMedia {
         state: &RwLock<UiState>,
     ) -> bool {
         if let Some(st) = state.try_read()
-            && (st.is_refreshing_media || st.is_refreshing_folders || st.is_pasting)
+            && (st.is_refreshing_media || st.is_refreshing_folders)
         {
             return true;
         }
