@@ -21,6 +21,46 @@ pub struct TileView {
     pub pixels: Option<SharedPixelBuffer<Rgb8Pixel>>,
     pub is_loading: bool,
     pub error: Option<String>,
+    /// An image that is zoomed: what is drawn instead of the fitted `pixels`.
+    pub zoom: Option<ZoomPictureView>,
+    /// The minimap of a zoomed image, while it is shown.
+    pub minimap: Option<MinimapView>,
+    /// Dragging the picture moves something (the image is larger than its tile).
+    pub pannable: bool,
+}
+
+/// The picture of a zoomed image: where it goes in its tile (physical pixels relative to the tile) and what it is.
+pub struct ZoomPictureView {
+    pub dest: Rect,
+    pub content: ZoomContentView,
+    /// Hard pixels instead of smoothing (the nearest-neighbour filter is chosen).
+    pub pixelated: bool,
+}
+
+pub enum ZoomContentView {
+    /// The sharp, resampled picture.
+    Rendered(SharedPixelBuffer<Rgb8Pixel>),
+    /// This rectangle of the tile's own picture, scaled by the renderer, until the sharp picture is ready.
+    Preview { clip: Rect },
+}
+
+/// The minimap of a tile: its place (physical pixels relative to the tile), the thumbnail of the whole image and the part
+/// that is visible (shares of the image: x, y, width, height).
+pub struct MinimapView {
+    pub rect: Rect,
+    pub thumb: SharedPixelBuffer<Rgb8Pixel>,
+    pub viewport: (f64, f64, f64, f64),
+}
+
+/// The zoom slider that hangs below the media bar: which tile it zooms and the numbers it needs (tenths of a percent).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZoomBubbleView {
+    pub tile: usize,
+    pub permille: i32,
+    pub min_permille: i32,
+    pub max_permille: i32,
+    /// The zooms the handle snaps to.
+    pub snaps: Vec<i32>,
 }
 
 /// One button of the hover bar of a tile.

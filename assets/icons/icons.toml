@@ -83,6 +83,9 @@ open_with = { tabler = "apps", doc = "Open with another application" }
 open_in_tab = { tabler = "tabs", doc = "Open in a viewer tab" }
 open_in_background_tab = { tabler = "browser-plus", doc = "Open in a background viewer tab" }
 open_fullscreen = { tabler = "arrows-maximize", doc = "Open in fullscreen" }
+zoom_in = { tabler = "zoom-in", doc = "Zoom an image (and zoom in one step)" }
+zoom_out = { tabler = "zoom-out", doc = "Zoom out one step" }
+zoom_reset = { tabler = "zoom-reset", doc = "Back to 100% (the image fitted into its view)" }
 playing_elsewhere = { tabler = "screen-share", doc = "The content is shown in the fullscreen window, not here (placeholder in the tab grid)" }
 open_multiview = { tabler = "layout-columns", doc = "Open several media side by side in the fullscreen Multiview" }
 multiview_swap = { tabler = "arrows-exchange", doc = "Swap two neighboring media in the Multiview" }

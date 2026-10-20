@@ -61,6 +61,7 @@ impl PlainTabState {
             // The tab already exists: there is nothing to open as a tab, and no arrangement to extend.
             single_tab: true,
             broken: false,
+            zoom: None,
         }
     }
 
@@ -155,6 +156,7 @@ impl PlainTabState {
         let id = self.media_id;
         match click {
             BarClick::MenuItem(item) => PlainOutcome::Ui(UiAction::OpenWithItem(id, item)),
+            BarClick::ZoomTo(_) | BarClick::ZoomStep { .. } | BarClick::ZoomReset => PlainOutcome::None,
             BarClick::Action(action) => {
                 if !self.media_actions().iter().any(|a| a.id == action) {
                     return PlainOutcome::None;
@@ -164,9 +166,11 @@ impl PlainTabState {
                     MediaActionId::OpenWith => PlainOutcome::Ui(UiAction::ToggleOpenWith(id)),
                     MediaActionId::Delete => PlainOutcome::Ui(UiAction::DeleteTile(id)),
                     MediaActionId::Close => PlainOutcome::Ui(UiAction::CloseActiveTab),
-                    MediaActionId::Sticky | MediaActionId::Duplicate | MediaActionId::OpenAsTab | MediaActionId::Remove => {
-                        PlainOutcome::None
-                    }
+                    MediaActionId::Sticky
+                    | MediaActionId::Duplicate
+                    | MediaActionId::OpenAsTab
+                    | MediaActionId::Remove
+                    | MediaActionId::Zoom => PlainOutcome::None,
                 }
             }
         }

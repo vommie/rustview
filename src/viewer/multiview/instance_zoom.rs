@@ -1,0 +1,579 @@
+//! Instance behavior around zooming images: the zoom of a tile (`TileState::zoom`), the slider that hangs below the bar,
+//! the wheel, dragging, the minimap, and the decoding and rendering that zooming needs.
+//!
+//! The model lives in `viewer::zoom` (pure); this file connects it to tiles: it gives each zoom its tile size when the layout
+//! changes, runs what `ZoomState::poll` asks for on worker threads (the events come back through the sink) and describes the
+//! result for the host (`TileView::zoom`, `TileView::minimap`, `zoom_bubble`).
+
+use super::events::PlayerEvent;
+use super::follow::TileKey;
+use super::instance::MultiviewInstance;
+use super::layout::Rect;
+use super::media_actions::BarClick;
+use super::model::TileKind;
+use super::route::HostMode;
+use super::view::{MinimapView, ZoomBubbleView, ZoomContentView, ZoomPictureView};
+use crate::viewer::HighResImageLoader;
+use crate::viewer::zoom::minimap::MinimapLayout;
+use crate::viewer::zoom::prefs as zoom_prefs;
+use crate::viewer::zoom::render::SourceImage;
+use crate::viewer::zoom::scale;
+use crate::viewer::zoom::state::{PictureContent, RenderDone, Request};
+use std::sync::Arc;
+use std::time::Instant;
+
+/// A mouse wheel notch is worth this much `delta-y` in Slint; touchpads send pixels and add up to a step the same way.
+const WHEEL_STEP_DELTA: f32 = 60.0;
+
+impl MultiviewInstance {
+    /// Zooming works where the picture is interactive: the fullscreen and the tab view. The tab-grid item is a miniature.
+    fn zoom_host_is_interactive(&self) -> bool {
+        matches!(self.host.surface.mode, HostMode::Fullscreen | HostMode::TabView)
+    }
+
+    fn zoomable(&self, index: usize) -> bool {
+        self.zoom_host_is_interactive()
+            && self
+                .tiles
+                .get(index)
+                .is_some_and(|t| t.kind == TileKind::Image && t.error.is_none() && !t.is_loading && t.zoom.is_some())
+    }
+
+    /// `Some(slider open)` for a tile whose picture can be zoomed; this is what the zoom button of the bar looks at.
+    pub(super) fn zoom_button_state(&self, index: usize) -> Option<bool> {
+        self.zoomable(index).then(|| self.zoom_slider == Some(self.tiles[index].key))
+    }
+
+    pub(super) fn toggle_zoom_slider(&mut self, index: usize) {
+        let Some(key) = self.tiles.get(index).map(|t| t.key) else { return };
+        self.zoom_slider = if self.zoom_slider == Some(key) { None } else { Some(key) };
+        tracing::info!(open = self.zoom_slider.is_some(), "[Zoom: Slider] Toggled");
+        self.bump();
+    }
+
+    /// The slider asked for something: a zoom, a step, the reset. The tile that has the slider is the one that zooms.
+    pub(super) fn zoom_slider_click(&mut self, key: TileKey, click: BarClick) {
+        let Some(index) = self.tile_index(key) else { return };
+        if !self.zoomable(index) {
+            return;
+        }
+        let prefs = zoom_prefs::current();
+        let now = Instant::now();
+        let Some(zoom) = self.tiles[index].zoom.as_mut() else { return };
+        match click {
+            BarClick::ZoomTo(permille) => zoom.zoom_to(scale::from_permille(permille), None, &prefs, now),
+            BarClick::ZoomStep { up, shift, ctrl } => zoom.zoom_step(up, scale::slider_wheel_step(shift, ctrl), None, &prefs, now),
+            BarClick::ZoomReset => zoom.reset(&prefs, now),
+            BarClick::Action(_) | BarClick::MenuItem(_) => return,
+        }
+        self.poll_zoom_at(now);
+        self.bump();
+    }
+
+    /// What the slider bubble shows: the tile it belongs to and its numbers; `None` while it is closed (or its tile can no
+    /// longer be zoomed).
+    pub fn zoom_bubble(&self) -> Option<ZoomBubbleView> {
+        let key = self.zoom_slider?;
+        let index = self.tile_index(key)?;
+        if !self.zoomable(index) {
+            return None;
+        }
+        let prefs = zoom_prefs::current();
+        let limits = prefs.limits();
+        let zoom = self.tiles[index].zoom.as_ref()?;
+        Some(ZoomBubbleView {
+            tile: index,
+            permille: scale::to_permille(zoom.zoom()),
+            min_permille: scale::to_permille(limits.min),
+            max_permille: scale::to_permille(limits.max),
+            snaps: scale::snap_zooms(limits).into_iter().map(scale::to_permille).collect(),
+        })
+    }
+
+    /// Closes the slider if its tile is gone or cannot be zoomed any more (a tick checks it).
+    fn validate_zoom_slider(&mut self) {
+        if let Some(key) = self.zoom_slider
+            && self.tile_index(key).is_none_or(|index| !self.zoomable(index))
+        {
+            self.zoom_slider = None;
+            self.bump();
+        }
+    }
+
+    // ---- input ------------------------------------------------------------------------------------------------------------
+
+    fn logical_to_physical(&self, value: f32) -> f64 {
+        f64::from(value) * f64::from(self.host.surface.dpi.max(0.5))
+    }
+
+    /// Ctrl + mouse wheel over tile `index`: one step up (wheel up, `delta_y > 0`) or down per notch, around the pointer
+    /// (`x`, `y`: logical pixels in the tile).
+    pub fn zoom_wheel(&mut self, index: usize, delta_y: f32, x: f32, y: f32) {
+        self.zoom_wheel_at(index, delta_y, (x, y), Instant::now());
+    }
+
+    pub(super) fn zoom_wheel_at(&mut self, index: usize, delta_y: f32, at: (f32, f32), now: Instant) {
+        if !self.zoomable(index) || !delta_y.is_finite() || delta_y == 0.0 {
+            return;
+        }
+        // Add up to whole notches; a change of direction starts over.
+        if self.zoom_wheel_accum * delta_y < 0.0 {
+            self.zoom_wheel_accum = 0.0;
+        }
+        self.zoom_wheel_accum += delta_y;
+        let steps = (self.zoom_wheel_accum.abs() / WHEEL_STEP_DELTA).floor() as u32;
+        if steps == 0 {
+            return;
+        }
+        let up = self.zoom_wheel_accum > 0.0;
+        self.zoom_wheel_accum -= self.zoom_wheel_accum.signum() * WHEEL_STEP_DELTA * steps as f32;
+        let anchor = (self.logical_to_physical(at.0), self.logical_to_physical(at.1));
+        let prefs = zoom_prefs::current();
+        let Some(zoom) = self.tiles[index].zoom.as_mut() else { return };
+        for _ in 0..steps.min(8) {
+            zoom.zoom_step(up, prefs.wheel_step, Some(anchor), &prefs, now);
+        }
+        self.poll_zoom_at(now);
+        self.bump();
+    }
+
+    /// A drag of the picture of tile `index` by `dx`, `dy` logical pixels.
+    pub fn zoom_pan(&mut self, index: usize, dx: f32, dy: f32) {
+        if !self.zoomable(index) {
+            return;
+        }
+        let (dx, dy) = (self.logical_to_physical(dx), self.logical_to_physical(dy));
+        let (prefs, now) = (zoom_prefs::current(), Instant::now());
+        if let Some(zoom) = self.tiles[index].zoom.as_mut() {
+            zoom.pan_pixels(dx, dy, &prefs, now);
+        }
+        self.poll_zoom_at(now);
+        self.bump();
+    }
+
+    /// The minimap of tile `index` was pressed (`phase` 0), dragged (1) or released (2) at (`nx`, `ny`), shares of the image.
+    pub fn zoom_minimap(&mut self, index: usize, nx: f32, ny: f32, phase: i32) {
+        if !self.zoomable(index) {
+            return;
+        }
+        let (nx, ny) = (f64::from(nx).clamp(0.0, 1.0), f64::from(ny).clamp(0.0, 1.0));
+        let (prefs, now) = (zoom_prefs::current(), Instant::now());
+        if let Some(zoom) = self.tiles[index].zoom.as_mut() {
+            match phase {
+                0 => zoom.minimap_press(nx, ny, &prefs, now),
+                1 => zoom.minimap_move(nx, ny, &prefs, now),
+                _ => zoom.minimap_release(),
+            }
+        }
+        self.poll_zoom_at(now);
+        self.bump();
+    }
+
+    /// Back to 100% for tile `index`.
+    pub fn zoom_reset(&mut self, index: usize) {
+        if !self.zoomable(index) {
+            return;
+        }
+        let (prefs, now) = (zoom_prefs::current(), Instant::now());
+        if let Some(zoom) = self.tiles[index].zoom.as_mut() {
+            zoom.reset(&prefs, now);
+        }
+        self.poll_zoom_at(now);
+        self.bump();
+    }
+
+    /// The zoom of tile `index` in percent (for the status), if it can be zoomed.
+    pub fn zoom_percent(&self, index: usize) -> Option<f64> {
+        self.tiles.get(index)?.zoom.as_ref().map(|z| z.zoom() * 100.0)
+    }
+
+    /// Whether any picture is gliding to a new zoom (the host redraws every frame meanwhile).
+    pub fn zoom_animating(&self) -> bool {
+        self.tiles.iter().any(|t| t.zoom.as_ref().is_some_and(|z| z.animating()))
+    }
+
+    // ---- layout, time and work ------------------------------------------------------------------------------------------------
+
+    /// Gives every zoom the size of its tile (called after the layout or the projection changed).
+    pub(super) fn sync_zoom_frames(&mut self) {
+        if !self.zoom_host_is_interactive() {
+            return;
+        }
+        let sizes: Vec<Option<(i32, i32)>> =
+            (0..self.tiles.len()).map(|i| self.host_content(i).map(|r| (r.w, r.h))).collect();
+        let prefs = zoom_prefs::current();
+        for (tile, size) in self.tiles.iter_mut().zip(sizes) {
+            if let (Some(zoom), Some(size)) = (tile.zoom.as_mut(), size) {
+                zoom.set_tile(size, &prefs);
+            }
+        }
+    }
+
+    /// Everything time driven: the glide, the render debounce, the minimap's hover and timeout, the slider's validity. Called
+    /// on every tick of the host (and by the host's frame timer while a zoom glides).
+    pub fn poll_zoom(&mut self) {
+        self.poll_zoom_at(Instant::now());
+    }
+
+    pub(super) fn poll_zoom_at(&mut self, now: Instant) {
+        if !self.zoom_host_is_interactive() {
+            return;
+        }
+        self.validate_zoom_slider();
+        self.ensure_zoom_thumbs();
+        let prefs = zoom_prefs::current();
+        let dpi = self.host.surface.dpi;
+        let pointer = self.pointer;
+        let rects: Vec<Option<Rect>> = (0..self.tiles.len()).map(|i| self.host_content(i)).collect();
+        let mut changed = false;
+        let mut work: Vec<(TileKey, std::path::PathBuf, Vec<Request>)> = Vec::new();
+        for (index, tile) in self.tiles.iter_mut().enumerate() {
+            let Some(zoom) = tile.zoom.as_mut() else { continue };
+            // The minimap is revealed by the pointer on or around its place.
+            let hover = match (pointer, rects[index]) {
+                (Some((px, py)), Some(rect)) if zoom.can_pan() => {
+                    let (tw, th) = (rect.w, rect.h);
+                    MinimapLayout::compute((tw, th), zoom.image(), prefs.minimap_corner, dpi)
+                        .is_some_and(|m| m.reveals(f64::from(px - rect.x), f64::from(py - rect.y)))
+                }
+                _ => false,
+            };
+            zoom.set_minimap_hover(hover);
+            let was_animating = zoom.animating();
+            let requests = zoom.poll(tile.pixels.as_ref(), &prefs, now);
+            changed |= was_animating || zoom.animating();
+            let shown = zoom.minimap_shown(&prefs, now);
+            if shown != tile.zoom_minimap_shown {
+                tile.zoom_minimap_shown = shown;
+                changed = true;
+            }
+            if !requests.is_empty() {
+                work.push((tile.key, tile.path.clone(), requests));
+            }
+        }
+        for (key, path, requests) in work {
+            for request in requests {
+                self.run_zoom_request(key, &path, request);
+            }
+        }
+        if changed {
+            self.bump();
+        }
+    }
+
+    fn run_zoom_request(&self, key: TileKey, path: &std::path::Path, request: Request) {
+        let (sink, me) = (self.sink.clone(), self.me.clone());
+        match request {
+            Request::LoadSource => {
+                let path = path.to_path_buf();
+                let spawned = std::thread::Builder::new().name("zoom-source".into()).spawn(move || {
+                    let result = HighResImageLoader::load_full_resolution(&path)
+                        .map_err(|e| e.to_string())
+                        .and_then(|(w, h, pixels)| SourceImage::new(w, h, pixels).map(Arc::new).ok_or_else(|| "the original has an unexpected size".to_string()));
+                    sink.post(me, PlayerEvent::ZoomSource { tile: key, result });
+                });
+                if let Err(e) = spawned {
+                    tracing::error!(error = %e, "[Zoom: Source] The decoder thread could not be started");
+                }
+            }
+            Request::Render(job) => {
+                let spawned = std::thread::Builder::new().name("zoom-render".into()).spawn(move || {
+                    let done = job.run();
+                    sink.post(me, PlayerEvent::ZoomRendered { tile: key, done });
+                });
+                if let Err(e) = spawned {
+                    tracing::error!(error = %e, "[Zoom: Render] The render thread could not be started");
+                }
+            }
+        }
+    }
+
+    /// The original of a zoomed image arrived (or could not be decoded).
+    pub fn on_zoom_source(&mut self, key: TileKey, result: Result<Arc<SourceImage>, String>) {
+        let Some(index) = self.tile_index(key) else { return };
+        if let Some(zoom) = self.tiles[index].zoom.as_mut() {
+            if let Err(why) = &result {
+                tracing::warn!(error = %why, "[Zoom: Source] The original could not be decoded; the zoom stays a preview");
+            }
+            zoom.source_loaded(result);
+        }
+        self.poll_zoom_at(Instant::now());
+        self.bump();
+    }
+
+    /// A zoomed picture was resampled.
+    pub fn on_zoom_rendered(&mut self, key: TileKey, done: RenderDone) {
+        let Some(index) = self.tile_index(key) else { return };
+        let prefs = zoom_prefs::current();
+        if let Some(zoom) = self.tiles[index].zoom.as_mut() {
+            zoom.rendered(done, &prefs);
+        }
+        self.poll_zoom_at(Instant::now());
+        self.bump();
+    }
+
+    // ---- what the host draws ----------------------------------------------------------------------------------------------
+
+    /// The zoomed picture, the minimap and the pannable flag of tile `index` for `view()`.
+    pub(super) fn zoom_views(&self, index: usize) -> (Option<ZoomPictureView>, Option<MinimapView>, bool) {
+        if !self.zoomable(index) {
+            return (None, None, false);
+        }
+        let tile = &self.tiles[index];
+        let Some(zoom) = tile.zoom.as_ref() else { return (None, None, false) };
+        let prefs = zoom_prefs::current();
+        let display_size = tile.pixels.as_ref().map(|p| (p.width(), p.height()));
+        let picture = zoom.picture(display_size, &prefs).map(|picture| ZoomPictureView {
+            dest: Rect::new(picture.dest.x, picture.dest.y, picture.dest.w, picture.dest.h),
+            content: match picture.content {
+                PictureContent::Rendered(pixels) => ZoomContentView::Rendered(pixels),
+                PictureContent::Preview { clip } => ZoomContentView::Preview { clip: Rect::new(clip.x, clip.y, clip.w, clip.h) },
+            },
+            pixelated: prefs.resample.is_pixelated(),
+        });
+        let minimap = self.minimap_view(index, &prefs);
+        (picture, minimap, zoom.can_pan())
+    }
+
+    fn minimap_view(&self, index: usize, prefs: &zoom_prefs::ZoomPrefs) -> Option<MinimapView> {
+        let tile = &self.tiles[index];
+        let zoom = tile.zoom.as_ref()?;
+        if !zoom.minimap_shown(prefs, Instant::now()) {
+            return None;
+        }
+        let rect = self.host_content(index)?;
+        let layout = MinimapLayout::compute((rect.w, rect.h), zoom.image(), prefs.minimap_corner, self.host.surface.dpi)?;
+        let thumb = zoom.thumb()?.clone();
+        let viewport = zoom.viewport_norm()?;
+        Some(MinimapView {
+            rect: Rect::new(layout.rect.x, layout.rect.y, layout.rect.w, layout.rect.h),
+            thumb,
+            viewport: (viewport.x, viewport.y, viewport.w, viewport.h),
+        })
+    }
+
+    /// Makes the thumbnails of the minimaps that are about to be shown (once per image, from the tile's own picture).
+    pub(super) fn ensure_zoom_thumbs(&mut self) {
+        for tile in &mut self.tiles {
+            if let (Some(zoom), Some(pixels)) = (tile.zoom.as_mut(), tile.pixels.as_ref())
+                && zoom.is_active()
+            {
+                zoom.ensure_thumb(pixels);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
+    use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
+    use crate::viewer::multiview::instance_host::HostSurface;
+    use crate::viewer::multiview::tile::TileSeed;
+    use crate::viewer::zoom::minimap::MinimapLayout;
+    use slint::{Rgb8Pixel, SharedPixelBuffer};
+    use std::path::PathBuf;
+    use std::time::Duration;
+
+    struct NullSink;
+
+    impl MultiviewEventSink for NullSink {
+        fn post(&self, _instance: WeakInstance, _event: PlayerEvent) {}
+    }
+
+    const AREA: Rect = Rect::new(100, 50, 1200, 900);
+
+    fn image_seed(id: u64) -> TileSeed {
+        let mut seed = TileSeed::new(id, TileKind::Image, 4.0 / 3.0, PathBuf::from(format!("/x/{id}.jpg")), format!("{id}.jpg"));
+        seed.pixels = Some(SharedPixelBuffer::<Rgb8Pixel>::new(1200, 900));
+        seed.orig_size = Some((4000, 3000));
+        seed
+    }
+
+    fn video_seed(id: u64) -> TileSeed {
+        TileSeed::new(id, TileKind::Video, 16.0 / 9.0, PathBuf::from(format!("/x/{id}.mp4")), format!("{id}.mp4"))
+    }
+
+    fn instance(seeds: Vec<TileSeed>, surface: HostSurface) -> SharedInstance {
+        let instance = MultiviewInstance::create(Arc::new(NullSink), seeds);
+        instance.lock().set_host(&surface);
+        instance
+    }
+
+    fn tab_view() -> HostSurface {
+        HostSurface::tab_view(1, AREA, 1.0, Vec::new())
+    }
+
+    fn first_tile(instance: &SharedInstance) -> crate::viewer::multiview::view::TileView {
+        instance.lock().view().tiles.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn the_zoom_button_exists_for_images_that_are_shown_in_an_interactive_host() {
+        let tab = instance(vec![image_seed(1)], tab_view());
+        assert_eq!(tab.lock().zoom_button_state(0), Some(false));
+        let fullscreen = instance(vec![image_seed(1)], HostSurface::fullscreen(1, 1600, 900, 1.0));
+        assert_eq!(fullscreen.lock().zoom_button_state(0), Some(false));
+        let grid = instance(
+            vec![image_seed(1)],
+            HostSurface::tab_grid(1, Rect::new(0, 0, 400, 300), 1.0, Rect::new(0, 0, 400, 300), Vec::new()),
+        );
+        assert_eq!(grid.lock().zoom_button_state(0), None, "the miniature is a picture");
+        let video = instance(vec![video_seed(2)], tab_view());
+        assert_eq!(video.lock().zoom_button_state(0), None, "mpv zooms videos itself");
+        let loading = instance(vec![TileSeed::new(3, TileKind::Image, 1.0, PathBuf::from("/x/3.jpg"), "3.jpg".into())], tab_view());
+        assert_eq!(loading.lock().zoom_button_state(0), None, "not before the picture is there");
+    }
+
+    #[test]
+    fn the_slider_toggles_and_closes_by_itself_when_it_cannot_belong_to_its_tile_any_more() {
+        let instance = instance(vec![image_seed(1)], tab_view());
+        assert!(instance.lock().zoom_bubble().is_none());
+        instance.lock().toggle_zoom_slider(0);
+        let bubble = instance.lock().zoom_bubble().unwrap();
+        assert_eq!((bubble.tile, bubble.permille, bubble.min_permille, bubble.max_permille), (0, 1000, 100, 10_000));
+        assert!(bubble.snaps.contains(&1000) && bubble.snaps.contains(&500) && bubble.snaps.contains(&2000));
+        assert_eq!(instance.lock().zoom_button_state(0), Some(true));
+        instance.lock().toggle_zoom_slider(0);
+        assert!(instance.lock().zoom_bubble().is_none());
+        // Open, then the host becomes the tab grid: it closes.
+        instance.lock().toggle_zoom_slider(0);
+        instance.lock().set_host(&HostSurface::tab_grid(1, Rect::new(0, 0, 400, 300), 1.0, Rect::new(0, 0, 400, 300), Vec::new()));
+        assert!(instance.lock().zoom_bubble().is_none());
+    }
+
+    #[test]
+    fn slider_clicks_zoom_the_picture_and_the_view_describes_it() {
+        let instance = instance(vec![image_seed(1)], tab_view());
+        let key = {
+            let mut guard = instance.lock();
+            guard.toggle_zoom_slider(0);
+            guard.tiles[0].key
+        };
+        assert!(first_tile(&instance).zoom.is_none() && !first_tile(&instance).pannable);
+        instance.lock().perform_click(key, BarClick::ZoomTo(2000));
+        let tile = first_tile(&instance);
+        let zoom = tile.zoom.expect("zoomed");
+        assert!(tile.pannable);
+        // The tile is the whole area (a lone image), and the zoomed picture covers all of it.
+        assert_eq!((zoom.dest.w, zoom.dest.h), (1200, 900));
+        assert!(matches!(zoom.content, ZoomContentView::Preview { .. }), "nothing is rendered in a test");
+        assert_eq!(instance.lock().zoom_bubble().unwrap().permille, 2000);
+        // A step up with the slider's 5%, one with Ctrl 25%.
+        instance.lock().perform_click(key, BarClick::ZoomStep { up: true, shift: false, ctrl: false });
+        assert!(instance.lock().zoom_bubble().unwrap().permille > 2000);
+        instance.lock().perform_click(key, BarClick::ZoomReset);
+        assert!(first_tile(&instance).zoom.is_none());
+        assert_eq!(instance.lock().zoom_bubble().unwrap().permille, 1000);
+        // Beyond the limits is held at the limits.
+        instance.lock().perform_click(key, BarClick::ZoomTo(900_000));
+        assert_eq!(instance.lock().zoom_bubble().unwrap().permille, 10_000);
+        instance.lock().perform_click(key, BarClick::ZoomTo(1));
+        assert_eq!(instance.lock().zoom_bubble().unwrap().permille, 100);
+    }
+
+    #[test]
+    fn the_wheel_zooms_in_whole_notches_around_the_pointer() {
+        let instance = instance(vec![image_seed(1)], tab_view());
+        let now = Instant::now();
+        // Half a notch is nothing yet.
+        instance.lock().zoom_wheel_at(0, 30.0, (900.0, 200.0), now);
+        assert!(first_tile(&instance).zoom.is_none());
+        // The second half makes one step (10% by default).
+        instance.lock().zoom_wheel_at(0, 30.0, (900.0, 200.0), now);
+        assert_eq!(instance.lock().zoom_percent(0).map(|p| p.round() as i32), Some(110));
+        // Wheel down goes back; a direction change does not carry over what was left.
+        instance.lock().zoom_wheel_at(0, -60.0, (900.0, 200.0), now);
+        assert!(first_tile(&instance).zoom.is_none());
+        // Zooming at a corner keeps that corner of the picture there: the window starts at the top left.
+        instance.lock().zoom_wheel_at(0, 60.0 * 20.0, (0.0, 0.0), now);
+        let z = instance.lock().tiles[0].zoom.as_ref().unwrap().viewport_norm().unwrap();
+        assert!(z.x.abs() < 1e-9 && z.y.abs() < 1e-9, "{z:?}");
+    }
+
+    #[test]
+    fn dragging_moves_the_picture_and_the_minimap_moves_the_window() {
+        let instance = instance(vec![image_seed(1)], tab_view());
+        let key = instance.lock().tiles[0].key;
+        instance.lock().perform_click(key, BarClick::ZoomTo(3000));
+        let before = instance.lock().tiles[0].zoom.as_ref().unwrap().viewport_norm().unwrap();
+        instance.lock().zoom_pan(0, 120.0, 0.0);
+        let after = instance.lock().tiles[0].zoom.as_ref().unwrap().viewport_norm().unwrap();
+        assert!(after.x < before.x, "the picture followed the pointer to the right: {before:?} {after:?}");
+        instance.lock().zoom_minimap(0, 0.9, 0.9, 0);
+        let moved = instance.lock().tiles[0].zoom.as_ref().unwrap().viewport_norm().unwrap();
+        assert!((moved.right() - 1.0).abs() < 1e-6 || moved.x > after.x, "{moved:?}");
+        instance.lock().zoom_minimap(0, -4.0, -4.0, 1);
+        let corner = instance.lock().tiles[0].zoom.as_ref().unwrap().viewport_norm().unwrap();
+        assert!(corner.x.abs() < 1e-9 && corner.y.abs() < 1e-9);
+        instance.lock().zoom_minimap(0, 0.0, 0.0, 2);
+        assert!(!instance.lock().tiles[0].zoom.as_ref().unwrap().minimap_dragging());
+    }
+
+    #[test]
+    fn the_minimap_is_in_the_view_after_a_zoom_and_comes_back_with_the_pointer() {
+        let instance = instance(vec![image_seed(1)], tab_view());
+        let key = instance.lock().tiles[0].key;
+        instance.lock().perform_click(key, BarClick::ZoomTo(2000));
+        instance.lock().poll_zoom();
+        let tile = first_tile(&instance);
+        let minimap = tile.minimap.expect("shown right after a zoom");
+        assert!(minimap.rect.x > 0 && minimap.rect.y + minimap.rect.h <= 900);
+        assert!((minimap.viewport.2 - 0.5).abs() < 1e-6, "a window of half the width: {:?}", minimap.viewport);
+        // Later (a poll in the future) it is gone, unless the pointer is where it sits.
+        let later = Instant::now() + Duration::from_secs(10);
+        instance.lock().poll_zoom_at(later);
+        let layout = MinimapLayout::compute((1200, 900), (4000, 3000), zoom_prefs::current().minimap_corner, 1.0).unwrap();
+        let spot = (AREA.x + layout.rect.x + 10, AREA.y + layout.rect.y + 10);
+        instance.lock().tick(|| Some(spot));
+        assert!(instance.lock().tiles[0].zoom.as_ref().unwrap().minimap_shown(&zoom_prefs::current(), Instant::now()));
+        instance.lock().tick(|| Some((AREA.x + 600, AREA.y + 100)));
+        // The pointer is gone and the time is over.
+        assert!(!instance.lock().tiles[0].zoom.as_ref().unwrap().minimap_shown(&zoom_prefs::current(), later));
+    }
+
+    #[test]
+    fn the_zoom_follows_the_tile_when_the_layout_changes() {
+        let instance = instance(vec![image_seed(1)], tab_view());
+        let key = instance.lock().tiles[0].key;
+        instance.lock().perform_click(key, BarClick::ZoomTo(2500));
+        let before = instance.lock().tiles[0].zoom.as_ref().unwrap().viewport_norm().unwrap();
+        instance.lock().set_host(&HostSurface::tab_view(1, Rect::new(0, 0, 600, 450), 1.0, Vec::new()));
+        let tile = first_tile(&instance);
+        assert_eq!((tile.zoom.unwrap().dest.w, tile.pixels.is_some()), (600, true));
+        let after = instance.lock().tiles[0].zoom.as_ref().unwrap().viewport_norm().unwrap();
+        assert!((after.w - before.w).abs() < 1e-9, "the same part of the image: {before:?} {after:?}");
+    }
+
+    #[test]
+    fn a_stale_slider_click_after_the_tile_left_does_nothing() {
+        let instance = instance(vec![image_seed(1), image_seed(2)], tab_view());
+        let key = instance.lock().tiles[1].key;
+        instance.lock().toggle_zoom_slider(1);
+        let keep = instance.lock().tiles[0].key;
+        let plan = crate::viewer::multiview::follow::FollowPlan {
+            remove: vec![key],
+            slots: vec![crate::viewer::multiview::follow::Slot::Keep(keep)],
+            ..Default::default()
+        };
+        instance.lock().apply_follow(&plan, Vec::new());
+        instance.lock().poll_zoom();
+        assert!(instance.lock().zoom_bubble().is_none());
+        let _ = instance.lock().perform_click(key, BarClick::ZoomTo(3000));
+        assert!(first_tile(&instance).zoom.is_none());
+    }
+
+    #[test]
+    fn a_broken_or_missing_picture_is_not_zoomable_and_calls_are_harmless() {
+        let instance = instance(vec![image_seed(1)], tab_view());
+        instance.lock().zoom_wheel_at(7, 60.0, (0.0, 0.0), Instant::now());
+        instance.lock().zoom_pan(7, 5.0, 5.0);
+        instance.lock().zoom_minimap(7, 0.5, 0.5, 0);
+        instance.lock().zoom_reset(7);
+        instance.lock().zoom_wheel_at(0, f32::NAN, (0.0, 0.0), Instant::now());
+        instance.lock().tiles[0].error = Some("gone".into());
+        assert_eq!(instance.lock().zoom_button_state(0), None);
+        assert!(instance.lock().zoom_percent(7).is_none());
+    }
+}

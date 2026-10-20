@@ -22,25 +22,56 @@ pub enum MediaActionId {
     OpenWith,
     Delete,
     Duplicate,
+    /// Opens or closes the zoom slider of an image.
+    Zoom,
 }
 
-/// What a click in the media bar window means: a button, or an item of the drop-down menu that hangs below the bar.
+/// What a click in the media bar window means: a button, an item of the drop-down menu that hangs below the bar, or a
+/// movement of the zoom slider (which hangs there too).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BarClick {
     Action(MediaActionId),
     /// The id of the clicked menu item (the application defines them; they never collide with the button codes).
     MenuItem(i32),
+    /// The slider asks for this zoom, in tenths of a percent (1500 = 150%).
+    ZoomTo(i32),
+    /// A step on the slider: the wheel over it, or its plus and minus buttons.
+    ZoomStep { up: bool, shift: bool, ctrl: bool },
+    /// The reset (100%).
+    ZoomReset,
 }
 
 impl BarClick {
     /// Button codes are small numbers; menu items start here.
     const FIRST_MENU_ITEM: i32 = 1000;
+    /// The codes of the zoom slider: `ZOOM_TO + permille`, `ZOOM_STEP + flags`, `ZOOM_RESET`.
+    pub const ZOOM_TO: i32 = 1_000_000;
+    pub const ZOOM_STEP: i32 = 2_000_000;
+    pub const ZOOM_RESET: i32 = 3_000_000;
+    const MAX_ZOOM_PERMILLE: i32 = 999_999;
 
     pub fn from_code(code: i32) -> Option<Self> {
-        if code >= Self::FIRST_MENU_ITEM {
+        if code >= Self::ZOOM_RESET {
+            (code == Self::ZOOM_RESET).then_some(Self::ZoomReset)
+        } else if code >= Self::ZOOM_STEP {
+            let flags = code - Self::ZOOM_STEP;
+            (flags < 8).then_some(Self::ZoomStep { up: flags & 1 != 0, shift: flags & 2 != 0, ctrl: flags & 4 != 0 })
+        } else if code >= Self::ZOOM_TO {
+            Some(Self::ZoomTo((code - Self::ZOOM_TO).min(Self::MAX_ZOOM_PERMILLE)))
+        } else if code >= Self::FIRST_MENU_ITEM {
             Some(Self::MenuItem(code))
         } else {
             MediaActionId::from_code(code).map(Self::Action)
+        }
+    }
+
+    /// The number that crosses the Slint boundary for a zoom click (the slider uses the same formulas).
+    pub fn zoom_code(self) -> Option<i32> {
+        match self {
+            Self::ZoomTo(permille) => Some(Self::ZOOM_TO + permille.clamp(0, Self::MAX_ZOOM_PERMILLE)),
+            Self::ZoomStep { up, shift, ctrl } => Some(Self::ZOOM_STEP + i32::from(up) + 2 * i32::from(shift) + 4 * i32::from(ctrl)),
+            Self::ZoomReset => Some(Self::ZOOM_RESET),
+            Self::Action(_) | Self::MenuItem(_) => None,
         }
     }
 }
@@ -57,6 +88,7 @@ impl MediaActionId {
             Self::OpenWith => 5,
             Self::Delete => 6,
             Self::Duplicate => 7,
+            Self::Zoom => 8,
         }
     }
 
@@ -70,6 +102,7 @@ impl MediaActionId {
             Self::OpenWith,
             Self::Delete,
             Self::Duplicate,
+            Self::Zoom,
         ]
         .into_iter()
         .find(|id| id.code() == code)
@@ -91,6 +124,8 @@ pub struct MediaBarContext {
     pub single_tab: bool,
     /// The tile shows an error instead of its medium (the file is gone, the video could not be played).
     pub broken: bool,
+    /// `Some(open)` for a picture that can be zoomed (an image that is shown), with the state of its slider; else `None`.
+    pub zoom: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,7 +154,7 @@ impl MediaActionSpec {
 type Provider = fn(&MediaBarContext) -> Option<MediaActionSpec>;
 
 /// Order of the buttons in the bar, left to right.
-const PROVIDERS: &[Provider] = &[mute, sticky, duplicate, open_as_tab, open_with, delete, remove, close];
+const PROVIDERS: &[Provider] = &[mute, sticky, duplicate, open_as_tab, open_with, delete, zoom, remove, close];
 
 /// The bar exists in the fullscreen window and in the viewer tab; the tab-grid miniature is a picture.
 fn interactive(ctx: &MediaBarContext) -> bool {
@@ -187,6 +222,19 @@ fn open_as_tab(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
 
 fn open_with(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     interactive(ctx).then(|| MediaActionSpec::on(MediaActionId::OpenWith, Icon::OpenWith, "Open with..."))
+}
+
+/// Images only (mpv zooms videos itself): the button toggles the slider that hangs below the bar.
+fn zoom(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    let open = ctx.zoom.filter(|_| interactive(ctx))?;
+    Some(MediaActionSpec {
+        active: Some(open),
+        ..MediaActionSpec::on(
+            MediaActionId::Zoom,
+            Icon::ZoomIn,
+            if open { "Hide the zoom slider" } else { "Zoom (also Ctrl + mouse wheel over the image)" },
+        )
+    })
 }
 
 fn delete(ctx: &MediaBarContext) -> Option<MediaActionSpec> {

@@ -8,6 +8,7 @@ mod tab_native;
 pub mod tab_ui_gate;
 pub mod types;
 pub mod x11_embed;
+pub mod zoom;
 
 pub use error::ViewerError;
 pub use loader::HighResImageLoader;

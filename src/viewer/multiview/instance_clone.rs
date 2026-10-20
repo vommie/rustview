@@ -24,6 +24,7 @@ impl MultiviewInstance {
             path: tile.path.clone(),
             filename: tile.filename.clone(),
             pixels: tile.pixels.clone().filter(|_| !tile.is_loading),
+            orig_size: tile.zoom.as_ref().map(|zoom| zoom.image()),
             sticky: tile.sticky,
         }
     }

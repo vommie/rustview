@@ -23,6 +23,8 @@ use super::schema::{
     FullscreenSettings, DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE,
     DEFAULT_FULLSCREEN_SOUND_FOLLOWS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+    DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION, DEFAULT_FULLSCREEN_ZOOM_RESAMPLE, MAX_FULLSCREEN_ZOOM_MAX_PERCENT,
+    MAX_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT,
 };
 use crate::util::hex_color;
 use parking_lot::Mutex;
@@ -415,5 +417,21 @@ impl SettingsStore {
         fullscreen.background.color = hex_color::parse_rgb(&fullscreen.background.color)
             .map(hex_color::format_rgb)
             .unwrap_or_else(|| DEFAULT_FULLSCREEN_BACKGROUND_COLOR.to_string());
+
+        let zoom = &mut fullscreen.zoom;
+        zoom.step_percent = zoom.step_percent.clamp(MIN_FULLSCREEN_ZOOM_STEP_PERCENT, MAX_FULLSCREEN_ZOOM_STEP_PERCENT);
+        zoom.max_percent = zoom.max_percent.clamp(MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MAX_FULLSCREEN_ZOOM_MAX_PERCENT);
+        let corner = zoom.minimap_position.trim().to_lowercase();
+        zoom.minimap_position = if matches!(corner.as_str(), "bottom_left" | "bottom_right") {
+            corner
+        } else {
+            DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION.to_string()
+        };
+        let resample = zoom.resample.trim().to_lowercase();
+        zoom.resample = if matches!(resample.as_str(), "lanczos3" | "catmull_rom" | "bilinear" | "nearest") {
+            resample
+        } else {
+            DEFAULT_FULLSCREEN_ZOOM_RESAMPLE.to_string()
+        };
     }
 }

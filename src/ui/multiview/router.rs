@@ -46,6 +46,26 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
             refresh_host(mode);
             return;
         }
+        PlayerEvent::ZoomSource { tile, result } => {
+            let mode = {
+                let mut guard = instance.lock();
+                guard.on_zoom_source(tile, result);
+                guard.host_mode()
+            };
+            drop(instance);
+            refresh_host(mode);
+            return;
+        }
+        PlayerEvent::ZoomRendered { tile, done } => {
+            let mode = {
+                let mut guard = instance.lock();
+                guard.on_zoom_rendered(tile, done);
+                guard.host_mode()
+            };
+            drop(instance);
+            refresh_host(mode);
+            return;
+        }
         PlayerEvent::MuteChanged { tile, muted } => {
             let mode = {
                 let mut guard = instance.lock();

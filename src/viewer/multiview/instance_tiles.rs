@@ -11,6 +11,7 @@ use super::teardown::teardown_videos;
 use super::tile;
 use crate::library::models::MediaId;
 use crate::settings::LogObscurer;
+use crate::viewer::zoom::state::ZoomState;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// Error texts can embed file paths; with log obfuscation active they are not written to the log.
@@ -180,6 +181,7 @@ impl MultiviewInstance {
                 tile.aspect = aspect;
                 tile.aspect_source = AspectSource::Probed;
                 tile.pixels = Some(pixels);
+                tile.zoom = Some(ZoomState::new((width, height)));
                 tracing::debug!(
                     media_id,
                     width,
@@ -196,6 +198,8 @@ impl MultiviewInstance {
         if relayout {
             self.apply_layout();
         } else {
+            // A new picture has a new zoom; it needs the size of its tile.
+            self.sync_zoom_frames();
             self.bump();
         }
     }

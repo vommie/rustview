@@ -31,6 +31,7 @@ impl MultiviewInstance {
             sticky: tile.sticky,
             single_tab: self.single_tab,
             broken: tile.error.is_some(),
+            zoom: self.zoom_button_state(index),
         })
     }
 
@@ -63,6 +64,10 @@ impl MultiviewInstance {
                 Some(index) => UiAction::OpenWithItem(self.tiles[index].media_id, item),
                 None => UiAction::None,
             },
+            BarClick::ZoomTo(_) | BarClick::ZoomStep { .. } | BarClick::ZoomReset => {
+                self.zoom_slider_click(key, click);
+                UiAction::None
+            }
         }
     }
 
@@ -93,6 +98,10 @@ impl MultiviewInstance {
             }
             MediaActionId::Duplicate => {
                 self.duplicate_tile(key);
+                UiAction::None
+            }
+            MediaActionId::Zoom => {
+                self.toggle_zoom_slider(index);
                 UiAction::None
             }
             MediaActionId::OpenAsTab => UiAction::OpenTileAsTab(id),

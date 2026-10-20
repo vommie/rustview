@@ -271,6 +271,8 @@ pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE: bool = true;
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE: bool = true;
+/// The zoom button of an image (slider with the zoom of the picture).
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_ZOOM: bool = true;
 /// The bar appears when the pointer comes this close (logical pixels) to the place of the bar.
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 15;
 pub const MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 0;
@@ -299,6 +301,24 @@ pub const DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL: bool = true;
 pub const DEFAULT_FULLSCREEN_SOUND_FOLLOWS: &str = "first";
 /// The sound passes to another video when the video that had it leaves.
 pub const DEFAULT_FULLSCREEN_SOUND_HAND_OVER: bool = true;
+
+// --- Fullscreen image zoom (images only; mpv zooms videos itself) ---
+/// A step of Ctrl + mouse wheel over an image, in percent of the fitted size (the slider has its own steps: 5%, Shift 10%, Ctrl 25%).
+pub const DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT: u32 = 10;
+pub const MIN_FULLSCREEN_ZOOM_STEP_PERCENT: u32 = 1;
+pub const MAX_FULLSCREEN_ZOOM_STEP_PERCENT: u32 = 100;
+/// The largest zoom, in percent of the fitted size.
+pub const DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT: u32 = 1000;
+pub const MIN_FULLSCREEN_ZOOM_MAX_PERCENT: u32 = 200;
+pub const MAX_FULLSCREEN_ZOOM_MAX_PERCENT: u32 = 6400;
+/// Zooms glide (a short animation) instead of jumping.
+pub const DEFAULT_FULLSCREEN_ZOOM_SMOOTH: bool = false;
+/// "bottom_left" or "bottom_right".
+pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION: &str = "bottom_left";
+/// The minimap is shown for as long as the picture is zoomed in (otherwise: mouse-over and a few seconds after a zoom).
+pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS: bool = false;
+/// "lanczos3" (best quality), "catmull_rom" (bicubic), "bilinear" or "nearest" (hard pixels).
+pub const DEFAULT_FULLSCREEN_ZOOM_RESAMPLE: &str = "lanczos3";
 
 // --- Fullscreen background ---
 /// "theme" (color of the app theme), "viewer" (the background of the viewer settings) or "custom" (`color`).
@@ -805,6 +825,7 @@ pub struct FullscreenMediaBarSettings {
     pub show_delete: bool,
     /// Remove (several media) and Close (the last medium) are one button that changes its role.
     pub show_remove: bool,
+    pub show_zoom: bool,
     pub reveal_distance_px: u32,
 }
 
@@ -819,6 +840,7 @@ impl Default for FullscreenMediaBarSettings {
             show_open_with: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH,
             show_delete: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE,
             show_remove: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE,
+            show_zoom: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_ZOOM,
             reveal_distance_px: DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
         }
     }
@@ -877,6 +899,31 @@ impl Default for FullscreenSoundSettings {
     }
 }
 
+/// Image zoom in the Multiview (fullscreen, tab view) and in the image tab.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FullscreenZoomSettings {
+    pub step_percent: u32,
+    pub max_percent: u32,
+    pub smooth: bool,
+    pub minimap_position: String, // "bottom_left" or "bottom_right"
+    pub minimap_always: bool,
+    pub resample: String, // "lanczos3", "catmull_rom", "bilinear" or "nearest"
+}
+
+impl Default for FullscreenZoomSettings {
+    fn default() -> Self {
+        Self {
+            step_percent: DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT,
+            max_percent: DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT,
+            smooth: DEFAULT_FULLSCREEN_ZOOM_SMOOTH,
+            minimap_position: DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION.to_string(),
+            minimap_always: DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS,
+            resample: DEFAULT_FULLSCREEN_ZOOM_RESAMPLE.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FullscreenBackgroundSettings {
@@ -906,6 +953,7 @@ pub struct FullscreenSettings {
     pub primary_bar: FullscreenPrimaryBarSettings,
     pub sound: FullscreenSoundSettings,
     pub background: FullscreenBackgroundSettings,
+    pub zoom: FullscreenZoomSettings,
 }
 
 impl Default for FullscreenSettings {
@@ -919,6 +967,7 @@ impl Default for FullscreenSettings {
             primary_bar: FullscreenPrimaryBarSettings::default(),
             sound: FullscreenSoundSettings::default(),
             background: FullscreenBackgroundSettings::default(),
+            zoom: FullscreenZoomSettings::default(),
         }
     }
 }

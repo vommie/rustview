@@ -76,6 +76,10 @@ pub struct MultiviewInstance {
     pub(super) rename_pinned: bool,
     pub(super) clicks: ClickDetector,
     pub(super) revision: u64,
+    /// The tile whose zoom slider hangs below the media bar.
+    pub(super) zoom_slider: Option<TileKey>,
+    /// Wheel movement over an image that has not made a whole step yet.
+    pub(super) zoom_wheel_accum: f32,
 }
 
 impl MultiviewInstance {
@@ -109,6 +113,8 @@ impl MultiviewInstance {
                 rename_pinned: false,
                 clicks: ClickDetector::default(),
                 revision: 0,
+                zoom_slider: None,
+                zoom_wheel_accum: 0.0,
             })
         })
     }

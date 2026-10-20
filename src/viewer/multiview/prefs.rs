@@ -16,7 +16,8 @@ use crate::settings::schema::{
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB, DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DUPLICATE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH,
-    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY, FullscreenSettings,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_ZOOM,
+    FullscreenSettings,
 };
 use parking_lot::RwLock;
 
@@ -32,6 +33,7 @@ pub struct MediaBarPrefs {
     pub delete: bool,
     /// Remove and Close are one button that changes its role with the number of media.
     pub remove: bool,
+    pub zoom: bool,
     /// Logical pixels around the place of the bar in which the pointer reveals it.
     pub reveal_distance_px: u32,
 }
@@ -46,6 +48,7 @@ impl MediaBarPrefs {
         open_with: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH,
         delete: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE,
         remove: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE,
+        zoom: DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_ZOOM,
         reveal_distance_px: DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     };
 
@@ -60,6 +63,7 @@ impl MediaBarPrefs {
                 MediaActionId::OpenWith => self.open_with,
                 MediaActionId::Delete => self.delete,
                 MediaActionId::Remove | MediaActionId::Close => self.remove,
+                MediaActionId::Zoom => self.zoom,
             }
     }
 }
@@ -152,6 +156,7 @@ impl MultiviewPrefs {
                 open_with: bar.show_open_with,
                 delete: bar.show_delete,
                 remove: bar.show_remove,
+                zoom: bar.show_zoom,
                 reveal_distance_px: bar.reveal_distance_px,
             },
             audio: AudioPolicy {

@@ -209,6 +209,7 @@ impl MultiviewInstance {
     /// Re-places everything after the layout or the projection changed. The shape of a video window is relative to the
     /// window, so it is reset before any window moves and applied again afterwards.
     pub(super) fn reproject(&mut self) {
+        self.sync_zoom_frames();
         self.place_windows();
         self.apply_all_cutouts();
         self.bump();
@@ -439,14 +440,21 @@ impl MultiviewInstance {
             .tiles
             .iter()
             .zip(&self.layout.tiles)
-            .map(|(tile, placed)| TileView {
-                key: tile.key,
-                media_id: tile.media_id,
-                rect: relative(projection.rect(placed.content)),
-                kind: tile.kind,
-                pixels: tile.pixels.clone(),
-                is_loading: tile.is_loading && tile.pixels.is_none(),
-                error: tile.error.clone(),
+            .enumerate()
+            .map(|(index, (tile, placed))| {
+                let (zoom, minimap, pannable) = self.zoom_views(index);
+                TileView {
+                    key: tile.key,
+                    media_id: tile.media_id,
+                    rect: relative(projection.rect(placed.content)),
+                    kind: tile.kind,
+                    pixels: tile.pixels.clone(),
+                    is_loading: tile.is_loading && tile.pixels.is_none(),
+                    error: tile.error.clone(),
+                    zoom,
+                    minimap,
+                    pannable,
+                }
             })
             .collect();
         let gutters = self

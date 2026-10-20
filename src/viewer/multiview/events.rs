@@ -6,7 +6,10 @@
 
 use super::follow::TileKey;
 use super::instance::WeakInstance;
+use crate::viewer::zoom::render::SourceImage;
+use crate::viewer::zoom::state::RenderDone;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
+use std::sync::Arc;
 
 /// Original pixel size and the (possibly downscaled) pixels of a decoded image tile, or a user-facing error text.
 pub type DecodedImage = Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), String>;
@@ -37,6 +40,16 @@ pub enum PlayerEvent {
     ImageDecoded {
         tile: TileKey,
         result: DecodedImage,
+    },
+    /// The original of an image tile that is zoomed in was decoded (or could not be).
+    ZoomSource {
+        tile: TileKey,
+        result: Result<Arc<SourceImage>, String>,
+    },
+    /// A zoomed picture was resampled.
+    ZoomRendered {
+        tile: TileKey,
+        done: RenderDone,
     },
 }
 

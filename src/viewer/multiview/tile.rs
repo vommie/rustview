@@ -12,6 +12,7 @@ use super::layout::Rect;
 use super::model::{AspectSource, TileKind};
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::library::models::MediaId;
+use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
 use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
@@ -46,6 +47,8 @@ pub struct TileSeed {
     pub filename: String,
     /// Already decoded pixels of an image (a duplicate of a tile that has them shares the buffer instead of decoding again).
     pub pixels: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    /// Pixel size of the original of an image whose `pixels` are given (the pixels may be a downscaled copy): what zooming needs.
+    pub orig_size: Option<(u32, u32)>,
     pub sticky: bool,
 }
 
@@ -59,6 +62,7 @@ impl TileSeed {
             path,
             filename,
             pixels: None,
+            orig_size: None,
             sticky: false,
         }
     }
@@ -94,6 +98,10 @@ pub struct TileState {
     pub feedback: HashMap<MediaActionId, ButtonFeedback>,
     /// Display parameters mpv reported for the file a recycled player showed before: they are stale until they change.
     pub stale_probe: Option<StaleProbe>,
+    /// The zoom of an image that is shown (`None` for a video, an image that is still loading or one that failed).
+    pub zoom: Option<ZoomState>,
+    /// The minimap was shown the last time the zoom was looked at (a change of it makes the view redraw).
+    pub zoom_minimap_shown: bool,
 }
 
 /// Parameters that must not be taken for the new file, and how many ticks to ignore them at most.
@@ -124,6 +132,8 @@ impl TileState {
             pin: None,
             feedback: HashMap::new(),
             stale_probe: None,
+            zoom: seed.orig_size.filter(|_| decoded).map(ZoomState::new),
+            zoom_minimap_shown: false,
         }
     }
 }

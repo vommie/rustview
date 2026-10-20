@@ -26,6 +26,7 @@ mod instance_members;
 mod instance_primary;
 mod instance_sound;
 mod instance_tiles;
+mod instance_zoom;
 pub mod layout;
 pub mod layout_pins;
 pub mod model;

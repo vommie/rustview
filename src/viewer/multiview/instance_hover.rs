@@ -23,6 +23,7 @@ impl MultiviewInstance {
     pub fn tick(&mut self, pointer: impl FnOnce() -> Option<(i32, i32)>) {
         self.ticks = self.ticks.wrapping_add(1);
         self.poll_pointer(pointer());
+        self.poll_zoom();
         if !self.has_video() {
             return;
         }
