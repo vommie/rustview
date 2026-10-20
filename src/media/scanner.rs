@@ -95,10 +95,16 @@ impl IgnoredFiles {
 
     fn note_unsupported(&mut self, path: &Path) {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        match self.unsupported.get_mut(ext) {
+        // Counted by the lower-case extension; a name that is already lower case (nearly all) costs no allocation.
+        let key = if ext.bytes().any(|b| b.is_ascii_uppercase()) {
+            std::borrow::Cow::Owned(ext.to_ascii_lowercase())
+        } else {
+            std::borrow::Cow::Borrowed(ext)
+        };
+        match self.unsupported.get_mut(key.as_ref()) {
             Some(n) => *n += 1,
             None => {
-                self.unsupported.insert(ext.to_ascii_lowercase(), 1);
+                self.unsupported.insert(key.into_owned(), 1);
             }
         }
     }
@@ -181,14 +187,14 @@ mod tests {
     #[test]
     fn the_message_explains_each_kind_of_skipped_file() {
         let mut ignored = IgnoredFiles::default();
-        ignored.unsupported.insert("heic".into(), 4);
+        ignored.unsupported.insert("nef".into(), 4);
         ignored.unsupported.insert("cr2".into(), 7);
         ignored.unsupported.insert("txt".into(), 99);
         ignored.disabled.insert("png", 2);
         ignored.header_mismatch = 1;
         assert_eq!(
             ignored.describe().unwrap(),
-            "Skipped: 11 not supported (7 .cr2, 4 .heic); 2 of switched-off formats (2 PNG); 1 whose content does not match their extension."
+            "Skipped: 11 not supported (7 .cr2, 4 .nef); 2 of switched-off formats (2 PNG); 1 whose content does not match their extension."
         );
     }
 
@@ -196,14 +202,14 @@ mod tests {
     fn merging_adds_up() {
         let mut a = IgnoredFiles::default();
         a.disabled.insert("gif", 1);
-        a.unsupported.insert("heic".into(), 1);
+        a.unsupported.insert("nef".into(), 1);
         let mut b = IgnoredFiles::default();
         b.disabled.insert("gif", 2);
-        b.unsupported.insert("heic".into(), 3);
+        b.unsupported.insert("nef".into(), 3);
         b.header_mismatch = 2;
         a.merge(b);
         assert_eq!(a.disabled["gif"], 3);
-        assert_eq!(a.unsupported["heic"], 4);
+        assert_eq!(a.unsupported["nef"], 4);
         assert_eq!(a.header_mismatch, 2);
     }
 
@@ -214,17 +220,19 @@ mod tests {
         let write = |name: &str, bytes: &[u8]| fs::write(dir.path().join(name), bytes).unwrap();
         write("a.jpg", b"x");
         write("b.png", b"x");
-        write("c.heic", b"x");
+        write("c.nef", b"x");
         write("notes.txt", b"x");
         write("source.ts", b"export const a = 1;\n");
         write("UPPER.JPG", b"x");
+        write("one.NEF", b"x");
+        write("two.nef", b"x");
         let mask = FormatMask::ALL_ENABLED.with(MediaFormat::Png, false);
         let result = DirectoryScanner::scan_with(dir.path(), false, mask);
         let mut names: Vec<_> = result.files.iter().map(|f| f.filename.clone()).collect();
         names.sort();
         assert_eq!(names, vec!["UPPER.JPG", "a.jpg"]);
         assert_eq!(result.ignored.disabled["png"], 1);
-        assert_eq!(result.ignored.unsupported["heic"], 1);
+        assert_eq!(result.ignored.unsupported["nef"], 3, "the case of the extension does not matter");
         assert_eq!(result.ignored.unsupported["txt"], 1);
         assert_eq!(result.ignored.header_mismatch, 1);
     }

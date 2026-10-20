@@ -3,6 +3,7 @@ use super::error::LibraryError;
 use super::folder_move::FolderMoveExecutor;
 use super::folders::FolderManager;
 use super::models::{FolderId, FolderRecord, MediaId};
+use crate::media::FormatPolicy;
 use crate::settings::LogObscurer;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -344,6 +345,9 @@ impl<'a> FolderOperations<'a> {
         let mut wtxn = self.db.env.write_txn()?;
         let mut deleted_media_ids = Vec::new();
         let mut deleted_media_count = 0;
+        // The counts of the ancestors only hold what their folders list, so records of switched-off formats do not leave them.
+        let mut deleted_shown_count = 0i64;
+        let mask = FormatPolicy::mask();
 
         let mut parent_id_opt = None;
         if let Some(rec) = self.db.folders.get(&wtxn, &folder_id)? {
@@ -365,6 +369,9 @@ impl<'a> FolderOperations<'a> {
                             media_record.is_deleted = true;
                             self.db.media.put(&mut wtxn, &media_id, &media_record)?;
                             deleted_media_count += 1;
+                            if mask.shows(media_record.format) {
+                                deleted_shown_count += 1;
+                            }
                         }
                         deleted_media_ids.push(media_id);
                     }
@@ -378,7 +385,7 @@ impl<'a> FolderOperations<'a> {
                 p_rec.subfolder_count = p_rec.subfolder_count.saturating_sub(1);
                 self.db.folders.put(&mut wtxn, &pid, &p_rec)?;
             }
-            FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, pid, -(deleted_media_count as i64))?;
+            FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, pid, -deleted_shown_count)?;
         }
 
         wtxn.commit()?;

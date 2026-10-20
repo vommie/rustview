@@ -71,3 +71,129 @@ impl<'a> FolderFormatCounts<'a> {
         Ok(report)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::{FolderScanOptions, Library};
+    use crate::media::FormatPolicy;
+    use parking_lot::Mutex;
+    use std::path::Path;
+
+    /// The policy is process-wide: tests that change it take turns and put it back.
+    static POLICY_LOCK: Mutex<()> = Mutex::new(());
+
+    fn write_image(path: &Path) {
+        image::RgbImage::from_pixel(24, 16, image::Rgb([30, 120, 200])).save(path).expect("write image");
+    }
+
+    struct Fixture {
+        _dir: tempfile::TempDir,
+        library: Library,
+        root_id: FolderId,
+        sub_id: FolderId,
+    }
+
+    fn fixture() -> Fixture {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("root");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        write_image(&root.join("a.png"));
+        write_image(&root.join("b.jpg"));
+        write_image(&root.join("sub").join("c.png"));
+        std::fs::write(root.join("notes.txt"), "x").unwrap();
+        let library = Library::open(&dir.path().join("library")).expect("open library");
+        library.folders().scan_directory_tree(&root, FolderScanOptions::default(), None::<fn(usize)>).expect("scan");
+        let id_of = |p: &Path| library.folders().get_folder_by_path(p).expect("lookup").expect("registered").id;
+        let (root_id, sub_id) = (id_of(&root), id_of(&root.join("sub")));
+        library.refresher().refresh_folder(root_id).expect("refresh root");
+        library.refresher().refresh_folder(sub_id).expect("refresh sub");
+        Fixture { _dir: dir, library, root_id, sub_id }
+    }
+
+    fn counts(f: &Fixture) -> [(u32, u32); 2] {
+        let get = |id| {
+            let rec = f.library.folders().get_folder(id).unwrap().unwrap();
+            (rec.media_count, rec.recursive_media_count)
+        };
+        [get(f.root_id), get(f.sub_id)]
+    }
+
+    fn png_off() -> FormatMask {
+        FormatMask::ALL_ENABLED.with(MediaFormat::Png, false)
+    }
+
+    #[test]
+    fn a_refresh_leaves_the_records_of_switched_off_formats_alone() {
+        let _guard = POLICY_LOCK.lock();
+        let f = fixture();
+        assert_eq!(counts(&f), [(2, 3), (1, 1)], "the tree and the refreshed folders agree");
+
+        FormatPolicy::set(png_off());
+        let report = f.library.refresher().refresh_folder(f.root_id);
+        FormatPolicy::set(FormatMask::ALL_ENABLED);
+        let report = report.expect("refresh");
+
+        assert_eq!(report.hidden_format_media, 1, "a.png is left as it is");
+        assert_eq!(report.ignored.disabled.get("png"), Some(&1));
+        assert_eq!(report.deleted_media, 0, "a switched-off format is never marked missing");
+        let all = f.library.media().get_all_by_folder(f.root_id).unwrap();
+        assert_eq!(all.len(), 2);
+        assert!(all.iter().all(|r| !r.is_deleted));
+        assert_eq!(report.ignored.unsupported.get("txt"), Some(&1));
+    }
+
+    #[test]
+    fn the_folder_counts_move_with_the_switches_and_return_exactly() {
+        let _guard = POLICY_LOCK.lock();
+        let f = fixture();
+
+        let off = f.library.folder_format_counts().apply_change(FormatMask::ALL_ENABLED, png_off()).unwrap();
+        assert_eq!(off, FormatCountReport { folders_changed: 2, hidden: 2, restored: 0 });
+        assert_eq!(counts(&f), [(1, 1), (0, 0)]);
+
+        let on = f.library.folder_format_counts().apply_change(png_off(), FormatMask::ALL_ENABLED).unwrap();
+        assert_eq!(on, FormatCountReport { folders_changed: 2, hidden: 0, restored: 2 });
+        assert_eq!(counts(&f), [(2, 3), (1, 1)]);
+
+        let nothing = f.library.folder_format_counts().apply_change(png_off(), png_off()).unwrap();
+        assert_eq!(nothing, FormatCountReport::default());
+    }
+
+    #[test]
+    fn queries_and_lists_of_the_repository_skip_hidden_formats() {
+        let _guard = POLICY_LOCK.lock();
+        let f = fixture();
+        FormatPolicy::set(png_off());
+        let listed = f.library.media().get_by_folder(f.root_id).unwrap();
+        let counted = f.library.media().get_active_count(f.root_id).unwrap();
+        FormatPolicy::set(FormatMask::ALL_ENABLED);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(counted, 1);
+        assert_eq!(f.library.media().get_by_folder(f.root_id).unwrap().len(), 2);
+        let by_format = f.library.media().count_by_format().unwrap();
+        assert_eq!(by_format.get(&MediaFormat::Png), Some(&2));
+        assert_eq!(by_format.get(&MediaFormat::Jpeg), Some(&1));
+    }
+
+    #[test]
+    fn renaming_into_or_out_of_a_switched_off_format_moves_the_count() {
+        let _guard = POLICY_LOCK.lock();
+        let f = fixture();
+        f.library.folder_format_counts().apply_change(FormatMask::ALL_ENABLED, png_off()).unwrap();
+        assert_eq!(counts(&f), [(1, 1), (0, 0)]);
+
+        FormatPolicy::set(png_off());
+        let id = f.library.media().get_all_by_folder(f.root_id).unwrap().into_iter().find(|r| r.filename == "b.jpg").unwrap().id;
+        let renamed = f.library.file_operations().rename_media(id, "b.png");
+        let after_hide = counts(&f);
+        let back = f.library.file_operations().rename_media(id, "b.jpg");
+        let after_show = counts(&f);
+        FormatPolicy::set(FormatMask::ALL_ENABLED);
+
+        assert_eq!(renamed.unwrap().format, MediaFormat::Png);
+        assert_eq!(after_hide, [(0, 0), (0, 0)], "b.png belongs to a switched-off format now");
+        assert_eq!(back.unwrap().format, MediaFormat::Jpeg);
+        assert_eq!(after_show, [(1, 1), (0, 0)]);
+    }
+}

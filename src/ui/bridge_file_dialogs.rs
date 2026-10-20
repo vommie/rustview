@@ -16,6 +16,7 @@ pub use super::{FileRenameDialog, MainWindow};
 use crate::library::file_operations::FileOperations;
 use crate::library::models::{FileConflictResolution, FileTransferKind, MediaId, MediaRecord};
 use crate::library::Library;
+use crate::media::FormatPolicy;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
 use crate::viewer::ViewerTabManager;
@@ -314,7 +315,20 @@ impl FileRenameDialogController {
 
                 fullscreen.sync_tab(&ctx.tab_manager);
 
-                StatusBarBridge::success(window, format!("Renamed file to '{}'", new_name));
+                // A new extension can belong to a format the user switched off: the file leaves the lists at once.
+                let hidden_by_policy = !FormatPolicy::mask().shows(updated_record.format);
+                if hidden_by_policy {
+                    StatusBarBridge::warn(
+                        window,
+                        format!(
+                            "Renamed file to '{}'. {} files are switched off in Settings > File Formats, so it is hidden now.",
+                            new_name,
+                            updated_record.format.display_name()
+                        ),
+                    );
+                } else {
+                    StatusBarBridge::success(window, format!("Renamed file to '{}'", new_name));
+                }
                 BridgeInspector::update(window, &ctx.state);
                 BridgeViewerTabs::sync_ui(
                     window,
@@ -330,7 +344,7 @@ impl FileRenameDialogController {
                     &ctx.settings,
                     &ctx.state,
                     false,
-                    false,
+                    hidden_by_policy,
                 );
 
                 // If in TabGrid mode (mode 2), also update all TabGrid masonry tiles

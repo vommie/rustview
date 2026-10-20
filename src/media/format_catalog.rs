@@ -13,10 +13,6 @@ pub struct CatalogEntry {
 /// Formats RustView cannot show, so the Settings page can say so (title, explanation).
 pub const UNSUPPORTED_FORMATS: &[(&str, &str)] = &[
     (
-        "HEIC and HEIF (.heic, .heif, .hif)",
-        "The photo format of iPhones and many Android phones. Decoding needs libheif, which RustView does not use yet.",
-    ),
-    (
         "Camera RAW (.cr2, .cr3, .nef, .arw, .dng, .orf, .rw2, .raf)",
         "Needs a RAW decoder, which RustView does not include.",
     ),
@@ -33,7 +29,7 @@ pub const UNSUPPORTED_FORMATS: &[(&str, &str)] = &[
 /// Extensions of media files RustView does not handle but users expect to see (phone photos, camera RAW). A refresh names
 /// the ones it skipped, so a missing picture is explained; other unknown extensions (.txt, .pdf, ...) are not mentioned.
 pub const KNOWN_UNSUPPORTED_EXTENSIONS: &[&str] = &[
-    "heic", "heif", "hif", "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "orf", "rw2", "raf", "pef", "srw", "x3f", "3fr", "erf", "kdc",
+    "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "orf", "rw2", "raf", "pef", "srw", "x3f", "3fr", "erf", "kdc",
     "mrw", "rwl", "iiq", "jxr", "wdp", "bpg", "flif", "icns", "cur", "xcf", "kra", "psb",
 ];
 
@@ -101,7 +97,8 @@ mod tests {
         assert_eq!(found("jfif", MediaType::Image), vec![MediaFormat::Jpeg]);
         assert_eq!(found(".mkv", MediaType::Video), vec![MediaFormat::Mkv]);
         assert_eq!(found("QuickTime", MediaType::Video), vec![MediaFormat::Mov]);
-        assert!(found("heic", MediaType::Image).is_empty());
+        assert_eq!(found("heif", MediaType::Image), vec![MediaFormat::Heic]);
+        assert!(found("nef", MediaType::Image).is_empty());
         assert!(catalog(MediaType::Image, "jp").iter().any(|e| e.spec.format == MediaFormat::Jp2));
     }
 

@@ -71,6 +71,11 @@ pub enum MediaFormat {
     Nut,
     H264,
     Hevc,
+    Gxf,
+    Wtv,
+
+    // Appended image format
+    Heic,
 }
 
 /// The longest extension in `FORMAT_SPECS` fits comfortably; longer ones cannot match and are rejected without lookup.
@@ -78,7 +83,7 @@ const MAX_EXTENSION_LEN: usize = 8;
 
 impl MediaFormat {
     /// Number of variants including `Unknown` (the length of `FORMAT_SPECS`).
-    pub const COUNT: usize = Self::Hevc as usize + 1;
+    pub const COUNT: usize = Self::Heic as usize + 1;
 
     /// The table entry of this format.
     #[inline]

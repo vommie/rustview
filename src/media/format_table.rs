@@ -136,7 +136,7 @@ pub static FORMAT_SPECS: [FormatSpec; MediaFormat::COUNT] = [
     ),
     noted(
         mime(spec(F::Avif, "avif", "AVIF", "AVIF", IMG, &["avif", "avifs"], "avif", Common, FFmpeg), "image/avif"),
-        "Decoded by FFmpeg (libdav1d). Grid-composed files show a single tile.",
+        "Decoded by FFmpeg (libdav1d). Tiled pictures are put together and the stored rotation is applied; animated files show their first frame.",
     ),
     noted(
         animated(mime(spec(F::Gif, "gif", "GIF", "GIF", IMG, &["gif"], "gif", Common, Native), "image/gif")),
@@ -175,8 +175,8 @@ pub static FORMAT_SPECS: [FormatSpec; MediaFormat::COUNT] = [
     ),
     mime(spec(F::Jp2, "jp2", "JP2", "JPEG 2000", IMG, &["jp2", "j2k", "j2c", "jpc", "jpf", "jpx"], "jp2", Specialized, FFmpeg), "image/jp2"),
     noted(
-        mime(spec(F::Svg, "svg", "SVG", "SVG", IMG, &["svg"], "svg", Common, FFmpeg), "image/svg+xml"),
-        "Rasterized by FFmpeg (librsvg) at the size the file declares.",
+        mime(spec(F::Svg, "svg", "SVG", "SVG", IMG, &["svg"], "svg", Common, Native), "image/svg+xml"),
+        "Drawn by the built-in SVG renderer with the installed fonts. Files an SVG points to are not loaded.",
     ),
     mime(spec(F::Dpx, "dpx", "DPX", "Digital Picture Exchange", IMG, &["dpx"], "dpx", Specialized, FFmpeg), "image/x-dpx"),
     mime(spec(F::Pcx, "pcx", "PCX", "PC Paintbrush", IMG, &["pcx"], "pcx", Legacy, FFmpeg), "image/vnd.zbrush.pcx"),
@@ -206,17 +206,23 @@ pub static FORMAT_SPECS: [FormatSpec; MediaFormat::COUNT] = [
     mime(spec(F::Nut, "nut", "NUT", "NUT", VID, &["nut"], "nut", Specialized, Player), "video/x-nut"),
     mime(spec(F::H264, "h264", "H264", "H.264 elementary stream", VID, &["h264", "264"], "h264", Specialized, Player), "video/h264"),
     mime(spec(F::Hevc, "hevc", "HEVC", "H.265 elementary stream", VID, &["hevc", "h265"], "hevc", Specialized, Player), "video/h265"),
+    mime(spec(F::Gxf, "gxf", "GXF", "General Exchange Format", VID, &["gxf"], "gxf", Specialized, Player), "application/gxf"),
+    mime(spec(F::Wtv, "wtv", "WTV", "Windows TV recording", VID, &["wtv", "dvr-ms"], "wtv", Legacy, Player), "video/x-ms-wtv"),
+    noted(
+        mime(spec(F::Heic, "heic", "HEIC", "HEIC / HEIF", IMG, &["heic", "heif", "hif"], "heic", Common, FFmpeg), "image/heic"),
+        "Phone photos: tiled pictures are put together and the stored rotation is applied. HDR gain maps, depth and alpha channels are ignored.",
+    ),
 ];
 
 impl FormatSpec {
-    /// The `(media type, group, name)` order of the Settings page.
-    pub fn ui_sort_key(&self) -> (u8, FormatGroup, &'static str) {
+    /// The `(media type, group, short name)` order of the Settings page, the name compared without case.
+    pub fn ui_sort_key(&self) -> (u8, FormatGroup, String) {
         let kind = match self.media_type {
             Some(MediaType::Image) => 0,
             Some(MediaType::Video) => 1,
             None => 2,
         };
-        (kind, self.group, self.long_name)
+        (kind, self.group, self.name.to_lowercase())
     }
 }
 
@@ -256,6 +262,14 @@ mod tests {
             assert_eq!(format as usize, index);
             assert_eq!(bincode::serialize(&format).unwrap(), (index as u32).to_le_bytes(), "bincode layout of {format:?}");
         }
+    }
+
+    #[test]
+    fn formats_added_later_come_after_the_older_ones() {
+        assert!(MediaFormat::Ico as usize > MediaFormat::Unknown as usize);
+        assert_eq!(MediaFormat::Hevc as usize + 1, MediaFormat::Gxf as usize);
+        assert_eq!(MediaFormat::COUNT, MediaFormat::Heic as usize + 1);
+        assert_eq!(MediaFormat::Wtv as usize + 1, MediaFormat::Heic as usize);
     }
 
     #[test]

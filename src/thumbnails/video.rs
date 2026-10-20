@@ -422,12 +422,8 @@ impl FfmpegVideoThumbnailer {
         let num_previews = params.target_preview_count.clamp(2, 100);
         let primary_offset_pct = params.primary_offset_pct;
 
-        // A stream without a known duration (a raw H.264 file, a recording in progress) is read from where it is: a seek
-        // on it can lose the stream.
-        if duration_secs.is_some() {
-            let _ = ictx.seek(0, ..0);
-            decoder.flush();
-        }
+        // The input was just opened, so it is read from its start. A seek to 0 would be wrong for a stream whose first
+        // keyframe lies after 0 (FLV, raw H.264): the demuxer then lands behind it and the decoder shows garbage.
 
         let (target_primary_sec, target_preview_secs) = if let Some(dur) = duration_secs {
             let prim_sec = (dur * primary_offset_pct).clamp(0.0, dur);
@@ -653,17 +649,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let stream_duration = stream.duration();
         let time_base = stream.time_base();
 
-        let rotation: i32 = stream
-            .metadata()
-            .get("rotate")
-            .and_then(|r| r.parse::<i32>().ok())
-            .or_else(|| {
-                ictx.metadata()
-                    .get("rotate")
-                    .and_then(|r| r.parse::<i32>().ok())
-            })
-            .unwrap_or(0);
-        let norm_rot = rotation.rem_euclid(360);
+        let norm_rot = crate::media::orientation::stream_rotation(&stream, &ictx.metadata());
 
         let mut context_decoder =
             ffmpeg_next::codec::context::Context::from_parameters(stream.parameters())

@@ -1,5 +1,5 @@
 use super::error::ViewerError;
-use crate::media::{MediaFormat, image_decode, svg};
+use crate::media::{MediaFormat, image_decode, svg, tile_grid};
 use crate::settings::LogObscurer;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::Path;
@@ -51,7 +51,25 @@ impl HighResImageLoader {
             return Ok((width, height, pixel_buffer));
         }
 
-        // 2. Resilient Fallback to FFmpeg decoder (AVIF, JPEG XL, JPEG 2000, PSD, DPX, legacy formats, exotic variants),
+        // 2. FFmpeg: a picture stored as a grid of tiles (HEIC photos, AVIF grids) is put together first
+        match tile_grid::decode(path) {
+            Ok(Some(grid)) if !grid.rgb.is_empty() => {
+                let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(grid.width, grid.height);
+                pixel_buffer.make_mut_bytes().copy_from_slice(&grid.rgb);
+                tracing::info!(
+                    path = %LogObscurer::path(path),
+                    width = grid.width,
+                    height = grid.height,
+                    elapsed_ms = t0.elapsed().as_millis(),
+                    "[HighResImageLoader] Composed a tiled image via FFmpeg"
+                );
+                return Ok((grid.width, grid.height, pixel_buffer));
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!(error = %e, "[HighResImageLoader] Tile grid could not be composed; falling back to the first stream"),
+        }
+
+        // 3. Resilient Fallback to FFmpeg decoder (AVIF, JPEG XL, JPEG 2000, PSD, DPX, legacy formats, exotic variants),
         // at the size the picture has
         let ffmpeg_decoder = crate::thumbnails::video::FfmpegVideoThumbnailer::new();
         match ffmpeg_decoder.extract_native_frame(path) {

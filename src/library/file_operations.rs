@@ -7,7 +7,7 @@ use super::models::{
 };
 use super::refresh_media_files::MediaItemRefresher;
 use super::schema::SEQ_MEDIA_ID;
-use crate::media::{MediaFormat, MediaHasher, MetadataExtractor};
+use crate::media::{FormatPolicy, MediaFormat, MediaHasher, MetadataExtractor};
 use crate::settings::LogObscurer;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -244,6 +244,13 @@ impl<'a> FileOperations<'a> {
         // The new name decides the format (what the format switches of the Settings act on); image or video stays as the
         // content made it, so renaming a JPEG to ".mp4" does not turn it into a video.
         let format = MediaFormat::from_path(&paths.new_path);
+
+        // A new extension can move the file into or out of a switched-off format: the folder's count follows what it lists.
+        let mask = FormatPolicy::mask();
+        if !record.is_deleted && mask.shows(record.format) != mask.shows(format) {
+            let step = if mask.shows(format) { 1 } else { -1 };
+            FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, record.folder_id, step)?;
+        }
 
         record.filename = paths.validated_name.clone();
         record.format = format;

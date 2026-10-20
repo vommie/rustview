@@ -3,7 +3,7 @@ use super::types::{calculate_aspect_dimensions, ScalingAlgorithm};
 use super::video::{FfmpegVideoThumbnailer, VideoFrameDecoder};
 use fast_image_resize::images::Image;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
-use crate::media::{MediaFormat, image_decode, svg};
+use crate::media::{MediaFormat, image_decode, svg, tile_grid};
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -55,32 +55,45 @@ impl ImageDecoder for SimdImageThumbnailer {
         if let Ok(reader_guessed) = image_decode::open_reader(path, 128 * 1024)
             && let Ok(dynamic_img) = reader_guessed.decode()
         {
-            let orig_w = dynamic_img.width();
-            let orig_h = dynamic_img.height();
-            let (target_w, target_h) = calculate_aspect_dimensions(orig_w, orig_h, max_bound);
-
-            let rgb_src = dynamic_img.into_rgb8();
-            let src_raw = rgb_src.into_raw();
-
-            let src_image = Image::from_vec_u8(orig_w, orig_h, src_raw, PixelType::U8x3)?;
-            let mut dst_image = Image::new(target_w, target_h, PixelType::U8x3);
-            let mut resizer = Resizer::new();
-            let options = ResizeOptions::default().resize_alg(scaling_algo.to_resize_alg());
-
-            resizer.resize(&src_image, &mut dst_image, &options)?;
-            let resized_raw = dst_image.into_vec();
-
-            return Ok(DecodedThumbnailFrame {
-                width: target_w,
-                height: target_h,
-                rgb_pixels: resized_raw,
-                orig_width: orig_w,
-                orig_height: orig_h,
-            });
+            let (orig_w, orig_h) = (dynamic_img.width(), dynamic_img.height());
+            return Self::resize_rgb(dynamic_img.into_rgb8().into_raw(), orig_w, orig_h, max_bound, scaling_algo);
         }
 
-        // 2. Resilient Fallback to FFmpeg decoder (AVIF, JPEG XL, JPEG 2000, PSD, DPX, legacy formats, exotic variants)
+        // 2. FFmpeg: a picture stored as a grid of tiles (HEIC photos, AVIF grids) is put together first
+        match tile_grid::decode(path) {
+            Ok(Some(grid)) => return Self::resize_rgb(grid.rgb, grid.width, grid.height, max_bound, scaling_algo),
+            Ok(None) => {}
+            Err(e) => tracing::warn!(error = %e, "[ImageThumbnailer] Tile grid could not be composed; falling back to the first stream"),
+        }
+
+        // 3. Resilient Fallback to FFmpeg decoder (AVIF, JPEG XL, JPEG 2000, PSD, DPX, legacy formats, exotic variants)
         let ffmpeg_decoder = FfmpegVideoThumbnailer::new();
         ffmpeg_decoder.extract_frame(path, 0.0, max_bound, scaling_algo)
+    }
+}
+
+impl SimdImageThumbnailer {
+    fn resize_rgb(
+        rgb: Vec<u8>,
+        orig_w: u32,
+        orig_h: u32,
+        max_bound: u32,
+        scaling_algo: ScalingAlgorithm,
+    ) -> Result<DecodedThumbnailFrame, ThumbnailError> {
+        let (target_w, target_h) = calculate_aspect_dimensions(orig_w, orig_h, max_bound);
+        let src_image = Image::from_vec_u8(orig_w, orig_h, rgb, PixelType::U8x3)?;
+        let mut dst_image = Image::new(target_w, target_h, PixelType::U8x3);
+        let mut resizer = Resizer::new();
+        let options = ResizeOptions::default().resize_alg(scaling_algo.to_resize_alg());
+
+        resizer.resize(&src_image, &mut dst_image, &options)?;
+
+        Ok(DecodedThumbnailFrame {
+            width: target_w,
+            height: target_h,
+            rgb_pixels: dst_image.into_vec(),
+            orig_width: orig_w,
+            orig_height: orig_h,
+        })
     }
 }

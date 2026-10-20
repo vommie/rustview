@@ -101,7 +101,11 @@ impl MetadataExtractor {
         {
             return Ok(dims);
         }
-        // Fallback for formats not natively handled by the image crate (AVIF, JPEG XL, PSD, ...)
+        // Fallback for formats not natively handled by the image crate (AVIF, JPEG XL, PSD, ...): a picture stored as a
+        // grid of tiles (HEIC photos) is as large as the grid, not as its first tile
+        if let Ok(Some(size)) = super::tile_grid::display_size(path) {
+            return Ok(size);
+        }
         let (w, h, _) = Self::extract_video_details(path)
             .map_err(|e| MetadataError::ImageError(e.to_string()))?;
         Ok((w, h))
@@ -139,19 +143,8 @@ impl MetadataExtractor {
             ));
         }
 
-        // Apply display orientation rotation if container/stream specifies it safely
-        let rotation: i32 = stream
-            .metadata()
-            .get("rotate")
-            .and_then(|r| r.parse::<i32>().ok())
-            .or_else(|| {
-                ictx.metadata()
-                    .get("rotate")
-                    .and_then(|r| r.parse::<i32>().ok())
-            })
-            .unwrap_or(0);
-        let norm_rot = rotation.rem_euclid(360);
-        if norm_rot == 90 || norm_rot == 270 {
+        // A phone video stores its rotation next to the pixels: the picture is shown with width and height swapped
+        if super::orientation::swaps_axes(super::orientation::stream_rotation(&stream, &ictx.metadata())) {
             std::mem::swap(&mut width, &mut height);
         }
 

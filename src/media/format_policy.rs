@@ -131,10 +131,10 @@ mod tests {
 
     #[test]
     fn with_toggles_one_bit_even_for_the_last_format() {
-        let last = MediaFormat::Hevc;
+        let last = MediaFormat::Wtv;
         let mask = FormatMask::ALL_ENABLED.with(last, false);
         assert!(!mask.is_enabled(last));
-        assert!(mask.is_enabled(MediaFormat::H264));
+        assert!(mask.is_enabled(MediaFormat::Gxf));
         assert!(mask.with(last, true).is_all_enabled());
     }
 

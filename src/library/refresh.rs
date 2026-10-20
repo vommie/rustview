@@ -1,4 +1,5 @@
 use super::db::LibraryDatabase;
+use super::folders::FolderManager;
 use super::error::LibraryError;
 use super::models::{FolderId, MediaId, MediaRecord};
 use super::schema::SEQ_MEDIA_ID;
@@ -638,6 +639,15 @@ impl<'a> FolderRefresher<'a> {
         }
 
         self.db.media_by_folder.put(&mut wtxn, &folder_id, &final_unique_ids)?;
+
+        // The tree shows the number of files the folder lists: bring the stored count in step with the folder that was just read
+        // (switched-off formats are not part of it, see FolderFormatCounts).
+        let shown_now = active_media_ids.len() as i64;
+        let count_delta = match self.db.folders.get(&wtxn, &folder_id)? {
+            Some(folder) => shown_now - i64::from(folder.media_count),
+            None => 0,
+        };
+        FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, folder_id, count_delta)?;
         wtxn.commit()?;
 
         tracing::info!(
@@ -687,11 +697,13 @@ impl<'a> FolderRefresher<'a> {
                 && let Some((format, ext)) = MediaDetector::detect_format(&path)
                 && mask.is_enabled(format)
             {
+                // "photo" becomes "photo.jpg"; only when that name is taken is a counter added ("photo (1).jpg")
                 let target_filename = format!("{}.{}", filename, ext);
-                let unique_filename = crate::library::file_operations::FileOperations::generate_unique_filename(
-                    folder_path,
-                    &target_filename,
-                );
+                let unique_filename = if folder_path.join(&target_filename).exists() {
+                    crate::library::file_operations::FileOperations::generate_unique_filename(folder_path, &target_filename)
+                } else {
+                    target_filename
+                };
                 let new_path = folder_path.join(&unique_filename);
 
                 let t_ren = Instant::now();

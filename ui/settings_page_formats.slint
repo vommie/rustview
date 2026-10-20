@@ -175,24 +175,12 @@ export component SettingsPageFormats inherits VerticalLayout {
         title: "Not supported";
         description: "Common formats RustView cannot show. Their files are skipped by every refresh.";
 
-        for item in root.unsupported : VerticalLayout {
-            spacing: 2px;
-            padding-left: 8px;
-            padding-right: 8px;
-
-            Text {
-                text: item.title;
-                font-size: 12px;
-                color: Theme.text;
-                wrap: word-wrap;
-            }
-
-            Text {
-                text: item.text;
-                font-size: 11px;
-                color: Theme.text-muted;
-                wrap: word-wrap;
-            }
+        // One wrapping Text per item, directly in the card: wrapped text inside a nested layout is measured as one line.
+        for item in root.unsupported : Text {
+            text: item.title + ": " + item.text;
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
         }
     }
 }

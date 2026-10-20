@@ -45,13 +45,10 @@ impl MediaDetector {
             .map(|format| (format, format.default_extension()))
     }
 
-    /// The kind of content the header shows, including image kinds RustView cannot decode (HEIC): a file called `.mp4`
-    /// that holds an HEIC photo is an image whatever its name says.
+    /// The kind of content the header shows: a file called `.mp4` that holds an HEIC photo is an image whatever its name
+    /// says.
     pub fn content_media_type(bytes: &[u8]) -> Option<MediaType> {
-        match Self::detect_from_bytes(bytes) {
-            Some((format, _)) => format.media_type(),
-            None => Self::is_unsupported_iso_image(bytes).then_some(MediaType::Image),
-        }
+        Self::detect_from_bytes(bytes).and_then(|(format, _)| format.media_type())
     }
 
     /// For formats whose extension also names unrelated files (`.ts` is TypeScript too): does the header look like the
@@ -152,7 +149,10 @@ impl MediaDetector {
             if brands.has(b"avif") || brands.has(b"avis") {
                 return Some(MediaFormat::Avif);
             }
-            if brands.has_any(HEIF_BRANDS) || brands.major.starts_with(b"M4A") || brands.major.starts_with(b"M4B") || brands.major.starts_with(b"M4P") {
+            if brands.has_any(HEIF_BRANDS) {
+                return Some(MediaFormat::Heic);
+            }
+            if brands.major.starts_with(b"M4A") || brands.major.starts_with(b"M4B") || brands.major.starts_with(b"M4P") {
                 return None;
             }
             return Some(match brands.major {
@@ -169,10 +169,6 @@ impl MediaDetector {
         None
     }
 
-    fn is_unsupported_iso_image(b: &[u8]) -> bool {
-        IsoBrands::parse(b).is_some_and(|brands| brands.has_any(HEIF_BRANDS))
-    }
-
     fn detect_video(b: &[u8]) -> Option<MediaFormat> {
         if b.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
             let window = &b[..b.len().min(128)];
@@ -183,6 +179,9 @@ impl MediaDetector {
         }
         if b.starts_with(&[0, 0, 1, 0xBA]) || b.starts_with(&[0, 0, 1, 0xB3]) {
             return Some(MediaFormat::Mpeg);
+        }
+        if b.starts_with(&WTV_HEADER_GUID) {
+            return Some(MediaFormat::Wtv);
         }
         if b.starts_with(&ASF_HEADER_GUID) {
             return memmem::find(b, &ASF_VIDEO_STREAM_GUID).map(|_| MediaFormat::Wmv);
@@ -219,10 +218,11 @@ impl MediaDetector {
     }
 }
 
-/// HEIF/HEIC brands; the images are not decodable without libheif.
+/// HEIF/HEIC brands (AVIF files carry `mif1` too, so AVIF is checked first).
 const HEIF_BRANDS: &[&[u8; 4]] = &[b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"];
 
 const ASF_HEADER_GUID: [u8; 16] = [0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C];
+const WTV_HEADER_GUID: [u8; 16] = [0xB7, 0xD8, 0x00, 0x20, 0x37, 0x49, 0xDA, 0x11, 0xA6, 0x4E, 0x00, 0x07, 0xE9, 0x5E, 0xAD, 0x8D];
 /// ASF stream type "video media"; an ASF without one is a WMA audio file.
 const ASF_VIDEO_STREAM_GUID: [u8; 16] = [0xC0, 0xEF, 0x19, 0xBC, 0x4D, 0x5B, 0xCF, 0x11, 0xA8, 0xFD, 0x00, 0x80, 0x5F, 0x5C, 0x44, 0x2B];
 
@@ -360,7 +360,7 @@ mod tests {
         assert_eq!(detect(&ftyp(b"avif", &[b"mif1", b"miaf"])), Some(MediaFormat::Avif));
         assert_eq!(detect(&ftyp(b"mif1", &[b"avif", b"miaf"])), Some(MediaFormat::Avif));
         assert_eq!(detect(&ftyp(b"avis", &[])), Some(MediaFormat::Avif));
-        assert_eq!(detect(&ftyp(b"heic", &[b"mif1"])), None);
+        assert_eq!(detect(&ftyp(b"heic", &[b"mif1"])), Some(MediaFormat::Heic));
         assert_eq!(detect(&ftyp(b"qt  ", &[])), Some(MediaFormat::Mov));
         assert_eq!(detect(&ftyp(b"3gp4", &[b"isom"])), Some(MediaFormat::ThreeGp));
         assert_eq!(detect(&ftyp(b"isom", &[b"iso2", b"avc1", b"mp41"])), Some(MediaFormat::Mp4));

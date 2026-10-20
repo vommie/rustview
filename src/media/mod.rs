@@ -6,8 +6,10 @@ pub mod formats;
 pub mod hashing;
 pub mod image_decode;
 pub mod metadata;
+pub mod orientation;
 pub mod scanner;
 pub mod svg;
+pub mod tile_grid;
 
 pub use detector::MediaDetector;
 pub use format_catalog::{CatalogEntry, KNOWN_UNSUPPORTED_EXTENSIONS, UNSUPPORTED_FORMATS, catalog};
