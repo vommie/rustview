@@ -16,6 +16,7 @@ use super::browse_folders::{BrowseDragScroller, BrowseFolders};
 use super::bridge_folders::BridgeFolders;
 use super::multiview::{self, MultiviewHandle, bar_overlay};
 use crate::viewer::multiview::prefs;
+use crate::viewer::zoom::prefs as zoom_prefs;
 use super::bridge_inspector::BridgeInspector;
 use super::bridge_media::BridgeMedia;
 use super::bridge_rubberband::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
@@ -226,6 +227,7 @@ impl UiBridge {
         );
         type_ahead::config::apply(&app_settings.appearance);
         prefs::apply(&app_settings.fullscreen);
+        zoom_prefs::apply(&app_settings.fullscreen);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 
         window.set_tag_history_height(initial_state.tag_history_height);
@@ -518,6 +520,7 @@ impl UiBridge {
 
                 if diff_clone.fullscreen_settings_changed || diff_clone.viewer_settings_changed {
                     prefs::apply(&new_clone.fullscreen);
+                    zoom_prefs::apply(&new_clone.fullscreen);
                     multiview::refresh_settings(&settings);
                 }
 

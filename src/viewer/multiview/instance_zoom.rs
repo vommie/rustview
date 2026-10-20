@@ -22,9 +22,9 @@ use crate::viewer::zoom::state::{PictureContent, RenderDone, Request};
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Length of the track of the zoom slider in logical pixels (the bubble is 250 wide, the slider 242; two buttons, their gaps and the
-/// padding take 72); the snapping of the handle measures its distances with it.
-pub const SLIDER_TRACK_PX: f64 = 170.0;
+/// Length of the track of the zoom slider in logical pixels (the bubble is 210 wide, the slider 202; the padding and the handle
+/// take 30); the snapping of the handle measures its distances with it.
+pub const SLIDER_TRACK_PX: f64 = 172.0;
 
 /// A mouse wheel notch is worth this much `delta-y` in Slint; touchpads send pixels and add up to a step the same way.
 const WHEEL_STEP_DELTA: f32 = 120.0;
@@ -507,10 +507,10 @@ mod tests {
         let instance = instance(vec![image_seed(1)], tab_view());
         let now = Instant::now();
         // Half a notch is nothing yet.
-        instance.lock().zoom_wheel_at(0, 30.0, (900.0, 200.0), now);
+        instance.lock().zoom_wheel_at(0, 60.0, (900.0, 200.0), now);
         assert!(first_tile(&instance).zoom.is_none());
         // The second half makes one step (10% by default).
-        instance.lock().zoom_wheel_at(0, 30.0, (900.0, 200.0), now);
+        instance.lock().zoom_wheel_at(0, 60.0, (900.0, 200.0), now);
         assert_eq!(instance.lock().zoom_percent(0).map(|p| p.round() as i32), Some(110));
         // Wheel down goes back; a direction change does not carry over what was left.
         instance.lock().zoom_wheel_at(0, -120.0, (900.0, 200.0), now);

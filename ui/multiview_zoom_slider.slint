@@ -1,13 +1,13 @@
 import { Theme } from "styles.slint";
-import { AppIcon, IconId, IconSize } from "icons.slint";
 
 /// The zoom slider that hangs below the media bar of an image (inside the speech bubble of `MultiviewBarMenu`).
 ///
 /// The reset (100%) is in the middle, zooming in is to the right, zooming out to the left; both halves are logarithmic (the
 /// same distance is the same factor). A thin line from the middle to the handle shows which way the zoom went, small ticks mark
 /// the points the handle snaps to (the snapping itself is done by Rust, which answers with the snapped value at once). The
-/// percentage appears above the handle while the pointer is over the slider. The mouse wheel over it steps (5%, Shift 10%,
-/// Ctrl 25%), the buttons at its ends step once, a double click on the track or a click on the middle tick resets.
+/// percentage is not drawn here: the bar window floats it below the bubble (`pill-visible`, `handle-center-x`) while the pointer
+/// is over the slider, so it takes no room. The mouse wheel over it steps (5%, Shift 10%, Ctrl 25%), a double click on the track
+/// or a click on the middle tick resets.
 ///
 /// Every movement is reported as a number that crosses the Slint boundary (`BarClick::from_code` on the Rust side):
 /// `4000000 + position * 10000` for the handle (position 0..1), `2000000 + 1/2/4` for up / Shift / Ctrl steps, `3000000` for the
@@ -21,19 +21,24 @@ export component MultiviewZoomSlider inherits Rectangle {
 
     callback request(int /* code */);
 
-    out property <length> content-height: 46px;
+    out property <length> content-height: 28px;
+    // The owner floats the percentage: whether it shows (the pointer is over the slider or the handle is dragged) and the middle of
+    // the handle, from the left edge of the slider.
+    callback pill-changed(bool /* shown */, length /* handle center x */);
 
-    property <length> pad: 10px;
-    property <length> button: 20px;
-    property <length> gap: 6px;
+    property <length> pad: 8px;
     property <length> handle-size: 14px;
-    property <length> center-y: 31px;
-    property <length> track-x: root.pad + root.button + root.gap;
-    property <length> track-w: Math.max(root.width - 2 * (root.pad + root.button + root.gap), 20px);
+    property <length> center-y: 9px;
+    property <length> track-x: root.pad;
+    property <length> track-w: Math.max(root.width - 2 * root.pad - root.handle-size, 20px);
     property <float> wheel-acc: 0;
     property <bool> dragging: false;
     property <float> position: root.pos-of(root.value-permille);
     property <bool> active: track-touch.has-hover || root.dragging;
+    property <length> handle-center-x: root.track-x + root.position * root.track-w + root.handle-size / 2;
+
+    changed active => { root.pill-changed(root.active, root.handle-center-x); }
+    changed handle-center-x => { root.pill-changed(root.active, root.handle-center-x); }
 
     pure function pos-of(z: int) -> float {
         if z >= 1000 {
@@ -51,51 +56,6 @@ export component MultiviewZoomSlider inherits Rectangle {
     }
 
     height: root.content-height;
-
-    // The two buttons at the ends: one step down / up.
-    Rectangle {
-        x: root.pad;
-        y: root.center-y - self.height / 2;
-        width: root.button;
-        height: root.button;
-        border-radius: 10px;
-        background: minus-touch.has-hover ? Theme.surface-hover : transparent;
-
-        minus-touch := TouchArea {
-            mouse-cursor: MouseCursor.pointer;
-            clicked => { root.request(2000000); }
-        }
-
-        AppIcon {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            icon: IconId.zoom-out;
-            size: IconSize.md;
-            color: minus-touch.has-hover ? Theme.text : Theme.text-muted;
-        }
-    }
-
-    Rectangle {
-        x: root.width - root.pad - root.button;
-        y: root.center-y - self.height / 2;
-        width: root.button;
-        height: root.button;
-        border-radius: 10px;
-        background: plus-touch.has-hover ? Theme.surface-hover : transparent;
-
-        plus-touch := TouchArea {
-            mouse-cursor: MouseCursor.pointer;
-            clicked => { root.request(2000001); }
-        }
-
-        AppIcon {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            icon: IconId.zoom-in;
-            size: IconSize.md;
-            color: plus-touch.has-hover ? Theme.text : Theme.text-muted;
-        }
-    }
 
     // The track.
     Rectangle {
@@ -148,32 +108,12 @@ export component MultiviewZoomSlider inherits Rectangle {
         border-color: Theme.surface;
     }
 
-    // The percentage above the handle, only while the pointer is over the slider.
-    Rectangle {
-        visible: root.active;
-        width: 46px;
-        height: 17px;
-        x: Math.clamp(root.track-x + root.handle-size / 2 + root.position * root.track-w - self.width / 2, 2px, root.width - self.width - 2px);
-        y: 3px;
-        border-radius: 8px;
-        background: Theme.surface-selected;
-
-        Text {
-            text: Math.round(root.value-permille / 10.0) + "%";
-            font-size: 10px;
-            font-weight: 700;
-            color: Theme.text;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-    }
-
     // Dragging, the wheel and the double click.
     track-touch := TouchArea {
         x: root.track-x;
-        y: 16px;
+        y: 0px;
         width: root.track-w + root.handle-size;
-        height: root.content-height - 16px;
+        height: root.content-height;
         mouse-cursor: MouseCursor.pointer;
 
         pointer-event(event) => {

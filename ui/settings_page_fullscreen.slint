@@ -23,6 +23,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <bool> media-bar-show-duplicate: true;
     in-out property <bool> media-bar-show-open-as-tab: true;
     in-out property <bool> media-bar-show-open-with: true;
+    in-out property <bool> media-bar-show-zoom: true;
     in-out property <bool> media-bar-show-delete: true;
     in-out property <bool> media-bar-show-remove: true;
     in-out property <int> media-bar-reveal-distance-px: 15;
@@ -39,6 +40,14 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <int> primary-bar-reveal-distance-px: 15;
     in-out property <bool> hide-idle-cursor: false;
     in-out property <int> idle-cursor-secs: 3;
+
+    // Image zoom
+    in-out property <int> zoom-step-percent: 10;
+    in-out property <int> zoom-max-percent: 1000;
+    in-out property <bool> zoom-smooth: false;
+    in-out property <int> zoom-minimap-idx: 0; // 0 = bottom left, 1 = bottom right
+    in-out property <bool> zoom-minimap-always: false;
+    in-out property <int> zoom-resample-idx: 0; // 0 = Lanczos, 1 = Catmull-Rom, 2 = Bilinear, 3 = Nearest neighbor
 
     // Sound
     in-out property <bool> sound-auto-control: true;
@@ -282,6 +291,14 @@ export component SettingsPageFullscreen inherits VerticalLayout {
 
         SettingsSwitchRow {
             indent: 12px;
+            label: "Zoom";
+            tooltip: "A button with a zoom slider, shown on images only. Ctrl + mouse wheel over an image zooms without the button.";
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-zoom;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
             label: "Delete";
             tooltip: "Delete the medium (to the trash or permanently), after the usual confirmation. Del does the same on a single medium.";
             enabled: root.media-bar-enabled;
@@ -440,6 +457,108 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                     horizontal-alignment: right;
                 }
             }
+        }
+    }
+
+    SettingsCard {
+        title: "Image Zoom";
+        description: "Zooming and the minimap for images in a Multiview (fullscreen and tabs). Videos have the zoom of mpv.";
+
+        SettingsOptionRow {
+            label: "Ctrl + mouse wheel step";
+            description: "Each notch zooms by this much. The wheel over the zoom slider uses 5 %, with Shift 10 %, with Ctrl 25 %.";
+            tooltip: "How much one notch of Ctrl + mouse wheel over an image zooms in or out (Ctrl + plus and minus use it too).";
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 1;
+                    maximum: 100;
+                    value: root.zoom-step-percent;
+                    changed(v) => { root.zoom-step-percent = Math.round(v); }
+                }
+
+                Text {
+                    text: root.zoom-step-percent + " %";
+                    color: Theme.primary;
+                    width: 46px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Maximum zoom";
+            description: "The slider and the wheel stop here. 100 % is the picture as it fits its place.";
+            tooltip: "The largest zoom you can reach, as a percentage of the fitted picture. Large values need the original to be decoded in full.";
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 200;
+                    maximum: 6400;
+                    value: root.zoom-max-percent;
+                    changed(v) => { root.zoom-max-percent = Math.round(v / 100) * 100; }
+                }
+
+                Text {
+                    text: root.zoom-max-percent + " %";
+                    color: Theme.primary;
+                    width: 56px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        SettingsSwitchRow {
+            label: "Smooth zoom";
+            description: "Off (default): a zoom step happens at once.";
+            tooltip: "Glide to the new zoom in a fraction of a second instead of jumping to it.";
+            checked <=> root.zoom-smooth;
+        }
+
+        SettingsOptionRow {
+            label: "Resampling quality";
+            description: "Used when a zoomed picture is made sharp, in both directions.";
+            tooltip: "Lanczos (default) is the sharpest and the best for zooming in and out. Catmull-Rom is slightly softer, Bilinear is fast and soft, Nearest neighbor shows the pixels as blocks.";
+
+            ComboBox {
+                width: 220px;
+                model: ["Lanczos (best quality)", "Catmull-Rom (cubic)", "Bilinear (fast)", "Nearest neighbor (pixels)"];
+                current-index <=> root.zoom-resample-idx;
+            }
+        }
+
+        Text {
+            text: "Minimap";
+            color: Theme.text-muted;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        SettingsOptionRow {
+            indent: 12px;
+            label: "Position";
+            tooltip: "The corner of the image where the minimap sits. It appears when the pointer comes near it and for a moment after every zoom change.";
+
+            ComboBox {
+                width: 220px;
+                model: ["Bottom left", "Bottom right"];
+                current-index <=> root.zoom-minimap-idx;
+            }
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Always visible while zoomed in";
+            tooltip: "Keep the minimap on screen as long as the image is zoomed in, without having to point at it.";
+            checked <=> root.zoom-minimap-always;
         }
     }
 

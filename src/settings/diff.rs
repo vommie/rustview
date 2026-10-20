@@ -585,8 +585,8 @@ impl SettingsDiff {
             ));
             let bar = &new.fullscreen.media_bar;
             changes.push(format!(
-                "Fullscreen media action bar: enabled: {}, mute: {}, sticky: {}, duplicate: {}, open_as_tab: {}, open_with: {}, delete: {}, remove: {}, reveal_distance_px: {}",
-                bar.enabled, bar.show_mute, bar.show_sticky, bar.show_duplicate, bar.show_open_as_tab, bar.show_open_with, bar.show_delete,
+                "Fullscreen media action bar: enabled: {}, mute: {}, sticky: {}, duplicate: {}, open_as_tab: {}, open_with: {}, zoom: {}, delete: {}, remove: {}, reveal_distance_px: {}",
+                bar.enabled, bar.show_mute, bar.show_sticky, bar.show_duplicate, bar.show_open_as_tab, bar.show_open_with, bar.show_zoom, bar.show_delete,
                 bar.show_remove, bar.reveal_distance_px
             ));
             let primary = &new.fullscreen.primary_bar;
@@ -595,6 +595,11 @@ impl SettingsDiff {
                 primary.enabled, primary.show_send_to_tab, primary.show_close, primary.show_mute_all, primary.show_play_pause_all,
                 primary.show_reset_layout, primary.show_hide_cursor, primary.show_pin, primary.reveal_distance_px,
                 primary.hide_idle_cursor, primary.idle_cursor_ms
+            ));
+            let zoom = &new.fullscreen.zoom;
+            changes.push(format!(
+                "Fullscreen image zoom: step_percent: {}, max_percent: {}, smooth: {}, minimap_position: '{}', minimap_always: {}, resample: '{}'",
+                zoom.step_percent, zoom.max_percent, zoom.smooth, zoom.minimap_position, zoom.minimap_always, zoom.resample
             ));
             let sound = &new.fullscreen.sound;
             changes.push(format!(

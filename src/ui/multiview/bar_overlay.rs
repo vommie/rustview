@@ -279,6 +279,8 @@ struct XState {
     placed: Option<BarPlacement>,
     /// The tooltip bubble inside the window, physical pixels relative to the window.
     tooltip: Option<Rect>,
+    /// The floating percentage of the zoom slider, physical pixels relative to the window.
+    pill: Option<Rect>,
     /// The drop-down menu inside the window, physical pixels relative to the window (the caret zone on top included).
     menu: Option<Rect>,
     /// The caret of the menu: its center x (relative to the window) and its height, physical pixels.
@@ -312,6 +314,9 @@ impl XState {
         let mut region = rounded_region(bar, self.bar_radius);
         if let Some(tooltip) = self.tooltip {
             region.extend(rounded_region(tooltip, self.tooltip_radius));
+        }
+        if let Some(pill) = self.pill {
+            region.extend(rounded_region(pill, pill.h / 2));
         }
         if let Some(menu) = self.menu {
             let (caret_x, caret_h) = self.menu_caret;
@@ -352,6 +357,8 @@ struct Overlay {
     model: Rc<VecModel<MultiviewBarButtonView>>,
     shared: Rc<Shared>,
     owner: Option<BarOwner>,
+    /// The window of the host the bar was last shown for (0 = none yet).
+    host_xid: u64,
     shown: bool,
     last_actions: Vec<MultiviewBarButtonView>,
     last_zoom_snaps: Vec<i32>,
@@ -400,6 +407,16 @@ impl Overlay {
                 .then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
             state.apply_shape();
         });
+        let for_pill = shared.clone();
+        window.on_pill_changed(move |visible, x, y, w, h| {
+            let Ok(mut state) = for_pill.x.try_borrow_mut() else {
+                return;
+            };
+            let scale = state.scale.max(0.5);
+            let px = |logical: f32| (logical * scale).round() as i32;
+            state.pill = (visible && w > 2.0 && h > 2.0).then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
+            state.apply_shape();
+        });
         let for_menu = shared.clone();
         window.on_menu_changed(move |visible, x, y, w, h, caret_x, caret_h| {
             let Ok(mut state) = for_menu.x.try_borrow_mut() else {
@@ -429,6 +446,7 @@ impl Overlay {
             model,
             shared,
             owner: None,
+            host_xid: 0,
             shown: false,
             last_actions: Vec::new(),
             last_zoom_snaps: Vec::new(),
@@ -468,10 +486,12 @@ impl Overlay {
             self.hide();
             return false;
         };
-        if !in_front && !request.forced {
+        // A bar that gives feedback shows without the pointer, but never while the user works in another window.
+        if !in_front && !(request.forced && self.host_active(request.host_xid)) {
             self.hide();
             return false;
         }
+        self.host_xid = request.host_xid;
         self.owner = Some(request.owner);
         self.place(in_host.translated(origin.0, origin.1), request.scale);
         true
@@ -526,8 +546,37 @@ impl Overlay {
         }
     }
 
+    /// Whether the window manager has the host window (or the window that holds it) as the active window.
+    fn host_active(&self, host_xid: u64) -> bool {
+        let x = self.shared.x.borrow();
+        let Some(server) = x.server.as_ref() else {
+            return false;
+        };
+        let Some(active) = server.active_window() else {
+            // A window manager that does not tell cannot be asked; the pointer decides alone then.
+            return false;
+        };
+        active == host_xid || server.top_level_of(active).is_some_and(|top| Some(top) == server.top_level_of(host_xid))
+    }
+
+    /// Whether the user is looking at the host: the pointer is over it (or over the bar) or it is the active window. A bar that
+    /// stays by itself (open menu or slider) goes away when this is false, so it never floats over another application.
+    fn host_in_use(&self) -> bool {
+        self.host_xid != 0 && (self.host_state(self.host_xid).is_some_and(|(_, in_front)| in_front) || self.host_active(self.host_xid))
+    }
+
     /// See `service_menu`.
     fn service_menu(&mut self) -> bool {
+        // A hidden bar has nothing to keep; the pointer brings it back (with its slider, which the Multiview still has open).
+        if !self.shown {
+            return false;
+        }
+        if (self.window.get_zoom_open() || self.window.get_menu_open()) && !self.host_in_use() {
+            if self.close_menu() {
+                tracing::debug!("[Multiview: Overlay] The host is not in use; closing the bar menu");
+            }
+            return false;
+        }
         if self.window.get_zoom_open() {
             // The slider stays as long as the Multiview says so, wherever the pointer is.
             return true;

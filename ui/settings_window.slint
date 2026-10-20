@@ -145,6 +145,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-media-bar-show-duplicate: true;
     in-out property <bool> fullscreen-media-bar-show-open-as-tab: true;
     in-out property <bool> fullscreen-media-bar-show-open-with: true;
+    in-out property <bool> fullscreen-media-bar-show-zoom: true;
     in-out property <bool> fullscreen-media-bar-show-delete: true;
     in-out property <bool> fullscreen-media-bar-show-remove: true;
     in-out property <int> fullscreen-media-bar-reveal-distance-px: 15;
@@ -159,6 +160,12 @@ export component SettingsWindow inherits Window {
     in-out property <int> fullscreen-primary-bar-reveal-distance-px: 15;
     in-out property <bool> fullscreen-hide-idle-cursor: false;
     in-out property <int> fullscreen-idle-cursor-secs: 3;
+    in-out property <int> fullscreen-zoom-step-percent: 10;
+    in-out property <int> fullscreen-zoom-max-percent: 1000;
+    in-out property <bool> fullscreen-zoom-smooth: false;
+    in-out property <int> fullscreen-zoom-minimap-idx: 0; // 0 = bottom left, 1 = bottom right
+    in-out property <bool> fullscreen-zoom-minimap-always: false;
+    in-out property <int> fullscreen-zoom-resample-idx: 0; // 0 = Lanczos, 1 = Catmull-Rom, 2 = Bilinear, 3 = Nearest neighbor
     in-out property <bool> fullscreen-sound-auto-control: true;
     in-out property <int> fullscreen-sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
     in-out property <bool> fullscreen-sound-hand-over: true;
@@ -343,6 +350,7 @@ export component SettingsWindow inherits Window {
                             media-bar-show-duplicate <=> root.fullscreen-media-bar-show-duplicate;
                             media-bar-show-open-as-tab <=> root.fullscreen-media-bar-show-open-as-tab;
                             media-bar-show-open-with <=> root.fullscreen-media-bar-show-open-with;
+                            media-bar-show-zoom <=> root.fullscreen-media-bar-show-zoom;
                             media-bar-show-delete <=> root.fullscreen-media-bar-show-delete;
                             media-bar-show-remove <=> root.fullscreen-media-bar-show-remove;
                             media-bar-reveal-distance-px <=> root.fullscreen-media-bar-reveal-distance-px;
@@ -357,6 +365,12 @@ export component SettingsWindow inherits Window {
                             primary-bar-reveal-distance-px <=> root.fullscreen-primary-bar-reveal-distance-px;
                             hide-idle-cursor <=> root.fullscreen-hide-idle-cursor;
                             idle-cursor-secs <=> root.fullscreen-idle-cursor-secs;
+                            zoom-step-percent <=> root.fullscreen-zoom-step-percent;
+                            zoom-max-percent <=> root.fullscreen-zoom-max-percent;
+                            zoom-smooth <=> root.fullscreen-zoom-smooth;
+                            zoom-minimap-idx <=> root.fullscreen-zoom-minimap-idx;
+                            zoom-minimap-always <=> root.fullscreen-zoom-minimap-always;
+                            zoom-resample-idx <=> root.fullscreen-zoom-resample-idx;
                             sound-auto-control <=> root.fullscreen-sound-auto-control;
                             sound-follows-idx <=> root.fullscreen-sound-follows-idx;
                             sound-hand-over <=> root.fullscreen-sound-hand-over;

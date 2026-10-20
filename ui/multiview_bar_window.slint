@@ -2,6 +2,7 @@ import { MultiviewBarButtonView } from "multiview_types.slint";
 import { MultiviewBar } from "multiview_bar.slint";
 import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
+import { Theme } from "styles.slint";
 import { ContextMenuItemModel } from "types.slint";
 import { MultiviewBarMenu } from "multiview_bar_menu.slint";
 import { MultiviewZoomSlider } from "multiview_zoom_slider.slint";
@@ -38,6 +39,7 @@ export component MultiviewBarWindow inherits Window {
     in property <int> zoom-min-permille: 100;
     in property <int> zoom-max-permille: 10000;
     in property <[int]> zoom-snaps: [];
+    // Where the percentage of the zoom slider floats: its handle, in the slider's own coordinates.
     out property <length> bar-width: bar.width;
     out property <length> bar-height: bar.height;
     out property <length> bar-radius: bar.border-radius;
@@ -50,6 +52,8 @@ export component MultiviewBarWindow inherits Window {
     callback menu-item-clicked(int /* tile index */, int /* item id */);
     // The drop-down appeared, changed its size or went away (logical pixels in this window).
     callback menu-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */, length /* caret center x */, length /* caret height */);
+    // The floating percentage appeared, moved or went away (logical pixels in this window).
+    callback pill-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
     callback tooltip-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
 
     // Called when the window is hidden: a tooltip that was open must not be there when the window comes back.
@@ -76,7 +80,7 @@ export component MultiviewBarWindow inherits Window {
         }
     }
 
-    property <length> menu-width: root.zoom-open ? 250px : 230px;
+    property <length> menu-width: root.zoom-open ? 210px : 230px;
     property <length> menu-gap: 2px;
     // The bubble is centered under the opener where the window leaves room for it.
     property <length> opener-x: bar.x + bar.button-center-x(root.menu-owner-index);
@@ -99,7 +103,7 @@ export component MultiviewBarWindow inherits Window {
         width: root.menu-width;
         max-content-height: Math.max(root.height - root.menu-y - 2px, 0px);
         items: root.zoom-open ? [] : root.menu-items;
-        custom-height: root.zoom-open ? 46px + 8px : 0px;
+        custom-height: root.zoom-open ? 28px + 8px : 0px;
         anchor-x: root.opener-x - root.menu-x;
         translucent: root.translucent;
 
@@ -115,10 +119,55 @@ export component MultiviewBarWindow inherits Window {
             min-permille: root.zoom-min-permille;
             max-permille: root.zoom-max-permille;
             snaps: root.zoom-snaps;
+            pill-changed(shown, center) => {
+                root.zoom-pill-visible = shown;
+                root.zoom-handle-x = center;
+            }
 
             request(code) => {
                 root.action-clicked(root.tile, code);
             }
+        }
+    }
+
+    property <bool> zoom-pill-visible: false;
+    property <length> zoom-handle-x: 0px;
+    // The percentage of the zoom slider floats below its bubble, so the bubble itself stays as slim as possible.
+    property <length> pill-width: 46px;
+    property <length> pill-height: 18px;
+    property <length> pill-x: Math.clamp(root.menu-x + 4px + root.zoom-handle-x - root.pill-width / 2, 1px, root.width - root.pill-width - 1px);
+    property <length> pill-y: root.menu-y + root.menu-height + 3px;
+    property <bool> pill-shown: root.zoom-open && root.zoom-pill-visible;
+
+    changed zoom-open => {
+        if !root.zoom-open {
+            root.zoom-pill-visible = false;
+        }
+    }
+    changed pill-shown => {
+        root.pill-changed(root.pill-shown, root.pill-x, root.pill-y, root.pill-width, root.pill-height);
+    }
+    changed pill-x => {
+        root.pill-changed(root.pill-shown, root.pill-x, root.pill-y, root.pill-width, root.pill-height);
+    }
+
+    if root.pill-shown : Rectangle {
+        x: root.pill-x;
+        y: root.pill-y;
+        width: root.pill-width;
+        height: root.pill-height;
+        border-radius: root.pill-height / 2;
+        background: Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        Text {
+            text: Math.round(root.zoom-permille / 10.0) + "%";
+            font-size: 10px;
+            font-weight: 700;
+            color: Theme.text;
+            horizontal-alignment: center;
+            vertical-alignment: center;
         }
     }
 

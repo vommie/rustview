@@ -3,7 +3,8 @@ use super::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
 use super::registry::SettingsManager;
 use super::schema::{
     AppSettings, FullscreenSettings, MAX_CONFIRM_OPEN_FILE_COUNT, MIN_CONFIRM_OPEN_FILE_COUNT, MAX_MEMORY_BUDGET_MB, MIN_MEMORY_BUDGET_MB, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
-    MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+    MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT, DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT, MAX_FULLSCREEN_ZOOM_MAX_PERCENT,
+    MAX_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT,
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
     MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MIN_TYPE_AHEAD_TIMEOUT_MS,
 };
@@ -294,6 +295,7 @@ impl SettingsDialogController {
         window.set_fullscreen_media_bar_show_duplicate(bar.show_duplicate);
         window.set_fullscreen_media_bar_show_open_as_tab(bar.show_open_as_tab);
         window.set_fullscreen_media_bar_show_open_with(bar.show_open_with);
+        window.set_fullscreen_media_bar_show_zoom(bar.show_zoom);
         window.set_fullscreen_media_bar_show_delete(bar.show_delete);
         window.set_fullscreen_media_bar_show_remove(bar.show_remove);
         window.set_fullscreen_media_bar_reveal_distance_px(bar.reveal_distance_px as i32);
@@ -310,6 +312,19 @@ impl SettingsDialogController {
         window.set_fullscreen_primary_bar_reveal_distance_px(primary.reveal_distance_px as i32);
         window.set_fullscreen_hide_idle_cursor(primary.hide_idle_cursor);
         window.set_fullscreen_idle_cursor_secs((primary.idle_cursor_ms as f32 / 1000.0).round() as i32);
+
+        let zoom = &fullscreen.zoom;
+        window.set_fullscreen_zoom_step_percent(zoom.step_percent as i32);
+        window.set_fullscreen_zoom_max_percent(zoom.max_percent as i32);
+        window.set_fullscreen_zoom_smooth(zoom.smooth);
+        window.set_fullscreen_zoom_minimap_idx(i32::from(zoom.minimap_position == "bottom_right"));
+        window.set_fullscreen_zoom_minimap_always(zoom.minimap_always);
+        window.set_fullscreen_zoom_resample_idx(match zoom.resample.as_str() {
+            "catmull_rom" => 1,
+            "bilinear" => 2,
+            "nearest" => 3,
+            _ => 0,
+        });
 
         let sound = &fullscreen.sound;
         window.set_fullscreen_sound_auto_control(sound.auto_control);
@@ -339,6 +354,7 @@ impl SettingsDialogController {
         bar.show_duplicate = window.get_fullscreen_media_bar_show_duplicate();
         bar.show_open_as_tab = window.get_fullscreen_media_bar_show_open_as_tab();
         bar.show_open_with = window.get_fullscreen_media_bar_show_open_with();
+        bar.show_zoom = window.get_fullscreen_media_bar_show_zoom();
         bar.show_delete = window.get_fullscreen_media_bar_show_delete();
         bar.show_remove = window.get_fullscreen_media_bar_show_remove();
         bar.reveal_distance_px = u32::try_from(window.get_fullscreen_media_bar_reveal_distance_px())
@@ -360,6 +376,24 @@ impl SettingsDialogController {
         primary.hide_idle_cursor = window.get_fullscreen_hide_idle_cursor();
         let secs = u32::try_from(window.get_fullscreen_idle_cursor_secs()).unwrap_or(1);
         primary.idle_cursor_ms = (secs * 1000).clamp(MIN_FULLSCREEN_IDLE_CURSOR_MS, MAX_FULLSCREEN_IDLE_CURSOR_MS);
+
+        let zoom = &mut fullscreen.zoom;
+        zoom.step_percent = u32::try_from(window.get_fullscreen_zoom_step_percent())
+            .unwrap_or(DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT)
+            .clamp(MIN_FULLSCREEN_ZOOM_STEP_PERCENT, MAX_FULLSCREEN_ZOOM_STEP_PERCENT);
+        zoom.max_percent = u32::try_from(window.get_fullscreen_zoom_max_percent())
+            .unwrap_or(DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT)
+            .clamp(MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MAX_FULLSCREEN_ZOOM_MAX_PERCENT);
+        zoom.smooth = window.get_fullscreen_zoom_smooth();
+        zoom.minimap_position = if window.get_fullscreen_zoom_minimap_idx() == 1 { "bottom_right" } else { "bottom_left" }.to_string();
+        zoom.minimap_always = window.get_fullscreen_zoom_minimap_always();
+        zoom.resample = match window.get_fullscreen_zoom_resample_idx() {
+            1 => "catmull_rom",
+            2 => "bilinear",
+            3 => "nearest",
+            _ => "lanczos3",
+        }
+        .to_string();
 
         let sound = &mut fullscreen.sound;
         sound.auto_control = window.get_fullscreen_sound_auto_control();

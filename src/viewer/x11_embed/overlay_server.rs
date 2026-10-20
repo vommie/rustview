@@ -4,7 +4,7 @@
 
 use super::{get_x11_api, DisplayPtr, WindowId, X11Symbols, XRectangle};
 use crate::viewer::ViewerError;
-use std::ffi::{c_int, c_uint, c_void, CString};
+use std::ffi::{c_int, c_uint, c_ulong, c_void, CString};
 use std::sync::Arc;
 
 /// `ShapeBounding` / `ShapeInput` of the SHAPE extension.
@@ -138,6 +138,41 @@ impl OverlayServer {
             )
         };
         (on_screen != 0 && child_ret != 0).then_some(child_ret)
+    }
+
+    /// The window the window manager reports as active (`_NET_ACTIVE_WINDOW`, the client window the user works in), or `None`
+    /// if there is none or the window manager does not say.
+    pub fn active_window(&self) -> Option<u64> {
+        let atom = unsafe { (self.api.x_intern_atom)(self.display, c"_NET_ACTIVE_WINDOW".as_ptr(), 1) };
+        if atom == 0 {
+            return None;
+        }
+        let (mut actual_type, mut bytes_after): (WindowId, c_ulong) = (0, 0);
+        let (mut actual_format, mut items): (c_int, c_ulong) = (0, 0);
+        let mut data: *mut u8 = std::ptr::null_mut();
+        let status = unsafe {
+            (self.api.x_get_window_property)(
+                self.display,
+                self.root,
+                atom,
+                0,
+                1,
+                0,
+                0,
+                &mut actual_type,
+                &mut actual_format,
+                &mut items,
+                &mut bytes_after,
+                &mut data,
+            )
+        };
+        if data.is_null() {
+            return None;
+        }
+        // A 32 bit property is delivered as an array of C longs.
+        let window = (status == 0 && actual_format == 32 && items > 0).then(|| unsafe { *(data as *const c_ulong) });
+        unsafe { (self.api.x_free)(data as *mut c_void) };
+        window.filter(|&w| w != 0).map(u64::from)
     }
 
     /// The top level window that contains `window`: the window itself, or its frame if the window manager reparented it.

@@ -899,7 +899,7 @@ impl Default for FullscreenSoundSettings {
     }
 }
 
-/// Image zoom in the Multiview (fullscreen, tab view) and in the image tab.
+/// Image zoom in the Multiview (fullscreen and tab view).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FullscreenZoomSettings {
