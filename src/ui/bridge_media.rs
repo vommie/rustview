@@ -1826,6 +1826,7 @@ impl BridgeMedia {
             has_root,
             root_exists,
             current_folder_name,
+            formats_switched_off: !FormatPolicy::mask().is_all_enabled(),
         });
 
         window.set_empty_state_active(fallback_state.is_active);

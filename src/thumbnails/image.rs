@@ -41,7 +41,7 @@ impl ImageDecoder for SimdImageThumbnailer {
         scaling_algo: ScalingAlgorithm,
     ) -> Result<DecodedThumbnailFrame, ThumbnailError> {
         if MediaFormat::from_path(path) == MediaFormat::Svg {
-            let raster = svg::rasterize(path, max_bound).map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
+            let raster = svg::rasterize(path, max_bound).map_err(|e| ThumbnailError::Svg(e.to_string()))?;
             return Ok(DecodedThumbnailFrame {
                 width: raster.width,
                 height: raster.height,

@@ -17,6 +17,9 @@ pub enum ThumbnailError {
     #[error("FFmpeg extraction error: {0}")]
     Ffmpeg(String),
 
+    #[error("SVG rendering error: {0}")]
+    Svg(String),
+
     #[error("Pack store corruption or missing pack ID: {0}")]
     PackNotFound(u32),
 

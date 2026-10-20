@@ -22,6 +22,8 @@ pub struct FallbackEvaluationParams<'a> {
     pub has_root: bool,
     pub root_exists: bool,
     pub current_folder_name: Option<&'a str>,
+    /// Some format is switched off in Settings > File Formats: an empty folder may only look empty.
+    pub formats_switched_off: bool,
 }
 
 /// Encapsulated, pure evaluator determining empty state messages and visibility.
@@ -101,7 +103,7 @@ impl FallbackViewEvaluator {
                 return FallbackViewState {
                     is_active: true,
                     title: "Empty Folder".to_string(),
-                    description: "This folder contains no supported media files.".to_string(),
+                    description: Self::no_media_text(None, params.formats_switched_off),
                     icon: Some(Icon::Folder),
                 };
             }
@@ -162,8 +164,20 @@ impl FallbackViewEvaluator {
         FallbackViewState {
             is_active: true,
             title: "Empty Folder".to_string(),
-            description: format!("'{}' contains no supported media files.", folder_name),
+            description: Self::no_media_text(Some(folder_name), params.formats_switched_off),
             icon: Some(Icon::Folder),
+        }
+    }
+
+    fn no_media_text(folder_name: Option<&str>, formats_switched_off: bool) -> String {
+        let subject = match folder_name {
+            Some(name) => format!("'{name}'"),
+            None => "This folder".to_string(),
+        };
+        if formats_switched_off {
+            format!("{subject} contains no media files of the formats that are switched on (Settings > File Formats).")
+        } else {
+            format!("{subject} contains no supported media files.")
         }
     }
 }
@@ -183,6 +197,7 @@ mod tests {
             has_root: true,
             root_exists: true,
             current_folder_name: Some("Photos"),
+            formats_switched_off: false,
         });
 
         assert!(!state.is_active);
@@ -199,6 +214,7 @@ mod tests {
             has_root: false,
             root_exists: false,
             current_folder_name: None,
+            formats_switched_off: false,
         });
 
         assert!(state.is_active);
@@ -222,6 +238,7 @@ mod tests {
             has_root: true,
             root_exists: true,
             current_folder_name: Some("Vacation"),
+            formats_switched_off: false,
         });
 
         assert!(state.is_active);
@@ -245,10 +262,30 @@ mod tests {
             has_root: true,
             root_exists: true,
             current_folder_name: Some("Pictures"),
+            formats_switched_off: false,
         });
 
         assert!(state.is_active);
         assert_eq!(state.title, "No Videos in Folder");
         assert_eq!(state.icon, Some(Icon::MediaVideo));
+    }
+
+    #[test]
+    fn an_empty_folder_names_switched_off_formats() {
+        let filter = QueryFilter::default();
+        let evaluate = |formats_switched_off| {
+            FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
+                total_in_dataset: 0,
+                matched_count: 0,
+                is_query_active: false,
+                filter: &filter,
+                has_root: true,
+                root_exists: true,
+                current_folder_name: Some("Photos"),
+                formats_switched_off,
+            })
+        };
+        assert_eq!(evaluate(false).description, "'Photos' contains no supported media files.");
+        assert!(evaluate(true).description.contains("formats that are switched on"));
     }
 }

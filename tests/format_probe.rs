@@ -94,3 +94,20 @@ fn probe_samples() {
         println!("{rel:<44} {:<9} {:<7} {meta:<18} {thumb:<24} {viewer:<16} {sniff}", format.display_name(), if is_video { "video" } else { "image" });
     }
 }
+
+#[test]
+fn print_format_table_as_markdown() {
+    if std::env::var("PROBE_TABLE").is_err() {
+        return;
+    }
+    use rustview::media::{FORMAT_SPECS, MediaType};
+    for kind in [MediaType::Image, MediaType::Video] {
+        println!("\n| Format | id | Extensions | Group | Decoder | Note |\n|---|---|---|---|---|---|");
+        let mut specs: Vec<_> = FORMAT_SPECS.iter().filter(|s| s.media_type == Some(kind)).collect();
+        specs.sort_by_key(|s| s.ui_sort_key());
+        for s in specs {
+            let ext: Vec<String> = s.extensions.iter().map(|e| format!(".{e}")).collect();
+            println!("| {} | `{}` | {} | {} | {} | {} |", s.long_name, s.id, ext.join(" "), s.group.title(), s.decoder.label(), s.note);
+        }
+    }
+}
