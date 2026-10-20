@@ -598,8 +598,9 @@ impl SettingsDiff {
             ));
             let zoom = &new.fullscreen.zoom;
             changes.push(format!(
-                "Fullscreen image zoom: step_percent: {}, max_percent: {}, smooth: {}, minimap_position: '{}', minimap_always: {}, resample: '{}'",
-                zoom.step_percent, zoom.max_percent, zoom.smooth, zoom.minimap_position, zoom.minimap_always, zoom.resample
+                "Fullscreen image zoom: step_percent: {}, max_percent: {}, out_percent: {}, smooth: {}, minimap_position: '{}', minimap_always: {}, minimap_secs: {}, resample: '{}'",
+                zoom.step_percent, zoom.max_percent, zoom.out_percent, zoom.smooth, zoom.minimap_position, zoom.minimap_always, zoom.minimap_secs,
+                zoom.resample
             ));
             let sound = &new.fullscreen.sound;
             changes.push(format!(

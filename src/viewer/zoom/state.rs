@@ -7,7 +7,7 @@
 //! *preview*: the picture the tile already has, cut out and scaled by the graphics card, so every change is visible at once and
 //! the sharp picture follows a moment later (the debounce keeps a burst of wheel steps from rendering every step).
 
-use super::geometry::{Frame, IRect, Limits, RectF, Visible, ZoomView};
+use super::geometry::{Area, Frame, IRect, Limits, RectF, Visible, ZoomView};
 use super::minimap::Grab;
 use super::prefs::ZoomPrefs;
 use super::render::{Resample, SourceImage, render_view};
@@ -21,7 +21,6 @@ const ANIMATION: Duration = Duration::from_millis(160);
 /// How long a view has to rest before the sharp picture is rendered.
 const RENDER_DEBOUNCE: Duration = Duration::from_millis(60);
 /// The minimap stays this long after the last change of the view.
-const MINIMAP_AFTER_ACTIVITY: Duration = Duration::from_millis(2500);
 /// The original is kept this long after the view went back to 100% (a zoom right after does not decode again).
 const RELEASE_AFTER: Duration = Duration::from_secs(8);
 const FIT_EPS: f64 = 1e-4;
@@ -32,12 +31,12 @@ pub struct RenderKey {
     zoom: u64,
     cx: u64,
     cy: u64,
-    tile: (i32, i32),
+    tile: Area,
     algorithm: Resample,
 }
 
 impl RenderKey {
-    fn of(view: ZoomView, tile: (i32, i32), algorithm: Resample) -> Self {
+    fn of(view: ZoomView, tile: Area, algorithm: Resample) -> Self {
         Self { zoom: view.zoom.to_bits(), cx: view.cx.to_bits(), cy: view.cy.to_bits(), tile, algorithm }
     }
 }
@@ -109,13 +108,15 @@ pub enum PictureContent {
 #[derive(Default)]
 struct MinimapState {
     hover: bool,
+    /// The slider bubble on the minimap is open: the minimap stays, whatever the zoom.
+    pinned: bool,
     grab: Option<Grab>,
     reveal_until: Option<Instant>,
 }
 
 pub struct ZoomState {
     image: (u32, u32),
-    tile: Option<(i32, i32)>,
+    tile: Option<Area>,
     target: ZoomView,
     shown: ZoomView,
     animation: Option<Animation>,
@@ -155,8 +156,18 @@ impl ZoomState {
         self.image
     }
 
+    /// Where the tile (the place of the fitted picture) is inside the room, if it is known.
+    pub fn home(&self) -> Option<IRect> {
+        self.tile.map(|a| a.home)
+    }
+
+    /// The size of the room the picture may use, if the tile is known.
+    pub fn room(&self) -> Option<(i32, i32)> {
+        self.tile.map(|a| a.size)
+    }
+
     fn frame(&self) -> Option<Frame> {
-        Frame::new(self.image, self.tile?)
+        Frame::in_area(self.image, self.tile?)
     }
 
     /// The zoom the user chose, as a factor of the fitted size (the animation may still be on its way).
@@ -187,13 +198,18 @@ impl ZoomState {
 
     // ---- the tile -------------------------------------------------------------------------------------------------------
 
-    /// The tile the picture is shown in (physical pixels). A different size re-fits the view and asks for a new render.
-    /// Returns whether anything changed.
+    /// The tile the picture is shown in, with no room around it (physical pixels); see `set_area`.
     pub fn set_tile(&mut self, tile: (i32, i32), prefs: &ZoomPrefs) -> bool {
-        if tile.0 <= 0 || tile.1 <= 0 || self.tile == Some(tile) {
+        self.set_area(Area::plain(tile), prefs)
+    }
+
+    /// The room the picture may use (physical pixels): the tile and the free space around it. A different room re-fits the view
+    /// and asks for a new render. Returns whether anything changed.
+    pub fn set_area(&mut self, area: Area, prefs: &ZoomPrefs) -> bool {
+        if !area.is_valid() || self.tile == Some(area) {
             return false;
         }
-        self.tile = Some(tile);
+        self.tile = Some(area);
         if let Some(frame) = self.frame() {
             let limits = prefs.limits();
             self.target = frame.normalize(self.target, limits);
@@ -210,7 +226,7 @@ impl ZoomState {
         let from = self.shown;
         self.target = if (to.zoom - 1.0).abs() < FIT_EPS { ZoomView::FIT } else { to };
         self.changed_at = Some(now);
-        self.minimap.reveal_until = Some(now + MINIMAP_AFTER_ACTIVITY);
+        self.minimap.reveal_until = Some(now + prefs.minimap_timeout);
         self.release_at = self.target.is_fit().then_some(now + RELEASE_AFTER);
         if animate && prefs.smooth && from != self.target {
             self.animation = Some(Animation { from, to: self.target, start: now });
@@ -242,6 +258,13 @@ impl ZoomState {
         }
     }
 
+    /// Back to the fitted picture at once, whatever the setting for smooth zooms says.
+    pub fn reset_now(&mut self, prefs: &ZoomPrefs, now: Instant) {
+        if self.target != ZoomView::FIT || self.animation.is_some() {
+            self.start_view_change(ZoomView::FIT, prefs, now, false);
+        }
+    }
+
     /// The picture follows a drag of the pointer by `dx`, `dy` screen pixels.
     pub fn pan_pixels(&mut self, dx: f64, dy: f64, prefs: &ZoomPrefs, now: Instant) {
         let Some(frame) = self.frame() else { return };
@@ -252,6 +275,15 @@ impl ZoomState {
         if next != self.target || self.animation.is_some() {
             self.start_view_change(next, prefs, now, false);
         }
+    }
+
+    /// The slider bubble of the minimap is open (or not): the minimap is shown as long as it is.
+    pub fn set_minimap_pinned(&mut self, pinned: bool) {
+        self.minimap.pinned = pinned;
+    }
+
+    pub fn minimap_pinned(&self) -> bool {
+        self.minimap.pinned
     }
 
     /// The pointer is on (or just around) the place of the minimap.
@@ -428,8 +460,9 @@ impl ZoomState {
     /// the pointer is near it, it is dragged, or the view changed a moment ago).
     pub fn minimap_shown(&self, prefs: &ZoomPrefs, now: Instant) -> bool {
         let zoomed_in = self.shown.zoom > 1.0 + FIT_EPS && self.frame().is_some_and(|f| f.is_pannable(self.shown));
-        zoomed_in
-            && (prefs.minimap_always
+        self.minimap.pinned
+            || zoomed_in
+                && (prefs.minimap_always
                 || self.minimap.hover
                 || self.minimap.grab.is_some()
                 || self.minimap.reveal_until.is_some_and(|until| now < until))
@@ -470,7 +503,7 @@ mod tests {
     use crate::viewer::zoom::prefs::MinimapCorner;
 
     fn prefs() -> ZoomPrefs {
-        ZoomPrefs::DEFAULT
+        ZoomPrefs { smooth: false, min_zoom: 0.1, wheel_step: 0.1, minimap_timeout: Duration::from_millis(2500), ..ZoomPrefs::DEFAULT }
     }
 
     fn buffer(w: u32, h: u32) -> SharedPixelBuffer<Rgb8Pixel> {

@@ -29,8 +29,12 @@ pub struct TileView {
     pub pannable: bool,
 }
 
-/// The picture of a zoomed image: where it goes in its tile (physical pixels relative to the tile) and what it is.
+/// The picture of a zoomed image: where it goes in its room (physical pixels) and what it is.
 pub struct ZoomPictureView {
+    /// The room the picture may use: the tile and the free space around it (physical pixels, relative to the tile, so it starts
+    /// at zero or below).
+    pub area: Rect,
+    /// Where the picture goes, relative to `area`.
     pub dest: Rect,
     pub content: ZoomContentView,
     /// Hard pixels instead of smoothing (the nearest-neighbour filter is chosen).
@@ -49,9 +53,14 @@ pub enum ZoomContentView {
 pub struct MinimapView {
     /// Whether it is shown now (it fades in and out, so it is described while it is not).
     pub visible: bool,
+    /// The room of the tile (physical pixels, relative to the tile) the minimap is in.
+    pub area: Rect,
+    /// Relative to the tile (physical pixels).
     pub rect: Rect,
     pub thumb: SharedPixelBuffer<Rgb8Pixel>,
     pub viewport: (f64, f64, f64, f64),
+    /// The zoom slider bubble above the minimap, while the user has it open.
+    pub bubble: Option<ZoomBubbleView>,
 }
 
 /// The zoom slider that hangs below the media bar: which tile it zooms and the numbers it needs (tenths of a percent).

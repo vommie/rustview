@@ -42,9 +42,11 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <int> idle-cursor-secs: 3;
 
     // Image zoom
-    in-out property <int> zoom-step-percent: 10;
+    in-out property <int> zoom-step-percent: 15;
     in-out property <int> zoom-max-percent: 1000;
-    in-out property <bool> zoom-smooth: false;
+    in-out property <int> zoom-out-percent: 200;
+    in-out property <int> zoom-minimap-secs: 3;
+    in-out property <bool> zoom-smooth: true;
     in-out property <int> zoom-minimap-idx: 0; // 0 = bottom left, 1 = bottom right
     in-out property <bool> zoom-minimap-always: false;
     in-out property <int> zoom-resample-idx: 0; // 0 = Lanczos, 1 = Catmull-Rom, 2 = Bilinear, 3 = Nearest neighbor
@@ -465,9 +467,9 @@ export component SettingsPageFullscreen inherits VerticalLayout {
         description: "Zooming and the minimap for images in a Multiview (fullscreen and tabs). Videos have the zoom of mpv.";
 
         SettingsOptionRow {
-            label: "Ctrl + mouse wheel step";
-            description: "Each notch zooms by this much. The wheel over the zoom slider uses 5 %, with Shift 10 %, with Ctrl 25 %.";
-            tooltip: "How much one notch of Ctrl + mouse wheel over an image zooms in or out (Ctrl + plus and minus use it too).";
+            label: "Zoom step size";
+            description: "How much one notch of Ctrl + mouse wheel zooms (Ctrl + plus and minus too). The wheel over the zoom slider uses 5 %, with Shift 10 %, with Ctrl 25 %.";
+            tooltip: "How much one notch of Ctrl + mouse wheel over an image zooms in or out. Every step is this share of the current size, so a step up and a step down lead back to where you were.";
 
             HorizontalLayout {
                 spacing: 8px;
@@ -491,7 +493,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
         }
 
         SettingsOptionRow {
-            label: "Maximum zoom";
+            label: "Maximum zoom in";
             description: "The slider and the wheel stop here. 100 % is the picture as it fits its place.";
             tooltip: "The largest zoom you can reach, as a percentage of the fitted picture. Large values need the original to be decoded in full.";
 
@@ -508,6 +510,34 @@ export component SettingsPageFullscreen inherits VerticalLayout {
 
                 Text {
                     text: root.zoom-max-percent + " %";
+                    color: Theme.primary;
+                    width: 56px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Maximum zoom out";
+            description: root.zoom-out-percent == 0
+                ? "No zooming out: the picture is never smaller than its fit."
+                : "The picture can shrink to " + Math.round(10000 / (100 + root.zoom-out-percent)) + " % of its fit. 0 = no zooming out.";
+            tooltip: "How far the slider and the wheel can make the picture smaller than 100 %: 200 = down to a third, 1000 = down to a eleventh. At 0 the slider only zooms in.";
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 0;
+                    maximum: 1000;
+                    value: root.zoom-out-percent;
+                    changed(v) => { root.zoom-out-percent = Math.round(v / 10) * 10; }
+                }
+
+                Text {
+                    text: root.zoom-out-percent + " %";
                     color: Theme.primary;
                     width: 56px;
                     vertical-alignment: center;
@@ -559,6 +589,34 @@ export component SettingsPageFullscreen inherits VerticalLayout {
             label: "Always visible while zoomed in";
             tooltip: "Keep the minimap on screen as long as the image is zoomed in, without having to point at it.";
             checked <=> root.zoom-minimap-always;
+        }
+
+        SettingsOptionRow {
+            indent: 12px;
+            label: "Hide after";
+            tooltip: "How long the minimap stays after the zoom or the view changed, when the pointer is not on it.";
+            enabled: !root.zoom-minimap-always;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Slider {
+                    width: 140px;
+                    minimum: 1;
+                    maximum: 30;
+                    enabled: !root.zoom-minimap-always;
+                    value: root.zoom-minimap-secs;
+                    changed(v) => { root.zoom-minimap-secs = Math.round(v); }
+                }
+
+                Text {
+                    text: root.zoom-minimap-secs + " s";
+                    color: root.zoom-minimap-always ? Theme.text-muted : Theme.primary;
+                    width: 46px;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                }
+            }
         }
     }
 

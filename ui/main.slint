@@ -1095,6 +1095,7 @@ export component MainWindow inherits Window {
                         tile-zoom-wheel(index, delta, x, y) => { MultiviewTabBus.tile-zoom-wheel(index, delta, x, y); }
                         tile-pan(index, dx, dy) => { MultiviewTabBus.tile-pan(index, dx, dy); }
                         minimap-pointer(index, x, y, phase) => { MultiviewTabBus.minimap-pointer(index, x, y, phase); }
+                        minimap-slider(index, code) => { MultiviewTabBus.minimap-slider(index, code); }
                         background-clicked(is-ctrl) => { MultiviewTabBus.background-clicked(is-ctrl); }
                         middle-clicked => { MultiviewTabBus.middle-clicked(); }
                         gutter-drag-started(index) => { MultiviewTabBus.gutter-drag-started(index); }

@@ -11,6 +11,8 @@ export component MultiviewBarMenu inherits Rectangle {
     in property <[ContextMenuItemModel]> items;
     in property <length> anchor-x: 0px;
     in property <bool> translucent: true;
+    // The caret is under the bubble and points down (a bubble that sits above its opener) instead of up.
+    in property <bool> caret-down: false;
     in property <length> max-content-height: 300px;
     // More than 0: the bubble holds its children (the zoom slider) instead of the rows, and is this tall (plus its padding).
     in property <length> custom-height: 0px;
@@ -29,7 +31,7 @@ export component MultiviewBarMenu inherits Rectangle {
 
     // Swallows the clicks on the gaps between rows.
     body := Rectangle {
-        y: root.caret-height;
+        y: root.caret-down ? 0px : root.caret-height;
         height: root.body-height;
         background: root.fill;
         border-radius: root.corner-radius;
@@ -71,8 +73,10 @@ export component MultiviewBarMenu inherits Rectangle {
         }
     }
 
-    // The caret, drawn over the top edge of the body: a filled triangle whose base also covers the body's border, and its two outer edges.
+    // The caret, drawn over the edge of the body that faces the opener: a filled triangle whose base also covers the body's border, and its two
+    // outer edges.
     Path {
+        visible: !root.caret-down;
         x: root.caret-x - 7px;
         y: 0px;
         width: 14px;
@@ -84,6 +88,7 @@ export component MultiviewBarMenu inherits Rectangle {
     }
 
     Path {
+        visible: !root.caret-down;
         x: root.caret-x - 7px;
         y: 0px;
         width: 14px;
@@ -91,6 +96,31 @@ export component MultiviewBarMenu inherits Rectangle {
         viewbox-width: 14;
         viewbox-height: 8;
         commands: "M 0 7.5 L 7 0.5 L 14 7.5";
+        stroke: Theme.border;
+        stroke-width: 1px;
+    }
+
+    Path {
+        visible: root.caret-down;
+        x: root.caret-x - 7px;
+        y: root.body-height - 1px;
+        width: 14px;
+        height: root.caret-height + 1px;
+        viewbox-width: 14;
+        viewbox-height: 8;
+        commands: "M 0 1 L 7 8 L 14 1 L 14 0 L 0 0 Z";
+        fill: root.fill;
+    }
+
+    Path {
+        visible: root.caret-down;
+        x: root.caret-x - 7px;
+        y: root.body-height - 1px;
+        width: 14px;
+        height: root.caret-height + 1px;
+        viewbox-width: 14;
+        viewbox-height: 8;
+        commands: "M 0 0.5 L 7 7.5 L 14 0.5";
         stroke: Theme.border;
         stroke-width: 1px;
     }

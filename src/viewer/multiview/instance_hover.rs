@@ -32,11 +32,17 @@ impl MultiviewInstance {
 
     /// The tile under a point given in host window coordinates.
     fn tile_at_host(&self, x: i32, y: i32) -> Option<usize> {
+        // A zoomed picture fills its whole room, which counts as the tile.
+        let zoomed = (0..self.tiles.len())
+            .find(|&i| self.host_tile_rect(i).is_some_and(|r| self.tiles[i].zoom.as_ref().is_some_and(|z| z.is_active()) && r.contains(x, y)));
+        if zoomed.is_some() {
+            return zoomed;
+        }
         let (cx, cy) = self.host.projection.point_to_container(x, y);
         self.layout.tile_at(cx, cy)
     }
 
-    fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
+    pub(super) fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
         if pointer != self.pointer || self.last_move.is_none() {
             self.last_move = Some(Instant::now());
         }
@@ -60,7 +66,7 @@ impl MultiviewInstance {
     pub fn media_bar_target(&self) -> Option<MediaBarTarget> {
         let bar = prefs::current().media_bar;
         let (tile, pointer) = (self.hovered?, self.pointer?);
-        let rect = self.host_content(tile)?;
+        let rect = self.host_tile_rect(tile)?;
         if !bar.enabled
             || !near_bar_corner(BarCorner::TopRight, rect, pointer, self.host.surface.dpi, bar.reveal_distance_px)
         {

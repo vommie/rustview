@@ -2,6 +2,8 @@ import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconSize } from "icons.slint";
 import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "multiview_types.slint";
 import { MultiviewGutter } from "multiview_gutter.slint";
+import { MultiviewBarMenu } from "multiview_bar_menu.slint";
+import { MultiviewZoomSlider } from "multiview_zoom_slider.slint";
 
 /// The scene of a Multiview: background, image and status tiles and gutters. Video tiles are native mpv windows that Rust
 /// places on top of this scene. The same component draws the fullscreen window, the tab view and the tab grid item, so a
@@ -29,8 +31,11 @@ export component MultiviewCanvas inherits Rectangle {
     callback tile-zoom-wheel(int /* tile index */, length /* delta-y */, length /* x */, length /* y */);
     // The picture of a zoomed image is dragged (the movement since the last report, logical pixels).
     callback tile-pan(int /* tile index */, length /* dx */, length /* dy */);
-    // The minimap of a zoomed image is pressed (0), dragged (1) or released (2) at a point given as shares of the image.
+    // The minimap of a zoomed image is pressed (0), dragged (1) or released (2) at a point given as shares of the image; 3 = middle
+    // click (reset), 4 = right click (the slider bubble opens or closes).
     callback minimap-pointer(int /* tile index */, float /* x */, float /* y */, int /* phase */);
+    // The zoom slider on the minimap asks for something (the codes of the slider of the media bar).
+    callback minimap-slider(int /* tile index */, int /* code */);
     callback gutter-drag-started(int);
     callback gutter-dragged(int, length /* distance from drag start */);
     callback gutter-drag-finished(int);
@@ -101,10 +106,12 @@ export component MultiviewCanvas inherits Rectangle {
         }
 
         // A zoomed image: the sharp picture, or - until it is ready - the part of the fitted picture that is visible, scaled by the
-        // renderer. It sits where the image is inside the tile (smaller than the tile when zoomed out).
+        // renderer. It sits where the image is inside the room the tile may use (smaller than the room when zoomed out).
         if tile.kind == 0 && tile.zoomed : Rectangle {
-            width: 100%;
-            height: 100%;
+            x: tile.zoom-area-x;
+            y: tile.zoom-area-y;
+            width: tile.zoom-area-width;
+            height: tile.zoom-area-height;
             clip: true;
 
             if tile.zoom-hq : Image {
@@ -170,6 +177,12 @@ export component MultiviewCanvas inherits Rectangle {
         }
 
         if root.interactive : TouchArea {
+            // A zoomed picture takes the whole room of its tile (the pointer is reported inside the room then).
+            x: tile.zoomed ? tile.zoom-area-x : 0px;
+            y: tile.zoomed ? tile.zoom-area-y : 0px;
+            width: tile.zoomed ? tile.zoom-area-width : parent.width;
+            height: tile.zoomed ? tile.zoom-area-height : parent.height;
+
             // The press and the drag that moves a zoomed picture: a click is reported where the button goes up (without a drag
             // in between) on a picture that can be dragged, and where it goes down on every other tile.
             property <length> press-x;
@@ -238,7 +251,6 @@ export component MultiviewCanvas inherits Rectangle {
             visible: self.opacity > 0.01;
             animate opacity { duration: 150ms; easing: ease-out; }
             background: Theme.surface;
-            border-radius: 6px;
             border-width: 1px;
             border-color: Theme.border;
             drop-shadow-blur: 10px;
@@ -279,6 +291,10 @@ export component MultiviewCanvas inherits Rectangle {
                         } else if event.kind == PointerEventKind.up {
                             root.minimap-pointer(index, Math.clamp(self.mouse-x / self.width, 0, 1), Math.clamp(self.mouse-y / self.height, 0, 1), 2);
                         }
+                    } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.middle {
+                        root.minimap-pointer(index, 0, 0, 3);
+                    } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                        root.minimap-pointer(index, 0, 0, 4);
                     }
                 }
 
@@ -286,6 +302,68 @@ export component MultiviewCanvas inherits Rectangle {
                     if self.pressed {
                         root.minimap-pointer(index, Math.clamp(self.mouse-x / self.width, 0, 1), Math.clamp(self.mouse-y / self.height, 0, 1), 1);
                     }
+                }
+            }
+        }
+
+        // The zoom slider on the minimap (right click on it): a speech bubble above it, the same slider as the media bar's, so both show
+        // and change the same zoom. The percentage floats above the bubble.
+        if tile.kind == 0 && tile.mm-available && tile.mm-bubble-open && root.interactive : holder := Rectangle {
+            property <length> bubble-width: 210px;
+            property <length> bubble-height: 43px;
+            property <length> bubble-x: Math.max(tile.zoom-area-x, Math.min(tile.zoom-area-x + tile.zoom-area-width - self.bubble-width, tile.mm-x + tile.mm-width / 2 - self.bubble-width / 2));
+            property <bool> pill-shown: false;
+            property <length> pill-center: 0px;
+
+            x: 0px;
+            y: 0px;
+            width: 0px;
+            height: 0px;
+
+            MultiviewBarMenu {
+                x: holder.bubble-x;
+                y: tile.mm-y - holder.bubble-height - 4px;
+                width: holder.bubble-width;
+                custom-height: 28px + 8px;
+                translucent: false;
+                caret-down: true;
+                anchor-x: tile.mm-x + tile.mm-width / 2 - holder.bubble-x;
+
+                MultiviewZoomSlider {
+                    x: 4px;
+                    y: 4px;
+                    width: parent.width - 8px;
+                    value-permille: tile.mm-zoom-permille;
+                    min-permille: tile.mm-zoom-min;
+                    max-permille: tile.mm-zoom-max;
+                    snaps: tile.mm-zoom-snaps;
+                    pill-changed(shown, center) => {
+                        holder.pill-shown = shown;
+                        holder.pill-center = center;
+                    }
+                    request(code) => {
+                        root.minimap-slider(index, code);
+                    }
+                }
+            }
+
+            if holder.pill-shown : Rectangle {
+                x: Math.max(tile.zoom-area-x, holder.bubble-x + 4px + holder.pill-center - self.width / 2);
+                y: tile.mm-y - holder.bubble-height - 4px - self.height - 3px;
+                width: 46px;
+                height: 18px;
+                border-radius: 9px;
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border;
+
+                Text {
+                    text: Math.round(tile.mm-zoom-permille / 10.0) + "%";
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: Theme.text;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
         }

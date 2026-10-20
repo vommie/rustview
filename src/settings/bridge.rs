@@ -3,8 +3,9 @@ use super::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
 use super::registry::SettingsManager;
 use super::schema::{
     AppSettings, FullscreenSettings, MAX_CONFIRM_OPEN_FILE_COUNT, MIN_CONFIRM_OPEN_FILE_COUNT, MAX_MEMORY_BUDGET_MB, MIN_MEMORY_BUDGET_MB, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
-    MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT, DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT, MAX_FULLSCREEN_ZOOM_MAX_PERCENT,
-    MAX_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT,
+    MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT, DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS, DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT, DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT, MAX_FULLSCREEN_ZOOM_MAX_PERCENT,
+    MAX_FULLSCREEN_ZOOM_MINIMAP_SECS, MAX_FULLSCREEN_ZOOM_OUT_PERCENT, MAX_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_FULLSCREEN_ZOOM_MAX_PERCENT,
+    MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT,
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
     MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MIN_TYPE_AHEAD_TIMEOUT_MS,
 };
@@ -316,6 +317,8 @@ impl SettingsDialogController {
         let zoom = &fullscreen.zoom;
         window.set_fullscreen_zoom_step_percent(zoom.step_percent as i32);
         window.set_fullscreen_zoom_max_percent(zoom.max_percent as i32);
+        window.set_fullscreen_zoom_out_percent(zoom.out_percent as i32);
+        window.set_fullscreen_zoom_minimap_secs(zoom.minimap_secs as i32);
         window.set_fullscreen_zoom_smooth(zoom.smooth);
         window.set_fullscreen_zoom_minimap_idx(i32::from(zoom.minimap_position == "bottom_right"));
         window.set_fullscreen_zoom_minimap_always(zoom.minimap_always);
@@ -384,6 +387,12 @@ impl SettingsDialogController {
         zoom.max_percent = u32::try_from(window.get_fullscreen_zoom_max_percent())
             .unwrap_or(DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT)
             .clamp(MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MAX_FULLSCREEN_ZOOM_MAX_PERCENT);
+        zoom.out_percent = u32::try_from(window.get_fullscreen_zoom_out_percent())
+            .unwrap_or(DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT)
+            .clamp(MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MAX_FULLSCREEN_ZOOM_OUT_PERCENT);
+        zoom.minimap_secs = u32::try_from(window.get_fullscreen_zoom_minimap_secs())
+            .unwrap_or(DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS)
+            .clamp(MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MAX_FULLSCREEN_ZOOM_MINIMAP_SECS);
         zoom.smooth = window.get_fullscreen_zoom_smooth();
         zoom.minimap_position = if window.get_fullscreen_zoom_minimap_idx() == 1 { "bottom_right" } else { "bottom_left" }.to_string();
         zoom.minimap_always = window.get_fullscreen_zoom_minimap_always();

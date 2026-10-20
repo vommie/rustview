@@ -160,9 +160,11 @@ export component SettingsWindow inherits Window {
     in-out property <int> fullscreen-primary-bar-reveal-distance-px: 15;
     in-out property <bool> fullscreen-hide-idle-cursor: false;
     in-out property <int> fullscreen-idle-cursor-secs: 3;
-    in-out property <int> fullscreen-zoom-step-percent: 10;
+    in-out property <int> fullscreen-zoom-step-percent: 15;
     in-out property <int> fullscreen-zoom-max-percent: 1000;
-    in-out property <bool> fullscreen-zoom-smooth: false;
+    in-out property <int> fullscreen-zoom-out-percent: 200;
+    in-out property <int> fullscreen-zoom-minimap-secs: 3;
+    in-out property <bool> fullscreen-zoom-smooth: true;
     in-out property <int> fullscreen-zoom-minimap-idx: 0; // 0 = bottom left, 1 = bottom right
     in-out property <bool> fullscreen-zoom-minimap-always: false;
     in-out property <int> fullscreen-zoom-resample-idx: 0; // 0 = Lanczos, 1 = Catmull-Rom, 2 = Bilinear, 3 = Nearest neighbor
@@ -367,6 +369,8 @@ export component SettingsWindow inherits Window {
                             idle-cursor-secs <=> root.fullscreen-idle-cursor-secs;
                             zoom-step-percent <=> root.fullscreen-zoom-step-percent;
                             zoom-max-percent <=> root.fullscreen-zoom-max-percent;
+                            zoom-out-percent <=> root.fullscreen-zoom-out-percent;
+                            zoom-minimap-secs <=> root.fullscreen-zoom-minimap-secs;
                             zoom-smooth <=> root.fullscreen-zoom-smooth;
                             zoom-minimap-idx <=> root.fullscreen-zoom-minimap-idx;
                             zoom-minimap-always <=> root.fullscreen-zoom-minimap-always;

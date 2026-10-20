@@ -82,6 +82,7 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     bus.on_tile_zoom_wheel(|index, delta, x, y| act(|mv| mv.zoom_wheel(index.max(0) as usize, delta, x, y)));
     bus.on_tile_pan(|index, dx, dy| act(|mv| mv.zoom_pan(index.max(0) as usize, dx, dy)));
     bus.on_minimap_pointer(|index, x, y, phase| act(|mv| mv.zoom_minimap(index.max(0) as usize, x, y, phase)));
+    bus.on_minimap_slider(|index, code| act(|mv| mv.zoom_minimap_slider(index.max(0) as usize, code)));
     bus.on_background_clicked(on_click);
     bus.on_middle_clicked(|| run(route_for(RoutedEvent::ToggleFullscreen, ClickKind::None)));
 }

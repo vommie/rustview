@@ -185,7 +185,9 @@ pub fn service_menu(kind: BarKind, owner: BarOwner) -> bool {
         let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
             return false;
         };
-        slot.as_mut().filter(|overlay| overlay.owner == Some(owner)).is_some_and(Overlay::service_menu)
+        slot.as_mut()
+            .filter(|overlay| overlay.owner == Some(owner) || overlay.parked.as_ref().is_some_and(|p| p.owner == owner))
+            .is_some_and(Overlay::service_menu)
     })
 }
 
@@ -196,7 +198,10 @@ pub fn sync_zoom(kind: BarKind, owner: BarOwner, zoom: Option<&ZoomBubbleView>) 
         let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
             return;
         };
-        if let Some(overlay) = slot.as_mut().filter(|overlay| overlay.owner == Some(owner) || zoom.is_none()) {
+        if let Some(overlay) = slot
+            .as_mut()
+            .filter(|overlay| overlay.owner == Some(owner) || overlay.parked.as_ref().is_some_and(|p| p.owner == owner) || zoom.is_none())
+        {
             overlay.sync_zoom(zoom);
         }
     });
@@ -351,6 +356,13 @@ fn xrectangle(rect: Rect) -> XRectangle {
     }
 }
 
+/// A bar that went away because the user left the application while its slider was open; it comes back with the focus.
+struct Parked {
+    owner: BarOwner,
+    placement: BarPlacement,
+    scale: f32,
+}
+
 struct Overlay {
     kind: BarKind,
     window: MultiviewBarWindow,
@@ -359,6 +371,7 @@ struct Overlay {
     owner: Option<BarOwner>,
     /// The window of the host the bar was last shown for (0 = none yet).
     host_xid: u64,
+    parked: Option<Parked>,
     shown: bool,
     last_actions: Vec<MultiviewBarButtonView>,
     last_zoom_snaps: Vec<i32>,
@@ -447,6 +460,7 @@ impl Overlay {
             shared,
             owner: None,
             host_xid: 0,
+            parked: None,
             shown: false,
             last_actions: Vec::new(),
             last_zoom_snaps: Vec::new(),
@@ -493,6 +507,7 @@ impl Overlay {
         }
         self.host_xid = request.host_xid;
         self.owner = Some(request.owner);
+        self.parked = None;
         self.place(in_host.translated(origin.0, origin.1), request.scale);
         true
     }
@@ -518,6 +533,7 @@ impl Overlay {
     /// See `sync_zoom`.
     fn sync_zoom(&mut self, zoom: Option<&ZoomBubbleView>) {
         let Some(zoom) = zoom else {
+            self.parked = None;
             if self.window.get_zoom_open() {
                 self.window.set_zoom_open(false);
                 if !self.window.get_menu_open() {
@@ -567,14 +583,34 @@ impl Overlay {
 
     /// See `service_menu`.
     fn service_menu(&mut self) -> bool {
-        // A hidden bar has nothing to keep; the pointer brings it back (with its slider, which the Multiview still has open).
+        let open = self.window.get_zoom_open() || self.window.get_menu_open();
         if !self.shown {
+            // The user came back to the application: the bar that went away with its slider comes back with it.
+            if open
+                && self.parked.is_some()
+                && self.host_in_use()
+                && let Some(parked) = self.parked.take()
+            {
+                self.owner = Some(parked.owner);
+                self.place(parked.placement, parked.scale);
+                tracing::info!(bar = self.kind.label(), "[Multiview: Overlay] Back with the focus");
+                return self.shown;
+            }
             return false;
         }
-        if (self.window.get_zoom_open() || self.window.get_menu_open()) && !self.host_in_use() {
+        if open && !self.host_in_use() {
+            // The user works in another window: nothing of this bar may float over it. A slider is remembered and comes back.
+            if self.window.get_zoom_open()
+                && let (Some(owner), Some(placement)) = (self.owner, self.shared.x.borrow().placed)
+            {
+                let scale = self.shared.x.borrow().scale;
+                self.parked = Some(Parked { owner, placement, scale });
+                tracing::info!(bar = self.kind.label(), "[Multiview: Overlay] The host is not in use; the bar with its slider waits for the focus");
+            }
             if self.close_menu() {
                 tracing::debug!("[Multiview: Overlay] The host is not in use; closing the bar menu");
             }
+            self.hide();
             return false;
         }
         if self.window.get_zoom_open() {

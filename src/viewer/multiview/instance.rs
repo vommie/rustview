@@ -78,6 +78,8 @@ pub struct MultiviewInstance {
     pub(super) revision: u64,
     /// The tile whose zoom slider hangs below the media bar.
     pub(super) zoom_slider: Option<TileKey>,
+    /// The tile whose minimap carries a zoom slider bubble (right click on the minimap).
+    pub(super) zoom_minimap_bubble: Option<TileKey>,
     /// Wheel movement over an image that has not made a whole step yet.
     pub(super) zoom_wheel_accum: f32,
 }
@@ -114,6 +116,7 @@ impl MultiviewInstance {
                 clicks: ClickDetector::default(),
                 revision: 0,
                 zoom_slider: None,
+                zoom_minimap_bubble: None,
                 zoom_wheel_accum: 0.0,
             })
         })

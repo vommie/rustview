@@ -209,6 +209,7 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     win.on_tile_zoom_wheel(|index, delta, x, y| with_session(|s| s.zoom_wheel(index.max(0) as usize, delta, x, y)));
     win.on_tile_pan(|index, dx, dy| with_session(|s| s.zoom_pan(index.max(0) as usize, dx, dy)));
     win.on_minimap_pointer(|index, x, y, phase| with_session(|s| s.zoom_minimap(index.max(0) as usize, x, y, phase)));
+    win.on_minimap_slider(|index, code| with_session(|s| s.zoom_minimap_slider(index.max(0) as usize, code)));
     win.on_zoom_key(|key| with_session(|s| s.zoom_key(key)));
     win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0) as usize)));
     win.on_gutter_dragged(|_, distance| with_session(|s| s.dragged(distance)));

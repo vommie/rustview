@@ -88,6 +88,11 @@ impl Session {
         self.refresh();
     }
 
+    pub(super) fn zoom_minimap_slider(&mut self, index: usize, code: i32) {
+        self.instance.lock().zoom_minimap_slider(index, code);
+        self.refresh();
+    }
+
     /// Ctrl+0 / Ctrl++ / Ctrl+- zoom the image under the pointer (else the only image).
     pub(super) fn zoom_key(&mut self, key: i32) {
         self.instance.lock().zoom_key(key);

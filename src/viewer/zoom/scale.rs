@@ -18,10 +18,13 @@ const SNAP_PX: f64 = 5.0;
 /// A zoom within this many rungs of a rung is on it (the stored zoom is rounded, so it is never exactly on one).
 const ON_RUNG: f64 = 1e-4;
 
-/// Position on the slider (0..1, 0.5 = 100%) of a zoom factor.
+/// Position on the slider (0..1, 0.5 = 100%) of a zoom factor. Without zooming out the reset is at the left end and the whole
+/// slider is the way in.
 pub fn position_of(zoom: f64, limits: Limits) -> f64 {
     let zoom = limits.clamp(zoom);
-    if zoom >= 1.0 {
+    if !limits.can_zoom_out() {
+        zoom.ln() / limits.max.ln()
+    } else if zoom >= 1.0 {
         0.5 + 0.5 * zoom.ln() / limits.max.ln()
     } else {
         0.5 - 0.5 * zoom.ln() / limits.min.ln()
@@ -31,7 +34,9 @@ pub fn position_of(zoom: f64, limits: Limits) -> f64 {
 /// The zoom factor at a position of the slider (0..1).
 pub fn zoom_at(position: f64, limits: Limits) -> f64 {
     let p = if position.is_finite() { position.clamp(0.0, 1.0) } else { 0.5 };
-    if p >= 0.5 {
+    if !limits.can_zoom_out() {
+        if position.is_finite() { limits.max.powf(p) } else { 1.0 }
+    } else if p >= 0.5 {
         limits.max.powf((p - 0.5) * 2.0)
     } else {
         limits.min.powf((0.5 - p) * 2.0)
@@ -53,7 +58,7 @@ pub fn snap_zooms(limits: Limits) -> Vec<f64> {
 
 /// Pulls a handle position to the nearest snap point that is within a few pixels of it. `width_px` is the length of the track.
 pub fn snap_position(position: f64, width_px: f64, limits: Limits) -> f64 {
-    let p = if position.is_finite() { position.clamp(0.0, 1.0) } else { 0.5 };
+    let p = if position.is_finite() { position.clamp(0.0, 1.0) } else if limits.can_zoom_out() { 0.5 } else { 0.0 };
     let width = width_px.max(1.0);
     let mut best: Option<(f64, f64)> = None;
     for zoom in snap_zooms(limits) {
@@ -147,6 +152,26 @@ mod tests {
         assert!(close(zoom_at(0.5, L), 1.0));
         assert!(close(zoom_at(0.0, L), L.min));
         assert!(close(zoom_at(1.0, L), L.max));
+    }
+
+    #[test]
+    fn without_zooming_out_the_reset_is_the_left_end() {
+        let l = Limits::new(1.0, 10.0);
+        assert!(!l.can_zoom_out());
+        assert!(close(position_of(1.0, l), 0.0));
+        assert!(close(position_of(10.0, l), 1.0));
+        assert!(close(position_of(0.3, l), 0.0), "smaller than the fit counts as the fit");
+        assert!(close(zoom_at(0.0, l), 1.0) && close(zoom_at(1.0, l), 10.0));
+        assert!(close(zoom_at(f64::NAN, l), 1.0));
+        for i in 0..=50 {
+            let p = f64::from(i) / 50.0;
+            assert!((position_of(zoom_at(p, l), l) - p).abs() < 1e-9);
+        }
+        let points = snap_zooms(l);
+        assert!(close(points[0], 1.0) && points.iter().all(|p| *p >= 1.0));
+        assert!(close(snap_position(4.0 / 200.0, 200.0, l), 0.0), "the reset pulls at the left end");
+        assert!(close(step(1.0, false, 0.1, l), 1.0), "no step below the fit");
+        assert!(step(1.0, true, 0.1, l) > 1.0);
     }
 
     #[test]

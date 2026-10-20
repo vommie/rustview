@@ -90,20 +90,22 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
     let image = images.image_for(tile);
     let zoom_image = images.zoomed_image_for(tile);
     let mm_image = images.thumb_for(tile);
-    let (zoomed, zoom_hq, zoom_rect, zoom_clip, zoom_pixelated) = match tile.zoom.as_ref() {
+    let minimap_area = tile.minimap.as_ref().map(|m| m.area);
+    let (zoomed, zoom_hq, zoom_area, zoom_rect, zoom_clip, zoom_pixelated) = match tile.zoom.as_ref() {
         Some(zoom) => {
             let hq = matches!(zoom.content, ZoomContentView::Rendered(_));
             let clip = match &zoom.content {
                 ZoomContentView::Preview { clip } => *clip,
                 ZoomContentView::Rendered(_) => Rect::default(),
             };
-            (true, hq, zoom.dest, clip, zoom.pixelated)
+            (true, hq, zoom.area, zoom.dest, clip, zoom.pixelated)
         }
-        None => (false, false, Rect::default(), Rect::default(), false),
+        None => (false, false, minimap_area.unwrap_or_default(), Rect::default(), Rect::default(), false),
     };
     let minimap = tile.minimap.as_ref();
     let mm_rect = minimap.map_or(Rect::default(), |m| m.rect);
     let mm_viewport = minimap.map_or((0.0, 0.0, 1.0, 1.0), |m| m.viewport);
+    let bubble = minimap.and_then(|m| m.bubble.as_ref());
     MultiviewTileView {
         x: logical(x, dpi),
         y: logical(y, dpi),
@@ -116,6 +118,10 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         zoomed,
         zoom_hq,
         zoom_image,
+        zoom_area_x: logical(zoom_area.x, dpi),
+        zoom_area_y: logical(zoom_area.y, dpi),
+        zoom_area_width: logical(zoom_area.w, dpi),
+        zoom_area_height: logical(zoom_area.h, dpi),
         zoom_x: logical(zoom_rect.x, dpi),
         zoom_y: logical(zoom_rect.y, dpi),
         zoom_width: logical(zoom_rect.w, dpi),
@@ -137,6 +143,11 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         mm_vy: mm_viewport.1 as f32,
         mm_vw: mm_viewport.2 as f32,
         mm_vh: mm_viewport.3 as f32,
+        mm_bubble_open: bubble.is_some(),
+        mm_zoom_permille: bubble.map_or(1000, |b| b.permille),
+        mm_zoom_min: bubble.map_or(100, |b| b.min_permille),
+        mm_zoom_max: bubble.map_or(10000, |b| b.max_permille),
+        mm_zoom_snaps: slint::ModelRc::new(slint::VecModel::from(bubble.map_or_else(Vec::new, |b| b.snaps.clone()))),
     }
 }
 

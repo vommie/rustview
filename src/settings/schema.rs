@@ -303,20 +303,28 @@ pub const DEFAULT_FULLSCREEN_SOUND_FOLLOWS: &str = "first";
 pub const DEFAULT_FULLSCREEN_SOUND_HAND_OVER: bool = true;
 
 // --- Fullscreen image zoom (images only; mpv zooms videos itself) ---
-/// A step of Ctrl + mouse wheel over an image, in percent of the fitted size (the slider has its own steps: 5%, Shift 10%, Ctrl 25%).
-pub const DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT: u32 = 10;
+/// A step of Ctrl + mouse wheel over an image, in percent of the fitted size (the wheel over the slider has its own steps: 5%, Shift 10%, Ctrl 25%).
+pub const DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT: u32 = 15;
 pub const MIN_FULLSCREEN_ZOOM_STEP_PERCENT: u32 = 1;
 pub const MAX_FULLSCREEN_ZOOM_STEP_PERCENT: u32 = 100;
 /// The largest zoom, in percent of the fitted size.
 pub const DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT: u32 = 1000;
 pub const MIN_FULLSCREEN_ZOOM_MAX_PERCENT: u32 = 200;
 pub const MAX_FULLSCREEN_ZOOM_MAX_PERCENT: u32 = 6400;
+/// How far the picture may shrink: the smallest zoom is 100% / (1 + this / 100), so 200 = a third, 0 = no zooming out at all.
+pub const DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT: u32 = 200;
+pub const MIN_FULLSCREEN_ZOOM_OUT_PERCENT: u32 = 0;
+pub const MAX_FULLSCREEN_ZOOM_OUT_PERCENT: u32 = 1000;
 /// Zooms glide (a short animation) instead of jumping.
-pub const DEFAULT_FULLSCREEN_ZOOM_SMOOTH: bool = false;
+pub const DEFAULT_FULLSCREEN_ZOOM_SMOOTH: bool = true;
 /// "bottom_left" or "bottom_right".
 pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION: &str = "bottom_left";
 /// The minimap is shown for as long as the picture is zoomed in (otherwise: mouse-over and a few seconds after a zoom).
 pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS: bool = false;
+/// How long the minimap stays after the zoom changed, in seconds.
+pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS: u32 = 3;
+pub const MIN_FULLSCREEN_ZOOM_MINIMAP_SECS: u32 = 1;
+pub const MAX_FULLSCREEN_ZOOM_MINIMAP_SECS: u32 = 30;
 /// "lanczos3" (best quality), "catmull_rom" (bicubic), "bilinear" or "nearest" (hard pixels).
 pub const DEFAULT_FULLSCREEN_ZOOM_RESAMPLE: &str = "lanczos3";
 
@@ -905,9 +913,11 @@ impl Default for FullscreenSoundSettings {
 pub struct FullscreenZoomSettings {
     pub step_percent: u32,
     pub max_percent: u32,
+    pub out_percent: u32,
     pub smooth: bool,
     pub minimap_position: String, // "bottom_left" or "bottom_right"
     pub minimap_always: bool,
+    pub minimap_secs: u32,
     pub resample: String, // "lanczos3", "catmull_rom", "bilinear" or "nearest"
 }
 
@@ -916,9 +926,11 @@ impl Default for FullscreenZoomSettings {
         Self {
             step_percent: DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT,
             max_percent: DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT,
+            out_percent: DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT,
             smooth: DEFAULT_FULLSCREEN_ZOOM_SMOOTH,
             minimap_position: DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION.to_string(),
             minimap_always: DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS,
+            minimap_secs: DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS,
             resample: DEFAULT_FULLSCREEN_ZOOM_RESAMPLE.to_string(),
         }
     }

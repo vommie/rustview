@@ -33,6 +33,12 @@ export struct MultiviewTileView {
     zoomed: bool,
     zoom-hq: bool,
     zoom-image: image,
+    // The room the zoomed picture may use (the tile and the free space around it), relative to the tile; zoom-x/y/width/height are
+    // relative to it.
+    zoom-area-x: length,
+    zoom-area-y: length,
+    zoom-area-width: length,
+    zoom-area-height: length,
     zoom-x: length,
     zoom-y: length,
     zoom-width: length,
@@ -56,6 +62,12 @@ export struct MultiviewTileView {
     mm-vy: float,
     mm-vw: float,
     mm-vh: float,
+    // The zoom slider bubble above the minimap (right click on the minimap), with the numbers of the slider.
+    mm-bubble-open: bool,
+    mm-zoom-permille: int,
+    mm-zoom-min: int,
+    mm-zoom-max: int,
+    mm-zoom-snaps: [int],
 }
 
 /// A draggable separator between two tiles (or the two rows of a 2x2 grid) with a swap button in the middle.

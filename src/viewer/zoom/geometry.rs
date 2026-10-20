@@ -1,14 +1,18 @@
-//! The geometry of zooming one image inside a tile (pure, physical pixels).
+//! The geometry of zooming one image inside the room of a tile (pure, physical pixels).
 //!
-//! A view is `zoom` (1.0 = the image fitted into the tile, "100%") and the point of the image in the middle of the tile
+//! The room (`Area`) is the tile plus the free space around it that the layout leaves unused; the image fitted into the tile
+//! (its `home`, "100%") may grow into all of it. All coordinates here are relative to the room.
+//!
+//! A view is `zoom` (1.0 = the image fitted into its home, "100%") and the point of the image in the middle of the room
 //! (`cx`, `cy`, 0..1 of the image). The centre is the representation that survives everything: a resized tile, a changed
 //! zoom, a different tile of another size. Everything else (the scale in screen pixels per source pixel, the rectangle the
 //! image takes in the tile, the part of the source that is visible) is derived from it.
 //!
 //! Rules every operation keeps (these are what the tested viewers agree on):
-//! - the visible window never leaves the image on an axis where the image is larger than the tile (no empty margins when
+//! - the visible window never leaves the image on an axis where the image is larger than the room (no empty margins when
 //!   zoomed in);
-//! - on an axis where the image is smaller than the tile (zoomed out, or the image has bars at 100%) it stays centred;
+//! - on an axis where the image is smaller than the room it stays where the fit is (its home), pushed inwards where it would
+//!   leave the room;
 //! - zooming around a point keeps the source point under that point where the clamp allows it; at an edge the clamp wins.
 
 /// Tolerance for comparing pixel sizes.
@@ -24,11 +28,18 @@ pub struct Limits {
 impl Limits {
     pub const DEFAULT: Self = Self { min: 0.1, max: 10.0 };
 
-    /// Limits with `min < 1 < max` guaranteed (the slider has the reset in its middle).
+    /// Limits with `min <= 1 < max` guaranteed. A `min` of 1 means the picture cannot be made smaller than the fit; otherwise the
+    /// slider has the reset in its middle.
     pub fn new(min: f64, max: f64) -> Self {
-        let min = if min.is_finite() { min.clamp(0.01, 0.99) } else { Self::DEFAULT.min };
+        let min = if min.is_finite() { min.clamp(0.01, 1.0) } else { Self::DEFAULT.min };
+        let min = if min > 0.99 { 1.0 } else { min };
         let max = if max.is_finite() { max.clamp(1.01, 64.0) } else { Self::DEFAULT.max };
         Self { min, max }
+    }
+
+    /// Whether the picture can be made smaller than the fit at all.
+    pub fn can_zoom_out(&self) -> bool {
+        self.min < 1.0
     }
 
     pub fn clamp(&self, zoom: f64) -> f64 {
@@ -80,7 +91,7 @@ impl RectF {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct IRect {
     pub x: i32,
     pub y: i32,
@@ -98,29 +109,60 @@ pub struct Visible {
     pub src: RectF,
 }
 
-/// The image and the tile it is shown in.
+/// The room an image may use: its size, and where the tile (the place of the fitted picture) is inside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Area {
+    pub size: (i32, i32),
+    pub home: IRect,
+}
+
+impl Area {
+    /// A room that is exactly the tile.
+    pub fn plain(tile: (i32, i32)) -> Self {
+        Self { size: tile, home: IRect { x: 0, y: 0, w: tile.0, h: tile.1 } }
+    }
+
+    /// The tile `home` grown by the free space around it, `home` being given relative to the room's top left corner.
+    pub fn new(size: (i32, i32), home: IRect) -> Self {
+        Self { size, home }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.size.0 > 0 && self.size.1 > 0 && self.home.w > 0 && self.home.h > 0
+    }
+}
+
+/// The image and the room it is shown in.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Frame {
     pub image_w: f64,
     pub image_h: f64,
+    /// The room.
     pub tile_w: f64,
     pub tile_h: f64,
+    home: RectF,
 }
 
 impl Frame {
-    /// `None` while the image or the tile has no size (nothing can be zoomed then).
+    /// `None` while the image or the tile has no size (nothing can be zoomed then). The room is the tile.
     pub fn new(image: (u32, u32), tile: (i32, i32)) -> Option<Self> {
-        (image.0 > 0 && image.1 > 0 && tile.0 > 0 && tile.1 > 0).then(|| Self {
+        Self::in_area(image, Area::plain(tile))
+    }
+
+    /// The image in a room of its own (the tile and the free space around it).
+    pub fn in_area(image: (u32, u32), area: Area) -> Option<Self> {
+        (image.0 > 0 && image.1 > 0 && area.is_valid()).then(|| Self {
             image_w: f64::from(image.0),
             image_h: f64::from(image.1),
-            tile_w: f64::from(tile.0),
-            tile_h: f64::from(tile.1),
+            tile_w: f64::from(area.size.0),
+            tile_h: f64::from(area.size.1),
+            home: RectF::new(f64::from(area.home.x), f64::from(area.home.y), f64::from(area.home.w), f64::from(area.home.h)),
         })
     }
 
-    /// Screen pixels per source pixel at 100%.
+    /// Screen pixels per source pixel at 100% (the image fitted into its home).
     pub fn fit_scale(&self) -> f64 {
-        (self.tile_w / self.image_w).min(self.tile_h / self.image_h)
+        (self.home.w / self.image_w).min(self.home.h / self.image_h)
     }
 
     pub fn scale(&self, zoom: f64) -> f64 {
@@ -133,7 +175,7 @@ impl Frame {
         (self.image_w * s, self.image_h * s)
     }
 
-    /// Whether the image is larger than the tile on any axis, i.e. dragging can move something.
+    /// Whether the image is larger than the room on any axis, i.e. dragging can move something.
     pub fn is_pannable(&self, view: ZoomView) -> bool {
         let (ex, ey) = self.extent(view.zoom);
         ex > self.tile_w + EPS || ey > self.tile_h + EPS
@@ -168,21 +210,24 @@ impl Frame {
         self.clamp_center(view)
     }
 
-    /// Zooms to `zoom`. With an `anchor` (a point of the tile in pixels, for example the pointer) the point of the image under
-    /// it stays under it; an anchor that is not over the image zooms around the middle of the tile instead.
+    /// Zooms to `zoom`. With an `anchor` (a point of the room in pixels, for example the pointer) the point of the image under
+    /// it stays under it; an anchor that is not over the image zooms around the middle of the view instead.
     pub fn zoom_to(&self, view: ZoomView, zoom: f64, anchor: Option<(f64, f64)>, limits: Limits) -> ZoomView {
         let zoom = limits.clamp(zoom);
-        let (old_x, old_y) = self.extent(view.zoom);
         let (new_x, new_y) = self.extent(zoom);
         let mut cx = view.cx;
         let mut cy = view.cy;
         if let Some((ax, ay)) = anchor {
-            let (dx, dy) = (ax - self.tile_w / 2.0, ay - self.tile_h / 2.0);
+            let old = self.image_rect(view);
             // The point of the image under the anchor, 0..1.
-            let (px, py) = (view.cx + dx / old_x, view.cy + dy / old_y);
-            if (0.0..=1.0).contains(&px) && (0.0..=1.0).contains(&py) {
-                cx = px - dx / new_x;
-                cy = py - dy / new_y;
+            let (px, py) = ((ax - old.x) / old.w, (ay - old.y) / old.h);
+            // A hair outside (rounding) still is over the image.
+            const SLACK: f64 = 1e-9;
+            if (-SLACK..=1.0 + SLACK).contains(&px) && (-SLACK..=1.0 + SLACK).contains(&py) {
+                let (px, py) = (px.clamp(0.0, 1.0), py.clamp(0.0, 1.0));
+                // Where the image has to start for that point to stay under the anchor, as a centre of the view.
+                cx = (self.tile_w / 2.0 - (ax - px * new_x)) / new_x;
+                cy = (self.tile_h / 2.0 - (ay - py * new_y)) / new_y;
             }
         }
         self.clamp_center(ZoomView { zoom, cx, cy })
@@ -194,10 +239,25 @@ impl Frame {
         self.clamp_center(ZoomView { zoom: view.zoom, cx: view.cx - dx / ex, cy: view.cy - dy / ey })
     }
 
-    /// The image on screen, relative to the tile (it may reach beyond the tile).
+    /// Where the image starts on an axis: pushed from its home into the room while it is smaller than the room, else placed by
+    /// the centre of the view.
+    fn axis_start(c: f64, extent: f64, room: f64, home_start: f64, home_len: f64) -> f64 {
+        if extent <= room + EPS {
+            (home_start + home_len / 2.0 - extent / 2.0).clamp(0.0, (room - extent).max(0.0))
+        } else {
+            room / 2.0 - c * extent
+        }
+    }
+
+    /// The image on screen, relative to the room (it may reach beyond it).
     pub fn image_rect(&self, view: ZoomView) -> RectF {
         let (ex, ey) = self.extent(view.zoom);
-        RectF::new(self.tile_w / 2.0 - view.cx * ex, self.tile_h / 2.0 - view.cy * ey, ex, ey)
+        RectF::new(
+            Self::axis_start(view.cx, ex, self.tile_w, self.home.x, self.home.w),
+            Self::axis_start(view.cy, ey, self.tile_h, self.home.y, self.home.h),
+            ex,
+            ey,
+        )
     }
 
     /// The part of the image the tile shows, as shares of the image (0..1): the rectangle of the minimap.
@@ -255,6 +315,51 @@ mod tests {
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-6
+    }
+
+    fn portrait_in_a_wide_room() -> Frame {
+        // A 900x1600 picture fitted into a 506x900 tile that sits in the middle of a 1600x900 room.
+        Frame::in_area((900, 1600), Area::new((1600, 900), IRect { x: 547, y: 0, w: 506, h: 900 })).unwrap()
+    }
+
+    #[test]
+    fn the_fit_stays_where_the_tile_is_and_growing_uses_the_free_room() {
+        let f = portrait_in_a_wide_room();
+        let fit = f.image_rect(ZoomView::FIT);
+        assert!(close(fit.x, 547.0) && close(fit.w, 506.0) && (fit.h - 900.0).abs() < 1.0, "{fit:?}");
+        assert!(!f.is_pannable(ZoomView::FIT));
+        // 200%: 1012 px wide, still inside the room (so not pannable sideways) and centred on the tile.
+        let v = f.zoom_to(ZoomView::FIT, 2.0, None, LIMITS);
+        let r = f.image_rect(v);
+        assert!(close(r.w, 1012.0) && close(r.x + r.w / 2.0, 800.0), "{r:?}");
+        // 400%: wider than the room, so it fills the room's whole width.
+        let v = f.zoom_to(ZoomView::FIT, 4.0, None, LIMITS);
+        let vis = f.visible(v).unwrap();
+        assert_eq!((vis.dest.x, vis.dest.w), (0, 1600));
+        assert!(f.is_pannable(v));
+        let vp = f.viewport_norm(v);
+        assert!(vp.x >= 0.0 && vp.right() <= 1.0 + 1e-9 && close(vp.w, 1600.0 / (506.0 * 4.0)), "{vp:?}");
+    }
+
+    #[test]
+    fn a_picture_near_the_edge_of_the_room_is_pushed_inwards() {
+        // The tile hugs the left edge of the room; growing around its own centre would leave the room.
+        let f = Frame::in_area((1000, 1000), Area::new((1000, 500), IRect { x: 0, y: 0, w: 500, h: 500 })).unwrap();
+        let v = f.zoom_to(ZoomView::FIT, 1.8, None, LIMITS);
+        let r = f.image_rect(v);
+        assert!(r.x >= 0.0 && r.right() <= 1000.0 + 1e-9, "{r:?}");
+    }
+
+    #[test]
+    fn zooming_at_the_pointer_works_from_a_fit_that_is_smaller_than_the_room() {
+        let f = portrait_in_a_wide_room();
+        let anchor = (700.0, 300.0);
+        let before = f.image_rect(ZoomView::FIT);
+        let src_before = ((anchor.0 - before.x) / before.w, (anchor.1 - before.y) / before.h);
+        let v = f.zoom_to(ZoomView::FIT, 5.0, Some(anchor), LIMITS);
+        let after = f.image_rect(v);
+        let src_after = ((anchor.0 - after.x) / after.w, (anchor.1 - after.y) / after.h);
+        assert!(close(src_before.0, src_after.0) && close(src_before.1, src_after.1), "{src_before:?} {src_after:?}");
     }
 
     #[test]
@@ -400,7 +505,7 @@ mod tests {
         let v = f.normalize(ZoomView { zoom: f64::NAN, cx: f64::NAN, cy: f64::INFINITY }, LIMITS);
         assert!(v.zoom.is_finite() && v.cx.is_finite() && v.cy.is_finite());
         let l = Limits::new(5.0, 0.5);
-        assert!(l.min < 1.0 && l.max > 1.0);
+        assert!(l.min <= 1.0 && l.max > 1.0);
     }
 
     #[test]

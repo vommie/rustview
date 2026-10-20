@@ -34,13 +34,20 @@ export component MultiviewZoomSlider inherits Rectangle {
     property <float> wheel-acc: 0;
     property <bool> dragging: false;
     property <float> position: root.pos-of(root.value-permille);
+    property <float> reset-position: root.pos-of(1000);
     property <bool> active: track-touch.has-hover || root.dragging;
     property <length> handle-center-x: root.track-x + root.position * root.track-w + root.handle-size / 2;
 
     changed active => { root.pill-changed(root.active, root.handle-center-x); }
     changed handle-center-x => { root.pill-changed(root.active, root.handle-center-x); }
 
+    // Without zooming out (the smallest zoom is the fit) the reset is the left end and the whole slider is the way in.
+    property <bool> one-sided: root.min-permille >= 1000;
+
     pure function pos-of(z: int) -> float {
+        if root.one-sided {
+            return Math.log(Math.max(z, 1000) / 1000.0, root.max-permille / 1000.0);
+        }
         if z >= 1000 {
             return 0.5 + 0.5 * Math.log(z / 1000.0, root.max-permille / 1000.0);
         }
@@ -69,9 +76,9 @@ export component MultiviewZoomSlider inherits Rectangle {
 
     // From the middle to the handle: the way the zoom went.
     Rectangle {
-        x: root.track-x + root.handle-size / 2 + Math.min(root.position, 0.5) * root.track-w;
+        x: root.track-x + root.handle-size / 2 + Math.min(root.position, root.reset-position) * root.track-w;
         y: root.center-y - 2px;
-        width: Math.abs(root.position - 0.5) * root.track-w;
+        width: Math.abs(root.position - root.reset-position) * root.track-w;
         height: 4px;
         border-radius: 2px;
         background: Theme.primary;
@@ -88,7 +95,7 @@ export component MultiviewZoomSlider inherits Rectangle {
 
     // A click on the middle tick resets.
     TouchArea {
-        x: root.track-x + root.handle-size / 2 + 0.5 * root.track-w - 7px;
+        x: root.track-x + root.handle-size / 2 + root.reset-position * root.track-w - 7px;
         y: root.center-y + 3px;
         width: 14px;
         height: 12px;
