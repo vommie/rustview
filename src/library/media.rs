@@ -1,8 +1,8 @@
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{FolderId, MediaId, MediaRecord, MediaSearchParams, TagId};
-use crate::media::FileHash;
-use crate::query::{MatchMode, MediaTypeFilter, ScopeMode};
+use crate::media::{FileHash, FormatPolicy, MediaFormat};
+use crate::query::{MatchMode, ScopeMode};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -44,6 +44,7 @@ impl<'a> MediaRepository<'a> {
             .media_by_folder
             .get(&rtxn, &folder_id)?
             .unwrap_or_default();
+        let mask = FormatPolicy::mask();
         let mut records = Vec::with_capacity(media_ids.len());
         let mut seen = HashSet::new();
 
@@ -51,6 +52,7 @@ impl<'a> MediaRepository<'a> {
             if seen.insert(id)
                 && let Some(record) = self.db.media.get(&rtxn, &id)?
                 && !record.is_deleted
+                && mask.shows(record.format)
             {
                 records.push(record);
             }
@@ -89,6 +91,7 @@ impl<'a> MediaRepository<'a> {
             .media_by_folder
             .get(&rtxn, &folder_id)?
             .unwrap_or_default();
+        let mask = FormatPolicy::mask();
         let mut count = 0;
         let mut seen = HashSet::new();
 
@@ -96,11 +99,26 @@ impl<'a> MediaRepository<'a> {
             if seen.insert(id)
                 && let Some(rec) = self.db.media.get(&rtxn, &id)?
                 && !rec.is_deleted
+                && mask.shows(rec.format)
             {
                 count += 1;
             }
         }
         Ok(count)
+    }
+
+    /// How many active (not missing) records each format owns, switched-off formats included: the numbers shown next to
+    /// the switches of Settings > File Formats. One pass over the media table; call it from a worker thread.
+    pub fn count_by_format(&self) -> Result<HashMap<MediaFormat, u64>, LibraryError> {
+        let rtxn = self.db.env.read_txn()?;
+        let mut counts: HashMap<MediaFormat, u64> = HashMap::new();
+        for entry in self.db.media.iter(&rtxn)? {
+            let (_, record) = entry?;
+            if !record.is_deleted {
+                *counts.entry(record.format).or_default() += 1;
+            }
+        }
+        Ok(counts)
     }
 
     pub fn get_by_hash(&self, hash: &FileHash) -> Result<Vec<MediaRecord>, LibraryError> {
@@ -184,15 +202,12 @@ impl<'a> MediaRepository<'a> {
             if params.scope_mode == ScopeMode::Folder
                 && let Some(f_id) = params.folder_id
             {
-                let all_folder_media = self.get_all_by_folder(f_id)?;
-                if params.media_type_filter == MediaTypeFilter::All {
-                    return Ok(all_folder_media);
-                } else {
-                    return Ok(all_folder_media
-                        .into_iter()
-                        .filter(|m| params.media_type_filter.matches(m.media_type))
-                        .collect());
-                }
+                let mask = FormatPolicy::mask();
+                return Ok(self
+                    .get_all_by_folder(f_id)?
+                    .into_iter()
+                    .filter(|m| mask.shows(m.format) && params.media_type_filter.matches(m.media_type))
+                    .collect());
             }
             return Ok(Vec::new());
         }
@@ -284,6 +299,7 @@ impl<'a> MediaRepository<'a> {
             }
         }
 
+        let mask = FormatPolicy::mask();
         let mut results = Vec::new();
         let mut folder_active_cache: HashMap<FolderId, bool> = HashMap::new();
 
@@ -292,8 +308,8 @@ impl<'a> MediaRepository<'a> {
                 continue;
             };
 
-            // Fast Media Type Filter Check
-            if !params.media_type_filter.matches(rec.media_type) {
+            // Fast Media Type Filter Check (and the formats the user switched off)
+            if !mask.shows(rec.format) || !params.media_type_filter.matches(rec.media_type) {
                 continue;
             }
 

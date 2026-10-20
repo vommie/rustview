@@ -1,8 +1,9 @@
+use super::formats_page::{FormatCounter, FormatsPage};
 use super::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
 use super::registry::SettingsManager;
 use super::schema::{
     AppSettings, FullscreenSettings, MAX_CONFIRM_OPEN_FILE_COUNT, MIN_CONFIRM_OPEN_FILE_COUNT, MAX_MEMORY_BUDGET_MB, MIN_MEMORY_BUDGET_MB, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_FULLSCREEN_BACKGROUND_COLOR,
-    DEFAULT_SUPPORTED_IMAGE_FORMATS, DEFAULT_SUPPORTED_VIDEO_FORMATS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+    MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
     MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS,
     MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MIN_TYPE_AHEAD_TIMEOUT_MS,
 };
@@ -21,6 +22,7 @@ pub struct SettingsDialogController {
     manager: Arc<SettingsManager>,
     main_window_weak: Option<slint::Weak<MainWindow>>,
     detected_monitors: Rc<RefCell<Vec<MonitorInfo>>>,
+    formats_page: Arc<FormatsPage>,
 }
 
 impl SettingsDialogController {
@@ -30,7 +32,13 @@ impl SettingsDialogController {
             manager,
             main_window_weak: None,
             detected_monitors: Rc::new(RefCell::new(Vec::new())),
+            formats_page: Arc::new(FormatsPage::default()),
         }
+    }
+
+    /// Lets the File Formats page show how many indexed files each format owns (call before the first `show`).
+    pub fn set_format_counter(&self, counter: FormatCounter) {
+        self.formats_page.set_counter(counter);
     }
 
     pub fn set_main_window(&mut self, weak: slint::Weak<MainWindow>) {
@@ -62,6 +70,7 @@ impl SettingsDialogController {
         if self.settings_window.is_none() {
             let window = SettingsWindow::new().expect("Failed to create SettingsWindow");
             color_picker::install(&window);
+            self.formats_page.install(&window);
             self.register_callbacks(&window);
             self.settings_window = Some(window);
         }
@@ -210,8 +219,7 @@ impl SettingsDialogController {
         window.set_preview_quality(settings.performance.preview_quality as i32);
 
         // Formats properties
-        window.set_supported_image_formats(DEFAULT_SUPPORTED_IMAGE_FORMATS.into());
-        window.set_supported_video_formats(DEFAULT_SUPPORTED_VIDEO_FORMATS.into());
+        self.formats_page.populate(window, settings.formats.format_mask());
         window.set_auto_detect_extensionless(settings.formats.auto_detect_extensionless_media);
 
         // Viewer properties
@@ -394,6 +402,7 @@ impl SettingsDialogController {
 
         let manager = self.manager.clone();
         let main_weak = self.main_window_weak.clone();
+        let formats_page_save = self.formats_page.clone();
 
         let w_weak_browse = w_weak.clone();
         window.on_browse_root_folder(move || {
@@ -568,6 +577,7 @@ impl SettingsDialogController {
 
                 // Save Formats Parameters
                 current.formats.auto_detect_extensionless_media = w.get_auto_detect_extensionless();
+                current.formats.disabled_formats = formats_page_save.disabled_ids();
 
                 // Save Viewer Parameters
                 current.viewer.images.open_in_tab = w.get_open_images_in_tab();

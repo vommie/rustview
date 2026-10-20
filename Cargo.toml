@@ -10,7 +10,8 @@ raw-window-handle = "0.6"
 heed = "0.22"
 md-5 = "0.11"
 hex = "0.4"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "avif", "gif", "tiff", "bmp"] }
+# `avif` of the image crate is the ENCODER (ravif/rav1e); AVIF files are decoded by the FFmpeg fallback.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "tiff", "bmp", "ico", "tga", "pnm", "qoi", "hdr", "exr", "dds", "ff"] }
 fast_image_resize = "6"
 ffmpeg-next = "9"
 libmpv2 = "6"
@@ -33,8 +34,9 @@ rusqlite = { version = "0", features = ["bundled"] }
 webp = "0.3"
 arboard = "3"
 num-format = { version = "0.4", features = ["with-system-locale"] }
-# SVG rasterizer (already used by Slint); renders icons for native helper windows outside of Slint.
-resvg = { version = "0.47", default-features = false }
+# SVG rasterizer (already used by Slint); renders icons for native helper windows outside of Slint and the SVG files of the
+# library (text and system fonts for labels, raster-images for embedded pictures).
+resvg = { version = "0.47", default-features = false, features = ["text", "system-fonts", "raster-images"] }
 
 [build-dependencies]
 slint-build = "1"

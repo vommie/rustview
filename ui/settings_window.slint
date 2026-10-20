@@ -5,6 +5,7 @@ import { SettingsPageFolders } from "settings_page_folders.slint";
 import { SettingsPageAppearance } from "settings_page_appearance.slint";
 import { SettingsPagePerformance } from "settings_page_performance.slint";
 import { SettingsPageFormats } from "settings_page_formats.slint";
+import { FormatRowView, UnsupportedFormatView } from "settings_format_row.slint";
 import { SettingsPageViewer } from "settings_page_viewer.slint";
 import { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
 import { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
@@ -108,10 +109,20 @@ export component SettingsWindow inherits Window {
     in-out property <int> preview-format-idx: 0; // 0 = WebP, 1 = JPEG
     in-out property <int> preview-quality: 40;
 
-    // Formats options
-    in property <string> supported-image-formats: "jpg, jpeg, jfif, jpe, png, webp, avif, gif, bmp, tiff, tif, psd";
-    in property <string> supported-video-formats: "mp4, m4v, mkv, webm, mov, avi, mpg, mpeg, flv";
+    // Formats options (the rows and the switches live in `settings/formats_page.rs`)
+    in property <string> formats-intro;
+    in property <string> formats-hidden-notice;
+    in property <string> formats-image-summary;
+    in property <string> formats-video-summary;
+    in property <[FormatRowView]> format-image-rows;
+    in property <[FormatRowView]> format-video-rows;
+    in property <[UnsupportedFormatView]> format-unsupported;
+    in-out property <string> formats-filter-text;
     in-out property <bool> auto-detect-extensionless: true;
+    callback format-toggled(string, bool);
+    callback formats-set-all(int, bool);
+    callback formats-filter-edited(string);
+    callback formats-page-shown();
 
     // Viewer options
     in-out property <bool> open-images-in-tab: true;
@@ -169,6 +180,13 @@ export component SettingsWindow inherits Window {
     callback browse-root-folder();
     callback save-and-apply();
     callback cancel-clicked();
+
+    // The counts on the File Formats page are read from the library when the page is opened.
+    changed active-category => {
+        if root.active-category == 4 {
+            root.formats-page-shown();
+        }
+    }
 
     // The tooltips of this window follow the options being edited (the dialog is a window of its own with its own
     // tooltip settings).
@@ -288,9 +306,18 @@ export component SettingsWindow inherits Window {
                         }
 
                         if root.active-category == 4 : SettingsPageFormats {
-                            supported-image-formats: root.supported-image-formats;
-                            supported-video-formats: root.supported-video-formats;
+                            intro: root.formats-intro;
+                            hidden-notice: root.formats-hidden-notice;
+                            image-summary: root.formats-image-summary;
+                            video-summary: root.formats-video-summary;
+                            image-formats: root.format-image-rows;
+                            video-formats: root.format-video-rows;
+                            unsupported: root.format-unsupported;
+                            filter-text <=> root.formats-filter-text;
                             auto-detect-extensionless <=> root.auto-detect-extensionless;
+                            format-toggled(id, enabled) => { root.format-toggled(id, enabled); }
+                            set-all(kind, enabled) => { root.formats-set-all(kind, enabled); }
+                            filter-edited(text) => { root.formats-filter-edited(text); }
                         }
 
                         if root.active-category == 5 : SettingsPageViewer {

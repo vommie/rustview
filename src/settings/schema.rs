@@ -1,3 +1,4 @@
+use crate::media::FormatMask;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -211,9 +212,6 @@ pub fn default_worker_threads() -> usize {
 // SECTION 6: File Formats & Tools - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA: bool = true;
-pub const DEFAULT_SUPPORTED_IMAGE_FORMATS: &str =
-    "jpg, jpeg, jfif, jpe, png, webp, avif, gif, bmp, tiff, tif, psd";
-pub const DEFAULT_SUPPORTED_VIDEO_FORMATS: &str = "mp4, m4v, mkv, webm, mov, avi, mpg, mpeg, flv";
 
 // =============================================================================
 // SECTION 7: Tags, Categorization & History - Single Point of Truth Constants
@@ -704,13 +702,24 @@ impl Default for PerformanceSettings {
 #[serde(default)]
 pub struct FormatsSettings {
     pub auto_detect_extensionless_media: bool,
+    /// Stable ids (`FormatSpec::id`) of the formats the user switched off. Empty (the default) means every known format
+    /// is on, so formats added by a later version are on as well. Their indexed records stay in the library.
+    pub disabled_formats: Vec<String>,
 }
 
 impl Default for FormatsSettings {
     fn default() -> Self {
         Self {
             auto_detect_extensionless_media: DEFAULT_AUTO_DETECT_EXTENSIONLESS_MEDIA,
+            disabled_formats: Vec::new(),
         }
+    }
+}
+
+impl FormatsSettings {
+    /// The disabled formats as a policy mask.
+    pub fn format_mask(&self) -> FormatMask {
+        FormatMask::from_disabled_ids(&self.disabled_formats)
     }
 }
 

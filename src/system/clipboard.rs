@@ -5,7 +5,7 @@ use image::ImageEncoder;
 use parking_lot::Mutex;
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
@@ -33,32 +33,32 @@ pub struct ClipboardImageMetrics {
 pub struct SystemClipboard;
 
 impl SystemClipboard {
-    /// Detects the standard MIME type corresponding to the file extension.
+    /// Detects the standard MIME type corresponding to the file extension (from the format table).
     pub fn mime_type_from_path(path: &Path) -> &'static str {
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        crate::media::MediaFormat::from_path(path).spec().mime
+    }
 
-        match ext.to_ascii_lowercase().as_str() {
-            "jpg" | "jpeg" | "jfif" | "jpe" => "image/jpeg",
-            "png" => "image/png",
-            "webp" => "image/webp",
-            "avif" => "image/avif",
-            "gif" => "image/gif",
-            "bmp" => "image/bmp",
-            "tif" | "tiff" => "image/tiff",
-            "psd" => "image/vnd.adobe.photoshop",
-            "svg" => "image/svg+xml",
-            "mp4" | "m4v" => "video/mp4",
-            "mkv" => "video/x-matroska",
-            "webm" => "video/webm",
-            "mov" => "video/quicktime",
-            "avi" => "video/x-msvideo",
-            "mpg" | "mpeg" => "video/mpeg",
-            "flv" => "video/x-flv",
-            _ => "application/octet-stream",
+    /// Decodes any image RustView can show to RGBA: the `image` crate first (with alpha), then the viewer's decoders
+    /// (FFmpeg formats, SVG).
+    fn decode_rgba(path: &Path) -> Result<(u32, u32, Vec<u8>), SystemHandlerError> {
+        let native = if crate::media::MediaFormat::from_path(path) == crate::media::MediaFormat::Svg {
+            None
+        } else {
+            crate::media::image_decode::open_reader(path, 128 * 1024)
+                .ok()
+                .and_then(|reader| reader.decode().ok())
+        };
+        if let Some(img) = native {
+            let rgba = img.into_rgba8();
+            return Ok((rgba.width(), rgba.height(), rgba.into_raw()));
         }
+        let (width, height, buffer) = crate::viewer::HighResImageLoader::load_full_resolution(path)
+            .map_err(|e| SystemHandlerError::Clipboard(e.to_string()))?;
+        let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+        for px in buffer.as_bytes().as_chunks::<3>().0 {
+            rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
+        }
+        Ok((width, height, rgba))
     }
 
     /// Copies arbitrary UTF-8 text into the system clipboard using the persistent clipboard daemon.
@@ -179,15 +179,9 @@ impl SystemClipboard {
             path.to_path_buf()
         } else {
             let temp_png = std::env::temp_dir().join("rustview_clipboard_image.png");
-            let reader = BufReader::with_capacity(128 * 1024, File::open(path)?);
-            let dyn_img = image::ImageReader::new(reader)
-                .with_guessed_format()?
-                .decode()?;
-
-            let rgba = dyn_img.into_rgba8();
-            width = rgba.width();
-            height = rgba.height();
-            let raw = rgba.into_raw();
+            let (decoded_width, decoded_height, raw) = Self::decode_rgba(path)?;
+            width = decoded_width;
+            height = decoded_height;
 
             let mut out_file = File::create(&temp_png)?;
             let encoder = image::codecs::png::PngEncoder::new_with_quality(

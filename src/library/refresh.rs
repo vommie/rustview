@@ -3,8 +3,8 @@ use super::error::LibraryError;
 use super::models::{FolderId, MediaId, MediaRecord};
 use super::schema::SEQ_MEDIA_ID;
 use crate::media::{
-    DirectoryScanner, FileHash, MediaDetector, MediaHasher, MediaType,
-    MetadataExtractor, RawMetadata, ScannedFile,
+    DirectoryScanner, FileHash, FormatMask, FormatPolicy, IgnoredFiles, MediaDetector, MediaHasher, MediaType,
+    MetadataExtractor, RawMetadata, ScanResult, ScannedFile,
 };
 use crate::settings::LogObscurer;
 use rayon::prelude::*;
@@ -23,6 +23,10 @@ pub struct RefreshReport {
     pub deleted_media: usize,
     pub restored_media: usize,
     pub corrupted_media: usize,
+    /// Records of formats that are switched off: left exactly as they are (not scanned, not marked missing).
+    pub hidden_format_media: usize,
+    /// Files in the folder that were not taken, and why.
+    pub ignored: IgnoredFiles,
 }
 
 enum ProcessingCandidate {
@@ -137,7 +141,7 @@ impl<'a> FolderRefresher<'a> {
 
         // Auto-detect MIME type & append extension for extensionless files if option is enabled
         if auto_detect_extensionless && folder_path.is_dir() {
-            Self::auto_detect_and_fix_extensionless(folder_path, cancel_flag.as_deref());
+            Self::auto_detect_and_fix_extensionless(folder_path, FormatPolicy::mask(), cancel_flag.as_deref());
         }
 
         if let Some(ref flag) = cancel_flag
@@ -149,8 +153,10 @@ impl<'a> FolderRefresher<'a> {
 
         tracing::info!(folder = %LogObscurer::folder(Some(folder_id), folder_path), "Scanning folder on filesystem...");
 
-        let scanned_files = DirectoryScanner::scan(folder_path, false);
+        let mask = FormatPolicy::mask();
+        let ScanResult { files: scanned_files, ignored } = DirectoryScanner::scan_with(folder_path, false, mask);
         report.total_scanned = scanned_files.len();
+        report.ignored = ignored;
 
         tracing::info!(
             folder_id = folder_id,
@@ -176,15 +182,23 @@ impl<'a> FolderRefresher<'a> {
         let mut existing_map: HashMap<String, (MediaId, MediaRecord)> =
             HashMap::with_capacity(existing_ids.len());
         let mut seen_ids = HashSet::new();
+        // Records of switched-off formats are not part of this refresh at all: they are neither compared with the
+        // directory (which no longer lists their files) nor marked missing, and they stay in the folder's list.
+        let mut hidden_format_ids = Vec::new();
 
         for id in existing_ids {
             if seen_ids.insert(id)
                 && let Some(rec) = self.db.media.get(&rtxn, &id)?
             {
-                existing_map.insert(rec.filename.clone(), (id, rec));
+                if !mask.shows(rec.format) {
+                    hidden_format_ids.push(id);
+                } else {
+                    existing_map.insert(rec.filename.clone(), (id, rec));
+                }
             }
         }
         drop(rtxn);
+        report.hidden_format_media = hidden_format_ids.len();
 
         // 2. Classify scanned items into Unchanged (fast path), Modified, and New
         let mut candidates = Vec::with_capacity(scanned_files.len());
@@ -585,6 +599,7 @@ impl<'a> FolderRefresher<'a> {
 
         // 5. Zero-Data-Loss Soft Deletion with absolute deduplication & External Pending Stub Preservation
         let mut all_folder_media_ids = active_media_ids.clone();
+        all_folder_media_ids.extend(hidden_format_ids);
 
         for (deleted_id, mut deleted_record) in existing_map.into_values() {
             // Check whether this record is an external pending stub (e.g. from PyCutRv) that has not finished rendering yet
@@ -640,7 +655,9 @@ impl<'a> FolderRefresher<'a> {
         Ok(report)
     }
 
-    fn auto_detect_and_fix_extensionless(folder_path: &Path, cancel_flag: Option<&AtomicBool>) {
+    /// Appends the detected extension to extensionless media files. Files of a switched-off format are left alone: a
+    /// disabled format is not handled in any way.
+    fn auto_detect_and_fix_extensionless(folder_path: &Path, mask: FormatMask, cancel_flag: Option<&AtomicBool>) {
         let entries = match std::fs::read_dir(folder_path) {
             Ok(e) => e,
             Err(_) => return,
@@ -668,7 +685,7 @@ impl<'a> FolderRefresher<'a> {
             if !filename.starts_with('.')
                 && path.extension().is_none()
                 && let Some((format, ext)) = MediaDetector::detect_format(&path)
-                && format.is_supported()
+                && mask.is_enabled(format)
             {
                 let target_filename = format!("{}.{}", filename, ext);
                 let unique_filename = crate::library::file_operations::FileOperations::generate_unique_filename(

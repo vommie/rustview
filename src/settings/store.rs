@@ -109,6 +109,9 @@ impl SettingsStore {
             .confirm_open_file_count
             .clamp(MIN_CONFIRM_OPEN_FILE_COUNT, MAX_CONFIRM_OPEN_FILE_COUNT);
 
+        // Formats: canonical ids in table order, without duplicates or ids no format has
+        settings.formats.disabled_formats = settings.formats.format_mask().disabled_ids();
+
         // Appearance sanitization
         settings.appearance.default_thumbnail_size = settings
             .appearance

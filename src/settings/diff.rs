@@ -30,6 +30,8 @@ pub struct SettingsDiff {
 
     // Formats & Tools Subsystem
     pub formats_settings_changed: bool,
+    /// The set of enabled formats changed (files and records of other formats appear or disappear).
+    pub formats_policy_changed: bool,
 
     // Viewer Subsystem
     pub viewer_settings_changed: bool,
@@ -121,6 +123,7 @@ impl SettingsDiff {
 
         let view_settings_changed = old.view != new.view;
         let formats_settings_changed = old.formats != new.formats;
+        let formats_policy_changed = old.formats.format_mask() != new.formats.format_mask();
         let viewer_settings_changed = old.viewer != new.viewer;
         let fullscreen_settings_changed = old.fullscreen != new.fullscreen;
         let tags_settings_changed = old.tags.default_match_mode != new.tags.default_match_mode
@@ -170,6 +173,7 @@ impl SettingsDiff {
             performance_pipeline_changed,
             view_settings_changed,
             formats_settings_changed,
+            formats_policy_changed,
             viewer_settings_changed,
             fullscreen_settings_changed,
             tags_settings_changed,
@@ -502,6 +506,22 @@ impl SettingsDiff {
             changes.push(format!(
                 "Formats: auto_detect_extensionless_media ({} -> {})",
                 old.formats.auto_detect_extensionless_media, new.formats.auto_detect_extensionless_media
+            ));
+        }
+
+        if self.formats_policy_changed {
+            let changes_to = old.formats.format_mask().changes_to(new.formats.format_mask());
+            let named = |on: bool| {
+                changes_to
+                    .iter()
+                    .filter(|(_, enabled)| *enabled == on)
+                    .map(|(f, _)| f.spec().id)
+                    .collect::<Vec<_>>()
+            };
+            changes.push(format!(
+                "Formats: enabled {:?}, disabled {:?}",
+                named(true),
+                named(false)
             ));
         }
 

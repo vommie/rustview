@@ -264,7 +264,7 @@ impl ApiHandler {
                 let new_id = lib.raw_db().next_id(&mut wtxn, SEQ_MEDIA_ID)?;
 
                 let format = MediaFormat::from_path(Path::new(&filename));
-                let media_type = format
+                let mut media_type = format
                     .media_type()
                     .unwrap_or(crate::media::MediaType::Image);
 
@@ -298,6 +298,7 @@ impl ApiHandler {
                         width = raw_meta.width;
                         height = raw_meta.height;
                         duration_ms = raw_meta.duration_ms;
+                        media_type = raw_meta.media_type;
                     }
                 }
 

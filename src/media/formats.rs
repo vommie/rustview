@@ -1,5 +1,9 @@
+use super::format_policy::FormatPolicy;
+use super::format_table::{FORMAT_SPECS, FormatSpec};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MediaType {
@@ -7,9 +11,11 @@ pub enum MediaType {
     Video,
 }
 
+/// Every format RustView knows. The library stores the variant INDEX (bincode), so variants are only ever appended after
+/// `Unknown`, never inserted or reordered; `FORMAT_SPECS` follows the same order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MediaFormat {
-    // Image Formats
+    // Image formats
     Jpeg,
     Png,
     Webp,
@@ -19,7 +25,7 @@ pub enum MediaFormat {
     Tiff,
     Psd,
 
-    // Video Formats
+    // Video formats
     Mp4,
     Mkv,
     Webm,
@@ -29,29 +35,81 @@ pub enum MediaFormat {
     Flv,
 
     Unknown,
+
+    // Appended image formats
+    Ico,
+    Tga,
+    Pnm,
+    Qoi,
+    Hdr,
+    Exr,
+    Dds,
+    Farbfeld,
+    Jxl,
+    Jp2,
+    Svg,
+    Dpx,
+    Pcx,
+    Sgi,
+    SunRaster,
+    Xbm,
+    Xpm,
+    Xwd,
+    Wbmp,
+
+    // Appended video formats
+    Wmv,
+    Ts,
+    M2ts,
+    Ogv,
+    ThreeGp,
+    Mxf,
+    Dv,
+    Rm,
+    Y4m,
+    Ivf,
+    Nut,
+    H264,
+    Hevc,
 }
 
+/// The longest extension in `FORMAT_SPECS` fits comfortably; longer ones cannot match and are rejected without lookup.
+const MAX_EXTENSION_LEN: usize = 8;
+
 impl MediaFormat {
-    /// Detects the media format based on the file extension.
+    /// Number of variants including `Unknown` (the length of `FORMAT_SPECS`).
+    pub const COUNT: usize = Self::Hevc as usize + 1;
+
+    /// The table entry of this format.
+    #[inline]
+    pub fn spec(self) -> &'static FormatSpec {
+        &FORMAT_SPECS[self as usize]
+    }
+
+    /// Every known format except `Unknown`, in enum order.
+    pub fn all() -> impl Iterator<Item = MediaFormat> {
+        FORMAT_SPECS.iter().map(|s| s.format).filter(|f| f.is_supported())
+    }
+
+    /// Looks a format up by its stable settings id.
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::all().find(|f| f.spec().id.eq_ignore_ascii_case(id))
+    }
+
+    /// Detects the media format based on the file extension (case-insensitive, without the dot).
     pub fn from_extension(ext: &str) -> Self {
-        match ext.to_ascii_lowercase().as_str() {
-            "jpg" | "jpeg" | "jfif" | "jpe" => Self::Jpeg,
-            "png" => Self::Png,
-            "webp" => Self::Webp,
-            "avif" => Self::Avif,
-            "gif" => Self::Gif,
-            "bmp" => Self::Bmp,
-            "tif" | "tiff" => Self::Tiff,
-            "psd" => Self::Psd,
-            "mp4" | "m4v" => Self::Mp4,
-            "mkv" => Self::Mkv,
-            "webm" => Self::Webm,
-            "mov" => Self::Mov,
-            "avi" => Self::Avi,
-            "mpg" | "mpeg" => Self::Mpeg,
-            "flv" => Self::Flv,
-            _ => Self::Unknown,
+        let bytes = ext.as_bytes();
+        if bytes.is_empty() || bytes.len() > MAX_EXTENSION_LEN {
+            return Self::Unknown;
         }
+        let mut lower = [0u8; MAX_EXTENSION_LEN];
+        for (dst, src) in lower.iter_mut().zip(bytes) {
+            *dst = src.to_ascii_lowercase();
+        }
+        std::str::from_utf8(&lower[..bytes.len()])
+            .ok()
+            .and_then(|key| extension_map().get(key).copied())
+            .unwrap_or(Self::Unknown)
     }
 
     /// Detects the media format from a file path.
@@ -63,80 +121,50 @@ impl MediaFormat {
     }
 
     /// Identifies the high-level media type.
+    #[inline]
     pub fn media_type(&self) -> Option<MediaType> {
-        match self {
-            Self::Jpeg
-            | Self::Png
-            | Self::Webp
-            | Self::Avif
-            | Self::Gif
-            | Self::Bmp
-            | Self::Tiff
-            | Self::Psd => Some(MediaType::Image),
-            Self::Mp4
-            | Self::Mkv
-            | Self::Webm
-            | Self::Mov
-            | Self::Avi
-            | Self::Mpeg
-            | Self::Flv => Some(MediaType::Video),
-            Self::Unknown => None,
-        }
+        self.spec().media_type
     }
 
     /// Returns true if this format supports multi-frame animations (e.g. animated GIFs).
     #[inline]
     pub fn is_animated(&self) -> bool {
-        matches!(self, Self::Gif)
+        self.spec().animated
     }
 
     /// Returns the recommended default file extension for this format in lowercase.
+    #[inline]
     pub fn default_extension(&self) -> &'static str {
-        match self {
-            Self::Jpeg => "jpg",
-            Self::Png => "png",
-            Self::Webp => "webp",
-            Self::Avif => "avif",
-            Self::Gif => "gif",
-            Self::Bmp => "bmp",
-            Self::Tiff => "tiff",
-            Self::Psd => "psd",
-            Self::Mp4 => "mp4",
-            Self::Mkv => "mkv",
-            Self::Webm => "webm",
-            Self::Mov => "mov",
-            Self::Avi => "avi",
-            Self::Mpeg => "mpg",
-            Self::Flv => "flv",
-            Self::Unknown => "",
-        }
+        self.spec().default_extension
     }
 
     /// Returns the standardized, capitalized uppercase display name for the media format (e.g. "JPEG", "PNG", "MP4").
+    #[inline]
     pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Jpeg => "JPEG",
-            Self::Png => "PNG",
-            Self::Webp => "WEBP",
-            Self::Avif => "AVIF",
-            Self::Gif => "GIF",
-            Self::Bmp => "BMP",
-            Self::Tiff => "TIFF",
-            Self::Psd => "PSD",
-            Self::Mp4 => "MP4",
-            Self::Mkv => "MKV",
-            Self::Webm => "WEBM",
-            Self::Mov => "MOV",
-            Self::Avi => "AVI",
-            Self::Mpeg => "MPEG",
-            Self::Flv => "FLV",
-            Self::Unknown => "UNKNOWN",
-        }
+        self.spec().name
     }
 
+    /// Whether RustView knows this format at all (independent of the user's Settings; see `FormatPolicy` for that).
+    #[inline]
     pub fn is_supported(&self) -> bool {
         !matches!(self, Self::Unknown)
     }
+
+    /// Whether the user has this format switched on in Settings > File Formats.
+    #[inline]
+    pub fn is_enabled(&self) -> bool {
+        FormatPolicy::is_enabled(*self)
+    }
+}
+
+fn extension_map() -> &'static HashMap<&'static str, MediaFormat> {
+    static MAP: OnceLock<HashMap<&'static str, MediaFormat>> = OnceLock::new();
+    MAP.get_or_init(|| {
+        FORMAT_SPECS
+            .iter()
+            .flat_map(|spec| spec.extensions.iter().map(move |ext| (*ext, spec.format)))
+            .collect()
+    })
 }
 
 /// Formats a byte size in Megabytes with 2 decimal places and no suffix (e.g. "310.01").

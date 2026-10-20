@@ -182,6 +182,11 @@ impl ThumbnailManager {
         self.store.storage_stats(&self.scheduler.library)
     }
 
+    /// Image or video as the library knows the medium (content decides, not the extension).
+    pub fn is_video_media(&self, media_id: MediaId, file_path: &Path) -> bool {
+        self.scheduler.is_video_media(media_id, file_path)
+    }
+
     pub fn get_or_load_sync(
         &self,
         media_id: MediaId,

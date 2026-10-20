@@ -1192,6 +1192,8 @@ impl BridgeFolders {
                         combined_report.deleted_media += rep.deleted_media;
                         combined_report.restored_media += rep.restored_media;
                         combined_report.corrupted_media += rep.corrupted_media;
+                        combined_report.hidden_format_media += rep.hidden_format_media;
+                        combined_report.ignored.merge(rep.ignored);
                     }
                 }
 
@@ -1237,6 +1239,19 @@ impl BridgeFolders {
                     BridgeMedia::preindex(&lib_scanner, known, &target_p_scanner)
                 };
 
+                let ready_message = match combined_report.ignored.describe() {
+                    Some(skipped) => format!("Ready. {skipped}"),
+                    None => "Ready.".to_string(),
+                };
+                if !combined_report.ignored.is_empty() || combined_report.hidden_format_media > 0 {
+                    tracing::info!(
+                        disabled_format_files = combined_report.ignored.disabled_total(),
+                        hidden_format_records = combined_report.hidden_format_media,
+                        unsupported_extensions = combined_report.ignored.unsupported.len(),
+                        header_mismatch = combined_report.ignored.header_mismatch,
+                        "[FolderRefresh: Skipped] Files left out of the refresh"
+                    );
+                }
                 let pipeline_items = BridgeMedia::pipeline_items(&indexed_media);
                 let store = MediaStore::from_records(indexed_media);
                 let (mut request, query) = BridgeMedia::capture_request(&st_scanner);
@@ -1258,7 +1273,7 @@ impl BridgeFolders {
                         Self::reload_tree(&w, &lib_scanner, &set_scanner, &st_scanner);
 
                         StatusBarBridge::update_media_index_progress(&w, false, 0, 0);
-                        StatusBarBridge::info(&w, "Ready.");
+                        StatusBarBridge::info(&w, ready_message);
                         StatusBarBridge::update_metrics(&w, &st_scanner);
 
                         if !pipeline_items.is_empty() {

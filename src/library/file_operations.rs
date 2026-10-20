@@ -241,12 +241,12 @@ impl<'a> FileOperations<'a> {
             }
         }
 
+        // The new name decides the format (what the format switches of the Settings act on); image or video stays as the
+        // content made it, so renaming a JPEG to ".mp4" does not turn it into a video.
         let format = MediaFormat::from_path(&paths.new_path);
-        let media_type = format.media_type().unwrap_or(record.media_type);
 
         record.filename = paths.validated_name.clone();
         record.format = format;
-        record.media_type = media_type;
         record.is_deleted = false;
 
         self.db.media.put(&mut wtxn, &media_id, &record)?;

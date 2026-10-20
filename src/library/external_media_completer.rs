@@ -141,8 +141,7 @@ impl<'a> ExternalMediaCompleter<'a> {
             });
 
             let file_path = folder_dir.join(&rec.filename);
-            let format = MediaFormat::from_path(&file_path);
-            let is_video = format.media_type() == Some(MediaType::Video);
+            let is_video = rec.media_type == MediaType::Video;
 
             // Check 3: Is the file physically complete and ready on the filesystem?
             let (is_ready, pending_reason) = Self::evaluate_file_readiness(&file_path, is_video);
@@ -377,7 +376,7 @@ impl<'a> ExternalMediaCompleter<'a> {
                 };
 
                 let format = MediaFormat::from_path(&file_path);
-                let is_video = format.media_type() == Some(MediaType::Video);
+                let is_video = MetadataExtractor::resolve_media_type(&file_path, format.media_type().unwrap_or(MediaType::Image)) == MediaType::Video;
 
                 // Extract metadata (dimensions, duration)
                 let (raw_meta, meta_ok) = match MetadataExtractor::extract(&file_path) {

@@ -17,6 +17,14 @@ pub fn format_filesize(size_bytes: u64) -> String {
     format!("{:.2} {}", s, units[i.min(units.len() - 1)])
 }
 
+/// Formats a count with the thousands grouping of the system locale.
+pub fn format_count_with_locale(count: u64) -> String {
+    match *SYSTEM_LOCALE {
+        Some(ref locale) => count.to_formatted_string(locale),
+        None => count.to_formatted_string(&Locale::en),
+    }
+}
+
 /// Formats exact byte count with locale-sensitive thousands grouping separators using the `num-format` crate.
 pub fn format_bytes_with_locale(bytes: u64) -> String {
     let formatted_number = if let Some(ref locale) = *SYSTEM_LOCALE {

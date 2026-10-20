@@ -209,9 +209,21 @@ pub struct SequentialExtractionParams<'a> {
 #[derive(Default)]
 pub struct FfmpegVideoThumbnailer;
 
+/// Longest edge `extract_native_frame` returns; a larger picture is scaled down to it.
+const MAX_NATIVE_FRAME_EDGE: u32 = 16384;
+
 impl FfmpegVideoThumbnailer {
     pub fn new() -> Self {
         Self
+    }
+
+    /// The first frame at the size the picture has (no scaling up like a thumbnail): what the viewer shows for the
+    /// image formats only FFmpeg decodes.
+    pub fn extract_native_frame(&self, path: &Path) -> Result<DecodedThumbnailFrame, ThumbnailError> {
+        let (width, height, _) = crate::media::MetadataExtractor::probe_video_details(path)
+            .map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
+        let edge = width.max(height).clamp(16, MAX_NATIVE_FRAME_EDGE);
+        self.extract_frame(path, 0.0, edge, ScalingAlgorithm::Nearest)
     }
 
     /// Chronological Forward-Seek Extraction (D > 30.0s).
@@ -410,8 +422,12 @@ impl FfmpegVideoThumbnailer {
         let num_previews = params.target_preview_count.clamp(2, 100);
         let primary_offset_pct = params.primary_offset_pct;
 
-        let _ = ictx.seek(0, ..0);
-        decoder.flush();
+        // A stream without a known duration (a raw H.264 file, a recording in progress) is read from where it is: a seek
+        // on it can lose the stream.
+        if duration_secs.is_some() {
+            let _ = ictx.seek(0, ..0);
+            decoder.flush();
+        }
 
         let (target_primary_sec, target_preview_secs) = if let Some(dur) = duration_secs {
             let prim_sec = (dur * primary_offset_pct).clamp(0.0, dur);

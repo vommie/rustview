@@ -1,10 +1,7 @@
 use super::error::ViewerError;
+use crate::media::{MediaFormat, image_decode, svg};
 use crate::settings::LogObscurer;
-use crate::thumbnails::video::VideoFrameDecoder;
-use image::ImageReader;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
-use std::fs::File;
-use std::io::BufReader;
 use std::path::Path;
 use std::time::Instant;
 
@@ -27,40 +24,37 @@ impl HighResImageLoader {
             return Err(ViewerError::FileNotFound(path.to_path_buf()));
         }
 
-        // 1. High-Speed Buffered File Read & Native Image Crate Decoding
-        if let Ok(file) = File::open(path) {
-            let reader = BufReader::with_capacity(256 * 1024, file);
-            if let Ok(reader_guessed) = ImageReader::new(reader).with_guessed_format()
-                && let Ok(dynamic_img) = reader_guessed.decode()
-            {
-                let width = dynamic_img.width();
-                let height = dynamic_img.height();
-                let rgb = dynamic_img.into_rgb8();
-                let raw = rgb.into_raw();
-
-                let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
-                pixel_buffer.make_mut_bytes().copy_from_slice(&raw);
-
-                tracing::info!(
-                    path = %LogObscurer::path(path),
-                    width = width,
-                    height = height,
-                    elapsed_ms = t0.elapsed().as_millis(),
-                    "[HighResImageLoader] Decoded full-resolution image via image crate"
-                );
-
-                return Ok((width, height, pixel_buffer));
-            }
+        if MediaFormat::from_path(path) == MediaFormat::Svg {
+            return Self::load_svg(path, t0);
         }
 
-        // 2. Resilient Fallback to FFmpeg decoder (for PSD, exotic TIFF or chunk variations)
+        // 1. High-Speed Buffered File Read & Native Image Crate Decoding
+        if let Ok(reader_guessed) = image_decode::open_reader(path, 256 * 1024)
+            && let Ok(dynamic_img) = reader_guessed.decode()
+        {
+            let width = dynamic_img.width();
+            let height = dynamic_img.height();
+            let rgb = dynamic_img.into_rgb8();
+            let raw = rgb.into_raw();
+
+            let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
+            pixel_buffer.make_mut_bytes().copy_from_slice(&raw);
+
+            tracing::info!(
+                path = %LogObscurer::path(path),
+                width = width,
+                height = height,
+                elapsed_ms = t0.elapsed().as_millis(),
+                "[HighResImageLoader] Decoded full-resolution image via image crate"
+            );
+
+            return Ok((width, height, pixel_buffer));
+        }
+
+        // 2. Resilient Fallback to FFmpeg decoder (AVIF, JPEG XL, JPEG 2000, PSD, DPX, legacy formats, exotic variants),
+        // at the size the picture has
         let ffmpeg_decoder = crate::thumbnails::video::FfmpegVideoThumbnailer::new();
-        match ffmpeg_decoder.extract_frame(
-            path,
-            0.0,
-            8192,
-            crate::thumbnails::ScalingAlgorithm::Nearest,
-        ) {
+        match ffmpeg_decoder.extract_native_frame(path) {
             Ok(frame) => {
                 let width = frame.width;
                 let height = frame.height;
@@ -86,5 +80,21 @@ impl HighResImageLoader {
                 Err(ViewerError::DecodeFailed(e.to_string()))
             }
         }
+    }
+
+    fn load_svg(path: &Path, t0: Instant) -> Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), ViewerError> {
+        let (iw, ih) = svg::intrinsic_size(path).map_err(|e| ViewerError::DecodeFailed(e.to_string()))?;
+        let raster = svg::rasterize(path, svg::viewer_edge(iw, ih)).map_err(|e| ViewerError::DecodeFailed(e.to_string()))?;
+        let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(raster.width, raster.height);
+        pixel_buffer.make_mut_bytes().copy_from_slice(&raster.rgb);
+
+        tracing::info!(
+            path = %LogObscurer::path(path),
+            width = raster.width,
+            height = raster.height,
+            elapsed_ms = t0.elapsed().as_millis(),
+            "[HighResImageLoader] Rasterized SVG via resvg"
+        );
+        Ok((raster.width, raster.height, pixel_buffer))
     }
 }

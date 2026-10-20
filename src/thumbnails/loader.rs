@@ -65,6 +65,8 @@ pub struct PreparedTarget {
     pub folder_id: u64,
     pub media_id: MediaId,
     pub file_path: PathBuf,
+    /// From the library record: a file's content decides image or video, not its extension.
+    pub is_video: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -422,7 +424,7 @@ impl ThumbnailScheduler {
                 if has_primary && previews_ok {
                     existing_count += 1;
                 } else if let Some(file_path) = self.item_path(&rtxn, &mut folder_paths, item.media_id) {
-                    missing_targets.push(PreparedTarget { pipeline_id, folder_id, media_id: item.media_id, file_path });
+                    missing_targets.push(PreparedTarget { pipeline_id, folder_id, media_id: item.media_id, file_path, is_video: item.is_video });
                 }
             }
         }
@@ -510,8 +512,7 @@ impl ThumbnailScheduler {
 
             self.tracker.increment_active_workers();
 
-            let is_video =
-                MediaFormat::from_path(&target.file_path).media_type() == Some(MediaType::Video);
+            let is_video = target.is_video;
 
             let mut is_corrupted = false;
 
@@ -824,6 +825,17 @@ impl ThumbnailScheduler {
         }
     }
 
+    /// Image or video as the library knows it (a file's content decides, not its extension); the extension only
+    /// answers for files that are not in the library.
+    pub fn is_video_media(&self, media_id: MediaId, file_path: &Path) -> bool {
+        if let Ok(rtxn) = self.library.raw_db().env.read_txn()
+            && let Ok(Some(record)) = self.library.raw_db().media.get(&rtxn, &media_id)
+        {
+            return record.media_type == MediaType::Video;
+        }
+        MediaFormat::from_path(file_path).media_type() == Some(MediaType::Video)
+    }
+
     pub fn load_sync(
         &self,
         media_id: MediaId,
@@ -847,7 +859,7 @@ impl ThumbnailScheduler {
             return Ok(item);
         }
 
-        let is_video = MediaFormat::from_path(file_path).media_type() == Some(MediaType::Video);
+        let is_video = self.is_video_media(media_id, file_path);
         let frame = if is_video {
             self.generator
                 .generate_video_thumbnails(file_path, &config)?
@@ -891,7 +903,7 @@ impl ThumbnailScheduler {
         file_path: &Path,
         config: &ThumbnailConfig,
     ) -> Result<CachedThumbnail, ThumbnailError> {
-        let is_video = MediaFormat::from_path(file_path).media_type() == Some(MediaType::Video);
+        let is_video = self.is_video_media(media_id, file_path);
         let (frame, video_preview_rec) = if is_video {
             let video_res = self
                 .generator

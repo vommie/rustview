@@ -1,4 +1,5 @@
 use super::diff::SettingsDiff;
+use crate::media::FormatPolicy;
 use super::obscurer::LogObscurer;
 use super::schema::AppSettings;
 use super::store::SettingsStore;
@@ -21,6 +22,7 @@ impl SettingsManager {
         let store = SettingsStore::new(config_dir);
         let loaded = store.load();
         LogObscurer::set_obfuscate(loaded.debug.obfuscate_logs);
+        FormatPolicy::set(loaded.formats.format_mask());
         let current = Arc::new(RwLock::new(loaded));
 
         Arc::new(Self {
@@ -54,6 +56,7 @@ impl SettingsManager {
 
         // Live update log obfuscator state before emitting detailed summary
         LogObscurer::set_obfuscate(new_settings.debug.obfuscate_logs);
+        FormatPolicy::set(new_settings.formats.format_mask());
 
         let summary = diff.detailed_summary(&old_settings, &new_settings);
         tracing::info!(
@@ -85,6 +88,7 @@ impl SettingsManager {
     /// Persists settings quietly without triggering subscriber reload loops.
     pub fn save_quiet(&self, settings: &AppSettings) {
         LogObscurer::set_obfuscate(settings.debug.obfuscate_logs);
+        FormatPolicy::set(settings.formats.format_mask());
         {
             let mut writer = self.current.write();
             *writer = settings.clone();
@@ -112,6 +116,7 @@ impl SettingsManager {
     /// Persists settings in-memory immediately and flushes JSON to disk in a non-blocking background thread.
     pub fn save_quiet_async(&self, settings: &AppSettings) {
         LogObscurer::set_obfuscate(settings.debug.obfuscate_logs);
+        FormatPolicy::set(settings.formats.format_mask());
         {
             let mut writer = self.current.write();
             *writer = settings.clone();

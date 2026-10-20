@@ -1,3 +1,4 @@
+use super::detector::MediaDetector;
 use super::formats::{MediaFormat, MediaType};
 use std::fs;
 use std::path::Path;
@@ -33,7 +34,9 @@ pub struct RawMetadata {
     pub duration_ms: u64,
     pub width: u32,
     pub height: u32,
+    /// What the file really is: the content decides when it disagrees with the extension (an AVIF photo called `.mp4`).
     pub media_type: MediaType,
+    /// The format of the extension; it is what the format switches of the Settings act on.
     pub format: MediaFormat,
 }
 
@@ -43,9 +46,8 @@ impl MetadataExtractor {
     /// Extracts metadata by inspecting container headers and filesystem attributes without decoding pixel data.
     pub fn extract(path: &Path) -> Result<RawMetadata, MetadataError> {
         let format = MediaFormat::from_path(path);
-        let media_type = format
-            .media_type()
-            .ok_or(MetadataError::UnsupportedFormat)?;
+        let extension_type = format.media_type().ok_or(MetadataError::UnsupportedFormat)?;
+        let media_type = Self::resolve_media_type(path, extension_type);
 
         let fs_meta = fs::metadata(path)?;
         let file_size = fs_meta.len();
@@ -83,14 +85,31 @@ impl MetadataExtractor {
         })
     }
 
+    /// Image or video by content where the header is conclusive, else by extension.
+    pub fn resolve_media_type(path: &Path, extension_type: MediaType) -> MediaType {
+        MediaDetector::read_header(path)
+            .and_then(|header| MediaDetector::content_media_type(&header))
+            .unwrap_or(extension_type)
+    }
+
     fn extract_image_dimensions(path: &Path) -> Result<(u32, u32), MetadataError> {
-        if let Ok(dims) = image::image_dimensions(path) {
+        if MediaFormat::from_path(path) == MediaFormat::Svg {
+            return super::svg::intrinsic_size(path).map_err(|e| MetadataError::ImageError(e.to_string()));
+        }
+        if let Ok(reader) = super::image_decode::open_reader(path, 64 * 1024)
+            && let Ok(dims) = reader.into_dimensions()
+        {
             return Ok(dims);
         }
-        // Fallback for formats not natively handled by the image crate (e.g. PSD)
+        // Fallback for formats not natively handled by the image crate (AVIF, JPEG XL, PSD, ...)
         let (w, h, _) = Self::extract_video_details(path)
             .map_err(|e| MetadataError::ImageError(e.to_string()))?;
         Ok((w, h))
+    }
+
+    /// Width, height (after rotation) and duration of the first video stream, read through FFmpeg.
+    pub fn probe_video_details(path: &Path) -> Result<(u32, u32, u64), MetadataError> {
+        Self::extract_video_details(path)
     }
 
     fn extract_video_details(path: &Path) -> Result<(u32, u32, u64), MetadataError> {

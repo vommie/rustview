@@ -10,7 +10,6 @@ use super::ram_cache::CachedThumbnail;
 use super::types::{generate_random_video_offset_percent, ThumbnailConfig};
 use super::ThumbnailManager;
 use crate::library::models::MediaId;
-use crate::media::{MediaFormat, MediaType};
 use rayon::prelude::*;
 use std::path::PathBuf;
 
@@ -86,7 +85,7 @@ fn regenerate_one(
         return Err(fail(path, "File not found on disk".to_string()));
     }
 
-    let is_video = MediaFormat::from_path(&path).media_type() == Some(MediaType::Video);
+    let is_video = manager.is_video_media(media_id, &path);
     let (offset_percent, result) = if is_video {
         let pct = generate_random_video_offset_percent();
         (Some(pct), manager.regenerate_with_offset_sync(media_id, &path, config, pct))

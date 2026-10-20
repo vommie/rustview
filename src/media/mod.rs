@@ -1,11 +1,19 @@
 pub mod detector;
+pub mod format_catalog;
+pub mod format_policy;
+pub mod format_table;
 pub mod formats;
 pub mod hashing;
+pub mod image_decode;
 pub mod metadata;
 pub mod scanner;
+pub mod svg;
 
 pub use detector::MediaDetector;
+pub use format_catalog::{CatalogEntry, KNOWN_UNSUPPORTED_EXTENSIONS, UNSUPPORTED_FORMATS, catalog};
+pub use format_policy::{FormatMask, FormatPolicy};
+pub use format_table::{FORMAT_SPECS, FormatDecoder, FormatGroup, FormatSpec};
 pub use formats::{MediaFormat, MediaType};
 pub use hashing::{FileHash, MediaHasher};
 pub use metadata::{MetadataExtractor, RawMetadata};
-pub use scanner::{DirectoryScanner, ScannedFile};
+pub use scanner::{DirectoryScanner, IgnoredFiles, ScanResult, ScannedFile};

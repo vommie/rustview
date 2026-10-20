@@ -493,7 +493,8 @@ fn load_conflict_thumbnail(
 
 fn generate_transient_thumbnail(config: &ThumbnailConfig, path: &Path) -> Image {
     let generator = ThumbnailGenerator::new();
-    let is_video = MediaFormat::from_path(path).media_type() == Some(MediaType::Video);
+    let extension_type = MediaFormat::from_path(path).media_type().unwrap_or(MediaType::Image);
+    let is_video = crate::media::MetadataExtractor::resolve_media_type(path, extension_type) == MediaType::Video;
     let frame = if is_video {
         generator.generate_video_thumbnails(path, config).map(|r| r.primary_frame)
     } else {

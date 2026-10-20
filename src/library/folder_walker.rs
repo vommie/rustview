@@ -4,7 +4,7 @@
 //! explicitly user-triggered refresh actions (Refresh Tree Full / Relative), never automatically.
 //! Directories that are mount points listed in `ignored_mounts` are not entered and not reported as folders.
 
-use crate::media::MediaFormat;
+use crate::media::{DirectoryScanner, FormatMask, FormatPolicy, MediaFormat};
 use crate::settings::LogObscurer;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -40,6 +40,8 @@ struct WalkContext<'a> {
     ignored_mounts: &'a HashSet<PathBuf>,
     items: Vec<ScannedDirItem>,
     skipped_mounts: Vec<PathBuf>,
+    /// One policy snapshot for the whole walk: only files of these formats are counted.
+    formats: FormatMask,
 }
 
 /// Recursively walks `root` and returns all directories in pre-order, skipping ignored mount points.
@@ -54,6 +56,7 @@ pub fn walk_directory_tree(
         ignored_mounts,
         items: Vec::with_capacity(1024),
         skipped_mounts: Vec::new(),
+        formats: FormatPolicy::mask(),
     };
 
     let root_hidden = root
@@ -117,7 +120,7 @@ fn walk_dir(
                 sub_dirs.push((child_path, child_hidden));
             } else if is_file {
                 let format = MediaFormat::from_path(Path::new(&entry_name));
-                if format.is_supported() {
+                if ctx.formats.is_enabled(format) && DirectoryScanner::header_fits(format, &entry.path()) {
                     media_count += 1;
                 }
             }

@@ -20,7 +20,7 @@ use super::MainWindow;
 use crate::library::models::{FolderId, MediaId, MediaRecord};
 use crate::library::Library;
 use crate::media::metadata::MetadataExtractor;
-use crate::media::{MediaFormat, MediaHasher, MediaType};
+use crate::media::{FormatPolicy, MediaFormat, MediaHasher, MediaType};
 use crate::query::filters::IndexedMediaRecord;
 use crate::query::{FolderDir, ListLayout, ListRequest, MediaStore, MediaTypeFilter, ScopeMode, SortColumn, SortOrder, lay_out};
 use crate::settings::{LogObscurer, SettingsManager};
@@ -1174,7 +1174,7 @@ impl BridgeMedia {
                         };
 
                         let format = MediaFormat::from_path(&file_path);
-                        let is_video = format.media_type() == Some(MediaType::Video);
+                        let is_video = crate::media::MetadataExtractor::resolve_media_type(&file_path, format.media_type().unwrap_or(MediaType::Image)) == MediaType::Video;
 
                         let item_cfg = &cfg_ref;
 
@@ -1529,10 +1529,13 @@ impl BridgeMedia {
             .expect("Failed to spawn parallel media item refresher thread");
     }
 
-    /// Drops records whose id was already seen (a record can be listed by more than one scope).
-    fn unique_by_id(raw_records: Vec<MediaRecord>) -> Vec<MediaRecord> {
+    /// Drops records whose id was already seen (a record can be listed by more than one scope) and records of formats the
+    /// user switched off: every list, query result and count of the UI is built from this, so a switched-off format
+    /// is hidden everywhere while its records stay in the library.
+    fn visible_unique_by_id(raw_records: Vec<MediaRecord>) -> Vec<MediaRecord> {
+        let mask = FormatPolicy::mask();
         let mut seen = HashSet::with_capacity(raw_records.len());
-        raw_records.into_iter().filter(|r| seen.insert(r.id)).collect()
+        raw_records.into_iter().filter(|r| mask.shows(r.format) && seen.insert(r.id)).collect()
     }
 
     fn tag_counts(library: &Library, records: &[MediaRecord]) -> HashMap<MediaId, usize> {
@@ -1550,7 +1553,7 @@ impl BridgeMedia {
 
     pub fn preindex(library: &Library, raw_records: Vec<MediaRecord>, folder_path: &Path) -> Vec<IndexedMediaRecord> {
         let folder = FolderDir::new(folder_path);
-        let records = Self::unique_by_id(raw_records);
+        let records = Self::visible_unique_by_id(raw_records);
         let tag_counts = Self::tag_counts(library, &records);
 
         records
@@ -1564,7 +1567,7 @@ impl BridgeMedia {
     }
 
     pub fn preindex_records(library: &Library, raw_records: Vec<MediaRecord>) -> Vec<IndexedMediaRecord> {
-        let records = Self::unique_by_id(raw_records);
+        let records = Self::visible_unique_by_id(raw_records);
         let tag_counts = Self::tag_counts(library, &records);
         let mut folders: HashMap<FolderId, Arc<FolderDir>> = HashMap::new();
 

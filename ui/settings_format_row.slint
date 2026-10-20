@@ -1,0 +1,148 @@
+import { Theme } from "styles.slint";
+import { ToggleSwitch } from "toggle_switch.slint";
+
+/// One format on the File Formats settings page (built by `settings/formats_page.rs`).
+export struct FormatRowView {
+    id: string,
+    name: string,
+    long-name: string,
+    extensions: [string],
+    decoder: string,
+    note: string,
+    /// "1,234 files" when the format has indexed files, else "".
+    count-text: string,
+    /// The format is off but its indexed files stay in the library: the count is shown as a warning.
+    count-is-hidden: bool,
+    /// Heading of the group this row opens ("" for the other rows of the group).
+    group-title: string,
+    enabled: bool,
+}
+
+/// A format RustView cannot show, with the reason.
+export struct UnsupportedFormatView {
+    title: string,
+    text: string,
+}
+
+/// A format with its switch, extensions, decoder and how many indexed files it owns. The whole row switches it
+/// (mouse, or space/enter while it has the focus).
+export component SettingsFormatRow inherits Rectangle {
+    in property <FormatRowView> item;
+
+    callback toggled(bool /* enabled */);
+
+    background: area.has-hover ? Theme.surface-hover : transparent;
+    border-radius: 4px;
+    min-height: content.min-height;
+    preferred-height: content.preferred-height;
+
+    area := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => {
+            keys.focus();
+            root.toggled(!root.item.enabled);
+        }
+    }
+
+    keys := FocusScope {
+        width: 0px;
+        height: 0px;
+        key-pressed(event) => {
+            if event.text == " " || event.text == "\n" {
+                root.toggled(!root.item.enabled);
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    content := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        spacing: 12px;
+
+        VerticalLayout {
+            alignment: center;
+
+            ToggleSwitch {
+                checked: root.item.enabled;
+                has-focus: keys.has-focus;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 3px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+
+                Text {
+                    text: root.item.name;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: root.item.enabled ? Theme.text : Theme.text-muted;
+                }
+
+                if root.item.long-name != root.item.name : Text {
+                    text: root.item.long-name;
+                    font-size: 11px;
+                    color: Theme.text-muted;
+                    overflow: elide;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: start;
+
+                for extension in root.item.extensions : Rectangle {
+                    background: root.item.enabled ? Theme.surface-selected : Theme.surface-variant;
+                    border-radius: 3px;
+                    min-width: label.min-width + 10px;
+                    height: 16px;
+
+                    label := Text {
+                        x: 5px;
+                        text: "." + extension;
+                        font-size: 10px;
+                        color: root.item.enabled ? Theme.text : Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            if root.item.note != "" : Text {
+                text: root.item.note;
+                font-size: 10px;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+
+        VerticalLayout {
+            width: 118px;
+            alignment: center;
+            spacing: 2px;
+
+            Text {
+                text: root.item.decoder;
+                font-size: 10px;
+                color: Theme.text-muted;
+                horizontal-alignment: right;
+            }
+
+            if root.item.count-text != "" : Text {
+                text: root.item.count-text;
+                font-size: 11px;
+                font-weight: root.item.count-is-hidden ? 700 : 400;
+                color: root.item.count-is-hidden ? Theme.accent : Theme.text;
+                horizontal-alignment: right;
+            }
+        }
+    }
+}

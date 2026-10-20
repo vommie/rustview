@@ -4,6 +4,7 @@ pub mod external_media_completer;
 pub mod file_operations;
 pub mod folder_create;
 pub mod folder_diagnostics;
+pub mod folder_format_counts;
 pub mod folder_mount_filter;
 pub mod folder_move;
 pub mod folder_operations;
@@ -29,6 +30,7 @@ pub use external_media_completer::{
 };
 pub use file_operations::{is_same_file_path, robust_move_file, FileOperations, FilenameValidator};
 pub use folder_diagnostics::FolderDiagnostics;
+pub use folder_format_counts::{FolderFormatCounts, FormatCountReport};
 pub use folder_mount_filter::FolderMountFilter;
 pub use folder_move::{FolderMoveExecutor, FolderMovePatch};
 pub use folder_operations::{
@@ -72,6 +74,10 @@ impl Library {
 
     pub fn folder_operations(&self) -> FolderOperations<'_> {
         FolderOperations::new(&self.db)
+    }
+
+    pub fn folder_format_counts(&self) -> FolderFormatCounts<'_> {
+        FolderFormatCounts::new(&self.db)
     }
 
     pub fn media(&self) -> MediaRepository<'_> {

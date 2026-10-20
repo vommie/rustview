@@ -30,6 +30,7 @@ use super::bridge_thumbnails::BridgeThumbnails;
 use super::bridge_viewer_tabs::BridgeViewerTabs;
 use super::dnd_foldertree_autoscroller::DndFolderTreeAutoScroller;
 use super::favorites::FavoriteManager;
+use super::formats_policy::{FormatPolicyApplier, FormatPolicyContext};
 use super::keyboard_navigation::{handle_keyboard_navigate, KeyboardNavigateParams};
 use super::shutdown::ShutdownTargets;
 use super::multiview::tab_host;
@@ -127,6 +128,10 @@ impl UiBridge {
 
         let mut controller = SettingsDialogController::new(settings.clone());
         controller.set_main_window(window.as_weak());
+        let counting_library = library.clone();
+        controller.set_format_counter(Arc::new(move || {
+            counting_library.media().count_by_format().unwrap_or_default()
+        }));
         let settings_dialog = Rc::new(RefCell::new(controller));
         let fullscreen = MultiviewHandle::default();
 
@@ -447,10 +452,11 @@ impl UiBridge {
         let settings = self.settings.clone();
         let state = self.state.clone();
 
-        self.settings.subscribe(move |_old_settings: &AppSettings, new_settings: &AppSettings, diff: &SettingsDiff| {
+        self.settings.subscribe(move |old_settings: &AppSettings, new_settings: &AppSettings, diff: &SettingsDiff| {
             if !diff.has_changes {
                 return;
             }
+            let (old_formats, new_formats) = (old_settings.formats.format_mask(), new_settings.formats.format_mask());
 
             let library = library.clone();
             let thumbnails = thumbnails.clone();
@@ -483,6 +489,18 @@ impl UiBridge {
                     if state.read().current_folder_id.is_some() {
                         BridgeMedia::reload(&window, &library, &thumbnails, &settings, &state, true, false);
                     }
+                }
+
+                if diff_clone.formats_policy_changed {
+                    let ctx = FormatPolicyContext {
+                        window: &window,
+                        library: &library,
+                        thumbnails: &thumbnails,
+                        tab_manager: &tab_manager,
+                        settings: &settings,
+                        state: &state,
+                    };
+                    FormatPolicyApplier::apply(&ctx, old_formats, new_formats);
                 }
 
                 if diff_clone.tooltip_settings_changed {

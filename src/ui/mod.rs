@@ -50,6 +50,7 @@ pub mod color_picker;
 pub mod dnd_foldertree_autoscroller;
 pub mod fallback_view;
 pub mod favorites;
+pub mod formats_policy;
 pub mod file_selection;
 pub mod keyboard_navigation;
 pub mod list_loader;
