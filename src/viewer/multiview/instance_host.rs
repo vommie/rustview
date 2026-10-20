@@ -127,6 +127,10 @@ impl MultiviewInstance {
         if surface.mode != HostMode::Fullscreen {
             self.pinned = false;
         }
+        if !matches!(surface.mode, HostMode::Fullscreen | HostMode::TabView) {
+            // The slider hangs below a bar that exists in these two hosts only.
+            self.zoom_slider = None;
+        }
         self.host.projection = projection;
         tracing::debug!(
             instance = self.id,

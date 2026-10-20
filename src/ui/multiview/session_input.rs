@@ -71,6 +71,29 @@ impl Session {
         self.instance.lock().drag_finished();
     }
 
+    /// Ctrl + mouse wheel over an image of the Multiview: zoom around the pointer.
+    pub(super) fn zoom_wheel(&mut self, index: usize, delta: f32, x: f32, y: f32) {
+        self.instance.lock().zoom_wheel(index, delta, x, y);
+        self.refresh();
+    }
+
+    /// The picture of a zoomed image is dragged by `dx`, `dy` logical pixels.
+    pub(super) fn zoom_pan(&mut self, index: usize, dx: f32, dy: f32) {
+        self.instance.lock().zoom_pan(index, dx, dy);
+        self.refresh();
+    }
+
+    pub(super) fn zoom_minimap(&mut self, index: usize, x: f32, y: f32, phase: i32) {
+        self.instance.lock().zoom_minimap(index, x, y, phase);
+        self.refresh();
+    }
+
+    /// Ctrl+0 / Ctrl++ / Ctrl+- zoom the image under the pointer (else the only image).
+    pub(super) fn zoom_key(&mut self, key: i32) {
+        self.instance.lock().zoom_key(key);
+        self.refresh();
+    }
+
     pub(super) fn reset_split(&mut self) {
         self.instance.lock().reset_split();
         self.refresh();

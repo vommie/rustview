@@ -39,6 +39,8 @@ struct TabHost {
     /// Instance id and revision that the bus shows right now.
     shown: Option<(u64, u64)>,
     tick: Timer,
+    /// Redraws every frame while a zoom glides to its new value (the tick is too slow for that).
+    glide: Timer,
     /// The mouse cursor is hidden over the main window right now.
     cursor_hidden: bool,
 }
@@ -77,6 +79,9 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     bus.on_gutter_reset(|| act(MultiviewInstance::reset_split));
     bus.on_gutter_swap(|index| act(|mv| mv.swap(index.max(0) as usize)));
     bus.on_tile_clicked(|_, is_ctrl| on_click(is_ctrl));
+    bus.on_tile_zoom_wheel(|index, delta, x, y| act(|mv| mv.zoom_wheel(index.max(0) as usize, delta, x, y)));
+    bus.on_tile_pan(|index, dx, dy| act(|mv| mv.zoom_pan(index.max(0) as usize, dx, dy)));
+    bus.on_minimap_pointer(|index, x, y, phase| act(|mv| mv.zoom_minimap(index.max(0) as usize, x, y, phase)));
     bus.on_background_clicked(on_click);
     bus.on_middle_clicked(|| run(route_for(RoutedEvent::ToggleFullscreen, ClickKind::None)));
 }
@@ -257,6 +262,7 @@ pub fn suspend() {
     }
     let released = with_host(|h| {
         h.tick.stop();
+        h.glide.stop();
         h.instance = WeakInstance::new();
         h.shown.take().is_some()
     })
@@ -304,6 +310,23 @@ pub fn refresh() {
     let bus = window.global::<MultiviewTabBus>();
     bus.set_screen(views::screen_view(&view));
     update_bar_overlay();
+    manage_glide(instance.lock().zoom_animating());
+}
+
+/// Starts the frame timer while a zoom glides and stops it when it is done.
+fn manage_glide(animating: bool) {
+    with_host(|h| {
+        if animating && !h.glide.running() {
+            h.glide.start(TimerMode::Repeated, Duration::from_millis(16), || {
+                if let Some(instance) = current_instance() {
+                    instance.lock().poll_zoom();
+                }
+                refresh();
+            });
+        } else if !animating && h.glide.running() {
+            h.glide.stop();
+        }
+    });
 }
 
 fn on_tick() {

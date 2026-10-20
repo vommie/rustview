@@ -88,6 +88,8 @@ pub(super) struct Session {
     shown_revision: Option<u64>,
     pub(super) debounce: Timer,
     pub(super) tick: Timer,
+    /// Redraws every frame while a zoom glides to its new value (the tick is too slow for that).
+    pub(super) glide: Timer,
     pub(super) populated: bool,
 }
 
@@ -204,6 +206,10 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
             _ => UiAction::None,
         })
     });
+    win.on_tile_zoom_wheel(|index, delta, x, y| with_session(|s| s.zoom_wheel(index.max(0) as usize, delta, x, y)));
+    win.on_tile_pan(|index, dx, dy| with_session(|s| s.zoom_pan(index.max(0) as usize, dx, dy)));
+    win.on_minimap_pointer(|index, x, y, phase| with_session(|s| s.zoom_minimap(index.max(0) as usize, x, y, phase)));
+    win.on_zoom_key(|key| with_session(|s| s.zoom_key(key)));
     win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0) as usize)));
     win.on_gutter_dragged(|_, distance| with_session(|s| s.dragged(distance)));
     win.on_gutter_drag_finished(|_| with_session(Session::drag_finished));
@@ -534,6 +540,7 @@ impl Session {
             shown_revision: None,
             debounce: Timer::default(),
             tick: Timer::default(),
+            glide: Timer::default(),
             populated: false,
         }
     }
@@ -599,6 +606,22 @@ impl Session {
             win.set_navigation(views::navigation_code(view.navigation));
         }
         self.update_bar_overlay();
+        self.manage_glide();
+    }
+
+    /// Starts the frame timer while a zoom glides and stops it when it is done.
+    fn manage_glide(&mut self) {
+        let animating = self.instance.lock().zoom_animating();
+        if animating && !self.glide.running() {
+            self.glide.start(TimerMode::Repeated, Duration::from_millis(16), || with_session(Session::on_glide_frame));
+        } else if !animating && self.glide.running() {
+            self.glide.stop();
+        }
+    }
+
+    fn on_glide_frame(&mut self) {
+        self.instance.lock().poll_zoom();
+        self.refresh();
     }
 
     /// Hides the window and empties its models (the images would otherwise stay in memory until the next open); dropping
@@ -607,6 +630,7 @@ impl Session {
     pub(super) fn shutdown(mut self) {
         self.debounce.stop();
         self.tick.stop();
+        self.glide.stop();
         bar_overlay::hide(BarOwner::Fullscreen);
         if let Some(win) = self.window.upgrade() {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);

@@ -156,7 +156,7 @@ impl PlainTabState {
         let id = self.media_id;
         match click {
             BarClick::MenuItem(item) => PlainOutcome::Ui(UiAction::OpenWithItem(id, item)),
-            BarClick::ZoomTo(_) | BarClick::ZoomStep { .. } | BarClick::ZoomReset => PlainOutcome::None,
+            BarClick::ZoomTo(_) | BarClick::ZoomPos(_) | BarClick::ZoomStep { .. } | BarClick::ZoomReset => PlainOutcome::None,
             BarClick::Action(action) => {
                 if !self.media_actions().iter().any(|a| a.id == action) {
                     return PlainOutcome::None;

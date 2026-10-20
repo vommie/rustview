@@ -64,7 +64,7 @@ impl MultiviewInstance {
                 Some(index) => UiAction::OpenWithItem(self.tiles[index].media_id, item),
                 None => UiAction::None,
             },
-            BarClick::ZoomTo(_) | BarClick::ZoomStep { .. } | BarClick::ZoomReset => {
+            BarClick::ZoomTo(_) | BarClick::ZoomPos(_) | BarClick::ZoomStep { .. } | BarClick::ZoomReset => {
                 self.zoom_slider_click(key, click);
                 UiAction::None
             }
@@ -105,7 +105,11 @@ impl MultiviewInstance {
                 UiAction::None
             }
             MediaActionId::OpenAsTab => UiAction::OpenTileAsTab(id),
-            MediaActionId::OpenWith => UiAction::ToggleOpenWith(id),
+            MediaActionId::OpenWith => {
+                // One bubble at a time: the drop-down replaces the zoom slider.
+                self.zoom_slider = None;
+                UiAction::ToggleOpenWith(id)
+            }
             MediaActionId::Delete => UiAction::DeleteTile(id),
             MediaActionId::Remove => self.remove_tile(index),
             MediaActionId::Close => self.close_action(),

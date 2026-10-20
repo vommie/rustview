@@ -27,6 +27,35 @@ export struct MultiviewTileView {
     image: image,
     is-loading: bool,
     error-text: string,
+    // A zoomed image: drawn instead of `image` (which is its fitted picture) in the rectangle zoom-x/y/width/height of the tile.
+    // `zoom-hq` says the sharp, resampled `zoom-image` is ready; until then `image` is cut out (zoom-clip-*, pixels of `image`)
+    // and scaled by the renderer.
+    zoomed: bool,
+    zoom-hq: bool,
+    zoom-image: image,
+    zoom-x: length,
+    zoom-y: length,
+    zoom-width: length,
+    zoom-height: length,
+    zoom-clip-x: int,
+    zoom-clip-y: int,
+    zoom-clip-width: int,
+    zoom-clip-height: int,
+    zoom-pixelated: bool,
+    // Dragging the picture moves something.
+    pannable: bool,
+    // The minimap of a zoomed image: its place in the tile, the thumbnail and the visible part (shares of the image).
+    mm-available: bool,
+    mm-visible: bool,
+    mm-image: image,
+    mm-x: length,
+    mm-y: length,
+    mm-width: length,
+    mm-height: length,
+    mm-vx: float,
+    mm-vy: float,
+    mm-vw: float,
+    mm-vh: float,
 }
 
 /// A draggable separator between two tiles (or the two rows of a 2x2 grid) with a swap button in the middle.

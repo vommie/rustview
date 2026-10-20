@@ -30,6 +30,10 @@ export component MultiviewFullscreenWindow inherits Window {
     callback middle-clicked();
     callback navigate(bool /* forward */);
     callback wheel(length /* delta-y */);
+    callback tile-zoom-wheel(int /* tile index */, length /* delta-y */, length /* x */, length /* y */);
+    callback tile-pan(int /* tile index */, length /* dx */, length /* dy */);
+    callback minimap-pointer(int /* tile index */, float /* x */, float /* y */, int /* phase */);
+    callback zoom-key(int /* 0 = reset, 1 = in, 2 = out */);
     callback gutter-drag-started(int);
     callback gutter-dragged(int, length /* distance from drag start */);
     callback gutter-drag-finished(int);
@@ -64,6 +68,19 @@ export component MultiviewFullscreenWindow inherits Window {
             }
             if event.text == Key.F2 {
                 root.request-rename();
+                return accept;
+            }
+            // Zoom of the image under the pointer: Ctrl+0 resets, Ctrl++ / Ctrl+- step.
+            if event.modifiers.control && (event.text == "0" || event.text == "\u{30}") {
+                root.zoom-key(0);
+                return accept;
+            }
+            if event.modifiers.control && (event.text == "+" || event.text == "=") {
+                root.zoom-key(1);
+                return accept;
+            }
+            if event.modifiers.control && (event.text == "-" || event.text == "_") {
+                root.zoom-key(2);
                 return accept;
             }
             if event.text == Key.Delete {
@@ -108,6 +125,15 @@ export component MultiviewFullscreenWindow inherits Window {
         }
         wheel(delta) => {
             root.wheel(delta);
+        }
+        tile-zoom-wheel(index, delta, x, y) => {
+            root.tile-zoom-wheel(index, delta, x, y);
+        }
+        tile-pan(index, dx, dy) => {
+            root.tile-pan(index, dx, dy);
+        }
+        minimap-pointer(index, x, y, phase) => {
+            root.minimap-pointer(index, x, y, phase);
         }
         gutter-drag-started(index) => {
             root.gutter-drag-started(index);

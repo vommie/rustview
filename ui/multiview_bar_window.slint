@@ -4,6 +4,7 @@ import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 import { ContextMenuItemModel } from "types.slint";
 import { MultiviewBarMenu } from "multiview_bar_menu.slint";
+import { MultiviewZoomSlider } from "multiview_zoom_slider.slint";
 
 /// A bar (the media action bar of the hovered medium, or the primary action bar of the view), in a frameless transparent window of its own that floats above the Multiview.
 /// Native video windows are children of the Multiview window, so nothing drawn there can blend with them; a window of its
@@ -31,6 +32,12 @@ export component MultiviewBarWindow inherits Window {
     in property <bool> menu-open: false;
     // Position in `actions` of the button that opened the menu (-1 = none): it shows as open and the bubble points at it.
     in property <int> menu-owner-index: -1;
+    // The zoom slider (images): it hangs below the bar like the drop-down, in the same bubble. Tenths of a percent.
+    in property <bool> zoom-open: false;
+    in property <int> zoom-permille: 1000;
+    in property <int> zoom-min-permille: 100;
+    in property <int> zoom-max-permille: 10000;
+    in property <[int]> zoom-snaps: [];
     out property <length> bar-width: bar.width;
     out property <length> bar-height: bar.height;
     out property <length> bar-radius: bar.border-radius;
@@ -62,20 +69,20 @@ export component MultiviewBarWindow inherits Window {
         y: 0px;
         actions: root.actions;
         translucent: root.translucent;
-        menu-owner-index: root.menu-open ? root.menu-owner-index : -1;
+        menu-owner-index: (root.menu-open || root.zoom-open) ? root.menu-owner-index : -1;
 
         action-clicked(id) => {
             root.action-clicked(root.tile, id);
         }
     }
 
-    property <length> menu-width: 230px;
+    property <length> menu-width: root.zoom-open ? 250px : 230px;
     property <length> menu-gap: 2px;
     // The bubble is centered under the opener where the window leaves room for it.
     property <length> opener-x: bar.x + bar.button-center-x(root.menu-owner-index);
     property <length> menu-x: Math.max(0px, Math.min(root.width - root.menu-width, root.opener-x - root.menu-width / 2));
     property <length> menu-y: bar.y + bar.height + root.menu-gap;
-    property <bool> menu-shown: root.menu-open && root.menu-items.length > 0;
+    property <bool> menu-shown: root.zoom-open || (root.menu-open && root.menu-items.length > 0);
     property <length> menu-height: root.menu-shown ? bubble.content-height : 0px;
 
     changed menu-shown => {
@@ -91,12 +98,27 @@ export component MultiviewBarWindow inherits Window {
         y: root.menu-y;
         width: root.menu-width;
         max-content-height: Math.max(root.height - root.menu-y - 2px, 0px);
-        items: root.menu-items;
+        items: root.zoom-open ? [] : root.menu-items;
+        custom-height: root.zoom-open ? 46px + 8px : 0px;
         anchor-x: root.opener-x - root.menu-x;
         translucent: root.translucent;
 
         item-clicked(id) => {
             root.menu-item-clicked(root.tile, id);
+        }
+
+        if root.zoom-open : MultiviewZoomSlider {
+            x: 4px;
+            y: 4px;
+            width: parent.width - 8px;
+            value-permille: root.zoom-permille;
+            min-permille: root.zoom-min-permille;
+            max-permille: root.zoom-max-permille;
+            snaps: root.zoom-snaps;
+
+            request(code) => {
+                root.action-clicked(root.tile, code);
+            }
         }
     }
 

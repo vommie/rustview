@@ -14,6 +14,8 @@ use super::views::sync_model;
 use crate::ctx_menu::{CtxMenuDispatcher, CtxMenuItem};
 use crate::ui::{ContextMenuItemModel, MultiviewBarButtonView, MultiviewBarWindow};
 use crate::viewer::multiview::bar_menu::OutsidePress;
+use crate::viewer::multiview::media_actions::MediaActionId;
+use crate::viewer::multiview::view::ZoomBubbleView;
 use crate::viewer::multiview::bar_placement::{BarCorner, BarPlacement, in_reveal_zone, place_bar_in, rounded_region};
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::{OverlayServer, XRectangle, get_raw_window_xid};
@@ -187,6 +189,19 @@ pub fn service_menu(kind: BarKind, owner: BarOwner) -> bool {
     })
 }
 
+/// Shows, updates or closes the zoom slider that hangs below the bar `kind`, as the Multiview that shows the bar says (`None` =
+/// closed). While it is open it keeps its bar where it is (`service_menu`), until the Multiview closes it (the button toggles it).
+pub fn sync_zoom(kind: BarKind, owner: BarOwner, zoom: Option<&ZoomBubbleView>) {
+    OVERLAYS.with(|cells| {
+        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
+            return;
+        };
+        if let Some(overlay) = slot.as_mut().filter(|overlay| overlay.owner == Some(owner) || zoom.is_none()) {
+            overlay.sync_zoom(zoom);
+        }
+    });
+}
+
 /// Closes the drop-down menu of the bar `kind`. Returns whether one was open.
 pub fn close_menu(kind: BarKind) -> bool {
     OVERLAYS.with(|cells| {
@@ -339,6 +354,7 @@ struct Overlay {
     owner: Option<BarOwner>,
     shown: bool,
     last_actions: Vec<MultiviewBarButtonView>,
+    last_zoom_snaps: Vec<i32>,
     outside: OutsidePress,
 }
 
@@ -415,6 +431,7 @@ impl Overlay {
             owner: None,
             shown: false,
             last_actions: Vec::new(),
+            last_zoom_snaps: Vec::new(),
             outside: OutsidePress::default(),
         };
         overlay.apply_tooltip_settings();
@@ -478,8 +495,43 @@ impl Overlay {
         self.shared.x.borrow().server.as_ref()?.pointer_and_buttons()
     }
 
+    /// See `sync_zoom`.
+    fn sync_zoom(&mut self, zoom: Option<&ZoomBubbleView>) {
+        let Some(zoom) = zoom else {
+            if self.window.get_zoom_open() {
+                self.window.set_zoom_open(false);
+                if !self.window.get_menu_open() {
+                    self.window.set_menu_owner_index(-1);
+                }
+            }
+            return;
+        };
+        if self.window.get_menu_open() {
+            // One bubble at a time.
+            clear_menu(&self.window, &self.shared);
+        }
+        let opener = self.last_actions.iter().position(|a| a.id == MediaActionId::Zoom.code());
+        self.window.set_menu_owner_index(opener.map_or(-1, |i| i as i32));
+        self.window.set_tile(zoom.tile as i32);
+        self.window.set_zoom_permille(zoom.permille);
+        self.window.set_zoom_min_permille(zoom.min_permille);
+        self.window.set_zoom_max_permille(zoom.max_permille);
+        if self.last_zoom_snaps != zoom.snaps {
+            self.window.set_zoom_snaps(ModelRc::new(VecModel::from(zoom.snaps.clone())));
+            self.last_zoom_snaps.clone_from(&zoom.snaps);
+        }
+        if !self.window.get_zoom_open() {
+            self.window.set_zoom_open(true);
+            tracing::debug!("[Multiview: Overlay] Zoom slider opened");
+        }
+    }
+
     /// See `service_menu`.
     fn service_menu(&mut self) -> bool {
+        if self.window.get_zoom_open() {
+            // The slider stays as long as the Multiview says so, wherever the pointer is.
+            return true;
+        }
         if !self.window.get_menu_open() {
             return false;
         }
@@ -611,6 +663,7 @@ impl Overlay {
         }
         self.window.invoke_reset_tooltip();
         self.close_menu();
+        self.window.set_zoom_open(false);
         if let Err(e) = self.window.hide() {
             tracing::warn!(error = %e, "[Multiview: Overlay] A bar window could not be hidden");
         }

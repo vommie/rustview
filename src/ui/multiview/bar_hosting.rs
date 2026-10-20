@@ -5,7 +5,7 @@
 use super::bar_overlay::{self, BarKind, BarOwner, BarRequest};
 use super::views;
 use crate::viewer::multiview::instance::SharedInstance;
-use crate::viewer::multiview::view::{MediaBarTarget, PrimaryBarTarget};
+use crate::viewer::multiview::view::{MediaBarTarget, PrimaryBarTarget, ZoomBubbleView};
 use std::rc::Rc;
 
 /// What a host is: where its window is and how its bars react to clicks.
@@ -22,6 +22,8 @@ pub(super) struct BarHost {
 pub(super) struct BarTargets {
     pub media: Option<MediaBarTarget>,
     pub primary: Option<PrimaryBarTarget>,
+    /// The zoom slider of an image, while the user has it open.
+    pub zoom: Option<ZoomBubbleView>,
 }
 
 impl BarTargets {
@@ -34,6 +36,7 @@ impl BarTargets {
         Self {
             media: guard.media_bar_target(),
             primary: guard.primary_bar_target(),
+            zoom: guard.zoom_bubble(),
         }
     }
 }
@@ -41,7 +44,8 @@ impl BarTargets {
 /// Shows, moves or hides both bars. With `active` false (the host does not show its content) both go away. Returns whether
 /// any bar is visible now.
 pub(super) fn update(host: &BarHost, targets: BarTargets, active: bool) -> bool {
-    let BarTargets { media, primary } = targets;
+    let BarTargets { media, primary, zoom } = targets;
+    bar_overlay::sync_zoom(BarKind::Media, host.owner, zoom.as_ref());
     // An open menu keeps its bar where it is, however far the pointer is, until the user clicks elsewhere.
     let media_menu_open = active && bar_overlay::service_menu(BarKind::Media, host.owner);
     let media_shown = media_menu_open || media.is_some_and(|target| {

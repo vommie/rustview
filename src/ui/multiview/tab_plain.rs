@@ -290,6 +290,7 @@ fn update_bar_overlay() {
     let targets = BarTargets {
         media: state.media_bar_target(),
         primary: state.primary_bar_target(),
+        zoom: None,
     };
     let bars_visible = bar_hosting::update(&host, targets, true);
     sync_cursor(&window, state.cursor_should_hide(last_move) && !bars_visible);

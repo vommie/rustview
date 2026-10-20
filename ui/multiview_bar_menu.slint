@@ -12,12 +12,14 @@ export component MultiviewBarMenu inherits Rectangle {
     in property <length> anchor-x: 0px;
     in property <bool> translucent: true;
     in property <length> max-content-height: 300px;
+    // More than 0: the bubble holds its children (the zoom slider) instead of the rows, and is this tall (plus its padding).
+    in property <length> custom-height: 0px;
     out property <length> caret-height: 7px;
     out property <length> content-height: root.caret-height + root.body-height;
     out property <length> corner-radius: 8px;
     out property <length> caret-center-x: root.caret-x;
 
-    property <length> body-height: Math.min(menu-layout.preferred-height + 8px, Math.max(root.max-content-height - root.caret-height, 0px));
+    property <length> body-height: root.custom-height > 0px ? root.custom-height : Math.min(menu-layout.preferred-height + 8px, Math.max(root.max-content-height - root.caret-height, 0px));
     property <color> fill: root.translucent ? Theme.surface.with-alpha(0.9) : Theme.surface;
     property <length> caret-x: Math.max(14px, Math.min(root.width - 14px, root.anchor-x));
 
@@ -37,7 +39,10 @@ export component MultiviewBarMenu inherits Rectangle {
 
         TouchArea { }
 
+        @children
+
         scroll := SmoothScrollArea {
+            visible: root.custom-height <= 0px;
             width: 100%;
             height: 100%;
             enable-horizontal: false;

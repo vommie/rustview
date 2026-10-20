@@ -47,6 +47,8 @@ pub enum ZoomContentView {
 /// The minimap of a tile: its place (physical pixels relative to the tile), the thumbnail of the whole image and the part
 /// that is visible (shares of the image: x, y, width, height).
 pub struct MinimapView {
+    /// Whether it is shown now (it fades in and out, so it is described while it is not).
+    pub visible: bool,
     pub rect: Rect,
     pub thumb: SharedPixelBuffer<Rgb8Pixel>,
     pub viewport: (f64, f64, f64, f64),

@@ -35,6 +35,8 @@ pub enum BarClick {
     MenuItem(i32),
     /// The slider asks for this zoom, in tenths of a percent (1500 = 150%).
     ZoomTo(i32),
+    /// The handle of the slider is at this position (0..=10000 of its length); Rust snaps it and turns it into a zoom.
+    ZoomPos(i32),
     /// A step on the slider: the wheel over it, or its plus and minus buttons.
     ZoomStep { up: bool, shift: bool, ctrl: bool },
     /// The reset (100%).
@@ -48,10 +50,14 @@ impl BarClick {
     pub const ZOOM_TO: i32 = 1_000_000;
     pub const ZOOM_STEP: i32 = 2_000_000;
     pub const ZOOM_RESET: i32 = 3_000_000;
+    pub const ZOOM_POS: i32 = 4_000_000;
     const MAX_ZOOM_PERMILLE: i32 = 999_999;
+    pub const MAX_ZOOM_POS: i32 = 10_000;
 
     pub fn from_code(code: i32) -> Option<Self> {
-        if code >= Self::ZOOM_RESET {
+        if code >= Self::ZOOM_POS {
+            Some(Self::ZoomPos((code - Self::ZOOM_POS).min(Self::MAX_ZOOM_POS)))
+        } else if code >= Self::ZOOM_RESET {
             (code == Self::ZOOM_RESET).then_some(Self::ZoomReset)
         } else if code >= Self::ZOOM_STEP {
             let flags = code - Self::ZOOM_STEP;
@@ -71,6 +77,7 @@ impl BarClick {
             Self::ZoomTo(permille) => Some(Self::ZOOM_TO + permille.clamp(0, Self::MAX_ZOOM_PERMILLE)),
             Self::ZoomStep { up, shift, ctrl } => Some(Self::ZOOM_STEP + i32::from(up) + 2 * i32::from(shift) + 4 * i32::from(ctrl)),
             Self::ZoomReset => Some(Self::ZOOM_RESET),
+            Self::ZoomPos(position) => Some(Self::ZOOM_POS + position.clamp(0, Self::MAX_ZOOM_POS)),
             Self::Action(_) | Self::MenuItem(_) => None,
         }
     }

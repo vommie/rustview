@@ -22,8 +22,12 @@ use crate::viewer::zoom::state::{PictureContent, RenderDone, Request};
 use std::sync::Arc;
 use std::time::Instant;
 
+/// Length of the track of the zoom slider in logical pixels (the bubble is 250 wide, the slider 242; two buttons, their gaps and the
+/// padding take 72); the snapping of the handle measures its distances with it.
+pub const SLIDER_TRACK_PX: f64 = 170.0;
+
 /// A mouse wheel notch is worth this much `delta-y` in Slint; touchpads send pixels and add up to a step the same way.
-const WHEEL_STEP_DELTA: f32 = 60.0;
+const WHEEL_STEP_DELTA: f32 = 120.0;
 
 impl MultiviewInstance {
     /// Zooming works where the picture is interactive: the fullscreen and the tab view. The tab-grid item is a miniature.
@@ -62,6 +66,12 @@ impl MultiviewInstance {
         let Some(zoom) = self.tiles[index].zoom.as_mut() else { return };
         match click {
             BarClick::ZoomTo(permille) => zoom.zoom_to(scale::from_permille(permille), None, &prefs, now),
+            BarClick::ZoomPos(position) => {
+                // The handle: pulled to the snap points that are close (the track is `SLIDER_TRACK_PX` long), then a zoom.
+                let limits = prefs.limits();
+                let p = scale::snap_position(f64::from(position) / f64::from(BarClick::MAX_ZOOM_POS), SLIDER_TRACK_PX, limits);
+                zoom.zoom_to(scale::zoom_at(p, limits), None, &prefs, now);
+            }
             BarClick::ZoomStep { up, shift, ctrl } => zoom.zoom_step(up, scale::slider_wheel_step(shift, ctrl), None, &prefs, now),
             BarClick::ZoomReset => zoom.reset(&prefs, now),
             BarClick::Action(_) | BarClick::MenuItem(_) => return,
@@ -177,6 +187,23 @@ impl MultiviewInstance {
         let (prefs, now) = (zoom_prefs::current(), Instant::now());
         if let Some(zoom) = self.tiles[index].zoom.as_mut() {
             zoom.reset(&prefs, now);
+        }
+        self.poll_zoom_at(now);
+        self.bump();
+    }
+
+    /// Ctrl+0 (0), Ctrl++ (1) and Ctrl+- (2): the image under the pointer, else the only image of the Multiview.
+    pub fn zoom_key(&mut self, key: i32) {
+        let index = self.hovered.filter(|&i| self.zoomable(i)).or_else(|| (self.tiles.len() == 1 && self.zoomable(0)).then_some(0));
+        let Some(index) = index else { return };
+        let (prefs, now) = (zoom_prefs::current(), Instant::now());
+        if let Some(zoom) = self.tiles[index].zoom.as_mut() {
+            match key {
+                0 => zoom.reset(&prefs, now),
+                1 => zoom.zoom_step(true, prefs.wheel_step, None, &prefs, now),
+                2 => zoom.zoom_step(false, prefs.wheel_step, None, &prefs, now),
+                _ => return,
+            }
         }
         self.poll_zoom_at(now);
         self.bump();
@@ -338,14 +365,16 @@ impl MultiviewInstance {
     fn minimap_view(&self, index: usize, prefs: &zoom_prefs::ZoomPrefs) -> Option<MinimapView> {
         let tile = &self.tiles[index];
         let zoom = tile.zoom.as_ref()?;
-        if !zoom.minimap_shown(prefs, Instant::now()) {
+        if !zoom.is_active() || !zoom.can_pan() {
             return None;
         }
+        let visible = zoom.minimap_shown(prefs, Instant::now());
         let rect = self.host_content(index)?;
         let layout = MinimapLayout::compute((rect.w, rect.h), zoom.image(), prefs.minimap_corner, self.host.surface.dpi)?;
         let thumb = zoom.thumb()?.clone();
         let viewport = zoom.viewport_norm()?;
         Some(MinimapView {
+            visible,
             rect: Rect::new(layout.rect.x, layout.rect.y, layout.rect.w, layout.rect.h),
             thumb,
             viewport: (viewport.x, viewport.y, viewport.w, viewport.h),
@@ -484,10 +513,10 @@ mod tests {
         instance.lock().zoom_wheel_at(0, 30.0, (900.0, 200.0), now);
         assert_eq!(instance.lock().zoom_percent(0).map(|p| p.round() as i32), Some(110));
         // Wheel down goes back; a direction change does not carry over what was left.
-        instance.lock().zoom_wheel_at(0, -60.0, (900.0, 200.0), now);
+        instance.lock().zoom_wheel_at(0, -120.0, (900.0, 200.0), now);
         assert!(first_tile(&instance).zoom.is_none());
         // Zooming at a corner keeps that corner of the picture there: the window starts at the top left.
-        instance.lock().zoom_wheel_at(0, 60.0 * 20.0, (0.0, 0.0), now);
+        instance.lock().zoom_wheel_at(0, 120.0 * 20.0, (0.0, 0.0), now);
         let z = instance.lock().tiles[0].zoom.as_ref().unwrap().viewport_norm().unwrap();
         assert!(z.x.abs() < 1e-9 && z.y.abs() < 1e-9, "{z:?}");
     }
@@ -519,7 +548,7 @@ mod tests {
         instance.lock().poll_zoom();
         let tile = first_tile(&instance);
         let minimap = tile.minimap.expect("shown right after a zoom");
-        assert!(minimap.rect.x > 0 && minimap.rect.y + minimap.rect.h <= 900);
+        assert!(minimap.visible && minimap.rect.x > 0 && minimap.rect.y + minimap.rect.h <= 900);
         assert!((minimap.viewport.2 - 0.5).abs() < 1e-6, "a window of half the width: {:?}", minimap.viewport);
         // Later (a poll in the future) it is gone, unless the pointer is where it sits.
         let later = Instant::now() + Duration::from_secs(10);
@@ -567,7 +596,7 @@ mod tests {
     #[test]
     fn a_broken_or_missing_picture_is_not_zoomable_and_calls_are_harmless() {
         let instance = instance(vec![image_seed(1)], tab_view());
-        instance.lock().zoom_wheel_at(7, 60.0, (0.0, 0.0), Instant::now());
+        instance.lock().zoom_wheel_at(7, 120.0, (0.0, 0.0), Instant::now());
         instance.lock().zoom_pan(7, 5.0, 5.0);
         instance.lock().zoom_minimap(7, 0.5, 0.5, 0);
         instance.lock().zoom_reset(7);

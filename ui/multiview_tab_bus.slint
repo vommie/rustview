@@ -9,6 +9,9 @@ export global MultiviewTabBus {
     in-out property <MultiviewScreenView> screen;
 
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
+    callback tile-zoom-wheel(int /* tile index */, length /* delta-y */, length /* x */, length /* y */);
+    callback tile-pan(int /* tile index */, length /* dx */, length /* dy */);
+    callback minimap-pointer(int /* tile index */, float /* x */, float /* y */, int /* phase */);
     callback background-clicked(bool /* is_ctrl */);
     callback middle-clicked();
     callback gutter-drag-started(int);

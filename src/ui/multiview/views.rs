@@ -8,7 +8,7 @@ use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::model::TileKind;
 use crate::ui::button_feedback::ButtonFeedback;
-use crate::viewer::multiview::view::{MediaActionView, PrimaryActionView, GutterView, HostedView, Navigation, TileView};
+use crate::viewer::multiview::view::{MediaActionView, PrimaryActionView, GutterView, HostedView, Navigation, TileView, ZoomContentView};
 use slint::{Model, VecModel};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -23,27 +23,58 @@ fn logical(px: i32, dpi: f32) -> f32 {
 #[derive(Default)]
 pub struct ImageCache {
     entries: HashMap<TileKey, (usize, slint::Image)>,
+    /// The sharp pictures of zoomed images and the thumbnails of their minimaps: one of each per tile, kept for as long as the
+    /// buffer is the same.
+    zoomed: HashMap<TileKey, (usize, slint::Image)>,
+    thumbs: HashMap<TileKey, (usize, slint::Image)>,
+}
+
+/// The Slint image of `pixels`, made once per buffer (a new buffer has a new address).
+fn cached_image(
+    entries: &mut HashMap<TileKey, (usize, slint::Image)>,
+    tile: TileKey,
+    pixels: &slint::SharedPixelBuffer<slint::Rgb8Pixel>,
+) -> slint::Image {
+    let key = pixels.as_bytes().as_ptr() as usize;
+    if let Some((cached_key, image)) = entries.get(&tile)
+        && *cached_key == key
+    {
+        return image.clone();
+    }
+    let image = slint::Image::from_rgb8(pixels.clone());
+    entries.insert(tile, (key, image.clone()));
+    image
 }
 
 impl ImageCache {
     fn image_for(&mut self, tile: &TileView) -> slint::Image {
-        let Some(pixels) = tile.pixels.as_ref() else {
-            return slint::Image::default();
-        };
-        let key = pixels.as_bytes().as_ptr() as usize;
-        if let Some((cached_key, image)) = self.entries.get(&tile.key)
-            && *cached_key == key
-        {
-            return image.clone();
+        match tile.pixels.as_ref() {
+            Some(pixels) => cached_image(&mut self.entries, tile.key, pixels),
+            None => slint::Image::default(),
         }
-        let image = slint::Image::from_rgb8(pixels.clone());
-        self.entries.insert(tile.key, (key, image.clone()));
-        image
+    }
+
+    fn zoomed_image_for(&mut self, tile: &TileView) -> slint::Image {
+        match tile.zoom.as_ref().map(|z| &z.content) {
+            Some(ZoomContentView::Rendered(pixels)) => cached_image(&mut self.zoomed, tile.key, pixels),
+            _ => {
+                self.zoomed.remove(&tile.key);
+                slint::Image::default()
+            }
+        }
+    }
+
+    fn thumb_for(&mut self, tile: &TileView) -> slint::Image {
+        match tile.minimap.as_ref() {
+            Some(minimap) => cached_image(&mut self.thumbs, tile.key, &minimap.thumb),
+            None => slint::Image::default(),
+        }
     }
 
     fn retain(&mut self, tiles: &[TileView]) {
-        self.entries
-            .retain(|key, _| tiles.iter().any(|t| t.key == *key));
+        for entries in [&mut self.entries, &mut self.zoomed, &mut self.thumbs] {
+            entries.retain(|key, _| tiles.iter().any(|t| t.key == *key));
+        }
     }
 }
 
@@ -56,15 +87,56 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         0
     };
     let Rect { x, y, w, h } = tile.rect;
+    let image = images.image_for(tile);
+    let zoom_image = images.zoomed_image_for(tile);
+    let mm_image = images.thumb_for(tile);
+    let (zoomed, zoom_hq, zoom_rect, zoom_clip, zoom_pixelated) = match tile.zoom.as_ref() {
+        Some(zoom) => {
+            let hq = matches!(zoom.content, ZoomContentView::Rendered(_));
+            let clip = match &zoom.content {
+                ZoomContentView::Preview { clip } => *clip,
+                ZoomContentView::Rendered(_) => Rect::default(),
+            };
+            (true, hq, zoom.dest, clip, zoom.pixelated)
+        }
+        None => (false, false, Rect::default(), Rect::default(), false),
+    };
+    let minimap = tile.minimap.as_ref();
+    let mm_rect = minimap.map_or(Rect::default(), |m| m.rect);
+    let mm_viewport = minimap.map_or((0.0, 0.0, 1.0, 1.0), |m| m.viewport);
     MultiviewTileView {
         x: logical(x, dpi),
         y: logical(y, dpi),
         width: logical(w, dpi),
         height: logical(h, dpi),
         kind,
-        image: images.image_for(tile),
+        image,
         is_loading: tile.is_loading,
         error_text: tile.error.clone().unwrap_or_default().into(),
+        zoomed,
+        zoom_hq,
+        zoom_image,
+        zoom_x: logical(zoom_rect.x, dpi),
+        zoom_y: logical(zoom_rect.y, dpi),
+        zoom_width: logical(zoom_rect.w, dpi),
+        zoom_height: logical(zoom_rect.h, dpi),
+        zoom_clip_x: zoom_clip.x,
+        zoom_clip_y: zoom_clip.y,
+        zoom_clip_width: zoom_clip.w,
+        zoom_clip_height: zoom_clip.h,
+        zoom_pixelated,
+        pannable: tile.pannable,
+        mm_available: minimap.is_some(),
+        mm_visible: minimap.is_some_and(|m| m.visible),
+        mm_image,
+        mm_x: logical(mm_rect.x, dpi),
+        mm_y: logical(mm_rect.y, dpi),
+        mm_width: logical(mm_rect.w, dpi),
+        mm_height: logical(mm_rect.h, dpi),
+        mm_vx: mm_viewport.0 as f32,
+        mm_vy: mm_viewport.1 as f32,
+        mm_vw: mm_viewport.2 as f32,
+        mm_vh: mm_viewport.3 as f32,
     }
 }
 
