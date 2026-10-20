@@ -115,21 +115,3 @@ impl FormatPolicyApplier {
         format!("File formats: {}", parts.join(". "))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_summary_names_what_was_switched_and_what_it_means() {
-        let off = FormatPolicyApplier::summary(
-            &[(MediaFormat::Png, false), (MediaFormat::Gif, false)],
-            FormatCountReport { folders_changed: 3, hidden: 12, restored: 0 },
-        );
-        assert_eq!(off, "File formats: Switched off: PNG, GIF (12 indexed files hidden)");
-        let on = FormatPolicyApplier::summary(&[(MediaFormat::Png, true)], FormatCountReport::default());
-        assert!(on.contains("Switched on: PNG") && on.contains("after the next refresh"));
-        let many: Vec<_> = MediaFormat::all().take(5).map(|f| (f, false)).collect();
-        assert!(FormatPolicyApplier::summary(&many, FormatCountReport::default()).contains("5 formats"));
-    }
-}

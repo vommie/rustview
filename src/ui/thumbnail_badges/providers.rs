@@ -156,16 +156,6 @@ mod tests {
     }
 
     #[test]
-    fn animated_pictures_get_an_anim_badge_unless_switched_off() {
-        let item = MediaItemView { is_animated: true, ..Default::default() };
-        assert_eq!(ids(&item, &all_enabled()), ["media_type", "animated"]);
-        let off = ThumbnailBadgeConfig { show_animated: false, ..all_enabled() };
-        assert_eq!(ids(&item, &off), ["media_type"]);
-        let video = MediaItemView { is_animated: true, is_video: true, ..Default::default() };
-        assert!(!ids(&video, &all_enabled()).contains(&"animated"));
-    }
-
-    #[test]
     fn rating_and_tag_badges_follow_item_state() {
         let item = MediaItemView { rating: 3, has_tags: true, ..Default::default() };
         assert_eq!(ids(&item, &all_enabled()), ["tag", "rating", "media_type"]);

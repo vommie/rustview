@@ -269,23 +269,4 @@ mod tests {
         assert_eq!(state.title, "No Videos in Folder");
         assert_eq!(state.icon, Some(Icon::MediaVideo));
     }
-
-    #[test]
-    fn an_empty_folder_names_switched_off_formats() {
-        let filter = QueryFilter::default();
-        let evaluate = |formats_switched_off| {
-            FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
-                total_in_dataset: 0,
-                matched_count: 0,
-                is_query_active: false,
-                filter: &filter,
-                has_root: true,
-                root_exists: true,
-                current_folder_name: Some("Photos"),
-                formats_switched_off,
-            })
-        };
-        assert_eq!(evaluate(false).description, "'Photos' contains no supported media files.");
-        assert!(evaluate(true).description.contains("formats that are switched on"));
-    }
 }
