@@ -172,7 +172,7 @@ impl OverlayServer {
         // A 32 bit property is delivered as an array of C longs.
         let window = (status == 0 && actual_format == 32 && items > 0).then(|| unsafe { *(data as *const c_ulong) });
         unsafe { (self.api.x_free)(data as *mut c_void) };
-        window.filter(|&w| w != 0).map(u64::from)
+        window.filter(|&w| w != 0)
     }
 
     /// The top level window that contains `window`: the window itself, or its frame if the window manager reparented it.
