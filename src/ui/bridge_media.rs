@@ -245,7 +245,17 @@ impl BridgeMedia {
                 let win_w = win_hover.as_weak();
                 let st_c = st.clone();
 
-                if format == MediaFormat::Gif
+                // The preview frames stored in the pack store (videos and animated pictures) never touch the file. Only a GIF
+                // without stored frames (indexed before they existed) still decodes its file, as it always did, until a refresh
+                // the user starts stores them.
+                if let Some(images) = VideoPreviewAnimator::load_preview_images(&thumb, media_id) {
+                    let timer = VideoPreviewAnimator::start_animation(images, move |img| {
+                        if let Some(w) = win_w.upgrade() {
+                            update_tile(&w, &st_c.read(), media_id, |row| row.thumbnail = img);
+                        }
+                    });
+                    ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
+                } else if format == MediaFormat::Gif
                     && let Some(file_path) = full_path_opt
                 {
                     if let Some(preview) = thumb.try_get_animated_preview(media_id) {
@@ -281,13 +291,6 @@ impl BridgeMedia {
                             },
                         );
                     }
-                } else if let Some(images) = VideoPreviewAnimator::load_preview_images(&thumb, media_id) {
-                    let timer = VideoPreviewAnimator::start_animation(images, move |img| {
-                        if let Some(w) = win_w.upgrade() {
-                            update_tile(&w, &st_c.read(), media_id, |row| row.thumbnail = img);
-                        }
-                    });
-                    ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                 }
             } else {
                 ACTIVE_HOVER_MEDIA_ID.with(|active_id| *active_id.borrow_mut() = None);
@@ -1551,17 +1554,38 @@ impl BridgeMedia {
             .collect()
     }
 
+    /// The pictures among `records` that have stored hover preview frames (a database read per animatable picture, no file access).
+    fn animated_ids(library: &Library, records: &[MediaRecord]) -> HashSet<MediaId> {
+        let candidates = || {
+            records
+                .iter()
+                .filter(|r| r.media_type == MediaType::Image && crate::thumbnails::animated_frames::can_animate(r.format))
+        };
+        if candidates().next().is_none() {
+            return HashSet::new();
+        }
+        let Ok(rtxn) = library.raw_db().env.read_txn() else { return HashSet::new() };
+        candidates()
+            .filter(|r| matches!(library.raw_db().video_previews.get(&rtxn, &r.id), Ok(Some(p)) if p.frame_count > 1))
+            .map(|r| r.id)
+            .collect()
+    }
+
     pub fn preindex(library: &Library, raw_records: Vec<MediaRecord>, folder_path: &Path) -> Vec<IndexedMediaRecord> {
         let folder = FolderDir::new(folder_path);
         let records = Self::visible_unique_by_id(raw_records);
         let tag_counts = Self::tag_counts(library, &records);
+        let animated = Self::animated_ids(library, &records);
 
         records
             .into_par_iter()
             .enumerate()
             .map(|(index, r)| {
                 let tags_count = tag_counts.get(&r.id).copied().unwrap_or(0);
-                IndexedMediaRecord::new(index, r, folder.clone(), tags_count)
+                let is_animated = animated.contains(&r.id);
+                let mut item = IndexedMediaRecord::new(index, r, folder.clone(), tags_count);
+                item.is_animated = is_animated;
+                item
             })
             .collect()
     }
@@ -1569,6 +1593,7 @@ impl BridgeMedia {
     pub fn preindex_records(library: &Library, raw_records: Vec<MediaRecord>) -> Vec<IndexedMediaRecord> {
         let records = Self::visible_unique_by_id(raw_records);
         let tag_counts = Self::tag_counts(library, &records);
+        let animated = Self::animated_ids(library, &records);
         let mut folders: HashMap<FolderId, Arc<FolderDir>> = HashMap::new();
 
         records
@@ -1583,7 +1608,10 @@ impl BridgeMedia {
                     })
                     .clone();
                 let tags_count = tag_counts.get(&r.id).copied().unwrap_or(0);
-                IndexedMediaRecord::new(index, r, folder, tags_count)
+                let is_animated = animated.contains(&r.id);
+                let mut item = IndexedMediaRecord::new(index, r, folder, tags_count);
+                item.is_animated = is_animated;
+                item
             })
             .collect()
     }
@@ -1608,7 +1636,8 @@ impl BridgeMedia {
     }
 
     /// The items of the folder that can have a thumbnail (not deleted, not a pending stub), without their paths.
-    pub fn pipeline_items(records: &[IndexedMediaRecord]) -> Vec<PipelineItem> {
+    /// `explicit_refresh`: the user started a refresh, so pictures that could be animated and were never checked are checked now.
+    pub fn pipeline_items(records: &[IndexedMediaRecord], explicit_refresh: bool) -> Vec<PipelineItem> {
         records
             .iter()
             .filter(|item| !item.is_deleted && !item.is_pending)
@@ -1616,6 +1645,8 @@ impl BridgeMedia {
                 media_id: item.record.id,
                 folder_id: item.record.folder_id,
                 is_video: matches!(item.record.media_type, MediaType::Video),
+                animatable: item.record.media_type == MediaType::Image && crate::thumbnails::animated_frames::can_animate(item.record.format),
+                upgrade_animated: explicit_refresh,
             })
             .collect()
     }
@@ -1920,7 +1951,7 @@ impl BridgeMedia {
         if options.start_pipeline {
             let st_read = state.read();
             if let Some(f_id) = st_read.current_folder_id {
-                let items = Self::pipeline_items(&st_read.all_folder_media);
+                let items = Self::pipeline_items(&st_read.all_folder_media, false);
                 if !items.is_empty() {
                     let config = ThumbnailConfig::from_performance_settings(&settings.get().performance);
                     thumbnails.start_pipeline(f_id, items, config);

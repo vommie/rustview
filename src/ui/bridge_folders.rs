@@ -1252,7 +1252,7 @@ impl BridgeFolders {
                         "[FolderRefresh: Skipped] Files left out of the refresh"
                     );
                 }
-                let pipeline_items = BridgeMedia::pipeline_items(&indexed_media);
+                let pipeline_items = BridgeMedia::pipeline_items(&indexed_media, is_explicit_refresh);
                 let store = MediaStore::from_records(indexed_media);
                 let (mut request, query) = BridgeMedia::capture_request(&st_scanner);
                 request.refine_from = None;

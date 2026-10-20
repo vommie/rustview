@@ -1,3 +1,4 @@
+pub mod animated_frames;
 pub mod arena;
 pub mod cache;
 pub mod error;

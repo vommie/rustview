@@ -37,6 +37,7 @@ pub const DEFAULT_SHOW_RATINGS_OVERLAY: bool = true;
 pub const DEFAULT_SHOW_TAGS_OVERLAY: bool = true;
 pub const DEFAULT_SHOW_MEDIA_TYPE_BADGES: bool = true;
 pub const DEFAULT_SHOW_DURATION_BADGE: bool = true;
+pub const DEFAULT_SHOW_ANIMATED_BADGE: bool = true;
 /// Persisted name of the badge overflow behavior ("hide" or "wrap"), see `ThumbnailBadgeOverflow`.
 pub const DEFAULT_THUMBNAIL_BADGE_OVERFLOW: &str = "hide";
 pub const DEFAULT_ENABLE_HOVER_PREVIEWS: bool = true;
@@ -519,6 +520,8 @@ pub struct AppearanceSettings {
     pub show_tags_overlay: bool,
     pub show_media_type_badges: bool,
     pub show_duration_badge: bool,
+    /// "ANIM" badge on animated pictures (GIF, APNG, WebP, AVIF sequences).
+    pub show_animated_badge: bool,
     /// Overflow behavior of thumbnail badges: "hide" or "wrap" (see `ThumbnailBadgeOverflow`).
     pub thumbnail_badge_overflow: String,
     pub enable_hover_previews: bool,
@@ -556,6 +559,7 @@ impl Default for AppearanceSettings {
             show_tags_overlay: DEFAULT_SHOW_TAGS_OVERLAY,
             show_media_type_badges: DEFAULT_SHOW_MEDIA_TYPE_BADGES,
             show_duration_badge: DEFAULT_SHOW_DURATION_BADGE,
+            show_animated_badge: DEFAULT_SHOW_ANIMATED_BADGE,
             thumbnail_badge_overflow: DEFAULT_THUMBNAIL_BADGE_OVERFLOW.to_string(),
             enable_hover_previews: DEFAULT_ENABLE_HOVER_PREVIEWS,
             dark_theme: DEFAULT_DARK_THEME,

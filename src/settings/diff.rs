@@ -80,6 +80,7 @@ impl SettingsDiff {
             || old.appearance.show_ratings_overlay != new.appearance.show_ratings_overlay
             || old.appearance.show_tags_overlay != new.appearance.show_tags_overlay
             || old.appearance.show_media_type_badges != new.appearance.show_media_type_badges
+            || old.appearance.show_animated_badge != new.appearance.show_animated_badge
             || old.appearance.show_duration_badge != new.appearance.show_duration_badge
             || old.appearance.thumbnail_badge_overflow != new.appearance.thumbnail_badge_overflow
             || old.appearance.dark_theme != new.appearance.dark_theme
@@ -275,6 +276,13 @@ impl SettingsDiff {
                 old.appearance.show_tags_overlay, new.appearance.show_tags_overlay
             ));
         }
+        if old.appearance.show_animated_badge != new.appearance.show_animated_badge {
+            changes.push(format!(
+                "Appearance: show_animated_badge ({} -> {})",
+                old.appearance.show_animated_badge, new.appearance.show_animated_badge
+            ));
+        }
+
         if old.appearance.show_media_type_badges != new.appearance.show_media_type_badges {
             changes.push(format!(
                 "Appearance: show_media_type_badges ({} -> {})",

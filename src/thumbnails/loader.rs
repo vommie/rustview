@@ -1,3 +1,4 @@
+use super::animated_frames;
 use super::cache::L1AnimatedPreviewCache;
 use super::error::ThumbnailError;
 use super::generator::ThumbnailGenerator;
@@ -57,6 +58,11 @@ pub struct PipelineItem {
     pub media_id: MediaId,
     pub folder_id: u64,
     pub is_video: bool,
+    /// The picture can be animated (GIF, PNG, WebP, AVIF): its file is checked for hover preview frames.
+    pub animatable: bool,
+    /// A refresh the user started: pictures that have a thumbnail but were never checked for animation are checked now.
+    /// Without it only pictures that get their thumbnail anyway are checked, and everything else keeps its old behavior.
+    pub upgrade_animated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +73,7 @@ pub struct PreparedTarget {
     pub file_path: PathBuf,
     /// From the library record: a file's content decides image or video, not its extension.
     pub is_video: bool,
+    pub animatable: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +88,8 @@ pub struct ReadyThumbnailItem {
     pub orig_height: u32,
     pub duration_ms: u64,
     pub is_corrupted: bool,
+    /// Hover preview frames of an animated picture were just stored for the item.
+    pub is_animated: bool,
 }
 
 pub struct ThumbnailScheduler {
@@ -417,6 +426,9 @@ impl ThumbnailScheduler {
                     } else {
                         false
                     }
+                } else if item.animatable && config.generate_video_previews && item.upgrade_animated {
+                    // Any record, also the "checked, not animated" marker, means the picture was looked at already.
+                    self.library.raw_db().video_previews.get(&rtxn, &item.media_id).ok().flatten().is_some()
                 } else {
                     true
                 };
@@ -424,7 +436,7 @@ impl ThumbnailScheduler {
                 if has_primary && previews_ok {
                     existing_count += 1;
                 } else if let Some(file_path) = self.item_path(&rtxn, &mut folder_paths, item.media_id) {
-                    missing_targets.push(PreparedTarget { pipeline_id, folder_id, media_id: item.media_id, file_path, is_video: item.is_video });
+                    missing_targets.push(PreparedTarget { pipeline_id, folder_id, media_id: item.media_id, file_path, is_video: item.is_video, animatable: item.animatable });
                 }
             }
         }
@@ -618,6 +630,7 @@ impl ThumbnailScheduler {
                                         orig_height: video_res.orig_height,
                                         duration_ms: video_res.duration_ms,
                                         is_corrupted: false,
+                                        is_animated: false,
                                     });
                                     benchmark.record_queue_depth(depth);
                                 }
@@ -670,10 +683,17 @@ impl ThumbnailScheduler {
                                         None
                                     };
 
+                                    let preview_record = if target.animatable && config.generate_video_previews {
+                                        self.animated_preview_record(&target, &config)
+                                    } else {
+                                        None
+                                    };
+                                    let is_animated = preview_record.as_ref().is_some_and(|r| r.frame_count > 1);
+
                                     batched_db_writes.push(BatchedDbWriteItem {
                                         media_id: target.media_id,
                                         location: Some(location),
-                                        preview_record: None,
+                                        preview_record,
                                         probed_metadata: meta_update,
                                         is_corrupted: false,
                                     });
@@ -694,6 +714,7 @@ impl ThumbnailScheduler {
                                         orig_height: frame.orig_height,
                                         duration_ms: 0,
                                         is_corrupted: false,
+                                        is_animated,
                                     });
                                     benchmark.record_queue_depth(depth);
                                 }
@@ -727,6 +748,7 @@ impl ThumbnailScheduler {
                     orig_height: 0,
                     duration_ms: 0,
                     is_corrupted: true,
+                    is_animated: false,
                 });
                 benchmark.record_queue_depth(depth);
             }
@@ -744,6 +766,33 @@ impl ThumbnailScheduler {
         }
 
         benchmark.set_generate_duration(t_phase2_start.elapsed().as_micros() as u64);
+    }
+
+    /// The hover preview of an animated picture, stored like the preview of a video. `Some` with no frames marks a picture that was
+    /// checked and is not animated; `None` when the file could not be read (nothing is recorded, a later refresh tries again).
+    fn animated_preview_record(&self, target: &PreparedTarget, config: &ThumbnailConfig) -> Option<VideoPreviewRecord> {
+        let count = (config.preview_frame_count as usize).max(2);
+        match animated_frames::sample(&target.file_path, config.max_bound, config.scaling_algorithm, count) {
+            Ok(Some(frames)) => {
+                let (format, quality) = if config.custom_preview_settings {
+                    (config.preview_format, config.preview_quality)
+                } else {
+                    (config.format, config.quality)
+                };
+                let locations: Vec<_> = frames
+                    .iter()
+                    .filter_map(|f| self.generator.compress(&f.rgb_pixels, f.width, f.height, format, quality).ok())
+                    .filter_map(|bytes| self.store.append(&bytes).ok())
+                    .collect();
+                let frame_count = locations.len() as u32;
+                (frame_count > 1).then_some(VideoPreviewRecord { frame_count, frame_locations: locations })
+            }
+            Ok(None) => Some(VideoPreviewRecord { frame_count: 0, frame_locations: Vec::new() }),
+            Err(e) => {
+                tracing::debug!(media_id = target.media_id, error = %e, "[ThumbnailPipeline] Animation check failed; the picture stays unchecked");
+                None
+            }
+        }
     }
 
     fn flush_db_batch(

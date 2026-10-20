@@ -11,6 +11,7 @@ export component SettingsPageAppearance inherits VerticalLayout {
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
     in-out property <bool> show-media-type-badges: true;
+    in-out property <bool> show-animated-badge: true;
     in-out property <bool> show-duration-badge: true;
     in-out property <int> thumbnail-badge-overflow-idx: 0; // 0=hide, 1=wrap
     in-out property <bool> enable-hover-previews: true;
@@ -103,6 +104,11 @@ export component SettingsPageAppearance inherits VerticalLayout {
         CheckBox {
             text: "Show media type / status badge on thumbnails (Video / Image / Folder, Missing, Hidden)";
             checked <=> root.show-media-type-badges;
+        }
+
+        CheckBox {
+            text: "Show ANIM badge on animated pictures (GIF, APNG, WebP, AVIF sequences)";
+            checked <=> root.show-animated-badge;
         }
 
         CheckBox {

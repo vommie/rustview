@@ -95,7 +95,7 @@ impl BridgeThumbnails {
                 let media_id = item_data.media_id;
                 let mut metadata_changed = false;
 
-                if (item_data.orig_width > 0 || item_data.orig_height > 0 || item_data.duration_ms > 0 || item_data.is_corrupted)
+                if (item_data.orig_width > 0 || item_data.orig_height > 0 || item_data.duration_ms > 0 || item_data.is_corrupted || item_data.is_animated)
                     && let Some(item) = st.all_folder_media.find_mut(media_id)
                 {
                     if item_data.orig_width > 0 && item.record.width == 0 {
@@ -108,6 +108,10 @@ impl BridgeThumbnails {
                     }
                     if item_data.duration_ms > 0 && item.record.duration_ms == 0 {
                         item.record.duration_ms = item_data.duration_ms;
+                        metadata_changed = true;
+                    }
+                    if item_data.is_animated && !item.is_animated {
+                        item.is_animated = true;
                         metadata_changed = true;
                     }
                     if item_data.is_corrupted != item.is_corrupted {

@@ -24,6 +24,9 @@ pub struct IndexedMediaRecord {
     pub is_deleted: bool,
     pub is_pending: bool,
     pub has_tags: bool,
+    /// Hover preview frames of an animated picture are stored in the pack store. Not derived from the record: the folder load
+    /// and the thumbnail pipeline set it.
+    pub is_animated: bool,
 }
 
 impl IndexedMediaRecord {
@@ -39,6 +42,7 @@ impl IndexedMediaRecord {
             is_deleted: false,
             is_pending: false,
             has_tags: false,
+            is_animated: false,
         };
         item.refresh_derived();
         item

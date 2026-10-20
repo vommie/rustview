@@ -26,6 +26,7 @@ impl ThumbnailBadgeBridge {
             show_tag = config.show_tag,
             show_media_type = config.show_media_type,
             show_duration = config.show_duration,
+            show_animated = config.show_animated,
             overflow_mode = ?config.overflow_mode,
             "[ThumbnailBadges] Applying badge configuration"
         );
@@ -43,6 +44,7 @@ impl ThumbnailBadgeBridge {
             show_tag: appearance.show_tags_overlay,
             show_media_type: appearance.show_media_type_badges,
             show_duration: appearance.show_duration_badge,
+            show_animated: appearance.show_animated_badge,
             overflow_mode,
         }
     }

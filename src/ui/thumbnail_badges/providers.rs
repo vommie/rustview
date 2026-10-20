@@ -12,8 +12,8 @@ use crate::ui::{MediaItemView, ThumbnailBadgeConfig, ThumbnailBadgeOrientation, 
 type BadgeProvider = fn(&MediaItemView, &ThumbnailBadgeConfig) -> Option<ThumbnailBadge>;
 
 /// All badge providers in automatic (registration) order.
-const PROVIDERS: [BadgeProvider; 6] =
-    [tag_badge, rating_badge, media_type_badge, duration_badge, folder_status_badge, folder_missing_badge];
+const PROVIDERS: [BadgeProvider; 7] =
+    [tag_badge, rating_badge, media_type_badge, duration_badge, animated_badge, folder_status_badge, folder_missing_badge];
 
 /// Collects the badges of one media item from all providers.
 pub fn collect_badges(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Vec<ThumbnailBadge> {
@@ -81,6 +81,12 @@ fn duration_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option
     })
 }
 
+/// "ANIM" (bottom-right) on pictures that have stored hover preview frames; images have no duration badge, so the corner is free.
+fn animated_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
+    (config.show_animated && !item.is_folder && !item.is_video && item.is_animated)
+        .then(|| ThumbnailBadge::text("animated", "ANIM").at(ThumbnailBadgeOrientation::BottomRight))
+}
+
 /// Type / status label of a folder row (bottom-left), the folder counterpart of `media_type_badge` and governed by the same option.
 /// Priority: Missing > Hidden > Empty > Folder. The navigation entry "..." has none.
 fn folder_status_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
@@ -119,6 +125,7 @@ mod tests {
             show_tag: true,
             show_media_type: true,
             show_duration: true,
+            show_animated: true,
             overflow_mode: ThumbnailBadgeOverflowMode::Hide,
         }
     }
@@ -149,6 +156,16 @@ mod tests {
     }
 
     #[test]
+    fn animated_pictures_get_an_anim_badge_unless_switched_off() {
+        let item = MediaItemView { is_animated: true, ..Default::default() };
+        assert_eq!(ids(&item, &all_enabled()), ["media_type", "animated"]);
+        let off = ThumbnailBadgeConfig { show_animated: false, ..all_enabled() };
+        assert_eq!(ids(&item, &off), ["media_type"]);
+        let video = MediaItemView { is_animated: true, is_video: true, ..Default::default() };
+        assert!(!ids(&video, &all_enabled()).contains(&"animated"));
+    }
+
+    #[test]
     fn rating_and_tag_badges_follow_item_state() {
         let item = MediaItemView { rating: 3, has_tags: true, ..Default::default() };
         assert_eq!(ids(&item, &all_enabled()), ["tag", "rating", "media_type"]);
@@ -159,7 +176,7 @@ mod tests {
     #[test]
     fn disabled_options_suppress_their_badges() {
         let item = MediaItemView { rating: 5, has_tags: true, is_video: true, duration_badge_str: "5s".into(), ..Default::default() };
-        let none = ThumbnailBadgeConfig { show_rating: false, show_tag: false, show_media_type: false, show_duration: false, ..all_enabled() };
+        let none = ThumbnailBadgeConfig { show_rating: false, show_tag: false, show_media_type: false, show_duration: false, show_animated: false, ..all_enabled() };
         assert!(ids(&item, &none).is_empty());
         let only_duration = ThumbnailBadgeConfig { show_duration: true, ..none };
         assert_eq!(ids(&item, &only_duration), ["duration"]);

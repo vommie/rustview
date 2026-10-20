@@ -77,8 +77,7 @@ Two decisions are kept apart:
   and WebM by their DocType; Ogg is video only with a Theora/OGM stream; ASF is video only with a video stream (a `.wma`
   has none); RIFF by its form type. Everything that decides image or video afterwards (thumbnails, viewer, regeneration,
   rename, clipboard) uses the record, never the extension.
-* Animated pictures (GIF, WebP, APNG, AVIF sequences) are images; hover previews animate GIF only, the others show their
-  first frame.
+* Animated pictures (GIF, WebP, APNG, AVIF sequences) are images with hover previews and an ANIM badge (see "Animated pictures").
 * `.ts` is also TypeScript and `.m2ts`/`.mts` could be anything: formats flagged `needs_header_check` are only taken when the
   header has the transport stream signature (four sync bytes one packet apart, and not plain text). The scan and the tree
   walk count what was skipped as "header does not match".
@@ -140,6 +139,20 @@ friends are not mentioned.
 * The thumbnailer reads a short stream from its start without seeking: a seek to 0 loses streams whose first keyframe lies
   after 0 (FLV, raw H.264), which gave black thumbnails.
 
+## Animated pictures
+
+`thumbnails/animated_frames.rs` does for GIF, APNG, animated WebP (`image` crate frame streams) and AVIF sequences (FFmpeg, the
+stream with the most frames) what the thumbnailer does for videos: once, while the pipeline reads the file for the thumbnail, it
+samples `preview_frame_count` frames evenly, scales them to thumbnail size and stores them compressed with the preview format and
+quality of Settings > Performance in the pack store (`VideoPreviewRecord` in `video_previews`, no schema change). A record without
+frames marks a picture that was checked and is not animated. The hover reads only the pack store, with the uniform cadence of video
+previews, and never opens the picture file; no whole animation is kept in the database or in RAM. At most 400 source frames are read.
+* New pictures get their frames with their thumbnail. Pictures indexed before get them only from a refresh the user starts; until then
+  nothing changes (a GIF without stored frames still decodes its file on hover, as before). Static PNG/WebP are checked once.
+* The ANIM badge (Settings > Appearance & Grid) is shown for pictures with stored frames; the flag is read from the database when a
+  folder loads (animatable pictures only) and set when the pipeline stores frames.
+* Needs `generate_video_previews` (Settings > Performance) like video previews.
+
 ## Not supported
 
 These are not handled:
@@ -147,7 +160,7 @@ These are not handled:
 * **Camera RAW** (.cr2 .cr3 .nef .arw .dng .orf .rw2 .raf .pef .srw ...): needs a RAW decoder (`rawler`/`libraw`).
 * **Layered / document sources** (.xcf .kra .ai .eps .pdf), **vector metafiles** (.wmf .emf), **icons** `.icns`/`.cur`.
 * **JPEG XR** (.jxr .wdp), **BPG**, **FLIF**, **MNG**: no decoder in the libraries RustView uses.
-* **Animated** WebP/APNG/AVIF on hover (they show their first frame), **multi-page** TIFF beyond the first page, **PSB**.
+* **Multi-page** TIFF beyond the first page, **PSB**.
 * **Audio-only containers**: an audio-only .mp4/.mkv/.webm is indexed and marked as damaged (no video stream).
 * HEIC/AVIF **HDR gain maps, depth maps, alpha channels** are ignored; **EXIF orientation of JPEGs** is not applied
   (a portrait phone photo shows rotated; existing behavior, not part of this work).

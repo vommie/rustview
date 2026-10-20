@@ -25,6 +25,8 @@ export struct MediaItemView {
     thumbnail: image,
     is_selected: bool,
     is_video: bool,
+    /// Hover preview frames of an animated picture are stored.
+    is_animated: bool,
     is_corrupted: bool,
     is_deleted: bool,
     is_pending: bool,

@@ -119,6 +119,7 @@ impl SettingsDialogController {
         window.set_show_tag_badge(settings.appearance.show_tags_overlay);
         window.set_show_media_type_badges(settings.appearance.show_media_type_badges);
         window.set_show_duration_badge(settings.appearance.show_duration_badge);
+        window.set_show_animated_badge(settings.appearance.show_animated_badge);
         window.set_thumbnail_badge_overflow_idx(
             ThumbnailBadgeOverflow::from_str_name(&settings.appearance.thumbnail_badge_overflow)
                 .to_index(),
@@ -494,6 +495,7 @@ impl SettingsDialogController {
                 current.appearance.show_tags_overlay = w.get_show_tag_badge();
                 current.appearance.show_media_type_badges = w.get_show_media_type_badges();
                 current.appearance.show_duration_badge = w.get_show_duration_badge();
+                current.appearance.show_animated_badge = w.get_show_animated_badge();
                 current.appearance.thumbnail_badge_overflow =
                     ThumbnailBadgeOverflow::from_index(w.get_thumbnail_badge_overflow_idx())
                         .as_str()

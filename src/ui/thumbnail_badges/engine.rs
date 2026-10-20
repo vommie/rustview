@@ -79,6 +79,7 @@ mod tests {
             show_tag: true,
             show_media_type: true,
             show_duration: true,
+            show_animated: true,
             overflow_mode: ThumbnailBadgeOverflowMode::Hide,
         }
     }

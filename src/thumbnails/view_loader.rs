@@ -165,6 +165,7 @@ fn load_one(deps: &ViewLoaderDeps, id: MediaId) {
         orig_height: 0,
         duration_ms: 0,
         is_corrupted: false,
+        is_animated: false,
     });
 }
 

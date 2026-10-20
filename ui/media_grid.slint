@@ -65,8 +65,8 @@ export component MediaTile inherits Rectangle {
 
     property <bool> is-hovered: tile-touch.has-hover;
     changed is-hovered => {
-        // Trigger hover animation for both videos and animated GIFs
-        if item.is-video || item.format-str == "gif" {
+        // Hover previews: videos, pictures with stored preview frames, and GIFs (which may still decode their file once)
+        if item.is-video || item.is-animated || item.format-str == "gif" {
             root.hover-changed(self.is-hovered);
         }
     }

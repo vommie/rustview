@@ -64,6 +64,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> show-rating-badge: true;
     in-out property <bool> show-tag-badge: true;
     in-out property <bool> show-media-type-badges: true;
+    in-out property <bool> show-animated-badge: true;
     in-out property <bool> show-duration-badge: true;
     in-out property <int> thumbnail-badge-overflow-idx: 0; // 0=hide, 1=wrap
     in-out property <bool> enable-hover-previews: true;
@@ -261,6 +262,7 @@ export component SettingsWindow inherits Window {
                             show-rating-badge <=> root.show-rating-badge;
                             show-tag-badge <=> root.show-tag-badge;
                             show-media-type-badges <=> root.show-media-type-badges;
+                            show-animated-badge <=> root.show-animated-badge;
                             show-duration-badge <=> root.show-duration-badge;
                             thumbnail-badge-overflow-idx <=> root.thumbnail-badge-overflow-idx;
                             enable-hover-previews <=> root.enable-hover-previews;

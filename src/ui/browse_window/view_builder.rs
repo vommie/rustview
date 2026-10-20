@@ -43,4 +43,5 @@ pub fn apply_record(view: &mut MediaItemView, item: &IndexedMediaRecord) {
     view.is_corrupted = item.is_corrupted;
     view.is_deleted = item.is_deleted;
     view.is_pending = item.is_pending;
+    view.is_animated = item.is_animated;
 }

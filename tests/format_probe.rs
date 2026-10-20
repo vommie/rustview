@@ -111,3 +111,18 @@ fn print_format_table_as_markdown() {
         }
     }
 }
+
+#[test]
+fn probe_animated_samples() {
+    let Ok(dir) = std::env::var("PROBE_ANIM_DIR") else { return };
+    use rustview::thumbnails::animated_frames;
+    for path in files(Path::new(&dir)) {
+        let rel = path.file_name().unwrap().to_string_lossy().to_string();
+        let started = std::time::Instant::now();
+        match animated_frames::sample(&path, 256, ScalingAlgorithm::CatmullRom, 5) {
+            Ok(Some(frames)) => println!("{rel:<44} animated: {} frames {}x{} ({} ms)", frames.len(), frames[0].width, frames[0].height, started.elapsed().as_millis()),
+            Ok(None) => println!("{rel:<44} static ({} ms)", started.elapsed().as_millis()),
+            Err(e) => println!("{rel:<44} ERR {e}"),
+        }
+    }
+}
