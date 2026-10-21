@@ -22,8 +22,10 @@ pub(super) struct BarHost {
 pub(super) struct BarTargets {
     pub media: Option<MediaBarTarget>,
     pub primary: Option<PrimaryBarTarget>,
-    /// The zoom slider of an image, while the user has it open.
-    pub zoom: Option<ZoomBubbleView>,
+    /// The zoom sliders the user has open, one per tile.
+    pub zoom: Vec<ZoomBubbleView>,
+    /// How many tiles there are (each gets a media bar window of its own, made ahead of time).
+    pub tiles: usize,
 }
 
 impl BarTargets {
@@ -36,7 +38,8 @@ impl BarTargets {
         Self {
             media: guard.media_bar_target(),
             primary: guard.primary_bar_target(),
-            zoom: guard.zoom_bubble(),
+            zoom: guard.zoom_bubbles(),
+            tiles: guard.tile_count(),
         }
     }
 }
@@ -44,28 +47,43 @@ impl BarTargets {
 /// Shows, moves or hides both bars. With `active` false (the host does not show its content) both go away. Returns whether
 /// any bar is visible now.
 pub(super) fn update(host: &BarHost, targets: BarTargets, active: bool) -> bool {
-    let BarTargets { media, primary, zoom } = targets;
-    bar_overlay::sync_zoom(BarKind::Media, host.owner, zoom.as_ref());
-    // An open menu keeps its bar where it is, however far the pointer is, until the user clicks elsewhere.
-    let media_menu_open = active && bar_overlay::service_menu(BarKind::Media, host.owner);
-    let media_shown = media_menu_open || media.is_some_and(|target| {
-        bar_overlay::show(&BarRequest {
-            kind: BarKind::Media,
-            owner: host.owner,
-            host_xid: host.host_xid,
-            tile: target.tile as i32,
-            area: target.rect,
-            pointer: Some(target.pointer),
-            reveal_distance_px: target.reveal_distance_px,
-            forced: false,
-            scale: host.scale,
-            actions: views::action_views(&target.actions),
-            on_action: host.media_click.clone(),
-        })
-    });
-    if !media_shown {
-        bar_overlay::hide_kind(BarKind::Media, host.owner);
+    let BarTargets { media, primary, zoom, tiles } = targets;
+    if active {
+        bar_overlay::prepare_media_bars(tiles);
     }
+    bar_overlay::sync_zooms(host.owner, &zoom);
+    // Every tile has a media bar of its own. One whose menu or slider is open keeps its place, however far the pointer is, until
+    // the user clicks elsewhere or closes it; that never hides or blocks the bar of another tile.
+    let mut keep: Vec<i32> = if active {
+        bar_overlay::slots(BarKind::Media, host.owner)
+            .into_iter()
+            .filter(|&slot| bar_overlay::service_menu(BarKind::Media, host.owner, slot))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    if let Some(target) = media {
+        let slot = target.tile as i32;
+        if !keep.contains(&slot)
+            && bar_overlay::show(&BarRequest {
+                kind: BarKind::Media,
+                owner: host.owner,
+                host_xid: host.host_xid,
+                tile: target.tile as i32,
+                area: target.rect,
+                pointer: Some(target.pointer),
+                reveal_distance_px: target.reveal_distance_px,
+                forced: false,
+                scale: host.scale,
+                actions: views::action_views(&target.actions),
+                on_action: host.media_click.clone(),
+            })
+        {
+            keep.push(slot);
+        }
+    }
+    let media_shown = !keep.is_empty();
+    bar_overlay::hide_kind_except(BarKind::Media, host.owner, &keep);
     let primary_shown = primary.is_some_and(|target| {
         bar_overlay::show(&BarRequest {
             kind: BarKind::Primary,

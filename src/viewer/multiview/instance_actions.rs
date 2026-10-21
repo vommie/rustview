@@ -106,8 +106,8 @@ impl MultiviewInstance {
             }
             MediaActionId::OpenAsTab => UiAction::OpenTileAsTab(id),
             MediaActionId::OpenWith => {
-                // One bubble at a time: the drop-down replaces the zoom slider.
-                self.zoom_slider = None;
+                // One bubble per bar: the drop-down replaces the zoom slider of this tile's bar (other tiles keep theirs).
+                self.zoom_slider.retain(|k| *k != key);
                 UiAction::ToggleOpenWith(id)
             }
             MediaActionId::Delete => UiAction::DeleteTile(id),

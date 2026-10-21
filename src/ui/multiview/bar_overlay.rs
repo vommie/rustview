@@ -43,13 +43,6 @@ pub enum BarKind {
 }
 
 impl BarKind {
-    const fn index(self) -> usize {
-        match self {
-            Self::Media => 0,
-            Self::Primary => 1,
-        }
-    }
-
     const fn corner(self) -> BarCorner {
         match self {
             Self::Media => BarCorner::TopRight,
@@ -95,12 +88,19 @@ pub struct BarRequest {
 /// started and ended between two polls would be missed.
 const MENU_POLL_MS: u64 = 16;
 
+/// Which bar window: the kind, and for the media bar the tile it belongs to (every tile has a bar of its own, so any number of them
+/// can be shown and kept open at the same time; the primary bar is slot 0).
+type Key = (BarKind, i32);
+
 thread_local! {
-    /// Polls the pointer while the menu of the media bar is open.
+    /// Polls the pointer while the menu of a media bar is open.
     static MENU_TIMER: Timer = Timer::default();
-    static OVERLAYS: [RefCell<Option<Overlay>>; 2] = const { [RefCell::new(None), RefCell::new(None)] };
+    /// The bar windows that exist. A window is created when its bar is first shown and lives until the application ends.
+    static OVERLAYS: RefCell<Vec<(Key, Rc<RefCell<Overlay>>)>> = const { RefCell::new(Vec::new()) };
     /// The native windows of the bars: a pointer on any of them still counts as being on the Multiview.
-    static OVERLAY_XIDS: Cell<[Option<u64>; 2]> = const { Cell::new([None; 2]) };
+    static OVERLAY_XIDS: RefCell<Vec<(Key, u64)>> = const { RefCell::new(Vec::new()) };
+    /// The bar window whose button was clicked last (a menu that button opens belongs to that bar).
+    static LAST_CLICKED: Cell<Option<Key>> = const { Cell::new(None) };
     /// Set right before the overlay window is created, so that `window_attributes_hook` knows which window it is.
     static NEXT_IS_OVERLAY: Cell<bool> = const { Cell::new(false) };
     static TOOLTIPS: Cell<(bool, i32)> = const { Cell::new((true, 750)) };
@@ -121,35 +121,43 @@ pub fn set_tooltip_settings(enabled: bool, delay_ms: i32) {
     TOOLTIPS.with(|cell| cell.set((enabled, delay_ms)));
     // Only bars that exist are updated. A bar window costs an X window and a GL context, so it is not created at startup; a new
     // one reads these settings when it is created.
-    OVERLAYS.with(|cells| {
-        for cell in cells {
-            if let Ok(slot) = cell.try_borrow()
-                && let Some(overlay) = slot.as_ref()
-            {
-                overlay.apply_tooltip_settings();
-            }
+    for (_, cell) in all_overlays() {
+        if let Ok(overlay) = cell.try_borrow() {
+            overlay.apply_tooltip_settings();
         }
-    });
+    }
 }
 
-/// Creates both bar windows ahead of their first reveal (a Multiview opens), so that creating them does not delay the first
-/// appearance of a bar.
+/// Creates the first media bar window and the primary one ahead of their first reveal (a Multiview opens), so that creating them
+/// does not delay the first appearance of a bar. Windows for more tiles are created when their bars are first shown.
 pub fn prepare() {
-    for kind in [BarKind::Media, BarKind::Primary] {
-        with_overlay(kind, |_| ());
+    with_overlay((BarKind::Media, 0), |_| ());
+    with_overlay((BarKind::Primary, 0), |_| ());
+}
+
+/// Makes sure the media bars of the first `count` tiles have their windows (not shown yet): a window that is created at the moment
+/// its bar is first revealed would show black for a moment before its first frame is drawn.
+pub fn prepare_media_bars(count: usize) {
+    for slot in 0..count.min(8) {
+        with_overlay((BarKind::Media, slot as i32), |_| ());
     }
+}
+
+fn slot_of(kind: BarKind, tile: i32) -> i32 {
+    if kind == BarKind::Primary { 0 } else { tile.max(0) }
 }
 
 /// Shows the bar for the tile of `request` while the pointer is close enough to it, or hides it if the pointer is not, the
 /// tile cannot carry a bar or the host is not the window in front. Returns whether the bar is visible.
 pub fn show(request: &BarRequest) -> bool {
-    with_overlay(request.kind, |overlay| overlay.show(request)).unwrap_or(false)
+    with_overlay((request.kind, slot_of(request.kind, request.tile)), |overlay| overlay.show(request)).unwrap_or(false)
 }
 
-/// Opens the drop-down menu below the bar `kind` (the items are shown with the rows of a context menu); the next click on an
-/// item calls the bar's action handler with the id of the item. A bar that is not shown ignores this.
+/// Opens the drop-down menu below the bar whose button was clicked last (the items are shown with the rows of a context menu); the
+/// next click on an item calls the bar's action handler with the id of the item. A bar that is not shown ignores this.
 pub fn open_menu(kind: BarKind, opener_action: i32, items: &[CtxMenuItem]) {
-    with_overlay(kind, |overlay| {
+    let key = LAST_CLICKED.with(Cell::get).filter(|(clicked, _)| *clicked == kind).unwrap_or((kind, 0));
+    with_existing(key, |overlay| {
         if overlay.shown {
             let opener = overlay.last_actions.iter().position(|a| a.id == opener_action);
             overlay.window.set_menu_owner_index(opener.map_or(-1, |i| i as i32));
@@ -168,53 +176,63 @@ pub fn open_menu(kind: BarKind, opener_action: i32, items: &[CtxMenuItem]) {
     });
 }
 
-/// One poll of the open menu of `kind`, whoever shows the bar. Returns whether the menu is still open.
+/// One poll of the open menus of `kind`, whoever shows the bars. Returns whether a menu is still open.
 fn poll_menu(kind: BarKind) -> bool {
-    OVERLAYS.with(|cells| {
-        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
-            return true;
-        };
-        slot.as_mut().is_some_and(Overlay::service_menu)
-    })
+    let mut open = false;
+    for (_, cell) in overlays_of(kind) {
+        match cell.try_borrow_mut() {
+            Ok(mut overlay) => open |= overlay.service_menu(),
+            Err(_) => open = true,
+        }
+    }
+    open
 }
 
-/// While the menu of the bar `kind`, shown by `owner`, is open: the bar stays where it is whatever the pointer does, and a click
-/// outside the bar and the menu closes the menu. Called on every tick of the host. Returns whether the menu is open.
-pub fn service_menu(kind: BarKind, owner: BarOwner) -> bool {
-    OVERLAYS.with(|cells| {
-        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
-            return false;
-        };
-        slot.as_mut()
-            .filter(|overlay| overlay.owner == Some(owner) || overlay.parked.as_ref().is_some_and(|p| p.owner == owner))
-            .is_some_and(Overlay::service_menu)
-    })
+/// While the menu (or the zoom slider) of the media bar of `slot`, shown by `owner`, is open: the bar stays where it is whatever
+/// the pointer does, and a click outside the bar and the menu closes the menu. Called on every tick of the host. Returns whether
+/// something is open.
+pub fn service_menu(kind: BarKind, owner: BarOwner, slot: i32) -> bool {
+    with_existing((kind, slot), |overlay| overlay.is_owned_by(owner) && overlay.service_menu()).unwrap_or(false)
 }
 
-/// Shows, updates or closes the zoom slider that hangs below the bar `kind`, as the Multiview that shows the bar says (`None` =
-/// closed). While it is open it keeps its bar where it is (`service_menu`), until the Multiview closes it (the button toggles it).
-pub fn sync_zoom(kind: BarKind, owner: BarOwner, zoom: Option<&ZoomBubbleView>) {
-    OVERLAYS.with(|cells| {
-        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
-            return;
-        };
-        if let Some(overlay) = slot
-            .as_mut()
-            .filter(|overlay| overlay.owner == Some(owner) || overlay.parked.as_ref().is_some_and(|p| p.owner == owner) || zoom.is_none())
-        {
+/// The slots of the bars of `kind` that exist and are shown (or wait for the focus) for `owner`.
+pub fn slots(kind: BarKind, owner: BarOwner) -> Vec<i32> {
+    overlays_of(kind)
+        .into_iter()
+        .filter(|(_, cell)| cell.try_borrow().is_ok_and(|overlay| overlay.is_owned_by(owner)))
+        .map(|(slot, _)| slot)
+        .collect()
+}
+
+/// Shows, updates or closes the zoom sliders that hang below the media bars, as the Multiview that shows the bars says: each tile
+/// that has a slider open is in `zooms`, every other bar of `owner` closes its slider. While a slider is open it keeps its bar where
+/// it is (`service_menu`), until the Multiview closes it (the button toggles it).
+pub fn sync_zooms(owner: BarOwner, zooms: &[ZoomBubbleView]) {
+    for (slot, cell) in overlays_of(BarKind::Media) {
+        let Ok(mut overlay) = cell.try_borrow_mut() else { continue };
+        let zoom = zooms.iter().find(|z| z.tile as i32 == slot);
+        if zoom.is_none() || overlay.is_owned_by(owner) {
             overlay.sync_zoom(zoom);
         }
-    });
+    }
 }
 
-/// Closes the drop-down menu of the bar `kind`. Returns whether one was open.
+/// Closes the drop-down menus of the bars `kind`. Returns whether one was open.
 pub fn close_menu(kind: BarKind) -> bool {
-    OVERLAYS.with(|cells| {
-        let Ok(slot) = cells[kind.index()].try_borrow() else {
-            return false;
-        };
-        slot.as_ref().is_some_and(|overlay| overlay.close_menu())
-    })
+    let mut closed = false;
+    for (_, cell) in overlays_of(kind) {
+        if let Ok(overlay) = cell.try_borrow() {
+            closed |= overlay.close_menu();
+        }
+    }
+    closed
+}
+
+/// Closes the drop-down menu of the bar whose button was clicked last, if it is open (the button of a menu toggles it; the menus of
+/// other bars are not its business). Returns whether one was open.
+pub fn close_clicked_menu(kind: BarKind) -> bool {
+    let key = LAST_CLICKED.with(Cell::get).filter(|(clicked, _)| *clicked == kind).unwrap_or((kind, 0));
+    with_existing(key, |overlay| overlay.close_menu()).unwrap_or(false)
 }
 
 /// Hides the bars `owner` shows (a host may only hide a bar it shows itself).
@@ -224,47 +242,66 @@ pub fn hide(owner: BarOwner) {
     }
 }
 
-/// Hides one bar if `owner` is the host that shows it.
+/// Hides every bar of `kind` that `owner` shows.
 pub fn hide_kind(kind: BarKind, owner: BarOwner) {
-    OVERLAYS.with(|cells| {
-        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
+    hide_kind_except(kind, owner, &[]);
+}
+
+/// Hides the bars of `kind` that `owner` shows, except those of the slots in `keep`.
+pub fn hide_kind_except(kind: BarKind, owner: BarOwner, keep: &[i32]) {
+    for (slot, cell) in overlays_of(kind) {
+        if keep.contains(&slot) {
+            continue;
+        }
+        let Ok(mut overlay) = cell.try_borrow_mut() else {
             tracing::debug!("[Multiview: Overlay] Skipped a re-entrant call");
-            return;
+            continue;
         };
         // A bar that was never shown has no window; hiding it must not create one.
-        if let Some(overlay) = slot.as_mut().filter(|overlay| overlay.owner == Some(owner)) {
+        if overlay.owner == Some(owner) {
             overlay.hide();
         }
-    });
+    }
 }
 
-/// The application exits: both bar windows are hidden and destroyed (with their X connections). A bar that was never shown has
-/// no window and is not created for this.
+/// The application exits: all bar windows are hidden and destroyed (with their X connections). A bar that was never shown has no
+/// window and is not created for this.
 pub fn shutdown() {
-    OVERLAYS.with(|cells| {
-        for kind in [BarKind::Media, BarKind::Primary] {
-            let taken = cells[kind.index()].try_borrow_mut().ok().and_then(|mut slot| slot.take());
-            if let Some(mut overlay) = taken {
-                overlay.hide();
-                tracing::debug!(bar = kind.label(), "[Shutdown: Windows] Bar window destroyed");
-            }
+    let taken: Vec<_> = OVERLAYS.with(|all| std::mem::take(&mut *all.borrow_mut()));
+    for ((kind, slot), cell) in taken {
+        if let Ok(mut overlay) = cell.try_borrow_mut() {
+            overlay.hide();
         }
-    });
-    OVERLAY_XIDS.with(|cell| cell.set([None; 2]));
+        tracing::debug!(bar = kind.label(), slot, "[Shutdown: Windows] Bar window destroyed");
+    }
+    OVERLAY_XIDS.with(|ids| ids.borrow_mut().clear());
 }
 
-/// Runs `f` on the overlay, creating it on first use. Re-entrant calls (a click handler that hides the bar) are skipped.
-fn with_overlay<R>(kind: BarKind, f: impl FnOnce(&mut Overlay) -> R) -> Option<R> {
-    OVERLAYS.with(|cells| {
-        let Ok(mut slot) = cells[kind.index()].try_borrow_mut() else {
-            tracing::debug!("[Multiview: Overlay] Skipped a re-entrant call");
-            return None;
-        };
-        if slot.is_none() {
-            *slot = Overlay::new(kind);
-        }
-        slot.as_mut().map(f)
-    })
+fn all_overlays() -> Vec<(Key, Rc<RefCell<Overlay>>)> {
+    OVERLAYS.with(|all| all.borrow().clone())
+}
+
+fn overlays_of(kind: BarKind) -> Vec<(i32, Rc<RefCell<Overlay>>)> {
+    all_overlays().into_iter().filter(|((k, _), _)| *k == kind).map(|((_, slot), cell)| (slot, cell)).collect()
+}
+
+/// Runs `f` on the overlay if it exists. Re-entrant calls (a click handler that hides the bar) are skipped.
+fn with_existing<R>(key: Key, f: impl FnOnce(&mut Overlay) -> R) -> Option<R> {
+    let cell = OVERLAYS.with(|all| all.borrow().iter().find(|(k, _)| *k == key).map(|(_, cell)| cell.clone()))?;
+    let Ok(mut overlay) = cell.try_borrow_mut() else {
+        tracing::debug!("[Multiview: Overlay] Skipped a re-entrant call");
+        return None;
+    };
+    Some(f(&mut overlay))
+}
+
+/// Runs `f` on the overlay, creating it on first use.
+fn with_overlay<R>(key: Key, f: impl FnOnce(&mut Overlay) -> R) -> Option<R> {
+    if !OVERLAYS.with(|all| all.borrow().iter().any(|(k, _)| *k == key)) {
+        let overlay = Overlay::new(key)?;
+        OVERLAYS.with(|all| all.borrow_mut().push((key, Rc::new(RefCell::new(overlay)))));
+    }
+    with_existing(key, f)
 }
 
 /// What the callbacks of the window need as well.
@@ -339,8 +376,13 @@ impl XState {
 /// Closes the drop-down of `window` and forgets the area it took.
 fn clear_menu(window: &MultiviewBarWindow, shared: &Shared) {
     window.set_menu_open(false);
-    window.set_menu_owner_index(-1);
     window.set_menu_items(ModelRc::<ContextMenuItemModel>::default());
+    // An open zoom slider hangs in the same bubble below the same opener, and its place keeps being the area of the bubble: letting
+    // go of the opener or the area would make it jump to the left edge for a moment, or cut it out of the window's shape.
+    if window.get_zoom_open() {
+        return;
+    }
+    window.set_menu_owner_index(-1);
     if let Ok(mut state) = shared.x.try_borrow_mut() {
         state.menu = None;
         state.apply_shape();
@@ -365,6 +407,8 @@ struct Parked {
 
 struct Overlay {
     kind: BarKind,
+    /// The tile this media bar belongs to (0 for the primary bar).
+    slot: i32,
     window: MultiviewBarWindow,
     model: Rc<VecModel<MultiviewBarButtonView>>,
     shared: Rc<Shared>,
@@ -379,7 +423,7 @@ struct Overlay {
 }
 
 impl Overlay {
-    fn new(kind: BarKind) -> Option<Self> {
+    fn new((kind, slot): Key) -> Option<Self> {
         NEXT_IS_OVERLAY.with(|flag| flag.set(true));
         let created = MultiviewBarWindow::new();
         NEXT_IS_OVERLAY.with(|flag| flag.set(false));
@@ -404,6 +448,7 @@ impl Overlay {
 
         let for_click = shared.clone();
         window.on_action_clicked(move |tile, action| {
+            LAST_CLICKED.with(|cell| cell.set(Some((kind, slot))));
             let handler = for_click.on_action.borrow().clone();
             if let Some(handler) = handler {
                 handler(tile, action);
@@ -444,6 +489,7 @@ impl Overlay {
         let for_menu_click = shared.clone();
         let weak = window.as_weak();
         window.on_menu_item_clicked(move |tile, id| {
+            LAST_CLICKED.with(|cell| cell.set(Some((kind, slot))));
             if let Some(window) = weak.upgrade() {
                 clear_menu(&window, &for_menu_click);
             }
@@ -455,6 +501,7 @@ impl Overlay {
         window.set_align_left(kind == BarKind::Primary);
         let overlay = Self {
             kind,
+            slot,
             window,
             model,
             shared,
@@ -475,6 +522,11 @@ impl Overlay {
         let (enabled, delay_ms) = TOOLTIPS.with(Cell::get);
         self.window.set_enable_tooltips(enabled);
         self.window.set_tooltip_delay_ms(delay_ms);
+    }
+
+    /// The host that shows this bar, or that it waits for (see `Parked`).
+    fn is_owned_by(&self, owner: BarOwner) -> bool {
+        self.owner == Some(owner) || self.parked.as_ref().is_some_and(|p| p.owner == owner)
     }
 
     fn show(&mut self, request: &BarRequest) -> bool {
@@ -643,7 +695,9 @@ impl Overlay {
     /// Closes the drop-down. Returns whether one was open.
     fn close_menu(&self) -> bool {
         let was_open = self.window.get_menu_open();
-        clear_menu(&self.window, &self.shared);
+        if was_open {
+            clear_menu(&self.window, &self.shared);
+        }
         was_open
     }
 
@@ -654,10 +708,9 @@ impl Overlay {
         let server = x.server.as_ref()?;
         let origin = server.origin_in_root(host_xid)?;
         let host_top = server.top_level_of(host_xid)?;
-        let bars = OVERLAY_XIDS.with(Cell::get);
-        let in_front = server
-            .top_level_at_pointer()
-            .is_some_and(|front| front == host_top || bars.contains(&Some(front)));
+        let in_front = server.top_level_at_pointer().is_some_and(|front| {
+            front == host_top || OVERLAY_XIDS.with(|ids| ids.borrow().iter().any(|(_, xid)| *xid == front))
+        });
         Some((origin, in_front))
     }
 
@@ -706,12 +759,10 @@ impl Overlay {
         let first_xid = state.xid.is_none();
         if first_xid {
             state.xid = get_raw_window_xid(self.window.window());
-            let kind = self.kind;
-            OVERLAY_XIDS.with(|ids| {
-                let mut all = ids.get();
-                all[kind.index()] = state.xid;
-                ids.set(all);
-            });
+            let key = (self.kind, self.slot);
+            if let Some(xid) = state.xid {
+                OVERLAY_XIDS.with(|ids| ids.borrow_mut().push((key, xid)));
+            }
         }
         if let (Some(server), Some(xid)) = (state.server.as_ref(), state.xid)
             && (moved || appeared || first_xid)

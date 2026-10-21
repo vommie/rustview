@@ -433,7 +433,7 @@ impl MultiviewHandle {
     /// The "Open With" button of a tile: the drop-down with the applications of the medium opens below the bar, or closes if
     /// it is open. The applications are looked up now, on the click, never while the bar is merely shown. UI thread only.
     pub(super) fn toggle_open_with(&self, media_id: MediaId) {
-        if bar_overlay::close_menu(BarKind::Media) {
+        if bar_overlay::close_clicked_menu(BarKind::Media) {
             return;
         }
         let Some((app, _)) = self.app_and_window() else {

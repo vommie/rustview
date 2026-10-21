@@ -3,7 +3,7 @@
 //!
 //! The model lives in `viewer::zoom` (pure); this file connects it to tiles: it gives each zoom its tile size when the layout
 //! changes, runs what `ZoomState::poll` asks for on worker threads (the events come back through the sink) and describes the
-//! result for the host (`TileView::zoom`, `TileView::minimap`, `zoom_bubble`).
+//! result for the host (`TileView::zoom`, `TileView::minimap`, `zoom_bubbles`).
 
 use super::events::PlayerEvent;
 use super::follow::TileKey;
@@ -46,13 +46,18 @@ impl MultiviewInstance {
 
     /// `Some(slider open)` for a tile whose picture can be zoomed; this is what the zoom button of the bar looks at.
     pub(super) fn zoom_button_state(&self, index: usize) -> Option<bool> {
-        self.zoomable(index).then(|| self.zoom_slider == Some(self.tiles[index].key))
+        self.zoomable(index).then(|| self.zoom_slider.contains(&self.tiles[index].key))
     }
 
     pub(super) fn toggle_zoom_slider(&mut self, index: usize) {
         let Some(key) = self.tiles.get(index).map(|t| t.key) else { return };
-        self.zoom_slider = if self.zoom_slider == Some(key) { None } else { Some(key) };
-        tracing::info!(open = self.zoom_slider.is_some(), "[Zoom: Slider] Toggled");
+        let open = !self.zoom_slider.contains(&key);
+        if open {
+            self.zoom_slider.push(key);
+        } else {
+            self.zoom_slider.retain(|k| *k != key);
+        }
+        tracing::info!(open, "[Zoom: Slider] Toggled");
         self.bump();
     }
 
@@ -83,9 +88,8 @@ impl MultiviewInstance {
 
     /// What the slider bubble shows: the tile it belongs to and its numbers; `None` while it is closed (or its tile can no
     /// longer be zoomed).
-    pub fn zoom_bubble(&self) -> Option<ZoomBubbleView> {
-        let index = self.tile_index(self.zoom_slider?)?;
-        self.bubble_for(index)
+    pub fn zoom_bubbles(&self) -> Vec<ZoomBubbleView> {
+        self.zoom_slider.iter().filter_map(|key| self.tile_index(*key)).filter_map(|index| self.bubble_for(index)).collect()
     }
 
     /// The numbers a zoom slider of tile `index` shows (the slider of the bar and the one on the minimap are the same view).
@@ -106,16 +110,15 @@ impl MultiviewInstance {
 
     /// Closes the slider if its tile is gone or cannot be zoomed any more (a tick checks it).
     fn validate_zoom_slider(&mut self) {
-        if let Some(key) = self.zoom_slider
-            && self.tile_index(key).is_none_or(|index| !self.zoomable(index))
-        {
-            self.zoom_slider = None;
-            self.bump();
-        }
-        if let Some(key) = self.zoom_minimap_bubble
-            && self.tile_index(key).is_none_or(|index| !self.zoomable(index))
-        {
-            self.zoom_minimap_bubble = None;
+        let valid = |this: &Self, key: &TileKey| this.tile_index(*key).is_some_and(|index| this.zoomable(index));
+        let (slider, bubble) = (self.zoom_slider.len(), self.zoom_minimap_bubble.len());
+        let (sliders, bubbles): (Vec<TileKey>, Vec<TileKey>) = (
+            self.zoom_slider.iter().copied().filter(|k| valid(self, k)).collect(),
+            self.zoom_minimap_bubble.iter().copied().filter(|k| valid(self, k)).collect(),
+        );
+        if sliders.len() != slider || bubbles.len() != bubble {
+            self.zoom_slider = sliders;
+            self.zoom_minimap_bubble = bubbles;
             self.bump();
         }
     }
@@ -183,8 +186,13 @@ impl MultiviewInstance {
         }
         if phase == 4 {
             let key = self.tiles[index].key;
-            self.zoom_minimap_bubble = if self.zoom_minimap_bubble == Some(key) { None } else { Some(key) };
-            tracing::info!(open = self.zoom_minimap_bubble.is_some(), "[Zoom: Minimap] Slider bubble toggled");
+            let open = !self.zoom_minimap_bubble.contains(&key);
+            if open {
+                self.zoom_minimap_bubble.push(key);
+            } else {
+                self.zoom_minimap_bubble.retain(|k| *k != key);
+            }
+            tracing::info!(open, "[Zoom: Minimap] Slider bubble toggled");
             self.poll_zoom_at(Instant::now());
             self.bump();
             return;
@@ -340,7 +348,7 @@ impl MultiviewInstance {
         let dpi = self.host.surface.dpi;
         let pointer = self.pointer;
         let rects: Vec<Option<Rect>> = (0..self.tiles.len()).map(|i| self.host_tile_rect(i)).collect();
-        let bubble = self.zoom_minimap_bubble;
+        let bubbles = self.zoom_minimap_bubble.clone();
         let mut changed = false;
         let mut work: Vec<(TileKey, std::path::PathBuf, Vec<Request>)> = Vec::new();
         for (index, tile) in self.tiles.iter_mut().enumerate() {
@@ -355,7 +363,7 @@ impl MultiviewInstance {
                 _ => false,
             };
             zoom.set_minimap_hover(hover);
-            zoom.set_minimap_pinned(bubble == Some(tile.key));
+            zoom.set_minimap_pinned(bubbles.contains(&tile.key));
             let was_animating = zoom.animating();
             let requests = zoom.poll(tile.pixels.as_ref(), &prefs, now);
             changed |= was_animating || zoom.animating();
