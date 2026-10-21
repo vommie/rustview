@@ -42,7 +42,7 @@ impl MultiviewInstance {
         self.layout.tile_at(cx, cy)
     }
 
-    pub(super) fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
+    fn poll_pointer(&mut self, pointer: Option<(i32, i32)>) {
         if pointer != self.pointer || self.last_move.is_none() {
             self.last_move = Some(Instant::now());
         }
