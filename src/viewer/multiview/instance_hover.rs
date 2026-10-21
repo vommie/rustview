@@ -66,7 +66,8 @@ impl MultiviewInstance {
     pub fn media_bar_target(&self) -> Option<MediaBarTarget> {
         let bar = prefs::current().media_bar;
         let (tile, pointer) = (self.hovered?, self.pointer?);
-        let rect = self.host_tile_rect(tile)?;
+        // The bar stays at the corner of the medium itself, zoomed or not (not at the corner of the room a zoomed picture fills).
+        let rect = self.host_content(tile)?;
         if !bar.enabled
             || !near_bar_corner(BarCorner::TopRight, rect, pointer, self.host.surface.dpi, bar.reveal_distance_px)
         {

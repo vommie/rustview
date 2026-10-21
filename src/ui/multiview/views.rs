@@ -56,7 +56,7 @@ impl ImageCache {
 
     fn zoomed_image_for(&mut self, tile: &TileView) -> slint::Image {
         match tile.zoom.as_ref().map(|z| &z.content) {
-            Some(ZoomContentView::Rendered(pixels)) => cached_image(&mut self.zoomed, tile.key, pixels),
+            Some(ZoomContentView::Rendered { pixels, .. }) => cached_image(&mut self.zoomed, tile.key, pixels),
             _ => {
                 self.zoomed.remove(&tile.key);
                 slint::Image::default()
@@ -93,10 +93,10 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
     let minimap_area = tile.minimap.as_ref().map(|m| m.area);
     let (zoomed, zoom_hq, zoom_area, zoom_rect, zoom_clip, zoom_pixelated) = match tile.zoom.as_ref() {
         Some(zoom) => {
-            let hq = matches!(zoom.content, ZoomContentView::Rendered(_));
+            let hq = matches!(zoom.content, ZoomContentView::Rendered { .. });
             let clip = match &zoom.content {
                 ZoomContentView::Preview { clip } => *clip,
-                ZoomContentView::Rendered(_) => Rect::default(),
+                ZoomContentView::Rendered { clip, .. } => *clip,
             };
             (true, hq, zoom.area, zoom.dest, clip, zoom.pixelated)
         }

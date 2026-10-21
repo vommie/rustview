@@ -109,6 +109,26 @@ pub struct Visible {
     pub src: RectF,
 }
 
+/// Where the zoomed image is (see `Frame::placement`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Placement {
+    /// Where pixel (0, 0) of the virtual image is in the room.
+    pub x: i32,
+    pub y: i32,
+    /// Size of the virtual image.
+    pub w: i32,
+    pub h: i32,
+    /// The part of the virtual image that is inside the room, in its pixels.
+    pub window: IRect,
+}
+
+impl Placement {
+    /// Where `window` is in the room.
+    pub fn dest(&self) -> IRect {
+        IRect { x: self.x + self.window.x, y: self.y + self.window.y, w: self.window.w, h: self.window.h }
+    }
+}
+
 /// The room an image may use: its size, and where the tile (the place of the fitted picture) is inside it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Area {
@@ -293,6 +313,24 @@ impl Frame {
             dest: IRect { x: x0 as i32, y: y0 as i32, w: (x1 - x0) as i32, h: (y1 - y0) as i32 },
             src: RectF::new(sx0, sy0, sx1 - sx0, sy1 - sy0),
         })
+    }
+
+    /// The zoomed image as a grid of whole pixels ("virtual image", `w` x `h`) that sits at (`x`, `y`) in the room, and which part of
+    /// that grid is in the room (`window`). The grid depends on the zoom alone; panning only moves it by whole pixels, so a picture
+    /// rendered for it stays sharp and exact while the view is dragged around.
+    pub fn placement(&self, view: ZoomView) -> Option<Placement> {
+        let rect = self.image_rect(view);
+        let (x, y) = (rect.x.round() as i32, rect.y.round() as i32);
+        let (w, h) = ((rect.w.round() as i32).max(1), (rect.h.round() as i32).max(1));
+        let (room_w, room_h) = (self.tile_w.round() as i32, self.tile_h.round() as i32);
+        let (x0, y0) = ((-x).max(0), (-y).max(0));
+        let (x1, y1) = (w.min(room_w - x), h.min(room_h - y));
+        (x1 > x0 && y1 > y0).then(|| Placement { x, y, w, h, window: IRect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } })
+    }
+
+    /// Source pixels per pixel of the virtual image of `zoom` (the inverse of the scale).
+    pub fn source_per_pixel(&self, zoom: f64) -> f64 {
+        1.0 / self.scale(zoom)
     }
 
     /// A drag of the minimap's rectangle: the centre the view gets when the rectangle's middle is at (`nx`, `ny`), shares of

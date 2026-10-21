@@ -120,6 +120,10 @@ export component MultiviewCanvas inherits Rectangle {
                 width: tile.zoom-width;
                 height: tile.zoom-height;
                 source: tile.zoom-image;
+                source-clip-x: tile.zoom-clip-x;
+                source-clip-y: tile.zoom-clip-y;
+                source-clip-width: tile.zoom-clip-width;
+                source-clip-height: tile.zoom-clip-height;
                 image-fit: fill;
                 image-rendering: tile.zoom-pixelated ? ImageRendering.pixelated : ImageRendering.smooth;
             }

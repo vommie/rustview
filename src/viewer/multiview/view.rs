@@ -42,8 +42,8 @@ pub struct ZoomPictureView {
 }
 
 pub enum ZoomContentView {
-    /// The sharp, resampled picture.
-    Rendered(SharedPixelBuffer<Rgb8Pixel>),
+    /// The sharp, resampled picture, larger than what is shown: `clip` (its pixels) is the part that goes to the picture's place.
+    Rendered { pixels: SharedPixelBuffer<Rgb8Pixel>, clip: Rect },
     /// This rectangle of the tile's own picture, scaled by the renderer, until the sharp picture is ready.
     Preview { clip: Rect },
 }
@@ -70,7 +70,8 @@ pub struct ZoomBubbleView {
     pub permille: i32,
     pub min_permille: i32,
     pub max_permille: i32,
-    /// The zooms the handle snaps to.
+    /// The marks of the slider (where the handle snaps to): tenths of a percent * 4 + the rank of the mark (0 = reset, 1 and 2 =
+    /// lines, 3 = dot), see `scale::Tick`.
     pub snaps: Vec<i32>,
 }
 

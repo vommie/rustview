@@ -41,17 +41,10 @@ export component MultiviewZoomSlider inherits Rectangle {
     changed active => { root.pill-changed(root.active, root.handle-center-x); }
     changed handle-center-x => { root.pill-changed(root.active, root.handle-center-x); }
 
-    // Without zooming out (the smallest zoom is the fit) the reset is the left end and the whole slider is the way in.
-    property <bool> one-sided: root.min-permille >= 1000;
-
+    // One logarithmic range from the smallest to the largest zoom: the reset sits where its factor puts it (at the left end when the
+    // picture cannot be made smaller than its fit).
     pure function pos-of(z: int) -> float {
-        if root.one-sided {
-            return Math.log(Math.max(z, 1000) / 1000.0, root.max-permille / 1000.0);
-        }
-        if z >= 1000 {
-            return 0.5 + 0.5 * Math.log(z / 1000.0, root.max-permille / 1000.0);
-        }
-        return 0.5 - 0.5 * Math.log(z / 1000.0, root.min-permille / 1000.0);
+        return Math.log(Math.max(z, root.min-permille) / root.min-permille, root.max-permille / root.min-permille);
     }
 
     function position-at(mouse-x: length) -> float {
@@ -84,13 +77,18 @@ export component MultiviewZoomSlider inherits Rectangle {
         background: Theme.primary;
     }
 
-    // The points the handle snaps to; the middle one is the reset and taller.
-    for snap in root.snaps : Rectangle {
-        x: root.track-x + root.handle-size / 2 + root.pos-of(snap) * root.track-w - 0.5px;
+    // The marks: the reset is the strongest (rank 0), whole 100% steps and the ends are lines (1), 50% steps are shorter lines (2),
+    // 25% / 75% steps are dots (3). Rust has already left out the ones that would crowd each other.
+    for mark in root.snaps : Rectangle {
+        property <int> rank: Math.round(Math.mod(mark, 4));
+        property <int> permille: Math.round((mark - self.rank) / 4);
+
+        x: root.track-x + root.handle-size / 2 + root.pos-of(self.permille) * root.track-w - self.width / 2;
         y: root.center-y + 5px;
-        width: 1px;
-        height: snap == 1000 ? 7px : 4px;
-        background: snap == 1000 ? Theme.text-muted : Theme.surface-selected;
+        width: self.rank == 0 ? 2px : (self.rank == 3 ? 2px : 1px);
+        height: self.rank == 0 ? 10px : (self.rank == 1 ? 7px : (self.rank == 2 ? 5px : 2px));
+        border-radius: self.rank == 3 ? 1px : 0px;
+        background: self.rank == 0 ? Theme.text : Theme.text-muted;
     }
 
     // A click on the middle tick resets.

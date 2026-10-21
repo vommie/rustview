@@ -7,7 +7,7 @@
 //! *preview*: the picture the tile already has, cut out and scaled by the graphics card, so every change is visible at once and
 //! the sharp picture follows a moment later (the debounce keeps a burst of wheel steps from rendering every step).
 
-use super::geometry::{Area, Frame, IRect, Limits, RectF, Visible, ZoomView};
+use super::geometry::{Area, Frame, IRect, Limits, Placement, RectF, Visible, ZoomView};
 use super::minimap::Grab;
 use super::prefs::ZoomPrefs;
 use super::render::{Resample, SourceImage, render_view};
@@ -25,20 +25,44 @@ const RENDER_DEBOUNCE: Duration = Duration::from_millis(60);
 const RELEASE_AFTER: Duration = Duration::from_secs(8);
 const FIT_EPS: f64 = 1e-4;
 
-/// Which picture a render makes: exactly the view, the tile, the filter.
+/// Which grid of pixels a render belongs to: the zoom, the room, the filter. Not the centre: a render covers more than is visible
+/// (`OVERSCAN`), and panning only moves the window over it, so a picture stays valid while the view is dragged around.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RenderKey {
     zoom: u64,
-    cx: u64,
-    cy: u64,
     tile: Area,
     algorithm: Resample,
 }
 
 impl RenderKey {
     fn of(view: ZoomView, tile: Area, algorithm: Resample) -> Self {
-        Self { zoom: view.zoom.to_bits(), cx: view.cx.to_bits(), cy: view.cy.to_bits(), tile, algorithm }
+        Self { zoom: view.zoom.to_bits(), tile, algorithm }
     }
+}
+
+/// How much more than the room is rendered on every side (a share of the room, within these limits in pixels), and how close to the
+/// edge of that margin the window may come before a new render is made.
+const OVERSCAN_SHARE: f64 = 0.25;
+const OVERSCAN_MIN_PX: i32 = 64;
+const OVERSCAN_MAX_PX: i32 = 512;
+const OVERSCAN_REFRESH_AT: f64 = 0.4;
+
+fn overscan_px(room: f64) -> i32 {
+    ((room * OVERSCAN_SHARE).round() as i32).clamp(OVERSCAN_MIN_PX, OVERSCAN_MAX_PX)
+}
+
+/// The part of the virtual image (`w` x `h`) a render covers around `window`.
+fn render_region(placement: &Placement, room: (f64, f64)) -> IRect {
+    let (mx, my) = (overscan_px(room.0), overscan_px(room.1));
+    let x0 = (placement.window.x - mx).max(0);
+    let y0 = (placement.window.y - my).max(0);
+    let x1 = (placement.window.x + placement.window.w + mx).min(placement.w);
+    let y1 = (placement.window.y + placement.window.h + my).min(placement.h);
+    IRect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
+fn contains(outer: IRect, inner: IRect) -> bool {
+    inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h
 }
 
 /// One picture to resample, with everything it needs; `run` is what a worker thread does.
@@ -47,6 +71,8 @@ pub struct RenderJob {
     pub key: RenderKey,
     source: Arc<SourceImage>,
     visible: Visible,
+    /// `visible.dest` as a part of the virtual image (the pixels' place in it).
+    region: IRect,
     algorithm: Resample,
 }
 
@@ -54,14 +80,15 @@ pub struct RenderJob {
 pub struct RenderDone {
     pub generation: u64,
     pub key: RenderKey,
-    pub dest: IRect,
+    /// The part of the virtual image the pixels are.
+    pub region: IRect,
     pub pixels: Result<SharedPixelBuffer<Rgb8Pixel>, String>,
 }
 
 impl RenderJob {
     pub fn run(self) -> RenderDone {
         let pixels = render_view(&self.source, &self.visible, self.algorithm);
-        RenderDone { generation: self.generation, key: self.key, dest: self.visible.dest, pixels }
+        RenderDone { generation: self.generation, key: self.key, region: self.region, pixels }
     }
 }
 
@@ -88,7 +115,8 @@ struct Animation {
 struct Hq {
     key: RenderKey,
     pixels: SharedPixelBuffer<Rgb8Pixel>,
-    dest: IRect,
+    /// The part of the virtual image the pixels are.
+    region: IRect,
 }
 
 /// What is drawn instead of the plain, fitted picture.
@@ -99,8 +127,8 @@ pub struct Picture {
 }
 
 pub enum PictureContent {
-    /// The sharp picture, exactly `dest` in size.
-    Rendered(SharedPixelBuffer<Rgb8Pixel>),
+    /// The sharp picture, larger than `dest`; `clip` (its pixels) is the part that goes to `dest`.
+    Rendered { pixels: SharedPixelBuffer<Rgb8Pixel>, clip: IRect },
     /// The tile's own picture, this rectangle of it, scaled by the graphics card.
     Preview { clip: IRect },
 }
@@ -354,7 +382,13 @@ impl ZoomState {
             return requests;
         }
         let Some(key) = self.key_for(self.target, prefs) else { return requests };
-        if self.hq.as_ref().is_some_and(|hq| hq.key == key) || self.failed_key == Some(key) {
+        let Some(placement) = frame.placement(self.target) else { return requests };
+        if self.failed_key == Some(key) {
+            return requests;
+        }
+        // The picture we have is good while the window is well inside what it covers.
+        let room = (f64::from(self.tile.map_or(0, |a| a.size.0)), f64::from(self.tile.map_or(0, |a| a.size.1)));
+        if self.hq.as_ref().is_some_and(|hq| hq.key == key && Self::covers_with_reserve(hq.region, &placement, room)) {
             return requests;
         }
 
@@ -364,10 +398,19 @@ impl ZoomState {
             self.source = SourceState::Loading;
             requests.push(Request::LoadSource);
         }
-        if self.in_flight.is_some() || self.changed_at.is_some_and(|at| now.saturating_duration_since(at) < RENDER_DEBOUNCE) {
+        // A new zoom waits for the view to rest (the slider may be dragged); a window that nears the end of what is rendered (a drag)
+        // gets its picture at once, the old one is still on screen meanwhile.
+        let same_grid = self.hq.as_ref().is_some_and(|hq| hq.key == key);
+        let resting = same_grid || self.changed_at.is_none_or(|at| now.saturating_duration_since(at) >= RENDER_DEBOUNCE);
+        if self.in_flight.is_some() || !resting {
             return requests;
         }
-        let Some(visible) = frame.visible(self.target) else { return requests };
+        let region = render_region(&placement, room);
+        let s = frame.source_per_pixel(self.target.zoom);
+        let visible = Visible {
+            dest: region,
+            src: RectF::new(f64::from(region.x) * s, f64::from(region.y) * s, f64::from(region.w) * s, f64::from(region.h) * s),
+        };
         let job_source = match (&self.source, needs_original, display) {
             (SourceState::Ready(source), true, _) => Some((source.clone(), visible)),
             (_, false, Some(display)) => Self::display_source(display, self.image, visible),
@@ -381,10 +424,26 @@ impl ZoomState {
                 key,
                 source,
                 visible,
+                region,
                 algorithm: prefs.resample,
             }));
         }
         requests
+    }
+
+    /// Whether a render of `region` shows the window of `placement` and still has a reserve on every side that has more image
+    /// behind it (otherwise a new render is due before the window runs out of it).
+    fn covers_with_reserve(region: IRect, placement: &Placement, room: (f64, f64)) -> bool {
+        if !contains(region, placement.window) {
+            return false;
+        }
+        let (mx, my) = (overscan_px(room.0), overscan_px(room.1));
+        let need = |margin: i32| (f64::from(margin) * OVERSCAN_REFRESH_AT).round() as i32;
+        let w = placement.window;
+        (region.x == 0 || w.x - region.x >= need(mx))
+            && (region.y == 0 || w.y - region.y >= need(my))
+            && (region.x + region.w >= placement.w || region.x + region.w - (w.x + w.w) >= need(mx))
+            && (region.y + region.h >= placement.h || region.y + region.h - (w.y + w.h) >= need(my))
     }
 
     /// The tile's own picture as the source of a render: the visible rectangle is given in pixels of the original, the picture
@@ -417,7 +476,7 @@ impl ZoomState {
         }
         let current = self.key_for(self.target, prefs);
         match done.pixels {
-            Ok(pixels) if current == Some(done.key) => self.hq = Some(Hq { key: done.key, pixels, dest: done.dest }),
+            Ok(pixels) if current == Some(done.key) => self.hq = Some(Hq { key: done.key, pixels, region: done.region }),
             Ok(_) => {}
             Err(why) => {
                 tracing::warn!(error = %why, "[Zoom: Render] A zoomed picture could not be made");
@@ -436,10 +495,17 @@ impl ZoomState {
         let frame = self.frame()?;
         let visible = frame.visible(self.shown)?;
         if self.animation.is_none()
-            && let (Some(hq), Some(key)) = (&self.hq, self.key_for(self.shown, prefs))
+            && let (Some(hq), Some(key), Some(placement)) = (&self.hq, self.key_for(self.shown, prefs), frame.placement(self.shown))
             && hq.key == key
+            && contains(hq.region, placement.window)
         {
-            return Some(Picture { dest: hq.dest, content: PictureContent::Rendered(hq.pixels.clone()) });
+            let clip = IRect {
+                x: placement.window.x - hq.region.x,
+                y: placement.window.y - hq.region.y,
+                w: placement.window.w,
+                h: placement.window.h,
+            };
+            return Some(Picture { dest: placement.dest(), content: PictureContent::Rendered { pixels: hq.pixels.clone(), clip } });
         }
         let (dw, dh) = display_size?;
         let fx = f64::from(dw) / f64::from(self.image.0);
@@ -559,7 +625,7 @@ mod tests {
         match picture.content {
             // The window is 500x375 at (250, 187.5) of the 1000x750 picture; the preview rounds outwards.
             PictureContent::Preview { clip } => assert_eq!(clip, IRect { x: 250, y: 187, w: 500, h: 376 }),
-            PictureContent::Rendered(_) => panic!("nothing rendered yet"),
+            PictureContent::Rendered { .. } => panic!("nothing rendered yet"),
         }
     }
 
@@ -617,18 +683,63 @@ mod tests {
         state.rendered(job.run(), &prefs());
         match state.picture(Some((1000, 750)), &prefs()).unwrap().content {
             PictureContent::Preview { .. } => {}
-            PictureContent::Rendered(_) => panic!("the stale render must not be shown"),
+            PictureContent::Rendered { .. } => panic!("the stale render must not be shown"),
         }
         // The next poll renders the current view and its result is shown.
         let job = only_render(state.poll(None, &prefs(), ms(now, 300)));
         assert_eq!(job.generation, 2);
         state.rendered(job.run(), &prefs());
         match state.picture(Some((1000, 750)), &prefs()).unwrap().content {
-            PictureContent::Rendered(pixels) => assert_eq!((pixels.width(), pixels.height()), (1000, 750)),
+            PictureContent::Rendered { pixels, clip } => {
+                assert_eq!((clip.w, clip.h), (1000, 750));
+                assert!(pixels.width() >= 1000 && pixels.height() >= 750);
+            }
             PictureContent::Preview { .. } => panic!("the sharp picture is ready"),
         }
         // Nothing more to do.
         assert!(state.poll(None, &prefs(), ms(now, 400)).is_empty());
+    }
+
+    #[test]
+    fn panning_keeps_the_sharp_picture_and_only_moves_the_window_over_it() {
+        let (mut state, now) = state();
+        let p = prefs();
+        let source = Arc::new(SourceImage::new(4000, 3000, buffer(4000, 3000)).unwrap());
+        state.zoom_to(3.0, None, &p, now);
+        state.source_loaded(Ok(source));
+        let job = only_render(state.poll(None, &p, ms(now, 100)));
+        // More than the room is rendered (a margin around it), at the pixels of the zoomed image (3000 x 2250).
+        assert!(job.region.w > 1000 && job.region.h > 750, "{:?}", job.region);
+        state.rendered(job.run(), &p);
+        let sharp = |state: &ZoomState| match state.picture(Some((1000, 750)), &ZoomPrefs::DEFAULT).unwrap().content {
+            PictureContent::Rendered { clip, .. } => Some(clip),
+            PictureContent::Preview { .. } => None,
+        };
+        let first = sharp(&state).expect("sharp after the render");
+        // A small drag: no preview, no new render, the window just moved over the same pixels.
+        state.pan_pixels(-60.0, -40.0, &p, ms(now, 400));
+        let moved = sharp(&state).expect("still sharp while panning");
+        assert_eq!((moved.x - first.x, moved.y - first.y), (60, 40));
+        assert!(state.poll(None, &p, ms(now, 500)).is_empty(), "nothing to render for a small move");
+        // Dragging on towards the end of the margin makes a new render before the window leaves the old one, and the old one stays
+        // on screen until it is there.
+        // The worker needs a moment: the next drag step is made while it renders, then its picture arrives.
+        let mut job = None;
+        let mut renders = 0;
+        for step in 0..12 {
+            state.pan_pixels(-40.0, 0.0, &p, ms(now, 600 + step));
+            assert!(sharp(&state).is_some(), "sharp at step {step}");
+            if let Some(done) = job.take().map(|j: RenderJob| j.run()) {
+                state.rendered(done, &p);
+                renders += 1;
+            }
+            let next = state.poll(None, &p, ms(now, 600 + step)).into_iter().find_map(|r| match r {
+                Request::Render(job) => Some(job),
+                Request::LoadSource => None,
+            });
+            job = job.or(next);
+        }
+        assert!(renders >= 1, "a new render starts before the window runs out of the old one");
     }
 
     #[test]
@@ -637,7 +748,7 @@ mod tests {
         state.zoom_to(0.5, None, &prefs(), now);
         let display = buffer(1000, 750);
         let job = only_render(state.poll(Some(&display), &prefs(), ms(now, 100)));
-        state.rendered(RenderDone { generation: job.generation, key: job.key, dest: IRect::default(), pixels: Err("broken".into()) }, &prefs());
+        state.rendered(RenderDone { generation: job.generation, key: job.key, region: IRect::default(), pixels: Err("broken".into()) }, &prefs());
         assert!(state.poll(Some(&display), &prefs(), ms(now, 300)).is_empty());
         // A different view tries again.
         state.zoom_to(0.4, None, &prefs(), ms(now, 400));
@@ -816,7 +927,7 @@ mod tests {
         let job = only_render(state.poll(Some(&display), &p, ms(now, 100)));
         // The whole image is visible: the source rectangle is the whole display picture.
         assert!((job.visible.src.w - 1000.0).abs() < 2.0 && (job.visible.src.h - 750.0).abs() < 3.0, "{:?}", job.visible.src);
-        assert_eq!(job.visible.dest, IRect { x: 250, y: 188, w: 500, h: 375 });
+        assert_eq!(job.visible.dest, IRect { x: 0, y: 0, w: 500, h: 375 }, "the whole image, in the pixels of the zoomed image");
         let done = job.run();
         let pixels = done.pixels.unwrap();
         assert_eq!((pixels.width() as i32, pixels.height() as i32), (500, 375));

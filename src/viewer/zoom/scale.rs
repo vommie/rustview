@@ -1,9 +1,13 @@
 //! The scale of the zoom slider and the steps of the mouse wheel (pure).
 //!
-//! The slider has the reset (100% = the fitted picture) in its middle. Both halves are logarithmic, so the same distance on the
-//! slider is the same factor, and the end of each half is a limit: the left end is the smallest zoom, the right end the
-//! largest. Moving the handle snaps ("gravity") to the points that matter: the reset, 25/50/75% below it, 125/150/175/200%
-//! and the whole numbers above it.
+//! The slider is one logarithmic range from the smallest to the largest zoom, so the same distance is the same factor everywhere
+//! and the reset (100% = the fitted picture) sits where its factor puts it: far to the left when the picture can be enlarged much
+//! more than shrunk, at the left end when it cannot be shrunk at all. Moving the handle snaps ("gravity") to the marks of the
+//! slider: the reset, the steps of 25% above it (125, 150, 175, 200, ...) and 75/50/25% below it.
+//!
+//! The marks are thinned out by the room there is: the more important ones (reset, whole 100% steps, 50% steps, then 25% steps)
+//! are placed first and a lesser one is left out where it would sit closer than a few pixels to one already placed. That gives
+//! a regular rhythm where there is room (near the reset) and only the round numbers where the scale is compressed.
 //!
 //! A wheel step goes to the next rung of a ladder instead of adding a fixed amount, so the steps feel the same at every zoom
 //! and a step up followed by a step down returns to where it started: below 100% the rungs are `100% - k * step` (5% steps:
@@ -15,53 +19,85 @@ use super::geometry::Limits;
 /// How far (in slider pixels) the handle is pulled to a snap point.
 const SNAP_RESET_PX: f64 = 9.0;
 const SNAP_PX: f64 = 5.0;
+/// The least distance (slider pixels) between two marks: lines, and dots.
+const GAP_LINE_PX: f64 = 6.0;
+const GAP_DOT_PX: f64 = 5.0;
 /// A zoom within this many rungs of a rung is on it (the stored zoom is rounded, so it is never exactly on one).
 const ON_RUNG: f64 = 1e-4;
 
-/// Position on the slider (0..1, 0.5 = 100%) of a zoom factor. Without zooming out the reset is at the left end and the whole
-/// slider is the way in.
+/// A mark of the slider. `rank` decides how it is drawn: 0 = the reset (thickest), 1 = a whole 100% step or an end (a line),
+/// 2 = a 50% step (a shorter line), 3 = a 25% / 75% step (a dot).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Tick {
+    pub zoom: f64,
+    pub rank: u8,
+}
+
+/// Position on the slider (0..1) of a zoom factor: the logarithm of the zoom between the two limits.
 pub fn position_of(zoom: f64, limits: Limits) -> f64 {
     let zoom = limits.clamp(zoom);
-    if !limits.can_zoom_out() {
-        zoom.ln() / limits.max.ln()
-    } else if zoom >= 1.0 {
-        0.5 + 0.5 * zoom.ln() / limits.max.ln()
-    } else {
-        0.5 - 0.5 * zoom.ln() / limits.min.ln()
-    }
+    (zoom / limits.min).ln() / (limits.max / limits.min).ln()
 }
 
 /// The zoom factor at a position of the slider (0..1).
 pub fn zoom_at(position: f64, limits: Limits) -> f64 {
-    let p = if position.is_finite() { position.clamp(0.0, 1.0) } else { 0.5 };
-    if !limits.can_zoom_out() {
-        if position.is_finite() { limits.max.powf(p) } else { 1.0 }
-    } else if p >= 0.5 {
-        limits.max.powf((p - 0.5) * 2.0)
-    } else {
-        limits.min.powf((0.5 - p) * 2.0)
-    }
+    let p = if position.is_finite() { position.clamp(0.0, 1.0) } else { position_of(1.0, limits) };
+    limits.min * (limits.max / limits.min).powf(p)
 }
 
-/// The zoom factors the handle snaps to, ascending: the two limits, 100%, 25/50/75% and the round numbers above 100%.
-pub fn snap_zooms(limits: Limits) -> Vec<f64> {
-    let mut points = vec![limits.min, limits.max, 1.0];
-    for candidate in [0.25, 0.5, 0.75, 1.25, 1.5, 1.75, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0, 32.0, 50.0] {
-        if candidate > limits.min * 1.05 && candidate < limits.max / 1.05 {
-            points.push(candidate);
+/// The marks of the slider, ascending; `width_px` is the length of the track.
+pub fn ticks(limits: Limits, width_px: f64) -> Vec<Tick> {
+    let width = width_px.max(1.0);
+    let at = |zoom: f64| position_of(zoom, limits) * width;
+    // (mark, priority): the reset first, then the ends, then the steps by their rank.
+    let mut candidates = vec![(Tick { zoom: 1.0, rank: 0 }, 0u8), (Tick { zoom: limits.min, rank: 1 }, 1), (Tick { zoom: limits.max, rank: 1 }, 1)];
+    // The steps of 25% above the reset. A step belongs to a grid (25, 50 or 100%) and is drawn while that grid still has room: the
+    // distance to the next step of the same grid is what decides, so a grid never ends in the middle of a gap.
+    let mut d = 25u32;
+    while 1.0 + f64::from(d) / 100.0 < limits.max * 0.999 {
+        let (grid, rank) = if d.is_multiple_of(100) { (100, 1) } else if d.is_multiple_of(50) { (50, 2) } else { (25, 3) };
+        let zoom = 1.0 + f64::from(d) / 100.0;
+        let gap = if rank == 3 { GAP_DOT_PX } else { GAP_LINE_PX };
+        if at(zoom + f64::from(grid) / 100.0) - at(zoom) >= gap {
+            candidates.push((Tick { zoom, rank }, rank + 1));
+        }
+        d += 25;
+    }
+    // Where even the whole steps are too close, the doubling goes on: 200%, 400%, 800%, ...
+    let mut doubled = 2.0;
+    while doubled < limits.max * 0.999 {
+        candidates.push((Tick { zoom: doubled, rank: 1 }, 2));
+        doubled *= 2.0;
+    }
+    for (zoom, rank) in [(0.75, 3), (0.5, 2), (0.25, 3), (0.1, 1)] {
+        if zoom > limits.min * 1.001 {
+            candidates.push((Tick { zoom, rank }, rank + 1));
         }
     }
-    points.sort_by(|a, b| a.total_cmp(b));
-    points.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
-    points
+    candidates.retain(|(t, _)| t.zoom >= limits.min * 0.999 && t.zoom <= limits.max * 1.001);
+    candidates.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.zoom.total_cmp(&b.0.zoom)));
+    let mut placed: Vec<Tick> = Vec::new();
+    for (candidate, _) in candidates {
+        let gap = if candidate.rank == 3 { GAP_DOT_PX } else { GAP_LINE_PX };
+        if placed.iter().all(|t| (at(t.zoom) - at(candidate.zoom)).abs() >= gap) {
+            placed.push(candidate);
+        }
+    }
+    placed.sort_by(|a, b| a.zoom.total_cmp(&b.zoom));
+    placed
+}
+
+/// The zoom factors the handle snaps to, ascending: the marks.
+pub fn snap_zooms(limits: Limits, width_px: f64) -> Vec<f64> {
+    ticks(limits, width_px).into_iter().map(|t| t.zoom).collect()
 }
 
 /// Pulls a handle position to the nearest snap point that is within a few pixels of it. `width_px` is the length of the track.
 pub fn snap_position(position: f64, width_px: f64, limits: Limits) -> f64 {
-    let p = if position.is_finite() { position.clamp(0.0, 1.0) } else if limits.can_zoom_out() { 0.5 } else { 0.0 };
+    let p = if position.is_finite() { position.clamp(0.0, 1.0) } else { position_of(1.0, limits) };
     let width = width_px.max(1.0);
     let mut best: Option<(f64, f64)> = None;
-    for zoom in snap_zooms(limits) {
+    for zoom in snap_zooms(limits, width) {
         let target = position_of(zoom, limits);
         let reach = if (zoom - 1.0).abs() < 1e-9 { SNAP_RESET_PX } else { SNAP_PX };
         let distance = (target - p).abs() * width;
@@ -145,13 +181,19 @@ mod tests {
     }
 
     #[test]
-    fn the_middle_is_the_reset_and_the_ends_are_the_limits() {
-        assert!(close(position_of(1.0, L), 0.5));
+    fn the_ends_are_the_limits_and_the_reset_is_where_its_factor_puts_it() {
         assert!(close(position_of(L.min, L), 0.0));
         assert!(close(position_of(L.max, L), 1.0));
-        assert!(close(zoom_at(0.5, L), 1.0));
         assert!(close(zoom_at(0.0, L), L.min));
         assert!(close(zoom_at(1.0, L), L.max));
+        // 10% .. 1000%: the reset is exactly in the middle; with 33% .. 1000% it is far to the left.
+        assert!(close(position_of(1.0, L), 0.5));
+        let wide = Limits::new(1.0 / 3.0, 10.0);
+        let reset = position_of(1.0, wide);
+        assert!(reset > 0.2 && reset < 0.4, "{reset}");
+        assert!(close(zoom_at(reset, wide), 1.0));
+        // The same distance is the same factor on both sides of the reset.
+        assert!(close(position_of(2.0, wide) - reset, reset - position_of(0.5, wide)));
     }
 
     #[test]
@@ -163,26 +205,24 @@ mod tests {
         assert!(close(position_of(0.3, l), 0.0), "smaller than the fit counts as the fit");
         assert!(close(zoom_at(0.0, l), 1.0) && close(zoom_at(1.0, l), 10.0));
         assert!(close(zoom_at(f64::NAN, l), 1.0));
-        for i in 0..=50 {
-            let p = f64::from(i) / 50.0;
-            assert!((position_of(zoom_at(p, l), l) - p).abs() < 1e-9);
-        }
-        let points = snap_zooms(l);
+        let points = snap_zooms(l, 172.0);
         assert!(close(points[0], 1.0) && points.iter().all(|p| *p >= 1.0));
-        assert!(close(snap_position(4.0 / 200.0, 200.0, l), 0.0), "the reset pulls at the left end");
+        assert!(close(snap_position(4.0 / 172.0, 172.0, l), 0.0), "the reset pulls at the left end");
         assert!(close(step(1.0, false, 0.1, l), 1.0), "no step below the fit");
         assert!(step(1.0, true, 0.1, l) > 1.0);
     }
 
     #[test]
     fn position_and_zoom_are_inverse_and_monotonic() {
-        let mut last = -1.0;
-        for i in 0..=100 {
-            let p = f64::from(i) / 100.0;
-            let z = zoom_at(p, L);
-            assert!(z > last, "monotonic at {p}");
-            last = z;
-            assert!((position_of(z, L) - p).abs() < 1e-9, "round trip at {p}");
+        for limits in [L, Limits::new(1.0 / 3.0, 10.0), Limits::new(1.0, 10.0), Limits::new(0.09, 64.0)] {
+            let mut last = 0.0;
+            for i in 0..=100 {
+                let p = f64::from(i) / 100.0;
+                let z = zoom_at(p, limits);
+                assert!(z > last, "monotonic at {p}");
+                last = z;
+                assert!((position_of(z, limits) - p).abs() < 1e-9, "round trip at {p}");
+            }
         }
         assert!(close(zoom_at(f64::NAN, L), 1.0));
         assert!(close(zoom_at(7.0, L), L.max));
@@ -190,46 +230,51 @@ mod tests {
     }
 
     #[test]
-    fn other_limits_keep_the_reset_in_the_middle() {
-        let l = Limits::new(0.05, 32.0);
-        assert!(close(position_of(1.0, l), 0.5));
-        assert!(close(zoom_at(1.0, l), l.max));
-        assert!(snap_zooms(l).contains(&32.0));
-    }
-
-    #[test]
-    fn the_snap_points_are_what_the_user_expects() {
-        let points = snap_zooms(L);
-        for expected in [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0, 4.0, 5.0, 8.0] {
-            assert!(points.iter().any(|p| close(*p, expected)), "{expected}");
+    fn the_marks_are_regular_where_there_is_room_and_the_round_numbers_where_there_is_not() {
+        let marks = ticks(Limits::new(1.0 / 3.0, 10.0), 172.0);
+        let has = |z: f64| marks.iter().any(|t| close(t.zoom, z));
+        let rank = |z: f64| marks.iter().find(|t| close(t.zoom, z)).map(|t| t.rank);
+        // The reset is the strongest mark; the steps next to it are all there and drawn by size.
+        assert_eq!(rank(1.0), Some(0));
+        assert_eq!(rank(2.0), Some(1));
+        for (z, r) in [(1.25, 3), (1.5, 2), (1.75, 3), (0.75, 3), (0.5, 2)] {
+            assert_eq!(rank(z), Some(r), "{z}");
         }
-        assert!(points.windows(2).all(|w| w[0] < w[1]));
-        assert!(close(points[0], L.min) && close(*points.last().unwrap(), L.max));
-        // Nothing above the limit.
-        assert!(snap_zooms(Limits::new(0.1, 3.0)).iter().all(|p| *p <= 3.0 + 1e-9));
+        // Far out the 25% steps are left out, the whole steps are not.
+        assert!(!has(8.25) && !has(8.5), "no crowd near the end");
+        assert!(has(3.0));
+        // Whatever is kept is spaced out.
+        let width = 172.0;
+        for pair in marks.windows(2) {
+            let gap = (position_of(pair[1].zoom, Limits::new(1.0 / 3.0, 10.0)) - position_of(pair[0].zoom, Limits::new(1.0 / 3.0, 10.0))) * width;
+            assert!(gap >= GAP_DOT_PX - 1e-9, "{pair:?} {gap}");
+        }
+        // Ascending, with both ends.
+        assert!(marks.windows(2).all(|w| w[0].zoom < w[1].zoom));
+        assert!(has(1.0 / 3.0) && has(10.0));
+        // Nothing above the limit, and the marks below the fit go as far as the limit allows.
+        assert!(ticks(Limits::new(0.1, 3.0), 172.0).iter().all(|t| t.zoom <= 3.0 + 1e-9));
+        assert!(!ticks(Limits::new(0.6, 3.0), 172.0).iter().any(|t| t.zoom < 0.6 - 1e-9));
+        // A narrow track keeps fewer marks, never none.
+        assert!(ticks(L, 40.0).len() >= 3);
     }
 
     #[test]
-    fn the_handle_is_pulled_to_the_reset_and_to_the_other_points_only_when_close() {
-        let width = 200.0;
-        // 4 px next to the middle snaps to the reset.
-        assert!(close(snap_position(0.5 + 4.0 / width, width, L), 0.5));
-        assert!(close(snap_position(0.5 - 6.0 / width, width, L), 0.5));
-        // Between the reset and 75% the nearer point wins.
-        let near_75 = position_of(0.75, L) + 2.0 / width;
-        assert!(close(snap_position(near_75, width, L), position_of(0.75, L)));
-        // 15 px away does not.
-        let free = 0.5 + 15.0 / width;
-        assert!(close(snap_position(free, width, L), free) || snap_zooms(L).iter().any(|z| (position_of(*z, L) - free).abs() * width < 5.0));
-        // 50% is a snap point too.
-        let at_50 = position_of(0.5, L);
-        assert!(close(snap_position(at_50 + 3.0 / width, width, L), at_50));
-        // A position far from every point is left alone.
-        let p = (position_of(2.0, L) + position_of(3.0, L)) / 2.0;
-        assert!(close(snap_position(p, width, L), p));
-        // The ends snap, a broken value does not break.
-        assert!(close(snap_position(0.999, width, L), 1.0));
-        assert!(close(snap_position(f64::NAN, width, L), 0.5));
+    fn the_handle_is_pulled_to_the_reset_and_to_the_other_marks_only_when_close() {
+        let width = 172.0;
+        let limits = Limits::new(1.0 / 3.0, 10.0);
+        let reset = position_of(1.0, limits);
+        assert!(close(snap_position(reset + 4.0 / width, width, limits), reset));
+        assert!(close(snap_position(reset - 6.0 / width, width, limits), reset));
+        let at_150 = position_of(1.5, limits);
+        assert!(close(snap_position(at_150 + 2.0 / width, width, limits), at_150));
+        let at_50 = position_of(0.5, limits);
+        assert!(close(snap_position(at_50 - 3.0 / width, width, limits), at_50));
+        // Between two marks, far from both, the handle stays where it is.
+        let p = (position_of(4.0, limits) + position_of(5.0, limits)) / 2.0;
+        assert!(close(snap_position(p, width, limits), p));
+        assert!(close(snap_position(0.999, width, limits), 1.0));
+        assert!(close(snap_position(f64::NAN, width, limits), reset));
     }
 
     #[test]

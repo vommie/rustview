@@ -100,7 +100,7 @@ impl MultiviewInstance {
             permille: scale::to_permille(zoom.zoom()),
             min_permille: scale::to_permille(limits.min),
             max_permille: scale::to_permille(limits.max),
-            snaps: scale::snap_zooms(limits).into_iter().map(scale::to_permille).collect(),
+            snaps: scale::ticks(limits, SLIDER_TRACK_PX).into_iter().map(|t| scale::to_permille(t.zoom) * 4 + i32::from(t.rank)).collect(),
         })
     }
 
@@ -431,7 +431,9 @@ impl MultiviewInstance {
             area,
             dest: Rect::new(picture.dest.x, picture.dest.y, picture.dest.w, picture.dest.h),
             content: match picture.content {
-                PictureContent::Rendered(pixels) => ZoomContentView::Rendered(pixels),
+                PictureContent::Rendered { pixels, clip } => {
+                    ZoomContentView::Rendered { pixels, clip: Rect::new(clip.x, clip.y, clip.w, clip.h) }
+                }
                 PictureContent::Preview { clip } => ZoomContentView::Preview { clip: Rect::new(clip.x, clip.y, clip.w, clip.h) },
             },
             pixelated: prefs.resample.is_pixelated(),
@@ -561,7 +563,8 @@ mod tests {
         instance.lock().toggle_zoom_slider(0);
         let bubble = instance.lock().zoom_bubble().unwrap();
         assert_eq!((bubble.tile, bubble.permille, bubble.min_permille, bubble.max_permille), (0, 1000, 100, 10_000));
-        assert!(bubble.snaps.contains(&1000) && bubble.snaps.contains(&500) && bubble.snaps.contains(&2000));
+        let marks: Vec<i32> = bubble.snaps.iter().map(|tick| tick / 4).collect();
+        assert!(marks.contains(&1000) && marks.contains(&500) && marks.contains(&2000), "{marks:?}");
         assert_eq!(instance.lock().zoom_button_state(0), Some(true));
         instance.lock().toggle_zoom_slider(0);
         assert!(instance.lock().zoom_bubble().is_none());
@@ -620,7 +623,10 @@ mod tests {
         let picture = tile.zoom.expect("zoomed");
         assert_eq!((picture.dest.x, picture.dest.w), (0, 1600), "{:?}", picture.dest);
         assert_eq!(picture.area.w, 1600);
-        // Pointer and bar count the room as the tile.
+        // The bar stays at the corner of the medium itself, zoomed or not.
+        instance.lock().poll_pointer(Some((content.x + content.w - 10, content.y + 10)));
+        assert_eq!(instance.lock().media_bar_target().map(|t| t.rect), Some(content));
+        // Pointer and hover count the room as the tile.
         let inside_room_only = (room.x + 20, room.y + 450);
         assert!(!content.contains(inside_room_only.0, inside_room_only.1));
         instance.lock().poll_pointer(Some(inside_room_only));
