@@ -59,15 +59,21 @@ impl MultiviewInstance {
         self.pointer = None;
     }
 
-    /// The bar the host may show now: the hovered tile, where that tile is in the host window (physical pixels), the
-    /// pointer and the buttons of the tile. The host reveals the bar once the pointer is within the reveal distance of it.
-    /// `None` while no tile is hovered, the pointer is nowhere near the corner that carries the bar, the user switched the
-    /// bar off or the tile offers no button.
+    /// The tile whose canvas (its room, see `host_room`) the pointer is in: the hovered medium, or the free space around it.
+    fn canvas_tile_at(&self, pointer: (i32, i32)) -> Option<usize> {
+        self.hovered.or_else(|| (0..self.tiles.len()).find(|&i| self.host_room(i).is_some_and(|room| room.contains(pointer.0, pointer.1))))
+    }
+
+    /// The bar the host may show now: the tile whose canvas the pointer is in, that canvas in the host window (physical
+    /// pixels), the pointer and the buttons of the tile. The bar sits at the top right of the canvas of its medium, at the height
+    /// of the primary bar, whatever the medium's size or zoom, so it is always found at the same place. The host reveals the
+    /// bar once the pointer is within the reveal distance of it. `None` while the pointer is in no canvas, nowhere near the
+    /// corner that carries the bar, the user switched the bar off or the tile offers no button.
     pub fn media_bar_target(&self) -> Option<MediaBarTarget> {
         let bar = prefs::current().media_bar;
-        let (tile, pointer) = (self.hovered?, self.pointer?);
-        // The bar stays at the corner of the medium itself, zoomed or not (not at the corner of the room a zoomed picture fills).
-        let rect = self.host_content(tile)?;
+        let pointer = self.pointer?;
+        let tile = self.canvas_tile_at(pointer)?;
+        let rect = self.host_room(tile)?;
         if !bar.enabled
             || !near_bar_corner(BarCorner::TopRight, rect, pointer, self.host.surface.dpi, bar.reveal_distance_px)
         {

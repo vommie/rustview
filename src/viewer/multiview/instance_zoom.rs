@@ -264,7 +264,7 @@ impl MultiviewInstance {
     /// The room tile `index` may zoom in, in host pixels: its column (the full height of the row), and for the first and the last
     /// tile of a row also the free space the layout leaves at the edge of the container, so a picture that is narrower than the
     /// screen can grow into all of it. Never more than the column of a neighbor.
-    pub(super) fn host_zoom_area(&self, index: usize) -> Option<Rect> {
+    pub(super) fn host_room(&self, index: usize) -> Option<Rect> {
         let layout = self.layout.tiles.get(index)?;
         let container = self.solving_container().rect();
         let mut area = layout.column;
@@ -288,7 +288,7 @@ impl MultiviewInstance {
     /// else the place of the medium.
     pub(super) fn host_tile_rect(&self, index: usize) -> Option<Rect> {
         let zoomed = self.tiles.get(index)?.zoom.as_ref().is_some_and(|z| z.is_active());
-        if zoomed { self.host_zoom_area(index) } else { self.host_content(index) }
+        if zoomed { self.host_room(index) } else { self.host_content(index) }
     }
 
     /// Gives every zoom the room of its tile (called after the layout or the projection changed).
@@ -298,7 +298,7 @@ impl MultiviewInstance {
         }
         let areas: Vec<Option<Area>> = (0..self.tiles.len())
             .map(|i| {
-                let (room, home) = (self.host_zoom_area(i)?, self.host_content(i)?);
+                let (room, home) = (self.host_room(i)?, self.host_content(i)?);
                 Some(Area::new((room.w, room.h), IRect { x: home.x - room.x, y: home.y - room.y, w: home.w, h: home.h }))
             })
             .collect();
@@ -444,7 +444,7 @@ impl MultiviewInstance {
 
     /// The room of tile `index` relative to the top left corner of the tile (so it starts at zero or below).
     fn zoom_area_in_tile(&self, index: usize) -> Option<Rect> {
-        let (room, content) = (self.host_zoom_area(index)?, self.host_content(index)?);
+        let (room, content) = (self.host_room(index)?, self.host_content(index)?);
         Some(Rect::new(room.x - content.x, room.y - content.y, room.w, room.h))
     }
 
@@ -612,7 +612,7 @@ mod tests {
         let instance = instance(vec![seed], HostSurface::fullscreen(1, 1600, 900, 1.0));
         let (room, content) = {
             let guard = instance.lock();
-            (guard.host_zoom_area(0).unwrap(), guard.host_content(0).unwrap())
+            (guard.host_room(0).unwrap(), guard.host_content(0).unwrap())
         };
         assert_eq!((room.x, room.w, room.h), (0, 1600, 900), "a lone picture may use the whole screen: {room:?}");
         assert!(content.w < 600, "the fit is narrow: {content:?}");
@@ -623,9 +623,9 @@ mod tests {
         let picture = tile.zoom.expect("zoomed");
         assert_eq!((picture.dest.x, picture.dest.w), (0, 1600), "{:?}", picture.dest);
         assert_eq!(picture.area.w, 1600);
-        // The bar stays at the corner of the medium itself, zoomed or not.
-        instance.lock().poll_pointer(Some((content.x + content.w - 10, content.y + 10)));
-        assert_eq!(instance.lock().media_bar_target().map(|t| t.rect), Some(content));
+        // The bar sits at the top right of the canvas, not of the narrow medium (and the pointer there, over free space, finds it).
+        instance.lock().poll_pointer(Some((room.x + room.w - 10, room.y + 10)));
+        assert_eq!(instance.lock().media_bar_target().map(|t| t.rect), Some(room));
         // Pointer and hover count the room as the tile.
         let inside_room_only = (room.x + 20, room.y + 450);
         assert!(!content.contains(inside_room_only.0, inside_room_only.1));
@@ -643,7 +643,7 @@ mod tests {
         b.orig_size = Some((900, 1600));
         let instance = instance(vec![a, b], HostSurface::fullscreen(1, 1600, 900, 1.0));
         let guard = instance.lock();
-        let (first, second) = (guard.host_zoom_area(0).unwrap(), guard.host_zoom_area(1).unwrap());
+        let (first, second) = (guard.host_room(0).unwrap(), guard.host_room(1).unwrap());
         assert_eq!(first.x, 0);
         assert_eq!(second.x + second.w, 1600);
         assert!(first.x + first.w <= second.x, "the rooms do not overlap: {first:?} {second:?}");
