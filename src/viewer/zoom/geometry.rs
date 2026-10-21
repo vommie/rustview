@@ -201,6 +201,11 @@ impl Frame {
         (self.image_w * s, self.image_h * s)
     }
 
+    /// The size of the whole zoomed image on screen.
+    pub fn extent_px(&self, view: ZoomView) -> (f64, f64) {
+        self.extent(view.zoom)
+    }
+
     /// Whether the image is larger than the room on any axis, i.e. dragging can move something.
     pub fn is_pannable(&self, view: ZoomView) -> bool {
         let (ex, ey) = self.extent(view.zoom);

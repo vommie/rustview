@@ -94,9 +94,58 @@ impl Grab {
     }
 }
 
+/// Screen pixels the picture may move per pixel of pointer movement while the minimap is dragged slowly, however far in it is.
+/// Dragged 1:1 (the rectangle under the pointer) a picture zoomed 20x moves by hundreds of pixels per pointer pixel; this keeps
+/// a slow drag controllable and lets the rectangle lag behind the pointer instead.
+const TARGET_SCREEN_PER_POINTER_PX: f64 = 8.0;
+/// The finest the drag gets (the rectangle moves this share of the pointer's way).
+const MIN_GAIN: f64 = 0.03;
+/// The pointer speed (minimap pixels per second) from which a drag gets coarser again, and where it is 1:1 again: a flick
+/// crosses the whole minimap, a careful movement is precise ("precision with acceleration").
+const FAST_FROM_PX_S: f64 = 250.0;
+const FAST_TO_PX_S: f64 = 1000.0;
+
+/// How much of the pointer's movement on the minimap the rectangle follows. `screen_per_pointer_px` is how many screen pixels
+/// the picture moves for one pixel of rectangle movement (the size of the zoomed image divided by the size of the minimap),
+/// `speed` the smoothed pointer speed in minimap pixels per second. 1.0 = the rectangle stays under the pointer.
+pub fn drag_gain(screen_per_pointer_px: f64, speed: f64) -> f64 {
+    let slow = if screen_per_pointer_px.is_finite() && screen_per_pointer_px > 0.0 {
+        (TARGET_SCREEN_PER_POINTER_PX / screen_per_pointer_px).clamp(MIN_GAIN, 1.0)
+    } else {
+        1.0
+    };
+    let t = if speed.is_finite() { ((speed - FAST_FROM_PX_S) / (FAST_TO_PX_S - FAST_FROM_PX_S)).clamp(0.0, 1.0) } else { 0.0 };
+    let smooth = t * t * (3.0 - 2.0 * t);
+    slow + (1.0 - slow) * smooth
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_slow_drag_gets_finer_the_further_in_the_picture_is_and_a_flick_is_direct() {
+        // Zoomed out: the rectangle stays under the pointer.
+        assert_eq!(drag_gain(6.0, 0.0), 1.0);
+        assert_eq!(drag_gain(8.0, 0.0), 1.0);
+        // Further in: finer, never below the floor, and monotonic.
+        let mut last = 1.0;
+        for k in [10.0, 18.0, 40.0, 80.0, 160.0, 1000.0, 1e9] {
+            let g = drag_gain(k, 0.0);
+            assert!(g <= last + 1e-12 && g >= MIN_GAIN - 1e-12, "{k} {g}");
+            last = g;
+        }
+        assert!((drag_gain(60.0, 0.0) - 8.0 / 60.0).abs() < 1e-9);
+        // A fast pointer is followed more and more, a flick is 1:1 again.
+        let slow = drag_gain(60.0, 0.0);
+        let mid = drag_gain(60.0, 600.0);
+        assert!(mid > slow && mid < 1.0);
+        assert_eq!(drag_gain(60.0, 5000.0), 1.0);
+        assert_eq!(drag_gain(60.0, 100.0), slow, "below the threshold nothing changes");
+        // Broken numbers are harmless.
+        assert_eq!(drag_gain(f64::NAN, 10.0), 1.0);
+        assert!(drag_gain(10.0, f64::NAN) < 1.0);
+    }
 
     #[test]
     fn it_sits_in_the_chosen_corner_with_the_aspect_of_the_image() {

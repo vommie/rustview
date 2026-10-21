@@ -198,12 +198,14 @@ impl MultiviewInstance {
             self.bump();
             return;
         }
-        let (nx, ny) = (f64::from(nx).clamp(0.0, 1.0), f64::from(ny).clamp(0.0, 1.0));
+        // A press is on the minimap; a drag goes on outside of it, so the pointer is only kept within sane bounds.
+        let (nx, ny) = (f64::from(nx).clamp(-50.0, 51.0), f64::from(ny).clamp(-50.0, 51.0));
+        let mm_px = self.minimap_px(index);
         let (prefs, now) = (zoom_prefs::current(), Instant::now());
         if let Some(zoom) = self.tiles[index].zoom.as_mut() {
             match phase {
-                0 => zoom.minimap_press(nx, ny, &prefs, now),
-                1 => zoom.minimap_move(nx, ny, &prefs, now),
+                0 => zoom.minimap_press(nx.clamp(0.0, 1.0), ny.clamp(0.0, 1.0), &prefs, now),
+                1 => zoom.minimap_move(nx, ny, mm_px, &prefs, now),
                 _ => zoom.minimap_release(),
             }
         }
@@ -446,6 +448,15 @@ impl MultiviewInstance {
     fn zoom_area_in_tile(&self, index: usize) -> Option<Rect> {
         let (room, content) = (self.host_room(index)?, self.host_content(index)?);
         Some(Rect::new(room.x - content.x, room.y - content.y, room.w, room.h))
+    }
+
+    /// The size of the minimap of tile `index` in pixels (zero while it has none).
+    fn minimap_px(&self, index: usize) -> (f64, f64) {
+        let layout = self
+            .zoom_area_in_tile(index)
+            .zip(self.tiles.get(index).and_then(|t| t.zoom.as_ref()))
+            .and_then(|(area, zoom)| MinimapLayout::compute((area.w, area.h), zoom.image(), zoom_prefs::current().minimap_corner, self.host.surface.dpi));
+        layout.map_or((0.0, 0.0), |l| (f64::from(l.rect.w), f64::from(l.rect.h)))
     }
 
     fn minimap_view(&self, index: usize, prefs: &zoom_prefs::ZoomPrefs) -> Option<MinimapView> {

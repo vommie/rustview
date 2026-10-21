@@ -133,12 +133,19 @@ pub enum PictureContent {
     Preview { clip: IRect },
 }
 
+/// A drag on the minimap: where the pointer was last and when, and how fast it moves (smoothed, minimap pixels per second).
+struct Drag {
+    last: (f64, f64),
+    at: Instant,
+    speed: f64,
+}
+
 #[derive(Default)]
 struct MinimapState {
     hover: bool,
     /// The slider bubble on the minimap is open: the minimap stays, whatever the zoom.
     pinned: bool,
-    grab: Option<Grab>,
+    drag: Option<Drag>,
     reveal_until: Option<Instant>,
 }
 
@@ -319,30 +326,51 @@ impl ZoomState {
         self.minimap.hover = hover;
     }
 
-    /// A press on the minimap at (`nx`, `ny`), shares of the image.
+    /// A press on the minimap at (`nx`, `ny`), shares of the image: the rectangle is grabbed where it is, or jumps to the press
+    /// (which is meant: a click on the minimap goes there). From then on the drag is relative (see `minimap_move`).
     pub fn minimap_press(&mut self, nx: f64, ny: f64, prefs: &ZoomPrefs, now: Instant) {
         let Some(frame) = self.frame() else { return };
         let grab = Grab::at(nx, ny, frame.viewport_norm(self.shown));
-        self.minimap.grab = Some(grab);
-        self.minimap_move(nx, ny, prefs, now);
-    }
-
-    /// The pointer moved while the minimap is pressed.
-    pub fn minimap_move(&mut self, nx: f64, ny: f64, prefs: &ZoomPrefs, now: Instant) {
-        let (Some(frame), Some(grab)) = (self.frame(), self.minimap.grab) else { return };
         let (mx, my) = grab.middle_for(nx, ny);
+        self.minimap.drag = Some(Drag { last: (nx, ny), at: now, speed: 0.0 });
         let next = frame.center_for_viewport(self.shown, mx, my);
         if next != self.target || self.animation.is_some() {
             self.start_view_change(next, prefs, now, false);
         }
     }
 
+    /// The pointer moved while the minimap is pressed, to (`nx`, `ny`) (shares of the image; they may lie outside the minimap, the
+    /// drag goes on there). `mm_px` is the size of the minimap in pixels.
+    ///
+    /// The rectangle moves relative to the pointer, by a share of its movement (`minimap::drag_gain`): the further in the picture
+    /// is zoomed, the finer a slow drag, so the picture does not leap by hundreds of pixels per pointer pixel; a fast flick is
+    /// followed 1:1 to get across. The rectangle may lag behind the pointer; at an edge it simply stops.
+    pub fn minimap_move(&mut self, nx: f64, ny: f64, mm_px: (f64, f64), prefs: &ZoomPrefs, now: Instant) {
+        let (Some(frame), Some(drag)) = (self.frame(), self.minimap.drag.as_mut()) else { return };
+        let (dx, dy) = (nx - drag.last.0, ny - drag.last.1);
+        let seconds = now.saturating_duration_since(drag.at).as_secs_f64().max(0.001);
+        let instant = (dx * mm_px.0).hypot(dy * mm_px.1) / seconds;
+        // Smoothed, so one slow or fast event does not flip the gain.
+        drag.speed = if drag.speed == 0.0 { instant * 0.5 } else { drag.speed * 0.65 + instant * 0.35 };
+        drag.last = (nx, ny);
+        drag.at = now;
+        if mm_px.0 <= 0.0 || mm_px.1 <= 0.0 {
+            return;
+        }
+        let (ex, ey) = frame.extent_px(self.shown);
+        let gain = super::minimap::drag_gain((ex / mm_px.0).max(ey / mm_px.1), drag.speed);
+        let next = frame.center_for_viewport(self.shown, self.shown.cx + dx * gain, self.shown.cy + dy * gain);
+        if next != self.target || self.animation.is_some() {
+            self.start_view_change(next, prefs, now, false);
+        }
+    }
+
     pub fn minimap_release(&mut self) {
-        self.minimap.grab = None;
+        self.minimap.drag = None;
     }
 
     pub fn minimap_dragging(&self) -> bool {
-        self.minimap.grab.is_some()
+        self.minimap.drag.is_some()
     }
 
     // ---- time and the work -------------------------------------------------------------------------------------------------
@@ -530,7 +558,7 @@ impl ZoomState {
             || zoomed_in
                 && (prefs.minimap_always
                 || self.minimap.hover
-                || self.minimap.grab.is_some()
+                || self.minimap.drag.is_some()
                 || self.minimap.reveal_until.is_some_and(|until| now < until))
     }
 
@@ -881,10 +909,10 @@ mod tests {
         state.minimap_press(0.5, 0.5, &p, now);
         assert!(state.minimap_dragging());
         assert!(state.minimap_shown(&p, ms(now, 60_000)), "visible while dragged");
-        state.minimap_move(0.8, 0.5, &p, ms(now, 10));
+        state.minimap_move(0.8, 0.5, (200.0, 150.0), &p, ms(now, 10));
         let vp = state.viewport_norm().unwrap();
         assert!((vp.x + vp.w / 2.0 - 0.8).abs() < 1e-9, "{vp:?}");
-        state.minimap_move(5.0, -5.0, &p, ms(now, 20));
+        state.minimap_move(5.0, -5.0, (200.0, 150.0), &p, ms(now, 20));
         let vp = state.viewport_norm().unwrap();
         assert!((vp.right() - 1.0).abs() < 1e-9 && vp.y.abs() < 1e-9);
         state.minimap_release();
@@ -893,6 +921,58 @@ mod tests {
         state.minimap_press(0.1, 0.1, &p, ms(now, 30));
         let vp = state.viewport_norm().unwrap();
         assert!(vp.x.abs() < 1e-9 && vp.y.abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_slow_drag_of_the_minimap_is_finer_the_further_in_the_picture_is_and_a_flick_is_not() {
+        let mm = (200.0, 150.0);
+        let p = prefs();
+        let slow_drag = |zoom: f64| {
+            let (mut state, now) = state();
+            state.zoom_to(zoom, None, &p, now);
+            let before = state.viewport_norm().unwrap();
+            let start = (before.x + before.w / 2.0, before.y + before.h / 2.0);
+            state.minimap_press(start.0, start.1, &p, ms(now, 10));
+            // The pointer crawls 20 minimap pixels to the right (2 px every 60 ms).
+            for i in 1..=10 {
+                state.minimap_move(start.0 + f64::from(i) * 2.0 / 200.0, start.1, mm, &p, ms(now, 10 + 60 * i as u64));
+            }
+            let after = state.viewport_norm().unwrap();
+            (after.x + after.w / 2.0) - start.0
+        };
+        let (near, mid, far) = (slow_drag(1.5), slow_drag(5.0), slow_drag(10.0));
+        let pointer = 20.0 / 200.0;
+        assert!(near > mid && mid > far && far > 0.0, "{near} {mid} {far}");
+        assert!((near - pointer).abs() < 0.2 * pointer, "barely zoomed in: nearly 1:1 ({near})");
+        assert!(far < 0.2 * pointer, "far in: much finer ({far})");
+        // The same distance as a flick (20 px in 8 ms) is followed 1:1, so one can still get across.
+        let (mut state, now) = state();
+        state.zoom_to(10.0, None, &p, now);
+        let vp = state.viewport_norm().unwrap();
+        let start = (vp.x + vp.w / 2.0, vp.y + vp.h / 2.0);
+        state.minimap_press(start.0, start.1, &p, ms(now, 10));
+        for i in 1..=10 {
+            state.minimap_move(start.0 + f64::from(i) * 2.0 / 200.0, start.1, mm, &p, ms(now, 10 + i as u64));
+        }
+        let vp = state.viewport_norm().unwrap();
+        assert!((vp.x + vp.w / 2.0 - start.0 - pointer).abs() < 0.15 * pointer, "flick");
+    }
+
+    #[test]
+    fn a_drag_that_goes_on_outside_the_minimap_still_moves_the_view_and_stops_at_the_edge() {
+        let (mut state, now) = state();
+        let p = prefs();
+        state.zoom_to(4.0, None, &p, now);
+        state.minimap_press(0.5, 0.5, &p, now);
+        // The pointer is far outside (beyond the right edge of the minimap): the view is at the edge, not beyond it.
+        for i in 1..=40 {
+            state.minimap_move(0.5 + f64::from(i) * 0.1, 0.5, (200.0, 150.0), &p, ms(now, 20 * i as u64));
+        }
+        let vp = state.viewport_norm().unwrap();
+        assert!((vp.right() - 1.0).abs() < 1e-9);
+        // Coming back moves the view at once (no dead zone for the way the pointer went beyond the edge).
+        state.minimap_move(0.5 + 4.0 - 0.1, 0.5, (200.0, 150.0), &p, ms(now, 20 * 41));
+        assert!(state.viewport_norm().unwrap().right() < 1.0 - 1e-6);
     }
 
     #[test]

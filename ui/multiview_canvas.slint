@@ -303,8 +303,9 @@ export component MultiviewCanvas inherits Rectangle {
                 }
 
                 moved => {
+                    // Not clamped: the drag goes on outside the minimap, and Rust measures the way of the pointer.
                     if self.pressed {
-                        root.minimap-pointer(index, Math.clamp(self.mouse-x / self.width, 0, 1), Math.clamp(self.mouse-y / self.height, 0, 1), 1);
+                        root.minimap-pointer(index, self.mouse-x / self.width, self.mouse-y / self.height, 1);
                     }
                 }
             }
