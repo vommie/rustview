@@ -18,6 +18,12 @@
 /// Tolerance for comparing pixel sizes.
 const EPS: f64 = 1e-6;
 
+/// Rounds to a whole pixel, half up, with a bias far above float noise (1e-12) and far below anything visible: a position that is
+/// exactly (or by noise nearly) between two pixels always lands on the same one instead of flipping from one frame to the next.
+fn snap(v: f64) -> f64 {
+    (v + 0.5 + 1e-6).floor()
+}
+
 /// Zoom limits as factors of the fitted size (1.0 = 100%).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Limits {
@@ -254,9 +260,18 @@ impl Frame {
     }
 
     /// Moves the image by a drag of `dx`, `dy` screen pixels (the image follows the pointer).
+    ///
+    /// A drag is whole device pixels (the pointer moves in them), so the picture moves by exactly that many on screen, every time:
+    /// the position it starts from is snapped to a whole pixel once and then only whole pixels are added. Adding the distance to
+    /// the stored centre (a share of the image) and rounding the result for the screen would make the picture hop by 0, 1, 1, 0,
+    /// 1 pixels for the same pointer speed, which reads as jitter.
     pub fn pan_pixels(&self, view: ZoomView, dx: f64, dy: f64) -> ZoomView {
         let (ex, ey) = self.extent(view.zoom);
-        self.clamp_center(ZoomView { zoom: view.zoom, cx: view.cx - dx / ex, cy: view.cy - dy / ey })
+        let rect = self.image_rect(view);
+        let (dx, dy) = (dx.round(), dy.round());
+        let cx = if ex > self.tile_w + EPS { (self.tile_w / 2.0 - (snap(rect.x) + dx)) / ex } else { view.cx };
+        let cy = if ey > self.tile_h + EPS { (self.tile_h / 2.0 - (snap(rect.y) + dy)) / ey } else { view.cy };
+        self.clamp_center(ZoomView { zoom: view.zoom, cx, cy })
     }
 
     /// Where the image starts on an axis: pushed from its home into the room while it is smaller than the room, else placed by
@@ -295,10 +310,10 @@ impl Frame {
     pub fn visible(&self, view: ZoomView) -> Option<Visible> {
         let rect = self.image_rect(view);
         let s = self.scale(view.zoom);
-        let x0 = rect.x.max(0.0).round();
-        let y0 = rect.y.max(0.0).round();
-        let x1 = rect.right().min(self.tile_w).round();
-        let y1 = rect.bottom().min(self.tile_h).round();
+        let x0 = snap(rect.x.max(0.0));
+        let y0 = snap(rect.y.max(0.0));
+        let x1 = snap(rect.right().min(self.tile_w));
+        let y1 = snap(rect.bottom().min(self.tile_h));
         if x1 - x0 < 1.0 || y1 - y0 < 1.0 || s <= 0.0 {
             return None;
         }
@@ -320,8 +335,8 @@ impl Frame {
     /// rendered for it stays sharp and exact while the view is dragged around.
     pub fn placement(&self, view: ZoomView) -> Option<Placement> {
         let rect = self.image_rect(view);
-        let (x, y) = (rect.x.round() as i32, rect.y.round() as i32);
-        let (w, h) = ((rect.w.round() as i32).max(1), (rect.h.round() as i32).max(1));
+        let (x, y) = (snap(rect.x) as i32, snap(rect.y) as i32);
+        let (w, h) = ((snap(rect.w) as i32).max(1), (snap(rect.h) as i32).max(1));
         let (room_w, room_h) = (self.tile_w.round() as i32, self.tile_h.round() as i32);
         let (x0, y0) = ((-x).max(0), (-y).max(0));
         let (x1, y1) = (w.min(room_w - x), h.min(room_h - y));
@@ -398,6 +413,43 @@ mod tests {
         let after = f.image_rect(v);
         let src_after = ((anchor.0 - after.x) / after.w, (anchor.1 - after.y) / after.h);
         assert!(close(src_before.0, src_after.0) && close(src_before.1, src_after.1), "{src_before:?} {src_after:?}");
+    }
+
+    #[test]
+    fn a_drag_moves_the_picture_by_exactly_the_pointer_distance_every_time() {
+        // Odd sizes put the picture between two pixels (x.5) at the start; the drag must not hop by 0, 1, 1, 0 pixels.
+        for (image, tile, zoom) in [((4001, 3001), (1001, 751), 3.0), ((900, 1600), (500, 900), 2.7), ((6001, 4001), (1333, 777), 5.5)] {
+            let f = Frame::new(image, tile).unwrap();
+            let mut view = f.zoom_to(ZoomView::FIT, zoom, None, LIMITS);
+            let mut last = f.placement(view).unwrap().x;
+            for (i, step) in [3, 1, 2, 1, 1, 4, 1, 2, 3, 1, 1, 1, 2, 5, 1, 1].iter().enumerate() {
+                let before = view;
+                view = f.pan_pixels(view, -f64::from(*step), 0.0);
+                let now = f.placement(view).unwrap().x;
+                let clamped = f.pan_pixels(before, -f64::from(*step), 0.0) == f.clamp_center(before);
+                assert!(clamped || now - last == -step, "step {i} ({image:?}): moved {} for {step}", now - last);
+                last = now;
+            }
+            // And back with the opposite drag: the same distance again.
+            for step in [2, 1, 3, 1, 1] {
+                view = f.pan_pixels(view, f64::from(step), 0.0);
+                let now = f.placement(view).unwrap().x;
+                assert_eq!(now - last, step, "{image:?}");
+                last = now;
+            }
+        }
+    }
+
+    #[test]
+    fn a_position_between_two_pixels_always_rounds_the_same_way() {
+        assert_eq!(snap(10.5), 11.0);
+        assert_eq!(snap(10.5 + 1e-12), 11.0);
+        assert_eq!(snap(10.5 - 1e-12), 11.0);
+        assert_eq!(snap(-10.5), -10.0);
+        assert_eq!(snap(-10.5 + 1e-12), -10.0);
+        assert_eq!(snap(-10.5 - 1e-12), -10.0);
+        assert_eq!(snap(7.4), 7.0);
+        assert_eq!(snap(7.6), 8.0);
     }
 
     #[test]
