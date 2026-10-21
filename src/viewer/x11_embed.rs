@@ -175,6 +175,7 @@ struct X11Symbols {
         *mut c_int,
         *mut c_uint,
     ) -> c_int,
+    x_warp_pointer: unsafe extern "C" fn(DisplayPtr, WindowId, WindowId, c_int, c_int, c_uint, c_uint, c_int, c_int) -> c_int,
     x_set_error_handler: unsafe extern "C" fn(XErrorHandler) -> XErrorHandler,
     x_default_screen: unsafe extern "C" fn(DisplayPtr) -> c_int,
     x_get_selection_owner: unsafe extern "C" fn(DisplayPtr, AtomId) -> WindowId,
@@ -315,6 +316,7 @@ unsafe fn load_symbols_from_handles(
         x_get_selection_owner: unsafe { load_sym(lib_x11, "XGetSelectionOwner")? },
         x_translate_coordinates: unsafe { load_sym(lib_x11, "XTranslateCoordinates")? },
         x_get_geometry: unsafe { load_sym(lib_x11, "XGetGeometry")? },
+        x_warp_pointer: unsafe { load_sym(lib_x11, "XWarpPointer")? },
         x_raise_window: unsafe { load_sym(lib_x11, "XRaiseWindow")? },
     });
 

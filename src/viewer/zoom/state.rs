@@ -133,9 +133,11 @@ pub enum PictureContent {
     Preview { clip: IRect },
 }
 
-/// A drag on the minimap: where the pointer was last and when, and how fast it moves (smoothed, minimap pixels per second).
+/// A drag on the minimap: where it grabbed the rectangle, when the pointer last moved and how fast it moves (smoothed, minimap
+/// pixels per second).
 struct Drag {
-    last: (f64, f64),
+    /// Where in the rectangle the press was (the absolute drag keeps it under the pointer).
+    grab: Grab,
     at: Instant,
     speed: f64,
 }
@@ -327,39 +329,47 @@ impl ZoomState {
     }
 
     /// A press on the minimap at (`nx`, `ny`), shares of the image: the rectangle is grabbed where it is, or jumps to the press
-    /// (which is meant: a click on the minimap goes there). From then on the drag is relative (see `minimap_move`).
+    /// (which is meant: a click on the minimap goes there).
     pub fn minimap_press(&mut self, nx: f64, ny: f64, prefs: &ZoomPrefs, now: Instant) {
         let Some(frame) = self.frame() else { return };
         let grab = Grab::at(nx, ny, frame.viewport_norm(self.shown));
-        let (mx, my) = grab.middle_for(nx, ny);
-        self.minimap.drag = Some(Drag { last: (nx, ny), at: now, speed: 0.0 });
+        self.minimap.drag = Some(Drag { grab, at: now, speed: 0.0 });
+        self.minimap_move(nx, ny, prefs, now);
+    }
+
+    /// The pointer moved while the minimap is pressed and the pointer is not locked: the rectangle stays under it (1:1).
+    pub fn minimap_move(&mut self, nx: f64, ny: f64, prefs: &ZoomPrefs, now: Instant) {
+        let (Some(frame), Some(drag)) = (self.frame(), self.minimap.drag.as_ref()) else { return };
+        let (mx, my) = drag.grab.middle_for(nx, ny);
         let next = frame.center_for_viewport(self.shown, mx, my);
         if next != self.target || self.animation.is_some() {
             self.start_view_change(next, prefs, now, false);
         }
     }
 
-    /// The pointer moved while the minimap is pressed, to (`nx`, `ny`) (shares of the image; they may lie outside the minimap, the
-    /// drag goes on there). `mm_px` is the size of the minimap in pixels.
+    /// The pointer moved by (`dx`, `dy`) pixels while the minimap is pressed and the pointer is locked to it (hidden, held in place,
+    /// only its movement is read), `mm_px` being the size of the minimap in pixels.
     ///
     /// The rectangle moves relative to the pointer, by a share of its movement (`minimap::drag_gain`): the further in the picture
     /// is zoomed, the finer a slow drag, so the picture does not leap by hundreds of pixels per pointer pixel; a fast flick is
-    /// followed 1:1 to get across. The rectangle may lag behind the pointer; at an edge it simply stops.
-    pub fn minimap_move(&mut self, nx: f64, ny: f64, mm_px: (f64, f64), prefs: &ZoomPrefs, now: Instant) {
+    /// followed 1:1 to get across. The rectangle may lag behind where the pointer would be; at an edge it simply stops.
+    pub fn minimap_drag_by(&mut self, dx: f64, dy: f64, mm_px: (f64, f64), prefs: &ZoomPrefs, now: Instant) {
         let (Some(frame), Some(drag)) = (self.frame(), self.minimap.drag.as_mut()) else { return };
-        let (dx, dy) = (nx - drag.last.0, ny - drag.last.1);
-        let seconds = now.saturating_duration_since(drag.at).as_secs_f64().max(0.001);
-        let instant = (dx * mm_px.0).hypot(dy * mm_px.1) / seconds;
-        // Smoothed, so one slow or fast event does not flip the gain.
-        drag.speed = if drag.speed == 0.0 { instant * 0.5 } else { drag.speed * 0.65 + instant * 0.35 };
-        drag.last = (nx, ny);
-        drag.at = now;
         if mm_px.0 <= 0.0 || mm_px.1 <= 0.0 {
             return;
         }
+        let seconds = now.saturating_duration_since(drag.at).as_secs_f64().max(0.001);
+        let instant = dx.hypot(dy) / seconds;
+        // Smoothed, so one slow or fast event does not flip the gain.
+        drag.speed = if drag.speed == 0.0 { instant * 0.5 } else { drag.speed * 0.65 + instant * 0.35 };
+        drag.at = now;
         let (ex, ey) = frame.extent_px(self.shown);
         let gain = super::minimap::drag_gain((ex / mm_px.0).max(ey / mm_px.1), drag.speed);
-        let next = frame.center_for_viewport(self.shown, self.shown.cx + dx * gain, self.shown.cy + dy * gain);
+        let next = frame.center_for_viewport(
+            self.shown,
+            self.shown.cx + dx / mm_px.0 * gain,
+            self.shown.cy + dy / mm_px.1 * gain,
+        );
         if next != self.target || self.animation.is_some() {
             self.start_view_change(next, prefs, now, false);
         }
@@ -909,10 +919,10 @@ mod tests {
         state.minimap_press(0.5, 0.5, &p, now);
         assert!(state.minimap_dragging());
         assert!(state.minimap_shown(&p, ms(now, 60_000)), "visible while dragged");
-        state.minimap_move(0.8, 0.5, (200.0, 150.0), &p, ms(now, 10));
+        state.minimap_move(0.8, 0.5, &p, ms(now, 10));
         let vp = state.viewport_norm().unwrap();
         assert!((vp.x + vp.w / 2.0 - 0.8).abs() < 1e-9, "{vp:?}");
-        state.minimap_move(5.0, -5.0, (200.0, 150.0), &p, ms(now, 20));
+        state.minimap_move(5.0, -5.0, &p, ms(now, 20));
         let vp = state.viewport_norm().unwrap();
         assert!((vp.right() - 1.0).abs() < 1e-9 && vp.y.abs() < 1e-9);
         state.minimap_release();
@@ -935,7 +945,7 @@ mod tests {
             state.minimap_press(start.0, start.1, &p, ms(now, 10));
             // The pointer crawls 20 minimap pixels to the right (2 px every 60 ms).
             for i in 1..=10 {
-                state.minimap_move(start.0 + f64::from(i) * 2.0 / 200.0, start.1, mm, &p, ms(now, 10 + 60 * i as u64));
+                state.minimap_drag_by(2.0, 0.0, mm, &p, ms(now, 10 + 60 * i as u64));
             }
             let after = state.viewport_norm().unwrap();
             (after.x + after.w / 2.0) - start.0
@@ -952,27 +962,32 @@ mod tests {
         let start = (vp.x + vp.w / 2.0, vp.y + vp.h / 2.0);
         state.minimap_press(start.0, start.1, &p, ms(now, 10));
         for i in 1..=10 {
-            state.minimap_move(start.0 + f64::from(i) * 2.0 / 200.0, start.1, mm, &p, ms(now, 10 + i as u64));
+            state.minimap_drag_by(2.0, 0.0, mm, &p, ms(now, 10 + i as u64));
         }
         let vp = state.viewport_norm().unwrap();
         assert!((vp.x + vp.w / 2.0 - start.0 - pointer).abs() < 0.15 * pointer, "flick");
     }
 
     #[test]
-    fn a_drag_that_goes_on_outside_the_minimap_still_moves_the_view_and_stops_at_the_edge() {
+    fn a_locked_drag_goes_on_for_as_long_as_the_pointer_moves_and_stops_at_the_edge() {
         let (mut state, now) = state();
         let p = prefs();
+        let mm = (200.0, 150.0);
         state.zoom_to(4.0, None, &p, now);
         state.minimap_press(0.5, 0.5, &p, now);
-        // The pointer is far outside (beyond the right edge of the minimap): the view is at the edge, not beyond it.
-        for i in 1..=40 {
-            state.minimap_move(0.5 + f64::from(i) * 0.1, 0.5, (200.0, 150.0), &p, ms(now, 20 * i as u64));
+        // Far more movement than the minimap is wide: the view ends at the edge, not beyond it.
+        for i in 1..=60 {
+            state.minimap_drag_by(10.0, 0.0, mm, &p, ms(now, 20 * i as u64));
         }
-        let vp = state.viewport_norm().unwrap();
-        assert!((vp.right() - 1.0).abs() < 1e-9);
-        // Coming back moves the view at once (no dead zone for the way the pointer went beyond the edge).
-        state.minimap_move(0.5 + 4.0 - 0.1, 0.5, (200.0, 150.0), &p, ms(now, 20 * 41));
+        assert!((state.viewport_norm().unwrap().right() - 1.0).abs() < 1e-9);
+        // Coming back moves the view at once (nothing is owed for the way beyond the edge).
+        state.minimap_drag_by(-5.0, 0.0, mm, &p, ms(now, 20 * 61));
         assert!(state.viewport_norm().unwrap().right() < 1.0 - 1e-6);
+        // Without a press nothing happens.
+        state.minimap_release();
+        let before = state.viewport_norm().unwrap();
+        state.minimap_drag_by(-50.0, 0.0, mm, &p, ms(now, 20 * 62));
+        assert_eq!(state.viewport_norm().unwrap(), before);
     }
 
     #[test]

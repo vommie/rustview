@@ -81,7 +81,15 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     bus.on_tile_clicked(|_, is_ctrl| on_click(is_ctrl));
     bus.on_tile_zoom_wheel(|index, delta, x, y| act(|mv| mv.zoom_wheel(index.max(0) as usize, delta, x, y)));
     bus.on_tile_pan(|index, dx, dy| act(|mv| mv.zoom_pan(index.max(0) as usize, dx, dy)));
-    bus.on_minimap_pointer(|index, x, y, phase| act(|mv| mv.zoom_minimap(index.max(0) as usize, x, y, phase)));
+    bus.on_minimap_pointer(|index, x, y, phase| {
+        let xid = with_host(|h| h.main_xid).unwrap_or(0);
+        act(|mv| {
+            super::pointer_lock::drag_phase(xid, phase, &mut |locked_move| match locked_move {
+                Some((dx, dy)) => mv.zoom_minimap_delta(index.max(0) as usize, dx, dy),
+                None => mv.zoom_minimap(index.max(0) as usize, x, y, phase),
+            });
+        });
+    });
     bus.on_minimap_slider(|index, code| act(|mv| mv.zoom_minimap_slider(index.max(0) as usize, code)));
     bus.on_background_clicked(on_click);
     bus.on_middle_clicked(|| run(route_for(RoutedEvent::ToggleFullscreen, ClickKind::None)));
@@ -143,6 +151,7 @@ pub fn action_finished(media_id: MediaId, action: MediaActionId, ok: bool) {
 /// Shows, moves or hides the two bar windows while the pointer is close to their place (only while the Multiview is shown
 /// in the viewer tab: a fullscreen over it has its own bars), and hides the mouse cursor while it rests and no bar is in use.
 fn update_bar_overlay() {
+    super::pointer_lock::service();
     let Some((window, instance, host_xid)) = with_host(|h| {
         Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))
     })

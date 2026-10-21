@@ -198,16 +198,28 @@ impl MultiviewInstance {
             self.bump();
             return;
         }
-        // A press is on the minimap; a drag goes on outside of it, so the pointer is only kept within sane bounds.
-        let (nx, ny) = (f64::from(nx).clamp(-50.0, 51.0), f64::from(ny).clamp(-50.0, 51.0));
-        let mm_px = self.minimap_px(index);
+        let (nx, ny) = (f64::from(nx).clamp(0.0, 1.0), f64::from(ny).clamp(0.0, 1.0));
         let (prefs, now) = (zoom_prefs::current(), Instant::now());
         if let Some(zoom) = self.tiles[index].zoom.as_mut() {
             match phase {
-                0 => zoom.minimap_press(nx.clamp(0.0, 1.0), ny.clamp(0.0, 1.0), &prefs, now),
-                1 => zoom.minimap_move(nx, ny, mm_px, &prefs, now),
+                0 => zoom.minimap_press(nx, ny, &prefs, now),
+                1 => zoom.minimap_move(nx, ny, &prefs, now),
                 _ => zoom.minimap_release(),
             }
+        }
+        self.poll_zoom_at(now);
+        self.bump();
+    }
+
+    /// The pointer, locked to the minimap of tile `index` while it is dragged, moved by (`dx`, `dy`) device pixels.
+    pub fn zoom_minimap_delta(&mut self, index: usize, dx: i32, dy: i32) {
+        if !self.zoomable(index) {
+            return;
+        }
+        let mm_px = self.minimap_px(index);
+        let (prefs, now) = (zoom_prefs::current(), Instant::now());
+        if let Some(zoom) = self.tiles[index].zoom.as_mut() {
+            zoom.minimap_drag_by(f64::from(dx), f64::from(dy), mm_px, &prefs, now);
         }
         self.poll_zoom_at(now);
         self.bump();

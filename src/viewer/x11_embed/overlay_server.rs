@@ -13,11 +13,28 @@ const SHAPE_INPUT: c_int = 2;
 const SHAPE_SET: c_int = 0;
 const UNSORTED: c_int = 0;
 
+unsafe extern "C" {
+    fn dlopen(filename: *const std::ffi::c_char, flag: c_int) -> *mut c_void;
+    fn dlsym(handle: *mut c_void, symbol: *const std::ffi::c_char) -> *mut c_void;
+}
+
+const RTLD_LAZY: c_int = 1;
+
+/// `XFixesHideCursor` / `XFixesShowCursor` (libXfixes, loaded when first needed): hide the mouse cursor on the whole screen as
+/// long as this connection lives.
+#[derive(Clone, Copy)]
+struct CursorFns {
+    hide: unsafe extern "C" fn(DisplayPtr, WindowId),
+    show: unsafe extern "C" fn(DisplayPtr, WindowId),
+}
+
 pub struct OverlayServer {
     api: Arc<X11Symbols>,
     display: DisplayPtr,
     root: WindowId,
     screen: c_int,
+    cursor: std::cell::Cell<Option<CursorFns>>,
+    cursor_hidden: std::cell::Cell<bool>,
 }
 
 unsafe impl Send for OverlayServer {}
@@ -40,6 +57,8 @@ impl OverlayServer {
                 display,
                 root,
                 screen,
+                cursor: std::cell::Cell::new(None),
+                cursor_hidden: std::cell::Cell::new(false),
             })
         }
     }
@@ -138,6 +157,78 @@ impl OverlayServer {
             )
         };
         (on_screen != 0 && child_ret != 0).then_some(child_ret)
+    }
+
+    /// Puts the pointer at (`x`, `y`) on the screen (root window coordinates). The caller checks the result with
+    /// `pointer_and_buttons`: under XWayland this has no effect.
+    pub fn warp_pointer(&self, x: i32, y: i32) {
+        unsafe {
+            (self.api.x_warp_pointer)(self.display, 0, self.root, 0, 0, 0, 0, x, y);
+            (self.api.x_sync)(self.display, 0);
+        }
+    }
+
+    /// The size of a window.
+    pub fn window_size(&self, window: u64) -> Option<(i32, i32)> {
+        let (mut root, mut x, mut y) = (0, 0, 0);
+        let (mut w, mut h, mut border, mut depth): (c_uint, c_uint, c_uint, c_uint) = (0, 0, 0, 0);
+        let ok = unsafe {
+            (self.api.x_get_geometry)(self.display, window, &mut root, &mut x, &mut y, &mut w, &mut h, &mut border, &mut depth)
+        };
+        (ok != 0).then_some((w as i32, h as i32))
+    }
+
+    /// Hides the mouse cursor (until `show_cursor`, or until this connection ends). Returns whether it could be hidden.
+    pub fn hide_cursor(&self) -> bool {
+        if self.cursor_hidden.get() {
+            return true;
+        }
+        let Some(fns) = self.cursor_fns() else { return false };
+        unsafe {
+            (fns.hide)(self.display, self.root);
+            (self.api.x_sync)(self.display, 0);
+        }
+        self.cursor_hidden.set(true);
+        true
+    }
+
+    pub fn show_cursor(&self) {
+        if !self.cursor_hidden.replace(false) {
+            return;
+        }
+        if let Some(fns) = self.cursor.get() {
+            unsafe {
+                (fns.show)(self.display, self.root);
+                (self.api.x_sync)(self.display, 0);
+            }
+        }
+    }
+
+    fn cursor_fns(&self) -> Option<CursorFns> {
+        if let Some(fns) = self.cursor.get() {
+            return Some(fns);
+        }
+        unsafe {
+            let mut lib = dlopen(c"libXfixes.so.3".as_ptr(), RTLD_LAZY);
+            if lib.is_null() {
+                lib = dlopen(c"libXfixes.so".as_ptr(), RTLD_LAZY);
+            }
+            if lib.is_null() {
+                return None;
+            }
+            let hide = dlsym(lib, c"XFixesHideCursor".as_ptr());
+            let show = dlsym(lib, c"XFixesShowCursor".as_ptr());
+            if hide.is_null() || show.is_null() {
+                return None;
+            }
+            type CursorFn = unsafe extern "C" fn(DisplayPtr, WindowId);
+            let fns = CursorFns {
+                hide: std::mem::transmute::<*mut c_void, CursorFn>(hide),
+                show: std::mem::transmute::<*mut c_void, CursorFn>(show),
+            };
+            self.cursor.set(Some(fns));
+            Some(fns)
+        }
     }
 
     /// The window the window manager reports as active (`_NET_ACTIVE_WINDOW`, the client window the user works in), or `None`

@@ -83,8 +83,16 @@ impl Session {
         self.refresh();
     }
 
+    /// The minimap was pressed (0), dragged (1) or released (2), middle- (3) or right-clicked (4). During a drag the pointer is
+    /// locked where it can be (see `pointer_lock`) and only how far it moves counts; else the rectangle follows the pointer.
     pub(super) fn zoom_minimap(&mut self, index: usize, x: f32, y: f32, phase: i32) {
-        self.instance.lock().zoom_minimap(index, x, y, phase);
+        super::pointer_lock::drag_phase(self.fs_xid, phase, &mut |locked_move| {
+            let mut instance = self.instance.lock();
+            match locked_move {
+                Some((dx, dy)) => instance.zoom_minimap_delta(index, dx, dy),
+                None => instance.zoom_minimap(index, x, y, phase),
+            }
+        });
         self.refresh();
     }
 
@@ -145,6 +153,7 @@ impl Session {
     /// Shows, moves or hides the two bar windows (each appears while the pointer is close to the place of its bar) and
     /// hides the mouse cursor while it rests and no bar is in use.
     pub(super) fn update_bar_overlay(&mut self) {
+        super::pointer_lock::service();
         if !self.populated {
             return;
         }
