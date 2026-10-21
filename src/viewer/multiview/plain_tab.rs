@@ -126,10 +126,12 @@ impl PlainTabState {
         let actions = self.media_actions();
         (!actions.is_empty()).then_some(MediaBarTarget {
             tile: 0,
+            key: 0,
             rect: self.area,
             actions,
-            pointer,
+            pointer: Some(pointer),
             reveal_distance_px: bar.reveal_distance_px,
+            forced: false,
         })
     }
 

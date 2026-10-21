@@ -27,6 +27,8 @@ mod instance_primary;
 mod instance_sound;
 mod instance_tiles;
 mod instance_zoom;
+#[cfg(test)]
+mod instance_bar_scenarios;
 pub mod layout;
 pub mod layout_pins;
 pub mod model;

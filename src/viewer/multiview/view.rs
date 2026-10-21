@@ -67,6 +67,7 @@ pub struct MinimapView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZoomBubbleView {
     pub tile: usize,
+    pub key: super::follow::TileKey,
     pub permille: i32,
     pub min_permille: i32,
     pub max_permille: i32,
@@ -121,10 +122,14 @@ pub struct HostedView {
 /// within `reveal_distance_px` (logical pixels) of the place where it would be.
 pub struct MediaBarTarget {
     pub tile: usize,
+    /// The tile's stable key: the bar window belongs to the tile, not to its place in the row (which changes when media come and go).
+    pub key: super::follow::TileKey,
     pub rect: Rect,
     pub actions: Vec<MediaActionView>,
-    pub pointer: (i32, i32),
+    pub pointer: Option<(i32, i32)>,
     pub reveal_distance_px: u32,
+    /// The bar stays whatever the pointer does (the tile has its zoom slider or a menu open), and follows its tile.
+    pub forced: bool,
 }
 
 /// One button of the primary action bar.

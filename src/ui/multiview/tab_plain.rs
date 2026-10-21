@@ -288,7 +288,7 @@ fn update_bar_overlay() {
         primary_click: Rc::new(|_, action| on_primary_click(action)),
     };
     let targets = BarTargets {
-        media: state.media_bar_target(),
+        media: state.media_bar_target().into_iter().collect(),
         primary: state.primary_bar_target(),
         zoom: Vec::new(),
         tiles: 1,

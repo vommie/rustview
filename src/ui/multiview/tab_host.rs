@@ -168,7 +168,7 @@ fn update_bar_overlay() {
         media_click: Rc::new(on_action),
         primary_click: Rc::new(|_, action| on_primary_action(action)),
     };
-    let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(&instance, in_tab_view), in_tab_view);
+    let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(BarOwner::TabView, &instance, in_tab_view), in_tab_view);
     let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);
     if in_tab_view {
         cursor::sync(window.window(), &instance, bars_visible, &mut window_hidden);

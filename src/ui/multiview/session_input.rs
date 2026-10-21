@@ -173,7 +173,7 @@ impl Session {
             .main_window()
             .and_then(|main| main.upgrade())
             .is_some_and(|main| main.get_is_modal_locked());
-        let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(&self.instance, !dialog_open), !dialog_open);
+        let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(BarOwner::Fullscreen, &self.instance, !dialog_open), !dialog_open);
         if dialog_open {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
         } else {

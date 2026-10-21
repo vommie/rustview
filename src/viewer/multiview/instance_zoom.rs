@@ -101,6 +101,7 @@ impl MultiviewInstance {
         let zoom = self.tiles[index].zoom.as_ref()?;
         Some(ZoomBubbleView {
             tile: index,
+            key: self.tiles[index].key,
             permille: scale::to_permille(zoom.zoom()),
             min_permille: scale::to_permille(limits.min),
             max_permille: scale::to_permille(limits.max),
