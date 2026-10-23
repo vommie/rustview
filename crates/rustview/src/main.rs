@@ -101,10 +101,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let library = Arc::new(Library::open(&db_path)?);
     startup_clock::mark("Library");
 
-    // TEMPORARY DEBUG FEATURE (remove together with src/library/folder_reset.rs):
-    // `--reset-folder-tree` resets the folder tree (SPoT) once. Media records and their folder paths are preserved.
-    rustview_core::library::folder_reset::run_if_requested(cli.reset_folder_tree, &library, &settings);
-
     // Scope the in-memory folder tree snapshot to the configured root (None = empty tree, e.g. first start).
     let configured_root = settings
         .get()

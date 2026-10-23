@@ -715,6 +715,8 @@ fn split_folder_and_filename(path: &Path) -> Result<(std::path::PathBuf, String)
     Ok((folder_path, filename))
 }
 
+/// The time stamp of a newly registered external hash. It is stored in the library and returned by the API, so it is UTC on purpose (a
+/// stored time without a zone must not depend on the machine's time zone); only what the UI shows is local time.
 fn current_datetime_string() -> String {
     chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }

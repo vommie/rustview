@@ -8,8 +8,6 @@ pub mod folder_format_counts;
 pub mod folder_mount_filter;
 pub mod folder_move;
 pub mod folder_operations;
-// TEMPORARY DEBUG FEATURE: remove this module together with src/library/folder_reset.rs
-pub mod folder_reset;
 pub mod folder_snapshot;
 pub mod folder_snapshot_patch;
 pub mod folder_walker;
@@ -33,8 +31,6 @@ pub use folder_move::{FolderMoveExecutor, FolderMovePatch};
 pub use folder_operations::{
     FolderDeleteReport, FolderMoveReport, FolderOperations, FolderSubtreeMetrics, FolderValidator, MissingChildren,
 };
-// TEMPORARY DEBUG FEATURE: remove together with src/library/folder_reset.rs
-pub use folder_reset::FolderTreeReset;
 pub use folders::{FolderManager, FolderScanOptions};
 pub use media::MediaRepository;
 pub use models::{

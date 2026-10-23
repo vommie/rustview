@@ -17,10 +17,6 @@ pub struct Cli {
     #[command(flatten)]
     pub migrate: MigrateOptions,
 
-    /// Reset the folder tree once at startup (media records are preserved)
-    #[arg(long, hide = true)]
-    pub reset_folder_tree: bool,
-
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -104,7 +100,6 @@ mod tests {
         let cli = Cli::try_parse_from(["rustview"]).expect("plain start");
         assert!(cli.command.is_none());
         assert!(cli.migrate.xnview_db.is_none());
-        assert!(!cli.reset_folder_tree);
     }
 
     #[test]

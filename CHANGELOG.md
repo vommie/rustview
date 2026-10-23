@@ -9,6 +9,13 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Changed
+- **Dates are shown in local time:** the modified and created dates in the tables, the folder tree and the conflict dialog were UTC and now match what the
+  file manager shows. The time stamps stored in the library and returned by the API stay UTC.
+
+### Removed
+- The hidden `--reset-folder-tree` option, a temporary debugging aid for the folder tree.
+
 ## [0.3.82] - 2026-10-23
 
 ### Added
