@@ -1,0 +1,58 @@
+# cargo-deny configuration: advisories, licenses, banned crates and sources.
+# Run with `cargo deny check` (also part of scripts/check-all.sh). cargo-audit reads .cargo/audit.toml with the same ignores.
+
+[graph]
+targets = [{ triple = "x86_64-unknown-linux-gnu" }]
+
+[advisories]
+version = 2
+yanked = "deny"
+# Every ignored advisory is an "unmaintained" notice, not a vulnerability. None has a patched release available to this project yet;
+# re-check them on every dependency update (cargo update, cargo deny check advisories).
+ignore = [
+    { id = "RUSTSEC-2025-0141", reason = "bincode: the library stores its records with bincode 1 (src/library), so it cannot be replaced without a database migration, which the compatibility rule forbids; bincode 2 is used by the Slint compiler at build time only" },
+    { id = "RUSTSEC-2024-0436", reason = "paste (proc macro, build time) is pulled in by the image and ffmpeg binding crates; no replacement is available to this project" },
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz comes from usvg/resvg (SVG text); the maintained successor harfrust is not used by resvg yet" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser comes from rustybuzz/resvg and the Wayland window decorations; it only reads local system fonts" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant: unmaintained notice for the zbus stack that Slint, rfd and arboard use" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names: same zbus stack notice" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive: same zbus stack notice" },
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "0BSD",
+    "Unlicense",
+    # Slint is used under its royalty-free desktop license (attribution required, see README and Settings > General > About).
+    "LicenseRef-Slint-Royalty-free-2.0",
+]
+# Narrow exceptions: only these crates may use these licenses.
+exceptions = [
+    { allow = ["WTFPL"], crate = "ffmpeg-next" },
+    { allow = ["WTFPL"], crate = "ffmpeg-sys-next" },
+    # The bindings to libmpv are LGPL-2.1; RustView is open source under the MIT license and links libmpv dynamically.
+    { allow = ["LGPL-2.1"], crate = "libmpv2" },
+    { allow = ["LGPL-2.1"], crate = "libmpv2-sys" },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
