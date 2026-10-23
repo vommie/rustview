@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Command line client for the MCP server that is built into the RustView debug build (cargo feature `slint/mcp`).
+
+RustView only: this script lives in the repository and is not installed anywhere else. The app must run as an MCP build
+(`rv-testenv mcp-build`, then `rv-testenv mcp-start`, which sets SLINT_MCP_PORT; default port 8765 or $SLINT_MCP_PORT, always on
+127.0.0.1), otherwise there is nothing to talk to. The build has element ids because it is made with SLINT_EMIT_DEBUG_INFO=1.
+
+  scripts/slint-mcp windows                         window handles
+  scripts/slint-mcp tree [--max N]                  flat element tree: @index Type[id] "label" role x,y WxH
+  scripts/slint-mcp find TEXT [--max N]             elements whose id, type or accessible label contains TEXT (case-insensitive)
+  scripts/slint-mcp click TEXT|@INDEX               click the first match (a label, an id, or an @index from tree/find)
+  scripts/slint-mcp click TEXT --button right       other buttons: left (default), right, middle; --double for a double click;
+                                            --ctrl / --shift / --alt add modifier keys
+  scripts/slint-mcp act TEXT|@INDEX [ACTION]        accessibility action: default (activate a button, toggle a check box; the
+                                            default), increment, decrement, expand (preferred over click when it works)
+  scripts/slint-mcp hover TEXT|@INDEX
+  scripts/slint-mcp set TEXT|@INDEX VALUE           set the value of a text input
+  scripts/slint-mcp key TEXT [--event press|release]  keyboard input to the window: text, or a key name (escape, return, tab, backspace,
+                                            delete, up, down, left, right, home, end, pageup, pagedown, f1..f12)
+  scripts/slint-mcp scroll TEXT|@INDEX DY [DX]      scroll an element (pixels; negative = up)
+  scripts/slint-mcp shot FILE.png                   screenshot of the window
+  scripts/slint-mcp tools                           the tools of the server with their parameters
+  scripts/slint-mcp raw TOOL '{"json": "arguments"}'  call any tool and print the result
+
+Options before the command: --port N, --window INDEX (default 1). Only the Python standard library is used.
+"""
+import argparse
+import base64
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+
+KEYS = {
+    "backspace": "\u0008", "tab": "\t", "return": "\n", "enter": "\n", "escape": "\u001b", "esc": "\u001b", "delete": "\u007f",
+    "up": "\uf700", "down": "\uf701", "left": "\uf702", "right": "\uf703", "home": "\uf729", "end": "\uf72b",
+    "pageup": "\uf72c", "pagedown": "\uf72d", "space": " ",
+}
+KEYS.update({f"f{n}": chr(0xF704 + n - 1) for n in range(1, 13)})
+
+
+def die(message):
+    print(f"slint-mcp: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+class Client:
+    def __init__(self, port, window):
+        self.url = f"http://127.0.0.1:{port}/mcp"
+        self.window = window
+        self.next_id = 1
+
+    def rpc(self, method, params=None):
+        self.next_id += 1
+        body = json.dumps({"jsonrpc": "2.0", "id": self.next_id, "method": method, "params": params or {}}).encode()
+        request = urllib.request.Request(self.url, data=body, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                reply = json.loads(response.read())
+        except urllib.error.URLError as error:
+            die(f"cannot reach {self.url} ({error.reason}); start the MCP build of RustView with: rv-testenv mcp-start")
+        if "error" in reply:
+            die(f"{method}: {reply['error']}")
+        return reply["result"]
+
+    def call(self, tool, arguments=None):
+        result = self.rpc("tools/call", {"name": tool, "arguments": arguments or {}})
+        if result.get("isError"):
+            die(f"{tool}: {result['content'][0].get('text', result)}")
+        return result["content"]
+
+    def call_json(self, tool, arguments=None):
+        text = self.call(tool, arguments)[0].get("text", "{}")
+        return json.loads(text) if text.strip().startswith(("{", "[")) else {"text": text}
+
+    def window_handle(self):
+        handles = self.call_json("list_windows")["windowHandles"]
+        for handle in handles:
+            if handle["index"] == str(self.window):
+                return handle
+        die(f"no window with index {self.window}; windows: {[h['index'] for h in handles]}")
+
+    def elements(self, maximum):
+        window = self.window_handle()
+        root = self.call_json("get_window_properties", {"windowHandle": window})["rootElementHandle"]
+        return self.call_json("get_element_tree", {"elementHandle": root, "maxElements": maximum}).get("elements", [])
+
+
+def describe(element):
+    names = element.get("typeNamesAndIds") or [{}]
+    first = names[0]
+    kind = first.get("typeName", "?")
+    ident = first.get("id", "")
+    ident = f"[{ident}]" if ident else ""
+    label = element.get("accessibleLabel", "")
+    role = element.get("accessibleRole", "")
+    position = element.get("absolutePosition", {})
+    size = element.get("size", {})
+    geometry = f"{position.get('x', 0):.0f},{position.get('y', 0):.0f} {size.get('width', 0):.0f}x{size.get('height', 0):.0f}"
+    return f"@{element['handle']['index']:<5} {kind}{ident} {json.dumps(label) if label else ''} {role} {geometry}".rstrip()
+
+
+def matches(element, needle):
+    needle = needle.lower()
+    fields = [element.get("accessibleLabel", ""), element.get("accessibleDescription", ""), element.get("accessibleValue", "")]
+    for entry in element.get("typeNamesAndIds") or []:
+        fields += [entry.get("typeName", ""), entry.get("id", "")]
+    return any(needle in str(field).lower() for field in fields)
+
+
+def resolve(client, target, maximum=3000):
+    """A handle for `@index` or the first element that matches the text (preferring labels over type names)."""
+    elements = client.elements(maximum)
+    if target.startswith("@"):
+        index = target[1:]
+        for element in elements:
+            if element["handle"]["index"] == index:
+                return element["handle"], element
+        die(f"no element @{index} (the tree has {len(elements)} elements; raise --max)")
+    labelled = [e for e in elements if target.lower() in str(e.get("accessibleLabel", "")).lower()]
+    found = labelled or [e for e in elements if matches(e, target)]
+    if not found:
+        die(f"no element matches {target!r} (the tree has {len(elements)} elements)")
+    if len(found) > 1:
+        print(f"slint-mcp: {len(found)} matches, using the first:", file=sys.stderr)
+        for element in found[:5]:
+            print("  " + describe(element), file=sys.stderr)
+    return found[0]["handle"], found[0]
+
+
+def main():
+    parser = argparse.ArgumentParser(add_help=True, description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--port", type=int, default=int(os.environ.get("SLINT_MCP_PORT", "8765")))
+    parser.add_argument("--window", type=int, default=1)
+    parser.add_argument("command")
+    parser.add_argument("args", nargs="*")
+    parser.add_argument("--max", type=int, default=400)
+    parser.add_argument("--button", default="left", choices=["left", "right", "middle"])
+    parser.add_argument("--double", action="store_true")
+    parser.add_argument("--ctrl", action="store_true")
+    parser.add_argument("--shift", action="store_true")
+    parser.add_argument("--alt", action="store_true")
+    parser.add_argument("--event", default=None, choices=["press", "release"])
+    options = parser.parse_args()
+    client = Client(options.port, options.window)
+    command, args = options.command, options.args
+
+    if command == "windows":
+        print(json.dumps(client.call_json("list_windows"), indent=2))
+    elif command == "tools":
+        for tool in client.rpc("tools/list")["tools"]:
+            schema = tool.get("inputSchema", {})
+            properties = ", ".join(f"{k}{'*' if k in schema.get('required', []) else ''}" for k in schema.get("properties", {}))
+            print(f"{tool['name']}({properties})")
+    elif command == "tree":
+        for element in client.elements(options.max):
+            print(describe(element))
+    elif command == "find":
+        if not args:
+            die("find needs a text")
+        for element in client.elements(max(options.max, 3000)):
+            if matches(element, args[0]):
+                print(describe(element))
+    elif command in ("click", "hover"):
+        if not args:
+            die(f"{command} needs a label or @index")
+        handle, element = resolve(client, args[0])
+        if command == "hover":
+            client.call("hover_element", {"elementHandle": handle})
+        else:
+            arguments = {"elementHandle": handle}
+            if options.button != "left":
+                arguments["button"] = options.button.capitalize()
+            if options.double:
+                arguments["action"] = "DoubleClick"
+            modifiers = {name: True for name, on in (("control", options.ctrl), ("shift", options.shift), ("alt", options.alt)) if on}
+            if modifiers:
+                arguments["modifiers"] = modifiers
+            client.call("click_element", arguments)
+        print(f"{command}: {describe(element)}")
+    elif command == "act":
+        if not args:
+            die("act needs a label or @index")
+        action = {"default": "Default_", "increment": "Increment", "decrement": "Decrement", "expand": "Expand"}.get(
+            (args[1] if len(args) > 1 else "default").lower())
+        if not action:
+            die("the action is one of: default, increment, decrement, expand")
+        handle, element = resolve(client, args[0])
+        client.call("invoke_accessibility_action", {"elementHandle": handle, "action": action})
+        print(f"act {action}: {describe(element)}")
+    elif command == "set":
+        if len(args) < 2:
+            die("set needs a target and a value")
+        handle, element = resolve(client, args[0])
+        client.call("set_element_value", {"elementHandle": handle, "value": args[1]})
+        print(f"set: {describe(element)} = {args[1]!r}")
+    elif command == "scroll":
+        if len(args) < 2:
+            die("scroll needs a target and DY")
+        handle, element = resolve(client, args[0])
+        client.call("scroll_element", {"elementHandle": handle, "deltaY": float(args[1]), "deltaX": float(args[2]) if len(args) > 2 else 0.0})
+        print(f"scroll: {describe(element)}")
+    elif command == "key":
+        if not args:
+            die("key needs a text")
+        arguments = {"windowHandle": client.window_handle(), "text": KEYS.get(args[0].lower(), args[0])}
+        if options.event:
+            arguments["eventType"] = options.event.capitalize()
+        client.call("dispatch_key_event", arguments)
+    elif command == "shot":
+        if not args:
+            die("shot needs a file name")
+        for item in client.call("take_screenshot", {"windowHandle": client.window_handle()}):
+            if item.get("type") == "image":
+                with open(args[0], "wb") as handle:
+                    handle.write(base64.b64decode(item["data"]))
+                print(f"saved {args[0]}")
+                break
+        else:
+            die("the server returned no image")
+    elif command == "raw":
+        if not args:
+            die("raw needs a tool name")
+        print(json.dumps(client.call(args[0], json.loads(args[1]) if len(args) > 1 else {}), indent=2)[:20000])
+    else:
+        die(f"unknown command {command!r}; see scripts/slint-mcp --help")
+
+
+if __name__ == "__main__":
+    main()
