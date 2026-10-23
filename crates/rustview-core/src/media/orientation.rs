@@ -2,9 +2,9 @@
 //! the stream (older files in a `rotate` tag), HEIF and AVIF images in the `irot` property, which FFmpeg also exposes as a
 //! display matrix. Mirroring is not handled (it is rare and never produced by a camera that was not mirrored on purpose).
 
+use ffmpeg_next::DictionaryRef;
 use ffmpeg_next::codec::packet::side_data::Type as SideDataType;
 use ffmpeg_next::format::stream::Stream;
-use ffmpeg_next::DictionaryRef;
 
 /// Clockwise degrees (0, 90, 180 or 270) of a display matrix, as it is stored in the side data (nine native-endian 32-bit
 /// integers). `None` for matrices that do not describe a rotation by a multiple of 90 degrees.

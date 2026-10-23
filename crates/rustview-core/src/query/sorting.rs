@@ -160,9 +160,18 @@ impl MediaSorter {
                     .cmp(&b.height)
                     .then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase())),
                 SortColumn::AspectRatio => {
-                    let ar_a = if a.height > 0 { a.width as f32 / a.height as f32 } else { 0.0 };
-                    let ar_b = if b.height > 0 { b.width as f32 / b.height as f32 } else { 0.0 };
-                    ar_a.total_cmp(&ar_b).then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
+                    let ar_a = if a.height > 0 {
+                        a.width as f32 / a.height as f32
+                    } else {
+                        0.0
+                    };
+                    let ar_b = if b.height > 0 {
+                        b.width as f32 / b.height as f32
+                    } else {
+                        0.0
+                    };
+                    ar_a.total_cmp(&ar_b)
+                        .then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
                 }
                 SortColumn::Duration => a
                     .duration_ms
@@ -171,13 +180,22 @@ impl MediaSorter {
                 SortColumn::Format => {
                     let fa = a.format.default_extension();
                     let fb = b.format.default_extension();
-                    fa.cmp(fb).then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
+                    fa.cmp(fb)
+                        .then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
                 }
                 SortColumn::Flags => {
                     let flag_val = |r: &MediaRecord| -> u8 {
-                        if r.is_deleted { 2 } else if r.is_corrupted { 1 } else { 0 }
+                        if r.is_deleted {
+                            2
+                        } else if r.is_corrupted {
+                            1
+                        } else {
+                            0
+                        }
                     };
-                    flag_val(a).cmp(&flag_val(b)).then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
+                    flag_val(a)
+                        .cmp(&flag_val(b))
+                        .then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
                 }
             };
 

@@ -3,15 +3,15 @@
 use super::config::{self, TypeAheadConfig};
 use super::notice;
 use super::session::{Cursor, NameSource, Reaction, TypeAhead, classify};
+use crate::ui::MainWindow;
+use crate::ui::browse_folders::{FolderRowRef, Slot};
+use crate::ui::multiview::handle::Pace;
+use crate::ui::selection::keyboard::{CursorMove, Reveal, move_browse_cursor};
+use crate::ui::state::UiState;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::ui::MainWindow;
-use crate::ui::state::UiState;
-use crate::ui::browse_folders::{FolderRowRef, Slot};
-use crate::ui::selection::keyboard::{CursorMove, Reveal, move_browse_cursor};
-use crate::ui::multiview::handle::Pace;
-use parking_lot::RwLock;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -47,7 +47,10 @@ impl NameSource for ListNames<'_> {
 
     fn starts_with(&self, position: usize, needle: &str) -> bool {
         match self.state.slot_at(position) {
-            Slot::Media(row) => self.state.item_at(row).is_some_and(|item| item.filename_lower.starts_with(needle)),
+            Slot::Media(row) => self
+                .state
+                .item_at(row)
+                .is_some_and(|item| item.filename_lower.starts_with(needle)),
             Slot::Folder(FolderRowRef::Folder(id)) if self.include_folders => self
                 .state
                 .folder_hierarchy
@@ -68,12 +71,19 @@ fn lower_starts_with(name: &str, needle: &str) -> bool {
 /// An open Multiview follows an item selected by typing after a delay (so a burst of keys opens no video per letter); only this
 /// selection path is delayed, the item itself is selected at once.
 fn pace_for(config: &TypeAheadConfig) -> Pace {
-    if config.multiview_delay.is_zero() { Pace::Immediate } else { Pace::After(config.multiview_delay) }
+    if config.multiview_delay.is_zero() {
+        Pace::Immediate
+    } else {
+        Pace::After(config.multiview_delay)
+    }
 }
 
 fn show_no_match(params: &TypeAheadParams<'_>, config: &TypeAheadConfig) {
     if config.show_no_match {
-        notice::show(params.window, format!("No match for \"{}\"", params.search.borrow().query()));
+        notice::show(
+            params.window,
+            format!("No match for \"{}\"", params.search.borrow().query()),
+        );
     }
 }
 
@@ -90,12 +100,18 @@ pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
     let (reaction, in_place, landed) = {
         let st = params.state.read();
         let item = st.browse_cursor();
-        let cursor = Cursor { item, position: item.and_then(|item| st.browse_position_of(item)) };
+        let cursor = Cursor {
+            item,
+            position: item.and_then(|item| st.browse_position_of(item)),
+        };
         let reaction = params.search.borrow_mut().key(
             class,
             started,
             cursor,
-            &ListNames { state: &st, include_folders: config.include_folders },
+            &ListNames {
+                state: &st,
+                include_folders: config.include_folders,
+            },
             &config,
         );
         let landed = match reaction {
@@ -125,7 +141,11 @@ pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
                 },
                 position,
                 false,
-                if config.center_target { Reveal::Centered } else { Reveal::IntoView },
+                if config.center_target {
+                    Reveal::Centered
+                } else {
+                    Reveal::IntoView
+                },
                 pace_for(&config),
             );
         }

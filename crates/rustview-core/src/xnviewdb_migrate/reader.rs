@@ -12,9 +12,7 @@ impl XnViewDbReader {
     /// Connects to the XnViewMP SQLite database in read-only mode and extracts all relevant entities.
     pub fn read_database(db_path: &Path) -> Result<XnViewRawData, MigrationError> {
         if !db_path.exists() {
-            return Err(MigrationError::FileNotFound(
-                db_path.to_string_lossy().to_string(),
-            ));
+            return Err(MigrationError::FileNotFound(db_path.to_string_lossy().to_string()));
         }
 
         let t0 = Instant::now();
@@ -23,10 +21,7 @@ impl XnViewDbReader {
             "[XnViewReader] Opening XnViewMP SQLite database in read-only mode..."
         );
 
-        let conn = Connection::open_with_flags(
-            db_path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
-        )?;
+        let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI)?;
 
         // Validate required core tables
         Self::validate_schema(&conn)?;
@@ -41,25 +36,16 @@ impl XnViewDbReader {
 
         // 2. Read Folders
         let folders = Self::read_folders(&conn)?;
-        tracing::info!(
-            count = folders.len(),
-            "[XnViewReader] Extracted Folders table records"
-        );
+        tracing::info!(count = folders.len(), "[XnViewReader] Extracted Folders table records");
 
         // 3. Read Tags
         let tags = Self::read_tags(&conn)?;
-        tracing::info!(
-            count = tags.len(),
-            "[XnViewReader] Extracted Tags table records"
-        );
+        tracing::info!(count = tags.len(), "[XnViewReader] Extracted Tags table records");
 
         // 4. Read Hashes (Optional external table)
         let (hashes, hashes_table_found) = Self::read_hashes(&conn)?;
         if hashes_table_found {
-            tracing::info!(
-                count = hashes.len(),
-                "[XnViewReader] Extracted Hashes table records"
-            );
+            tracing::info!(count = hashes.len(), "[XnViewReader] Extracted Hashes table records");
         } else {
             tracing::info!(
                 "[XnViewReader] Optional 'Hashes' table not found in SQLite database. Skipping external hashes extraction."
@@ -75,10 +61,7 @@ impl XnViewDbReader {
 
         // 6. Read Images (Handles optional HashID column gracefully)
         let images = Self::read_images(&conn)?;
-        tracing::info!(
-            count = images.len(),
-            "[XnViewReader] Extracted Images table records"
-        );
+        tracing::info!(count = images.len(), "[XnViewReader] Extracted Images table records");
 
         // 7. Read TagsTree (Links between images and tags)
         let tag_links = Self::read_tag_links(&conn)?;
@@ -107,10 +90,7 @@ impl XnViewDbReader {
 
     fn validate_schema(conn: &Connection) -> Result<(), MigrationError> {
         let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")?;
-        let table_names: Vec<String> = stmt
-            .query_map([], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+        let table_names: Vec<String> = stmt.query_map([], |row| row.get(0))?.filter_map(|r| r.ok()).collect();
 
         let required = ["Folders", "Images", "Tags"];
         for req in required {
@@ -211,12 +191,8 @@ impl XnViewDbReader {
         Ok((hashes, true))
     }
 
-    fn read_images_info(
-        conn: &Connection,
-    ) -> Result<HashMap<i64, XnViewImageInfo>, MigrationError> {
-        let mut stmt = conn.prepare(
-            "SELECT ImageID, Width, Height, Format, Duration FROM ImagesInfo",
-        )?;
+    fn read_images_info(conn: &Connection) -> Result<HashMap<i64, XnViewImageInfo>, MigrationError> {
+        let mut stmt = conn.prepare("SELECT ImageID, Width, Height, Format, Duration FROM ImagesInfo")?;
         let rows = stmt.query_map([], |row| {
             let image_id: i64 = row.get(0)?;
             let width: i64 = row.get(1).unwrap_or(0);

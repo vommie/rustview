@@ -2,8 +2,8 @@
 //! user's mute toggle.
 
 use super::audio::{AudioMode, AudioOrigin, TileAudio};
-use super::instance::MultiviewInstance;
 use super::follow::TileKey;
+use super::instance::MultiviewInstance;
 
 impl MultiviewInstance {
     /// Pushes the mute state demanded by the audio rules to every video player whose actual state differs.
@@ -67,7 +67,11 @@ impl MultiviewInstance {
     /// the hosts redraw).
     pub fn on_player_pause_changed(&mut self, key: TileKey, paused: bool) {
         if let Some(tile) = self.tiles.iter().find(|t| t.key == key && t.video.is_some()) {
-            tracing::debug!(media_id = tile.media_id, paused, "[Multiview: Playback] Pause state changed");
+            tracing::debug!(
+                media_id = tile.media_id,
+                paused,
+                "[Multiview: Playback] Pause state changed"
+            );
             self.bump();
         }
     }

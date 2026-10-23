@@ -3,21 +3,21 @@ use super::multiview::events::MultiviewEventSink;
 use super::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use super::multiview::model::{TileKind, aspect_from_size};
 use super::multiview::route::OriginKind;
-use super::multiview::tile::TileSeed;
 use super::multiview::teardown;
+use super::multiview::tile::TileSeed;
 use super::tab_item::{TabCollection, TabTitleFormatter};
 use super::tab_ui_gate::TabUiGate;
 use super::types::{MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, TabId};
 use super::x11::{X11VideoSubwindow, XRectangle};
-use rustview_core::library::models::{MediaId, MediaRecord};
+use parking_lot::{Mutex, RwLock};
 use rustview_core::library::Library;
+use rustview_core::library::models::{MediaId, MediaRecord};
 use rustview_core::media::MediaType;
 use rustview_core::settings::LogObscurer;
 use rustview_core::settings::schema::{MULTIVIEW_FALLBACK_ASPECT, MULTIVIEW_TAB_TITLE, SHUTDOWN_TEARDOWN_WAIT_MS};
-use parking_lot::{Mutex, RwLock};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// High-level workspace coordinator managing open tabs, player lifecycles, and window embedding (SRP/OCP).
@@ -91,7 +91,10 @@ impl ViewerTabManager {
     /// Every creation path ends here, after its tab collection lock is released.
     fn tab_created(&self) {
         let revision = self.tab_ui_gate.changed();
-        tracing::debug!(revision, "[ViewerTabManager: TabCreated] The tab UI has to show the new tab");
+        tracing::debug!(
+            revision,
+            "[ViewerTabManager: TabCreated] The tab UI has to show the new tab"
+        );
         let hook = self.tabs_changed_hook.lock().clone();
         if let Some(hook) = hook {
             hook();
@@ -251,9 +254,7 @@ impl ViewerTabManager {
 
     /// Every medium the active tab shows (the tiles of a Multiview tab); empty for the Browse view.
     pub fn get_active_media_ids(&self) -> Vec<MediaId> {
-        self.get_active_tab()
-            .map(|t| t.member_ids())
-            .unwrap_or_default()
+        self.get_active_tab().map(|t| t.member_ids()).unwrap_or_default()
     }
 
     /// The tab that owns the Multiview instance `instance_id`.
@@ -320,11 +321,7 @@ impl ViewerTabManager {
             Some(p) => p,
             None => return false,
         };
-        if pos > 0 {
-            self.move_tab(tab_id, pos - 1)
-        } else {
-            false
-        }
+        if pos > 0 { self.move_tab(tab_id, pos - 1) } else { false }
     }
 
     #[inline]
@@ -453,7 +450,11 @@ impl ViewerTabManager {
     fn solo_seed(record: &MediaRecord, file_path: &std::path::Path) -> TileSeed {
         TileSeed::new(
             record.id,
-            if matches!(record.media_type, MediaType::Video) { TileKind::Video } else { TileKind::Image },
+            if matches!(record.media_type, MediaType::Video) {
+                TileKind::Video
+            } else {
+                TileKind::Image
+            },
             aspect_from_size(record.width, record.height, MULTIVIEW_FALLBACK_ASPECT),
             file_path.to_path_buf(),
             record.filename.clone(),
@@ -475,16 +476,10 @@ impl ViewerTabManager {
     }
 
     /// Opens a media item in a viewer tab and activates it in the foreground. Reuses existing tab if `allow_multiple` is false.
-    pub fn open_or_focus_media(
-        &self,
-        media_id: MediaId,
-        allow_multiple: bool,
-    ) -> Result<(TabId, bool), ViewerError> {
+    pub fn open_or_focus_media(&self, media_id: MediaId, allow_multiple: bool) -> Result<(TabId, bool), ViewerError> {
         let mut tabs = self.tabs.write();
 
-        if !allow_multiple
-            && let Some(existing) = tabs.get_by_media_id_mut(media_id)
-        {
+        if !allow_multiple && let Some(existing) = tabs.get_by_media_id_mut(media_id) {
             let id = existing.id;
             existing.last_accessed = Instant::now();
             drop(tabs);
@@ -539,9 +534,7 @@ impl ViewerTabManager {
     ) -> Result<(TabId, bool), ViewerError> {
         let mut tabs = self.tabs.write();
 
-        if !allow_multiple
-            && let Some(existing) = tabs.get_by_media_id_mut(media_id)
-        {
+        if !allow_multiple && let Some(existing) = tabs.get_by_media_id_mut(media_id) {
             let id = existing.id;
             tracing::info!(
                 tab_id = id,
@@ -592,7 +585,8 @@ impl ViewerTabManager {
         let single = instance.lock().solo_tile().map(|(id, _, _)| id);
         let single_filename = instance.lock().solo_filename();
         let base_title = single_filename.as_deref().unwrap_or(MULTIVIEW_TAB_TITLE);
-        let title = TabTitleFormatter::allocate_tab_title(tabs.all(), single.unwrap_or(MULTIVIEW_TAB_MEDIA_ID), base_title);
+        let title =
+            TabTitleFormatter::allocate_tab_title(tabs.all(), single.unwrap_or(MULTIVIEW_TAB_MEDIA_ID), base_title);
         let mut session = MediaTabSession::for_multiview(new_id, title, instance);
         if let Some(filename) = single_filename {
             session.filename = filename;
@@ -884,7 +878,11 @@ impl ViewerTabManager {
             Self::shutdown_session(session);
         }
         let settled = teardown::wait_for_teardowns(Duration::from_millis(SHUTDOWN_TEARDOWN_WAIT_MS));
-        tracing::info!(tabs = count, settled, "[ViewerTabManager: Shutdown] All tabs closed and their players shut down");
+        tracing::info!(
+            tabs = count,
+            settled,
+            "[ViewerTabManager: Shutdown] All tabs closed and their players shut down"
+        );
     }
 
     fn shutdown_session(session: MediaTabSession) {
@@ -911,10 +909,9 @@ impl ViewerTabManager {
 
     /// The Multiview with `instance_id` is owned by a tab now (or gone), so the tabs deliver its events.
     pub fn stop_observing_instance(&self, instance_id: u64) {
-        self.observed_instances.lock().retain(|weak| {
-            weak.upgrade()
-                .is_some_and(|other| other.lock().id() != instance_id)
-        });
+        self.observed_instances
+            .lock()
+            .retain(|weak| weak.upgrade().is_some_and(|other| other.lock().id() != instance_id));
     }
 
     fn for_each_observed(&self, mut apply: impl FnMut(&mut MultiviewInstance)) {
@@ -979,7 +976,11 @@ impl ViewerTabManager {
         if tabs.is_empty() {
             return None;
         }
-        let next_idx = if closed_index < tabs.len() { closed_index } else { closed_index.saturating_sub(1) };
+        let next_idx = if closed_index < tabs.len() {
+            closed_index
+        } else {
+            closed_index.saturating_sub(1)
+        };
         tabs.get_at(next_idx).map(|tab| tab.id)
     }
 }

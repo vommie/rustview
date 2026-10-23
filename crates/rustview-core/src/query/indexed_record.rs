@@ -51,7 +51,11 @@ impl IndexedMediaRecord {
     /// Recomputes the values derived from `record` and `tags_count`; call after changing `record` in place.
     pub fn refresh_derived(&mut self) {
         let r = &self.record;
-        self.ar_value = if r.height > 0 { r.width as f32 / r.height as f32 } else { 0.0 };
+        self.ar_value = if r.height > 0 {
+            r.width as f32 / r.height as f32
+        } else {
+            0.0
+        };
         self.is_pending = r.source.is_some() && (r.file_size == 0 || r.width == 0 || r.height == 0 || r.is_corrupted);
         self.is_corrupted = !self.is_pending && r.is_corrupted;
         self.is_deleted = r.is_deleted;
@@ -88,7 +92,10 @@ impl IndexedMediaRecord {
 
     /// Whether the record is the file at `path` (compares directory and name without building a path).
     pub fn is_at(&self, path: &Path) -> bool {
-        path.parent() == Some(self.folder.path()) && path.file_name().is_some_and(|name| name == self.record.filename.as_str())
+        path.parent() == Some(self.folder.path())
+            && path
+                .file_name()
+                .is_some_and(|name| name == self.record.filename.as_str())
     }
 
     /// The status shown in the "Flags" column; also the key of that sort order.

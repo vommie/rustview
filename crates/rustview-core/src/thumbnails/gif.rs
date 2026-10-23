@@ -1,9 +1,9 @@
 use super::error::ThumbnailError;
-use super::types::{calculate_aspect_dimensions, ScalingAlgorithm};
+use super::types::{ScalingAlgorithm, calculate_aspect_dimensions};
 use fast_image_resize::images::Image as FirImage;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
-use image::codecs::gif::GifDecoder;
 use image::AnimationDecoder;
+use image::codecs::gif::GifDecoder;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;

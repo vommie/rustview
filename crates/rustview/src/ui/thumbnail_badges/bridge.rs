@@ -2,9 +2,9 @@
 //! user configuration (from the Appearance settings) to the main window.
 
 use super::engine::compute_badge_zones;
-use rustview_core::settings::schema::AppearanceSettings;
-use rustview_core::settings::ThumbnailBadgeOverflow;
 use crate::ui::{MainWindow, ThumbnailBadgeConfig, ThumbnailBadgeEngine, ThumbnailBadgeOverflowMode};
+use rustview_core::settings::ThumbnailBadgeOverflow;
+use rustview_core::settings::schema::AppearanceSettings;
 use slint::ComponentHandle;
 
 pub struct ThumbnailBadgeBridge;
@@ -67,8 +67,14 @@ mod tests {
             thumbnail_badge_overflow: "wrap".into(),
             ..Default::default()
         };
-        assert_eq!(ThumbnailBadgeBridge::config_from_settings(&appearance).overflow_mode, ThumbnailBadgeOverflowMode::Wrap);
+        assert_eq!(
+            ThumbnailBadgeBridge::config_from_settings(&appearance).overflow_mode,
+            ThumbnailBadgeOverflowMode::Wrap
+        );
         appearance.thumbnail_badge_overflow = "bogus".into();
-        assert_eq!(ThumbnailBadgeBridge::config_from_settings(&appearance).overflow_mode, ThumbnailBadgeOverflowMode::Hide);
+        assert_eq!(
+            ThumbnailBadgeBridge::config_from_settings(&appearance).overflow_mode,
+            ThumbnailBadgeOverflowMode::Hide
+        );
     }
 }

@@ -7,8 +7,8 @@ use std::time::Instant;
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::shape::{self, ConnectionExt as _};
 use x11rb::protocol::xproto::{
-    ChangeWindowAttributesAux, ClipOrdering, ConfigureWindowAux, ConnectionExt as _, CreateGCAux, CreateWindowAux, Cursor,
-    Rectangle, Window, WindowClass,
+    ChangeWindowAttributesAux, ClipOrdering, ConfigureWindowAux, ConnectionExt as _, CreateGCAux, CreateWindowAux,
+    Cursor, Rectangle, Window, WindowClass,
 };
 
 /// A rectangle in window coordinates (`x`, `y` and size), as the X protocol has it.
@@ -22,7 +22,12 @@ pub struct XRectangle {
 
 impl From<XRectangle> for Rectangle {
     fn from(rect: XRectangle) -> Self {
-        Rectangle { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        Rectangle {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+        }
     }
 }
 
@@ -87,7 +92,8 @@ pub struct X11VideoSubwindow {
 impl X11VideoSubwindow {
     pub fn new(parent_xid: u64, x: i32, y: i32, width: u32, height: u32) -> Result<Self, ViewerError> {
         let t0 = Instant::now();
-        let parent = u32::try_from(parent_xid).map_err(|_| ViewerError::X11(format!("Invalid parent window #{parent_xid}")))?;
+        let parent =
+            u32::try_from(parent_xid).map_err(|_| ViewerError::X11(format!("Invalid parent window #{parent_xid}")))?;
         let session = Session::open("a video window")?;
 
         let w_clamped = width.max(MIN_SIZE);
@@ -123,7 +129,12 @@ impl X11VideoSubwindow {
 
         let _ = session.conn.map_window(subwindow);
         session.sync();
-        let shape_available = session.conn.extension_information(shape::X11_EXTENSION_NAME).ok().flatten().is_some();
+        let shape_available = session
+            .conn
+            .extension_information(shape::X11_EXTENSION_NAME)
+            .ok()
+            .flatten()
+            .is_some();
 
         tracing::info!(
             parent_xid,
@@ -190,7 +201,11 @@ impl X11VideoSubwindow {
     }
 
     fn place_video(&mut self, x: i32, y: i32, width: u32, height: u32) {
-        if self.current_sub_x != x || self.current_sub_y != y || self.current_sub_w != width || self.current_sub_h != height {
+        if self.current_sub_x != x
+            || self.current_sub_y != y
+            || self.current_sub_w != width
+            || self.current_sub_h != height
+        {
             self.current_sub_x = x;
             self.current_sub_y = y;
             self.current_sub_w = width;
@@ -231,14 +246,26 @@ impl X11VideoSubwindow {
         let sub_offset_y = geom.y - vis_y1;
 
         self.place_container(vis_x1, vis_y1, vis_w, vis_h);
-        self.place_video(sub_offset_x, sub_offset_y, w_clamped.unsigned_abs(), h_clamped.unsigned_abs());
+        self.place_video(
+            sub_offset_x,
+            sub_offset_y,
+            w_clamped.unsigned_abs(),
+            h_clamped.unsigned_abs(),
+        );
         self.session.flush();
 
         self.show();
         true
     }
 
-    pub fn reparent(&mut self, new_parent_xid: u64, x: i32, y: i32, width: u32, height: u32) -> Result<(), ViewerError> {
+    pub fn reparent(
+        &mut self,
+        new_parent_xid: u64,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    ) -> Result<(), ViewerError> {
         let t0 = Instant::now();
         let target_parent = u32::try_from(new_parent_xid)
             .map_err(|_| ViewerError::X11(format!("Invalid target parent #{new_parent_xid}")))?;
@@ -248,7 +275,11 @@ impl X11VideoSubwindow {
         self.session
             .conn
             .reparent_window(self.container, target_parent, coord(x), coord(y))
-            .map_err(|e| ViewerError::X11(format!("ReparentWindow failed for target parent #{new_parent_xid}: {e}")))?;
+            .map_err(|e| {
+                ViewerError::X11(format!(
+                    "ReparentWindow failed for target parent #{new_parent_xid}: {e}"
+                ))
+            })?;
 
         // The new parent may have other bounds: force the geometry of both windows.
         self.current_container_x = x;
@@ -297,8 +328,10 @@ impl X11VideoSubwindow {
         if container_w == 0 || container_h == 0 {
             return;
         }
-        let (container_w_i32, container_h_i32) =
-            (i32::try_from(container_w).unwrap_or(i32::MAX), i32::try_from(container_h).unwrap_or(i32::MAX));
+        let (container_w_i32, container_h_i32) = (
+            i32::try_from(container_w).unwrap_or(i32::MAX),
+            i32::try_from(container_h).unwrap_or(i32::MAX),
+        );
 
         let mut container_cutouts: Vec<XRectangle> = Vec::with_capacity(main_win_rects.len());
 
@@ -332,9 +365,22 @@ impl X11VideoSubwindow {
             self.is_clipped = false;
             self.last_applied_local_rects.clear();
         } else {
-            let full = XRectangle { x: 0, y: 0, width: extent(container_w.min(MAX_SHAPE_EXTENT)), height: extent(container_h.min(MAX_SHAPE_EXTENT)) };
+            let full = XRectangle {
+                x: 0,
+                y: 0,
+                width: extent(container_w.min(MAX_SHAPE_EXTENT)),
+                height: extent(container_h.min(MAX_SHAPE_EXTENT)),
+            };
             let conn = &self.session.conn;
-            let _ = conn.shape_rectangles(shape::SO::SET, shape::SK::BOUNDING, ClipOrdering::UNSORTED, self.container, 0, 0, &[full.into()]);
+            let _ = conn.shape_rectangles(
+                shape::SO::SET,
+                shape::SK::BOUNDING,
+                ClipOrdering::UNSORTED,
+                self.container,
+                0,
+                0,
+                &[full.into()],
+            );
             let _ = conn.shape_rectangles(
                 shape::SO::SUBTRACT,
                 shape::SK::BOUNDING,
@@ -353,7 +399,10 @@ impl X11VideoSubwindow {
 
     /// Gives the container its default (rectangular) shape again.
     fn reset_shape(&self) {
-        let _ = self.session.conn.shape_mask(shape::SO::SET, shape::SK::BOUNDING, self.container, 0, 0, x11rb::NONE);
+        let _ = self
+            .session
+            .conn
+            .shape_mask(shape::SO::SET, shape::SK::BOUNDING, self.container, 0, 0, x11rb::NONE);
     }
 
     /// Hides or shows the mouse cursor over this video window, whatever mpv does with its own cursor. The invisible cursor is
@@ -375,7 +424,10 @@ impl X11VideoSubwindow {
         let mut windows = vec![self.container, self.subwindow];
         windows.extend(self.descendants_of(self.subwindow));
         for window in windows {
-            let _ = self.session.conn.change_window_attributes(window, &ChangeWindowAttributesAux::new().cursor(cursor));
+            let _ = self
+                .session
+                .conn
+                .change_window_attributes(window, &ChangeWindowAttributesAux::new().cursor(cursor));
         }
         self.session.flush();
     }
@@ -389,8 +441,21 @@ impl X11VideoSubwindow {
         conn.create_pixmap(1, pixmap, self.container, 1, 1).ok()?;
         // A new pixmap has undefined contents: clear it, so the mask has no set bit.
         conn.create_gc(gc, pixmap, &CreateGCAux::new().foreground(0)).ok()?;
-        conn.poly_fill_rectangle(pixmap, gc, &[Rectangle { x: 0, y: 0, width: 1, height: 1 }]).ok()?;
-        let created = conn.create_cursor(cursor, pixmap, pixmap, 0, 0, 0, 0, 0, 0, 0, 0).ok().map(|cookie| cookie.check().is_ok());
+        conn.poly_fill_rectangle(
+            pixmap,
+            gc,
+            &[Rectangle {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            }],
+        )
+        .ok()?;
+        let created = conn
+            .create_cursor(cursor, pixmap, pixmap, 0, 0, 0, 0, 0, 0, 0, 0)
+            .ok()
+            .map(|cookie| cookie.check().is_ok());
         let _ = conn.free_gc(gc);
         let _ = conn.free_pixmap(pixmap);
         created.unwrap_or(false).then_some(cursor)
@@ -401,7 +466,13 @@ impl X11VideoSubwindow {
         let mut found = Vec::new();
         let mut pending = vec![window];
         while let Some(current) = pending.pop() {
-            if let Some(reply) = self.session.conn.query_tree(current).ok().and_then(|cookie| cookie.reply().ok()) {
+            if let Some(reply) = self
+                .session
+                .conn
+                .query_tree(current)
+                .ok()
+                .and_then(|cookie| cookie.reply().ok())
+            {
                 found.extend_from_slice(&reply.children);
                 pending.extend_from_slice(&reply.children);
             }

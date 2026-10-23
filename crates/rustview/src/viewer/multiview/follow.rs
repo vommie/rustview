@@ -77,10 +77,7 @@ pub fn follow(shown: &[Shown], wanted: &[Wanted], cap: usize) -> FollowPlan {
     }
 
     let is_wanted = |media: u64| wanted.iter().any(|w| w.id == media);
-    let removed: Vec<&Shown> = shown
-        .iter()
-        .filter(|s| !s.sticky && !is_wanted(s.media))
-        .collect();
+    let removed: Vec<&Shown> = shown.iter().filter(|s| !s.sticky && !is_wanted(s.media)).collect();
     let kept = shown.len() - removed.len();
     let room = cap.saturating_sub(kept);
     let newcomers: Vec<&Wanted> = wanted

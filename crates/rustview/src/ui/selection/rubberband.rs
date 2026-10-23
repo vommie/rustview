@@ -1,5 +1,5 @@
-use rustview_core::library::models::{FolderId, MediaId};
 use crate::ui::MainWindow;
+use rustview_core::library::models::{FolderId, MediaId};
 use slint::{ComponentHandle, Timer};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -142,7 +142,14 @@ impl RubberbandGeometry {
         let max_r_clamped = max_r.min(total_items.saturating_sub(1));
 
         (min_r..=max_r_clamped)
-            .filter(|&r| rect.intersects(&RectF32::new(0.0, r as f32 * config.row_height, config.content_width, config.row_height)))
+            .filter(|&r| {
+                rect.intersects(&RectF32::new(
+                    0.0,
+                    r as f32 * config.row_height,
+                    config.content_width,
+                    config.row_height,
+                ))
+            })
             .collect()
     }
 
@@ -353,7 +360,8 @@ impl RubberbandAutoScroller {
                     return;
                 }
 
-                let speed_boost = (RUBBERBAND_AUTOSCROLL_MAX_SPEED_PX - RUBBERBAND_AUTOSCROLL_BASE_SPEED_PX) * prox.powf(1.5);
+                let speed_boost =
+                    (RUBBERBAND_AUTOSCROLL_MAX_SPEED_PX - RUBBERBAND_AUTOSCROLL_BASE_SPEED_PX) * prox.powf(1.5);
                 let current_speed = RUBBERBAND_AUTOSCROLL_BASE_SPEED_PX + speed_boost;
 
                 let delta_y = match dir {

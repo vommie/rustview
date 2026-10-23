@@ -1,24 +1,24 @@
 //! The expansion state of the tree and what happens to the view when a folder disappears.
 
+use super::BridgeFolders;
+use crate::icons::Icon;
+use crate::ui::MainWindow;
 use crate::ui::favorites::BridgeFavorites;
 use crate::ui::folder_tree::tree_sync::FolderTreeSync;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::virtual_folder_wording;
-use crate::ui::MainWindow;
-use crate::icons::Icon;
+use parking_lot::RwLock;
+use rustview_core::library::Library;
 use rustview_core::library::folders::normalize_path;
 use rustview_core::library::models::FolderId;
-use rustview_core::library::Library;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::{ModelRc, VecModel};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use super::BridgeFolders;
 
 impl BridgeFolders {
     pub fn persist_expanded_folders(settings: &SettingsManager, expanded_set: &HashSet<FolderId>) {
@@ -58,18 +58,18 @@ impl BridgeFolders {
     /// Renders the folder tree from the in-memory Single Point of Truth snapshot with zero filesystem I/O.
     /// The Slint model is updated surgically (row-level insert/remove/move/update) instead of being replaced.
     /// Without a configured/registered root the snapshot is empty and an empty tree is shown.
-    pub fn reload_tree(
-        window: &MainWindow,
-        library: &Library,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn reload_tree(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
         FolderTreeSync::refresh(window, library, settings, state);
     }
 
     /// A folder was restored in the database behind the cached snapshot: the snapshot is read again, the tree, the folder rows of the
     /// Browse view and the Inspector show the folder as present.
-    pub fn reload_tree_after_restore(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
+    pub fn reload_tree_after_restore(
+        window: &MainWindow,
+        library: &Library,
+        settings: &SettingsManager,
+        state: &RwLock<UiState>,
+    ) {
         state.write().invalidate_folder_hierarchy();
         Self::reload_tree(window, library, settings, state);
         BridgeInspector::update(window, state);
@@ -138,11 +138,7 @@ impl BridgeFolders {
         BridgeInspector::update(window, state);
     }
 
-    pub fn prune_expanded_folders(
-        deleted_ids: &[FolderId],
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn prune_expanded_folders(deleted_ids: &[FolderId], settings: &SettingsManager, state: &RwLock<UiState>) {
         let mut st = state.write();
         for id in deleted_ids {
             st.expanded_folder_ids.remove(id);
@@ -226,24 +222,9 @@ impl BridgeFolders {
                     successor_path = %LogObscurer::path(&succ_path),
                     "[FolderNavigation: Successor] Navigating active view to resolved successor folder."
                 );
-                Self::select_folder(
-                    succ_id,
-                    succ_path,
-                    window,
-                    library,
-                    thumbnails,
-                    settings,
-                    state,
-                );
+                Self::select_folder(succ_id, succ_path, window, library, thumbnails, settings, state);
             } else {
-                Self::fallback_to_root_if_affected(
-                    affected_folder_ids,
-                    window,
-                    library,
-                    thumbnails,
-                    settings,
-                    state,
-                );
+                Self::fallback_to_root_if_affected(affected_folder_ids, window, library, thumbnails, settings, state);
             }
         } else {
             Self::reload_tree(window, library, settings, state);

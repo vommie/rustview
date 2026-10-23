@@ -33,7 +33,14 @@ pub fn begin(host_xid: u64) -> bool {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {
             match OverlayServer::new() {
-                Ok(server) => *slot = Some(Lock { server, center: (0, 0), restore: (0, 0), active: false }),
+                Ok(server) => {
+                    *slot = Some(Lock {
+                        server,
+                        center: (0, 0),
+                        restore: (0, 0),
+                        active: false,
+                    })
+                }
                 Err(_) => return false,
             }
         }
@@ -42,9 +49,11 @@ pub fn begin(host_xid: u64) -> bool {
             return true;
         }
         let server = &lock.server;
-        let (Some(((px, py), down)), Some(origin), Some((w, h))) =
-            (server.pointer_and_buttons(), server.origin_in_root(host_xid), server.window_size(host_xid))
-        else {
+        let (Some(((px, py), down)), Some(origin), Some((w, h))) = (
+            server.pointer_and_buttons(),
+            server.origin_in_root(host_xid),
+            server.window_size(host_xid),
+        ) else {
             return false;
         };
         if !down || w < 40 || h < 40 {
@@ -53,7 +62,9 @@ pub fn begin(host_xid: u64) -> bool {
         let center = (origin.0 + w / 2, origin.1 + h / 2);
         server.warp_pointer(center.0, center.1);
         // The pointer must have followed (it does not under Wayland); else the drag stays absolute.
-        let followed = server.pointer_and_buttons().is_some_and(|((x, y), _)| (x - center.0).abs() <= 2 && (y - center.1).abs() <= 2);
+        let followed = server
+            .pointer_and_buttons()
+            .is_some_and(|((x, y), _)| (x - center.0).abs() <= 2 && (y - center.1).abs() <= 2);
         if !followed {
             server.warp_pointer(px, py);
             return false;

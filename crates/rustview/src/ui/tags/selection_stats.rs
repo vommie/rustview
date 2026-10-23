@@ -1,7 +1,7 @@
 //! Which tags the selected media carry (all, some or none of them).
 
-use rustview_core::library::models::{MediaId, TagId};
 use rustview_core::library::Library;
+use rustview_core::library::models::{MediaId, TagId};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Default)]
@@ -19,10 +19,7 @@ impl TagSelectionStats {
         }
 
         let media_slice: Vec<MediaId> = selected_ids.iter().copied().collect();
-        let tag_counts = library
-            .tags()
-            .get_tag_frequencies(&media_slice)
-            .unwrap_or_default();
+        let tag_counts = library.tags().get_tag_frequencies(&media_slice).unwrap_or_default();
 
         let mut ratings = HashSet::new();
         for &id in selected_ids {

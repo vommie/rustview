@@ -69,7 +69,8 @@ impl SettingsDiff {
             || old.folders.show_hidden_folders != new.folders.show_hidden_folders
             || old.folders.support_dot_hidden_files != new.folders.support_dot_hidden_files;
 
-        let folder_tree_behavior_changed = old.folders.auto_reveal_remembered_folder != new.folders.auto_reveal_remembered_folder
+        let folder_tree_behavior_changed = old.folders.auto_reveal_remembered_folder
+            != new.folders.auto_reveal_remembered_folder
             || old.folders.persist_folder_tree_state != new.folders.persist_folder_tree_state;
 
         let folder_expansion_changed = old.folders.expanded_folder_ids != new.folders.expanded_folder_ids;

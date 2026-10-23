@@ -1,13 +1,13 @@
-use crate::ui::MainWindow;
-use crate::ui::favorites::BridgeFavorites;
-use crate::ui::status_bar::StatusBarBridge;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
 use crate::icons::Icon;
-use rustview_core::settings::LogObscurer;
 use crate::system::SystemFileHandler;
-use crate::ui::favorites::rename_dialog::FavoriteRenameDialogController;
+use crate::ui::MainWindow;
+use crate::ui::favorites::BridgeFavorites;
 use crate::ui::favorites::manager::FavoriteManager;
+use crate::ui::favorites::rename_dialog::FavoriteRenameDialogController;
+use crate::ui::status_bar::StatusBarBridge;
 use parking_lot::RwLock;
+use rustview_core::settings::LogObscurer;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -81,10 +81,7 @@ impl FavoriteContextMenu {
                         tracing::error!(error = %e, "[FavoriteContextMenu] Failed to open folder in File Manager");
                         StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
                     } else {
-                        StatusBarBridge::success(
-                            window,
-                            format!("Opened favorite '{}' in File Manager.", alias),
-                        );
+                        StatusBarBridge::success(window, format!("Opened favorite '{}' in File Manager.", alias));
                     }
                 } else {
                     StatusBarBridge::warn(
@@ -122,7 +119,11 @@ mod tests {
     fn every_favorite_menu_entry_has_an_icon() {
         for is_valid in [true, false] {
             let menu = FavoriteContextMenu::build_menu("Photos", Path::new("/photos"), is_valid);
-            assert!(menu.entries_without_icon().is_empty(), "{:?}", menu.entries_without_icon());
+            assert!(
+                menu.entries_without_icon().is_empty(),
+                "{:?}",
+                menu.entries_without_icon()
+            );
         }
     }
 }

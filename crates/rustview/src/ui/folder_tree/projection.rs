@@ -1,9 +1,9 @@
 //! Pure in-memory projections of the folder hierarchy snapshot into UI structures
 //! (Slint tree rows and "Move to..." / "Copy to..." context menus). Zero disk I/O.
 
-use rustview_core::library::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use crate::ctx_menu::{CtxMenuItem, CtxMenuItemKind};
 use crate::icons::Icon;
+use rustview_core::library::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use std::collections::HashSet;
 use std::time::Instant;
 
@@ -138,7 +138,8 @@ impl FolderProjection for FolderHierarchySnapshot {
             }
 
             for &child_id in &eligible_children {
-                if let Some(item) = build_target_folder_item(self, 
+                if let Some(item) = build_target_folder_item(
+                    self,
                     child_id,
                     base_action_id,
                     exclude_subtree_id,
@@ -178,7 +179,8 @@ fn flatten_into(
         }
 
         let has_children = node.children.iter().any(|cid| {
-            snapshot.get_node(*cid)
+            snapshot
+                .get_node(*cid)
                 .map(|c| is_node_visible(c, filter.show_deleted, filter.show_hidden))
                 .unwrap_or(false)
         });
@@ -186,10 +188,7 @@ fn flatten_into(
         let is_selected = filter.selected_id == Some(node.id);
 
         let formatted_name = if filter.show_metrics {
-            format!(
-                "{} ({}, {})",
-                node.name, node.subfolder_count, node.media_count
-            )
+            format!("{} ({}, {})", node.name, node.subfolder_count, node.media_count)
         } else {
             node.name.clone()
         };
@@ -212,7 +211,6 @@ fn flatten_into(
         }
     }
 }
-
 
 /// Evaluates if a folder is an eligible move/copy target.
 /// Strictly rejects deleted folders, hidden folders (if disabled), the excluded folder,
@@ -240,7 +238,6 @@ fn is_target_eligible(
 
     true
 }
-
 
 /// Recursively builds a folder node item without depth limits.
 /// - If it has no eligible subfolders: returns an Action item (`<name>` with a folder icon).
@@ -331,7 +328,8 @@ fn build_target_folder_item(
     sub_elements.push(CtxMenuItem::new_separator());
 
     for &child_id in &eligible_children {
-        if let Some(child_item) = build_target_folder_item(snapshot, 
+        if let Some(child_item) = build_target_folder_item(
+            snapshot,
             child_id,
             base_action_id,
             exclude_subtree_id,

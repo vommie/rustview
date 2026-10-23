@@ -1,8 +1,8 @@
 //! Window manager state of a top level window (EWMH): maximized and fullscreen, set through properties and client messages.
 
 use super::session::Session;
-use x11rb::wrapper::ConnectionExt as _;
 use x11rb::protocol::xproto::{Atom, AtomEnum, ClientMessageEvent, ConnectionExt as _, EventMask, PropMode, Window};
+use x11rb::wrapper::ConnectionExt as _;
 
 /// `_MOTIF_WM_HINTS` that ask for no decorations (flags = decorations, decorations = none).
 const MOTIF_HINTS_NO_DECORATIONS: [u32; 5] = [2, 0, 0, 0, 0];
@@ -20,14 +20,25 @@ fn send_to_window_manager(session: &Session, window: Window, message_type: Atom,
 }
 
 fn set_atom_list(session: &Session, window: Window, property: Atom, atoms: &[u32]) {
-    let _ = session.conn.change_property32(PropMode::REPLACE, window, property, AtomEnum::ATOM, atoms);
+    let _ = session
+        .conn
+        .change_property32(PropMode::REPLACE, window, property, AtomEnum::ATOM, atoms);
 }
 
 pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
     let window = u32::try_from(window_xid).ok().filter(|&xid| xid != 0)?;
     let session = Session::open("the maximized check").ok()?;
-    let [state, vert, horz] = session.atoms(["_NET_WM_STATE", "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ"])?;
-    let reply = session.conn.get_property(false, window, state, AtomEnum::ANY, 0, 1024).ok()?.reply().ok()?;
+    let [state, vert, horz] = session.atoms([
+        "_NET_WM_STATE",
+        "_NET_WM_STATE_MAXIMIZED_VERT",
+        "_NET_WM_STATE_MAXIMIZED_HORZ",
+    ])?;
+    let reply = session
+        .conn
+        .get_property(false, window, state, AtomEnum::ANY, 0, 1024)
+        .ok()?
+        .reply()
+        .ok()?;
     let atoms: Vec<u32> = reply.value32().map(Iterator::collect).unwrap_or_default();
     Some(atoms.contains(&vert) && atoms.contains(&horz))
 }
@@ -51,7 +62,11 @@ pub fn set_x11_initial_maximized(window_xid: u64) -> bool {
     let Ok(session) = Session::open("the initial maximized state") else {
         return false;
     };
-    let Some([state, vert, horz]) = session.atoms(["_NET_WM_STATE", "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ"]) else {
+    let Some([state, vert, horz]) = session.atoms([
+        "_NET_WM_STATE",
+        "_NET_WM_STATE_MAXIMIZED_VERT",
+        "_NET_WM_STATE_MAXIMIZED_HORZ",
+    ]) else {
         return false;
     };
     set_atom_list(&session, window, state, &[vert, horz]);
@@ -66,7 +81,11 @@ pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
     let Ok(session) = Session::open("the maximized state") else {
         return;
     };
-    let Some([state, vert, horz]) = session.atoms(["_NET_WM_STATE", "_NET_WM_STATE_MAXIMIZED_VERT", "_NET_WM_STATE_MAXIMIZED_HORZ"]) else {
+    let Some([state, vert, horz]) = session.atoms([
+        "_NET_WM_STATE",
+        "_NET_WM_STATE_MAXIMIZED_VERT",
+        "_NET_WM_STATE_MAXIMIZED_HORZ",
+    ]) else {
         return;
     };
     if maximized {
@@ -78,7 +97,9 @@ pub fn force_x11_maximized(window_xid: u64, maximized: bool) {
 }
 
 fn strip_decorations(session: &Session, window: Window, motif: Atom) {
-    let _ = session.conn.change_property32(PropMode::REPLACE, window, motif, motif, &MOTIF_HINTS_NO_DECORATIONS);
+    let _ = session
+        .conn
+        .change_property32(PropMode::REPLACE, window, motif, motif, &MOTIF_HINTS_NO_DECORATIONS);
 }
 
 pub fn force_x11_fullscreen(window_xid: u64) {
@@ -88,12 +109,19 @@ pub fn force_x11_fullscreen(window_xid: u64) {
     let Ok(session) = Session::open("the fullscreen state") else {
         return;
     };
-    let Some([state, fullscreen, motif]) = session.atoms(["_NET_WM_STATE", "_NET_WM_STATE_FULLSCREEN", "_MOTIF_WM_HINTS"]) else {
+    let Some([state, fullscreen, motif]) =
+        session.atoms(["_NET_WM_STATE", "_NET_WM_STATE_FULLSCREEN", "_MOTIF_WM_HINTS"])
+    else {
         return;
     };
     strip_decorations(&session, window, motif);
     set_atom_list(&session, window, state, &[fullscreen]);
-    send_to_window_manager(&session, window, state, [STATE_ADD, fullscreen, 0, SOURCE_APPLICATION, 0]);
+    send_to_window_manager(
+        &session,
+        window,
+        state,
+        [STATE_ADD, fullscreen, 0, SOURCE_APPLICATION, 0],
+    );
     session.flush();
 
     tracing::debug!(
@@ -112,9 +140,12 @@ pub fn force_x11_fullscreen_on_monitor(window_xid: u64, monitor_index: usize, x:
     let Ok(session) = Session::open("the fullscreen on a monitor") else {
         return;
     };
-    let Some([state, fullscreen, monitors, motif]) =
-        session.atoms(["_NET_WM_STATE", "_NET_WM_STATE_FULLSCREEN", "_NET_WM_FULLSCREEN_MONITORS", "_MOTIF_WM_HINTS"])
-    else {
+    let Some([state, fullscreen, monitors, motif]) = session.atoms([
+        "_NET_WM_STATE",
+        "_NET_WM_STATE_FULLSCREEN",
+        "_NET_WM_FULLSCREEN_MONITORS",
+        "_MOTIF_WM_HINTS",
+    ]) else {
         return;
     };
     let monitor = u32::try_from(monitor_index).unwrap_or(0);
@@ -123,20 +154,36 @@ pub fn force_x11_fullscreen_on_monitor(window_xid: u64, monitor_index: usize, x:
     strip_decorations(&session, window, motif);
 
     // 2. Set the property _NET_WM_FULLSCREEN_MONITORS on the client window.
-    let _ = session.conn.change_property32(PropMode::REPLACE, window, monitors, AtomEnum::CARDINAL, &[monitor; 4]);
+    let _ = session
+        .conn
+        .change_property32(PropMode::REPLACE, window, monitors, AtomEnum::CARDINAL, &[monitor; 4]);
 
     // 3. Ask the window manager through the root window.
-    send_to_window_manager(&session, window, monitors, [monitor, monitor, monitor, monitor, SOURCE_APPLICATION]);
+    send_to_window_manager(
+        &session,
+        window,
+        monitors,
+        [monitor, monitor, monitor, monitor, SOURCE_APPLICATION],
+    );
 
     // 4. Move and resize the window to the bounds of the target monitor.
     let _ = session.conn.configure_window(
         window,
-        &ConfigureWindowAux::new().x(x).y(y).width(width.max(16)).height(height.max(16)),
+        &ConfigureWindowAux::new()
+            .x(x)
+            .y(y)
+            .width(width.max(16))
+            .height(height.max(16)),
     );
 
     // 5. Set the _NET_WM_STATE property and 6. ask for the fullscreen state.
     set_atom_list(&session, window, state, &[fullscreen]);
-    send_to_window_manager(&session, window, state, [STATE_ADD, fullscreen, 0, SOURCE_APPLICATION, 0]);
+    send_to_window_manager(
+        &session,
+        window,
+        state,
+        [STATE_ADD, fullscreen, 0, SOURCE_APPLICATION, 0],
+    );
     session.flush();
 
     tracing::info!(

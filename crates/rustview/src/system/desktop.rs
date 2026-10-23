@@ -1,6 +1,6 @@
 use super::error::SystemHandlerError;
-use rustview_core::settings::LogObscurer;
 use freedesktop_desktop_entry::{DesktopEntry, Iter, default_paths, get_languages_from_env};
+use rustview_core::settings::LogObscurer;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -57,10 +57,7 @@ impl DesktopIntegration {
     }
 
     /// Launches a specific desktop application with target file paths asynchronously.
-    pub fn launch_app<P: AsRef<Path>>(
-        app: &DesktopApp,
-        file_paths: &[P],
-    ) -> Result<(), SystemHandlerError> {
+    pub fn launch_app<P: AsRef<Path>>(app: &DesktopApp, file_paths: &[P]) -> Result<(), SystemHandlerError> {
         if file_paths.is_empty() {
             return Ok(());
         }
@@ -82,9 +79,7 @@ impl DesktopIntegration {
         }
 
         if canonical_paths.is_empty() {
-            return Err(SystemHandlerError::FileNotFound(
-                file_paths[0].as_ref().to_path_buf(),
-            ));
+            return Err(SystemHandlerError::FileNotFound(file_paths[0].as_ref().to_path_buf()));
         }
 
         tracing::info!(
@@ -112,9 +107,7 @@ impl DesktopIntegration {
                     cmd.args(&argv[1..]);
                 }
 
-                cmd.stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null());
+                cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
 
                 match cmd.spawn() {
                     Ok(mut child) => {
@@ -325,7 +318,9 @@ except Exception:
     /// Finds the desktop entry `desktop_id` (`org.kde.gwenview.desktop`) in the application folders of the user and the system.
     fn resolve_desktop_file(desktop_id: &str) -> Option<DesktopApp> {
         let locales = get_languages_from_env();
-        let direct = default_paths().map(|dir| dir.join(desktop_id)).find(|path| path.is_file());
+        let direct = default_paths()
+            .map(|dir| dir.join(desktop_id))
+            .find(|path| path.is_file());
         let path = direct.or_else(|| {
             Iter::new(default_paths()).find(|path| path.file_name().is_some_and(|name| name == desktop_id))
         })?;
@@ -344,7 +339,13 @@ except Exception:
             std::borrow::Cow::into_owned,
         );
         let icon_path = Self::resolve_icon_path(&icon_name);
-        Some(DesktopApp { id: desktop_id.to_owned(), name, icon_name, icon_path, exec })
+        Some(DesktopApp {
+            id: desktop_id.to_owned(),
+            name,
+            icon_name,
+            icon_path,
+            exec,
+        })
     }
 
     /// The command line of an application for `paths`. The field codes of the `Exec=` line are expanded by the desktop entry
@@ -365,7 +366,9 @@ except Exception:
 
         let mut entry = DesktopEntry::from_appid(String::new());
         entry.add_desktop_entry("Exec".to_owned(), exec_template.to_owned());
-        let mut argv = entry.parse_exec_with_uris(&argument_refs, &[] as &[&str]).unwrap_or_default();
+        let mut argv = entry
+            .parse_exec_with_uris(&argument_refs, &[] as &[&str])
+            .unwrap_or_default();
 
         let has_file_code = ["%f", "%F", "%u", "%U"].iter().any(|code| exec_template.contains(code));
         if !argv.is_empty() && !has_file_code {
@@ -385,14 +388,27 @@ mod tests {
 
     #[test]
     fn a_path_field_code_gets_the_first_path() {
-        let argv = DesktopIntegration::build_argv("gwenview %f", &[PathBuf::from("/a b/c.jpg"), PathBuf::from("/d.png")]);
+        let argv =
+            DesktopIntegration::build_argv("gwenview %f", &[PathBuf::from("/a b/c.jpg"), PathBuf::from("/d.png")]);
         assert_eq!(argv, ["gwenview", "/a b/c.jpg"]);
     }
 
     #[test]
     fn a_url_list_field_code_gets_percent_encoded_uris() {
-        let argv = DesktopIntegration::build_argv("mpv --player-operation-mode=pseudo-gui -- %U", &[PathBuf::from("/a b/c.mp4"), PathBuf::from("/d.mkv")]);
-        assert_eq!(argv, ["mpv", "--player-operation-mode=pseudo-gui", "--", "file:///a%20b/c.mp4", "file:///d.mkv"]);
+        let argv = DesktopIntegration::build_argv(
+            "mpv --player-operation-mode=pseudo-gui -- %U",
+            &[PathBuf::from("/a b/c.mp4"), PathBuf::from("/d.mkv")],
+        );
+        assert_eq!(
+            argv,
+            [
+                "mpv",
+                "--player-operation-mode=pseudo-gui",
+                "--",
+                "file:///a%20b/c.mp4",
+                "file:///d.mkv"
+            ]
+        );
     }
 
     #[test]
@@ -414,9 +430,15 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let xpm = dir.path().join("a.xpm");
         std::fs::write(&xpm, b"x").expect("write");
-        assert_eq!(DesktopIntegration::resolve_icon_path(xpm.to_str().expect("utf-8")), None);
+        assert_eq!(
+            DesktopIntegration::resolve_icon_path(xpm.to_str().expect("utf-8")),
+            None
+        );
         let png = dir.path().join("a.png");
         std::fs::write(&png, b"x").expect("write");
-        assert_eq!(DesktopIntegration::resolve_icon_path(png.to_str().expect("utf-8")), Some(png));
+        assert_eq!(
+            DesktopIntegration::resolve_icon_path(png.to_str().expect("utf-8")),
+            Some(png)
+        );
     }
 }

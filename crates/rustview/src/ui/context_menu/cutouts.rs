@@ -1,5 +1,6 @@
 //! Cutouts of native video windows below open menus.
 
+use crate::ui::MainWindow;
 pub use crate::ui::context_menu::favorite::FavoriteContextMenu;
 pub use crate::ui::context_menu::folder::FolderContextMenu;
 pub use crate::ui::context_menu::media::{MediaActionContext, MediaContextMenu, MediaSelectionMeta};
@@ -11,14 +12,11 @@ pub use crate::ui::file_dialogs::delete::DeleteFileDialogController;
 pub use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
 pub use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
 pub use crate::ui::file_dialogs::{FileDialogContext, FileRenameContext, FileRenameDialogController};
-use crate::ui::MainWindow;
 use crate::viewer::XRectangle;
 use slint::{ComponentHandle, Model};
 
 /// Computes MPV cutouts for all currently mapped menu level rectangles.
-pub fn calculate_all_active_menu_cutouts(
-    window: &MainWindow,
-) -> Vec<XRectangle> {
+pub fn calculate_all_active_menu_cutouts(window: &MainWindow) -> Vec<XRectangle> {
     let scale = window.window().scale_factor();
     let levels = window.get_context_menu_levels();
     let count = levels.row_count();
@@ -40,13 +38,7 @@ pub fn calculate_all_active_menu_cutouts(
     all_cutouts
 }
 
-pub fn make_rounded_cutout_rectangles(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    scale: f32,
-) -> Vec<XRectangle> {
+pub fn make_rounded_cutout_rectangles(x: f32, y: f32, w: f32, h: f32, scale: f32) -> Vec<XRectangle> {
     let px = (x * scale).round() as i16;
     let py = (y * scale).round() as i16;
     let pw = (w * scale).round() as u16;

@@ -1,13 +1,15 @@
+use directories::ProjectDirs;
 use rustview::app::cli::{Cli, Command};
-use rustview_core::library::Library;
-use rustview_core::settings::memory_budget::BYTES_PER_MB;
-use rustview_core::settings::{LogObscurer, MemoryPlan, SettingsManager, SystemMemory, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 use rustview::system::SystemDisplayService;
 use rustview::system::termination;
-use rustview_core::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge, shutdown};
+use rustview_core::library::Library;
+use rustview_core::settings::memory_budget::BYTES_PER_MB;
+use rustview_core::settings::{
+    LogObscurer, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, MemoryPlan, SettingsManager, SystemMemory,
+};
+use rustview_core::thumbnails::ThumbnailManager;
 use rustview_core::util::startup_clock;
-use directories::ProjectDirs;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -51,8 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_target(false)
             .with_thread_names(false)
             .with_env_filter(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "rustview=info".into()),
+                tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "rustview=info".into()),
             )
             .init();
 
@@ -70,8 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_target(false)
         .with_thread_names(true)
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "rustview=info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "rustview=info".into()),
         )
         .init();
 
@@ -144,9 +144,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The action bar of the Multiview floats in a window of its own; it has to be an override-redirect window, which Slint only
     // lets us request before the first window is created.
     slint::BackendSelector::new()
-        .with_winit_window_attributes_hook(
-            rustview::ui::multiview::bar_overlay::window_attributes_hook,
-        )
+        .with_winit_window_attributes_hook(rustview::ui::multiview::bar_overlay::window_attributes_hook)
         .select()?;
 
     startup_clock::mark("Backend");
@@ -176,7 +174,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     && let Some(xid) = rustview::viewer::get_raw_window_xid(window.window())
                 {
                     let written = rustview::viewer::set_x11_initial_maximized(xid);
-                    tracing::info!(written, "[WindowState: Init] Maximized state written before the window is mapped");
+                    tracing::info!(
+                        written,
+                        "[WindowState: Init] Maximized state written before the window is mapped"
+                    );
                 }
             }
             slint::RenderingState::AfterRendering => {
@@ -218,9 +219,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // must not delay the first window. Without an X screen (Wayland) the compositor places the window.
     let target_position = match (win_state.x, win_state.y) {
         (Some(x), Some(y)) => match rustview::viewer::x11_root_size() {
-            Some((width, height)) if (0..width as i32).contains(&(x + 50)) && (0..height as i32).contains(&(y + 50)) => Some((x, y)),
+            Some((width, height))
+                if (0..width as i32).contains(&(x + 50)) && (0..height as i32).contains(&(y + 50)) =>
+            {
+                Some((x, y))
+            }
             Some(_) => {
-                tracing::info!("[WindowState: Init] The saved window position is outside the screen; the window manager places the window");
+                tracing::info!(
+                    "[WindowState: Init] The saved window position is outside the screen; the window manager places the window"
+                );
                 None
             }
             None => Some((x, y)),
@@ -319,7 +326,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(350),
         move || {
-            let Some(w) = main_weak_tracker.upgrade() else { return; };
+            let Some(w) = main_weak_tracker.upgrade() else {
+                return;
+            };
             let win = w.window();
 
             // A termination signal is handled like a click on the close button of the window.
@@ -450,7 +459,10 @@ fn persist_window_geometry(
         let anchor_y = t.last_unmaximized_y.unwrap_or(t.active_monitor_y + 60);
         (Some(anchor_x), Some(anchor_y))
     } else {
-        (t.last_unmaximized_x.or(Some(cur_pos.x)), t.last_unmaximized_y.or(Some(cur_pos.y)))
+        (
+            t.last_unmaximized_x.or(Some(cur_pos.x)),
+            t.last_unmaximized_y.or(Some(cur_pos.y)),
+        )
     };
 
     let mut current_settings = settings.get();
@@ -480,5 +492,6 @@ fn dirs_data_dir() -> PathBuf {
 }
 
 fn dirs_config_dir() -> PathBuf {
-    ProjectDirs::from("", "", "rustview").map_or_else(|| PathBuf::from("./config"), |dirs| dirs.config_dir().to_path_buf())
+    ProjectDirs::from("", "", "rustview")
+        .map_or_else(|| PathBuf::from("./config"), |dirs| dirs.config_dir().to_path_buf())
 }

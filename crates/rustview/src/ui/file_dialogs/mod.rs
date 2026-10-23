@@ -3,29 +3,27 @@ pub mod delete;
 pub mod missing;
 pub mod remove_orphaned;
 
-pub use crate::ui::file_dialogs::conflict::{
-    ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController,
-};
+pub use crate::ui::file_dialogs::conflict::{ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController};
 pub use crate::ui::file_dialogs::delete::DeleteFileDialogController;
 pub use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
 pub use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
-pub use crate::ui::multiview::MultiviewHandle;
-pub use crate::ui::media::inspector::BridgeInspector;
 pub use crate::ui::media::BridgeMedia;
+pub use crate::ui::media::inspector::BridgeInspector;
+pub use crate::ui::models::format_timestamp;
+pub use crate::ui::multiview::MultiviewHandle;
 pub use crate::ui::state::UiState;
 pub use crate::ui::status_bar::StatusBarBridge;
-pub use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 pub use crate::ui::tabs::BridgeViewerTabs;
-pub use crate::ui::models::format_timestamp;
+pub use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 pub use crate::ui::{FileRenameDialog, MainWindow};
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
+use rustview_core::library::Library;
 use rustview_core::library::file_operations::FileOperations;
 use rustview_core::library::models::{FileConflictResolution, FileTransferKind, MediaId, MediaRecord};
-use rustview_core::library::Library;
 use rustview_core::media::FormatPolicy;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::path::Path;
@@ -88,7 +86,10 @@ impl FileRenameDialogController {
         };
 
         let Some((current_name, full_path)) = current_target else {
-            tracing::warn!(media_id, "[FileRenameController: Open] Failed to resolve target media path");
+            tracing::warn!(
+                media_id,
+                "[FileRenameController: Open] Failed to resolve target media path"
+            );
             return;
         };
 
@@ -99,7 +100,9 @@ impl FileRenameDialogController {
             *d_ref = Some(win);
         }
 
-        let Some(ref win) = *d_ref else { return; };
+        let Some(ref win) = *d_ref else {
+            return;
+        };
 
         win.set_initial_name(current_name.clone().into());
         win.set_new_name(current_name.clone().into());
@@ -132,7 +135,9 @@ impl FileRenameDialogController {
                         let suggestion = FileOperations::generate_unique_filename(&folder_edit, &trimmed);
                         w.set_has_conflict(true);
                         w.set_suggested_name(suggestion.into());
-                        w.set_conflict_message(format!("'{}' already exists in this folder.", conflict.destination.filename).into());
+                        w.set_conflict_message(
+                            format!("'{}' already exists in this folder.", conflict.destination.filename).into(),
+                        );
                         w.set_error_message("".into());
                     }
                     Ok(None) => {
@@ -181,7 +186,11 @@ impl FileRenameDialogController {
                 return;
             }
 
-            match ctx_conf.library.file_operations().check_rename_conflict(target_id_conf, &trimmed) {
+            match ctx_conf
+                .library
+                .file_operations()
+                .check_rename_conflict(target_id_conf, &trimmed)
+            {
                 Ok(Some(conflict_report)) => {
                     Self::close(&dlg_ref_conf, &ctx_conf.state, &win_main_conf, &fs_conf);
 
@@ -205,43 +214,20 @@ impl FileRenameDialogController {
                             total_conflicts: 1,
                             transfer_kind: FileTransferKind::Move,
                         },
-                        move |resolution, _apply_all| {
-                            match resolution {
-                                FileConflictResolution::AutoRename => {
-                                    Self::do_execute(
-                                        target_id_conf,
-                                        &suggestion,
-                                        false,
-                                        &ctx_act,
-                                        &win_main_act,
-                                        &fs_act,
-                                    );
-                                }
-                                FileConflictResolution::Overwrite => {
-                                    Self::do_execute(
-                                        target_id_conf,
-                                        &name_act,
-                                        true,
-                                        &ctx_act,
-                                        &win_main_act,
-                                        &fs_act,
-                                    );
-                                }
-                                _ => {}
+                        move |resolution, _apply_all| match resolution {
+                            FileConflictResolution::AutoRename => {
+                                Self::do_execute(target_id_conf, &suggestion, false, &ctx_act, &win_main_act, &fs_act);
                             }
+                            FileConflictResolution::Overwrite => {
+                                Self::do_execute(target_id_conf, &name_act, true, &ctx_act, &win_main_act, &fs_act);
+                            }
+                            _ => {}
                         },
                     );
                 }
                 Ok(None) => {
                     Self::close(&dlg_ref_conf, &ctx_conf.state, &win_main_conf, &fs_conf);
-                    Self::do_execute(
-                        target_id_conf,
-                        &trimmed,
-                        false,
-                        &ctx_conf,
-                        &win_main_conf,
-                        &fs_conf,
-                    );
+                    Self::do_execute(target_id_conf, &trimmed, false, &ctx_conf, &win_main_conf, &fs_conf);
                 }
                 Err(e) => {
                     if let Some(w) = win_weak_conf.upgrade() {
@@ -335,13 +321,7 @@ impl FileRenameDialogController {
                     StatusBarBridge::success(window, format!("Renamed file to '{}'", new_name));
                 }
                 BridgeInspector::update(window, &ctx.state);
-                BridgeViewerTabs::sync_ui(
-                    window,
-                    &ctx.tab_manager,
-                    &ctx.library,
-                    &ctx.settings,
-                    &ctx.state,
-                );
+                BridgeViewerTabs::sync_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
                 BridgeMedia::reload(
                     window,
                     &ctx.library,
@@ -354,13 +334,7 @@ impl FileRenameDialogController {
 
                 // If in TabGrid mode (mode 2), also update all TabGrid masonry tiles
                 if window.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(
-                        window,
-                        &ctx.tab_manager,
-                        &ctx.library,
-                        &ctx.settings,
-                        &ctx.state,
-                    );
+                    BridgeTabGrid::sync_tab_grid_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
                 }
 
                 StatusBarBridge::update_metrics(window, &ctx.state);
@@ -395,17 +369,14 @@ impl FileRenameDialogController {
         }
 
         if let Some(old_id) = overwritten_id {
-            st.file_selection.deselect_many(&std::collections::HashSet::from([old_id]));
+            st.file_selection
+                .deselect_many(&std::collections::HashSet::from([old_id]));
             st.media_row_map.remove(&old_id);
             st.thumbs.remove(old_id);
         }
 
         // 2. Update the renamed media record
-        if let Some(item) = st
-            .all_folder_media
-            .iter_mut()
-            .find(|m| m.record.id == media_id)
-        {
+        if let Some(item) = st.all_folder_media.iter_mut().find(|m| m.record.id == media_id) {
             item.set_record(updated_record.clone());
         }
         st.mark_list_bytes_dirty();

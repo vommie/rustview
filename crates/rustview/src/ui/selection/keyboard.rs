@@ -1,17 +1,17 @@
-use crate::ui::selection::BridgeFileSelection;
-use crate::ui::multiview::MultiviewHandle;
+use crate::ui::MainWindow;
+use crate::ui::browse_folders::BrowseItem;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::{BridgeMedia, MediaReloadOptions};
+use crate::ui::multiview::MultiviewHandle;
+use crate::ui::multiview::handle::{self as multiview_handle, Pace};
+use crate::ui::selection::BridgeFileSelection;
 use crate::ui::state::{LastActivePanel, UiState};
-use crate::ui::browse_folders::BrowseItem;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::BridgeTags;
-use crate::ui::MainWindow;
-use crate::ui::multiview::handle::{self as multiview_handle, Pace};
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -132,11 +132,7 @@ pub fn calculate_target_index(
             let target_row = current_row.saturating_sub(rows_per_page);
             let candidate = target_row * cols + current_col;
             let res = candidate.min(total_items - 1);
-            if res == current_idx && current_idx > 0 {
-                0
-            } else {
-                res
-            }
+            if res == current_idx && current_idx > 0 { 0 } else { res }
         }
         NavigationDirection::PageDown => {
             let last_idx = total_items - 1;
@@ -191,7 +187,13 @@ pub struct CursorMove<'a> {
 /// Moves the cursor to the list position `target_idx` the way a key press does: selects it (with Shift the range from the anchor),
 /// re-anchors the tile pool when the target lies outside it, scrolls it into view and refreshes everything that follows the
 /// selection. Returns the item reached, `None` when the position holds nothing.
-pub fn move_browse_cursor(ctx: &CursorMove<'_>, target_idx: usize, is_shift: bool, reveal: Reveal, pace: Pace) -> Option<BrowseItem> {
+pub fn move_browse_cursor(
+    ctx: &CursorMove<'_>,
+    target_idx: usize,
+    is_shift: bool,
+    reveal: Reveal,
+    pace: Pace,
+) -> Option<BrowseItem> {
     let (delta, target_item) = {
         let mut st = ctx.state.write();
         let item = st.browse_item_at(target_idx)?;
@@ -254,10 +256,12 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
     };
 
     let target_idx = match current_position {
-        Some(current) => match calculate_target_index(current, direction, view_len, columns, params.page_rows.max(1) as usize) {
-            Some(target) => target.min(view_len - 1),
-            None => return,
-        },
+        Some(current) => {
+            match calculate_target_index(current, direction, view_len, columns, params.page_rows.max(1) as usize) {
+                Some(target) => target.min(view_len - 1),
+                None => return,
+            }
+        }
         None => {
             if direction == NavigationDirection::End {
                 view_len - 1

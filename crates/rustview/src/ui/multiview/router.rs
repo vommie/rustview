@@ -9,9 +9,9 @@ use super::session::{self, Session};
 use super::session_convert;
 use super::tab_host;
 use crate::viewer::multiview::click::ClickKind;
-use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
 use crate::viewer::multiview::instance::WeakInstance;
+use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::route::{HostMode, RoutedEvent, UiAction, route};
 
 pub(super) struct UiEventSink {

@@ -1,18 +1,18 @@
 //! The callbacks of the tag panel.
 
+use super::{BridgeTags, TagActionContext, TagTreeSync};
+use crate::ui::MainWindow;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::*;
-use crate::ui::MainWindow;
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::query::{MatchMode, ScopeMode};
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::sync::Arc;
 use std::time::Instant;
-use super::{BridgeTags, TagActionContext, TagTreeSync};
 
 impl BridgeTags {
     pub fn register_callbacks(
@@ -102,11 +102,7 @@ impl BridgeTags {
         let st = state.clone();
         window.on_match_mode_changed(move |idx| {
             let t0 = Instant::now();
-            let mode = if idx == 0 {
-                MatchMode::All
-            } else {
-                MatchMode::Any
-            };
+            let mode = if idx == 0 { MatchMode::All } else { MatchMode::Any };
 
             let should_execute = {
                 let mut s = st.write();

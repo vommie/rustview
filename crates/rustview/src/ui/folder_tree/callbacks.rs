@@ -1,20 +1,20 @@
 //! The callbacks of the folder tree panel.
 
+use super::BridgeFolders;
+use crate::ui::MainWindow;
+use crate::ui::SettingsDialogController;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::{LastActivePanel, UiState};
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::MainWindow;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
-use crate::ui::SettingsDialogController;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use super::BridgeFolders;
 
 impl BridgeFolders {
     pub fn register_callbacks(
@@ -63,15 +63,7 @@ impl BridgeFolders {
         let win = window.clone_strong();
         window.on_folder_selected(move |id, path| {
             st.write().last_active_panel = LastActivePanel::Folder;
-            Self::select_folder(
-                id as u64,
-                PathBuf::from(path.as_str()),
-                &win,
-                &lib,
-                &thumb,
-                &set,
-                &st,
-            );
+            Self::select_folder(id as u64, PathBuf::from(path.as_str()), &win, &lib, &thumb, &set, &st);
         });
 
         let lib = library.clone();
@@ -91,7 +83,10 @@ impl BridgeFolders {
         window.on_folder_refresh_all_clicked(move || {
             st_all.write().last_active_panel = LastActivePanel::Folder;
             if BridgeMedia::is_system_busy(&win_all, &thumb_all, &st_all) {
-                StatusBarBridge::warn(&win_all, "Cannot refresh folder tree: another operation is already in progress.");
+                StatusBarBridge::warn(
+                    &win_all,
+                    "Cannot refresh folder tree: another operation is already in progress.",
+                );
                 return;
             }
             tracing::info!("[FolderRefresh: Manual] Toolbar 'Refresh Tree (Full)' triggered by user");
@@ -106,7 +101,10 @@ impl BridgeFolders {
         window.on_folder_refresh_relative_clicked(move || {
             st_rel.write().last_active_panel = LastActivePanel::Folder;
             if BridgeMedia::is_system_busy(&win_rel, &thumb_rel, &st_rel) {
-                StatusBarBridge::warn(&win_rel, "Cannot refresh folder tree: another operation is already in progress.");
+                StatusBarBridge::warn(
+                    &win_rel,
+                    "Cannot refresh folder tree: another operation is already in progress.",
+                );
                 return;
             }
             tracing::info!("[FolderRefresh: Manual] Toolbar 'Refresh Tree (Relative)' triggered by user");

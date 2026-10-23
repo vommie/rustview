@@ -1,12 +1,12 @@
+use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
+use crate::icons::Icon;
 use crate::ui::MainWindow;
 use crate::ui::state::*;
 use crate::ui::tags::{BridgeTags, TagActionDialogs};
-use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
-use crate::icons::Icon;
-use rustview_core::library::models::{TagId, TagRecord};
-use rustview_core::library::Library;
-use rustview_core::settings::{LogObscurer, SettingsManager};
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::library::models::{TagId, TagRecord};
+use rustview_core::settings::{LogObscurer, SettingsManager};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -18,62 +18,34 @@ impl TagContextMenu {
     pub fn build_root_menu() -> CtxMenu {
         CtxMenuBuilder::new()
             .header("Tags Root")
-            .action(
-                CTX_TAG_ADD_ROOT,
-                "Add Root Tag...",
-                None,
-                Some(Icon::Plus),
-                true,
-            )
+            .action(CTX_TAG_ADD_ROOT, "Add Root Tag...", None, Some(Icon::Plus), true)
             .separator()
             .action(CTX_TAG_EXPAND_ALL, "Expand All", None, Some(Icon::ExpandAll), true)
-            .action(CTX_TAG_COLLAPSE_ALL, "Collapse All", None, Some(Icon::CollapseAll), true)
-            .separator()
             .action(
-                CTX_TAG_REFRESH,
-                "Refresh Tag Tree",
+                CTX_TAG_COLLAPSE_ALL,
+                "Collapse All",
                 None,
-                Some(Icon::Refresh),
+                Some(Icon::CollapseAll),
                 true,
             )
+            .separator()
+            .action(CTX_TAG_REFRESH, "Refresh Tag Tree", None, Some(Icon::Refresh), true)
             .build()
     }
 
     /// Builds tag item context menu with dynamic reparenting submenu.
     /// Formats the header using sticky prefix and left-side ellipsis to eliminate menu text overflow while attaching the full path as tooltip.
-    pub fn build_tag_menu(
-        tag: &TagRecord,
-        all_tags: &[TagRecord],
-        descendants: &HashSet<TagId>,
-    ) -> CtxMenu {
+    pub fn build_tag_menu(tag: &TagRecord, all_tags: &[TagRecord], descendants: &HashSet<TagId>) -> CtxMenu {
         let (header_title, tooltip) = CtxMenuBuilder::format_header_title("Tag: ", &tag.name, 26);
         let move_submenu = Self::build_reparent_submenu(tag.id, all_tags, descendants);
 
         CtxMenuBuilder::new()
             .header_with_tooltip(header_title, tooltip)
-            .action(
-                CTX_TAG_ADD_CHILD,
-                "Add Child Tag...",
-                None,
-                Some(Icon::Plus),
-                true,
-            )
-            .action(
-                CTX_TAG_RENAME,
-                "Rename Tag...",
-                Some("F2"),
-                Some(Icon::Rename),
-                true,
-            )
+            .action(CTX_TAG_ADD_CHILD, "Add Child Tag...", None, Some(Icon::Plus), true)
+            .action(CTX_TAG_RENAME, "Rename Tag...", Some("F2"), Some(Icon::Rename), true)
             .item(move_submenu)
             .separator()
-            .action(
-                CTX_TAG_DELETE,
-                "Delete Tag...",
-                None,
-                Some(Icon::Delete),
-                true,
-            )
+            .action(CTX_TAG_DELETE, "Delete Tag...", None, Some(Icon::Delete), true)
             .build()
     }
 
@@ -94,10 +66,7 @@ impl TagContextMenu {
         }
 
         let mut sub_items = Vec::new();
-        sub_items.push(
-            CtxMenuItem::new_action(CTX_TAG_MOVE_TO_ROOT, "Root (Top-level)")
-                .with_icon(Icon::TagRoot),
-        );
+        sub_items.push(CtxMenuItem::new_action(CTX_TAG_MOVE_TO_ROOT, "Root (Top-level)").with_icon(Icon::TagRoot));
         sub_items.push(CtxMenuItem::new_separator());
 
         Self::populate_move_nodes(None, &children_map, &mut sub_items);
@@ -121,9 +90,7 @@ impl TagContextMenu {
                     .with_icon(Icon::MoveTo),
                 );
 
-                let has_grandchildren = children_map
-                    .get(&Some(child.id))
-                    .is_some_and(|g| !g.is_empty());
+                let has_grandchildren = children_map.get(&Some(child.id)).is_some_and(|g| !g.is_empty());
                 if has_grandchildren {
                     child_sub_items.push(CtxMenuItem::new_separator());
                     Self::populate_move_nodes(Some(child.id), children_map, &mut child_sub_items);
@@ -232,29 +199,53 @@ mod tests {
     use super::*;
 
     fn tag(id: TagId, parent_id: Option<TagId>, name: &str) -> TagRecord {
-        TagRecord { id, parent_id, name: name.to_string() }
+        TagRecord {
+            id,
+            parent_id,
+            name: name.to_string(),
+        }
     }
 
     #[test]
     fn every_tag_menu_entry_has_an_icon_and_no_emoji_labels() {
-        let all = vec![tag(1, None, "Places"), tag(2, Some(1), "Cities"), tag(3, None, "People")];
+        let all = vec![
+            tag(1, None, "Places"),
+            tag(2, Some(1), "Cities"),
+            tag(3, None, "People"),
+        ];
         let menus = [
             TagContextMenu::build_root_menu(),
             TagContextMenu::build_tag_menu(&all[2], &all, &HashSet::new()),
         ];
         for menu in menus {
-            assert!(menu.entries_without_icon().is_empty(), "{:?}", menu.entries_without_icon());
+            assert!(
+                menu.entries_without_icon().is_empty(),
+                "{:?}",
+                menu.entries_without_icon()
+            );
         }
     }
 
     #[test]
     fn move_targets_keep_the_icon_out_of_the_label() {
-        let all = vec![tag(1, None, "Places"), tag(2, Some(1), "Cities"), tag(3, None, "People")];
+        let all = vec![
+            tag(1, None, "Places"),
+            tag(2, Some(1), "Cities"),
+            tag(3, None, "People"),
+        ];
         let menu = TagContextMenu::build_tag_menu(&all[2], &all, &HashSet::new());
         let move_to = menu.items.iter().find(|i| i.text == "Move to...").expect("submenu");
-        let places = move_to.children.iter().find(|i| i.text == "Places").expect("tag target");
+        let places = move_to
+            .children
+            .iter()
+            .find(|i| i.text == "Places")
+            .expect("tag target");
         assert_eq!(places.icon, Some(Icon::Tag));
-        let root = move_to.children.iter().find(|i| i.text == "Root (Top-level)").expect("root target");
+        let root = move_to
+            .children
+            .iter()
+            .find(|i| i.text == "Root (Top-level)")
+            .expect("root target");
         assert_eq!(root.icon, Some(Icon::TagRoot));
     }
 }

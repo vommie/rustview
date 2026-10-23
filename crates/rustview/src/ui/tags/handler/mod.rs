@@ -1,13 +1,13 @@
 //! Tag actions on the selected media: assigning, removing, rating and the tag queries.
 
-use std::time::Instant;
-use super::{BridgeTags, TagActionContext};
-use super::{TagSelectionStats};
+use super::TagSelectionStats;
 use super::TagTreeSync;
+use super::{BridgeTags, TagActionContext};
+use std::time::Instant;
 
-mod toggle;
-mod rating;
 mod query;
+mod rating;
+mod toggle;
 
 pub struct TagActionHandler;
 
@@ -19,6 +19,4 @@ pub(super) struct QueryTimings {
     pub(super) t_reload: Instant,
 }
 
-impl TagActionHandler {
-
-}
+impl TagActionHandler {}

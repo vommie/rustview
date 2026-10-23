@@ -42,7 +42,11 @@ pub struct CachedThumbnail {
 
 impl CachedThumbnail {
     pub fn new(pixels: SharedPixelBuffer<Rgb8Pixel>) -> Self {
-        Self { width: pixels.width(), height: pixels.height(), pixels }
+        Self {
+            width: pixels.width(),
+            height: pixels.height(),
+            pixels,
+        }
     }
 
     /// Copies tightly packed RGB8 bytes into a new shared buffer.
@@ -200,7 +204,13 @@ impl ThumbnailRamCache {
         if let Some(&slot) = inner.index.get(&id) {
             inner.remove_slot(slot);
         }
-        let node = Node { id, pixels, bytes, prev: NIL, next: NIL };
+        let node = Node {
+            id,
+            pixels,
+            bytes,
+            prev: NIL,
+            next: NIL,
+        };
         let slot = match inner.free.pop() {
             Some(slot) => {
                 inner.nodes[slot] = node;

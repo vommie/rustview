@@ -1,10 +1,9 @@
-pub use rustview_core::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
 use num_format::{Locale, SystemLocale, ToFormattedString};
+pub use rustview_core::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 use std::sync::LazyLock;
 
-static SYSTEM_LOCALE: LazyLock<Option<SystemLocale>> =
-    LazyLock::new(|| SystemLocale::default().ok());
+static SYSTEM_LOCALE: LazyLock<Option<SystemLocale>> = LazyLock::new(|| SystemLocale::default().ok());
 
 pub fn format_filesize(size_bytes: u64) -> String {
     if size_bytes == 0 {
@@ -50,11 +49,7 @@ pub fn format_timestamp(timestamp_secs: i64) -> String {
 }
 
 /// Creates a thread-safe `SharedPixelBuffer` that implements `Send` + `Sync`.
-pub fn rgb8_to_shared_buffer(
-    raw_rgb: &[u8],
-    width: u32,
-    height: u32,
-) -> SharedPixelBuffer<Rgb8Pixel> {
+pub fn rgb8_to_shared_buffer(raw_rgb: &[u8], width: u32, height: u32) -> SharedPixelBuffer<Rgb8Pixel> {
     let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
     pixel_buffer.make_mut_bytes().copy_from_slice(raw_rgb);
     pixel_buffer

@@ -1,26 +1,26 @@
 //! Clicks in the Browse view: select, extend, double and middle click.
 
+use super::{BridgeFileSelection, DoubleClickKind, FileClickContext, FileClickEvent, LastClickRecord};
+use crate::system::SystemFileHandler;
 use crate::ui::MainWindow;
+use crate::ui::browse_folders::BrowseItem;
 use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
-use crate::ui::multiview::MultiviewHandle;
 use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::multiview::MultiviewHandle;
+use crate::ui::multiview::handle::{self as multiview_handle, Pace};
 use crate::ui::state::{LastActivePanel, UiState};
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tags::BridgeTags;
 use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::browse_folders::BrowseItem;
-use crate::ui::multiview::handle::{self as multiview_handle, Pace};
+use crate::ui::tags::BridgeTags;
+use crate::viewer::ViewerTabManager;
+use parking_lot::{Mutex, RwLock};
 use rustview_core::library::Library;
 use rustview_core::library::models::MediaId;
 use rustview_core::media::MediaType;
 use rustview_core::settings::{LogObscurer, SettingsManager};
-use crate::system::SystemFileHandler;
-use crate::viewer::ViewerTabManager;
-use parking_lot::{Mutex, RwLock};
-use slint::{ComponentHandle};
+use slint::ComponentHandle;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use super::{BridgeFileSelection, DoubleClickKind, FileClickContext, FileClickEvent, LastClickRecord};
 
 impl BridgeFileSelection {
     /// Handles middle-click on a media tile or table row in the browse view: selects the item and shows it in the
@@ -50,9 +50,7 @@ impl BridgeFileSelection {
         StatusBarBridge::update_metrics(window, state);
 
         fullscreen.dismiss();
-        if !fullscreen
-            .open(settings, state, window.as_weak())
-        {
+        if !fullscreen.open(settings, state, window.as_weak()) {
             StatusBarBridge::warn(
                 window,
                 "This file cannot be shown in fullscreen (deleted, pending or corrupted).",
@@ -61,10 +59,7 @@ impl BridgeFileSelection {
     }
 
     /// Handles media tile clicks with modifier keys, double-click timing, the live Multiview follow, and surgical UI updates.
-    pub fn handle_click(
-        event: FileClickEvent,
-        ctx: FileClickContext<'_>,
-    ) {
+    pub fn handle_click(event: FileClickEvent, ctx: FileClickContext<'_>) {
         let t_start = Instant::now();
 
         // 1. Double Click Detection (< 400ms delta on same ID)
@@ -205,7 +200,10 @@ impl BridgeFileSelection {
                 );
                 StatusBarBridge::info(
                     window,
-                    format!("'{}' is currently in the external render queue and not yet ready on disk.", filename),
+                    format!(
+                        "'{}' is currently in the external render queue and not yet ready on disk.",
+                        filename
+                    ),
                 );
                 return;
             }
@@ -214,8 +212,7 @@ impl BridgeFileSelection {
         let open_images_in_tab = settings.get().viewer.images.open_in_tab;
         let open_videos_in_tab = settings.get().viewer.videos.open_in_tab;
 
-        let should_open_in_tab =
-            (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
+        let should_open_in_tab = (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
 
         if should_open_in_tab {
             tracing::info!(
@@ -224,15 +221,7 @@ impl BridgeFileSelection {
                 is_video,
                 "[FileSelection: DoubleClick] Opening media in foreground viewer tab"
             );
-            BridgeViewerTabs::open_media_tab(
-                media_id,
-                window,
-                tab_manager,
-                library,
-                settings,
-                state,
-                fullscreen,
-            );
+            BridgeViewerTabs::open_media_tab(media_id, window, tab_manager, library, settings, state, fullscreen);
         } else {
             tracing::info!(
                 media_id,
@@ -293,7 +282,10 @@ impl BridgeFileSelection {
                 );
                 StatusBarBridge::info(
                     window,
-                    format!("'{}' is currently in the external render queue and not yet ready on disk.", filename),
+                    format!(
+                        "'{}' is currently in the external render queue and not yet ready on disk.",
+                        filename
+                    ),
                 );
                 return;
             }
@@ -312,8 +304,7 @@ impl BridgeFileSelection {
         let open_images_in_tab = settings.get().viewer.images.open_in_tab;
         let open_videos_in_tab = settings.get().viewer.videos.open_in_tab;
 
-        let should_open_in_tab =
-            (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
+        let should_open_in_tab = (is_image && open_images_in_tab) || (is_video && open_videos_in_tab);
 
         if should_open_in_tab {
             tracing::info!(
@@ -322,14 +313,7 @@ impl BridgeFileSelection {
                 is_video,
                 "[FileSelection: CtrlDoubleClick] Opening media in background viewer tab (Ctrl+DoubleClick, selection reverted)"
             );
-            BridgeViewerTabs::open_media_tab_background(
-                media_id,
-                window,
-                tab_manager,
-                library,
-                settings,
-                state,
-            );
+            BridgeViewerTabs::open_media_tab_background(media_id, window, tab_manager, library, settings, state);
         } else {
             tracing::info!(
                 media_id,
@@ -343,24 +327,13 @@ impl BridgeFileSelection {
         }
     }
 
-    pub fn open_media(
-        media_id: MediaId,
-        state: &Arc<RwLock<UiState>>,
-        library: &Arc<Library>,
-        window: &MainWindow,
-    ) {
+    pub fn open_media(media_id: MediaId, state: &Arc<RwLock<UiState>>, library: &Arc<Library>, window: &MainWindow) {
         let full_path_opt = {
             let st = state.read();
             st.all_folder_media
                 .iter()
                 .find(|m| m.record.id == media_id)
-                .map(|m| {
-                    (
-                        m.record.filename.clone(),
-                        m.full_path(),
-                        m.record.is_corrupted,
-                    )
-                })
+                .map(|m| (m.record.filename.clone(), m.full_path(), m.record.is_corrupted))
         };
 
         let (filename, full_path, is_corrupted) = match full_path_opt {
@@ -386,10 +359,7 @@ impl BridgeFileSelection {
                         error = %e,
                         "Failed to resolve media path from database"
                     );
-                    StatusBarBridge::error(
-                        window,
-                        format!("Media record not found in database: #{}", media_id),
-                    );
+                    StatusBarBridge::error(window, format!("Media record not found in database: #{}", media_id));
                     return;
                 }
             },

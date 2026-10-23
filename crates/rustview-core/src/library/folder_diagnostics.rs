@@ -52,16 +52,17 @@ pub struct FolderDiagnostics;
 impl FolderDiagnostics {
     /// Runs the full audit on a background thread and logs the result. Never blocks startup.
     pub fn spawn_background_audit(db: LibraryDatabase, trigger: &'static str) {
-        let spawned = std::thread::Builder::new()
-            .name("folder-audit".into())
-            .spawn(move || match Self::run_audit(&db) {
-                Ok(report) => Self::log_report(trigger, &report),
-                Err(e) => tracing::error!(
-                    trigger,
-                    error = %e,
-                    "[FolderAudit: Failed] Folder schema audit failed"
-                ),
-            });
+        let spawned =
+            std::thread::Builder::new()
+                .name("folder-audit".into())
+                .spawn(move || match Self::run_audit(&db) {
+                    Ok(report) => Self::log_report(trigger, &report),
+                    Err(e) => tracing::error!(
+                        trigger,
+                        error = %e,
+                        "[FolderAudit: Failed] Folder schema audit failed"
+                    ),
+                });
 
         if let Err(e) = spawned {
             tracing::warn!(error = %e, "[FolderAudit: Spawn] Could not spawn folder audit thread");
@@ -167,9 +168,7 @@ impl FolderDiagnostics {
     /// Counts media records whose folder record is missing (such media could no longer be resolved to a path).
     pub fn count_unresolvable_media(db: &LibraryDatabase) -> Result<MediaResolutionReport, LibraryError> {
         let rtxn = db.env.read_txn()?;
-        Self::media_resolution_with_ids(db, &rtxn, |fid| {
-            matches!(db.folders.get(&rtxn, fid), Ok(Some(_)))
-        })
+        Self::media_resolution_with_ids(db, &rtxn, |fid| matches!(db.folders.get(&rtxn, fid), Ok(Some(_))))
     }
 
     fn media_resolution_with_ids<F>(

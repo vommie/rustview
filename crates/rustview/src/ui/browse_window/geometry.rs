@@ -25,7 +25,11 @@ pub struct ViewGeometry {
 
 impl ViewGeometry {
     pub fn new(columns: usize, visible_rows: usize, margin_rows: usize) -> Self {
-        Self { columns: columns.max(1), visible_rows: visible_rows.max(1), margin_rows }
+        Self {
+            columns: columns.max(1),
+            visible_rows: visible_rows.max(1),
+            margin_rows,
+        }
     }
 
     pub fn pool_rows(&self) -> usize {

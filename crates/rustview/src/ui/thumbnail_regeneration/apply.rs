@@ -1,15 +1,15 @@
 //! UI-thread completion of a thumbnail regeneration: releases the busy lock, shows the new thumbnails and reports.
 
 use super::wording::{self, RegenerationSummary};
-use rustview_core::thumbnails::regeneration::{RegeneratedThumbnail, RegenerationBatchResult};
-use rustview_core::thumbnails::ThumbnailManager;
-use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::MainWindow;
+use crate::ui::browse_window::update_tile;
 use crate::ui::media::BridgeMedia;
+use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::browse_window::update_tile;
-use crate::ui::MainWindow;
 use parking_lot::RwLock;
+use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::thumbnails::regeneration::{RegeneratedThumbnail, RegenerationBatchResult};
 use slint::Image;
 use std::time::Duration;
 
@@ -49,7 +49,9 @@ fn show_new_thumbnails(window: &MainWindow, state: &RwLock<UiState>, succeeded: 
         st.thumbs.insert(item.media_id, buffer.clone());
 
         if !is_table {
-            update_tile(window, &st, item.media_id, |view| view.thumbnail = Image::from_rgb8(buffer));
+            update_tile(window, &st, item.media_id, |view| {
+                view.thumbnail = Image::from_rgb8(buffer)
+            });
         }
     }
 }
@@ -82,5 +84,7 @@ fn report(window: &MainWindow, total: usize, batch: &RegenerationBatchResult, el
 }
 
 fn file_name(path: &std::path::Path) -> String {
-    path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+    path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default()
 }

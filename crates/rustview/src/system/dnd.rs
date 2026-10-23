@@ -1,7 +1,7 @@
 use super::error::SystemHandlerError;
 use crate::icons::Icon;
-use rustview_core::settings::LogObscurer;
 use parking_lot::Mutex;
+use rustview_core::settings::LogObscurer;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::LazyLock;
@@ -56,7 +56,8 @@ impl SystemDndHandler {
                 .unwrap_or_else(|_| path.to_path_buf())
         };
 
-        url::Url::from_file_path(&abs_path).map_or_else(|()| format!("file://{}", abs_path.to_string_lossy()), String::from)
+        url::Url::from_file_path(&abs_path)
+            .map_or_else(|()| format!("file://{}", abs_path.to_string_lossy()), String::from)
     }
 
     /// Formats a slice of filesystem paths into a standard CRLF-delimited `text/uri-list` payload.
@@ -86,12 +87,7 @@ impl SystemDndHandler {
             .join("icons")
             .join(format!("ghost-file-{GHOST_ICON_SIZE_PX}.png"));
         if !dest.is_file()
-            && let Err(e) = crate::icons::raster::render_png(
-                Icon::File,
-                GHOST_ICON_SIZE_PX,
-                GHOST_ICON_COLOR,
-                &dest,
-            )
+            && let Err(e) = crate::icons::raster::render_png(Icon::File, GHOST_ICON_SIZE_PX, GHOST_ICON_COLOR, &dest)
         {
             tracing::warn!(error = %e, "[SystemDnd] Cannot render ghost fallback icon");
             return None;
@@ -391,9 +387,7 @@ except Exception:
     }
 
     /// Synchronously executes the XDND drop transaction on the target window under the global mouse cursor [2.4.1].
-    pub fn execute_external_drop_sync(
-        paths: &[PathBuf],
-    ) -> Result<DndExportMetrics, SystemHandlerError> {
+    pub fn execute_external_drop_sync(paths: &[PathBuf]) -> Result<DndExportMetrics, SystemHandlerError> {
         let t0 = Instant::now();
         let session_type = Self::detect_session_type();
 
@@ -429,8 +423,7 @@ except Exception:
             "[SystemDndHandler: Drop] Executing external XDND drop transaction on window under cursor..."
         );
 
-        let (success, target_window_id, target_app_class) =
-            Self::perform_xdnd_drop_transaction(&canonical_paths);
+        let (success, target_window_id, target_app_class) = Self::perform_xdnd_drop_transaction(&canonical_paths);
 
         let elapsed_us = t0.elapsed().as_micros();
         let metrics = DndExportMetrics {

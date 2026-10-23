@@ -5,15 +5,15 @@
 //! If the model is not a `VecModel` or the result does not match the desired rows, the model is replaced as a
 //! safety net so the view can never end up inconsistent.
 
+use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::folder_tree::projection::FolderProjection;
 use crate::ui::state::UiState;
-use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::{FolderNodeView, MainWindow};
-use rustview_core::library::models::FolderId;
-use rustview_core::library::Library;
-use rustview_core::settings::SettingsManager;
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::library::models::FolderId;
+use rustview_core::settings::SettingsManager;
 use slint::{Model, ModelRc, VecModel};
 use std::collections::HashSet;
 use std::time::Instant;
@@ -33,12 +33,7 @@ pub struct FolderTreeSync;
 
 impl FolderTreeSync {
     /// Projects the tree rows from the in-memory SPoT snapshot (zero filesystem I/O) and syncs them into the window.
-    pub fn refresh(
-        window: &MainWindow,
-        library: &Library,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn refresh(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
         let t0 = Instant::now();
         let app_settings = settings.get();
 
@@ -80,9 +75,7 @@ impl FolderTreeSync {
         let model_rc = window.get_folders();
 
         let Some(vec_model) = model_rc.as_any().downcast_ref::<VecModel<FolderNodeView>>() else {
-            tracing::debug!(
-                "[FolderTree: Sync] Window model is not a VecModel, replacing model"
-            );
+            tracing::debug!("[FolderTree: Sync] Window model is not a VecModel, replacing model");
             Self::replace_model(window, rows);
             return RowSyncStats {
                 full_replace: true,
@@ -146,10 +139,7 @@ impl FolderTreeSync {
                 continue;
             }
 
-            let existing_offset = current
-                .iter()
-                .skip(target)
-                .position(|id| *id == row.id);
+            let existing_offset = current.iter().skip(target).position(|id| *id == row.id);
 
             match existing_offset {
                 Some(offset) => {

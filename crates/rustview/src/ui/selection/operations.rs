@@ -1,23 +1,23 @@
 //! Changing the selection: select all, clear, deselect, reveal and the synchronization with the views.
 
+use super::{BridgeFileSelection, FileClickEvent};
 use crate::ui::MainWindow;
+use crate::ui::browse_folders::{BrowseFolders, BrowseItem, SelectionDelta};
+use crate::ui::browse_window::update_tile;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::{BridgeMedia, MediaReloadOptions};
+use crate::ui::multiview::handle::{self as multiview_handle, Pace};
 use crate::ui::state::{LastActivePanel, UiState};
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::BridgeTags;
-use crate::ui::browse_folders::{BrowseFolders, BrowseItem, SelectionDelta};
-use crate::ui::browse_window::update_tile;
-use crate::ui::multiview::handle::{self as multiview_handle, Pace};
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::Model;
 use std::sync::Arc;
 use std::time::Instant;
-use super::{BridgeFileSelection, FileClickEvent};
 
 impl BridgeFileSelection {
     /// Programmatically selects a single media item in Browse Mode, synchronizing UI tiles,
@@ -101,11 +101,7 @@ impl BridgeFileSelection {
     /// Surgically modifies only changed rows in the Slint Model translating global indices to local viewport offsets.
     /// Employs an O(Viewport) threshold optimization when changed_ids is large (e.g. Select All / Deselect All)
     /// to eliminate CPU freezes on large datasets.
-    pub fn sync_selection_diff(
-        window: &MainWindow,
-        state: &RwLock<UiState>,
-        changed_ids: &[MediaId],
-    ) {
+    pub fn sync_selection_diff(window: &MainWindow, state: &RwLock<UiState>, changed_ids: &[MediaId]) {
         if changed_ids.is_empty() {
             return;
         }
@@ -211,11 +207,7 @@ impl BridgeFileSelection {
     }
 
     /// Deselects everything in the current Browse View (Ctrl+Shift+A / Esc): media and folder rows.
-    pub fn clear_selection(
-        window: &MainWindow,
-        library: &Arc<Library>,
-        state: &Arc<RwLock<UiState>>,
-    ) {
+    pub fn clear_selection(window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
         let t_start = Instant::now();
         let (delta, prev_media, prev_folders) = {
             let mut st = state.write();

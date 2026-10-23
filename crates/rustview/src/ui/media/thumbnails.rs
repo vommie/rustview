@@ -1,16 +1,16 @@
-use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
 use crate::ui::MainWindow;
+use crate::ui::browse_window::{apply_record, update_tile};
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::browse_window::{apply_record, update_tile};
+use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
+use parking_lot::RwLock;
 use rustview_core::telemetry::BenchmarkReportFormatter;
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::{Image, Timer};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 /// Subsystem managing background thumbnail draining, UI status bar reflection, and live busy-state propagation.
@@ -34,8 +34,12 @@ impl BridgeThumbnails {
     ) -> Rc<Timer> {
         let scheduled = Arc::new(AtomicBool::new(false));
         {
-            let (thumbnails, state, window_weak, scheduled) =
-                (thumbnails.clone(), state.clone(), window_weak.clone(), scheduled.clone());
+            let (thumbnails, state, window_weak, scheduled) = (
+                thumbnails.clone(),
+                state.clone(),
+                window_weak.clone(),
+                scheduled.clone(),
+            );
             let announce_thumbnails = thumbnails.clone();
             announce_thumbnails.set_ready_notifier(Arc::new(move || {
                 Self::schedule_drain(&thumbnails, &state, &window_weak, &scheduled);
@@ -63,7 +67,12 @@ impl BridgeThumbnails {
         if scheduled.swap(true, Ordering::AcqRel) {
             return;
         }
-        let (thumbnails, state, weak, flag) = (thumbnails.clone(), state.clone(), window_weak.clone(), scheduled.clone());
+        let (thumbnails, state, weak, flag) = (
+            thumbnails.clone(),
+            state.clone(),
+            window_weak.clone(),
+            scheduled.clone(),
+        );
         let posted = window_weak.upgrade_in_event_loop(move |window| {
             flag.store(false, Ordering::Release);
             let more_waiting = Self::drain_once(&window, &thumbnails, &state);
@@ -95,7 +104,11 @@ impl BridgeThumbnails {
                 let media_id = item_data.media_id;
                 let mut metadata_changed = false;
 
-                if (item_data.orig_width > 0 || item_data.orig_height > 0 || item_data.duration_ms > 0 || item_data.is_corrupted || item_data.is_animated)
+                if (item_data.orig_width > 0
+                    || item_data.orig_height > 0
+                    || item_data.duration_ms > 0
+                    || item_data.is_corrupted
+                    || item_data.is_animated)
                     && let Some(item) = st.all_folder_media.find_mut(media_id)
                 {
                     if item_data.orig_width > 0 && item.record.width == 0 {
@@ -148,13 +161,8 @@ impl BridgeThumbnails {
         if items_drained > 0
             && let Some(bench) = thumb_ref.active_benchmark()
         {
-            bench.record_drain_cycle(
-                items_drained,
-                row_set_us,
-                total_drain_us,
-            );
+            bench.record_drain_cycle(items_drained, row_set_us, total_drain_us);
         }
-
 
         !thumb_ref.is_drain_queue_empty()
     }
@@ -184,16 +192,11 @@ impl BridgeThumbnails {
                         && progress.active_workers == 0
                         && thumb_ref.is_drain_queue_empty()));
 
-            if is_done
-                && !bench.is_finalized.swap(true, Ordering::SeqCst)
-            {
+            if is_done && !bench.is_finalized.swap(true, Ordering::SeqCst) {
                 let folder_bench = st_ref.read().active_folder_bench.clone();
                 let storage_stats = thumb_ref.storage_stats();
-                let summary_str = BenchmarkReportFormatter::render_summary(
-                    folder_bench.as_deref(),
-                    &bench,
-                    &storage_stats,
-                );
+                let summary_str =
+                    BenchmarkReportFormatter::render_summary(folder_bench.as_deref(), &bench, &storage_stats);
                 tracing::info!("{}", summary_str);
             }
         }

@@ -2,8 +2,8 @@ use super::error::ThumbnailError;
 use super::image::{DecodedThumbnailFrame, ImageDecoder, SimdImageThumbnailer};
 use super::types::{ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat};
 use super::video::{DynamicVideoThumbnailer, VideoExtractionResult};
-use image::codecs::jpeg::JpegEncoder;
 use image::ColorType;
+use image::codecs::jpeg::JpegEncoder;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -27,8 +27,7 @@ impl ThumbnailGenerator {
         max_bound: u32,
         scaling_algo: ScalingAlgorithm,
     ) -> Result<DecodedThumbnailFrame, ThumbnailError> {
-        self.image_decoder
-            .decode_and_resize(path, max_bound, scaling_algo)
+        self.image_decoder.decode_and_resize(path, max_bound, scaling_algo)
     }
 
     /// Extracts video primary thumbnail and optional multi-frame previews in a single pass.
@@ -82,9 +81,7 @@ impl ThumbnailGenerator {
         let detected = ThumbnailFormat::detect(compressed);
 
         let img = match detected {
-            Some(ThumbnailFormat::Jpeg) => {
-                image::load_from_memory_with_format(compressed, image::ImageFormat::Jpeg)?
-            }
+            Some(ThumbnailFormat::Jpeg) => image::load_from_memory_with_format(compressed, image::ImageFormat::Jpeg)?,
             Some(ThumbnailFormat::Webp) => match decode_webp_rgb(compressed) {
                 Some(decoded) => return Ok(decoded),
                 None => image::load_from_memory_with_format(compressed, image::ImageFormat::WebP)?,

@@ -1,17 +1,17 @@
 //! Dragging tabs in the tab bar.
 
+use super::{BridgeViewerTabs, TabDragEndParams};
+use crate::ui::MainWindow;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tabs::dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
+use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tabs::icon::tab_icon;
-use crate::ui::MainWindow;
-use rustview_core::settings::LogObscurer;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
+use rustview_core::settings::LogObscurer;
 use slint::{ComponentHandle, Model};
 use std::sync::Arc;
-use super::{BridgeViewerTabs, TabDragEndParams};
 
 impl BridgeViewerTabs {
     /// Handles tab drag initiation: computes tab widths, creates ghost item preview, and starts DND session.
@@ -42,8 +42,7 @@ impl BridgeViewerTabs {
             let w = if i == source_index && tab_width > 20.0 {
                 tab_width
             } else if let Some(t_session) = tabs.get(i) {
-                let has_rating =
-                    window.get_viewer_show_tab_rating_badge() && t_session.record.rating > 0;
+                let has_rating = window.get_viewer_show_tab_rating_badge() && t_session.record.rating > 0;
                 TabDndGeometry::estimate_tab_width(&t_session.title, has_rating)
             } else {
                 120.0
@@ -113,12 +112,8 @@ impl BridgeViewerTabs {
             );
 
             session.target_index = new_target_idx;
-            let shifts = TabDndGeometry::compute_shift_offsets(
-                &session.slots,
-                session.source_index,
-                new_target_idx,
-                4.0,
-            );
+            let shifts =
+                TabDndGeometry::compute_shift_offsets(&session.slots, session.source_index, new_target_idx, 4.0);
 
             (
                 session.dragged_tab_id,
@@ -217,12 +212,7 @@ impl BridgeViewerTabs {
             params.settings,
             params.state,
         );
-        Self::sync_video_embedding(
-            params.window,
-            params.tab_manager,
-            params.fullscreen,
-            params.settings,
-        );
+        Self::sync_video_embedding(params.window, params.tab_manager, params.fullscreen, params.settings);
 
         if params.window.get_active_view_mode() == 2 {
             BridgeTabGrid::sync_tab_grid_ui(

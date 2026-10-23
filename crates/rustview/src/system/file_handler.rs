@@ -95,8 +95,7 @@ impl SystemFileHandler {
     }
 
     fn spawn_default_app(target_path: PathBuf) -> Result<(), SystemHandlerError> {
-        let launcher = Self::find_available_launcher(Self::DEFAULT_LAUNCHERS)
-            .unwrap_or("xdg-open");
+        let launcher = Self::find_available_launcher(Self::DEFAULT_LAUNCHERS).unwrap_or("xdg-open");
 
         tracing::info!(
             target = %LogObscurer::path(&target_path),
@@ -118,9 +117,7 @@ impl SystemFileHandler {
                 }
 
                 cmd.arg(&target_clone);
-                cmd.stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null());
+                cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
 
                 match cmd.status() {
                     Ok(status) if status.success() => {
@@ -250,10 +247,7 @@ impl SystemFileHandler {
                     for p in &target_paths {
                         fm_cmd.arg(p);
                     }
-                    fm_cmd
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null());
+                    fm_cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
 
                     if let Ok(mut child) = fm_cmd.spawn()
                         && child.wait().is_ok_and(|s| s.success())
@@ -272,10 +266,7 @@ impl SystemFileHandler {
                 if let Some(parent) = target_paths[0].parent() {
                     let mut xdg_cmd = Command::new("xdg-open");
                     xdg_cmd.arg(parent);
-                    xdg_cmd
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null());
+                    xdg_cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
 
                     if let Ok(mut child) = xdg_cmd.spawn() {
                         let _ = child.wait();

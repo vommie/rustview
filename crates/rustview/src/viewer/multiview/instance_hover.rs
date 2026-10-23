@@ -6,16 +6,16 @@
 //! says which tile it belongs to (the hovered one) and hands over what the host needs to decide whether the pointer is
 //! close enough to the bar.
 
+use super::bar_placement::{BarCorner, near_bar_corner};
 use super::follow::TileKey;
 use super::instance::MultiviewInstance;
-use super::bar_placement::{BarCorner, near_bar_corner};
 use super::model::{AspectSource, aspect_differs, aspect_from_video_params};
 use super::prefs;
 use super::target_pick::pick_target;
-use std::time::Instant;
 use super::tile::StaleProbe;
 use super::view::MediaBarTarget;
 use rustview_core::library::models::MediaId;
+use std::time::Instant;
 
 impl MultiviewInstance {
     /// Runs every tick while the Multiview is shown. `pointer` is asked for only when there is something to do; it returns
@@ -34,8 +34,10 @@ impl MultiviewInstance {
     /// The tile under a point given in host window coordinates.
     fn tile_at_host(&self, x: i32, y: i32) -> Option<usize> {
         // A zoomed picture fills its whole room, which counts as the tile.
-        let zoomed = (0..self.tiles.len())
-            .find(|&i| self.host_tile_rect(i).is_some_and(|r| self.tiles[i].zoom.as_ref().is_some_and(|z| z.is_active()) && r.contains(x, y)));
+        let zoomed = (0..self.tiles.len()).find(|&i| {
+            self.host_tile_rect(i)
+                .is_some_and(|r| self.tiles[i].zoom.as_ref().is_some_and(|z| z.is_active()) && r.contains(x, y))
+        });
         if zoomed.is_some() {
             return zoomed;
         }
@@ -62,7 +64,12 @@ impl MultiviewInstance {
 
     /// The tile whose canvas (its room, see `host_room`) the pointer is in: the hovered medium, or the free space around it.
     fn canvas_tile_at(&self, pointer: (i32, i32)) -> Option<usize> {
-        self.hovered.or_else(|| (0..self.tiles.len()).find(|&i| self.host_room(i).is_some_and(|room| room.contains(pointer.0, pointer.1))))
+        self.hovered.or_else(|| {
+            (0..self.tiles.len()).find(|&i| {
+                self.host_room(i)
+                    .is_some_and(|room| room.contains(pointer.0, pointer.1))
+            })
+        })
     }
 
     /// The media bars the host may show now. Every tile has a bar of its own:
@@ -80,7 +87,14 @@ impl MultiviewInstance {
         let hovered = self.pointer.and_then(|pointer| {
             let tile = self.canvas_tile_at(pointer)?;
             let rect = self.host_room(tile)?;
-            near_bar_corner(BarCorner::TopRight, rect, pointer, self.host.surface.dpi, bar.reveal_distance_px).then_some(tile)
+            near_bar_corner(
+                BarCorner::TopRight,
+                rect,
+                pointer,
+                self.host.surface.dpi,
+                bar.reveal_distance_px,
+            )
+            .then_some(tile)
         });
         let mut wanted: Vec<(usize, bool)> = hovered.map(|tile| (tile, false)).into_iter().collect();
         for key in self.zoom_slider.iter().chain(keep) {

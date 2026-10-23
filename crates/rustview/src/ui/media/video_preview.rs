@@ -1,6 +1,6 @@
+use crate::ui::models::rgb8_to_slint_image;
 use rustview_core::library::models::MediaId;
 use rustview_core::thumbnails::{AnimatedPreview, ThumbnailManager};
-use crate::ui::models::rgb8_to_slint_image;
 use slint::{Image, Timer};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -22,26 +22,17 @@ pub struct VideoPreviewAnimator;
 impl VideoPreviewAnimator {
     /// Loads and decodes multi-frame video preview buffers from PackStore / LMDB into Slint Images.
     /// Fast non-blocking lookup (< 0.05ms): NEVER blocks the GUI event loop.
-    pub fn load_preview_images(
-        thumbnails: &ThumbnailManager,
-        media_id: MediaId,
-    ) -> Option<Vec<Image>> {
+    pub fn load_preview_images(thumbnails: &ThumbnailManager, media_id: MediaId) -> Option<Vec<Image>> {
         let frames = thumbnails.try_load_preview_frames(media_id)?;
         let images: Vec<Image> = frames
             .into_iter()
             .map(|(w, h, rgb)| rgb8_to_slint_image(&rgb, w, h))
             .collect();
-        if images.is_empty() {
-            None
-        } else {
-            Some(images)
-        }
+        if images.is_empty() { None } else { Some(images) }
     }
 
     /// Converts an `AnimatedPreview` (e.g. from an animated GIF) into a collection of `TimedFrame`s.
-    pub fn convert_animated_preview_to_timed_frames(
-        preview: &AnimatedPreview,
-    ) -> Vec<TimedFrame> {
+    pub fn convert_animated_preview_to_timed_frames(preview: &AnimatedPreview) -> Vec<TimedFrame> {
         preview
             .frames
             .iter()
@@ -53,10 +44,7 @@ impl VideoPreviewAnimator {
     }
 
     /// Starts a repeating Slint `Timer` cycling through video preview frames with a uniform cadence.
-    pub fn start_animation<F>(
-        images: Vec<Image>,
-        on_frame: F,
-    ) -> Option<Timer>
+    pub fn start_animation<F>(images: Vec<Image>, on_frame: F) -> Option<Timer>
     where
         F: Fn(Image) + 'static,
     {
@@ -80,10 +68,7 @@ impl VideoPreviewAnimator {
     }
 
     /// Starts a high-precision, drift-free playback timer honoring individual frame delays (faithful GIF specification).
-    pub fn start_variable_delay_animation<F>(
-        frames: Vec<TimedFrame>,
-        on_frame: F,
-    ) -> Option<Timer>
+    pub fn start_variable_delay_animation<F>(frames: Vec<TimedFrame>, on_frame: F) -> Option<Timer>
     where
         F: Fn(Image) + 'static,
     {
@@ -129,28 +114,24 @@ impl VideoPreviewAnimator {
         let on_frame_c = on_frame_rc;
         let last_idx_c = last_emitted_index;
 
-        timer.start(
-            slint::TimerMode::Repeated,
-            timer_interval,
-            move || {
-                let elapsed_ms = (start_time.elapsed().as_millis() as u64) % total_duration_ms;
+        timer.start(slint::TimerMode::Repeated, timer_interval, move || {
+            let elapsed_ms = (start_time.elapsed().as_millis() as u64) % total_duration_ms;
 
-                // Search for the frame that contains the current timeline timestamp
-                let mut current_frame_idx = 0;
-                for i in 0..frames_c.len() {
-                    if elapsed_ms >= offsets_c[i] && elapsed_ms < offsets_c[i + 1] {
-                        current_frame_idx = i;
-                        break;
-                    }
+            // Search for the frame that contains the current timeline timestamp
+            let mut current_frame_idx = 0;
+            for i in 0..frames_c.len() {
+                if elapsed_ms >= offsets_c[i] && elapsed_ms < offsets_c[i + 1] {
+                    current_frame_idx = i;
+                    break;
                 }
+            }
 
-                let mut last = last_idx_c.borrow_mut();
-                if *last != current_frame_idx {
-                    *last = current_frame_idx;
-                    on_frame_c(frames_c[current_frame_idx].image.clone());
-                }
-            },
-        );
+            let mut last = last_idx_c.borrow_mut();
+            if *last != current_frame_idx {
+                *last = current_frame_idx;
+                on_frame_c(frames_c[current_frame_idx].image.clone());
+            }
+        });
 
         Some(timer)
     }

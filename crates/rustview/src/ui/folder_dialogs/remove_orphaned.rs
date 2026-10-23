@@ -1,10 +1,10 @@
-use crate::ui::folder_dialogs::reborn_warn::RebornFolderWarnDialogController;
 use crate::ui::folder_dialogs::FolderDialogContext;
+use crate::ui::folder_dialogs::reborn_warn::RebornFolderWarnDialogController;
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tags::BridgeTags;
 use crate::ui::tabs::BridgeViewerTabs;
+use crate::ui::tags::BridgeTags;
 use crate::ui::{MainWindow, RemoveOrphanedFolderDialog};
 use rustview_core::library::folder_operations::FolderSubtreeMetrics;
 use rustview_core::library::models::FolderId;
@@ -35,11 +35,7 @@ impl RemoveOrphanedFolderDialogController {
     ) {
         window.set_is_context_menu_open(false);
 
-        match ctx
-            .library
-            .folder_operations()
-            .check_and_restore_if_exists(folder_id)
-        {
+        match ctx.library.folder_operations().check_and_restore_if_exists(folder_id) {
             Ok(true) => {
                 let path_str = ctx
                     .library
@@ -105,11 +101,7 @@ impl RemoveOrphanedFolderDialogController {
         window: &MainWindow,
         reborn_warn: &RebornFolderWarnDialogController,
     ) {
-        match ctx
-            .library
-            .folder_operations()
-            .check_and_restore_if_exists(folder_id)
-        {
+        match ctx.library.folder_operations().check_and_restore_if_exists(folder_id) {
             Ok(true) => {
                 self.close(window);
                 let (f_name, path_str) = ctx
@@ -157,21 +149,13 @@ impl RemoveOrphanedFolderDialogController {
             &ctx.state,
         );
 
-        match ctx
-            .library
-            .folder_operations()
-            .purge_folder_from_db(folder_id)
-        {
+        match ctx.library.folder_operations().purge_folder_from_db(folder_id) {
             Ok(report) => {
                 for &mid in &report.deleted_media_ids {
                     ctx.tab_manager.notify_media_deleted(mid);
                 }
 
-                BridgeFolders::prune_expanded_folders(
-                    &report.deleted_folder_ids,
-                    &ctx.settings,
-                    &ctx.state,
-                );
+                BridgeFolders::prune_expanded_folders(&report.deleted_folder_ids, &ctx.settings, &ctx.state);
 
                 self.close(window);
 
@@ -194,13 +178,7 @@ impl RemoveOrphanedFolderDialogController {
 
                 BridgeInspector::update(window, &ctx.state);
                 BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
-                BridgeViewerTabs::sync_ui(
-                    window,
-                    &ctx.tab_manager,
-                    &ctx.library,
-                    &ctx.settings,
-                    &ctx.state,
-                );
+                BridgeViewerTabs::sync_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
                 StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {
@@ -215,8 +193,7 @@ impl RemoveOrphanedFolderDialogController {
     fn ensure_dialog_instantiated(&self) {
         let mut d_ref = self.dialog.borrow_mut();
         if d_ref.is_none() {
-            let win = RemoveOrphanedFolderDialog::new()
-                .expect("Failed to instantiate RemoveOrphanedFolderDialog");
+            let win = RemoveOrphanedFolderDialog::new().expect("Failed to instantiate RemoveOrphanedFolderDialog");
             *d_ref = Some(win);
         }
     }

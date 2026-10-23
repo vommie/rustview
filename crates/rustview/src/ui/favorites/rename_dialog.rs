@@ -1,6 +1,6 @@
 use crate::ui::favorites::BridgeFavorites;
-use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::favorites::manager::FavoriteManager;
+use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::{FavoriteRenameDialog, MainWindow};
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -38,12 +38,7 @@ impl FavoriteRenameDialogController {
             let favs_confirm = favorites;
 
             win.on_confirmed(move |new_alias| {
-                ctrl_confirm.execute(
-                    &win_confirm,
-                    &favs_confirm,
-                    &path_confirm,
-                    &new_alias,
-                );
+                ctrl_confirm.execute(&win_confirm, &favs_confirm, &path_confirm, &new_alias);
             });
 
             let ctrl_cancel = self.clone();
@@ -86,13 +81,7 @@ impl FavoriteRenameDialogController {
             .unwrap_or(false)
     }
 
-    fn execute(
-        &self,
-        window: &MainWindow,
-        favorites: &Arc<RwLock<FavoriteManager>>,
-        path: &Path,
-        new_alias: &str,
-    ) {
+    fn execute(&self, window: &MainWindow, favorites: &Arc<RwLock<FavoriteManager>>, path: &Path, new_alias: &str) {
         let trimmed = new_alias.trim();
         if trimmed.is_empty() {
             if let Some(ref win) = *self.dialog.borrow() {

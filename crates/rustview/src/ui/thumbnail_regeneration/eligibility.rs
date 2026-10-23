@@ -5,10 +5,10 @@
 //! physically available according to the library state, i.e. it is not deleted/orphaned, not a pending stub and not
 //! flagged corrupted. All decisions are made from in-memory state only; the drive is never touched here.
 
+use crate::ui::state::UiState;
 use rustview_core::library::models::MediaId;
 use rustview_core::media::MediaType;
 use rustview_core::query::filters::IndexedMediaRecord;
-use crate::ui::state::UiState;
 
 /// The facts about one media item that decide whether its thumbnail can be regenerated at a random position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,7 +47,10 @@ pub struct RegenerationEligibility {
 impl RegenerationEligibility {
     /// Counts the eligible items among the flags of all selected items.
     pub fn from_flags(selected: usize, flags: impl Iterator<Item = ItemFlags>) -> Self {
-        Self { selected, videos: flags.filter(ItemFlags::is_regenerable).count() }
+        Self {
+            selected,
+            videos: flags.filter(ItemFlags::is_regenerable).count(),
+        }
     }
 
     /// The button and the menu entry are enabled only if at least one valid video is selected.
@@ -65,7 +68,11 @@ impl RegenerationEligibility {
 /// loaded list are ignored instead of being looked up in the database or on disk.
 pub(crate) fn loaded_item(st: &UiState, id: MediaId) -> Option<&IndexedMediaRecord> {
     let row = *st.media_row_map.get(&id)?;
-    let index = if st.active_indices.is_empty() { row } else { *st.active_indices.get(row)? };
+    let index = if st.active_indices.is_empty() {
+        row
+    } else {
+        *st.active_indices.get(row)?
+    };
     st.all_folder_media.get(index).filter(|m| m.record.id == id)
 }
 
@@ -95,17 +102,35 @@ mod tests {
     use super::*;
 
     fn flags(is_video: bool, is_deleted: bool, is_pending: bool, is_corrupted: bool) -> ItemFlags {
-        ItemFlags { is_video, is_deleted, is_pending, is_corrupted }
+        ItemFlags {
+            is_video,
+            is_deleted,
+            is_pending,
+            is_corrupted,
+        }
     }
 
-    const VALID_VIDEO: ItemFlags = ItemFlags { is_video: true, is_deleted: false, is_pending: false, is_corrupted: false };
-    const IMAGE: ItemFlags = ItemFlags { is_video: false, is_deleted: false, is_pending: false, is_corrupted: false };
+    const VALID_VIDEO: ItemFlags = ItemFlags {
+        is_video: true,
+        is_deleted: false,
+        is_pending: false,
+        is_corrupted: false,
+    };
+    const IMAGE: ItemFlags = ItemFlags {
+        is_video: false,
+        is_deleted: false,
+        is_pending: false,
+        is_corrupted: false,
+    };
 
     #[test]
     fn only_valid_available_videos_are_regenerable() {
         assert!(VALID_VIDEO.is_regenerable());
         assert!(!IMAGE.is_regenerable());
-        assert!(!flags(true, true, false, false).is_regenerable(), "deleted/orphaned video");
+        assert!(
+            !flags(true, true, false, false).is_regenerable(),
+            "deleted/orphaned video"
+        );
         assert!(!flags(true, false, true, false).is_regenerable(), "pending stub");
         assert!(!flags(true, false, false, true).is_regenerable(), "corrupted video");
         assert!(!flags(false, true, true, true).is_regenerable());
@@ -127,7 +152,11 @@ mod tests {
 
     #[test]
     fn unavailable_only_selection_is_not_actionable() {
-        let items = [flags(true, true, false, false), flags(true, false, true, false), flags(false, true, false, false)];
+        let items = [
+            flags(true, true, false, false),
+            flags(true, false, true, false),
+            flags(false, true, false, false),
+        ];
         let e = RegenerationEligibility::from_flags(items.len(), items.into_iter());
         assert!(!e.is_actionable());
         assert_eq!(e.skipped(), 3);

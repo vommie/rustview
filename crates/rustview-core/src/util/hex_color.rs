@@ -20,9 +20,7 @@ fn parse_digits(digits: &[u8]) -> Option<[u8; 4]> {
         [r, g, b] => Some([pair(r, r)?, pair(g, g)?, pair(b, b)?, 255]),
         [r, g, b, a] => Some([pair(r, r)?, pair(g, g)?, pair(b, b)?, pair(a, a)?]),
         [r1, r0, g1, g0, b1, b0] => Some([pair(r1, r0)?, pair(g1, g0)?, pair(b1, b0)?, 255]),
-        [r1, r0, g1, g0, b1, b0, a1, a0] => {
-            Some([pair(r1, r0)?, pair(g1, g0)?, pair(b1, b0)?, pair(a1, a0)?])
-        }
+        [r1, r0, g1, g0, b1, b0, a1, a0] => Some([pair(r1, r0)?, pair(g1, g0)?, pair(b1, b0)?, pair(a1, a0)?]),
         _ => None,
     }
 }

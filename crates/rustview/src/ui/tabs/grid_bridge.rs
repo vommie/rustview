@@ -1,18 +1,18 @@
 use crate::ui::multiview::MultiviewHandle;
+use crate::ui::multiview::grid_host::{GridHost, GridItemView};
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::multiview::grid_host::{GridHost, GridItemView};
 use crate::ui::tabs::grid::canvas::canvas_rect;
 use crate::ui::tabs::grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
 use crate::ui::tabs::icon::tab_icon;
 use crate::ui::{MainWindow, TabGridItemModel};
-use rustview_core::library::Library;
-use rustview_core::settings::SettingsManager;
-use rustview_core::settings::schema::TAB_GRID_ITEM_HEADER_LOGICAL_PX;
 use crate::viewer::multiview::model::TileKind;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::settings::SettingsManager;
+use rustview_core::settings::schema::TAB_GRID_ITEM_HEADER_LOGICAL_PX;
 use slint::{ComponentHandle, Image, ModelRc, VecModel};
 use std::sync::Arc;
 use std::time::Instant;
@@ -180,7 +180,10 @@ impl BridgeTabGrid {
         for (idx, session) in tab_manager.list_tabs().iter().enumerate() {
             match rects.get(idx) {
                 Some(r) => {
-                    grid_host.place(&session.multiview.instance, canvas_rect(r, padding_h, padding_v, scroll_y));
+                    grid_host.place(
+                        &session.multiview.instance,
+                        canvas_rect(r, padding_h, padding_v, scroll_y),
+                    );
                 }
                 None => session.multiview.instance.lock().deactivate(),
             }
@@ -197,10 +200,7 @@ impl BridgeTabGrid {
         state: &Arc<RwLock<UiState>>,
         fullscreen: &MultiviewHandle,
     ) {
-        tracing::info!(
-            tab_id,
-            "[TabGrid: LeftClick] Opening selected tab in Tab Viewer mode"
-        );
+        tracing::info!(tab_id, "[TabGrid: LeftClick] Opening selected tab in Tab Viewer mode");
 
         // Hide all other video subwindows that were mapped on TabGrid tiles
         tab_manager.hide_video_subwindows_except(Some(tab_id));
@@ -239,10 +239,7 @@ impl BridgeTabGrid {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        tracing::info!(
-            tab_id,
-            "[TabGrid: CloseItem] Closing tab from TabGrid tile"
-        );
+        tracing::info!(tab_id, "[TabGrid: CloseItem] Closing tab from TabGrid tile");
 
         tab_manager.close_tab(tab_id);
         BridgeViewerTabs::sync_ui(window, tab_manager, library, settings, state);
@@ -271,14 +268,7 @@ impl BridgeTabGrid {
         let scroll_y = window.get_tab_grid_scroll_y();
 
         if !cached_rects.is_empty() {
-            Self::sync_video_subwindows(
-                window,
-                tab_manager,
-                &cached_rects,
-                scroll_y,
-                p_h,
-                p_v,
-            );
+            Self::sync_video_subwindows(window, tab_manager, &cached_rects, scroll_y, p_h, p_v);
         } else {
             let sessions = tab_manager.list_tabs();
             if sessions.is_empty() {
@@ -323,14 +313,7 @@ impl BridgeTabGrid {
                 st.cached_tab_grid_total_h = total_h;
             }
 
-            Self::sync_video_subwindows(
-                window,
-                tab_manager,
-                &rects,
-                scroll_y,
-                p_h,
-                p_v,
-            );
+            Self::sync_video_subwindows(window, tab_manager, &rects, scroll_y, p_h, p_v);
         }
     }
 }

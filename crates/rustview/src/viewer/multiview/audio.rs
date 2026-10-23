@@ -171,10 +171,7 @@ pub fn after_reconcile(slots: &mut AudioSlots, added: &[usize], policy: &AudioPo
     if let Some(&first_new) = new_videos.first() {
         slots[first_new] = Some(TileAudio::native());
     } else if policy.hand_over
-        && let Some(slot) = slots
-            .iter_mut()
-            .flatten()
-            .find(|s| s.origin == AudioOrigin::Policy)
+        && let Some(slot) = slots.iter_mut().flatten().find(|s| s.origin == AudioOrigin::Policy)
     {
         *slot = TileAudio::native();
     }

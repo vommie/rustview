@@ -106,7 +106,11 @@ mod tests {
 
     #[test]
     fn duration_view_carries_text_and_kind() {
-        let item = MediaItemView { is_video: true, duration_badge_str: "04:30".into(), ..Default::default() };
+        let item = MediaItemView {
+            is_video: true,
+            duration_badge_str: "04:30".into(),
+            ..Default::default()
+        };
         let zones = compute_badge_zones(&item, &config());
         let duration = zones.bottom_right.row_data(0).unwrap();
         assert_eq!(duration.kind, ThumbnailBadgeKind::Text);
@@ -116,7 +120,10 @@ mod tests {
 
     #[test]
     fn item_without_applicable_badges_yields_empty_zones() {
-        let none = ThumbnailBadgeConfig { show_media_type: false, ..config() };
+        let none = ThumbnailBadgeConfig {
+            show_media_type: false,
+            ..config()
+        };
         let zones = compute_badge_zones(&MediaItemView::default(), &none);
         assert!(ids(&zones.top_left).is_empty() && ids(&zones.top_right).is_empty());
         assert!(ids(&zones.bottom_left).is_empty() && ids(&zones.bottom_right).is_empty());

@@ -107,10 +107,7 @@ pub fn split_columns(usable: i32, caps: &[i32], pins: &[Option<f64>], floor: i32
         }
     }
     let taken: i32 = pinned.iter().sum();
-    let free_caps: Vec<i32> = (0..n)
-        .filter(|&i| wants[i].is_none())
-        .map(|i| caps[i])
-        .collect();
+    let free_caps: Vec<i32> = (0..n).filter(|&i| wants[i].is_none()).map(|i| caps[i]).collect();
     let mut shared = fair_share(usable - taken, &free_caps).into_iter();
     let mut pinned = pinned.into_iter();
     let widths = (0..n)
@@ -144,8 +141,7 @@ pub fn drag_pins(
             let Some(row) = layout.rows.get(gutter.row) else {
                 return next;
             };
-            let (Some(&left), Some(&right)) = (row.get(gutter.left), row.get(gutter.left + 1))
-            else {
+            let (Some(&left), Some(&right)) = (row.get(gutter.left), row.get(gutter.left + 1)) else {
                 return next;
             };
             let usable: i32 = row.iter().map(|&i| layout.tiles[i].column.w).sum();

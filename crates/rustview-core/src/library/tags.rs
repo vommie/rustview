@@ -21,11 +21,7 @@ impl<'a> TagManager<'a> {
     }
 
     /// Creates a new tag under an optional parent. Rejects duplicates under the same parent.
-    pub fn create_tag(
-        &self,
-        name: &str,
-        parent_id: Option<TagId>,
-    ) -> Result<TagRecord, LibraryError> {
+    pub fn create_tag(&self, name: &str, parent_id: Option<TagId>) -> Result<TagRecord, LibraryError> {
         let trimmed_name = name.trim();
         if trimmed_name.is_empty() {
             return Err(LibraryError::InvalidTagName(name.to_string()));
@@ -92,9 +88,7 @@ impl<'a> TagManager<'a> {
 
         let old_key = Self::composite_key(record.parent_id, &record.name);
         self.db.tags_by_parent_name.delete(&mut wtxn, &old_key)?;
-        self.db
-            .tags_by_parent_name
-            .put(&mut wtxn, &new_key, &tag_id)?;
+        self.db.tags_by_parent_name.put(&mut wtxn, &new_key, &tag_id)?;
 
         record.name = trimmed_name.to_string();
         self.db.tags.put(&mut wtxn, &tag_id, &record)?;
@@ -108,11 +102,7 @@ impl<'a> TagManager<'a> {
     }
 
     /// Moves a tag (and its entire subtree) under a new parent or to root, preventing cyclic references.
-    pub fn move_tag(
-        &self,
-        tag_id: TagId,
-        new_parent_id: Option<TagId>,
-    ) -> Result<TagRecord, LibraryError> {
+    pub fn move_tag(&self, tag_id: TagId, new_parent_id: Option<TagId>) -> Result<TagRecord, LibraryError> {
         if new_parent_id == Some(tag_id) {
             return Err(LibraryError::InvalidTagHierarchy);
         }
@@ -153,9 +143,7 @@ impl<'a> TagManager<'a> {
 
         let old_key = Self::composite_key(record.parent_id, &record.name);
         self.db.tags_by_parent_name.delete(&mut wtxn, &old_key)?;
-        self.db
-            .tags_by_parent_name
-            .put(&mut wtxn, &new_key, &tag_id)?;
+        self.db.tags_by_parent_name.put(&mut wtxn, &new_key, &tag_id)?;
 
         record.parent_id = new_parent_id;
         self.db.tags.put(&mut wtxn, &tag_id, &record)?;
@@ -222,9 +210,7 @@ impl<'a> TagManager<'a> {
                         if media_tags.is_empty() {
                             self.db.tags_by_media.delete(&mut wtxn, &media_id)?;
                         } else {
-                            self.db
-                                .tags_by_media
-                                .put(&mut wtxn, &media_id, &media_tags)?;
+                            self.db.tags_by_media.put(&mut wtxn, &media_id, &media_tags)?;
                         }
                     }
                 }
@@ -257,23 +243,13 @@ impl<'a> TagManager<'a> {
             return Err(LibraryError::TagNotFound(tag_id));
         }
 
-        let mut media_tags = self
-            .db
-            .tags_by_media
-            .get(&wtxn, &media_id)?
-            .unwrap_or_default();
+        let mut media_tags = self.db.tags_by_media.get(&wtxn, &media_id)?.unwrap_or_default();
         if !media_tags.contains(&tag_id) {
             media_tags.push(tag_id);
-            self.db
-                .tags_by_media
-                .put(&mut wtxn, &media_id, &media_tags)?;
+            self.db.tags_by_media.put(&mut wtxn, &media_id, &media_tags)?;
         }
 
-        let mut tag_media = self
-            .db
-            .media_by_tag
-            .get(&wtxn, &tag_id)?
-            .unwrap_or_default();
+        let mut tag_media = self.db.media_by_tag.get(&wtxn, &tag_id)?.unwrap_or_default();
         if !tag_media.contains(&media_id) {
             tag_media.push(media_id);
             self.db.media_by_tag.put(&mut wtxn, &tag_id, &tag_media)?;
@@ -283,11 +259,7 @@ impl<'a> TagManager<'a> {
         Ok(())
     }
 
-    pub fn remove_tag_from_media(
-        &self,
-        media_id: MediaId,
-        tag_id: TagId,
-    ) -> Result<(), LibraryError> {
+    pub fn remove_tag_from_media(&self, media_id: MediaId, tag_id: TagId) -> Result<(), LibraryError> {
         let mut wtxn = self.db.env.write_txn()?;
 
         if let Some(mut media_tags) = self.db.tags_by_media.get(&wtxn, &media_id)? {
@@ -295,9 +267,7 @@ impl<'a> TagManager<'a> {
             if media_tags.is_empty() {
                 self.db.tags_by_media.delete(&mut wtxn, &media_id)?;
             } else {
-                self.db
-                    .tags_by_media
-                    .put(&mut wtxn, &media_id, &media_tags)?;
+                self.db.tags_by_media.put(&mut wtxn, &media_id, &media_tags)?;
             }
         }
 
@@ -316,11 +286,7 @@ impl<'a> TagManager<'a> {
 
     pub fn get_tags_for_media(&self, media_id: MediaId) -> Result<Vec<TagRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
-        let tag_ids = self
-            .db
-            .tags_by_media
-            .get(&rtxn, &media_id)?
-            .unwrap_or_default();
+        let tag_ids = self.db.tags_by_media.get(&rtxn, &media_id)?.unwrap_or_default();
         let mut records = Vec::with_capacity(tag_ids.len());
 
         for tag_id in tag_ids {
@@ -334,11 +300,7 @@ impl<'a> TagManager<'a> {
 
     pub fn get_media_for_tag(&self, tag_id: TagId) -> Result<Vec<MediaId>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
-        Ok(self
-            .db
-            .media_by_tag
-            .get(&rtxn, &tag_id)?
-            .unwrap_or_default())
+        Ok(self.db.media_by_tag.get(&rtxn, &tag_id)?.unwrap_or_default())
     }
 
     pub fn list_all_tags(&self) -> Result<Vec<TagRecord>, LibraryError> {
@@ -352,10 +314,7 @@ impl<'a> TagManager<'a> {
     }
 
     /// Computes the frequency count of each tag across a given set/slice of media items in a single read transaction.
-    pub fn get_tag_frequencies(
-        &self,
-        media_ids: &[MediaId],
-    ) -> Result<HashMap<TagId, usize>, LibraryError> {
+    pub fn get_tag_frequencies(&self, media_ids: &[MediaId]) -> Result<HashMap<TagId, usize>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let mut counts = HashMap::new();
 

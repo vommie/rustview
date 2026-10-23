@@ -1,57 +1,53 @@
 slint::include_modules!();
 
 pub mod bridge;
+pub mod browse_folders;
+pub mod browse_window;
+pub mod button_feedback;
+pub mod button_feedback_bridge;
+pub mod color_picker;
 pub mod context_menu;
 pub mod dnd;
 pub mod favorites;
 pub mod file_dialogs;
 pub mod folder_dialogs;
 pub mod folder_tree;
+pub mod formats_policy;
+pub mod list_loader;
 pub mod media;
+pub mod models;
+pub mod multiview;
+pub mod open_confirmation;
 pub mod selection;
+pub mod settings_dialog;
+pub mod shutdown;
 pub mod sidebar;
 pub mod state;
 pub mod status_bar;
 pub mod tabs;
 pub mod tags;
-pub mod browse_folders;
-pub mod browse_window;
-pub mod button_feedback;
-pub mod button_feedback_bridge;
-pub mod color_picker;
-pub mod formats_policy;
-pub mod list_loader;
-pub mod models;
-pub mod multiview;
-pub mod settings_dialog;
-pub mod open_confirmation;
-pub mod shutdown;
 pub mod thumbnail_badges;
 pub mod thumbnail_regeneration;
 pub mod type_ahead;
 pub mod virtual_folder_wording;
 
 pub use bridge::{RenameActionParams, UiBridge};
-pub use context_menu::{FolderMenuContext, MediaMenuContext};
 pub use context_menu::favorite::FavoriteContextMenu;
 pub use context_menu::folder::FolderContextMenu;
 pub use context_menu::media::MediaContextMenu;
 pub use context_menu::presenter::CtxMenuPresenter;
 pub use context_menu::tab::{TabActionContext, TabContextMenu};
 pub use context_menu::tag::TagContextMenu;
+pub use context_menu::{FolderMenuContext, MediaMenuContext};
 pub use dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
-pub use favorites::rename_dialog::FavoriteRenameDialogController;
 pub use favorites::BridgeFavorites;
-pub use file_dialogs::conflict::{
-    ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController,
-};
+pub use favorites::manager::{FavoriteEntry, FavoriteManager};
+pub use favorites::rename_dialog::FavoriteRenameDialogController;
+pub use file_dialogs::conflict::{ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController};
 pub use file_dialogs::delete::DeleteFileDialogController;
 pub use file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
 pub use file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
 pub use file_dialogs::{FileRenameContext, FileRenameDialogController, RenameDialogParams};
-pub use selection::{
-    BridgeFileSelection, FileClickContext, FileClickEvent, LastClickRecord,
-};
 pub use folder_dialogs::delete::DeleteFolderDialogController;
 pub use folder_dialogs::missing_delete::MissingFolderDeleteDialogController;
 pub use folder_dialogs::move_to::MoveFolderDialogController;
@@ -59,42 +55,34 @@ pub use folder_dialogs::reborn_warn::RebornFolderWarnDialogController;
 pub use folder_dialogs::remove_orphaned::RemoveOrphanedFolderDialogController;
 pub use folder_dialogs::rename::RenameFolderDialogController;
 pub use folder_dialogs::{FolderDialogContext, FolderDialogController};
+pub use folder_tree::dnd_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
 pub use folder_tree::move_sync::BridgeFolderMoveSync;
+pub use folder_tree::projection::FolderProjection;
 pub use folder_tree::tree_sync::FolderTreeSync;
+pub use media::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, FallbackViewState};
+pub use media::video_preview::{DEFAULT_PREVIEW_INTERVAL_MS, VideoPreviewAnimator};
 pub use multiview::MultiviewHandle;
-pub use selection::rubberband_bridge::{
-    BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams,
+pub use selection::keyboard::{
+    KeyboardNavigateParams, NavigationDirection, calculate_target_index, handle_keyboard_navigate,
 };
+pub use selection::model::{FileSelectionModel, FileSelectionSummary};
+pub use selection::rubberband::{
+    GridLayoutConfig, RectF32, RubberbandAutoScroller, RubberbandGeometry, RubberbandSession, RubberbandStartParams,
+    TableLayoutConfig,
+};
+pub use selection::rubberband_bridge::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
+pub use selection::{BridgeFileSelection, FileClickContext, FileClickEvent, LastClickRecord};
+pub use settings_dialog::{FormatCounter, SettingsDialogController};
 pub use sidebar::BridgeSidebarPanelTabs;
+pub use sidebar::panel_tab_dnd::{SidebarPanelTabDndGeometry, SidebarPanelTabDndSession, SidebarPanelTabSlotInfo};
 pub use state::*;
 pub use status_bar::{StatusBarBridge, StatusMessageLevel};
+pub use tabs::dnd::{TabAutoScrollDirection, TabDndAutoScroller, TabDndGeometry, TabDndSession, TabSlotInfo};
+pub use tabs::grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
 pub use tabs::grid_bridge::BridgeTabGrid;
+pub use tabs::{BridgeViewerTabs, TabDragEndParams};
 pub use tags::dialogs::TagDialogController;
+pub use tags::history::{TagHistoryItem, TagHistoryLayoutEngine, TagHistoryManager, TagHistoryRow};
 pub use tags::history_bridge::BridgeTagHistory;
 pub use tags::{BridgeTags, TagActionContext};
-pub use tabs::{BridgeViewerTabs, TabDragEndParams};
-pub use folder_tree::dnd_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
-pub use media::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, FallbackViewState};
-pub use favorites::manager::{FavoriteEntry, FavoriteManager};
-pub use folder_tree::projection::FolderProjection;
-pub use settings_dialog::{FormatCounter, SettingsDialogController};
-pub use selection::model::{FileSelectionModel, FileSelectionSummary};
-pub use selection::keyboard::{
-    calculate_target_index, handle_keyboard_navigate, KeyboardNavigateParams, NavigationDirection,
-};
 pub use thumbnail_badges::ThumbnailBadgeBridge;
-pub use selection::rubberband::{
-    GridLayoutConfig, RectF32, RubberbandAutoScroller, RubberbandGeometry, RubberbandSession,
-    RubberbandStartParams, TableLayoutConfig,
-};
-pub use sidebar::panel_tab_dnd::{
-    SidebarPanelTabDndGeometry, SidebarPanelTabDndSession, SidebarPanelTabSlotInfo,
-};
-pub use tabs::dnd::{
-    TabAutoScrollDirection, TabDndAutoScroller, TabDndGeometry, TabDndSession, TabSlotInfo,
-};
-pub use tabs::grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
-pub use tags::history::{
-    TagHistoryItem, TagHistoryLayoutEngine, TagHistoryManager, TagHistoryRow,
-};
-pub use media::video_preview::{VideoPreviewAnimator, DEFAULT_PREVIEW_INTERVAL_MS};

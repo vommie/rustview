@@ -28,10 +28,7 @@ impl TagHistoryLayoutEngine {
     }
 
     /// Flow-packs tag history items into rows based on available container width.
-    pub fn pack_into_rows(
-        items: Vec<TagHistoryItem>,
-        container_width: f32,
-    ) -> (Vec<TagHistoryRow>, f32) {
+    pub fn pack_into_rows(items: Vec<TagHistoryItem>, container_width: f32) -> (Vec<TagHistoryRow>, f32) {
         if items.is_empty() {
             return (Vec::new(), 0.0);
         }
@@ -44,9 +41,7 @@ impl TagHistoryLayoutEngine {
 
         for item in items {
             let item_w = item.width;
-            if !current_row_items.is_empty()
-                && (current_row_w + Self::PILL_HORIZONTAL_SPACING + item_w > available_w)
-            {
+            if !current_row_items.is_empty() && (current_row_w + Self::PILL_HORIZONTAL_SPACING + item_w > available_w) {
                 rows.push(TagHistoryRow {
                     items: std::mem::take(&mut current_row_items),
                 });

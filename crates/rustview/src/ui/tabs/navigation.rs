@@ -1,20 +1,20 @@
 //! Moving between tabs and within a tab: cycling, scrolling into view, previous/next medium, refresh and video embedding.
 
-use crate::ui::multiview::MultiviewHandle;
+use super::BridgeViewerTabs;
+use crate::ui::MainWindow;
 use crate::ui::media::BridgeMedia;
+use crate::ui::multiview::MultiviewHandle;
+use crate::ui::multiview::tab_host;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::multiview::tab_host;
 use crate::ui::tabs::dnd::TabDndGeometry;
-use crate::ui::MainWindow;
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Instant;
-use super::BridgeViewerTabs;
 
 impl BridgeViewerTabs {
     /// Cycles the active viewer tab with cyclic wrapping (mouse wheel on tab bar) and synchronizes UI & video embedding.
@@ -70,9 +70,7 @@ impl BridgeViewerTabs {
         }
 
         let show_rating = settings.get().viewer.tabs.show_rating_badge;
-        if let Some((tab_x, tab_w)) =
-            TabDndGeometry::find_tab_slot_geometry(&tabs, active_id, show_rating)
-        {
+        if let Some((tab_x, tab_w)) = TabDndGeometry::find_tab_slot_geometry(&tabs, active_id, show_rating) {
             tracing::debug!(
                 active_id,
                 tab_x,
@@ -146,14 +144,7 @@ impl BridgeViewerTabs {
             "[BridgeViewerTabs: RefreshActive] Executing unified full media refresh for active tab"
         );
 
-        BridgeMedia::refresh_selected_media(
-            window,
-            library,
-            thumbnails,
-            tab_manager,
-            settings,
-            state,
-        );
+        BridgeMedia::refresh_selected_media(window, library, thumbnails, tab_manager, settings, state);
     }
 
     /// Navigates to the adjacent (previous or next) media item in the current active list while keeping the same tab open in-place.
@@ -177,7 +168,11 @@ impl BridgeViewerTabs {
             let current_pos = st.row_of(active_media_id);
 
             if let Some(pos) = current_pos {
-                let target_pos = if is_next { pos.checked_add(1) } else { pos.checked_sub(1) };
+                let target_pos = if is_next {
+                    pos.checked_add(1)
+                } else {
+                    pos.checked_sub(1)
+                };
 
                 target_pos.and_then(|t_idx| {
                     if !st.active_indices.is_empty() {

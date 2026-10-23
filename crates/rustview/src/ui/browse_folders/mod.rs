@@ -5,23 +5,23 @@ mod actions;
 mod dnd;
 mod history;
 pub mod rows;
-pub mod times;
 pub mod selection;
+pub mod times;
 pub mod view;
 
 pub use dnd::BrowseDragScroller;
 pub use history::NavigationHistory;
-pub use times::{FolderStamp, FolderTimes};
-pub use selection::{BrowseItem, SelectionDelta};
 pub use rows::{BrowseFolderRows, FolderRowRef, FolderRowsRequest, Slot, UP_ROW_ID};
+pub use selection::{BrowseItem, SelectionDelta};
+pub use times::{FolderStamp, FolderTimes};
 pub use view::{folder_row_view, stamp_labels};
 
-use rustview_core::library::Library;
-use rustview_core::library::models::FolderHierarchySnapshot;
-use rustview_core::settings::schema::FolderSettings;
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::state::UiState;
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::library::models::FolderHierarchySnapshot;
+use rustview_core::settings::schema::FolderSettings;
 use std::sync::Arc;
 
 pub struct BrowseFolders;
@@ -37,10 +37,20 @@ impl BrowseFolders {
     }
 
     /// Brings the folder rows of `st` in line with the snapshot (`None` = no folder rows wanted). Returns whether they changed.
-    pub fn rebuild_rows(st: &mut UiState, snapshot: Option<&FolderHierarchySnapshot>, folders: &FolderSettings) -> bool {
+    pub fn rebuild_rows(
+        st: &mut UiState,
+        snapshot: Option<&FolderHierarchySnapshot>,
+        folders: &FolderSettings,
+    ) -> bool {
         match snapshot {
-            Some(snapshot) => st.rebuild_folder_rows(snapshot, folders.show_hidden_folders, folders.show_deleted_folders),
-            None => st.rebuild_folder_rows(&FolderHierarchySnapshot::default(), folders.show_hidden_folders, folders.show_deleted_folders),
+            Some(snapshot) => {
+                st.rebuild_folder_rows(snapshot, folders.show_hidden_folders, folders.show_deleted_folders)
+            }
+            None => st.rebuild_folder_rows(
+                &FolderHierarchySnapshot::default(),
+                folders.show_hidden_folders,
+                folders.show_deleted_folders,
+            ),
         }
     }
 }

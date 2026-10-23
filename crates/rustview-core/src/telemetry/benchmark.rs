@@ -79,8 +79,7 @@ impl ViewScrollBenchmark {
     #[inline]
     pub fn record_slice_reload(&self, duration_us: u64) {
         self.slice_reloads.fetch_add(1, Ordering::Relaxed);
-        self.total_slice_time_us
-            .fetch_add(duration_us, Ordering::Relaxed);
+        self.total_slice_time_us.fetch_add(duration_us, Ordering::Relaxed);
         update_min(&self.min_slice_time_us, duration_us);
         update_max(&self.max_slice_time_us, duration_us);
         self.check_periodic_log();
@@ -249,29 +248,20 @@ impl ThumbnailPipelineBenchmark {
     #[inline]
     pub fn record_pack_read(&self, bytes: u64, duration_us: u64) {
         self.l2_pack_reads.fetch_add(1, Ordering::Relaxed);
-        self.l2_pack_bytes_read
-            .fetch_add(bytes, Ordering::Relaxed);
-        self.l2_pack_read_time_us
-            .fetch_add(duration_us, Ordering::Relaxed);
+        self.l2_pack_bytes_read.fetch_add(bytes, Ordering::Relaxed);
+        self.l2_pack_read_time_us.fetch_add(duration_us, Ordering::Relaxed);
     }
 
     #[inline]
-    pub fn record_decompress(
-        &self,
-        is_webp: bool,
-        raw_bytes: u64,
-        duration_us: u64,
-    ) {
+    pub fn record_decompress(&self, is_webp: bool, raw_bytes: u64, duration_us: u64) {
         self.decompress_count.fetch_add(1, Ordering::Relaxed);
         if is_webp {
             self.decompress_webp_count.fetch_add(1, Ordering::Relaxed);
         } else {
             self.decompress_jpeg_count.fetch_add(1, Ordering::Relaxed);
         }
-        self.decompress_raw_bytes
-            .fetch_add(raw_bytes, Ordering::Relaxed);
-        self.decompress_time_us
-            .fetch_add(duration_us, Ordering::Relaxed);
+        self.decompress_raw_bytes.fetch_add(raw_bytes, Ordering::Relaxed);
+        self.decompress_time_us.fetch_add(duration_us, Ordering::Relaxed);
         update_min(&self.decompress_min_us, duration_us);
         update_max(&self.decompress_max_us, duration_us);
     }
@@ -283,8 +273,7 @@ impl ThumbnailPipelineBenchmark {
 
     #[inline]
     pub fn record_image_decode_resize(&self, duration_us: u64) {
-        self.image_decode_resize_count
-            .fetch_add(1, Ordering::Relaxed);
+        self.image_decode_resize_count.fetch_add(1, Ordering::Relaxed);
         self.image_decode_resize_time_us
             .fetch_add(duration_us, Ordering::Relaxed);
         update_min(&self.image_decode_min_us, duration_us);
@@ -294,16 +283,14 @@ impl ThumbnailPipelineBenchmark {
     #[inline]
     pub fn record_video_extract(&self, duration_us: u64) {
         self.video_extract_count.fetch_add(1, Ordering::Relaxed);
-        self.video_extract_time_us
-            .fetch_add(duration_us, Ordering::Relaxed);
+        self.video_extract_time_us.fetch_add(duration_us, Ordering::Relaxed);
     }
 
     #[inline]
     pub fn record_compress(&self, bytes: u64, duration_us: u64) {
         self.compress_count.fetch_add(1, Ordering::Relaxed);
         self.compress_bytes.fetch_add(bytes, Ordering::Relaxed);
-        self.compress_time_us
-            .fetch_add(duration_us, Ordering::Relaxed);
+        self.compress_time_us.fetch_add(duration_us, Ordering::Relaxed);
         update_min(&self.compress_min_us, duration_us);
         update_max(&self.compress_max_us, duration_us);
     }
@@ -312,33 +299,22 @@ impl ThumbnailPipelineBenchmark {
     pub fn record_pack_append(&self, bytes: u64, duration_us: u64) {
         self.pack_appends.fetch_add(1, Ordering::Relaxed);
         self.pack_append_bytes.fetch_add(bytes, Ordering::Relaxed);
-        self.pack_append_time_us
-            .fetch_add(duration_us, Ordering::Relaxed);
+        self.pack_append_time_us.fetch_add(duration_us, Ordering::Relaxed);
     }
 
     #[inline]
     pub fn record_lmdb_commit(&self, records_count: usize, duration_us: u64) {
         self.lmdb_commit_batches.fetch_add(1, Ordering::Relaxed);
-        self.lmdb_committed_records
-            .fetch_add(records_count, Ordering::Relaxed);
-        self.lmdb_commit_time_us
-            .fetch_add(duration_us, Ordering::Relaxed);
+        self.lmdb_committed_records.fetch_add(records_count, Ordering::Relaxed);
+        self.lmdb_commit_time_us.fetch_add(duration_us, Ordering::Relaxed);
     }
 
     #[inline]
-    pub fn record_drain_cycle(
-        &self,
-        items_count: usize,
-        row_set_us: u64,
-        total_drain_us: u64,
-    ) {
+    pub fn record_drain_cycle(&self, items_count: usize, row_set_us: u64, total_drain_us: u64) {
         self.drain_ticks.fetch_add(1, Ordering::Relaxed);
-        self.drained_items
-            .fetch_add(items_count, Ordering::Relaxed);
-        self.slint_set_row_data_us
-            .fetch_add(row_set_us, Ordering::Relaxed);
-        self.drain_time_us
-            .fetch_add(total_drain_us, Ordering::Relaxed);
+        self.drained_items.fetch_add(items_count, Ordering::Relaxed);
+        self.slint_set_row_data_us.fetch_add(row_set_us, Ordering::Relaxed);
+        self.drain_time_us.fetch_add(total_drain_us, Ordering::Relaxed);
     }
 
     #[inline]
@@ -359,14 +335,12 @@ impl ThumbnailPipelineBenchmark {
 
     #[inline]
     pub fn set_preload_duration(&self, duration_us: u64) {
-        self.preload_duration_us
-            .store(duration_us, Ordering::Release);
+        self.preload_duration_us.store(duration_us, Ordering::Release);
     }
 
     #[inline]
     pub fn set_generate_duration(&self, duration_us: u64) {
-        self.generate_duration_us
-            .store(duration_us, Ordering::Release);
+        self.generate_duration_us.store(duration_us, Ordering::Release);
     }
 }
 
@@ -437,12 +411,7 @@ impl FolderLoadBenchmark {
 fn update_min(atomic: &AtomicU64, val: u64) {
     let mut current = atomic.load(Ordering::Relaxed);
     while current == 0 || val < current {
-        match atomic.compare_exchange_weak(
-            current,
-            val,
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-        ) {
+        match atomic.compare_exchange_weak(current, val, Ordering::Relaxed, Ordering::Relaxed) {
             Ok(_) => break,
             Err(actual) => current = actual,
         }
@@ -535,10 +504,7 @@ impl BenchmarkReportFormatter {
                 total_items
             ));
         } else {
-            out.push_str(&format!(
-                "Folder ID Target     : Folder #{}\n",
-                thumb_bench.folder_id
-            ));
+            out.push_str(&format!("Folder ID Target     : Folder #{}\n", thumb_bench.folder_id));
         }
 
         out.push_str(&format!(
@@ -748,8 +714,7 @@ impl BenchmarkReportFormatter {
             if video_count > 0 {
                 out.push_str(&format!(
                     "    ├─ Video Extractions    : {} videos | Avg: {:.2} ms / video\n",
-                    video_count,
-                    avg_video_extract_ms
+                    video_count, avg_video_extract_ms
                 ));
             }
             out.push_str(&format!(
@@ -797,7 +762,9 @@ impl BenchmarkReportFormatter {
         out.push_str("STORAGE FOOTPRINT & CACHE CAPACITY:\n");
         out.push_str(&format!(
             "  • L1 In-Memory Cache      : {} / {} slots utilized ({:.1}% capacity)\n",
-            drained_items.min(l1_slots_cap), l1_slots_cap, l1_occupancy_pct
+            drained_items.min(l1_slots_cap),
+            l1_slots_cap,
+            l1_occupancy_pct
         ));
         out.push_str(&format!(
             "  • L2 Binary Pack Files    : {} packfiles | {:.2} MB on disk\n",

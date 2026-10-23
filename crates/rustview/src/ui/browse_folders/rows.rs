@@ -132,7 +132,12 @@ impl BrowseFolderRows {
 
     /// The highlighted folders in list order (front rows, then the ones that wait at the end).
     pub fn selected_folders_ordered(&self) -> Vec<FolderId> {
-        self.front.iter().chain(&self.tail).copied().filter(|id| self.selection.contains(id)).collect()
+        self.front
+            .iter()
+            .chain(&self.tail)
+            .copied()
+            .filter(|id| self.selection.contains(id))
+            .collect()
     }
 
     /// The row that is highlighted when exactly one row is ("..." or a folder).
@@ -205,7 +210,12 @@ impl BrowseFolderRows {
                 .iter()
                 .position(|&f| f == id)
                 .map(|i| i + has_up)
-                .or_else(|| self.tail.iter().position(|&f| f == id).map(|i| self.front_len() + media_len + i)),
+                .or_else(|| {
+                    self.tail
+                        .iter()
+                        .position(|&f| f == id)
+                        .map(|i| self.front_len() + media_len + i)
+                }),
         }
     }
 
@@ -279,14 +289,28 @@ impl BrowseFolderRows {
 
     /// Recomputes the rows from the snapshot (memory only). Appended folders stay appended while they still exist. Returns
     /// whether anything changed.
-    pub fn rebuild(&mut self, snapshot: &FolderHierarchySnapshot, request: FolderRowsRequest, name_matches: &dyn Fn(&str) -> bool) -> bool {
+    pub fn rebuild(
+        &mut self,
+        snapshot: &FolderHierarchySnapshot,
+        request: FolderRowsRequest,
+        name_matches: &dyn Fn(&str) -> bool,
+    ) -> bool {
         let previous = self.clone();
         *self = self.computed(snapshot, request, name_matches);
         *self != previous
     }
 
-    fn computed(&self, snapshot: &FolderHierarchySnapshot, request: FolderRowsRequest, name_matches: &dyn Fn(&str) -> bool) -> Self {
-        let Some(node) = request.current.filter(|_| request.enabled).and_then(|id| snapshot.get_node(id)) else {
+    fn computed(
+        &self,
+        snapshot: &FolderHierarchySnapshot,
+        request: FolderRowsRequest,
+        name_matches: &dyn Fn(&str) -> bool,
+    ) -> Self {
+        let Some(node) = request
+            .current
+            .filter(|_| request.enabled)
+            .and_then(|id| snapshot.get_node(id))
+        else {
             return Self::default();
         };
 
@@ -295,11 +319,18 @@ impl BrowseFolderRows {
             .filter(|parent| !snapshot.root_ids.contains(&node.id) && snapshot.nodes.contains_key(parent));
 
         let listed = |id: &FolderId| {
-            snapshot
-                .get_node(*id)
-                .is_some_and(|child| (request.show_hidden || !child.is_hidden) && (request.show_deleted || !child.is_deleted) && name_matches(&child.name))
+            snapshot.get_node(*id).is_some_and(|child| {
+                (request.show_hidden || !child.is_hidden)
+                    && (request.show_deleted || !child.is_deleted)
+                    && name_matches(&child.name)
+            })
         };
-        let tail: Vec<FolderId> = self.tail.iter().copied().filter(|id| listed(id) && node.children.contains(id)).collect();
+        let tail: Vec<FolderId> = self
+            .tail
+            .iter()
+            .copied()
+            .filter(|id| listed(id) && node.children.contains(id))
+            .collect();
         let front: Vec<FolderId> = node
             .children
             .iter()
@@ -324,11 +355,18 @@ impl BrowseFolderRows {
         };
         if !self.selection.is_empty() {
             let listed: HashSet<FolderId> = rows.front.iter().chain(&rows.tail).copied().collect();
-            rows.selection = self.selection.iter().copied().filter(|id| listed.contains(id)).collect();
-            let still_there = |row: &Option<FolderRowRef>| row.filter(|r| match r {
-                FolderRowRef::Up => up.is_some(),
-                FolderRowRef::Folder(id) => listed.contains(id),
-            });
+            rows.selection = self
+                .selection
+                .iter()
+                .copied()
+                .filter(|id| listed.contains(id))
+                .collect();
+            let still_there = |row: &Option<FolderRowRef>| {
+                row.filter(|r| match r {
+                    FolderRowRef::Up => up.is_some(),
+                    FolderRowRef::Folder(id) => listed.contains(id),
+                })
+            };
             rows.anchor = still_there(&self.anchor);
             rows.cursor = still_there(&self.cursor);
         } else {

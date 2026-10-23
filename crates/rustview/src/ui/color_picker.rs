@@ -4,8 +4,8 @@
 //! Call [`install`] once for every window that contains a `ColorPicker` or a `ColorSwatchButton`. [`open`] shows the
 //! picker in a window of its own.
 
-use rustview_core::util::hex_color;
 use crate::ui::{ColorCodec, ColorPickerWindow};
+use rustview_core::util::hex_color;
 use slint::{Color, ComponentHandle, Global, SharedString};
 use std::cell::RefCell;
 use std::rc::Rc;

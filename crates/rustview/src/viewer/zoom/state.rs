@@ -36,7 +36,11 @@ pub struct RenderKey {
 
 impl RenderKey {
     fn of(view: ZoomView, tile: Area, algorithm: Resample) -> Self {
-        Self { zoom: view.zoom.to_bits(), tile, algorithm }
+        Self {
+            zoom: view.zoom.to_bits(),
+            tile,
+            algorithm,
+        }
     }
 }
 
@@ -58,11 +62,19 @@ fn render_region(placement: &Placement, room: (f64, f64)) -> IRect {
     let y0 = (placement.window.y - my).max(0);
     let x1 = (placement.window.x + placement.window.w + mx).min(placement.w);
     let y1 = (placement.window.y + placement.window.h + my).min(placement.h);
-    IRect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+    IRect {
+        x: x0,
+        y: y0,
+        w: x1 - x0,
+        h: y1 - y0,
+    }
 }
 
 fn contains(outer: IRect, inner: IRect) -> bool {
-    inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h
+    inner.x >= outer.x
+        && inner.y >= outer.y
+        && inner.x + inner.w <= outer.x + outer.w
+        && inner.y + inner.h <= outer.y + outer.h
 }
 
 /// One picture to resample, with everything it needs; `run` is what a worker thread does.
@@ -88,7 +100,12 @@ pub struct RenderDone {
 impl RenderJob {
     pub fn run(self) -> RenderDone {
         let pixels = render_view(&self.source, &self.visible, self.algorithm);
-        RenderDone { generation: self.generation, key: self.key, region: self.region, pixels }
+        RenderDone {
+            generation: self.generation,
+            key: self.key,
+            region: self.region,
+            pixels,
+        }
     }
 }
 
@@ -128,7 +145,10 @@ pub struct Picture {
 
 pub enum PictureContent {
     /// The sharp picture, larger than `dest`; `clip` (its pixels) is the part that goes to `dest`.
-    Rendered { pixels: SharedPixelBuffer<Rgb8Pixel>, clip: IRect },
+    Rendered {
+        pixels: SharedPixelBuffer<Rgb8Pixel>,
+        clip: IRect,
+    },
     /// The tile's own picture, this rectangle of it, scaled by the graphics card.
     Preview { clip: IRect },
 }
@@ -261,12 +281,20 @@ impl ZoomState {
 
     fn start_view_change(&mut self, to: ZoomView, prefs: &ZoomPrefs, now: Instant, animate: bool) {
         let from = self.shown;
-        self.target = if (to.zoom - 1.0).abs() < FIT_EPS { ZoomView::FIT } else { to };
+        self.target = if (to.zoom - 1.0).abs() < FIT_EPS {
+            ZoomView::FIT
+        } else {
+            to
+        };
         self.changed_at = Some(now);
         self.minimap.reveal_until = Some(now + prefs.minimap_timeout);
         self.release_at = self.target.is_fit().then_some(now + RELEASE_AFTER);
         if animate && prefs.smooth && from != self.target {
-            self.animation = Some(Animation { from, to: self.target, start: now });
+            self.animation = Some(Animation {
+                from,
+                to: self.target,
+                start: now,
+            });
         } else {
             self.animation = None;
             self.shown = self.target;
@@ -333,13 +361,19 @@ impl ZoomState {
     pub fn minimap_press(&mut self, nx: f64, ny: f64, prefs: &ZoomPrefs, now: Instant) {
         let Some(frame) = self.frame() else { return };
         let grab = Grab::at(nx, ny, frame.viewport_norm(self.shown));
-        self.minimap.drag = Some(Drag { grab, at: now, speed: 0.0 });
+        self.minimap.drag = Some(Drag {
+            grab,
+            at: now,
+            speed: 0.0,
+        });
         self.minimap_move(nx, ny, prefs, now);
     }
 
     /// The pointer moved while the minimap is pressed and the pointer is not locked: the rectangle stays under it (1:1).
     pub fn minimap_move(&mut self, nx: f64, ny: f64, prefs: &ZoomPrefs, now: Instant) {
-        let (Some(frame), Some(drag)) = (self.frame(), self.minimap.drag.as_ref()) else { return };
+        let (Some(frame), Some(drag)) = (self.frame(), self.minimap.drag.as_ref()) else {
+            return;
+        };
         let (mx, my) = drag.grab.middle_for(nx, ny);
         let next = frame.center_for_viewport(self.shown, mx, my);
         if next != self.target || self.animation.is_some() {
@@ -354,14 +388,20 @@ impl ZoomState {
     /// is zoomed, the finer a slow drag, so the picture does not leap by hundreds of pixels per pointer pixel; a fast flick is
     /// followed 1:1 to get across. The rectangle may lag behind where the pointer would be; at an edge it simply stops.
     pub fn minimap_drag_by(&mut self, dx: f64, dy: f64, mm_px: (f64, f64), prefs: &ZoomPrefs, now: Instant) {
-        let (Some(frame), Some(drag)) = (self.frame(), self.minimap.drag.as_mut()) else { return };
+        let (Some(frame), Some(drag)) = (self.frame(), self.minimap.drag.as_mut()) else {
+            return;
+        };
         if mm_px.0 <= 0.0 || mm_px.1 <= 0.0 {
             return;
         }
         let seconds = now.saturating_duration_since(drag.at).as_secs_f64().max(0.001);
         let instant = dx.hypot(dy) / seconds;
         // Smoothed, so one slow or fast event does not flip the gain.
-        drag.speed = if drag.speed == 0.0 { instant * 0.5 } else { drag.speed * 0.65 + instant * 0.35 };
+        drag.speed = if drag.speed == 0.0 {
+            instant * 0.5
+        } else {
+            drag.speed * 0.65 + instant * 0.35
+        };
         drag.at = now;
         let (ex, ey) = frame.extent_px(self.shown);
         let gain = super::minimap::drag_gain((ex / mm_px.0).max(ey / mm_px.1), drag.speed);
@@ -391,13 +431,19 @@ impl ZoomState {
 
     /// Advances the animation and says what has to be done now. `display` is the picture the tile has (it is the source of
     /// every view that is not enlarged, and of the preview). Cheap when nothing is going on.
-    pub fn poll(&mut self, display: Option<&SharedPixelBuffer<Rgb8Pixel>>, prefs: &ZoomPrefs, now: Instant) -> Vec<Request> {
+    pub fn poll(
+        &mut self,
+        display: Option<&SharedPixelBuffer<Rgb8Pixel>>,
+        prefs: &ZoomPrefs,
+        now: Instant,
+    ) -> Vec<Request> {
         let mut requests = Vec::new();
         let Some(frame) = self.frame() else { return requests };
         let limits = prefs.limits();
 
         if let Some(animation) = &self.animation {
-            let t = (now.saturating_duration_since(animation.start).as_secs_f64() / ANIMATION.as_secs_f64()).clamp(0.0, 1.0);
+            let t = (now.saturating_duration_since(animation.start).as_secs_f64() / ANIMATION.as_secs_f64())
+                .clamp(0.0, 1.0);
             if t >= 1.0 {
                 self.shown = self.target;
                 self.animation = None;
@@ -419,14 +465,25 @@ impl ZoomState {
         if self.animation.is_some() {
             return requests;
         }
-        let Some(key) = self.key_for(self.target, prefs) else { return requests };
-        let Some(placement) = frame.placement(self.target) else { return requests };
+        let Some(key) = self.key_for(self.target, prefs) else {
+            return requests;
+        };
+        let Some(placement) = frame.placement(self.target) else {
+            return requests;
+        };
         if self.failed_key == Some(key) {
             return requests;
         }
         // The picture we have is good while the window is well inside what it covers.
-        let room = (f64::from(self.tile.map_or(0, |a| a.size.0)), f64::from(self.tile.map_or(0, |a| a.size.1)));
-        if self.hq.as_ref().is_some_and(|hq| hq.key == key && Self::covers_with_reserve(hq.region, &placement, room)) {
+        let room = (
+            f64::from(self.tile.map_or(0, |a| a.size.0)),
+            f64::from(self.tile.map_or(0, |a| a.size.1)),
+        );
+        if self
+            .hq
+            .as_ref()
+            .is_some_and(|hq| hq.key == key && Self::covers_with_reserve(hq.region, &placement, room))
+        {
             return requests;
         }
 
@@ -439,7 +496,10 @@ impl ZoomState {
         // A new zoom waits for the view to rest (the slider may be dragged); a window that nears the end of what is rendered (a drag)
         // gets its picture at once, the old one is still on screen meanwhile.
         let same_grid = self.hq.as_ref().is_some_and(|hq| hq.key == key);
-        let resting = same_grid || self.changed_at.is_none_or(|at| now.saturating_duration_since(at) >= RENDER_DEBOUNCE);
+        let resting = same_grid
+            || self
+                .changed_at
+                .is_none_or(|at| now.saturating_duration_since(at) >= RENDER_DEBOUNCE);
         if self.in_flight.is_some() || !resting {
             return requests;
         }
@@ -447,7 +507,12 @@ impl ZoomState {
         let s = frame.source_per_pixel(self.target.zoom);
         let visible = Visible {
             dest: region,
-            src: RectF::new(f64::from(region.x) * s, f64::from(region.y) * s, f64::from(region.w) * s, f64::from(region.h) * s),
+            src: RectF::new(
+                f64::from(region.x) * s,
+                f64::from(region.y) * s,
+                f64::from(region.w) * s,
+                f64::from(region.h) * s,
+            ),
         };
         let job_source = match (&self.source, needs_original, display) {
             (SourceState::Ready(source), true, _) => Some((source.clone(), visible)),
@@ -486,18 +551,37 @@ impl ZoomState {
 
     /// The tile's own picture as the source of a render: the visible rectangle is given in pixels of the original, the picture
     /// is a downscaled copy of it.
-    fn display_source(display: &SharedPixelBuffer<Rgb8Pixel>, image: (u32, u32), visible: Visible) -> Option<(Arc<SourceImage>, Visible)> {
+    fn display_source(
+        display: &SharedPixelBuffer<Rgb8Pixel>,
+        image: (u32, u32),
+        visible: Visible,
+    ) -> Option<(Arc<SourceImage>, Visible)> {
         let source = SourceImage::new(display.width(), display.height(), display.clone())?;
         let fx = f64::from(display.width()) / f64::from(image.0);
         let fy = f64::from(display.height()) / f64::from(image.1);
-        let src = RectF::new(visible.src.x * fx, visible.src.y * fy, visible.src.w * fx, visible.src.h * fy);
-        Some((Arc::new(source), Visible { dest: visible.dest, src }))
+        let src = RectF::new(
+            visible.src.x * fx,
+            visible.src.y * fy,
+            visible.src.w * fx,
+            visible.src.h * fy,
+        );
+        Some((
+            Arc::new(source),
+            Visible {
+                dest: visible.dest,
+                src,
+            },
+        ))
     }
 
     fn interpolate(from: ZoomView, to: ZoomView, t: f64) -> ZoomView {
         // The zoom glides geometrically (the same ratio per moment), the centre linearly.
         let zoom = (from.zoom.ln() + (to.zoom.ln() - from.zoom.ln()) * t).exp();
-        ZoomView { zoom, cx: from.cx + (to.cx - from.cx) * t, cy: from.cy + (to.cy - from.cy) * t }
+        ZoomView {
+            zoom,
+            cx: from.cx + (to.cx - from.cx) * t,
+            cy: from.cy + (to.cy - from.cy) * t,
+        }
     }
 
     pub fn source_loaded(&mut self, result: Result<Arc<SourceImage>, String>) {
@@ -509,12 +593,21 @@ impl ZoomState {
     }
 
     pub fn rendered(&mut self, done: RenderDone, prefs: &ZoomPrefs) {
-        if self.in_flight.is_some_and(|(generation, key)| generation == done.generation && key == done.key) {
+        if self
+            .in_flight
+            .is_some_and(|(generation, key)| generation == done.generation && key == done.key)
+        {
             self.in_flight = None;
         }
         let current = self.key_for(self.target, prefs);
         match done.pixels {
-            Ok(pixels) if current == Some(done.key) => self.hq = Some(Hq { key: done.key, pixels, region: done.region }),
+            Ok(pixels) if current == Some(done.key) => {
+                self.hq = Some(Hq {
+                    key: done.key,
+                    pixels,
+                    region: done.region,
+                })
+            }
             Ok(_) => {}
             Err(why) => {
                 tracing::warn!(error = %why, "[Zoom: Render] A zoomed picture could not be made");
@@ -533,7 +626,8 @@ impl ZoomState {
         let frame = self.frame()?;
         let visible = frame.visible(self.shown)?;
         if self.animation.is_none()
-            && let (Some(hq), Some(key), Some(placement)) = (&self.hq, self.key_for(self.shown, prefs), frame.placement(self.shown))
+            && let (Some(hq), Some(key), Some(placement)) =
+                (&self.hq, self.key_for(self.shown, prefs), frame.placement(self.shown))
             && hq.key == key
             && contains(hq.region, placement.window)
         {
@@ -543,7 +637,13 @@ impl ZoomState {
                 w: placement.window.w,
                 h: placement.window.h,
             };
-            return Some(Picture { dest: placement.dest(), content: PictureContent::Rendered { pixels: hq.pixels.clone(), clip } });
+            return Some(Picture {
+                dest: placement.dest(),
+                content: PictureContent::Rendered {
+                    pixels: hq.pixels.clone(),
+                    clip,
+                },
+            });
         }
         let (dw, dh) = display_size?;
         let fx = f64::from(dw) / f64::from(self.image.0);
@@ -552,7 +652,17 @@ impl ZoomState {
         let y = (visible.src.y * fy).floor().clamp(0.0, f64::from(dh - 1));
         let w = ((visible.src.right() * fx).ceil() - x).clamp(1.0, f64::from(dw) - x);
         let h = ((visible.src.bottom() * fy).ceil() - y).clamp(1.0, f64::from(dh) - y);
-        Some(Picture { dest: visible.dest, content: PictureContent::Preview { clip: IRect { x: x as i32, y: y as i32, w: w as i32, h: h as i32 } } })
+        Some(Picture {
+            dest: visible.dest,
+            content: PictureContent::Preview {
+                clip: IRect {
+                    x: x as i32,
+                    y: y as i32,
+                    w: w as i32,
+                    h: h as i32,
+                },
+            },
+        })
     }
 
     /// The visible part of the image as shares of it (the rectangle of the minimap).
@@ -567,9 +677,9 @@ impl ZoomState {
         self.minimap.pinned
             || zoomed_in
                 && (prefs.minimap_always
-                || self.minimap.hover
-                || self.minimap.drag.is_some()
-                || self.minimap.reveal_until.is_some_and(|until| now < until))
+                    || self.minimap.hover
+                    || self.minimap.drag.is_some()
+                    || self.minimap.reveal_until.is_some_and(|until| now < until))
     }
 
     /// When the minimap will go away if nothing happens (so the owner knows to look again then).

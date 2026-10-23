@@ -38,10 +38,7 @@ fn adopt(session: &Session) -> Result<TabId, String> {
     if !session.populated {
         return Err("the Multiview is still opening".to_string());
     }
-    let tab_manager = session
-        .handle
-        .tab_manager()
-        .ok_or("no tab manager is bound")?;
+    let tab_manager = session.handle.tab_manager().ok_or("no tab manager is bound")?;
     session.instance.lock().set_origin(OriginKind::Tab);
     park_below_main_window(session)?;
     Ok(tab_manager.adopt_multiview_in_background(session.instance.clone()))
@@ -50,17 +47,13 @@ fn adopt(session: &Session) -> Result<TabId, String> {
 /// Moves the video windows of the session's instance below the main window (hidden and paused), so the fullscreen window can
 /// go away without taking them along.
 pub(super) fn park_below_main_window(session: &Session) -> Result<(), String> {
-    let tab_manager = session
-        .handle
-        .tab_manager()
-        .ok_or("no tab manager is bound")?;
+    let tab_manager = session.handle.tab_manager().ok_or("no tab manager is bound")?;
     let main_window = session
         .handle
         .main_window()
         .and_then(|weak| weak.upgrade())
         .ok_or("the main window is gone")?;
-    let main_xid =
-        get_slint_window_xid(main_window.window()).ok_or("the main window has no native handle")?;
+    let main_xid = get_slint_window_xid(main_window.window()).ok_or("the main window has no native handle")?;
     let (x, y, width, height) = tab_manager.get_viewport_rect();
     session
         .instance

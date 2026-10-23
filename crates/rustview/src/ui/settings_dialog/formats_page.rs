@@ -4,10 +4,10 @@
 //! dialog is saved. The numbers of indexed files per format are read from the library on a worker thread when the page
 //! is opened (database only, never the drive).
 
-use rustview_core::media::{FormatMask, MediaFormat, MediaType, UNSUPPORTED_FORMATS, catalog};
 use crate::ui::models::format_count_with_locale;
 use crate::ui::{FormatRowView, SettingsWindow, UnsupportedFormatView};
 use parking_lot::Mutex;
+use rustview_core::media::{FormatMask, MediaFormat, MediaType, UNSUPPORTED_FORMATS, catalog};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -176,7 +176,12 @@ impl PageRows {
         let (video_on, video_total) = Self::totals(MediaType::Video, mask);
 
         let hidden_files: u64 = counts
-            .map(|c| mask.disabled_formats().iter().map(|f| c.get(f).copied().unwrap_or(0)).sum())
+            .map(|c| {
+                mask.disabled_formats()
+                    .iter()
+                    .map(|f| c.get(f).copied().unwrap_or(0))
+                    .sum()
+            })
             .unwrap_or(0);
         let hidden_notice = match hidden_files {
             0 => String::new(),
@@ -189,7 +194,11 @@ impl PageRows {
             videos,
             image_summary: format!("{image_on} of {image_total} on"),
             video_summary: format!("{video_on} of {video_total} on"),
-            intro: format!("{} of {} formats are on.", image_on + video_on, image_total + video_total),
+            intro: format!(
+                "{} of {} formats are on.",
+                image_on + video_on,
+                image_total + video_total
+            ),
             hidden_notice,
         }
     }
@@ -218,13 +227,20 @@ impl PageRows {
                     name: spec.name.into(),
                     long_name: spec.long_name.into(),
                     extensions: ModelRc::new(VecModel::from(
-                        spec.extensions.iter().map(|e| SharedString::from(*e)).collect::<Vec<_>>(),
+                        spec.extensions
+                            .iter()
+                            .map(|e| SharedString::from(*e))
+                            .collect::<Vec<_>>(),
                     )),
                     decoder: spec.decoder.label().into(),
                     note: spec.note.into(),
                     count_text: count_text.into(),
                     count_is_hidden: !enabled && indexed > 0,
-                    group_title: if entry.starts_group { spec.group.title().into() } else { SharedString::new() },
+                    group_title: if entry.starts_group {
+                        spec.group.title().into()
+                    } else {
+                        SharedString::new()
+                    },
                     enabled,
                 }
             })

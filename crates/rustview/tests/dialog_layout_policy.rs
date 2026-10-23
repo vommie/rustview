@@ -20,8 +20,16 @@ fn dialogs() -> Vec<(String, String)> {
         .unwrap()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().ends_with("_dialog.slint")))
-        .map(|p| (p.file_name().unwrap().to_string_lossy().to_string(), fs::read_to_string(p).unwrap_or_default()))
+        .filter(|p| {
+            p.file_name()
+                .is_some_and(|n| n.to_string_lossy().ends_with("_dialog.slint"))
+        })
+        .map(|p| {
+            (
+                p.file_name().unwrap().to_string_lossy().to_string(),
+                fs::read_to_string(p).unwrap_or_default(),
+            )
+        })
         .filter(|(_, text)| text.contains("inherits Window"))
         .collect();
     found.sort();
@@ -49,15 +57,23 @@ fn dialog_windows_have_a_fixed_width_and_a_content_driven_height() {
     for (name, text) in dialogs() {
         let props = window_properties(&text);
         let has = |key: &str| props.iter().any(|l| l.trim_start().starts_with(key));
-        if !props.iter().any(|l| l.trim_start().starts_with("width:") && l.trim_end().ends_with("px;")) {
+        if !props
+            .iter()
+            .any(|l| l.trim_start().starts_with("width:") && l.trim_end().ends_with("px;"))
+        {
             problems.push(format!("{name}: the window needs a fixed `width: <n>px;`"));
         }
         for forbidden in ["max-height:", "height:", "min-width:", "preferred-width:"] {
             if has(forbidden) {
-                problems.push(format!("{name}: the window must not set `{forbidden}` (the height follows the content, the width is fixed)"));
+                problems.push(format!(
+                    "{name}: the window must not set `{forbidden}` (the height follows the content, the width is fixed)"
+                ));
             }
         }
-        for required in ["preferred-height: dialog-layout.preferred-height;", "min-height: dialog-layout.preferred-height;"] {
+        for required in [
+            "preferred-height: dialog-layout.preferred-height;",
+            "min-height: dialog-layout.preferred-height;",
+        ] {
             if !props.iter().any(|l| l.trim() == required) {
                 problems.push(format!("{name}: the window needs `{required}`"));
             }
@@ -66,7 +82,11 @@ fn dialog_windows_have_a_fixed_width_and_a_content_driven_height() {
             problems.push(format!("{name}: the outer layout must be named `dialog-layout`"));
         }
     }
-    assert!(problems.is_empty(), "dialog windows break the layout rule:\n{}", problems.join("\n"));
+    assert!(
+        problems.is_empty(),
+        "dialog windows break the layout rule:\n{}",
+        problems.join("\n")
+    );
 }
 
 #[test]
@@ -75,8 +95,14 @@ fn dialog_containers_get_the_window_width() {
     for (name, text) in dialogs() {
         let count = text.matches("width: root.width;").count();
         if count < 2 {
-            problems.push(format!("{name}: the outer and the content layout need `width: root.width;` (found {count})"));
+            problems.push(format!(
+                "{name}: the outer and the content layout need `width: root.width;` (found {count})"
+            ));
         }
     }
-    assert!(problems.is_empty(), "wrapped text is measured wrongly without it:\n{}", problems.join("\n"));
+    assert!(
+        problems.is_empty(),
+        "wrapped text is measured wrongly without it:\n{}",
+        problems.join("\n")
+    );
 }

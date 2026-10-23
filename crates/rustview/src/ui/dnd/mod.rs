@@ -1,28 +1,25 @@
+use crate::system::SystemDndHandler;
+use crate::system::fs_access::can_write_directory;
+use crate::ui::MainWindow;
+use crate::ui::browse_folders::{BrowseDragScroller, BrowseFolders};
 use crate::ui::file_dialogs::conflict::FileOpsConflictDialogController;
 use crate::ui::file_dialogs::missing::MissingFileDialogController;
-use crate::ui::selection::BridgeFileSelection;
-use crate::ui::browse_folders::{BrowseDragScroller, BrowseFolders};
-use crate::ui::multiview::MultiviewHandle;
-use crate::ui::media::inspector::BridgeInspector;
-use crate::ui::media::BridgeMedia;
-use crate::ui::state::UiState;
-use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tags::BridgeTags;
 use crate::ui::folder_tree::dnd_autoscroller::{
     DndFolderTreeAutoScroller, FOLDER_TREE_ROW_HEIGHT_PX, FOLDER_TREE_TOP_OFFSET_PX,
 };
-use crate::ui::MainWindow;
-use rustview_core::library::models::{
-    BatchMoveSummary, FileTransferKind, FolderId,
-    MediaId,
-};
+use crate::ui::media::BridgeMedia;
+use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::multiview::MultiviewHandle;
+use crate::ui::selection::BridgeFileSelection;
+use crate::ui::state::UiState;
+use crate::ui::status_bar::StatusBarBridge;
+use crate::ui::tags::BridgeTags;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
+use rustview_core::library::models::{BatchMoveSummary, FileTransferKind, FolderId, MediaId};
 use rustview_core::media::MediaType;
 use rustview_core::settings::{LogObscurer, SettingsManager};
-use crate::system::fs_access::can_write_directory;
-use crate::system::SystemDndHandler;
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::{ComponentHandle, Image, Model};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -30,7 +27,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 mod batch_transfer;
-use batch_transfer::{BatchTransferRunner};
+use batch_transfer::BatchTransferRunner;
 
 pub struct DragStartParams<'a> {
     pub media_id: MediaId,
@@ -61,7 +58,11 @@ pub struct BridgeDnd;
 impl BridgeDnd {
     /// Why files must not be dropped into a folder right now, if so. The scan check is memory only (it also keeps the drop target from
     /// lighting up); `target` adds what a drop needs from the drive: the folder is there and the user may write to it.
-    pub fn transfer_block_reason(window: &MainWindow, state: &RwLock<UiState>, target: Option<(&str, &Path)>) -> Option<String> {
+    pub fn transfer_block_reason(
+        window: &MainWindow,
+        state: &RwLock<UiState>,
+        target: Option<(&str, &Path)>,
+    ) -> Option<String> {
         if BridgeMedia::is_scan_running(window, state) {
             return Some("Cannot move or copy files while a scan or refresh is running.".to_string());
         }
@@ -214,7 +215,11 @@ impl BridgeDnd {
             let tree_container_h = window.get_folder_tree_container_height();
             let tree_bottom_y = FOLDER_TREE_TOP_OFFSET_PX + tree_container_h;
 
-            if current_x >= 0.0 && current_x <= sidebar_w && current_y >= FOLDER_TREE_TOP_OFFSET_PX && current_y <= tree_bottom_y {
+            if current_x >= 0.0
+                && current_x <= sidebar_w
+                && current_y >= FOLDER_TREE_TOP_OFFSET_PX
+                && current_y <= tree_bottom_y
+            {
                 let local_y = current_y - FOLDER_TREE_TOP_OFFSET_PX - scroll_y;
                 let row_idx = (local_y / FOLDER_TREE_ROW_HEIGHT_PX).floor() as i32;
                 let folders = window.get_folders();
@@ -304,7 +309,9 @@ impl BridgeDnd {
             && let Ok(Some(target_folder_rec)) = library.folders().get_folder(target_folder_id as FolderId)
         {
             let target_name = target_folder_rec.name.clone();
-            if let Some(reason) = Self::transfer_block_reason(window, state, Some((&target_name, Path::new(&target_folder_rec.path)))) {
+            if let Some(reason) =
+                Self::transfer_block_reason(window, state, Some((&target_name, Path::new(&target_folder_rec.path))))
+            {
                 tracing::info!(target = %LogObscurer::folder(Some(target_folder_id as FolderId), Path::new(&target_folder_rec.path)), %reason, "[MediaDrag: Blocked] Drop refused");
                 StatusBarBridge::warn(window, reason);
                 return;
@@ -328,7 +335,8 @@ impl BridgeDnd {
             // While a scan runs no folder is a drop target (nothing lights up); a release over the folder tree or a folder row of the
             // Browse view still gets an answer instead of being taken for a drop onto another application.
             if BridgeMedia::is_scan_running(window, state) {
-                let over_tree = window.get_active_sidebar_panel_tab().as_str() == "folders" && release_x <= window.get_sidebar_left_width();
+                let over_tree = window.get_active_sidebar_panel_tab().as_str() == "folders"
+                    && release_x <= window.get_sidebar_left_width();
                 let over_folder_row = window.invoke_drag_row_id_at(release_x, release_y) != 0;
                 if over_tree || over_folder_row {
                     StatusBarBridge::warn(window, "Cannot move or copy files while a scan or refresh is running.");
@@ -354,7 +362,11 @@ impl BridgeDnd {
         let target_folder_path = PathBuf::from(&target_folder_rec.path);
         let target_folder_name = target_folder_rec.name.clone();
         // The popup can stay open while a scan starts or the folder changes: the check is made again before anything moves.
-        if let Some(reason) = Self::transfer_block_reason(params.window, params.state, Some((&target_folder_name, &target_folder_path))) {
+        if let Some(reason) = Self::transfer_block_reason(
+            params.window,
+            params.state,
+            Some((&target_folder_name, &target_folder_path)),
+        ) {
             StatusBarBridge::warn(params.window, reason);
             return;
         }

@@ -1,11 +1,11 @@
-use crate::ui::models::{format_bytes_with_locale, format_filesize};
 use crate::ui::MainWindow;
-use crate::ui::state::UiState;
 use crate::ui::browse_folders::{FolderStamp, stamp_labels};
+use crate::ui::models::{format_bytes_with_locale, format_filesize};
 use crate::ui::selection::model::FileSelectionSummary;
+use crate::ui::state::UiState;
+use parking_lot::RwLock;
 use rustview_core::media::MediaHasher;
 use rustview_core::query::filters::IndexedMediaRecord;
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -97,15 +97,28 @@ impl BridgeInspector {
                 return;
             };
             // The date of a selected folder is in the cache from its tile; a drive read only fills a gap (one folder, user action).
-            let stamp = st.folder_times.peek(node.id).unwrap_or_else(|| FolderStamp::read(&node.path));
+            let stamp = st
+                .folder_times
+                .peek(node.id)
+                .unwrap_or_else(|| FolderStamp::read(&node.path));
             let (modified, created) = stamp_labels(Some(stamp));
-            let dash = |text: slint::SharedString| if text.is_empty() { slint::SharedString::from("-") } else { text };
+            let dash = |text: slint::SharedString| {
+                if text.is_empty() {
+                    slint::SharedString::from("-")
+                } else {
+                    text
+                }
+            };
 
             Self::set_labels(window, "Contents:", "Modified:", "Created:", "Type:", "Folder");
             window.set_info_filename(node.name.as_str().into());
             window.set_info_filename_tooltip(node.path.to_string_lossy().to_string().into());
             window.set_info_path_label("Path:".into());
-            let parent = node.path.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "-".to_string());
+            let parent = node
+                .path
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "-".to_string());
             window.set_info_path(parent.clone().into());
             window.set_info_path_tooltip(parent.into());
             window.set_info_size(
@@ -117,11 +130,19 @@ impl BridgeInspector {
                 .into(),
             );
             window.set_info_size_tooltip(
-                format!("{} in total, subfolders included", Self::plural(node.recursive_media_count as usize, "file", "files")).into(),
+                format!(
+                    "{} in total, subfolders included",
+                    Self::plural(node.recursive_media_count as usize, "file", "files")
+                )
+                .into(),
             );
             window.set_info_dimensions(dash(modified));
             window.set_info_format(dash(created));
-            let kind = if node.is_deleted { "Folder (missing on disk)" } else { "Folder" };
+            let kind = if node.is_deleted {
+                "Folder (missing on disk)"
+            } else {
+                "Folder"
+            };
             window.set_info_hash(kind.into());
             window.set_info_hash_tooltip(node.path.to_string_lossy().to_string().into());
             window.set_info_selection_count(1);
@@ -131,16 +152,31 @@ impl BridgeInspector {
         // Several items, folders among them.
         let title = match (folder_count, file_count) {
             (folders, 0) => format!("{} selected", Self::plural(folders, "folder", "folders")),
-            (folders, files) => format!("{}, {} selected", Self::plural(folders, "folder", "folders"), Self::plural(files, "file", "files")),
+            (folders, files) => format!(
+                "{}, {} selected",
+                Self::plural(folders, "folder", "folders"),
+                Self::plural(files, "file", "files")
+            ),
         };
         let size_label = if file_count > 0 { "Size:" } else { "Contents:" };
-        Self::set_labels(window, size_label, "Dimensions:", "Format:", "Details:", &title.replace(" selected", ""));
+        Self::set_labels(
+            window,
+            size_label,
+            "Dimensions:",
+            "Format:",
+            "Details:",
+            &title.replace(" selected", ""),
+        );
         window.set_info_selection_count((folder_count + file_count) as i32);
         window.set_info_filename(title.clone().into());
         window.set_info_filename_tooltip(title.into());
 
         window.set_info_path_label("Path:".into());
-        let here = st.current_folder_path.as_deref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "-".to_string());
+        let here = st
+            .current_folder_path
+            .as_deref()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "-".to_string());
         window.set_info_path(here.clone().into());
         window.set_info_path_tooltip(here.into());
 
@@ -153,9 +189,16 @@ impl BridgeInspector {
             let (subfolders, files) = ids
                 .iter()
                 .filter_map(|&id| snapshot.and_then(|s| s.get_node(id)))
-                .fold((0usize, 0usize), |(sub, media), node| (sub + node.subfolder_count as usize, media + node.media_count as usize));
+                .fold((0usize, 0usize), |(sub, media), node| {
+                    (sub + node.subfolder_count as usize, media + node.media_count as usize)
+                });
             window.set_info_size(
-                format!("{}, {}", Self::plural(subfolders, "subfolder", "subfolders"), Self::plural(files, "file", "files")).into(),
+                format!(
+                    "{}, {}",
+                    Self::plural(subfolders, "subfolder", "subfolders"),
+                    Self::plural(files, "file", "files")
+                )
+                .into(),
             );
             window.set_info_size_tooltip("The contents of the selected folders".into());
         }
@@ -271,17 +314,17 @@ impl BridgeInspector {
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| parent.to_string_lossy().to_string());
 
-            let entry = folder_counts.entry(parent.to_path_buf()).or_insert((folder_name, 0, is_root));
+            let entry = folder_counts
+                .entry(parent.to_path_buf())
+                .or_insert((folder_name, 0, is_root));
             entry.1 += 1;
         }
 
         let mut sorted_folders: Vec<(String, usize, bool)> = folder_counts.into_values().collect();
-        sorted_folders.sort_by(|a, b| {
-            match (a.2, b.2) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => a.0.to_lowercase().cmp(&b.0.to_lowercase()),
-            }
+        sorted_folders.sort_by(|a, b| match (a.2, b.2) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.0.to_lowercase().cmp(&b.0.to_lowercase()),
         });
 
         let subfolders_str = if sorted_folders.is_empty() {
@@ -325,10 +368,7 @@ impl BridgeInspector {
         window.set_info_format(format_str.into());
 
         let detail_str = if summary.rated_count > 0 {
-            format!(
-                "Avg Rating: {:.1} ({} rated)",
-                summary.avg_rating, summary.rated_count
-            )
+            format!("Avg Rating: {:.1} ({} rated)", summary.avg_rating, summary.rated_count)
         } else {
             "- (Multi-selection)".to_string()
         };

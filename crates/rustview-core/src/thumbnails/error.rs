@@ -24,11 +24,7 @@ pub enum ThumbnailError {
     PackNotFound(u32),
 
     #[error("Out of bounds in pack {pack_id} at offset {offset} with length {length}")]
-    PackOutOfBounds {
-        pack_id: u32,
-        offset: u64,
-        length: u32,
-    },
+    PackOutOfBounds { pack_id: u32, offset: u64, length: u32 },
 
     #[error("Database engine error: {0}")]
     Heed(#[from] heed::Error),

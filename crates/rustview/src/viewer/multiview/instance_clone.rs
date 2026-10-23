@@ -7,10 +7,10 @@
 
 use super::follow::{self, DuplicateRefusal, TileKey};
 use super::instance::MultiviewInstance;
-use super::tile::TileSeed;
-use rustview_core::settings::schema::MULTIVIEW_MAX_TILES;
-use crate::ui::button_feedback::FeedbackKind;
 use super::media_actions::MediaActionId;
+use super::tile::TileSeed;
+use crate::ui::button_feedback::FeedbackKind;
+use rustview_core::settings::schema::MULTIVIEW_MAX_TILES;
 
 impl MultiviewInstance {
     /// What a duplicate of tile `index` starts from. A sticky tile has a sticky duplicate (it is meant to stay while the

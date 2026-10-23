@@ -41,7 +41,10 @@ pub fn needs_confirmation(count: usize, limit: u32) -> bool {
 }
 
 pub fn message(kind: OpenKind, count: usize) -> String {
-    format!("You are about to {} at once. Do you want to continue?", kind.action(count))
+    format!(
+        "You are about to {} at once. Do you want to continue?",
+        kind.action(count)
+    )
 }
 
 pub const HINT: &str = "You can change this limit in Settings > General > Confirmations.";

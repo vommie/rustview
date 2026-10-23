@@ -2,8 +2,7 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::folders::FolderManager;
 use super::models::{
-    FileConflictItemDetails, FileConflictReport, FileTransferKind, FolderId, FolderRecord,
-    MediaId, MediaRecord,
+    FileConflictItemDetails, FileConflictReport, FileTransferKind, FolderId, FolderRecord, MediaId, MediaRecord,
 };
 use super::refresh_media_files::MediaItemRefresher;
 use super::schema::SEQ_MEDIA_ID;
@@ -63,7 +62,11 @@ struct RenamePaths {
 /// would leave it dangling in the new folder). The file the link points to is never touched.
 fn move_symlink(src: &Path, dst: &Path) -> std::io::Result<()> {
     let target = std::fs::read_link(src)?;
-    let absolute = if target.is_absolute() { target } else { src.parent().unwrap_or(Path::new("/")).join(target) };
+    let absolute = if target.is_absolute() {
+        target
+    } else {
+        src.parent().unwrap_or(Path::new("/")).join(target)
+    };
     std::os::unix::fs::symlink(&absolute, dst)?;
     if let Err(e) = std::fs::remove_file(src) {
         let _ = std::fs::remove_file(dst);
@@ -75,7 +78,10 @@ fn move_symlink(src: &Path, dst: &Path) -> std::io::Result<()> {
 pub fn robust_move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
     if std::fs::symlink_metadata(src).is_ok_and(|m| m.file_type().is_symlink()) {
         if dst.exists() || std::fs::symlink_metadata(dst).is_ok() {
-            return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "the destination exists already"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "the destination exists already",
+            ));
         }
         return move_symlink(src, dst);
     }
@@ -143,11 +149,7 @@ impl<'a> FileOperations<'a> {
     }
 
     #[inline]
-    pub fn rename_media(
-        &self,
-        media_id: MediaId,
-        new_filename: &str,
-    ) -> Result<MediaRecord, LibraryError> {
+    pub fn rename_media(&self, media_id: MediaId, new_filename: &str) -> Result<MediaRecord, LibraryError> {
         self.rename_media_with_overwrite(media_id, new_filename, false)
     }
 
@@ -185,11 +187,7 @@ impl<'a> FileOperations<'a> {
         }
 
         if overwrite_existing && paths.new_path.exists() {
-            let mut target_media_ids = self
-                .db
-                .media_by_folder
-                .get(&wtxn, &folder.id)?
-                .unwrap_or_default();
+            let mut target_media_ids = self.db.media_by_folder.get(&wtxn, &folder.id)?.unwrap_or_default();
 
             let mut overwritten_id_opt = None;
             for &t_id in &target_media_ids {
@@ -203,7 +201,8 @@ impl<'a> FileOperations<'a> {
             }
 
             if let Some((old_dst_id, old_hash)) = overwritten_id_opt {
-                self.db.update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
+                self.db
+                    .update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
                 self.db.media.delete(&mut wtxn, &old_dst_id)?;
                 self.db.thumbnails.delete(&mut wtxn, &old_dst_id)?;
                 self.db.video_previews.delete(&mut wtxn, &old_dst_id)?;
@@ -296,11 +295,7 @@ impl<'a> FileOperations<'a> {
             return Ok(None);
         }
 
-        let target_media_ids = self
-            .db
-            .media_by_folder
-            .get(&rtxn, &folder.id)?
-            .unwrap_or_default();
+        let target_media_ids = self.db.media_by_folder.get(&rtxn, &folder.id)?.unwrap_or_default();
 
         let mut existing_target_media_id = None;
         for &t_id in &target_media_ids {
@@ -329,14 +324,8 @@ impl<'a> FileOperations<'a> {
 
     pub fn generate_unique_filename(target_folder_path: &Path, original_name: &str) -> String {
         let path = Path::new(original_name);
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or(original_name);
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(original_name);
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         let mut counter = 1u32;
         loop {
@@ -473,7 +462,9 @@ impl<'a> FileOperations<'a> {
         let src_path = Path::new(&source_folder.path).join(&source_record.filename);
         let dst_path = Path::new(&target_folder.path).join(&source_record.filename);
 
-        if transfer_kind == FileTransferKind::Move && (source_record.folder_id == target_folder_id || is_same_file_path(&src_path, &dst_path)) {
+        if transfer_kind == FileTransferKind::Move
+            && (source_record.folder_id == target_folder_id || is_same_file_path(&src_path, &dst_path))
+        {
             return Ok(None);
         }
 
@@ -598,14 +589,17 @@ impl<'a> FileOperations<'a> {
             }
 
             if let Some((old_dst_id, old_hash)) = overwritten_id_opt {
-                self.db.update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
+                self.db
+                    .update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
                 self.db.media.delete(&mut wtxn, &old_dst_id)?;
                 self.db.thumbnails.delete(&mut wtxn, &old_dst_id)?;
                 self.db.video_previews.delete(&mut wtxn, &old_dst_id)?;
                 self.db.tags_by_media.delete(&mut wtxn, &old_dst_id)?;
 
                 target_media_ids.retain(|&id| id != old_dst_id);
-                self.db.media_by_folder.put(&mut wtxn, &target_folder_id, &target_media_ids)?;
+                self.db
+                    .media_by_folder
+                    .put(&mut wtxn, &target_folder_id, &target_media_ids)?;
 
                 // Overwritten file in target folder is removed
                 FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, target_folder_id, -1)?;
@@ -748,7 +742,8 @@ impl<'a> FileOperations<'a> {
             }
 
             if let Some((old_dst_id, old_hash)) = overwritten_id_opt {
-                self.db.update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
+                self.db
+                    .update_media_hash_index(&mut wtxn, old_dst_id, Some(&old_hash), None)?;
                 self.db.media.delete(&mut wtxn, &old_dst_id)?;
                 self.db.thumbnails.delete(&mut wtxn, &old_dst_id)?;
                 self.db.video_previews.delete(&mut wtxn, &old_dst_id)?;
@@ -781,11 +776,14 @@ impl<'a> FileOperations<'a> {
         };
 
         self.db.media.put(&mut wtxn, &new_media_id, &new_record)?;
-        self.db.update_media_hash_index(&mut wtxn, new_media_id, None, Some(&new_record.file_hash))?;
+        self.db
+            .update_media_hash_index(&mut wtxn, new_media_id, None, Some(&new_record.file_hash))?;
 
         if !target_media_ids.contains(&new_media_id) {
             target_media_ids.push(new_media_id);
-            self.db.media_by_folder.put(&mut wtxn, &target_folder_id, &target_media_ids)?;
+            self.db
+                .media_by_folder
+                .put(&mut wtxn, &target_folder_id, &target_media_ids)?;
         }
 
         if let Some(source_tags) = self.db.tags_by_media.get(&wtxn, &media_id)? {
@@ -834,7 +832,8 @@ impl<'a> FileOperations<'a> {
 
         for &mid in media_ids {
             if let Some(rec) = self.db.media.get(&wtxn, &mid)? {
-                self.db.update_media_hash_index(&mut wtxn, mid, Some(&rec.file_hash), None)?;
+                self.db
+                    .update_media_hash_index(&mut wtxn, mid, Some(&rec.file_hash), None)?;
                 self.db.media.delete(&mut wtxn, &mid)?;
                 self.db.thumbnails.delete(&mut wtxn, &mid)?;
                 self.db.video_previews.delete(&mut wtxn, &mid)?;
@@ -869,7 +868,10 @@ impl<'a> FileOperations<'a> {
         }
 
         wtxn.commit()?;
-        tracing::info!(purged_count, "[FileOperations: PurgeMedia] Purged media records and adjusted folder rollups in LMDB");
+        tracing::info!(
+            purged_count,
+            "[FileOperations: PurgeMedia] Purged media records and adjusted folder rollups in LMDB"
+        );
         Ok(purged_count)
     }
 

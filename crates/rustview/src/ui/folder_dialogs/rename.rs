@@ -4,10 +4,10 @@ use crate::ui::media::BridgeMedia;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::{MainWindow, RenameFolderDialog};
+use parking_lot::RwLock;
 use rustview_core::library::folder_operations::FolderOperations;
 use rustview_core::library::models::FolderId;
 use rustview_core::query::FolderDir;
-use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -25,13 +25,7 @@ impl RenameFolderDialogController {
     }
 
     /// Displays the Rename Folder modal dialog with pre-populated name and real-time conflict checking.
-    pub fn show(
-        &self,
-        window: &MainWindow,
-        folder_id: FolderId,
-        current_name: &str,
-        ctx: FolderDialogContext,
-    ) {
+    pub fn show(&self, window: &MainWindow, folder_id: FolderId, current_name: &str, ctx: FolderDialogContext) {
         window.set_is_context_menu_open(false);
         self.ensure_dialog_instantiated();
 
@@ -61,18 +55,8 @@ impl RenameFolderDialogController {
     }
 
     /// Executes atomic folder renaming on disk and updates LMDB path indices recursively.
-    pub fn execute(
-        &self,
-        folder_id: FolderId,
-        new_name: &str,
-        ctx: &FolderDialogContext,
-        window: &MainWindow,
-    ) {
-        match ctx
-            .library
-            .folder_operations()
-            .rename_folder(folder_id, new_name)
-        {
+    pub fn execute(&self, folder_id: FolderId, new_name: &str, ctx: &FolderDialogContext, window: &MainWindow) {
+        match ctx.library.folder_operations().rename_folder(folder_id, new_name) {
             Ok(updated) => {
                 let is_active = self.update_in_memory_state(folder_id, &updated.path, &ctx.state);
 
@@ -145,7 +129,9 @@ impl RenameFolderDialogController {
 
                         w.set_has_conflict(true);
                         w.set_suggested_name(suggestion.into());
-                        w.set_conflict_message(format!("Folder '{}' already exists in parent directory.", folder_name).into());
+                        w.set_conflict_message(
+                            format!("Folder '{}' already exists in parent directory.", folder_name).into(),
+                        );
                         w.set_error_message("".into());
                     }
                     Ok(None) => {
@@ -207,12 +193,7 @@ impl RenameFolderDialogController {
         win.set_error_message("".into());
     }
 
-    fn update_in_memory_state(
-        &self,
-        folder_id: FolderId,
-        new_path_str: &str,
-        state: &RwLock<UiState>,
-    ) -> bool {
+    fn update_in_memory_state(&self, folder_id: FolderId, new_path_str: &str, state: &RwLock<UiState>) -> bool {
         let is_active = state.read().current_folder_id == Some(folder_id);
         let new_path = PathBuf::from(new_path_str);
         let mut st = state.write();

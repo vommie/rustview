@@ -27,7 +27,10 @@ pub fn hint(e: &RegenerationEligibility) -> String {
     let base = if e.videos == 1 {
         "Regenerate the thumbnail at a new random video position".to_string()
     } else {
-        format!("Regenerate the thumbnails of {} videos at new random video positions", e.videos)
+        format!(
+            "Regenerate the thumbnails of {} videos at new random video positions",
+            e.videos
+        )
     };
     match e.skipped() {
         0 => base,
@@ -53,7 +56,10 @@ pub fn start_message(total: usize) -> String {
     if total == 1 {
         "Regenerating thumbnail at a random video position...".to_string()
     } else {
-        format!("Regenerating thumbnails at random video positions for {} videos...", total)
+        format!(
+            "Regenerating thumbnails at random video positions for {} videos...",
+            total
+        )
     }
 }
 
@@ -87,7 +93,10 @@ pub fn result_message(s: &RegenerationSummary) -> String {
         return success_message(s);
     }
     if s.succeeded == 0 && s.total == 1 {
-        return format!("Could not regenerate thumbnail for {}. The previous thumbnail was kept.", failure_hint);
+        return format!(
+            "Could not regenerate thumbnail for {}. The previous thumbnail was kept.",
+            failure_hint
+        );
     }
     if s.succeeded == 0 {
         return format!(
@@ -108,10 +117,16 @@ pub fn result_message(s: &RegenerationSummary) -> String {
 fn success_message(s: &RegenerationSummary) -> String {
     match (&s.first_success, s.total) {
         (Some((name, Some(pct))), 1) => {
-            format!("Regenerated thumbnail at {}% for '{}' in {}ms.", pct, name, s.elapsed_ms)
+            format!(
+                "Regenerated thumbnail at {}% for '{}' in {}ms.",
+                pct, name, s.elapsed_ms
+            )
         }
         (Some((name, None)), 1) => format!("Regenerated thumbnail for '{}' in {}ms.", name, s.elapsed_ms),
-        _ => format!("Regenerated {} thumbnails at random positions in {}ms.", s.succeeded, s.elapsed_ms),
+        _ => format!(
+            "Regenerated {} thumbnails at random positions in {}ms.",
+            s.succeeded, s.elapsed_ms
+        ),
     }
 }
 
@@ -139,20 +154,31 @@ mod tests {
 
     #[test]
     fn hint_names_the_random_position_for_single_and_multiple_videos() {
-        assert_eq!(hint(&e(1, 1)), "Regenerate the thumbnail at a new random video position");
-        assert_eq!(hint(&e(4, 4)), "Regenerate the thumbnails of 4 videos at new random video positions");
+        assert_eq!(
+            hint(&e(1, 1)),
+            "Regenerate the thumbnail at a new random video position"
+        );
+        assert_eq!(
+            hint(&e(4, 4)),
+            "Regenerate the thumbnails of 4 videos at new random video positions"
+        );
     }
 
     #[test]
     fn hint_mentions_skipped_files_of_mixed_selections() {
         assert!(hint(&e(2, 1)).ends_with("(1 other selected file is skipped)"));
-        assert!(hint(&e(5, 2)).contains("2 videos") && hint(&e(5, 2)).ends_with("(3 other selected files are skipped)"));
+        assert!(
+            hint(&e(5, 2)).contains("2 videos") && hint(&e(5, 2)).ends_with("(3 other selected files are skipped)")
+        );
     }
 
     #[test]
     fn start_message_is_singular_or_plural() {
         assert_eq!(start_message(1), "Regenerating thumbnail at a random video position...");
-        assert_eq!(start_message(5), "Regenerating thumbnails at random video positions for 5 videos...");
+        assert_eq!(
+            start_message(5),
+            "Regenerating thumbnails at random video positions for 5 videos..."
+        );
     }
 
     fn summary(total: usize, succeeded: usize) -> RegenerationSummary {
@@ -167,8 +193,14 @@ mod tests {
 
     #[test]
     fn result_message_reports_full_success() {
-        assert_eq!(result_message(&summary(1, 1)), "Regenerated thumbnail at 42% for 'a.mp4' in 12ms.");
-        assert_eq!(result_message(&summary(3, 3)), "Regenerated 3 thumbnails at random positions in 12ms.");
+        assert_eq!(
+            result_message(&summary(1, 1)),
+            "Regenerated thumbnail at 42% for 'a.mp4' in 12ms."
+        );
+        assert_eq!(
+            result_message(&summary(3, 3)),
+            "Regenerated 3 thumbnails at random positions in 12ms."
+        );
     }
 
     #[test]

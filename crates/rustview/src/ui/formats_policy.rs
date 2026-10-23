@@ -2,19 +2,19 @@
 //! open list are built again without (or with) the records of the formats that changed. Reads only the library, never
 //! the drive: files of a newly switched-on format that were never indexed appear with the next refresh.
 
+use crate::ui::MainWindow;
 use crate::ui::folder_tree::BridgeFolders;
-use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::BridgeMedia;
+use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::{BridgeTags, TagActionContext};
-use crate::ui::MainWindow;
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
 use rustview_core::library::{FormatCountReport, Library};
 use rustview_core::media::{FormatMask, MediaFormat};
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::sync::Arc;
 
@@ -33,7 +33,14 @@ pub struct FormatPolicyApplier;
 impl FormatPolicyApplier {
     /// `old` and `new` are the policy before and after the Settings were saved (the process-wide policy already is `new`).
     pub fn apply(ctx: &FormatPolicyContext<'_>, old: FormatMask, new: FormatMask) {
-        let FormatPolicyContext { window, library, thumbnails, tab_manager, settings, state } = *ctx;
+        let FormatPolicyContext {
+            window,
+            library,
+            thumbnails,
+            tab_manager,
+            settings,
+            state,
+        } = *ctx;
         let changes = old.changes_to(new);
         tracing::info!(
             switched_on = changes.iter().filter(|(_, on)| *on).count(),
@@ -42,8 +49,13 @@ impl FormatPolicyApplier {
         );
 
         let weak = window.as_weak();
-        let (library, thumbnails, tab_manager, settings, state) =
-            (library.clone(), thumbnails.clone(), tab_manager.clone(), settings.clone(), state.clone());
+        let (library, thumbnails, tab_manager, settings, state) = (
+            library.clone(),
+            thumbnails.clone(),
+            tab_manager.clone(),
+            settings.clone(),
+            state.clone(),
+        );
         let spawned = std::thread::Builder::new().name("format-policy".into()).spawn(move || {
             let report = library.folder_format_counts().apply_change(old, new).unwrap_or_else(|e| {
                 tracing::error!(error = %e, "[FormatPolicy: Counts] Could not adjust the folder counts; a tree refresh corrects them");
@@ -83,7 +95,14 @@ impl FormatPolicyApplier {
             (st.is_query_active, st.current_folder_id.is_some())
         };
         if is_query {
-            BridgeTags::execute_query_flow(&TagActionContext { window, library, thumbnails, tab_manager, settings, state });
+            BridgeTags::execute_query_flow(&TagActionContext {
+                window,
+                library,
+                thumbnails,
+                tab_manager,
+                settings,
+                state,
+            });
         } else if has_folder {
             BridgeMedia::reload(window, library, thumbnails, settings, state, true, true);
         }
@@ -92,7 +111,11 @@ impl FormatPolicyApplier {
     /// The status line after a change: what is hidden now, and that new files of a switched-on format need a refresh.
     pub fn summary(changes: &[(MediaFormat, bool)], report: FormatCountReport) -> String {
         let named = |on: bool| -> String {
-            let names: Vec<&str> = changes.iter().filter(|(_, enabled)| *enabled == on).map(|(f, _)| f.display_name()).collect();
+            let names: Vec<&str> = changes
+                .iter()
+                .filter(|(_, enabled)| *enabled == on)
+                .map(|(f, _)| f.display_name())
+                .collect();
             match names.len() {
                 0 => String::new(),
                 1..=3 => names.join(", "),
@@ -110,7 +133,14 @@ impl FormatPolicyApplier {
         }
         let on = named(true);
         if !on.is_empty() {
-            parts.push(format!("Switched on: {on}. Files of {} that were not indexed yet appear after the next refresh.", if changes.iter().filter(|(_, e)| *e).count() == 1 { "this format" } else { "these formats" }));
+            parts.push(format!(
+                "Switched on: {on}. Files of {} that were not indexed yet appear after the next refresh.",
+                if changes.iter().filter(|(_, e)| *e).count() == 1 {
+                    "this format"
+                } else {
+                    "these formats"
+                }
+            ));
         }
         format!("File formats: {}", parts.join(". "))
     }

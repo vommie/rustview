@@ -150,18 +150,13 @@ impl FolderHierarchySnapshot {
 
     #[inline]
     pub fn get_children(&self, parent_id: Option<FolderId>) -> &[FolderId] {
-        self.children_map
-            .get(&parent_id)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+        self.children_map.get(&parent_id).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     #[inline]
     pub fn get_by_path(&self, path: &Path) -> Option<&CachedFolderNode> {
         let canonical = crate::library::folders::normalize_path(path);
-        self.path_index
-            .get(&canonical)
-            .and_then(|id| self.nodes.get(id))
+        self.path_index.get(&canonical).and_then(|id| self.nodes.get(id))
     }
 
     /// Verifies if `candidate` is equal to or a transitive descendant of `ancestor`.

@@ -48,11 +48,7 @@ pub struct MigrationStats {
 }
 
 impl MigrationStats {
-    pub fn new(
-        source_path: &str,
-        skip_missing_enabled: bool,
-        root_filter: Option<&str>,
-    ) -> Self {
+    pub fn new(source_path: &str, skip_missing_enabled: bool, root_filter: Option<&str>) -> Self {
         let size = std::fs::metadata(source_path).map(|m| m.len()).unwrap_or(0);
         Self {
             source_path: source_path.to_string(),
@@ -123,10 +119,7 @@ impl MigrationStats {
             );
         }
         if self.skipped_folders_missing > 0 {
-            println!(
-                "    └─ Missing Folder Skipped : {:>7}",
-                self.skipped_folders_missing
-            );
+            println!("    └─ Missing Folder Skipped : {:>7}", self.skipped_folders_missing);
         }
         println!(
             "  • XnView Images Entries     : {:>7} extracted | {:>6} skipped | {:>7} migrated (IDs 1..={})",
@@ -140,10 +133,7 @@ impl MigrationStats {
             self.total_media
         );
         if self.skipped_media_outside_root > 0 {
-            println!(
-                "    ├─ Outside Root Skipped   : {:>7}",
-                self.skipped_media_outside_root
-            );
+            println!("    ├─ Outside Root Skipped   : {:>7}", self.skipped_media_outside_root);
         }
         println!(
             "    ├─ Subfolders in Images   : {:>7} (directory entries from XnView browser)",
@@ -161,10 +151,7 @@ impl MigrationStats {
                 );
             }
             if self.skipped_media_missing_file > 0 {
-                println!(
-                    "    └─ Missing File Skipped   : {:>7}",
-                    self.skipped_media_missing_file
-                );
+                println!("    └─ Missing File Skipped   : {:>7}", self.skipped_media_missing_file);
             }
         }
         println!(
@@ -176,9 +163,7 @@ impl MigrationStats {
         );
         println!(
             "  • Tag Associations          : {:>7} extracted | {:>6} skipped | {:>7} migrated",
-            self.extracted_tag_assignments,
-            self.skipped_tag_assignments_orphaned,
-            self.total_tag_assignments
+            self.extracted_tag_assignments, self.skipped_tag_assignments_orphaned, self.total_tag_assignments
         );
         println!(
             "  • Dedicated External Hashes : {:>7} extracted | {:>6} skipped | {:>7} migrated{}",
@@ -193,18 +178,12 @@ impl MigrationStats {
         );
         println!("--------------------------------------------------------------------------------");
         println!("CHECKSUM & HASH RESOLUTION:");
-        println!(
-            "  • Resolved from Hashes Table: {:>8}",
-            self.resolved_hashes_from_table
-        );
+        println!("  • Resolved from Hashes Table: {:>8}", self.resolved_hashes_from_table);
         println!(
             "  • Computed Live from Files  : {:>8}",
             self.resolved_hashes_computed_live
         );
-        println!(
-            "  • Seeded Fallback Checksums : {:>8}",
-            self.fallback_hashes_generated
-        );
+        println!("  • Seeded Fallback Checksums : {:>8}", self.fallback_hashes_generated);
         println!("--------------------------------------------------------------------------------");
         println!("PERFORMANCE & EXECUTION METRICS:");
         println!("  • Extraction Phase (SQLite) : {:>7} ms", self.read_time_ms);

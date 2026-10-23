@@ -1,20 +1,20 @@
 //! Registering the context menu handlers of every kind of menu.
 
-pub use crate::ui::context_menu::presenter::CtxMenuPresenter;
-use crate::ui::state::*;
-use crate::ui::context_menu::browse::{BrowseContextMenus, BrowseMenuContext};
-use crate::ui::browse_folders::{BrowseFolders, FolderRowRef};
-use crate::ui::favorites::manager::FavoriteManager;
+use super::calculate_all_active_menu_cutouts;
+use super::{BridgeContextMenu, FolderMenuContext, MediaMenuContext};
 use crate::ui::MainWindow;
+use crate::ui::browse_folders::{BrowseFolders, FolderRowRef};
+use crate::ui::context_menu::browse::{BrowseContextMenus, BrowseMenuContext};
+pub use crate::ui::context_menu::presenter::CtxMenuPresenter;
+use crate::ui::favorites::manager::FavoriteManager;
+use crate::ui::state::*;
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::sync::Arc;
-use super::{BridgeContextMenu, FolderMenuContext, MediaMenuContext};
-use super::calculate_all_active_menu_cutouts;
 
 impl BridgeContextMenu {
     pub(super) fn register_media_menu(
@@ -44,7 +44,13 @@ impl BridgeContextMenu {
             };
             if in_mixed_selection {
                 BrowseContextMenus::show_selection_menu(
-                    BrowseMenuContext { window: &win_sel, library: &lib_sel, thumbnails: &th_sel, tab_manager: &tm_sel, state: &st },
+                    BrowseMenuContext {
+                        window: &win_sel,
+                        library: &lib_sel,
+                        thumbnails: &th_sel,
+                        tab_manager: &tm_sel,
+                        state: &st,
+                    },
                     x,
                     y,
                 );
@@ -86,7 +92,12 @@ impl BridgeContextMenu {
         );
         // A folder row of the Browse view opens exactly the menu of the same folder in the tree ("..." has none); a row inside a
         // selection of several items opens the menu of that selection.
-        let (win_ctx, lib_ctx, th_ctx, tm_ctx) = (window.clone_strong(), library.clone(), thumbnails.clone(), tab_manager.clone());
+        let (win_ctx, lib_ctx, th_ctx, tm_ctx) = (
+            window.clone_strong(),
+            library.clone(),
+            thumbnails.clone(),
+            tab_manager.clone(),
+        );
         window.on_folder_row_context_menu(move |id, x, y| {
             let Some(FolderRowRef::Folder(folder_id)) = FolderRowRef::from_view_id(id) else {
                 return;
@@ -94,7 +105,13 @@ impl BridgeContextMenu {
             BrowseFolders::select_row_for_menu(FolderRowRef::Folder(folder_id), &win_row, &lib_row, &st_row);
             if BrowseContextMenus::is_mixed_selection(&st_row.read()) {
                 BrowseContextMenus::show_selection_menu(
-                    BrowseMenuContext { window: &win_ctx, library: &lib_ctx, thumbnails: &th_ctx, tab_manager: &tm_ctx, state: &st_row },
+                    BrowseMenuContext {
+                        window: &win_ctx,
+                        library: &lib_ctx,
+                        thumbnails: &th_ctx,
+                        tab_manager: &tm_ctx,
+                        state: &st_row,
+                    },
                     x,
                     y,
                 );
@@ -116,10 +133,22 @@ impl BridgeContextMenu {
             );
         });
 
-        let (win_bg, lib_bg, th_bg, tm_bg, st_bg) = (window.clone_strong(), library.clone(), thumbnails.clone(), tab_manager.clone(), state.clone());
+        let (win_bg, lib_bg, th_bg, tm_bg, st_bg) = (
+            window.clone_strong(),
+            library.clone(),
+            thumbnails.clone(),
+            tab_manager.clone(),
+            state.clone(),
+        );
         window.on_browse_background_context_menu(move |x, y| {
             BrowseContextMenus::show_background_menu(
-                BrowseMenuContext { window: &win_bg, library: &lib_bg, thumbnails: &th_bg, tab_manager: &tm_bg, state: &st_bg },
+                BrowseMenuContext {
+                    window: &win_bg,
+                    library: &lib_bg,
+                    thumbnails: &th_bg,
+                    tab_manager: &tm_bg,
+                    state: &st_bg,
+                },
                 x,
                 y,
             );
@@ -175,15 +204,7 @@ impl BridgeContextMenu {
         let tm = tab_manager.clone();
         let st = state.clone();
         window.on_favorite_context_menu(move |path_str, alias_str, x, y| {
-            Self::show_favorite_menu(
-                &win,
-                &tm,
-                &st,
-                path_str.as_str(),
-                alias_str.as_str(),
-                x,
-                y,
-            );
+            Self::show_favorite_menu(&win, &tm, &st, path_str.as_str(), alias_str.as_str(), x, y);
         });
     }
 

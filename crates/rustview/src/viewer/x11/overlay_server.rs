@@ -20,7 +20,10 @@ pub struct OverlayServer {
 
 impl OverlayServer {
     pub fn new() -> Result<Self, ViewerError> {
-        Ok(Self { session: Session::open("the overlay server")?, cursor_hidden: AtomicBool::new(false) })
+        Ok(Self {
+            session: Session::open("the overlay server")?,
+            cursor_hidden: AtomicBool::new(false),
+        })
     }
 
     fn window(xid: u64) -> Option<Window> {
@@ -43,7 +46,13 @@ impl OverlayServer {
 
     /// The color depth of a window (32 = it has an alpha channel).
     pub fn window_depth(&self, window: u64) -> Option<u32> {
-        let geometry = self.session.conn.get_geometry(Self::window(window)?).ok()?.reply().ok()?;
+        let geometry = self
+            .session
+            .conn
+            .get_geometry(Self::window(window)?)
+            .ok()?
+            .reply()
+            .ok()?;
         Some(u32::from(geometry.depth))
     }
 
@@ -56,15 +65,18 @@ impl OverlayServer {
             .ok()?
             .reply()
             .ok()?;
-        reply.same_screen.then_some((i32::from(reply.dst_x), i32::from(reply.dst_y)))
+        reply
+            .same_screen
+            .then_some((i32::from(reply.dst_x), i32::from(reply.dst_y)))
     }
 
     /// The pointer in screen coordinates and whether a mouse button is held down (one round trip, `QueryPointer`).
     pub fn pointer_and_buttons(&self) -> Option<((i32, i32), bool)> {
         let reply = self.session.conn.query_pointer(self.session.root).ok()?.reply().ok()?;
-        reply
-            .same_screen
-            .then_some(((i32::from(reply.root_x), i32::from(reply.root_y)), u16::from(reply.mask) & BUTTONS != 0))
+        reply.same_screen.then_some((
+            (i32::from(reply.root_x), i32::from(reply.root_y)),
+            u16::from(reply.mask) & BUTTONS != 0,
+        ))
     }
 
     /// The top level window (a child of the root window) that is in front at the pointer, or `None` if the pointer is on
@@ -79,13 +91,22 @@ impl OverlayServer {
     /// `pointer_and_buttons`: under XWayland this has no effect.
     pub fn warp_pointer(&self, x: i32, y: i32) {
         let to = |value: i32| i16::try_from(value).unwrap_or(if value < 0 { i16::MIN } else { i16::MAX });
-        let _ = self.session.conn.warp_pointer(x11rb::NONE, self.session.root, 0, 0, 0, 0, to(x), to(y));
+        let _ = self
+            .session
+            .conn
+            .warp_pointer(x11rb::NONE, self.session.root, 0, 0, 0, 0, to(x), to(y));
         self.session.sync();
     }
 
     /// The size of a window.
     pub fn window_size(&self, window: u64) -> Option<(i32, i32)> {
-        let geometry = self.session.conn.get_geometry(Self::window(window)?).ok()?.reply().ok()?;
+        let geometry = self
+            .session
+            .conn
+            .get_geometry(Self::window(window)?)
+            .ok()?
+            .reply()
+            .ok()?;
         Some((i32::from(geometry.width), i32::from(geometry.height)))
     }
 
@@ -144,7 +165,10 @@ impl OverlayServer {
     /// Puts the window on top of the stack of its siblings (the screen's top level windows).
     pub fn raise(&self, window: u64) {
         if let Some(window) = Self::window(window) {
-            let _ = self.session.conn.configure_window(window, &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE));
+            let _ = self
+                .session
+                .conn
+                .configure_window(window, &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE));
             self.session.flush();
         }
     }
@@ -164,7 +188,15 @@ impl OverlayServer {
         let conn = &self.session.conn;
         match rects {
             Some(rects) => {
-                let _ = conn.shape_rectangles(shape::SO::SET, kind, ClipOrdering::UNSORTED, window, 0, 0, &protocol_rectangles(rects));
+                let _ = conn.shape_rectangles(
+                    shape::SO::SET,
+                    kind,
+                    ClipOrdering::UNSORTED,
+                    window,
+                    0,
+                    0,
+                    &protocol_rectangles(rects),
+                );
             }
             None => {
                 let _ = conn.shape_mask(shape::SO::SET, kind, window, 0, 0, x11rb::NONE);

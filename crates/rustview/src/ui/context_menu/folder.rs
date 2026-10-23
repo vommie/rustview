@@ -1,15 +1,15 @@
-use crate::ui::folder_tree::projection::FolderProjection;
+use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
+use crate::icons::Icon;
+use crate::system::SystemFileHandler;
 use crate::ui::MainWindow;
 use crate::ui::folder_dialogs::{FolderDialogContext, FolderDialogController};
 use crate::ui::folder_tree::BridgeFolders;
+use crate::ui::folder_tree::projection::FolderProjection;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::*;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
-use crate::icons::Icon;
 use rustview_core::library::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use rustview_core::settings::LogObscurer;
-use crate::system::SystemFileHandler;
 use std::path::{Path, PathBuf};
 
 /// Reason appended to the tooltip of refresh entries while another scan or refresh holds the busy lock.
@@ -43,7 +43,11 @@ impl FolderContextMenu {
         let (header_title, _) = CtxMenuBuilder::format_header_title(prefix, &target_node.name, max_chars);
         let header_tooltip = format!(
             "{}{}",
-            if target_node.is_deleted { "Missing Folder: " } else { "Folder: " },
+            if target_node.is_deleted {
+                "Missing Folder: "
+            } else {
+                "Folder: "
+            },
             target_node.path.display()
         );
 
@@ -87,7 +91,10 @@ impl FolderContextMenu {
                 None,
                 Some(Icon::FolderPlus),
                 false,
-                format!("Create a new folder (or a path of folders) in this folder\n{}", DISABLED_BUSY_REASON),
+                format!(
+                    "Create a new folder (or a path of folders) in this folder\n{}",
+                    DISABLED_BUSY_REASON
+                ),
             )
         } else {
             builder.action_with_tooltip(
@@ -120,11 +127,7 @@ impl FolderContextMenu {
                 )
             };
 
-            let move_submenu = Self::build_reparent_submenu(
-                target_node.id,
-                snapshot,
-                show_hidden_folders,
-            );
+            let move_submenu = Self::build_reparent_submenu(target_node.id, snapshot, show_hidden_folders);
             builder = builder.item(move_submenu);
         }
 
@@ -137,9 +140,15 @@ impl FolderContextMenu {
         let can_favorite = !is_favorite && !target_node.is_deleted;
         let favorite_description = "Bookmark this folder in the Favorites sidebar";
         let favorite_tip = if is_favorite {
-            format!("{}\nDisabled: Folder is already added to Favorites", favorite_description)
+            format!(
+                "{}\nDisabled: Folder is already added to Favorites",
+                favorite_description
+            )
         } else if target_node.is_deleted {
-            format!("{}\nDisabled: Cannot add a missing or deleted folder to Favorites", favorite_description)
+            format!(
+                "{}\nDisabled: Cannot add a missing or deleted folder to Favorites",
+                favorite_description
+            )
         } else {
             favorite_description.to_string()
         };
@@ -286,13 +295,7 @@ impl FolderContextMenu {
         }
 
         if action_id == CTX_FOLDER_REFRESH_TREE_FULL {
-            BridgeFolders::refresh_folder_tree(
-                window,
-                &ctx.library,
-                &ctx.thumbnails,
-                &ctx.settings,
-                &ctx.state,
-            );
+            BridgeFolders::refresh_folder_tree(window, &ctx.library, &ctx.thumbnails, &ctx.settings, &ctx.state);
             return;
         }
 
@@ -314,10 +317,7 @@ impl FolderContextMenu {
                     );
                     StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
                 } else {
-                    StatusBarBridge::success(
-                        window,
-                        format!("Opened folder '{}' in File Manager.", name),
-                    );
+                    StatusBarBridge::success(window, format!("Opened folder '{}' in File Manager.", name));
                 }
             } else if action_id == CTX_FOLDER_REFRESH || action_id == CTX_FOLDER_REFRESH_FILES_FULL {
                 BridgeFolders::refresh_folder_explicit(

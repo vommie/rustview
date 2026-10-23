@@ -1,8 +1,8 @@
 use super::error::SystemHandlerError;
-use rustview_core::settings::LogObscurer;
 use arboard::{Clipboard, ImageData};
 use image::ImageEncoder;
 use parking_lot::Mutex;
+use rustview_core::settings::LogObscurer;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::Write;
@@ -11,8 +11,7 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::time::Instant;
 
-static PERSISTENT_CLIPBOARD: LazyLock<Mutex<Option<Clipboard>>> =
-    LazyLock::new(|| Mutex::new(Clipboard::new().ok()));
+static PERSISTENT_CLIPBOARD: LazyLock<Mutex<Option<Clipboard>>> = LazyLock::new(|| Mutex::new(Clipboard::new().ok()));
 
 /// Detailed benchmark metrics recorded during image clipboard operations.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -103,11 +102,7 @@ impl SystemClipboard {
         if names.is_empty() {
             return Ok(0);
         }
-        let joined = names
-            .iter()
-            .map(|n| n.as_ref())
-            .collect::<Vec<_>>()
-            .join("\n");
+        let joined = names.iter().map(|n| n.as_ref()).collect::<Vec<_>>().join("\n");
         Self::set_text(&joined)?;
         Ok(names.len())
     }
@@ -142,9 +137,7 @@ impl SystemClipboard {
 
     /// Reads an image from disk and sets it in the system clipboard with full `image/png` X11/Wayland INCR streaming support.
     /// Handles arbitrary image dimensions without freezing KDE Plasma or Krita.
-    pub fn copy_image_from_path_sync(
-        path: &Path,
-    ) -> Result<(u32, u32, ClipboardImageMetrics), SystemHandlerError> {
+    pub fn copy_image_from_path_sync(path: &Path) -> Result<(u32, u32, ClipboardImageMetrics), SystemHandlerError> {
         let t_total = Instant::now();
         let mut metrics = ClipboardImageMetrics::default();
 
@@ -189,13 +182,7 @@ impl SystemClipboard {
                 image::codecs::png::CompressionType::Fast,
                 image::codecs::png::FilterType::NoFilter,
             );
-            ImageEncoder::write_image(
-                encoder,
-                &raw,
-                width,
-                height,
-                image::ExtendedColorType::Rgba8,
-            )?;
+            ImageEncoder::write_image(encoder, &raw, width, height, image::ExtendedColorType::Rgba8)?;
             temp_png
         };
         metrics.width = width;

@@ -1,24 +1,23 @@
 //! The step-by-step runner of a batch copy or move started by a drop (conflicts, progress, final report).
 
+use crate::ui::MainWindow;
 use crate::ui::file_dialogs::conflict::{ConflictDialogParams, FileOpsConflictDialogController};
 use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
 use crate::ui::folder_tree::BridgeFolders;
-use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::BridgeMedia;
+use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::BridgeTags;
-use crate::ui::MainWindow;
+use parking_lot::RwLock;
+use rustview_core::library::Library;
 use rustview_core::library::error::LibraryError;
 use rustview_core::library::file_operations::FileOperations;
 use rustview_core::library::models::{
-    BatchMoveSummary, FileConflictReport, FileConflictResolution, FileTransferKind, FolderId,
-    MediaId,
+    BatchMoveSummary, FileConflictReport, FileConflictResolution, FileTransferKind, FolderId, MediaId,
 };
-use rustview_core::library::Library;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::{ComponentHandle, Timer};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -112,18 +111,16 @@ impl BatchTransferRunner {
             }
             Ok(None) => {
                 let exec_res = match self.transfer_kind {
-                    FileTransferKind::Move => self.library.file_operations().move_single_media(
-                        media_id,
-                        self.target_folder_id,
-                        None,
-                        false,
-                    ),
-                    FileTransferKind::Copy => self.library.file_operations().copy_single_media(
-                        media_id,
-                        self.target_folder_id,
-                        None,
-                        false,
-                    ),
+                    FileTransferKind::Move => {
+                        self.library
+                            .file_operations()
+                            .move_single_media(media_id, self.target_folder_id, None, false)
+                    }
+                    FileTransferKind::Copy => {
+                        self.library
+                            .file_operations()
+                            .copy_single_media(media_id, self.target_folder_id, None, false)
+                    }
                 };
 
                 match exec_res {
@@ -144,7 +141,11 @@ impl BatchTransferRunner {
                         let missing_path = self.resolve_media_path(media_id);
                         self.missing_dialog.show(
                             &self.window,
-                            if self.transfer_kind == FileTransferKind::Move { "Move File" } else { "Copy File" },
+                            if self.transfer_kind == FileTransferKind::Move {
+                                "Move File"
+                            } else {
+                                "Copy File"
+                            },
                             vec![MissingFileItem {
                                 filename: format!("Media #{}", media_id),
                                 path: missing_path,
@@ -188,10 +189,8 @@ impl BatchTransferRunner {
                 Timer::single_shot(std::time::Duration::from_millis(1), move || self.step());
             }
             FileConflictResolution::AutoRename => {
-                let auto_name = FileOperations::generate_unique_filename(
-                    &self.target_folder_path,
-                    &conflict.source.filename,
-                );
+                let auto_name =
+                    FileOperations::generate_unique_filename(&self.target_folder_path, &conflict.source.filename);
                 let exec_res = match self.transfer_kind {
                     FileTransferKind::Move => self.library.file_operations().move_single_media(
                         media_id,
@@ -225,18 +224,16 @@ impl BatchTransferRunner {
             }
             FileConflictResolution::Overwrite => {
                 let exec_res = match self.transfer_kind {
-                    FileTransferKind::Move => self.library.file_operations().move_single_media(
-                        media_id,
-                        self.target_folder_id,
-                        None,
-                        true,
-                    ),
-                    FileTransferKind::Copy => self.library.file_operations().copy_single_media(
-                        media_id,
-                        self.target_folder_id,
-                        None,
-                        true,
-                    ),
+                    FileTransferKind::Move => {
+                        self.library
+                            .file_operations()
+                            .move_single_media(media_id, self.target_folder_id, None, true)
+                    }
+                    FileTransferKind::Copy => {
+                        self.library
+                            .file_operations()
+                            .copy_single_media(media_id, self.target_folder_id, None, true)
+                    }
                 };
 
                 match exec_res {
@@ -302,7 +299,11 @@ impl BatchTransferRunner {
         BridgeInspector::update(&self.window, &self.state);
         BridgeTags::sync_tag_selection(&self.window, &self.library, &self.state);
 
-        let verb_past = if self.transfer_kind == FileTransferKind::Move { "Moved" } else { "Copied" };
+        let verb_past = if self.transfer_kind == FileTransferKind::Move {
+            "Moved"
+        } else {
+            "Copied"
+        };
 
         let mut details = Vec::new();
         if self.summary.auto_renamed_count > 0 {
@@ -315,7 +316,11 @@ impl BatchTransferRunner {
             details.push(format!("{} skipped", self.summary.skipped_count));
         }
         if self.summary.failed_count > 0 {
-            let reason = self.first_failure.as_deref().map(|r| format!(": {r}")).unwrap_or_default();
+            let reason = self
+                .first_failure
+                .as_deref()
+                .map(|r| format!(": {r}"))
+                .unwrap_or_default();
             details.push(format!("{} failed{reason}", self.summary.failed_count));
         }
 

@@ -1,6 +1,6 @@
 use crate::icons::Icon;
-use rustview_core::query::filters::{MediaTypeFilter, QueryFilter};
 use rustview_core::query::ScopeMode;
+use rustview_core::query::filters::{MediaTypeFilter, QueryFilter};
 
 /// Context-sensitive fallback overlay state data model.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -77,15 +77,24 @@ impl FallbackViewEvaluator {
             let (title, description) = match media_type {
                 MediaTypeFilter::Videos => (
                     "No Matching Videos".to_string(),
-                    format!("No video files {} match the active tag and rating criteria.", scope_desc),
+                    format!(
+                        "No video files {} match the active tag and rating criteria.",
+                        scope_desc
+                    ),
                 ),
                 MediaTypeFilter::Images => (
                     "No Matching Images".to_string(),
-                    format!("No image files {} match the active tag and rating criteria.", scope_desc),
+                    format!(
+                        "No image files {} match the active tag and rating criteria.",
+                        scope_desc
+                    ),
                 ),
                 MediaTypeFilter::All => (
                     "No Query Results".to_string(),
-                    format!("No media files {} match the active tag and rating criteria.", scope_desc),
+                    format!(
+                        "No media files {} match the active tag and rating criteria.",
+                        scope_desc
+                    ),
                 ),
             };
 
@@ -127,7 +136,11 @@ impl FallbackViewEvaluator {
                 is_active: true,
                 title,
                 description,
-                icon: Some(if params.filter.is_regex { Icon::Regex } else { Icon::Search }),
+                icon: Some(if params.filter.is_regex {
+                    Icon::Regex
+                } else {
+                    Icon::Search
+                }),
             };
         }
 

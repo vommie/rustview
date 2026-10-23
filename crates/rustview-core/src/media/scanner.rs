@@ -65,7 +65,11 @@ impl IgnoredFiles {
         };
         if !unsupported.is_empty() {
             let total: u32 = unsupported.iter().map(|(_, n)| n).sum();
-            let listed: Vec<String> = unsupported.iter().take(3).map(|(ext, n)| format!("{n} .{ext}")).collect();
+            let listed: Vec<String> = unsupported
+                .iter()
+                .take(3)
+                .map(|(ext, n)| format!("{n} .{ext}"))
+                .collect();
             let more = if unsupported.len() > 3 { ", ..." } else { "" };
             parts.push(format!("{total} not supported ({}{more})", listed.join(", ")));
         }
@@ -73,12 +77,22 @@ impl IgnoredFiles {
         if disabled > 0 {
             let mut names: Vec<(&&str, &u32)> = self.disabled.iter().collect();
             names.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-            let listed: Vec<String> = names.iter().take(3).map(|(id, n)| format!("{n} {}", id.to_uppercase())).collect();
+            let listed: Vec<String> = names
+                .iter()
+                .take(3)
+                .map(|(id, n)| format!("{n} {}", id.to_uppercase()))
+                .collect();
             let more = if names.len() > 3 { ", ..." } else { "" };
-            parts.push(format!("{disabled} of switched-off formats ({}{more})", listed.join(", ")));
+            parts.push(format!(
+                "{disabled} of switched-off formats ({}{more})",
+                listed.join(", ")
+            ));
         }
         if self.header_mismatch > 0 {
-            parts.push(format!("{} whose content does not match their extension", self.header_mismatch));
+            parts.push(format!(
+                "{} whose content does not match their extension",
+                self.header_mismatch
+            ));
         }
         (!parts.is_empty()).then(|| format!("Skipped: {}.", parts.join("; ")))
     }

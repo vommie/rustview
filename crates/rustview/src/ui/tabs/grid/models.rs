@@ -1,5 +1,5 @@
-use rustview_core::library::models::MediaId;
 use crate::viewer::{MediaTabSession, TabId};
+use rustview_core::library::models::MediaId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// High-level layout item for an individual tab inside the TabGridView.
@@ -28,7 +28,12 @@ impl TabGridTile {
     /// Aspect ratio of the content area of a tab: its medium, or the virtual display of a Multiview.
     pub fn aspect_of(tab: &MediaTabSession) -> f32 {
         let (width, height) = tab.display_size();
-        let is_video = tab.multiview.instance.lock().solo_tile().is_some_and(|(_, kind, _)| kind == crate::viewer::multiview::model::TileKind::Video);
+        let is_video = tab
+            .multiview
+            .instance
+            .lock()
+            .solo_tile()
+            .is_some_and(|(_, kind, _)| kind == crate::viewer::multiview::model::TileKind::Video);
         Self::compute_aspect_ratio(width, height, is_video)
     }
 

@@ -17,10 +17,7 @@ impl FileSelectionModel {
 
     /// Computes the symmetric difference of changed IDs between two selection states.
     #[inline]
-    pub fn compute_selection_diff(
-        prev: &HashSet<MediaId>,
-        current: &HashSet<MediaId>,
-    ) -> Vec<MediaId> {
+    pub fn compute_selection_diff(prev: &HashSet<MediaId>, current: &HashSet<MediaId>) -> Vec<MediaId> {
         let mut changed = Vec::new();
         for &id in prev {
             if !current.contains(&id) {
@@ -71,12 +68,7 @@ impl FileSelectionModel {
 
     /// Selects a contiguous range between the anchor and the target ID (Shift + Click / Shift + Arrow).
     /// If `additive` is true (Ctrl + Shift), existing selections outside the range are preserved.
-    pub fn select_range(
-        &mut self,
-        target_id: MediaId,
-        ordered_visible_ids: &[MediaId],
-        additive: bool,
-    ) {
+    pub fn select_range(&mut self, target_id: MediaId, ordered_visible_ids: &[MediaId], additive: bool) {
         if ordered_visible_ids.is_empty() {
             return;
         }
@@ -86,15 +78,9 @@ impl FileSelectionModel {
             self.anchor_id = Some(anchor);
         }
 
-        let anchor_idx = ordered_visible_ids
-            .iter()
-            .position(|&id| id == anchor)
-            .unwrap_or(0);
+        let anchor_idx = ordered_visible_ids.iter().position(|&id| id == anchor).unwrap_or(0);
 
-        let target_idx = ordered_visible_ids
-            .iter()
-            .position(|&id| id == target_id)
-            .unwrap_or(0);
+        let target_idx = ordered_visible_ids.iter().position(|&id| id == target_id).unwrap_or(0);
 
         let start = anchor_idx.min(target_idx);
         let end = anchor_idx.max(target_idx);

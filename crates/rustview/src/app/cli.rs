@@ -1,13 +1,18 @@
 //! The command line of the `rustview` binary (parsed with `clap`): no arguments start the application, `api ...` runs the headless
 //! API for other tools, `--migrate-xnview` runs the XnView MP database migration.
 
+use clap::{Parser, Subcommand};
 use rustview_core::cli_api::ApiSubcommand;
 use rustview_core::xnviewdb_migrate::MigrateOptions;
-use clap::{Parser, Subcommand};
 use std::ffi::OsString;
 
 #[derive(Debug, Parser)]
-#[command(name = "rustview", version, about = "RustView - a fast media browser for images and videos", args_conflicts_with_subcommands = true)]
+#[command(
+    name = "rustview",
+    version,
+    about = "RustView - a fast media browser for images and videos",
+    args_conflicts_with_subcommands = true
+)]
 pub struct Cli {
     #[command(flatten)]
     pub migrate: MigrateOptions,
@@ -62,22 +67,34 @@ mod tests {
 
     #[test]
     fn legacy_api_spellings_become_subcommands() {
-        assert_eq!(legacy_spellings(os(&["rustview", "--api", "tag-tree"])), os(&["rustview", "api", "tag-tree"]));
-        assert_eq!(legacy_spellings(os(&["rustview", "--api-get-media", "--path", "/a"])), os(&["rustview", "get-media", "--path", "/a"]));
+        assert_eq!(
+            legacy_spellings(os(&["rustview", "--api", "tag-tree"])),
+            os(&["rustview", "api", "tag-tree"])
+        );
+        assert_eq!(
+            legacy_spellings(os(&["rustview", "--api-get-media", "--path", "/a"])),
+            os(&["rustview", "get-media", "--path", "/a"])
+        );
         assert_eq!(legacy_spellings(os(&["rustview", "--yes"])), os(&["rustview", "--yes"]));
         assert_eq!(legacy_spellings(os(&["rustview"])), os(&["rustview"]));
     }
 
     #[test]
     fn the_api_commands_work_with_and_without_the_api_word() {
-        for args in [["rustview", "api", "get", "/a.jpg"], ["rustview", "get-media", "--path", "/a.jpg"]] {
+        for args in [
+            ["rustview", "api", "get", "/a.jpg"],
+            ["rustview", "get-media", "--path", "/a.jpg"],
+        ] {
             let cli = Cli::try_parse_from(args).expect("api command");
             let Some(Command::Api { command } | Command::Direct(command)) = cli.command else {
                 panic!("not an API command");
             };
             assert_eq!(
                 command.into_command().expect("valid command"),
-                ApiCommand::GetMedia { path: "/a.jpg".into(), json: false }
+                ApiCommand::GetMedia {
+                    path: "/a.jpg".into(),
+                    json: false
+                }
             );
         }
     }
@@ -92,19 +109,44 @@ mod tests {
 
     #[test]
     fn migration_options_keep_their_old_spellings() {
-        let cli = Cli::try_parse_from(["rustview", "-m", "/db/XnView.db", "--root=/pics", "--no-skip-missing", "--plain-logs", "--log-file", "/tmp/m.log", "--force"])
-            .expect("migration options");
-        assert_eq!(cli.migrate.xnview_db.as_deref(), Some(std::path::Path::new("/db/XnView.db")));
+        let cli = Cli::try_parse_from([
+            "rustview",
+            "-m",
+            "/db/XnView.db",
+            "--root=/pics",
+            "--no-skip-missing",
+            "--plain-logs",
+            "--log-file",
+            "/tmp/m.log",
+            "--force",
+        ])
+        .expect("migration options");
+        assert_eq!(
+            cli.migrate.xnview_db.as_deref(),
+            Some(std::path::Path::new("/db/XnView.db"))
+        );
         assert_eq!(cli.migrate.root.as_deref(), Some(std::path::Path::new("/pics")));
         assert!(cli.migrate.include_missing && cli.migrate.no_obfuscate_logs && cli.migrate.yes);
-        assert_eq!(cli.migrate.log_file.as_deref(), Some(std::path::Path::new("/tmp/m.log")));
+        assert_eq!(
+            cli.migrate.log_file.as_deref(),
+            Some(std::path::Path::new("/tmp/m.log"))
+        );
         // Options of the migration without the migration itself are refused.
         assert!(Cli::try_parse_from(["rustview", "--yes"]).is_err());
     }
 
     #[test]
     fn later_flags_win_like_before() {
-        let cli = Cli::try_parse_from(["rustview", "-m", "/db", "--include-missing", "--skip-missing", "--obfuscate-logs", "--plain-logs"]).expect("flags");
+        let cli = Cli::try_parse_from([
+            "rustview",
+            "-m",
+            "/db",
+            "--include-missing",
+            "--skip-missing",
+            "--obfuscate-logs",
+            "--plain-logs",
+        ])
+        .expect("flags");
         assert!(!cli.migrate.include_missing);
         assert!(!cli.migrate.obfuscate_logs && cli.migrate.no_obfuscate_logs);
     }

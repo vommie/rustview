@@ -58,13 +58,22 @@ struct GridLayout {
 impl GridLayout {
     /// The size the picture has on screen (after the rotation).
     fn display_size(&self) -> (u32, u32) {
-        if orientation::swaps_axes(self.rotation) { (self.height, self.width) } else { (self.width, self.height) }
+        if orientation::swaps_axes(self.rotation) {
+            (self.height, self.width)
+        } else {
+            (self.width, self.height)
+        }
     }
 
     fn validate(&self) -> Result<(), GridError> {
         let canvas = u64::from(self.coded_width) * u64::from(self.coded_height) * 3;
         if self.tiles.is_empty() || self.width == 0 || self.height == 0 || canvas == 0 || canvas > MAX_CANVAS_BYTES {
-            return Err(GridError::Invalid(format!("{} tiles, canvas {}x{}", self.tiles.len(), self.coded_width, self.coded_height)));
+            return Err(GridError::Invalid(format!(
+                "{} tiles, canvas {}x{}",
+                self.tiles.len(),
+                self.coded_width,
+                self.coded_height
+            )));
         }
         if self.crop_x + self.width > self.coded_width || self.crop_y + self.height > self.coded_height {
             return Err(GridError::Invalid("the picture reaches beyond the canvas".into()));
@@ -103,7 +112,11 @@ fn find_layout(ictx: &ffmpeg_next::format::context::Input) -> Option<GridLayout>
                 if stream.is_null() {
                     continue;
                 }
-                tiles.push(Placement { stream_index: (*stream).index as usize, x: offset.horizontal, y: offset.vertical });
+                tiles.push(Placement {
+                    stream_index: (*stream).index as usize,
+                    x: offset.horizontal,
+                    y: offset.vertical,
+                });
             }
 
             let mut rotation = 0;
@@ -127,7 +140,10 @@ fn find_layout(ictx: &ffmpeg_next::format::context::Input) -> Option<GridLayout>
                 tiles,
             };
             let area = u64::from(layout.width) * u64::from(layout.height);
-            if best.as_ref().is_none_or(|b| area > u64::from(b.width) * u64::from(b.height)) {
+            if best
+                .as_ref()
+                .is_none_or(|b| area > u64::from(b.width) * u64::from(b.height))
+            {
                 best = Some(layout);
             }
         }
@@ -146,7 +162,9 @@ pub fn display_size(path: &Path) -> Result<Option<(u32, u32)>, GridError> {
 pub fn decode(path: &Path) -> Result<Option<GridImage>, GridError> {
     super::metadata::ensure_ffmpeg_initialized();
     let mut ictx = ffmpeg_next::format::input(path)?;
-    let Some(layout) = find_layout(&ictx) else { return Ok(None) };
+    let Some(layout) = find_layout(&ictx) else {
+        return Ok(None);
+    };
     layout.validate()?;
 
     let mut canvas = filled_canvas(&layout);
@@ -157,7 +175,9 @@ pub fn decode(path: &Path) -> Result<Option<GridImage>, GridError> {
 
     let mut decoders = HashMap::new();
     for &index in placements.keys() {
-        let stream = ictx.stream(index).ok_or_else(|| GridError::Invalid(format!("tile stream {index} is missing")))?;
+        let stream = ictx
+            .stream(index)
+            .ok_or_else(|| GridError::Invalid(format!("tile stream {index} is missing")))?;
         let context = ffmpeg_next::codec::context::Context::from_parameters(stream.parameters())?;
         decoders.insert(index, context.decoder().video()?);
     }
@@ -165,7 +185,9 @@ pub fn decode(path: &Path) -> Result<Option<GridImage>, GridError> {
     let mut placed = 0usize;
     for (stream, packet) in ictx.packets() {
         let index = stream.index();
-        let Some(decoder) = decoders.get_mut(&index) else { continue };
+        let Some(decoder) = decoders.get_mut(&index) else {
+            continue;
+        };
         if decoder.send_packet(&packet).is_err() {
             continue;
         }
@@ -174,7 +196,11 @@ pub fn decode(path: &Path) -> Result<Option<GridImage>, GridError> {
         if decoder.receive_frame(&mut frame).is_ok()
             && let Some(rgb) = frame_to_rgb(&frame)
         {
-            let tile = RgbTile { data: &rgb, width: frame.width(), height: frame.height() };
+            let tile = RgbTile {
+                data: &rgb,
+                width: frame.width(),
+                height: frame.height(),
+            };
             for &(x, y) in &placements[&index] {
                 blit(&mut canvas, layout.coded_width, layout.coded_height, &tile, x, y);
             }
@@ -189,7 +215,14 @@ pub fn decode(path: &Path) -> Result<Option<GridImage>, GridError> {
         return Err(GridError::Invalid("no tile could be decoded".into()));
     }
 
-    let cropped = crop(&canvas, layout.coded_width, layout.crop_x, layout.crop_y, layout.width, layout.height);
+    let cropped = crop(
+        &canvas,
+        layout.coded_width,
+        layout.crop_x,
+        layout.crop_y,
+        layout.width,
+        layout.height,
+    );
     let (width, height, rgb) = rotate(cropped, layout.width, layout.height, layout.rotation);
     Ok(Some(GridImage { width, height, rgb }))
 }
@@ -259,7 +292,9 @@ fn crop(canvas: &[u8], canvas_w: u32, x: u32, y: u32, w: u32, h: u32) -> Vec<u8>
 
 /// Turns the picture clockwise by 0, 90, 180 or 270 degrees.
 fn rotate(rgb: Vec<u8>, width: u32, height: u32, clockwise_degrees: i32) -> (u32, u32, Vec<u8>) {
-    let Some(img) = image::RgbImage::from_raw(width, height, rgb) else { return (width, height, Vec::new()) };
+    let Some(img) = image::RgbImage::from_raw(width, height, rgb) else {
+        return (width, height, Vec::new());
+    };
     let turned = match clockwise_degrees.rem_euclid(360) {
         90 => image::imageops::rotate90(&img),
         180 => image::imageops::rotate180(&img),

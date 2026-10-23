@@ -1,17 +1,17 @@
 //! Instance behavior around the tiles: creating and starting them and decoding images.
 
 use super::audio::{self, TileAudio};
-use super::prefs;
 use super::events::{DecodedImage, PlayerEvent};
 use super::follow::TileKey;
 use super::image_decode;
 use super::instance::MultiviewInstance;
 use super::model::{AspectSource, TileKind, aspect_differs, aspect_from_size};
+use super::prefs;
 use super::teardown::teardown_videos;
 use super::tile;
+use crate::viewer::zoom::state::ZoomState;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::LogObscurer;
-use crate::viewer::zoom::state::ZoomState;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// Error texts can embed file paths; with log obfuscation active they are not written to the log.
@@ -100,14 +100,7 @@ impl MultiviewInstance {
             let tile = &self.tiles[index];
             (tile.media_id, tile.key, tile.path.clone())
         };
-        let created = tile::create_video(
-            &self.sink,
-            &self.me,
-            self.host.surface.parent_xid,
-            content,
-            key,
-            &path,
-        );
+        let created = tile::create_video(&self.sink, &self.me, self.host.surface.parent_xid, content, key, &path);
         match created {
             Ok(mut video) => {
                 video.player.set_background_color(self.effective_video_background());

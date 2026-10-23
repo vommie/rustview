@@ -1,7 +1,7 @@
+use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::folder_dialogs::FolderDialogContext;
 use crate::ui::media::BridgeMedia;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::{MainWindow, NewFolderDialog};
 use rustview_core::library::error::LibraryError;
 use rustview_core::library::folder_create::FolderPathPlanner;
@@ -37,11 +37,17 @@ impl NewFolderDialogController {
     pub fn show(&self, window: &MainWindow, parent_folder_id: FolderId, ctx: FolderDialogContext) {
         window.set_is_context_menu_open(false);
         if BridgeMedia::is_system_busy(window, &ctx.thumbnails, &ctx.state) {
-            StatusBarBridge::warn(window, "Cannot create a folder: another operation is already in progress.");
+            StatusBarBridge::warn(
+                window,
+                "Cannot create a folder: another operation is already in progress.",
+            );
             return;
         }
         let Some(parent) = ctx.library.folders().get_folder(parent_folder_id).ok().flatten() else {
-            StatusBarBridge::error(window, "Cannot create a folder: the parent folder is not in the library.");
+            StatusBarBridge::error(
+                window,
+                "Cannot create a folder: the parent folder is not in the library.",
+            );
             return;
         };
 
@@ -109,7 +115,13 @@ impl NewFolderDialogController {
         }
     }
 
-    fn bind_dialog_events(&self, win: &NewFolderDialog, window: &MainWindow, parent_folder_id: FolderId, ctx: FolderDialogContext) {
+    fn bind_dialog_events(
+        &self,
+        win: &NewFolderDialog,
+        window: &MainWindow,
+        parent_folder_id: FolderId,
+        ctx: FolderDialogContext,
+    ) {
         let win_weak = win.as_weak();
         win.on_text_edited(move |typed| {
             let Some(w) = win_weak.upgrade() else { return };

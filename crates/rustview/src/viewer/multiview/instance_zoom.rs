@@ -46,11 +46,14 @@ impl MultiviewInstance {
 
     /// `Some(slider open)` for a tile whose picture can be zoomed; this is what the zoom button of the bar looks at.
     pub(super) fn zoom_button_state(&self, index: usize) -> Option<bool> {
-        self.zoomable(index).then(|| self.zoom_slider.contains(&self.tiles[index].key))
+        self.zoomable(index)
+            .then(|| self.zoom_slider.contains(&self.tiles[index].key))
     }
 
     pub(super) fn toggle_zoom_slider(&mut self, index: usize) {
-        let Some(key) = self.tiles.get(index).map(|t| t.key) else { return };
+        let Some(key) = self.tiles.get(index).map(|t| t.key) else {
+            return;
+        };
         let open = !self.zoom_slider.contains(&key);
         if open {
             self.zoom_slider.push(key);
@@ -69,16 +72,24 @@ impl MultiviewInstance {
         }
         let prefs = zoom_prefs::current();
         let now = Instant::now();
-        let Some(zoom) = self.tiles[index].zoom.as_mut() else { return };
+        let Some(zoom) = self.tiles[index].zoom.as_mut() else {
+            return;
+        };
         match click {
             BarClick::ZoomTo(permille) => zoom.zoom_to(scale::from_permille(permille), None, &prefs, now),
             BarClick::ZoomPos(position) => {
                 // The handle: pulled to the snap points that are close (the track is `SLIDER_TRACK_PX` long), then a zoom.
                 let limits = prefs.limits();
-                let p = scale::snap_position(f64::from(position) / f64::from(BarClick::MAX_ZOOM_POS), SLIDER_TRACK_PX, limits);
+                let p = scale::snap_position(
+                    f64::from(position) / f64::from(BarClick::MAX_ZOOM_POS),
+                    SLIDER_TRACK_PX,
+                    limits,
+                );
                 zoom.zoom_to(scale::zoom_at(p, limits), None, &prefs, now);
             }
-            BarClick::ZoomStep { up, shift, ctrl } => zoom.zoom_step(up, scale::slider_wheel_step(shift, ctrl), None, &prefs, now),
+            BarClick::ZoomStep { up, shift, ctrl } => {
+                zoom.zoom_step(up, scale::slider_wheel_step(shift, ctrl), None, &prefs, now)
+            }
             BarClick::ZoomReset => zoom.reset(&prefs, now),
             BarClick::Action(_) | BarClick::MenuItem(_) => return,
         }
@@ -89,7 +100,11 @@ impl MultiviewInstance {
     /// What the slider bubble shows: the tile it belongs to and its numbers; `None` while it is closed (or its tile can no
     /// longer be zoomed).
     pub fn zoom_bubbles(&self) -> Vec<ZoomBubbleView> {
-        self.zoom_slider.iter().filter_map(|key| self.tile_index(*key)).filter_map(|index| self.bubble_for(index)).collect()
+        self.zoom_slider
+            .iter()
+            .filter_map(|key| self.tile_index(*key))
+            .filter_map(|index| self.bubble_for(index))
+            .collect()
     }
 
     /// The numbers a zoom slider of tile `index` shows (the slider of the bar and the one on the minimap are the same view).
@@ -105,7 +120,10 @@ impl MultiviewInstance {
             permille: scale::to_permille(zoom.zoom()),
             min_permille: scale::to_permille(limits.min),
             max_permille: scale::to_permille(limits.max),
-            snaps: scale::ticks(limits, SLIDER_TRACK_PX).into_iter().map(|t| scale::to_permille(t.zoom) * 4 + i32::from(t.rank)).collect(),
+            snaps: scale::ticks(limits, SLIDER_TRACK_PX)
+                .into_iter()
+                .map(|t| scale::to_permille(t.zoom) * 4 + i32::from(t.rank))
+                .collect(),
         })
     }
 
@@ -115,7 +133,11 @@ impl MultiviewInstance {
         let (slider, bubble) = (self.zoom_slider.len(), self.zoom_minimap_bubble.len());
         let (sliders, bubbles): (Vec<TileKey>, Vec<TileKey>) = (
             self.zoom_slider.iter().copied().filter(|k| valid(self, k)).collect(),
-            self.zoom_minimap_bubble.iter().copied().filter(|k| valid(self, k)).collect(),
+            self.zoom_minimap_bubble
+                .iter()
+                .copied()
+                .filter(|k| valid(self, k))
+                .collect(),
         );
         if sliders.len() != slider || bubbles.len() != bubble {
             self.zoom_slider = sliders;
@@ -153,7 +175,9 @@ impl MultiviewInstance {
         self.zoom_wheel_accum -= self.zoom_wheel_accum.signum() * WHEEL_STEP_DELTA * steps as f32;
         let mut anchor = (self.logical_to_physical(at.0), self.logical_to_physical(at.1));
         let prefs = zoom_prefs::current();
-        let Some(zoom) = self.tiles[index].zoom.as_mut() else { return };
+        let Some(zoom) = self.tiles[index].zoom.as_mut() else {
+            return;
+        };
         // The pointer is reported inside the room while the picture is zoomed, else inside the tile.
         if let (false, Some(home)) = (zoom.is_active(), zoom.home()) {
             anchor = (anchor.0 + f64::from(home.x), anchor.1 + f64::from(home.y));
@@ -236,7 +260,9 @@ impl MultiviewInstance {
 
     /// The slider bubble of the minimap of tile `index` asked for something (the same codes as the slider of the bar).
     pub fn zoom_minimap_slider(&mut self, index: usize, code: i32) {
-        let Some(key) = self.tiles.get(index).map(|t| t.key) else { return };
+        let Some(key) = self.tiles.get(index).map(|t| t.key) else {
+            return;
+        };
         if let Some(click) = BarClick::from_code(code) {
             self.zoom_slider_click(key, click);
         }
@@ -257,7 +283,10 @@ impl MultiviewInstance {
 
     /// Ctrl+0 (0), Ctrl++ (1) and Ctrl+- (2): the image under the pointer, else the only image of the Multiview.
     pub fn zoom_key(&mut self, key: i32) {
-        let index = self.hovered.filter(|&i| self.zoomable(i)).or_else(|| (self.tiles.len() == 1 && self.zoomable(0)).then_some(0));
+        let index = self
+            .hovered
+            .filter(|&i| self.zoomable(i))
+            .or_else(|| (self.tiles.len() == 1 && self.zoomable(0)).then_some(0));
         let Some(index) = index else { return };
         let (prefs, now) = (zoom_prefs::current(), Instant::now());
         if let Some(zoom) = self.tiles[index].zoom.as_mut() {
@@ -279,7 +308,9 @@ impl MultiviewInstance {
 
     /// Whether any picture is gliding to a new zoom (the host redraws every frame meanwhile).
     pub fn zoom_animating(&self) -> bool {
-        self.tiles.iter().any(|t| t.zoom.as_ref().is_some_and(|z| z.animating()))
+        self.tiles
+            .iter()
+            .any(|t| t.zoom.as_ref().is_some_and(|z| z.animating()))
     }
 
     // ---- layout, time and work ------------------------------------------------------------------------------------------------
@@ -311,7 +342,11 @@ impl MultiviewInstance {
     /// else the place of the medium.
     pub(super) fn host_tile_rect(&self, index: usize) -> Option<Rect> {
         let zoomed = self.tiles.get(index)?.zoom.as_ref().is_some_and(|z| z.is_active());
-        if zoomed { self.host_room(index) } else { self.host_content(index) }
+        if zoomed {
+            self.host_room(index)
+        } else {
+            self.host_content(index)
+        }
     }
 
     /// Gives every zoom the room of its tile (called after the layout or the projection changed).
@@ -322,7 +357,15 @@ impl MultiviewInstance {
         let areas: Vec<Option<Area>> = (0..self.tiles.len())
             .map(|i| {
                 let (room, home) = (self.host_room(i)?, self.host_content(i)?);
-                Some(Area::new((room.w, room.h), IRect { x: home.x - room.x, y: home.y - room.y, w: home.w, h: home.h }))
+                Some(Area::new(
+                    (room.w, room.h),
+                    IRect {
+                        x: home.x - room.x,
+                        y: home.y - room.y,
+                        w: home.w,
+                        h: home.h,
+                    },
+                ))
             })
             .collect();
         let prefs = zoom_prefs::current();
@@ -395,7 +438,11 @@ impl MultiviewInstance {
                 let spawned = std::thread::Builder::new().name("zoom-source".into()).spawn(move || {
                     let result = HighResImageLoader::load_full_resolution(&path)
                         .map_err(|e| e.to_string())
-                        .and_then(|(w, h, pixels)| SourceImage::new(w, h, pixels).map(Arc::new).ok_or_else(|| "the original has an unexpected size".to_string()));
+                        .and_then(|(w, h, pixels)| {
+                            SourceImage::new(w, h, pixels)
+                                .map(Arc::new)
+                                .ok_or_else(|| "the original has an unexpected size".to_string())
+                        });
                     sink.post(me, PlayerEvent::ZoomSource { tile: key, result });
                 });
                 if let Err(e) = spawned {
@@ -446,7 +493,9 @@ impl MultiviewInstance {
             return (None, None, false);
         }
         let tile = &self.tiles[index];
-        let Some(zoom) = tile.zoom.as_ref() else { return (None, None, false) };
+        let Some(zoom) = tile.zoom.as_ref() else {
+            return (None, None, false);
+        };
         let prefs = zoom_prefs::current();
         let display_size = tile.pixels.as_ref().map(|p| (p.width(), p.height()));
         let area = self.zoom_area_in_tile(index).unwrap_or_default();
@@ -454,10 +503,13 @@ impl MultiviewInstance {
             area,
             dest: Rect::new(picture.dest.x, picture.dest.y, picture.dest.w, picture.dest.h),
             content: match picture.content {
-                PictureContent::Rendered { pixels, clip } => {
-                    ZoomContentView::Rendered { pixels, clip: Rect::new(clip.x, clip.y, clip.w, clip.h) }
-                }
-                PictureContent::Preview { clip } => ZoomContentView::Preview { clip: Rect::new(clip.x, clip.y, clip.w, clip.h) },
+                PictureContent::Rendered { pixels, clip } => ZoomContentView::Rendered {
+                    pixels,
+                    clip: Rect::new(clip.x, clip.y, clip.w, clip.h),
+                },
+                PictureContent::Preview { clip } => ZoomContentView::Preview {
+                    clip: Rect::new(clip.x, clip.y, clip.w, clip.h),
+                },
             },
             pixelated: prefs.resample.is_pixelated(),
         });
@@ -476,7 +528,14 @@ impl MultiviewInstance {
         let layout = self
             .zoom_area_in_tile(index)
             .zip(self.tiles.get(index).and_then(|t| t.zoom.as_ref()))
-            .and_then(|(area, zoom)| MinimapLayout::compute((area.w, area.h), zoom.image(), zoom_prefs::current().minimap_corner, self.host.surface.dpi));
+            .and_then(|(area, zoom)| {
+                MinimapLayout::compute(
+                    (area.w, area.h),
+                    zoom.image(),
+                    zoom_prefs::current().minimap_corner,
+                    self.host.surface.dpi,
+                )
+            });
         layout.map_or((0.0, 0.0), |l| (f64::from(l.rect.w), f64::from(l.rect.h)))
     }
 
@@ -490,13 +549,23 @@ impl MultiviewInstance {
         }
         let visible = zoom.minimap_shown(prefs, Instant::now());
         let area = self.zoom_area_in_tile(index)?;
-        let layout = MinimapLayout::compute((area.w, area.h), zoom.image(), prefs.minimap_corner, self.host.surface.dpi)?;
+        let layout = MinimapLayout::compute(
+            (area.w, area.h),
+            zoom.image(),
+            prefs.minimap_corner,
+            self.host.surface.dpi,
+        )?;
         let thumb = zoom.thumb()?.clone();
         let viewport = zoom.viewport_norm()?;
         Some(MinimapView {
             visible,
             area,
-            rect: Rect::new(area.x + layout.rect.x, area.y + layout.rect.y, layout.rect.w, layout.rect.h),
+            rect: Rect::new(
+                area.x + layout.rect.x,
+                area.y + layout.rect.y,
+                layout.rect.w,
+                layout.rect.h,
+            ),
             thumb,
             viewport: (viewport.x, viewport.y, viewport.w, viewport.h),
             bubble: if pinned { self.bubble_for(index) } else { None },

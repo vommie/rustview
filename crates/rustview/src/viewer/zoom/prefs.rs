@@ -5,11 +5,12 @@
 
 use super::geometry::Limits;
 use super::render::Resample;
+use parking_lot::RwLock;
 use rustview_core::settings::schema::{
     DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT, DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS, DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS,
-    DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT, DEFAULT_FULLSCREEN_ZOOM_SMOOTH, DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT, FullscreenSettings,
+    DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT, DEFAULT_FULLSCREEN_ZOOM_SMOOTH, DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT,
+    FullscreenSettings,
 };
-use parking_lot::RwLock;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,7 +21,11 @@ pub enum MinimapCorner {
 
 impl MinimapCorner {
     pub fn from_setting(name: &str) -> Self {
-        if name.trim().eq_ignore_ascii_case("bottom_right") { Self::BottomRight } else { Self::BottomLeft }
+        if name.trim().eq_ignore_ascii_case("bottom_right") {
+            Self::BottomRight
+        } else {
+            Self::BottomLeft
+        }
     }
 
     pub fn as_setting(self) -> &'static str {

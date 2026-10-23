@@ -77,9 +77,15 @@ impl MultiviewInstance {
         let now = Instant::now();
         let forced = self.pulsing(now);
         let area = self.host.projection.screen();
-        let near = self
-            .pointer
-            .is_some_and(|p| near_bar_corner(BarCorner::TopLeft, area, p, self.host.surface.dpi, bar.reveal_distance_px));
+        let near = self.pointer.is_some_and(|p| {
+            near_bar_corner(
+                BarCorner::TopLeft,
+                area,
+                p,
+                self.host.surface.dpi,
+                bar.reveal_distance_px,
+            )
+        });
         if !near && !forced {
             return None;
         }
@@ -168,7 +174,11 @@ impl MultiviewInstance {
 
     fn set_all_paused(&mut self, paused: bool) {
         for video in self.tiles.iter().filter_map(|t| t.video.as_ref()) {
-            let result = if paused { video.player.pause() } else { video.player.play() };
+            let result = if paused {
+                video.player.pause()
+            } else {
+                video.player.play()
+            };
             if let Err(e) = result {
                 tracing::warn!(error = %e, "[Multiview: Primary bar] Pause or play failed");
             }

@@ -4,12 +4,12 @@
 //! own view structs, so no host keeps a second copy of the arrangement.
 
 use super::follow::TileKey;
-use super::media_actions::MediaActionId;
-use super::primary_actions::PrimaryActionId;
 use super::layout::Rect;
+use super::media_actions::MediaActionId;
 use super::model::TileKind;
-use crate::ui::button_feedback::ButtonFeedback;
+use super::primary_actions::PrimaryActionId;
 use crate::icons::Icon;
+use crate::ui::button_feedback::ButtonFeedback;
 use rustview_core::library::models::MediaId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
@@ -43,7 +43,10 @@ pub struct ZoomPictureView {
 
 pub enum ZoomContentView {
     /// The sharp, resampled picture, larger than what is shown: `clip` (its pixels) is the part that goes to the picture's place.
-    Rendered { pixels: SharedPixelBuffer<Rgb8Pixel>, clip: Rect },
+    Rendered {
+        pixels: SharedPixelBuffer<Rgb8Pixel>,
+        clip: Rect,
+    },
     /// This rectangle of the tile's own picture, scaled by the renderer, until the sharp picture is ready.
     Preview { clip: Rect },
 }

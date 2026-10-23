@@ -1,11 +1,11 @@
 pub mod panel_tab_dnd;
 
-use crate::ui::sidebar::panel_tab_dnd::{SidebarPanelTabDndGeometry, SidebarPanelTabDndSession};
-use crate::ui::{MainWindow, SidebarPanelTabModel};
 use crate::icons::Icon;
-use rustview_core::settings::SettingsManager;
+use crate::ui::sidebar::panel_tab_dnd::{SidebarPanelTabDndGeometry, SidebarPanelTabDndSession};
 use crate::ui::state::{LastActivePanel, UiState};
+use crate::ui::{MainWindow, SidebarPanelTabModel};
 use parking_lot::RwLock;
+use rustview_core::settings::SettingsManager;
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::sync::Arc;
 
@@ -31,11 +31,7 @@ impl BridgeSidebarPanelTabs {
     }
 
     /// Initializes sidebar panel tabs from persisted settings and synchronizes with the UI.
-    pub fn init(
-        window: &MainWindow,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn init(window: &MainWindow, settings: &SettingsManager, state: &RwLock<UiState>) {
         let app_settings = settings.get();
         let active_tab = app_settings.view.left_sidebar_active_panel_tab.clone();
         {
@@ -46,11 +42,7 @@ impl BridgeSidebarPanelTabs {
     }
 
     /// Synchronizes current panel tabs ordering and active state to Slint's `sidebar-panel-tabs` model.
-    pub fn sync_ui(
-        window: &MainWindow,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn sync_ui(window: &MainWindow, settings: &SettingsManager, state: &RwLock<UiState>) {
         let app_settings = settings.get();
         let tab_ids = &app_settings.view.left_sidebar_panel_tabs;
         let active_tab = &state.read().active_sidebar_panel_tab;
@@ -76,11 +68,7 @@ impl BridgeSidebarPanelTabs {
     }
 
     /// Registers selection and drag-and-drop callbacks on `MainWindow`.
-    pub fn register_callbacks(
-        window: &MainWindow,
-        settings: Arc<SettingsManager>,
-        state: Arc<RwLock<UiState>>,
-    ) {
+    pub fn register_callbacks(window: &MainWindow, settings: Arc<SettingsManager>, state: Arc<RwLock<UiState>>) {
         // 1. Tab Selection
         let win_sel = window.clone_strong();
         let set_sel = settings.clone();
@@ -142,13 +130,8 @@ impl BridgeSidebarPanelTabs {
                 tab_width / 2.0
             };
 
-            let session = SidebarPanelTabDndSession::new(
-                id_str.clone(),
-                source_idx as usize,
-                grab_offset,
-                mouse_x,
-                slots,
-            );
+            let session =
+                SidebarPanelTabDndSession::new(id_str.clone(), source_idx as usize, grab_offset, mouse_x, slots);
 
             let ghost_x = session.ghost_left_x();
             let ghost_w = session.current_slot_width();

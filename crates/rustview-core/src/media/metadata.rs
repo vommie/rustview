@@ -106,8 +106,7 @@ impl MetadataExtractor {
         if let Ok(Some(size)) = super::tile_grid::display_size(path) {
             return Ok(size);
         }
-        let (w, h, _) = Self::extract_video_details(path)
-            .map_err(|e| MetadataError::ImageError(e.to_string()))?;
+        let (w, h, _) = Self::extract_video_details(path).map_err(|e| MetadataError::ImageError(e.to_string()))?;
         Ok((w, h))
     }
 
@@ -119,8 +118,7 @@ impl MetadataExtractor {
     fn extract_video_details(path: &Path) -> Result<(u32, u32, u64), MetadataError> {
         ensure_ffmpeg_initialized();
 
-        let ictx = ffmpeg_next::format::input(path)
-            .map_err(|e| MetadataError::VideoError(e.to_string()))?;
+        let ictx = ffmpeg_next::format::input(path).map_err(|e| MetadataError::VideoError(e.to_string()))?;
 
         let stream = ictx
             .streams()
@@ -138,9 +136,7 @@ impl MetadataExtractor {
         let mut height = video_decoder.height();
 
         if width == 0 || height == 0 {
-            return Err(MetadataError::VideoError(
-                "Invalid video dimensions (0x0)".to_string(),
-            ));
+            return Err(MetadataError::VideoError("Invalid video dimensions (0x0)".to_string()));
         }
 
         // A phone video stores its rotation next to the pixels: the picture is shown with width and height swapped

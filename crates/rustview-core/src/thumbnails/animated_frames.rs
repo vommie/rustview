@@ -7,8 +7,8 @@
 
 use super::error::ThumbnailError;
 use super::image::DecodedThumbnailFrame;
-use super::types::{calculate_aspect_dimensions, ScalingAlgorithm};
-use super::video::{apply_rotation_if_needed, map_scaling_algorithm_to_sws_flags, DynamicScaler};
+use super::types::{ScalingAlgorithm, calculate_aspect_dimensions};
+use super::video::{DynamicScaler, apply_rotation_if_needed, map_scaling_algorithm_to_sws_flags};
 use crate::media::metadata::ensure_ffmpeg_initialized;
 use crate::media::{MediaDetector, MediaFormat};
 use fast_image_resize::images::Image as FirImage;
@@ -26,7 +26,10 @@ pub const MAX_SOURCE_FRAMES: usize = 400;
 
 /// Formats whose files can be animated (a PNG or WebP usually is not; the file tells).
 pub fn can_animate(format: MediaFormat) -> bool {
-    matches!(format, MediaFormat::Gif | MediaFormat::Png | MediaFormat::Webp | MediaFormat::Avif)
+    matches!(
+        format,
+        MediaFormat::Gif | MediaFormat::Png | MediaFormat::Webp | MediaFormat::Avif
+    )
 }
 
 /// `count` indexes out of `len`, evenly spread and including the first and the last (fewer when `len` is smaller).
@@ -38,7 +41,9 @@ pub fn pick_evenly(len: usize, count: usize) -> Vec<usize> {
     if count == 1 {
         return vec![0];
     }
-    (0..count).map(|k| (k * (len - 1) + (count - 1) / 2) / (count - 1)).collect()
+    (0..count)
+        .map(|k| (k * (len - 1) + (count - 1) / 2) / (count - 1))
+        .collect()
 }
 
 /// Samples up to `count` evenly spread frames of an animated picture, scaled to `max_bound`.
@@ -50,7 +55,9 @@ pub fn sample(
     count: usize,
 ) -> Result<Option<Vec<DecodedThumbnailFrame>>, ThumbnailError> {
     let header = MediaDetector::read_header(path).unwrap_or_default();
-    let Some((format, _)) = MediaDetector::detect_from_bytes(&header) else { return Ok(None) };
+    let Some((format, _)) = MediaDetector::detect_from_bytes(&header) else {
+        return Ok(None);
+    };
 
     let frames = match format {
         MediaFormat::Gif => {
@@ -162,17 +169,32 @@ fn ffmpeg_sequence(
             .filter(|s| s.parameters().medium() == ffmpeg_next::media::Type::Video)
             .max_by_key(|s| s.frames())
             .ok_or_else(|| ThumbnailError::Ffmpeg("No video stream found in container".into()))?;
-        (stream.index(), crate::media::orientation::stream_rotation(&stream, &ictx.metadata()))
+        (
+            stream.index(),
+            crate::media::orientation::stream_rotation(&stream, &ictx.metadata()),
+        )
     };
-    let context = ffmpeg_next::codec::context::Context::from_parameters(ictx.stream(index).map(|s| s.parameters()).ok_or_else(|| ThumbnailError::Ffmpeg("stream vanished".into()))?)
-        .map_err(ffmpeg_err)?;
+    let context = ffmpeg_next::codec::context::Context::from_parameters(
+        ictx.stream(index)
+            .map(|s| s.parameters())
+            .ok_or_else(|| ThumbnailError::Ffmpeg("stream vanished".into()))?,
+    )
+    .map_err(ffmpeg_err)?;
     let mut decoder = context.decoder().video().map_err(ffmpeg_err)?;
-    let (w, h) = if crate::media::orientation::swaps_axes(rotation) { (decoder.height(), decoder.width()) } else { (decoder.width(), decoder.height()) };
+    let (w, h) = if crate::media::orientation::swaps_axes(rotation) {
+        (decoder.height(), decoder.width())
+    } else {
+        (decoder.width(), decoder.height())
+    };
     if w == 0 || h == 0 {
         return Err(ThumbnailError::Ffmpeg("Invalid picture dimensions (0x0)".into()));
     }
     let (target_w, target_h) = calculate_aspect_dimensions(w, h, max_bound);
-    let (scaler_w, scaler_h) = if crate::media::orientation::swaps_axes(rotation) { (target_h, target_w) } else { (target_w, target_h) };
+    let (scaler_w, scaler_h) = if crate::media::orientation::swaps_axes(rotation) {
+        (target_h, target_w)
+    } else {
+        (target_w, target_h)
+    };
     let mut scaler = DynamicScaler::new(scaler_w, scaler_h, map_scaling_algorithm_to_sws_flags(scaling_algo));
 
     let mut out = Vec::new();
@@ -181,7 +203,13 @@ fn ffmpeg_sequence(
         while out.len() < MAX_SOURCE_FRAMES && decoder.receive_frame(&mut decoded).is_ok() {
             if let Ok(rgb) = scaler.scale_frame(&decoded) {
                 let (fw, fh, pixels) = apply_rotation_if_needed(rgb, scaler_w, scaler_h, rotation);
-                out.push(DecodedThumbnailFrame { width: fw, height: fh, rgb_pixels: pixels, orig_width: w, orig_height: h });
+                out.push(DecodedThumbnailFrame {
+                    width: fw,
+                    height: fh,
+                    rgb_pixels: pixels,
+                    orig_width: w,
+                    orig_height: h,
+                });
             }
         }
     };

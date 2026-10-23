@@ -143,7 +143,11 @@ fn mute_all(ctx: &PrimaryBarContext) -> Option<PrimaryActionSpec> {
     (interactive(ctx) && ctx.video_count >= 2).then(|| PrimaryActionSpec {
         id: PrimaryActionId::MuteAll,
         // Like the mute button of a medium, the icon shows the state: sound on, or muted.
-        icon: if ctx.any_audible { Icon::VolumeOn } else { Icon::VolumeOff },
+        icon: if ctx.any_audible {
+            Icon::VolumeOn
+        } else {
+            Icon::VolumeOff
+        },
         tooltip: if ctx.any_audible {
             format!("Mute all {} videos", ctx.video_count)
         } else {
@@ -159,7 +163,11 @@ fn play_pause_all(ctx: &PrimaryBarContext) -> Option<PrimaryActionSpec> {
         let many = ctx.video_count > 1;
         PrimaryActionSpec {
             id: PrimaryActionId::PlayPauseAll,
-            icon: if ctx.any_playing { Icon::PlaybackPause } else { Icon::PlaybackPlay },
+            icon: if ctx.any_playing {
+                Icon::PlaybackPause
+            } else {
+                Icon::PlaybackPlay
+            },
             tooltip: match (ctx.any_playing, many) {
                 (true, true) => format!("Pause all {} videos", ctx.video_count),
                 (true, false) => "Pause the video".to_string(),
@@ -191,7 +199,11 @@ fn hide_idle_cursor(ctx: &PrimaryBarContext) -> Option<PrimaryActionSpec> {
         let seconds = f64::from(ctx.idle_cursor_ms) / 1000.0;
         PrimaryActionSpec {
             id: PrimaryActionId::HideIdleCursor,
-            icon: if ctx.hide_idle_cursor { Icon::CursorHidden } else { Icon::CursorVisible },
+            icon: if ctx.hide_idle_cursor {
+                Icon::CursorHidden
+            } else {
+                Icon::CursorVisible
+            },
             tooltip: if ctx.hide_idle_cursor {
                 format!("The mouse cursor is hidden after {seconds:.1} s without movement (click to keep it visible)")
             } else {

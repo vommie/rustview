@@ -1,10 +1,10 @@
 //! Callbacks of the tab grid (masonry view of the open tabs).
 
-use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tabs::grid_bridge::BridgeTabGrid;
-use crate::ui::tabs::BridgeViewerTabs;
-use slint::ComponentHandle;
 use super::UiBridge;
+use crate::ui::status_bar::StatusBarBridge;
+use crate::ui::tabs::BridgeViewerTabs;
+use crate::ui::tabs::grid_bridge::BridgeTabGrid;
+use slint::ComponentHandle;
 
 impl UiBridge {
     pub(super) fn register_tab_grid_callbacks(&self) {
@@ -50,13 +50,7 @@ impl UiBridge {
         let set_mid = self.settings.clone();
         let fs_mid = self.fullscreen.clone();
         self.window.on_tab_grid_item_middle_clicked(move |tab_id| {
-            BridgeTabGrid::handle_item_middle_clicked(
-                tab_id as u64,
-                &win_mid,
-                &tm_mid,
-                &set_mid,
-                &fs_mid,
-            );
+            BridgeTabGrid::handle_item_middle_clicked(tab_id as u64, &win_mid, &tm_mid, &set_mid, &fs_mid);
         });
 
         let win_close = self.window.clone_strong();
@@ -122,8 +116,20 @@ impl UiBridge {
         self.window.on_tab_grid_close_all_clicked(move || {
             tracing::info!("[UiBridge: TabGrid] Close all tabs clicked from TabGrid toolbar");
             tm_close_all.close_all_tabs();
-            BridgeViewerTabs::sync_ui(&win_close_all, &tm_close_all, &lib_close_all, &set_close_all, &st_close_all);
-            BridgeTabGrid::sync_tab_grid_ui(&win_close_all, &tm_close_all, &lib_close_all, &set_close_all, &st_close_all);
+            BridgeViewerTabs::sync_ui(
+                &win_close_all,
+                &tm_close_all,
+                &lib_close_all,
+                &set_close_all,
+                &st_close_all,
+            );
+            BridgeTabGrid::sync_tab_grid_ui(
+                &win_close_all,
+                &tm_close_all,
+                &lib_close_all,
+                &set_close_all,
+                &st_close_all,
+            );
         });
 
         let win_geom = self.window.clone_strong();

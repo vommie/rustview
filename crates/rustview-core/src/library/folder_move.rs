@@ -64,11 +64,7 @@ impl<'a> FolderMoveExecutor<'a> {
     }
 
     /// Moves `folder_id` (including its subtree) below `new_parent_id` on disk and in the database.
-    pub fn execute(
-        &self,
-        folder_id: FolderId,
-        new_parent_id: FolderId,
-    ) -> Result<FolderMoveReport, LibraryError> {
+    pub fn execute(&self, folder_id: FolderId, new_parent_id: FolderId) -> Result<FolderMoveReport, LibraryError> {
         let t0 = Instant::now();
         let mut wtxn = self.db.env.write_txn()?;
 
@@ -174,17 +170,13 @@ impl<'a> FolderMoveExecutor<'a> {
             ));
         }
         if src_path == dst_path {
-            return Err(Self::rejected(
-                "The folder is already located in the target folder",
-            ));
+            return Err(Self::rejected("The folder is already located in the target folder"));
         }
         if !src_path.is_dir() {
             return Err(Self::rejected("The source folder does not exist on disk"));
         }
         if !dst_parent_path.is_dir() {
-            return Err(Self::rejected(
-                "The destination folder does not exist on disk",
-            ));
+            return Err(Self::rejected("The destination folder does not exist on disk"));
         }
         if dst_path.exists() {
             return Err(LibraryError::FileOperationAlreadyExists(folder_name));
@@ -237,8 +229,7 @@ impl<'a> FolderMoveExecutor<'a> {
         // Parents first, so inherited hidden flags can be propagated top-down.
         subtree.sort_by_key(|(_, rec)| rec.depth);
 
-        let old_hidden: HashMap<FolderId, bool> =
-            subtree.iter().map(|(id, rec)| (*id, rec.is_hidden)).collect();
+        let old_hidden: HashMap<FolderId, bool> = subtree.iter().map(|(id, rec)| (*id, rec.is_hidden)).collect();
         let mut new_hidden: HashMap<FolderId, bool> = HashMap::with_capacity(subtree.len());
 
         let depth_delta = i64::from(mv.parent_record.depth) + 1 - i64::from(mv.record.depth);
@@ -255,9 +246,7 @@ impl<'a> FolderMoveExecutor<'a> {
         for (id, mut rec) in subtree {
             let is_root = id == mv.folder_id;
             let hidden = if is_root {
-                rec.name.starts_with('.')
-                    || mv.parent_record.is_hidden
-                    || dst_hidden_entries.contains(&mv.folder_name)
+                rec.name.starts_with('.') || mv.parent_record.is_hidden || dst_hidden_entries.contains(&mv.folder_name)
             } else {
                 Self::descendant_hidden(&rec, &old_hidden, &new_hidden)
             };
@@ -318,11 +307,7 @@ impl<'a> FolderMoveExecutor<'a> {
     /// Updates parent/children index entries and direct subfolder counters of both parents.
     fn relink_parents(&self, wtxn: &mut heed::RwTxn, mv: &MoveContext) -> Result<(), LibraryError> {
         if let Some(old_pid) = mv.record.parent_id {
-            let mut siblings = self
-                .db
-                .folders_by_parent
-                .get(wtxn, &old_pid)?
-                .unwrap_or_default();
+            let mut siblings = self.db.folders_by_parent.get(wtxn, &old_pid)?.unwrap_or_default();
             siblings.retain(|&x| x != mv.folder_id);
             self.db.folders_by_parent.put(wtxn, &old_pid, &siblings)?;
             self.adjust_subfolder_count(wtxn, old_pid, -1)?;
@@ -335,9 +320,7 @@ impl<'a> FolderMoveExecutor<'a> {
             .unwrap_or_default();
         if !new_siblings.contains(&mv.folder_id) {
             new_siblings.push(mv.folder_id);
-            self.db
-                .folders_by_parent
-                .put(wtxn, &mv.new_parent_id, &new_siblings)?;
+            self.db.folders_by_parent.put(wtxn, &mv.new_parent_id, &new_siblings)?;
             self.adjust_subfolder_count(wtxn, mv.new_parent_id, 1)?;
         }
 
@@ -358,11 +341,7 @@ impl<'a> FolderMoveExecutor<'a> {
     }
 
     /// Returns `start` and all of its ancestors (nearest first), protected against cyclic parent links.
-    fn ancestor_chain(
-        &self,
-        rtxn: &heed::RoTxn,
-        start: Option<FolderId>,
-    ) -> Result<Vec<FolderId>, LibraryError> {
+    fn ancestor_chain(&self, rtxn: &heed::RoTxn, start: Option<FolderId>) -> Result<Vec<FolderId>, LibraryError> {
         let mut chain = Vec::new();
         let mut visited: HashSet<FolderId> = HashSet::new();
         let mut current = start;
@@ -397,8 +376,7 @@ impl<'a> FolderMoveExecutor<'a> {
         }
         for id in chain {
             if let Some(mut rec) = self.db.folders.get(wtxn, id)? {
-                rec.recursive_media_count =
-                    (i64::from(rec.recursive_media_count) + delta).max(0) as u32;
+                rec.recursive_media_count = (i64::from(rec.recursive_media_count) + delta).max(0) as u32;
                 self.db.folders.put(wtxn, id, &rec)?;
             }
         }
@@ -437,8 +415,7 @@ impl<'a> FolderMoveExecutor<'a> {
             );
             if e.kind() == std::io::ErrorKind::CrossesDevices {
                 LibraryError::FileOperationRenameFailed(
-                    "Cannot move a folder across file systems or mount points. Move it manually instead."
-                        .to_string(),
+                    "Cannot move a folder across file systems or mount points. Move it manually instead.".to_string(),
                 )
             } else {
                 LibraryError::from(e)
@@ -516,11 +493,7 @@ mod tests {
         let rec = record(2, Some(1), "child", false);
         let old_hidden = HashMap::from([(1, false)]);
         let new_hidden = HashMap::from([(1, true)]);
-        assert!(FolderMoveExecutor::descendant_hidden(
-            &rec,
-            &old_hidden,
-            &new_hidden
-        ));
+        assert!(FolderMoveExecutor::descendant_hidden(&rec, &old_hidden, &new_hidden));
     }
 
     #[test]
@@ -530,15 +503,7 @@ mod tests {
         let old_hidden = HashMap::from([(1, true)]);
         let new_hidden = HashMap::from([(1, false)]);
 
-        assert!(!FolderMoveExecutor::descendant_hidden(
-            &plain,
-            &old_hidden,
-            &new_hidden
-        ));
-        assert!(FolderMoveExecutor::descendant_hidden(
-            &dotted,
-            &old_hidden,
-            &new_hidden
-        ));
+        assert!(!FolderMoveExecutor::descendant_hidden(&plain, &old_hidden, &new_hidden));
+        assert!(FolderMoveExecutor::descendant_hidden(&dotted, &old_hidden, &new_hidden));
     }
 }

@@ -51,16 +51,14 @@ impl GridHost {
 
     /// Places the Multiview on `canvas` (logical window pixels) and returns what the item has to draw.
     pub fn place(&self, instance: &SharedInstance, canvas: LogicalRect) -> GridItemView {
-        let rect =
-            views::physical_rect(canvas.x, canvas.y, canvas.width, canvas.height, self.scale);
+        let rect = views::physical_rect(canvas.x, canvas.y, canvas.width, canvas.height, self.scale);
         let clip = Rect::new(
             self.viewport.x,
             self.viewport.y,
             self.viewport.width as i32,
             self.viewport.height as i32,
         );
-        let surface =
-            HostSurface::tab_grid(self.main_xid, rect, self.scale, clip, self.cutouts.clone());
+        let surface = HostSurface::tab_grid(self.main_xid, rect, self.scale, clip, self.cutouts.clone());
         let view = {
             let mut guard = instance.lock();
             guard.set_host(&surface);

@@ -1,62 +1,57 @@
-use crate::ui::settings_dialog::SettingsDialogController;
-use crate::ui::multiview::handle::{AppContext, KEEP_VIEW};
-use crate::ui::context_menu::{
-    BridgeContextMenu, MediaMenuContext,
-};
-use crate::ui::favorites::rename_dialog::FavoriteRenameDialogController;
+use crate::ctx_menu::CtxMenuDispatcher;
+use crate::ui::browse_folders::BrowseDragScroller;
+use crate::ui::context_menu::{BridgeContextMenu, MediaMenuContext};
 use crate::ui::favorites::BridgeFavorites;
+use crate::ui::favorites::manager::FavoriteManager;
+use crate::ui::favorites::rename_dialog::FavoriteRenameDialogController;
 use crate::ui::file_dialogs::conflict::FileOpsConflictDialogController;
 use crate::ui::file_dialogs::delete::DeleteFileDialogController;
 use crate::ui::file_dialogs::missing::MissingFileDialogController;
 use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
-use crate::ui::selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
 use crate::ui::folder_dialogs::FolderDialogController;
-use crate::ui::browse_folders::BrowseDragScroller;
 use crate::ui::folder_tree::BridgeFolders;
-use crate::ui::multiview::{MultiviewHandle, bar_overlay};
-use crate::viewer::multiview::prefs;
-use crate::viewer::zoom::prefs as zoom_prefs;
-use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::folder_tree::dnd_autoscroller::DndFolderTreeAutoScroller;
 use crate::ui::media::BridgeMedia;
+use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::media::thumbnails::BridgeThumbnails;
+use crate::ui::multiview::handle::{AppContext, KEEP_VIEW};
+use crate::ui::multiview::tab_host;
+use crate::ui::multiview::{MultiviewHandle, bar_overlay};
+use crate::ui::selection::rubberband::RubberbandAutoScroller;
+use crate::ui::selection::{BridgeFileSelection, FileClickContext, LastClickRecord};
+use crate::ui::settings_dialog::SettingsDialogController;
+use crate::ui::shutdown::ShutdownTargets;
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
 use crate::ui::state::*;
 use crate::ui::status_bar::StatusBarBridge;
+use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tags::dialogs::TagDialogController;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::tags::{BridgeTags, TagActionContext};
-use crate::ui::media::thumbnails::BridgeThumbnails;
-use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::folder_tree::dnd_autoscroller::DndFolderTreeAutoScroller;
-use crate::ui::favorites::manager::FavoriteManager;
-use crate::ui::shutdown::ShutdownTargets;
-use crate::ui::multiview::tab_host;
-use crate::ui::selection::rubberband::RubberbandAutoScroller;
 use crate::ui::thumbnail_badges::ThumbnailBadgeBridge;
 use crate::ui::type_ahead::{self};
 use crate::ui::{FileRenameDialog, MainWindow};
-use crate::ctx_menu::CtxMenuDispatcher;
-use rustview_core::library::models::{FolderId, MediaId, TagId};
-use rustview_core::library::Library;
-use rustview_core::query::{MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
-use rustview_core::settings::{
-    GridAspectRatio,
-    SettingsManager,
-};
-use rustview_core::thumbnails::ThumbnailManager;
 use crate::viewer::ViewerTabManager;
+use crate::viewer::multiview::prefs;
+use crate::viewer::zoom::prefs as zoom_prefs;
 use parking_lot::{Mutex, RwLock};
+use rustview_core::library::Library;
+use rustview_core::library::models::{FolderId, MediaId, TagId};
+use rustview_core::query::{MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
+use rustview_core::settings::{GridAspectRatio, SettingsManager};
+use rustview_core::thumbnails::ThumbnailManager;
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
+mod actions;
+mod pointer_callbacks;
 mod settings_subscriber;
 mod subsystem_callbacks;
-mod actions;
 mod tab_grid_callbacks;
-mod pointer_callbacks;
 
 pub struct RenameActionParams<'a> {
     pub window: &'a MainWindow,
@@ -328,11 +323,7 @@ impl UiBridge {
 
         Self::install_tabs_changed_hook(&window, &tab_manager, &library, &settings, &state);
 
-        let thumbnail_timer = BridgeThumbnails::start_drain_timer(
-            thumbnails.clone(),
-            state.clone(),
-            window.as_weak(),
-        );
+        let thumbnail_timer = BridgeThumbnails::start_drain_timer(thumbnails.clone(), state.clone(), window.as_weak());
 
         let bridge = Self {
             window,
@@ -365,19 +356,9 @@ impl UiBridge {
 
         BridgeFavorites::init(&bridge.window, &bridge.favorites);
         bridge.reload_tags();
-        BridgeFolders::reload_tree(
-            &bridge.window,
-            &bridge.library,
-            &bridge.settings,
-            &bridge.state,
-        );
+        BridgeFolders::reload_tree(&bridge.window, &bridge.library, &bridge.settings, &bridge.state);
 
-        BridgeTagHistory::init(
-            &bridge.window,
-            &bridge.library,
-            &bridge.settings,
-            &bridge.state,
-        );
+        BridgeTagHistory::init(&bridge.window, &bridge.library, &bridge.settings, &bridge.state);
 
         let w_weak = bridge.window.as_weak();
         let lib = bridge.library.clone();

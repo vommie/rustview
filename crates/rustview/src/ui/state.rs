@@ -1,29 +1,28 @@
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId};
-use rustview_core::library::models::{FolderHierarchySnapshot, FolderId, MediaId, TagId};
-use rustview_core::query::filters::{IndexedMediaRecord, PreparedFilter};
-use rustview_core::query::MediaStore;
-use rustview_core::query::{QueryFilter, SortColumn, SortOrder};
-use rustview_core::settings::{
-    DEFAULT_IS_INSPECTOR_COLLAPSED, DEFAULT_IS_TAG_HISTORY_COLLAPSED,
-    DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB, DEFAULT_MAX_HISTORY_TAGS, DEFAULT_SORT_COLUMN,
-    DEFAULT_SORT_ORDER, DEFAULT_TAB_GRID_AUTO_COLUMNS, DEFAULT_TAB_GRID_COLUMNS,
-    DEFAULT_TAG_HISTORY_HEIGHT,
-};
 use crate::system::DesktopApp;
-use rustview_core::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
+use crate::ui::browse_folders::{BrowseFolderRows, FolderRowsRequest, FolderTimes, NavigationHistory, Slot};
+use crate::ui::browse_window::{RingWindow, ViewGeometry};
 use crate::ui::selection::model::FileSelectionModel;
 use crate::ui::selection::rubberband::RubberbandSession;
 use crate::ui::sidebar::panel_tab_dnd::SidebarPanelTabDndSession;
 use crate::ui::tabs::dnd::TabDndSession;
 use crate::ui::tabs::grid::MasonryRect;
 use crate::viewer::TabId;
+use rustview_core::library::models::{FolderHierarchySnapshot, FolderId, MediaId, TagId};
+use rustview_core::query::MediaStore;
+use rustview_core::query::filters::{IndexedMediaRecord, PreparedFilter};
+use rustview_core::query::{QueryFilter, SortColumn, SortOrder};
+use rustview_core::settings::{
+    DEFAULT_IS_INSPECTOR_COLLAPSED, DEFAULT_IS_TAG_HISTORY_COLLAPSED, DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB,
+    DEFAULT_MAX_HISTORY_TAGS, DEFAULT_SORT_COLUMN, DEFAULT_SORT_ORDER, DEFAULT_TAB_GRID_AUTO_COLUMNS,
+    DEFAULT_TAB_GRID_COLUMNS, DEFAULT_TAG_HISTORY_HEIGHT,
+};
+use rustview_core::telemetry::{FolderLoadBenchmark, ViewScrollBenchmark};
 use rustview_core::thumbnails::ThumbnailRamCache;
-use crate::ui::browse_folders::{BrowseFolderRows, FolderRowsRequest, FolderTimes, NavigationHistory, Slot};
-use crate::ui::browse_window::{RingWindow, ViewGeometry};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 // Standard File Context Menu Action IDs
 pub const CTX_ACTION_OPEN: CtxMenuActionId = 1000;
@@ -276,7 +275,8 @@ impl UiState {
 
     /// Stores the total size of the listed items when the code that built the list already summed it.
     pub fn set_visible_total_bytes(&self, total: u64) {
-        self.list_total_bytes.store(total.min(LIST_BYTES_DIRTY - 1), Ordering::Relaxed);
+        self.list_total_bytes
+            .store(total.min(LIST_BYTES_DIRTY - 1), Ordering::Relaxed);
     }
 
     /// Total size of the listed items; summed once after every change of the list, not on every selection click.
@@ -294,7 +294,8 @@ impl UiState {
                 .map(|item| item.record.file_size)
                 .sum()
         };
-        self.list_total_bytes.store(total.min(LIST_BYTES_DIRTY - 1), Ordering::Relaxed);
+        self.list_total_bytes
+            .store(total.min(LIST_BYTES_DIRTY - 1), Ordering::Relaxed);
         total
     }
 
@@ -305,7 +306,12 @@ impl UiState {
     }
 
     /// Recomputes the folder rows from the snapshot (memory only). Returns whether they changed.
-    pub fn rebuild_folder_rows(&mut self, snapshot: &FolderHierarchySnapshot, show_hidden: bool, show_deleted: bool) -> bool {
+    pub fn rebuild_folder_rows(
+        &mut self,
+        snapshot: &FolderHierarchySnapshot,
+        show_hidden: bool,
+        show_deleted: bool,
+    ) -> bool {
         let request = FolderRowsRequest {
             enabled: self.show_folders && self.is_plain_folder_view(),
             current: self.current_folder_id,
@@ -314,7 +320,8 @@ impl UiState {
         };
         // The filter field filters the folders by name as well (a regular expression when the regex toggle is on).
         let name_filter = PreparedFilter::from_filter(&self.filter);
-        self.folder_rows.rebuild(snapshot, request, &|name| name_filter.matches_name(name))
+        self.folder_rows
+            .rebuild(snapshot, request, &|name| name_filter.matches_name(name))
     }
 
     /// The highlighted folders of the Browse view while that view has the focus, in list order (F2 and Del act on them, like on the
@@ -347,7 +354,9 @@ impl UiState {
     /// The list position of a medium, folder rows in front included (O(1)).
     #[inline]
     pub fn view_position_of(&self, media_id: MediaId) -> Option<usize> {
-        self.media_row_map.get(&media_id).map(|&row| row + self.folder_front_len())
+        self.media_row_map
+            .get(&media_id)
+            .map(|&row| row + self.folder_front_len())
     }
 
     /// The record at `position` of the sorted, filtered media list (the folder rows in front are not counted, see `slot_at`).
@@ -356,7 +365,9 @@ impl UiState {
         if self.active_indices.is_empty() {
             self.all_folder_media.get(position)
         } else {
-            self.active_indices.get(position).and_then(|&index| self.all_folder_media.get(index))
+            self.active_indices
+                .get(position)
+                .and_then(|&index| self.all_folder_media.get(index))
         }
     }
 
@@ -411,16 +422,12 @@ impl UiState {
     /// The media an action in the viewer tab acts on, or `None` while no tab content is shown (the caller then falls back to
     /// the Browse selection). A Multiview tab always yields its tiles, so its actions never leak to the Browse selection.
     pub fn active_tab_selection(&self) -> Option<HashSet<MediaId>> {
-        (!self.active_tab_media_ids.is_empty())
-            .then(|| self.active_tab_media_ids.iter().copied().collect())
+        (!self.active_tab_media_ids.is_empty()).then(|| self.active_tab_media_ids.iter().copied().collect())
     }
 
     #[inline]
     pub fn is_query_resettable(&self) -> bool {
-        !self.is_assign_mode
-            && (self.selected_rating > 0
-                || !self.filter.tag_ids.is_empty()
-                || self.is_query_active)
+        !self.is_assign_mode && (self.selected_rating > 0 || !self.filter.tag_ids.is_empty() || self.is_query_active)
     }
 
     /// Drops deleted media from the open folder. The positions the previous layout stored are void afterwards, so the next

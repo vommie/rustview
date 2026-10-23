@@ -58,6 +58,8 @@ impl ReadyQueue {
 
     /// Drops everything that belongs to a folder pipeline (a pipeline was cancelled); view-loaded items stay.
     pub fn retain_view_items(&self) {
-        self.items.lock().retain(|item| item.pipeline_id == VIEW_LOAD_PIPELINE_ID);
+        self.items
+            .lock()
+            .retain(|item| item.pipeline_id == VIEW_LOAD_PIPELINE_ID);
     }
 }

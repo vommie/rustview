@@ -12,8 +12,15 @@ use crate::ui::{MediaItemView, ThumbnailBadgeConfig, ThumbnailBadgeOrientation, 
 type BadgeProvider = fn(&MediaItemView, &ThumbnailBadgeConfig) -> Option<ThumbnailBadge>;
 
 /// All badge providers in automatic (registration) order.
-const PROVIDERS: [BadgeProvider; 7] =
-    [tag_badge, rating_badge, media_type_badge, duration_badge, animated_badge, folder_status_badge, folder_missing_badge];
+const PROVIDERS: [BadgeProvider; 7] = [
+    tag_badge,
+    rating_badge,
+    media_type_badge,
+    duration_badge,
+    animated_badge,
+    folder_status_badge,
+    folder_missing_badge,
+];
 
 /// Collects the badges of one media item from all providers.
 pub fn collect_badges(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Vec<ThumbnailBadge> {
@@ -71,7 +78,11 @@ fn media_type_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Opti
     } else {
         ("IMAGE", ThumbnailBadgeTone::Standard)
     };
-    Some(ThumbnailBadge::text("media_type", label).at(ThumbnailBadgeOrientation::BottomLeft).tone(tone))
+    Some(
+        ThumbnailBadge::text("media_type", label)
+            .at(ThumbnailBadgeOrientation::BottomLeft)
+            .tone(tone),
+    )
 }
 
 /// Compact video duration (bottom-right). Only shown for videos with a known duration.
@@ -102,16 +113,25 @@ fn folder_status_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> O
     } else {
         ("FOLDER", ThumbnailBadgeTone::Standard)
     };
-    Some(ThumbnailBadge::text("folder_status", label).at(ThumbnailBadgeOrientation::BottomLeft).tone(tone))
+    Some(
+        ThumbnailBadge::text("folder_status", label)
+            .at(ThumbnailBadgeOrientation::BottomLeft)
+            .tone(tone),
+    )
 }
 
 /// "N MISSING" (bottom-right) on a folder that is there but has subfolders that are gone from the drive.
 fn folder_missing_badge(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Option<ThumbnailBadge> {
-    (config.show_media_type && item.is_folder && !item.is_folder_up && !item.is_deleted && item.folder_missing_children > 0).then(|| {
-        ThumbnailBadge::text("folder_missing", format!("{} MISSING", item.folder_missing_children))
-            .at(ThumbnailBadgeOrientation::BottomRight)
-            .tone(ThumbnailBadgeTone::Danger)
-    })
+    (config.show_media_type
+        && item.is_folder
+        && !item.is_folder_up
+        && !item.is_deleted
+        && item.folder_missing_children > 0)
+        .then(|| {
+            ThumbnailBadge::text("folder_missing", format!("{} MISSING", item.folder_missing_children))
+                .at(ThumbnailBadgeOrientation::BottomRight)
+                .tone(ThumbnailBadgeTone::Danger)
+        })
 }
 
 #[cfg(test)]
@@ -131,7 +151,11 @@ mod tests {
     }
 
     fn video() -> MediaItemView {
-        MediaItemView { is_video: true, duration_badge_str: "04:30".into(), ..Default::default() }
+        MediaItemView {
+            is_video: true,
+            duration_badge_str: "04:30".into(),
+            ..Default::default()
+        }
     }
 
     fn ids(item: &MediaItemView, config: &ThumbnailBadgeConfig) -> Vec<&'static str> {
@@ -145,19 +169,29 @@ mod tests {
 
     #[test]
     fn images_never_show_a_duration() {
-        let image = MediaItemView { duration_badge_str: "04:30".into(), ..Default::default() };
+        let image = MediaItemView {
+            duration_badge_str: "04:30".into(),
+            ..Default::default()
+        };
         assert_eq!(ids(&image, &all_enabled()), ["media_type"]);
     }
 
     #[test]
     fn videos_without_known_duration_have_no_duration_badge() {
-        let item = MediaItemView { is_video: true, ..Default::default() };
+        let item = MediaItemView {
+            is_video: true,
+            ..Default::default()
+        };
         assert_eq!(ids(&item, &all_enabled()), ["media_type"]);
     }
 
     #[test]
     fn rating_and_tag_badges_follow_item_state() {
-        let item = MediaItemView { rating: 3, has_tags: true, ..Default::default() };
+        let item = MediaItemView {
+            rating: 3,
+            has_tags: true,
+            ..Default::default()
+        };
         assert_eq!(ids(&item, &all_enabled()), ["tag", "rating", "media_type"]);
         let unrated = MediaItemView::default();
         assert_eq!(ids(&unrated, &all_enabled()), ["media_type"]);
@@ -165,10 +199,26 @@ mod tests {
 
     #[test]
     fn disabled_options_suppress_their_badges() {
-        let item = MediaItemView { rating: 5, has_tags: true, is_video: true, duration_badge_str: "5s".into(), ..Default::default() };
-        let none = ThumbnailBadgeConfig { show_rating: false, show_tag: false, show_media_type: false, show_duration: false, show_animated: false, ..all_enabled() };
+        let item = MediaItemView {
+            rating: 5,
+            has_tags: true,
+            is_video: true,
+            duration_badge_str: "5s".into(),
+            ..Default::default()
+        };
+        let none = ThumbnailBadgeConfig {
+            show_rating: false,
+            show_tag: false,
+            show_media_type: false,
+            show_duration: false,
+            show_animated: false,
+            ..all_enabled()
+        };
         assert!(ids(&item, &none).is_empty());
-        let only_duration = ThumbnailBadgeConfig { show_duration: true, ..none };
+        let only_duration = ThumbnailBadgeConfig {
+            show_duration: true,
+            ..none
+        };
         assert_eq!(ids(&item, &only_duration), ["duration"]);
     }
 
@@ -178,12 +228,42 @@ mod tests {
             super::super::badge::BadgeContent::Text(t) => t.clone(),
             other => panic!("unexpected content {other:?}"),
         };
-        let base = MediaItemView { is_video: true, ..Default::default() };
-        assert_eq!(label(MediaItemView { is_pending: true, is_deleted: true, is_corrupted: true, ..base.clone() }), "PENDING");
-        assert_eq!(label(MediaItemView { is_deleted: true, is_corrupted: true, ..base.clone() }), "DELETED");
-        assert_eq!(label(MediaItemView { is_corrupted: true, ..base.clone() }), "CORRUPT");
+        let base = MediaItemView {
+            is_video: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            label(MediaItemView {
+                is_pending: true,
+                is_deleted: true,
+                is_corrupted: true,
+                ..base.clone()
+            }),
+            "PENDING"
+        );
+        assert_eq!(
+            label(MediaItemView {
+                is_deleted: true,
+                is_corrupted: true,
+                ..base.clone()
+            }),
+            "DELETED"
+        );
+        assert_eq!(
+            label(MediaItemView {
+                is_corrupted: true,
+                ..base.clone()
+            }),
+            "CORRUPT"
+        );
         assert_eq!(label(base), "VIDEO");
-        assert_eq!(label(MediaItemView { format_str: "gif".into(), ..Default::default() }), "GIF");
+        assert_eq!(
+            label(MediaItemView {
+                format_str: "gif".into(),
+                ..Default::default()
+            }),
+            "GIF"
+        );
         assert_eq!(label(MediaItemView::default()), "IMAGE");
     }
 

@@ -1,5 +1,8 @@
 //! Dispatching the action chosen in a context menu to the feature that handles it.
 
+use super::{BridgeContextMenu, ContextMenuRegistration};
+use crate::ui::MainWindow;
+use crate::ui::context_menu::browse::{BrowseActionContext, BrowseContextMenus};
 pub use crate::ui::context_menu::favorite::FavoriteContextMenu;
 pub use crate::ui::context_menu::folder::FolderContextMenu;
 pub use crate::ui::context_menu::media::{MediaActionContext, MediaContextMenu};
@@ -9,10 +12,7 @@ pub use crate::ui::context_menu::tag::TagContextMenu;
 use crate::ui::favorites::BridgeFavorites;
 use crate::ui::folder_dialogs::FolderDialogContext;
 use crate::ui::state::*;
-use crate::ui::context_menu::browse::{BrowseActionContext, BrowseContextMenus};
-use crate::ui::MainWindow;
 use slint::ComponentHandle;
-use super::{BridgeContextMenu, ContextMenuRegistration};
 
 impl BridgeContextMenu {
     pub(super) fn register_action_dispatcher(window: &MainWindow, reg: ContextMenuRegistration) {
@@ -42,13 +42,7 @@ impl BridgeContextMenu {
             // 1. Favorites Action Handling (5000..6000)
             if (5000..6000).contains(&action_u64) {
                 let target_fav = st.write().active_favorite_target.take();
-                FavoriteContextMenu::handle_action(
-                    action_u64,
-                    &win,
-                    &favs,
-                    &fav_ren_dlg,
-                    target_fav,
-                );
+                FavoriteContextMenu::handle_action(action_u64, &win, &favs, &fav_ren_dlg, target_fav);
                 return;
             }
 
@@ -145,12 +139,7 @@ impl BridgeContextMenu {
                         fullscreen: &fs_ctrl,
                     };
 
-                    MediaContextMenu::handle_file_action_for_ids(
-                        action_u64,
-                        &win,
-                        &media_action_ctx,
-                        &[tab.media_id],
-                    );
+                    MediaContextMenu::handle_file_action_for_ids(action_u64, &win, &media_action_ctx, &[tab.media_id]);
                     return;
                 }
             }

@@ -43,8 +43,12 @@ pub fn get_slint_window_xid_with_title_fallback(window: &slint::Window, fallback
 /// Performs STRICT title matching to prevent accidentally capturing other windows of the same process.
 pub fn find_window_by_pid_and_title(target_pid: u32, title_contains: &str) -> Option<u64> {
     let session = Session::open("the window search").ok()?;
-    let [atom_pid, net_wm_name, wm_name, utf8, string] = session.atoms(["_NET_WM_PID", "_NET_WM_NAME", "WM_NAME", "UTF8_STRING", "STRING"])?;
-    let atoms = TitleAtoms { names: [net_wm_name, wm_name], types: [utf8, string, u32::from(AtomEnum::ANY)] };
+    let [atom_pid, net_wm_name, wm_name, utf8, string] =
+        session.atoms(["_NET_WM_PID", "_NET_WM_NAME", "WM_NAME", "UTF8_STRING", "STRING"])?;
+    let atoms = TitleAtoms {
+        names: [net_wm_name, wm_name],
+        types: [utf8, string, u32::from(AtomEnum::ANY)],
+    };
     let top_level = session.conn.query_tree(session.root).ok()?.reply().ok()?.children;
 
     for window in top_level.into_iter().rev() {
@@ -83,10 +87,19 @@ fn window_tree_has_title(session: &Session, atoms: &TitleAtoms, window: Window, 
     if window_title_matches(session, atoms, window, title_match) {
         return true;
     }
-    let Some(children) = session.conn.query_tree(window).ok().and_then(|cookie| cookie.reply().ok()).map(|reply| reply.children) else {
+    let Some(children) = session
+        .conn
+        .query_tree(window)
+        .ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .map(|reply| reply.children)
+    else {
         return false;
     };
-    children.into_iter().rev().any(|child| window_tree_has_title(session, atoms, child, title_match))
+    children
+        .into_iter()
+        .rev()
+        .any(|child| window_tree_has_title(session, atoms, child, title_match))
 }
 
 fn window_title_matches(session: &Session, atoms: &TitleAtoms, window: Window, title_match: &str) -> bool {
@@ -105,7 +118,11 @@ fn window_title_matches(session: &Session, atoms: &TitleAtoms, window: Window, t
             }
             let title = String::from_utf8_lossy(&reply.value);
             // Match window title strictly to avoid matching "RustView - Settings" when searching for "RustView".
-            let matches = if title_match == "RustView" { title.trim() == "RustView" } else { title.contains(title_match) };
+            let matches = if title_match == "RustView" {
+                title.trim() == "RustView"
+            } else {
+                title.contains(title_match)
+            };
             if matches {
                 return true;
             }

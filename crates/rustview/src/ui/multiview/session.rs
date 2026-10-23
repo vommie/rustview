@@ -14,25 +14,21 @@ use super::router::{UiEventSink, execute};
 use super::session_convert::park_below_main_window;
 use super::tab_host;
 use super::views::{self, ImageCache, ViewModels};
-use rustview_core::util::hex_color;
-use rustview_core::settings::SettingsManager;
-use rustview_core::settings::schema::{
-    MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS,
-    MULTIVIEW_TICK_MS,
-};
 use crate::system::{MonitorInfo, SystemDisplayService};
-use crate::ui::state::UiState;
 use crate::ui::MainWindow;
 use crate::ui::MultiviewFullscreenWindow;
-use crate::viewer::{TabId, ViewerTabManager};
+use crate::ui::state::UiState;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance};
 use crate::viewer::multiview::route::UiAction;
 use crate::viewer::{PointerProbe, force_x11_fullscreen_on_monitor, get_raw_window_xid};
+use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
-use slint::{
-    CloseRequestResponse, Color, ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer,
-    TimerMode,
+use rustview_core::settings::SettingsManager;
+use rustview_core::settings::schema::{
+    MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS, MULTIVIEW_TICK_MS,
 };
+use rustview_core::util::hex_color;
+use slint::{CloseRequestResponse, Color, ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -95,9 +91,7 @@ pub(super) struct Session {
 /// after the session borrow is released, so it may close the session.
 pub(super) fn run(f: impl FnOnce(&mut Session) -> UiAction) {
     let outcome = SESSION.with(|cell| match cell.try_borrow_mut() {
-        Ok(mut guard) => guard
-            .as_mut()
-            .map(|session| (f(session), session.handle.clone())),
+        Ok(mut guard) => guard.as_mut().map(|session| (f(session), session.handle.clone())),
         Err(_) => {
             tracing::debug!("[Multiview: Session] Skipped a re-entrant event");
             None
@@ -116,11 +110,7 @@ pub(super) fn with_session(f: impl FnOnce(&mut Session)) {
 }
 
 fn session_generation() -> Option<u64> {
-    SESSION.with(|cell| {
-        cell.try_borrow()
-            .ok()
-            .and_then(|g| g.as_ref().map(|s| s.generation))
-    })
+    SESSION.with(|cell| cell.try_borrow().ok().and_then(|g| g.as_ref().map(|s| s.generation)))
 }
 
 /// A user action changed the Browse selection: the Multiview follows it, at once or once the selection is quiet.
@@ -136,7 +126,9 @@ pub(super) fn schedule_follow(pace: Pace) {
                 Duration::from_millis(MULTIVIEW_SELECTION_DEBOUNCE_MS),
                 || with_session(Session::follow_now),
             ),
-            Pace::After(delay) => s.debounce.start(TimerMode::SingleShot, delay, || with_session(Session::follow_now)),
+            Pace::After(delay) => s
+                .debounce
+                .start(TimerMode::SingleShot, delay, || with_session(Session::follow_now)),
         }
     });
 }
@@ -239,10 +231,7 @@ fn window_weak() -> Option<slint::Weak<MultiviewFullscreenWindow>> {
     })
 }
 
-fn resolve_monitor(
-    settings: &SettingsManager,
-    main_window: &slint::Weak<MainWindow>,
-) -> MonitorInfo {
+fn resolve_monitor(settings: &SettingsManager, main_window: &slint::Weak<MainWindow>) -> MonitorInfo {
     let main_geom = main_window.upgrade().map(|w| {
         let pos = w.window().position();
         let size = w.window().size();
@@ -265,10 +254,8 @@ fn prepare_window(
     let appearance = &settings.get().appearance;
     bar_overlay::set_tooltip_settings(appearance.enable_tooltips, appearance.tooltip_delay_ms as i32);
     bar_overlay::prepare();
-    win.window()
-        .set_position(PhysicalPosition::new(monitor.x, monitor.y));
-    win.window()
-        .set_size(PhysicalSize::new(monitor.width, monitor.height));
+    win.window().set_position(PhysicalPosition::new(monitor.x, monitor.y));
+    win.window().set_size(PhysicalSize::new(monitor.width, monitor.height));
 }
 
 /// Opens the Multiview with the tiles of `plan`. A Multiview that is already open is replaced. UI thread only.
@@ -293,12 +280,7 @@ pub(super) fn open_tab(
 ) -> bool {
     tab_host::suspend();
     instance.lock().deactivate();
-    launch(
-        handle,
-        Source::Tab { instance, tab },
-        &settings,
-        main_window,
-    )
+    launch(handle, Source::Tab { instance, tab }, &settings, main_window)
 }
 
 fn launch(
@@ -326,18 +308,9 @@ fn launch(
     let session = Session::new(handle, window, monitor, source);
     let generation = session.generation;
     let tile_count = session.instance.lock().tile_count();
-    prepare_window(
-        &win,
-        settings,
-        &session.monitor,
-        &session.models,
-    );
+    prepare_window(&win, settings, &session.monitor, &session.models);
     session.instance.lock().set_video_background(video_background(&win));
-    if SESSION.with(|cell| {
-        cell.try_borrow_mut()
-            .map(|mut g| *g = Some(session))
-            .is_err()
-    }) {
+    if SESSION.with(|cell| cell.try_borrow_mut().map(|mut g| *g = Some(session)).is_err()) {
         tracing::error!("[Multiview: Open] The session slot is busy; not opening");
         return false;
     }
@@ -437,7 +410,9 @@ pub(super) fn shutdown() {
     match take_session() {
         Ok(Some(session)) => finish_close(session, false),
         Ok(None) => {}
-        Err(()) => tracing::warn!("[Shutdown: Windows] The fullscreen is busy with an event; it cannot be closed in order"),
+        Err(()) => {
+            tracing::warn!("[Shutdown: Windows] The fullscreen is busy with an event; it cannot be closed in order")
+        }
     }
 }
 
@@ -457,11 +432,7 @@ pub(super) fn close_if_tab_gone(tab_manager: &ViewerTabManager) {
 
 /// Takes the session out of its slot. `Err` means the slot is borrowed right now (an event handler is running).
 pub(super) fn take_session() -> Result<Option<Session>, ()> {
-    SESSION.with(|cell| {
-        cell.try_borrow_mut()
-            .map(|mut slot| slot.take())
-            .map_err(|_| ())
-    })
+    SESSION.with(|cell| cell.try_borrow_mut().map(|mut slot| slot.take()).map_err(|_| ()))
 }
 
 /// Shuts a session that was taken out of its slot down. A Multiview that comes from a tab hands its windows back to the tab
@@ -473,10 +444,7 @@ pub(super) fn finish_close(session: Session, notify: bool) {
     if tab_return.is_some()
         && let Err(reason) = park_below_main_window(&session)
     {
-        tracing::warn!(
-            reason,
-            "[Multiview: Close] The windows could not return to the tab"
-        );
+        tracing::warn!(reason, "[Multiview: Close] The windows could not return to the tab");
     }
     // The placeholders stay until the main window has shown the tab again (`notify_closed`); without that notification (another
     // fullscreen replaces this one, which sets the id itself) nothing would clear them.
@@ -503,11 +471,7 @@ impl Session {
         let (instance, state, tab_return) = match source {
             Source::Plan { plan, state } => {
                 let sink = Arc::new(UiEventSink::new(handle.clone()));
-                (
-                    MultiviewInstance::create(sink, plan.tiles),
-                    Some(state),
-                    None,
-                )
+                (MultiviewInstance::create(sink, plan.tiles), Some(state), None)
             }
             Source::Tab { instance, tab } => (instance, None, Some(tab)),
         };
@@ -569,11 +533,10 @@ impl Session {
         if let Some(win) = self.window.upgrade() {
             win.set_is_ready(true);
         }
-        self.tick.start(
-            TimerMode::Repeated,
-            Duration::from_millis(MULTIVIEW_TICK_MS),
-            || with_session(Session::on_tick),
-        );
+        self.tick
+            .start(TimerMode::Repeated, Duration::from_millis(MULTIVIEW_TICK_MS), || {
+                with_session(Session::on_tick)
+            });
         tracing::info!(
             generation = self.generation,
             monitor = self.monitor.index,
@@ -603,7 +566,9 @@ impl Session {
     fn manage_glide(&mut self) {
         let animating = self.instance.lock().zoom_animating();
         if animating && !self.glide.running() {
-            self.glide.start(TimerMode::Repeated, Duration::from_millis(16), || with_session(Session::on_glide_frame));
+            self.glide.start(TimerMode::Repeated, Duration::from_millis(16), || {
+                with_session(Session::on_glide_frame)
+            });
         } else if !animating && self.glide.running() {
             self.glide.stop();
         }

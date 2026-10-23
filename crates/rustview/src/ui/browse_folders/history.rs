@@ -41,7 +41,12 @@ impl NavigationHistory {
         Self::step(&mut self.forward, &mut self.back, current, is_valid).inspect(|_| self.replaying = true)
     }
 
-    fn step(from: &mut Vec<FolderId>, to: &mut Vec<FolderId>, current: FolderId, is_valid: impl Fn(FolderId) -> bool) -> Option<FolderId> {
+    fn step(
+        from: &mut Vec<FolderId>,
+        to: &mut Vec<FolderId>,
+        current: FolderId,
+        is_valid: impl Fn(FolderId) -> bool,
+    ) -> Option<FolderId> {
         while let Some(candidate) = from.pop() {
             if candidate != current && is_valid(candidate) {
                 if to.last() != Some(&current) {

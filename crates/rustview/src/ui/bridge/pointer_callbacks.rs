@@ -1,10 +1,10 @@
 //! Rubber band selection and drag and drop callbacks of the Browse view.
 
+use super::UiBridge;
 use crate::ui::dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
 use crate::ui::selection::rubberband_bridge::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
 use rustview_core::library::models::FileTransferKind;
 use slint::ComponentHandle;
-use super::UiBridge;
 
 impl UiBridge {
     pub(super) fn register_rubberband_callbacks(&self) {
@@ -108,13 +108,7 @@ impl UiBridge {
         let autoscroll_end = self.dnd_foldertree_autoscroller.clone();
         let browse_scroll_end = self.dnd_browse_scroller.clone();
         self.window.on_media_drag_ended(move || {
-            BridgeDnd::handle_drag_ended(
-                &win_end,
-                &lib_end,
-                &st_end,
-                &autoscroll_end,
-                &browse_scroll_end,
-            );
+            BridgeDnd::handle_drag_ended(&win_end, &lib_end, &st_end, &autoscroll_end, &browse_scroll_end);
         });
 
         let win_copy = self.window.clone_strong();

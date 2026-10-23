@@ -35,11 +35,21 @@ pub struct MigrateOptions {
     pub skip_missing: bool,
 
     /// Include non-existent folders and files (disables the missing check)
-    #[arg(long, alias = "no-skip-missing", overrides_with = "skip_missing", requires = "xnview_db")]
+    #[arg(
+        long,
+        alias = "no-skip-missing",
+        overrides_with = "skip_missing",
+        requires = "xnview_db"
+    )]
     pub include_missing: bool,
 
     /// Force log and audit trail obfuscation (mask names and paths)
-    #[arg(long, alias = "obfuscate", overrides_with = "no_obfuscate_logs", requires = "xnview_db")]
+    #[arg(
+        long,
+        alias = "obfuscate",
+        overrides_with = "no_obfuscate_logs",
+        requires = "xnview_db"
+    )]
     pub obfuscate_logs: bool,
 
     /// Disable log obfuscation (clear text paths and names)
@@ -64,11 +74,7 @@ pub struct MigrateOptions {
 }
 
 /// Executes the CLI migration workflow.
-pub fn run_cli(
-    options: &MigrateOptions,
-    data_dir: &Path,
-    config_dir: &Path,
-) -> Result<(), MigrationError> {
+pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> Result<(), MigrationError> {
     let xnview_path_opt = options.xnview_db.clone();
     let auto_confirm = options.yes;
     let skip_missing = !options.include_missing; // Default: true (skip non-existing folders and files)
@@ -109,13 +115,8 @@ pub fn run_cli(
     if let Some(explicit_root) = explicit_root_path {
         let norm_root = normalize_input_path(&explicit_root);
         if !norm_root.is_dir() {
-            eprintln!(
-                "Error: Specified base root directory does not exist: {:?}",
-                norm_root
-            );
-            return Err(MigrationError::FileNotFound(
-                norm_root.to_string_lossy().to_string(),
-            ));
+            eprintln!("Error: Specified base root directory does not exist: {:?}", norm_root);
+            return Err(MigrationError::FileNotFound(norm_root.to_string_lossy().to_string()));
         }
 
         // Persist validated base path to settings
@@ -165,13 +166,8 @@ pub fn run_cli(
 
                 let norm_root = normalize_input_path(Path::new(raw_input));
                 if !norm_root.is_dir() {
-                    eprintln!(
-                        "Error: Entered directory does not exist on disk: {:?}",
-                        norm_root
-                    );
-                    return Err(MigrationError::FileNotFound(
-                        norm_root.to_string_lossy().to_string(),
-                    ));
+                    eprintln!("Error: Entered directory does not exist on disk: {:?}", norm_root);
+                    return Err(MigrationError::FileNotFound(norm_root.to_string_lossy().to_string()));
                 }
 
                 // Persist new base path to settings
@@ -282,12 +278,7 @@ pub fn run_cli(
         }
     }
 
-    logger.log_header(
-        &xnview_db_path,
-        data_dir,
-        skip_missing,
-        active_root_path.as_deref(),
-    );
+    logger.log_header(&xnview_db_path, data_dir, skip_missing, active_root_path.as_deref());
 
     println!();
     println!("[1/4] Extracting tables from XnViewMP SQLite database...");
@@ -295,10 +286,7 @@ pub fn run_cli(
     let mut stats = MigrationStats::new(
         &xnview_db_path.to_string_lossy(),
         skip_missing,
-        active_root_path
-            .as_ref()
-            .map(|p| p.to_string_lossy())
-            .as_deref(),
+        active_root_path.as_ref().map(|p| p.to_string_lossy()).as_deref(),
     );
 
     let t_read = Instant::now();

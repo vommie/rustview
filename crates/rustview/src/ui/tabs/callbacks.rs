@@ -1,20 +1,20 @@
 //! The callbacks of the tab bar and the tab view.
 
-use crate::ui::multiview::MultiviewHandle;
+use super::{BridgeViewerTabs, TabDragEndParams};
+use crate::ui::MainWindow;
 use crate::ui::media::BridgeMedia;
+use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tabs::dnd::TabDndAutoScroller;
-use crate::ui::MainWindow;
+use crate::ui::tabs::grid_bridge::BridgeTabGrid;
+use crate::viewer::{TabId, ViewerTabManager};
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::{TabId, ViewerTabManager};
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::sync::Arc;
-use super::{BridgeViewerTabs, TabDragEndParams};
 
 impl BridgeViewerTabs {
     /// Registers all tab-related UI callbacks on the Slint `MainWindow`.
@@ -79,13 +79,7 @@ impl BridgeViewerTabs {
             Self::sync_video_embedding(&win_close, &tm_close, &fs_close, &set_close);
             fs_close.sync_tab(&tm_close);
             if win_close.get_active_view_mode() == 2 {
-                BridgeTabGrid::sync_tab_grid_ui(
-                    &win_close,
-                    &tm_close,
-                    &lib_close,
-                    &set_close,
-                    &st_close,
-                );
+                BridgeTabGrid::sync_tab_grid_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
             }
         });
 
@@ -98,13 +92,7 @@ impl BridgeViewerTabs {
         let fs_wheel = fullscreen.clone();
         window.on_tab_wheel_scrolled(move |is_next| {
             Self::cycle_active_tab(
-                &win_wheel,
-                &tm_wheel,
-                &lib_wheel,
-                &set_wheel,
-                &st_wheel,
-                &fs_wheel,
-                is_next,
+                &win_wheel, &tm_wheel, &lib_wheel, &set_wheel, &st_wheel, &fs_wheel, is_next,
             );
             Self::sync_video_embedding(&win_wheel, &tm_wheel, &fs_wheel, &set_wheel);
         });
@@ -129,13 +117,7 @@ impl BridgeViewerTabs {
         let st_dmove = state.clone();
         let scroller_dmove = tab_autoscroller.clone();
         window.on_tab_drag_moved(move |mouse_x, view_w| {
-            Self::handle_tab_drag_moved(
-                mouse_x,
-                view_w,
-                &win_dmove,
-                &st_dmove,
-                &scroller_dmove,
-            );
+            Self::handle_tab_drag_moved(mouse_x, view_w, &win_dmove, &st_dmove, &scroller_dmove);
         });
 
         let win_dend = window.clone_strong();
@@ -168,13 +150,7 @@ impl BridgeViewerTabs {
             scroller_dcancel.stop();
             st_dcancel.write().active_tab_dnd_session = None;
             win_dcancel.set_is_dragging_tab(false);
-            Self::sync_ui(
-                &win_dcancel,
-                &tm_dcancel,
-                &lib_dcancel,
-                &set_dcancel,
-                &st_dcancel,
-            );
+            Self::sync_ui(&win_dcancel, &tm_dcancel, &lib_dcancel, &set_dcancel, &st_dcancel);
         });
 
         // 6. Viewer Toolbar Close Tab Button / Keyboard Shortcut
@@ -191,23 +167,11 @@ impl BridgeViewerTabs {
                     "[BridgeViewerTabs: ViewerClose] Closed active tab from viewer toolbar / shortcut"
                 );
                 tm_v_close.close_tab(active_id);
-                Self::sync_ui(
-                    &win_v_close,
-                    &tm_v_close,
-                    &lib_v_close,
-                    &set_v_close,
-                    &st_v_close,
-                );
+                Self::sync_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
                 Self::sync_video_embedding(&win_v_close, &tm_v_close, &fs_v_close, &set_v_close);
                 fs_v_close.sync_tab(&tm_v_close);
                 if win_v_close.get_active_view_mode() == 2 {
-                    BridgeTabGrid::sync_tab_grid_ui(
-                        &win_v_close,
-                        &tm_v_close,
-                        &lib_v_close,
-                        &set_v_close,
-                        &st_v_close,
-                    );
+                    BridgeTabGrid::sync_tab_grid_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
                 }
             }
         });
@@ -248,9 +212,7 @@ impl BridgeViewerTabs {
         let set_prev = settings.clone();
         let fs_prev = fullscreen.clone();
         window.on_viewer_previous(move || {
-            Self::navigate_adjacent(
-                &win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, &fs_prev, false,
-            );
+            Self::navigate_adjacent(&win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, &fs_prev, false);
             Self::sync_video_embedding(&win_prev, &tm_prev, &fs_prev, &set_prev);
         });
 
@@ -261,9 +223,7 @@ impl BridgeViewerTabs {
         let set_next = settings.clone();
         let fs_next = fullscreen.clone();
         window.on_viewer_next(move || {
-            Self::navigate_adjacent(
-                &win_next, &tm_next, &lib_next, &set_next, &st_next, &fs_next, true,
-            );
+            Self::navigate_adjacent(&win_next, &tm_next, &lib_next, &set_next, &st_next, &fs_next, true);
             Self::sync_video_embedding(&win_next, &tm_next, &fs_next, &set_next);
         });
 

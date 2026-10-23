@@ -18,20 +18,20 @@ mod windows;
 
 pub use windows::WINDOWS;
 
-use rustview_core::settings::schema::SHUTDOWN_WATCHDOG_MS;
-use crate::ui::SettingsDialogController;
-use rustview_core::settings::SettingsManager;
 use crate::system::SystemDndHandler;
 use crate::system::termination;
-use rustview_core::thumbnails::ThumbnailManager;
+use crate::ui::SettingsDialogController;
 use crate::ui::open_confirmation::OpenConfirmation;
 use crate::ui::{
-    FavoriteRenameDialogController, FileOpsConflictDialogController, FileRenameDialog, FolderDialogController,
-    DeleteFileDialogController, MainWindow, MissingFileDialogController, MultiviewHandle,
+    DeleteFileDialogController, FavoriteRenameDialogController, FileOpsConflictDialogController, FileRenameDialog,
+    FolderDialogController, MainWindow, MissingFileDialogController, MultiviewHandle,
     RemoveOrphanedFileDialogController, TagDialogController, UiState, color_picker,
 };
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
+use rustview_core::settings::SettingsManager;
+use rustview_core::settings::schema::SHUTDOWN_WATCHDOG_MS;
+use rustview_core::thumbnails::ThumbnailManager;
 use slint::ComponentHandle;
 use std::cell::RefCell;
 use std::rc::Rc;

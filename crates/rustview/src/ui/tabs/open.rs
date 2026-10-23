@@ -1,19 +1,19 @@
 //! Opening media in tabs (foreground and background).
 
+use super::BridgeViewerTabs;
+use crate::ui::MainWindow;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
-use crate::ui::MainWindow;
-use rustview_core::library::models::MediaId;
-use rustview_core::library::Library;
-use rustview_core::media::MediaType;
-use rustview_core::settings::SettingsManager;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::library::models::MediaId;
+use rustview_core::media::MediaType;
+use rustview_core::settings::SettingsManager;
 use std::sync::Arc;
 use std::time::Instant;
-use super::BridgeViewerTabs;
 
 impl BridgeViewerTabs {
     /// Whether more than one tab may show `media_id` (the settings of the viewer for images and videos).
@@ -34,7 +34,11 @@ impl BridgeViewerTabs {
             }
         };
         let viewer = settings.get().viewer;
-        if is_video { viewer.videos.allow_multiple_tabs } else { viewer.images.allow_multiple_tabs }
+        if is_video {
+            viewer.videos.allow_multiple_tabs
+        } else {
+            viewer.images.allow_multiple_tabs
+        }
     }
 
     /// Opens multiple media items in foreground viewer tabs.
@@ -96,15 +100,9 @@ impl BridgeViewerTabs {
         }
 
         let all_tabs = tab_manager.list_tabs();
-        let last_title = ViewerTabManager::compute_tab_title(
-            &all_tabs,
-            tab_manager.active_tab_id().unwrap_or(0),
-        );
+        let last_title = ViewerTabManager::compute_tab_title(&all_tabs, tab_manager.active_tab_id().unwrap_or(0));
 
-        StatusBarBridge::success(
-            window,
-            format!("Opened {} tabs (Foreground: '{}')", total, last_title),
-        );
+        StatusBarBridge::success(window, format!("Opened {} tabs (Foreground: '{}')", total, last_title));
 
         tracing::info!(
             total_opened = total,
@@ -150,10 +148,7 @@ impl BridgeViewerTabs {
             BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, library, settings, state);
         }
 
-        StatusBarBridge::success(
-            window,
-            format!("Opened {} tabs in background", opened_count),
-        );
+        StatusBarBridge::success(window, format!("Opened {} tabs in background", opened_count));
 
         tracing::info!(
             opened_count,
@@ -199,10 +194,7 @@ impl BridgeViewerTabs {
                     error = %e,
                     "[BridgeViewerTabs: OpenError] Failed to open media tab"
                 );
-                StatusBarBridge::error(
-                    window,
-                    format!("Failed to open tab for media #{}: {}", media_id, e),
-                );
+                StatusBarBridge::error(window, format!("Failed to open tab for media #{}: {}", media_id, e));
             }
         }
     }

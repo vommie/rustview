@@ -7,11 +7,11 @@
 
 use super::geometry::ViewGeometry;
 use super::view_builder::build_view;
+use crate::ui::browse_folders::{Slot, folder_row_view};
+use crate::ui::state::UiState;
+use crate::ui::{MainWindow, MediaItemView};
 use rustview_core::library::models::MediaId;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::ui::state::UiState;
-use crate::ui::browse_folders::{Slot, folder_row_view};
-use crate::ui::{MainWindow, MediaItemView};
 use slint::{Image, Model, ModelRc, VecModel};
 use std::rc::Rc;
 use std::time::Instant;
@@ -29,7 +29,10 @@ pub struct SyncOutcome {
 
 /// Rows that carry no item (the pool is larger than the window at the end of the list) are parked off the grid.
 fn placeholder_row() -> MediaItemView {
-    MediaItemView { index: -1, ..Default::default() }
+    MediaItemView {
+        index: -1,
+        ..Default::default()
+    }
 }
 
 /// The picture for `item`, if it is in RAM; the id is queued for loading otherwise.
@@ -37,7 +40,9 @@ fn tile_image(thumbnails: &ThumbnailManager, id: MediaId, is_table: bool) -> Ima
     if is_table {
         return Image::default();
     }
-    thumbnails.cached_thumbnail(id).map_or_else(Image::default, Image::from_rgb8)
+    thumbnails
+        .cached_thumbnail(id)
+        .map_or_else(Image::default, Image::from_rgb8)
 }
 
 fn build_row(st: &UiState, thumbnails: &ThumbnailManager, position: usize, is_table: bool) -> MediaItemView {
@@ -51,7 +56,13 @@ fn build_row(st: &UiState, thumbnails: &ThumbnailManager, position: usize, is_ta
         },
         Slot::Folder(folder) => {
             let selected = st.folder_rows.is_selected(folder);
-            folder_row_view(st.folder_hierarchy.as_deref(), folder, position, selected, &st.folder_times)
+            folder_row_view(
+                st.folder_hierarchy.as_deref(),
+                folder,
+                position,
+                selected,
+                &st.folder_times,
+            )
         }
         Slot::Empty => placeholder_row(),
     }
@@ -72,7 +83,10 @@ pub fn sync_window(
     let pool = geometry.pool_size(total);
     let model = window.get_media_items();
     let rebuild = force || pool != st.ring.pool() || model.row_count() != pool;
-    let mut outcome = SyncOutcome { rebuilt: rebuild, ..Default::default() };
+    let mut outcome = SyncOutcome {
+        rebuilt: rebuild,
+        ..Default::default()
+    };
 
     if rebuild {
         st.ring.reset(pool);
@@ -110,7 +124,9 @@ fn request_missing_thumbnails(
     let mut missing: Vec<(usize, MediaId)> = window
         .clone()
         .filter_map(|position| {
-            let Slot::Media(row) = st.slot_at(position) else { return None };
+            let Slot::Media(row) = st.slot_at(position) else {
+                return None;
+            };
             let id = st.item_at(row)?.record.id;
             (!thumbnails.cache().contains(id)).then_some((position.abs_diff(center), id))
         })

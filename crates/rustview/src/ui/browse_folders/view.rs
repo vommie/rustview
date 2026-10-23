@@ -2,9 +2,9 @@
 
 use super::rows::FolderRowRef;
 use super::times::{FolderStamp, FolderTimes};
-use rustview_core::library::models::{CachedFolderNode, FolderHierarchySnapshot};
 use crate::ui::MediaItemView;
 use crate::ui::models::format_timestamp;
+use rustview_core::library::models::{CachedFolderNode, FolderHierarchySnapshot};
 use slint::SharedString;
 use std::sync::Arc;
 
@@ -13,7 +13,10 @@ pub const UP_LABEL: &str = "...";
 
 /// The date strings of a folder (empty where unknown).
 pub fn stamp_labels(stamp: Option<FolderStamp>) -> (SharedString, SharedString) {
-    let label = |secs: Option<i64>| secs.map(|s| SharedString::from(format_timestamp(s))).unwrap_or_default();
+    let label = |secs: Option<i64>| {
+        secs.map(|s| SharedString::from(format_timestamp(s)))
+            .unwrap_or_default()
+    };
     stamp.map(|s| (label(s.modified), label(s.created))).unwrap_or_default()
 }
 
@@ -30,12 +33,20 @@ pub struct FolderFlags {
 impl FolderFlags {
     pub fn of(node: &CachedFolderNode, snapshot: Option<&FolderHierarchySnapshot>) -> Self {
         let missing_children = snapshot
-            .map(|s| node.children.iter().filter(|id| s.get_node(**id).is_some_and(|c| c.is_deleted)).count())
+            .map(|s| {
+                node.children
+                    .iter()
+                    .filter(|id| s.get_node(**id).is_some_and(|c| c.is_deleted))
+                    .count()
+            })
             .unwrap_or(0);
         Self {
             missing: node.is_deleted,
             hidden: node.is_hidden,
-            empty: !node.is_deleted && node.recursive_media_count == 0 && node.subfolder_count == 0 && missing_children == 0,
+            empty: !node.is_deleted
+                && node.recursive_media_count == 0
+                && node.subfolder_count == 0
+                && missing_children == 0,
             missing_children: if node.is_deleted { 0 } else { missing_children },
         }
     }
@@ -80,7 +91,12 @@ pub fn folder_row_view(
         FolderRowRef::Folder(id) => {
             if let Some(node) = snapshot.and_then(|s| s.get_node(id)) {
                 view.filename = node.name.as_str().into();
-                view.path_str = node.path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default().into();
+                view.path_str = node
+                    .path
+                    .parent()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+                    .into();
                 view.is_deleted = node.is_deleted;
                 let flags = FolderFlags::of(node, snapshot);
                 view.folder_hidden = flags.hidden;

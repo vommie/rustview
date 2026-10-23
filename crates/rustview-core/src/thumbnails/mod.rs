@@ -25,15 +25,14 @@ pub use progress::{PipelinePhase, ThumbnailProgressSnapshot, ThumbnailProgressTr
 pub use ram_cache::{CachedThumbnail, RamCacheStats, ThumbnailRamCache};
 pub use store::PackStore;
 pub use types::{
-    anonymize_target, calculate_aspect_dimensions, generate_random_video_offset_percent,
-    FitMode, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat,
-    ThumbnailLocation, ThumbnailPriority, ThumbnailStorageStats, VideoPreviewRecord,
-    VideoThumbnailEngine, DEFAULT_THUMBNAIL_BOUND, THUMBNAIL_BYTE_SIZE, THUMBNAIL_CHANNELS,
-    THUMBNAIL_PIXELS, THUMBNAIL_SIZE,
+    DEFAULT_THUMBNAIL_BOUND, FitMode, ScalingAlgorithm, THUMBNAIL_BYTE_SIZE, THUMBNAIL_CHANNELS, THUMBNAIL_PIXELS,
+    THUMBNAIL_SIZE, ThumbnailConfig, ThumbnailFormat, ThumbnailLocation, ThumbnailPriority, ThumbnailStorageStats,
+    VideoPreviewRecord, VideoThumbnailEngine, anonymize_target, calculate_aspect_dimensions,
+    generate_random_video_offset_percent,
 };
 
-use crate::library::models::MediaId;
 use crate::library::Library;
+use crate::library::models::MediaId;
 use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::{Path, PathBuf};
@@ -81,12 +80,7 @@ impl ThumbnailManager {
         self.scheduler.get_config()
     }
 
-    pub fn start_pipeline(
-        &self,
-        folder_id: u64,
-        items: Vec<PipelineItem>,
-        config: ThumbnailConfig,
-    ) {
+    pub fn start_pipeline(&self, folder_id: u64, items: Vec<PipelineItem>, config: ThumbnailConfig) {
         self.scheduler.start_folder_pipeline(folder_id, items, config);
     }
 
@@ -115,10 +109,7 @@ impl ThumbnailManager {
     /// Fast non-blocking lookup for cached preview animation frames (0.05ms).
     /// NEVER invokes heavy video decoding on UI threads.
     #[inline]
-    pub fn try_load_preview_frames(
-        &self,
-        media_id: MediaId,
-    ) -> Option<Vec<(u32, u32, Vec<u8>)>> {
+    pub fn try_load_preview_frames(&self, media_id: MediaId) -> Option<Vec<(u32, u32, Vec<u8>)>> {
         self.scheduler.try_load_preview_frames(media_id)
     }
 

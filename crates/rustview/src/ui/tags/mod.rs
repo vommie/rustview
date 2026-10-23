@@ -2,29 +2,29 @@ pub mod dialogs;
 pub mod history;
 pub mod history_bridge;
 
+use crate::ctx_menu::CtxMenuActionId;
+use crate::ui::MainWindow;
 use crate::ui::context_menu::BridgeContextMenu;
 use crate::ui::context_menu::tag::TagContextMenu;
 use crate::ui::state::*;
-use crate::ui::MainWindow;
-use crate::ctx_menu::CtxMenuActionId;
-use rustview_core::library::models::{MediaId, TagId};
-use rustview_core::library::Library;
-use rustview_core::settings::{LogObscurer, SettingsManager};
-use rustview_core::thumbnails::ThumbnailManager;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use regex::RegexBuilder;
+use rustview_core::library::Library;
+use rustview_core::library::models::{MediaId, TagId};
+use rustview_core::settings::{LogObscurer, SettingsManager};
+use rustview_core::thumbnails::ThumbnailManager;
 use slint::{Model, ModelRc, VecModel};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
+pub mod handler;
 pub mod selection_stats;
 pub mod tree;
-pub mod handler;
-pub use selection_stats::{TagSelectionStats};
+pub use handler::TagActionHandler;
+pub use selection_stats::TagSelectionStats;
 pub use tree::{TagFlattenContext, TagTreeBuilder, TagTreeNode, TagTreeSync};
-pub use handler::{TagActionHandler};
 
 mod callbacks;
 
@@ -59,7 +59,6 @@ pub struct TagActionDialogs {
 pub struct BridgeTags;
 
 impl BridgeTags {
-
     pub fn reload_tags(window: &MainWindow, library: &Library, state: &RwLock<UiState>) {
         let t0 = Instant::now();
         let tags = library.tags().list_all_tags().unwrap_or_default();
@@ -184,12 +183,7 @@ impl BridgeTags {
         Self::reload_tags(window, library, state);
     }
 
-    pub fn expand_all(
-        window: &MainWindow,
-        library: &Library,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn expand_all(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
         let all_tags = library.tags().list_all_tags().unwrap_or_default();
         {
             let mut st = state.write();
@@ -201,12 +195,7 @@ impl BridgeTags {
         Self::reload_tags(window, library, state);
     }
 
-    pub fn collapse_all(
-        window: &MainWindow,
-        library: &Library,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn collapse_all(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
         {
             let mut st = state.write();
             st.expanded_tag_ids.clear();
@@ -215,12 +204,7 @@ impl BridgeTags {
         Self::reload_tags(window, library, state);
     }
 
-    pub fn filter_tags(
-        window: &MainWindow,
-        library: &Library,
-        state: &RwLock<UiState>,
-        filter_text: &str,
-    ) {
+    pub fn filter_tags(window: &MainWindow, library: &Library, state: &RwLock<UiState>, filter_text: &str) {
         state.write().tag_filter_query = filter_text.trim().to_string();
         Self::reload_tags(window, library, state);
     }
@@ -279,41 +263,27 @@ impl BridgeTags {
     }
 
     #[inline]
-    pub fn toggle_tag(
-        tag_id: TagId,
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn toggle_tag(tag_id: TagId, ctx: &TagActionContext<'_>) {
         TagActionHandler::toggle_tag(tag_id, ctx);
     }
 
     #[inline]
-    pub fn apply_rating(
-        rating: Option<u8>,
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn apply_rating(rating: Option<u8>, ctx: &TagActionContext<'_>) {
         TagActionHandler::apply_rating(rating, ctx);
     }
 
     #[inline]
-    pub fn apply_rating_to_ids(
-        ids: &HashSet<MediaId>,
-        rating: u8,
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn apply_rating_to_ids(ids: &HashSet<MediaId>, rating: u8, ctx: &TagActionContext<'_>) {
         TagActionHandler::apply_rating_to_ids(ids, rating, ctx);
     }
 
     #[inline]
-    pub fn reset_query(
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn reset_query(ctx: &TagActionContext<'_>) {
         TagActionHandler::reset_query(ctx);
     }
 
     #[inline]
-    pub fn execute_query_flow(
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn execute_query_flow(ctx: &TagActionContext<'_>) {
         TagActionHandler::execute_query_flow(ctx);
     }
 }

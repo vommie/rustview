@@ -23,7 +23,10 @@ fn ignored_at_startup(signal: c_int) -> bool {
     let Ok(status) = Process::myself().and_then(|process| process.status()) else {
         return false;
     };
-    u32::try_from(signal - 1).ok().and_then(|bit| 1u64.checked_shl(bit)).is_some_and(|mask| status.sigign & mask != 0)
+    u32::try_from(signal - 1)
+        .ok()
+        .and_then(|bit| 1u64.checked_shl(bit))
+        .is_some_and(|mask| status.sigign & mask != 0)
 }
 
 /// Routes `SIGINT`, `SIGTERM` and `SIGHUP` to the orderly shutdown. Call once at startup, before other threads are created.
@@ -33,7 +36,10 @@ pub fn install_signal_handlers() {
         .filter(|&(signum, name)| {
             let ignored = ignored_at_startup(signum);
             if ignored {
-                tracing::debug!(signal = name, "[Shutdown: Signals] The signal was ignored at startup; it stays ignored");
+                tracing::debug!(
+                    signal = name,
+                    "[Shutdown: Signals] The signal was ignored at startup; it stays ignored"
+                );
             }
             !ignored
         })
@@ -49,13 +55,15 @@ pub fn install_signal_handlers() {
     };
     // The library's handler only wakes this thread (async-signal-safe); logging and the decision happen here. The UI thread picks the
     // signal up from its housekeeping timer.
-    let spawned = std::thread::Builder::new().name("termination-signals".into()).spawn(move || {
-        for signum in signals.forever() {
-            if RECEIVED.swap(signum, Ordering::SeqCst) != 0 {
-                exit_now(128 + signum);
+    let spawned = std::thread::Builder::new()
+        .name("termination-signals".into())
+        .spawn(move || {
+            for signum in signals.forever() {
+                if RECEIVED.swap(signum, Ordering::SeqCst) != 0 {
+                    exit_now(128 + signum);
+                }
             }
-        }
-    });
+        });
     if let Err(e) = spawned {
         tracing::warn!(error = %e, "[Shutdown: Signals] Could not start the signal thread; the signals are held back");
         return;

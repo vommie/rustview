@@ -24,7 +24,9 @@ fn window_components(text: &str) -> Vec<String> {
 }
 
 fn slint_files(dir: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
     let mut files: Vec<PathBuf> = entries
         .flatten()
         .map(|e| e.path())
@@ -44,7 +46,11 @@ fn every_slint_window_is_handled_by_the_shutdown() {
         let text = fs::read_to_string(&file).unwrap_or_default();
         windows.extend(window_components(&text));
     }
-    assert!(windows.len() >= 20, "found only {} windows; the scan is broken: {windows:?}", windows.len());
+    assert!(
+        windows.len() >= 20,
+        "found only {} windows; the scan is broken: {windows:?}",
+        windows.len()
+    );
 
     let missing: Vec<&String> = windows
         .iter()
@@ -68,6 +74,12 @@ fn the_manifest_lists_no_window_that_does_not_exist() {
         .filter_map(|line| line.trim_start().strip_prefix("(\""))
         .filter_map(|rest| rest.split_once('"').map(|(name, _)| name))
         .collect();
-    let stale: Vec<&&str> = listed.iter().filter(|name| !windows.iter().any(|w| w == **name)).collect();
-    assert!(stale.is_empty(), "windows listed in the manifest that no .slint file declares: {stale:?}");
+    let stale: Vec<&&str> = listed
+        .iter()
+        .filter(|name| !windows.iter().any(|w| w == **name))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "windows listed in the manifest that no .slint file declares: {stale:?}"
+    );
 }

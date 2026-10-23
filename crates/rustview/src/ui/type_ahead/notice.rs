@@ -1,9 +1,9 @@
 //! The "No match" message of the status bar: shown while nothing starts with the typed text, and taken back (the status bar shows
 //! again what it showed before) after `TYPE_AHEAD_NO_MATCH_MESSAGE_MS`, when a search finds something or ends. UI thread only.
 
-use rustview_core::settings::schema::TYPE_AHEAD_NO_MATCH_MESSAGE_MS;
 use crate::ui::MainWindow;
 use crate::ui::status_bar::{StatusBarBridge, StatusMessageLevel};
+use rustview_core::settings::schema::TYPE_AHEAD_NO_MATCH_MESSAGE_MS;
 use slint::{ComponentHandle, SharedString, Timer, TimerMode};
 use std::cell::RefCell;
 use std::time::Duration;
@@ -30,11 +30,15 @@ pub fn show(window: &MainWindow, text: String) {
         StatusBarBridge::set_message(window, text, StatusMessageLevel::Info);
         notice.shown = window.get_status_text();
         let weak = window.as_weak();
-        notice.timer.start(TimerMode::SingleShot, Duration::from_millis(TYPE_AHEAD_NO_MATCH_MESSAGE_MS), move || {
-            if let Some(window) = weak.upgrade() {
-                clear(&window);
-            }
-        });
+        notice.timer.start(
+            TimerMode::SingleShot,
+            Duration::from_millis(TYPE_AHEAD_NO_MATCH_MESSAGE_MS),
+            move || {
+                if let Some(window) = weak.upgrade() {
+                    clear(&window);
+                }
+            },
+        );
     });
 }
 

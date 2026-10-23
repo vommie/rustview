@@ -8,8 +8,8 @@ use crate::media::{DirectoryScanner, FormatMask, FormatPolicy, MediaFormat};
 use crate::settings::LogObscurer;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Shared progress callback receiving the number of directories visited so far.
 pub type ScanProgressCallback = Arc<dyn Fn(usize) + Send + Sync>;
@@ -76,13 +76,7 @@ pub fn walk_directory_tree(
     }
 }
 
-fn walk_dir(
-    ctx: &mut WalkContext<'_>,
-    dir: &Path,
-    parent: Option<&Path>,
-    depth: u32,
-    is_parent_hidden: bool,
-) {
+fn walk_dir(ctx: &mut WalkContext<'_>, dir: &Path, parent: Option<&Path>, depth: u32, is_parent_hidden: bool) {
     let dir_name = dir
         .file_name()
         .map(|n| n.to_string_lossy().to_string())

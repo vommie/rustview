@@ -1,30 +1,27 @@
 use super::schema::{
-    AppSettings, GridAspectRatio, ThumbnailBadgeOverflow, DEFAULT_COL_FLAGS_WIDTH, DEFAULT_COL_PATH_WIDTH,
-    DEFAULT_FULLSCREEN_FALLBACK_TARGET, DEFAULT_GRID_SPACING, DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB,
-    DEFAULT_LEFT_SIDEBAR_PANEL_TABS, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_PREVIEW_FORMAT,
-    DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_ASPECT_RATIO, DEFAULT_THUMBNAIL_FORMAT,
-    DEFAULT_VIDEO_ENGINE, DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_WINDOW_HEIGHT,
-    DEFAULT_WINDOW_WIDTH, MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_GRID_ITEM_BORDER_WIDTH,
-    MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_GRID_ITEM_PADDING_V,
-    MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_MAX_HISTORY_TAGS, MAX_MEMORY_BUDGET_MB, MAX_MAXIMIZED_WINDOW_SIZE,
-    MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH,
-    MAX_TAB_GRID_COLUMNS, MAX_TAG_HISTORY_HEIGHT, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH,
-    MAX_TOOLTIP_DELAY_MS, MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS, MAX_VIDEO_OFFSET_PERCENT,
-    MAX_CONFIRM_OPEN_FILE_COUNT, MIN_CONFIRM_OPEN_FILE_COUNT,
-    MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE, MIN_TYPE_AHEAD_TIMEOUT_MS,
-    MIN_COL_WIDTH, MIN_GRID_ITEM_BORDER_WIDTH, MIN_GRID_ITEM_CORNER_RADIUS, MIN_GRID_ITEM_PADDING_H,
-    MIN_GRID_ITEM_PADDING_V, MIN_GRID_PADDING, MIN_GRID_SPACING, MIN_MEMORY_BUDGET_MB,
-    MIN_MAX_HISTORY_TAGS, MIN_PREVIEW_FRAME_COUNT, MIN_QUALITY,
-    MIN_SHORT_VIDEO_THRESHOLD_SECS, MIN_SIDEBAR_WIDTH, MIN_TAB_GRID_COLUMNS,
-    MIN_TAG_HISTORY_HEIGHT, MIN_THUMBNAIL_DB_SIZE, MIN_THUMBNAIL_WIDTH, MIN_TOOLTIP_DELAY_MS,
-    MIN_VIDEO_OFFSET_PERCENT, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, MIN_WORKER_THREADS,
+    AppSettings, DEFAULT_COL_FLAGS_WIDTH, DEFAULT_COL_PATH_WIDTH, DEFAULT_FULLSCREEN_FALLBACK_TARGET,
+    DEFAULT_GRID_SPACING, DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB, DEFAULT_LEFT_SIDEBAR_PANEL_TABS,
+    DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_PREVIEW_FORMAT, DEFAULT_SCALING_ALGORITHM, DEFAULT_THUMBNAIL_ASPECT_RATIO,
+    DEFAULT_THUMBNAIL_FORMAT, DEFAULT_VIDEO_ENGINE, DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_WINDOW_HEIGHT,
+    DEFAULT_WINDOW_WIDTH, GridAspectRatio, MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_CONFIRM_OPEN_FILE_COUNT,
+    MAX_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_GRID_ITEM_PADDING_V,
+    MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_MAX_HISTORY_TAGS, MAX_MAXIMIZED_WINDOW_SIZE, MAX_MEMORY_BUDGET_MB,
+    MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH, MAX_TAB_GRID_COLUMNS,
+    MAX_TAG_HISTORY_HEIGHT, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH, MAX_TOOLTIP_DELAY_MS,
+    MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS,
+    MAX_VIDEO_OFFSET_PERCENT, MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE, MIN_COL_WIDTH, MIN_CONFIRM_OPEN_FILE_COUNT,
+    MIN_GRID_ITEM_BORDER_WIDTH, MIN_GRID_ITEM_CORNER_RADIUS, MIN_GRID_ITEM_PADDING_H, MIN_GRID_ITEM_PADDING_V,
+    MIN_GRID_PADDING, MIN_GRID_SPACING, MIN_MAX_HISTORY_TAGS, MIN_MEMORY_BUDGET_MB, MIN_PREVIEW_FRAME_COUNT,
+    MIN_QUALITY, MIN_SHORT_VIDEO_THRESHOLD_SECS, MIN_SIDEBAR_WIDTH, MIN_TAB_GRID_COLUMNS, MIN_TAG_HISTORY_HEIGHT,
+    MIN_THUMBNAIL_DB_SIZE, MIN_THUMBNAIL_WIDTH, MIN_TOOLTIP_DELAY_MS, MIN_TYPE_AHEAD_TIMEOUT_MS,
+    MIN_VIDEO_OFFSET_PERCENT, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, MIN_WORKER_THREADS, ThumbnailBadgeOverflow,
 };
 use super::schema::{
-    FullscreenSettings, DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE,
-    DEFAULT_FULLSCREEN_SOUND_FOLLOWS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
-    MAX_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
-    DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION, DEFAULT_FULLSCREEN_ZOOM_RESAMPLE, MAX_FULLSCREEN_ZOOM_MAX_PERCENT,
-    MAX_FULLSCREEN_ZOOM_MINIMAP_SECS, MAX_FULLSCREEN_ZOOM_OUT_PERCENT, MAX_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_FULLSCREEN_ZOOM_MAX_PERCENT,
+    DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE, DEFAULT_FULLSCREEN_SOUND_FOLLOWS,
+    DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION, DEFAULT_FULLSCREEN_ZOOM_RESAMPLE, FullscreenSettings,
+    MAX_FULLSCREEN_IDLE_CURSOR_MS, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_ZOOM_MAX_PERCENT,
+    MAX_FULLSCREEN_ZOOM_MINIMAP_SECS, MAX_FULLSCREEN_ZOOM_OUT_PERCENT, MAX_FULLSCREEN_ZOOM_STEP_PERCENT,
+    MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_FULLSCREEN_ZOOM_MAX_PERCENT,
     MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT,
 };
 use crate::util::hex_color;
@@ -122,12 +119,11 @@ impl SettingsStore {
             .clamp(MIN_THUMBNAIL_WIDTH, MAX_THUMBNAIL_WIDTH);
 
         let ratio = GridAspectRatio::from_str_name(&settings.appearance.thumbnail_aspect_ratio);
-        settings.appearance.thumbnail_aspect_ratio =
-            if settings.appearance.thumbnail_aspect_ratio.is_empty() {
-                DEFAULT_THUMBNAIL_ASPECT_RATIO.to_string()
-            } else {
-                ratio.as_str().to_string()
-            };
+        settings.appearance.thumbnail_aspect_ratio = if settings.appearance.thumbnail_aspect_ratio.is_empty() {
+            DEFAULT_THUMBNAIL_ASPECT_RATIO.to_string()
+        } else {
+            ratio.as_str().to_string()
+        };
 
         // Unknown overflow names (e.g. from hand-edited files) fall back to the default behavior.
         settings.appearance.thumbnail_badge_overflow =
@@ -211,23 +207,14 @@ impl SettingsStore {
             .performance
             .thumbnail_db_size
             .clamp(MIN_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_DB_SIZE);
-        settings.performance.thumbnail_quality = settings
-            .performance
-            .thumbnail_quality
-            .clamp(MIN_QUALITY, MAX_QUALITY);
+        settings.performance.thumbnail_quality = settings.performance.thumbnail_quality.clamp(MIN_QUALITY, MAX_QUALITY);
         settings.performance.batch_commit_size = settings
             .performance
             .batch_commit_size
             .clamp(MIN_BATCH_COMMIT_SIZE, MAX_BATCH_COMMIT_SIZE);
 
-        if !settings
-            .performance
-            .thumbnail_format
-            .eq_ignore_ascii_case("jpeg")
-            && !settings
-                .performance
-                .thumbnail_format
-                .eq_ignore_ascii_case("webp")
+        if !settings.performance.thumbnail_format.eq_ignore_ascii_case("jpeg")
+            && !settings.performance.thumbnail_format.eq_ignore_ascii_case("webp")
         {
             settings.performance.thumbnail_format = DEFAULT_THUMBNAIL_FORMAT.to_string();
         }
@@ -259,21 +246,12 @@ impl SettingsStore {
             .preview_frame_count
             .clamp(MIN_PREVIEW_FRAME_COUNT, MAX_PREVIEW_FRAME_COUNT);
 
-        if !settings
-            .performance
-            .preview_format
-            .eq_ignore_ascii_case("jpeg")
-            && !settings
-                .performance
-                .preview_format
-                .eq_ignore_ascii_case("webp")
+        if !settings.performance.preview_format.eq_ignore_ascii_case("jpeg")
+            && !settings.performance.preview_format.eq_ignore_ascii_case("webp")
         {
             settings.performance.preview_format = DEFAULT_PREVIEW_FORMAT.to_string();
         }
-        settings.performance.preview_quality = settings
-            .performance
-            .preview_quality
-            .clamp(MIN_QUALITY, MAX_QUALITY);
+        settings.performance.preview_quality = settings.performance.preview_quality.clamp(MIN_QUALITY, MAX_QUALITY);
 
         // Media Type Filter sanitization
         let m_lower = settings.view.media_type_filter.to_lowercase();
@@ -320,7 +298,10 @@ impl SettingsStore {
         } else {
             settings.view.col_path_width = settings.view.col_path_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         }
-        settings.view.col_modified_date_width = settings.view.col_modified_date_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
+        settings.view.col_modified_date_width = settings
+            .view
+            .col_modified_date_width
+            .clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         settings.view.col_created_date_width = settings.view.col_created_date_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         settings.view.col_size_width = settings.view.col_size_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
         settings.view.col_rating_width = settings.view.col_rating_width.clamp(MIN_COL_WIDTH, MAX_COL_WIDTH);
@@ -348,7 +329,10 @@ impl SettingsStore {
 
         // Sanitize Left Sidebar Panel Tabs configuration
         let valid_tabs = DEFAULT_LEFT_SIDEBAR_PANEL_TABS;
-        settings.view.left_sidebar_panel_tabs.retain(|t| valid_tabs.contains(&t.as_str()));
+        settings
+            .view
+            .left_sidebar_panel_tabs
+            .retain(|t| valid_tabs.contains(&t.as_str()));
         if settings.view.left_sidebar_panel_tabs.is_empty() {
             settings.view.left_sidebar_panel_tabs = valid_tabs.iter().map(|s| s.to_string()).collect();
         }
@@ -357,7 +341,11 @@ impl SettingsStore {
                 settings.view.left_sidebar_panel_tabs.push(tab.to_string());
             }
         }
-        if !settings.view.left_sidebar_panel_tabs.contains(&settings.view.left_sidebar_active_panel_tab) {
+        if !settings
+            .view
+            .left_sidebar_panel_tabs
+            .contains(&settings.view.left_sidebar_active_panel_tab)
+        {
             settings.view.left_sidebar_active_panel_tab = DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string();
         }
 
@@ -390,14 +378,16 @@ impl SettingsStore {
     /// Action bar, sound and background of the fullscreen: a hand-edited file can never leave an unknown mode or color.
     fn sanitize_fullscreen_extras(&self, fullscreen: &mut FullscreenSettings) {
         let bar = &mut fullscreen.media_bar;
-        bar.reveal_distance_px = bar
-            .reveal_distance_px
-            .clamp(MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX);
+        bar.reveal_distance_px = bar.reveal_distance_px.clamp(
+            MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+            MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+        );
 
         let primary = &mut fullscreen.primary_bar;
-        primary.reveal_distance_px = primary
-            .reveal_distance_px
-            .clamp(MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX);
+        primary.reveal_distance_px = primary.reveal_distance_px.clamp(
+            MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+            MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
+        );
         primary.idle_cursor_ms = primary
             .idle_cursor_ms
             .clamp(MIN_FULLSCREEN_IDLE_CURSOR_MS, MAX_FULLSCREEN_IDLE_CURSOR_MS);
@@ -420,10 +410,18 @@ impl SettingsStore {
             .unwrap_or_else(|| DEFAULT_FULLSCREEN_BACKGROUND_COLOR.to_string());
 
         let zoom = &mut fullscreen.zoom;
-        zoom.step_percent = zoom.step_percent.clamp(MIN_FULLSCREEN_ZOOM_STEP_PERCENT, MAX_FULLSCREEN_ZOOM_STEP_PERCENT);
-        zoom.max_percent = zoom.max_percent.clamp(MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MAX_FULLSCREEN_ZOOM_MAX_PERCENT);
-        zoom.out_percent = zoom.out_percent.clamp(MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MAX_FULLSCREEN_ZOOM_OUT_PERCENT);
-        zoom.minimap_secs = zoom.minimap_secs.clamp(MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MAX_FULLSCREEN_ZOOM_MINIMAP_SECS);
+        zoom.step_percent = zoom
+            .step_percent
+            .clamp(MIN_FULLSCREEN_ZOOM_STEP_PERCENT, MAX_FULLSCREEN_ZOOM_STEP_PERCENT);
+        zoom.max_percent = zoom
+            .max_percent
+            .clamp(MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MAX_FULLSCREEN_ZOOM_MAX_PERCENT);
+        zoom.out_percent = zoom
+            .out_percent
+            .clamp(MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MAX_FULLSCREEN_ZOOM_OUT_PERCENT);
+        zoom.minimap_secs = zoom
+            .minimap_secs
+            .clamp(MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MAX_FULLSCREEN_ZOOM_MINIMAP_SECS);
         let corner = zoom.minimap_position.trim().to_lowercase();
         zoom.minimap_position = if matches!(corner.as_str(), "bottom_left" | "bottom_right") {
             corner

@@ -1,25 +1,23 @@
 //! Actions of the media context menu that open, reveal or rename files.
 
+use super::{MediaActionContext, MediaContextMenu};
+use crate::ctx_menu::{CtxMenuActionId, CtxMenuContext};
+use crate::system::SystemFileHandler;
+use crate::ui::MainWindow;
 use crate::ui::file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
-use crate::ui::selection::BridgeFileSelection;
-use crate::ui::open_confirmation::{OpenConfirmation, OpenKind};
-use crate::ui::media::open_with::{MediaOpenWith, OpenWithChoice};
 use crate::ui::media::BridgeMedia;
+use crate::ui::media::open_with::{MediaOpenWith, OpenWithChoice};
+use crate::ui::open_confirmation::{OpenConfirmation, OpenKind};
+use crate::ui::selection::BridgeFileSelection;
 use crate::ui::state::*;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tags::{BridgeTags, TagActionContext};
 use crate::ui::tabs::BridgeViewerTabs;
+use crate::ui::tags::{BridgeTags, TagActionContext};
 use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
-use crate::ui::MainWindow;
-use crate::ctx_menu::{
-    CtxMenuActionId, CtxMenuContext,
-};
 use rustview_core::library::models::{FileTransferKind, MediaId};
 use rustview_core::settings::LogObscurer;
-use crate::system::SystemFileHandler;
 use slint::ComponentHandle;
 use std::path::PathBuf;
-use super::{MediaActionContext, MediaContextMenu};
 
 impl MediaContextMenu {
     pub fn handle_file_action_for_ids(
@@ -119,10 +117,7 @@ impl MediaContextMenu {
             }
             CTX_ACTION_DELETE_MEDIA => {
                 if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
-                    StatusBarBridge::warn(
-                        window,
-                        "Cannot delete files: an active operation is in progress.",
-                    );
+                    StatusBarBridge::warn(window, "Cannot delete files: an active operation is in progress.");
                     return;
                 }
                 let dialog_ctx = FileDialogContext {
@@ -136,10 +131,7 @@ impl MediaContextMenu {
             }
             CTX_ACTION_REMOVE_FROM_DB => {
                 if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
-                    StatusBarBridge::warn(
-                        window,
-                        "Cannot modify database: an active operation is in progress.",
-                    );
+                    StatusBarBridge::warn(window, "Cannot modify database: an active operation is in progress.");
                     return;
                 }
                 let dialog_ctx = FileDialogContext {
@@ -159,20 +151,10 @@ impl MediaContextMenu {
                     );
                     return;
                 }
-                BridgeMedia::refresh_selected_metadata_only(
-                    window,
-                    ctx.library,
-                    ctx.thumbnails,
-                    ctx.state,
-                );
+                BridgeMedia::refresh_selected_metadata_only(window, ctx.library, ctx.thumbnails, ctx.state);
             }
             CTX_ACTION_REGENERATE_THUMB_RANDOM => {
-                ThumbnailRegeneration::regenerate_selected(
-                    window,
-                    ctx.thumbnails,
-                    ctx.settings,
-                    ctx.state,
-                );
+                ThumbnailRegeneration::regenerate_selected(window, ctx.thumbnails, ctx.settings, ctx.state);
             }
             CTX_ACTION_REFRESH_FILES => {
                 if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
@@ -193,50 +175,19 @@ impl MediaContextMenu {
             }
             CTX_ACTION_RENAME => {
                 if BridgeMedia::is_system_busy(window, ctx.thumbnails, ctx.state) {
-                    StatusBarBridge::warn(
-                        window,
-                        "Cannot rename: an active operation is in progress.",
-                    );
+                    StatusBarBridge::warn(window, "Cannot rename: an active operation is in progress.");
                     return;
                 }
                 Self::handle_rename_action(window, ctx, target_ids);
             }
-            CTX_ACTION_SELECT_ALL => {
-                BridgeFileSelection::select_all(window, ctx.library, ctx.state)
-            }
-            CTX_ACTION_CLEAR_SELECTION => {
-                BridgeFileSelection::clear_selection(window, ctx.library, ctx.state)
-            }
-            CTX_ACTION_RATE_5 => BridgeTags::apply_rating_to_ids(
-                &target_id_set,
-                5,
-                &tag_action_ctx,
-            ),
-            CTX_ACTION_RATE_4 => BridgeTags::apply_rating_to_ids(
-                &target_id_set,
-                4,
-                &tag_action_ctx,
-            ),
-            CTX_ACTION_RATE_3 => BridgeTags::apply_rating_to_ids(
-                &target_id_set,
-                3,
-                &tag_action_ctx,
-            ),
-            CTX_ACTION_RATE_2 => BridgeTags::apply_rating_to_ids(
-                &target_id_set,
-                2,
-                &tag_action_ctx,
-            ),
-            CTX_ACTION_RATE_1 => BridgeTags::apply_rating_to_ids(
-                &target_id_set,
-                1,
-                &tag_action_ctx,
-            ),
-            CTX_ACTION_RATE_0 => BridgeTags::apply_rating_to_ids(
-                &target_id_set,
-                0,
-                &tag_action_ctx,
-            ),
+            CTX_ACTION_SELECT_ALL => BridgeFileSelection::select_all(window, ctx.library, ctx.state),
+            CTX_ACTION_CLEAR_SELECTION => BridgeFileSelection::clear_selection(window, ctx.library, ctx.state),
+            CTX_ACTION_RATE_5 => BridgeTags::apply_rating_to_ids(&target_id_set, 5, &tag_action_ctx),
+            CTX_ACTION_RATE_4 => BridgeTags::apply_rating_to_ids(&target_id_set, 4, &tag_action_ctx),
+            CTX_ACTION_RATE_3 => BridgeTags::apply_rating_to_ids(&target_id_set, 3, &tag_action_ctx),
+            CTX_ACTION_RATE_2 => BridgeTags::apply_rating_to_ids(&target_id_set, 2, &tag_action_ctx),
+            CTX_ACTION_RATE_1 => BridgeTags::apply_rating_to_ids(&target_id_set, 1, &tag_action_ctx),
+            CTX_ACTION_RATE_0 => BridgeTags::apply_rating_to_ids(&target_id_set, 0, &tag_action_ctx),
             _ => {
                 ctx.dispatcher.dispatch(action_id, &context);
             }
@@ -253,15 +204,10 @@ impl MediaContextMenu {
             "[MediaContextMenu] 'Open in Fullscreen' action triggered"
         );
         ctx.fullscreen.dismiss();
-        ctx.fullscreen
-            .open(ctx.settings, ctx.state, window.as_weak());
+        ctx.fullscreen.open(ctx.settings, ctx.state, window.as_weak());
     }
 
-    pub(super) fn handle_open_action(
-        window: &MainWindow,
-        ctx: &MediaActionContext<'_>,
-        target_ids: &[MediaId],
-    ) {
+    pub(super) fn handle_open_action(window: &MainWindow, ctx: &MediaActionContext<'_>, target_ids: &[MediaId]) {
         if target_ids.is_empty() {
             return;
         }
@@ -271,7 +217,12 @@ impl MediaContextMenu {
             "[MediaContextMenu] 'Open' action triggered from context menu"
         );
 
-        let (ids, state, library, win) = (target_ids.to_vec(), ctx.state.clone(), ctx.library.clone(), window.clone_strong());
+        let (ids, state, library, win) = (
+            target_ids.to_vec(),
+            ctx.state.clone(),
+            ctx.library.clone(),
+            window.clone_strong(),
+        );
         OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::Default, ids.len(), move || {
             for id in ids {
                 BridgeFileSelection::open_media(id, &state, &library, &win);
@@ -297,12 +248,31 @@ impl MediaContextMenu {
             ctx.state.clone(),
             ctx.fullscreen.clone(),
         );
-        let kind = if background { OpenKind::BackgroundTabs } else { OpenKind::Tabs };
+        let kind = if background {
+            OpenKind::BackgroundTabs
+        } else {
+            OpenKind::Tabs
+        };
         OpenConfirmation::run_or_ask(window, ctx.settings, kind, ids.len(), move || {
             if background {
-                BridgeViewerTabs::open_multiple_media_tabs_background(&ids, &win, &tab_manager, &library, &settings, &state);
+                BridgeViewerTabs::open_multiple_media_tabs_background(
+                    &ids,
+                    &win,
+                    &tab_manager,
+                    &library,
+                    &settings,
+                    &state,
+                );
             } else {
-                BridgeViewerTabs::open_multiple_media_tabs(&ids, &win, &tab_manager, &library, &settings, &state, &fullscreen);
+                BridgeViewerTabs::open_multiple_media_tabs(
+                    &ids,
+                    &win,
+                    &tab_manager,
+                    &library,
+                    &settings,
+                    &state,
+                    &fullscreen,
+                );
             }
         });
     }
@@ -313,7 +283,12 @@ impl MediaContextMenu {
         target_ids: &[MediaId],
         app_idx: usize,
     ) {
-        let (ids, state, library, win) = (target_ids.to_vec(), ctx.state.clone(), ctx.library.clone(), window.clone_strong());
+        let (ids, state, library, win) = (
+            target_ids.to_vec(),
+            ctx.state.clone(),
+            ctx.library.clone(),
+            window.clone_strong(),
+        );
         OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::OpenWith, ids.len(), move || {
             let paths = MediaOpenWith::paths_for(&state, &library, &ids);
             MediaOpenWith::launch(&win, &state, &paths, app_idx);
@@ -325,17 +300,19 @@ impl MediaContextMenu {
         ctx: &MediaActionContext<'_>,
         target_ids: &[MediaId],
     ) {
-        let (ids, state, library, win) = (target_ids.to_vec(), ctx.state.clone(), ctx.library.clone(), window.clone_strong());
+        let (ids, state, library, win) = (
+            target_ids.to_vec(),
+            ctx.state.clone(),
+            ctx.library.clone(),
+            window.clone_strong(),
+        );
         OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::OpenWith, ids.len(), move || {
             let paths = MediaOpenWith::paths_for(&state, &library, &ids);
             MediaOpenWith::choose_application(&win, &paths);
         });
     }
 
-    pub fn collect_paths_for_ids(
-        ctx: &MediaActionContext<'_>,
-        target_ids: &[MediaId],
-    ) -> Vec<PathBuf> {
+    pub fn collect_paths_for_ids(ctx: &MediaActionContext<'_>, target_ids: &[MediaId]) -> Vec<PathBuf> {
         MediaOpenWith::paths_for(ctx.state, ctx.library, target_ids)
     }
 
@@ -344,7 +321,12 @@ impl MediaContextMenu {
         ctx: &MediaActionContext<'_>,
         target_ids: &[MediaId],
     ) {
-        let (ids, state, library, win) = (target_ids.to_vec(), ctx.state.clone(), ctx.library.clone(), window.clone_strong());
+        let (ids, state, library, win) = (
+            target_ids.to_vec(),
+            ctx.state.clone(),
+            ctx.library.clone(),
+            window.clone_strong(),
+        );
         OpenConfirmation::run_or_ask(window, ctx.settings, OpenKind::FileManager, ids.len(), move || {
             let paths = MediaOpenWith::paths_for(&state, &library, &ids);
             Self::reveal_paths_in_file_manager(&win, &paths);
@@ -371,15 +353,9 @@ impl MediaContextMenu {
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
-                    StatusBarBridge::success(
-                        window,
-                        format!("Opened file '{}' in File Manager.", name),
-                    );
+                    StatusBarBridge::success(window, format!("Opened file '{}' in File Manager.", name));
                 } else {
-                    StatusBarBridge::success(
-                        window,
-                        format!("Opened {} files in File Manager.", count),
-                    );
+                    StatusBarBridge::success(window, format!("Opened {} files in File Manager.", count));
                 }
             }
             Err(e) => {
@@ -392,15 +368,14 @@ impl MediaContextMenu {
         }
     }
 
-    pub(super) fn handle_rename_action(
-        window: &MainWindow,
-        ctx: &MediaActionContext<'_>,
-        target_ids: &[MediaId],
-    ) {
+    pub(super) fn handle_rename_action(window: &MainWindow, ctx: &MediaActionContext<'_>, target_ids: &[MediaId]) {
         if let Some(&target_id) = target_ids.first()
             && target_ids.len() == 1
         {
-            tracing::info!(target_id, "[MediaContextMenu] Opening rename dialog for single media item");
+            tracing::info!(
+                target_id,
+                "[MediaContextMenu] Opening rename dialog for single media item"
+            );
 
             let dialog_ctx = FileDialogContext {
                 library: ctx.library.clone(),

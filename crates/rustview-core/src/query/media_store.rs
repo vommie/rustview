@@ -34,7 +34,11 @@ pub struct MediaStore {
 
 impl Default for MediaStore {
     fn default() -> Self {
-        Self { records: Arc::default(), by_id: Arc::default(), generation: next_generation() }
+        Self {
+            records: Arc::default(),
+            by_id: Arc::default(),
+            generation: next_generation(),
+        }
     }
 }
 
@@ -54,7 +58,11 @@ impl MediaStore {
     /// Builds a store (and its index) without touching any shared state, so it can be done off the UI thread.
     pub fn from_records(records: Vec<IndexedMediaRecord>) -> Self {
         let by_id = Arc::new(index_of(&records));
-        Self { records: Arc::new(records), by_id, generation: next_generation() }
+        Self {
+            records: Arc::new(records),
+            by_id,
+            generation: next_generation(),
+        }
     }
 
     /// Replaces all records and rebuilds the index.
@@ -89,7 +97,9 @@ impl MediaStore {
     /// The record of the media `id`.
     #[inline]
     pub fn find(&self, id: MediaId) -> Option<&IndexedMediaRecord> {
-        self.by_id.get(&id).and_then(|&position| self.records.get(position as usize))
+        self.by_id
+            .get(&id)
+            .and_then(|&position| self.records.get(position as usize))
     }
 
     #[inline]

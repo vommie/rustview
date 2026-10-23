@@ -85,10 +85,7 @@ impl MediaTabSession {
             format: MediaFormat::Unknown,
             record: Self::placeholder_record(&title),
             title,
-            multiview: MultiviewTabPayload {
-                instance,
-                instance_id,
-            },
+            multiview: MultiviewTabPayload { instance, instance_id },
             created_at: now,
             last_accessed: now,
         }
@@ -97,7 +94,13 @@ impl MediaTabSession {
     /// A tab that shows one medium: a Multiview of exactly one tile. The scalar fields describe that medium (as long as the tab shows
     /// it; the manager keeps them in line with the tile, see `ViewerTabManager::sync_tab_identities`), so lookups by medium, the tab
     /// bar and the menus treat it like the tab of the medium it is.
-    pub fn for_solo(id: TabId, title: String, record: MediaRecord, file_path: PathBuf, instance: SharedInstance) -> Self {
+    pub fn for_solo(
+        id: TabId,
+        title: String,
+        record: MediaRecord,
+        file_path: PathBuf,
+        instance: SharedInstance,
+    ) -> Self {
         let mut session = Self::for_multiview(id, title, instance);
         session.set_solo_identity(record, file_path);
         session

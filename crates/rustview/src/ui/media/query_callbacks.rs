@@ -1,25 +1,23 @@
 //! The callbacks of the filter, sort and search controls of the Browse view.
 
+use super::{ACTIVE_HOVER_MEDIA_ID, ACTIVE_PREVIEW_TIMER, BridgeMedia, MediaReloadOptions};
+use crate::ui::MainWindow;
+use crate::ui::browse_window::update_tile;
+use crate::ui::media::video_preview::VideoPreviewAnimator;
 use crate::ui::state::{LastActivePanel, UiState};
 use crate::ui::tags::{BridgeTags, TagActionContext};
-use crate::ui::browse_window::update_tile;
 use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
-use crate::ui::media::video_preview::VideoPreviewAnimator;
-use crate::ui::MainWindow;
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::media::MediaFormat;
 use rustview_core::query::{MediaTypeFilter, SortColumn, SortOrder};
 use rustview_core::settings::{LogObscurer, SettingsManager};
-use rustview_core::thumbnails::{
-    ThumbnailConfig, ThumbnailManager,
-};
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
+use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use slint::{ComponentHandle, Image};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-use super::{ACTIVE_HOVER_MEDIA_ID, ACTIVE_PREVIEW_TIMER, BridgeMedia, MediaReloadOptions};
 
 impl BridgeMedia {
     pub fn register_query_callbacks(
@@ -60,12 +58,7 @@ impl BridgeMedia {
             Self::reload_deferred(&win, &lib, &thumb, &set, &st, MediaReloadOptions::new(false, false));
         });
 
-        ThumbnailRegeneration::register_callbacks(
-            window,
-            thumbnails.clone(),
-            settings.clone(),
-            state.clone(),
-        );
+        ThumbnailRegeneration::register_callbacks(window, thumbnails.clone(), settings.clone(), state.clone());
 
         let win = window.clone_strong();
         let lib = library.clone();
@@ -203,25 +196,25 @@ impl BridgeMedia {
                         let win_w_async = win_hover.as_weak();
                         let st_async = st.clone();
 
-                        thumb.get_or_load_animated_preview_async(
-                            media_id,
-                            file_path,
-                            config,
-                            move |res| {
-                                if let Ok(preview) = res {
-                                    let _ = win_w_async.upgrade_in_event_loop(move |w| {
-                                        let is_still_hovered = ACTIVE_HOVER_MEDIA_ID.with(|id| *id.borrow() == Some(media_id));
-                                        if is_still_hovered {
-                                            let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
-                                            let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                        thumb.get_or_load_animated_preview_async(media_id, file_path, config, move |res| {
+                            if let Ok(preview) = res {
+                                let _ = win_w_async.upgrade_in_event_loop(move |w| {
+                                    let is_still_hovered =
+                                        ACTIVE_HOVER_MEDIA_ID.with(|id| *id.borrow() == Some(media_id));
+                                    if is_still_hovered {
+                                        let timed_frames =
+                                            VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
+                                        let timer = VideoPreviewAnimator::start_variable_delay_animation(
+                                            timed_frames,
+                                            move |img| {
                                                 update_tile(&w, &st_async.read(), media_id, |row| row.thumbnail = img);
-                                            });
-                                            ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
-                                        }
-                                    });
-                                }
-                            },
-                        );
+                                            },
+                                        );
+                                        ACTIVE_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
+                                    }
+                                });
+                            }
+                        });
                     }
                 }
             } else {

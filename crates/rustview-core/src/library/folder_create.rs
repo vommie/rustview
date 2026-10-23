@@ -39,7 +39,9 @@ impl FolderPathPlanner {
         }
 
         if names.is_empty() {
-            return Err(LibraryError::FileOperationInvalidFilename("Folder name cannot be empty".to_string()));
+            return Err(LibraryError::FileOperationInvalidFilename(
+                "Folder name cannot be empty".to_string(),
+            ));
         }
         Ok(names)
     }
@@ -86,7 +88,9 @@ impl<'a> FolderCreator<'a> {
         let names = FolderPathPlanner::parse(relative_path)?;
         let manager = FolderManager::new(self.db);
 
-        let parent = manager.get_folder(parent_id)?.ok_or(LibraryError::FolderNotFound(parent_id))?;
+        let parent = manager
+            .get_folder(parent_id)?
+            .ok_or(LibraryError::FolderNotFound(parent_id))?;
         if parent.is_deleted {
             return Err(LibraryError::FileOperationInvalidFilename(
                 "The folder does not exist on disk any more".to_string(),
@@ -106,7 +110,9 @@ impl<'a> FolderCreator<'a> {
                 Ok(()) => true,
                 Err(e) if e.kind() == ErrorKind::AlreadyExists && current.is_dir() => false,
                 Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                    return Err(LibraryError::FileOperationAlreadyExists(format!("'{name}' already exists and is not a folder")));
+                    return Err(LibraryError::FileOperationAlreadyExists(format!(
+                        "'{name}' already exists and is not a folder"
+                    )));
                 }
                 Err(e) => return Err(LibraryError::Io(e)),
             };
@@ -116,7 +122,10 @@ impl<'a> FolderCreator<'a> {
                 created_on_disk,
                 "[FolderCreate: Component] Path component ready"
             );
-            report.components.push(CreatedComponent { record, created_on_disk });
+            report.components.push(CreatedComponent {
+                record,
+                created_on_disk,
+            });
         }
         Ok(report)
     }

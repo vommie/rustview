@@ -19,7 +19,10 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         assert!(can_write_directory(dir.path()));
         assert!(!can_write_directory(&dir.path().join("missing")));
-        assert!(!can_write_directory(&dir.path().join("..\u{0}")), "a path with a NUL byte is never accepted");
+        assert!(
+            !can_write_directory(&dir.path().join("..\u{0}")),
+            "a path with a NUL byte is never accepted"
+        );
     }
 
     #[test]

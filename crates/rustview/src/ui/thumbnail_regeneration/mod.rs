@@ -13,12 +13,12 @@ mod runner;
 mod targets;
 pub mod wording;
 
+use super::MainWindow;
 use crate::ui::state::{LastActivePanel, UiState};
 use crate::ui::status_bar::StatusBarBridge;
-use super::MainWindow;
+use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::sync::Arc;
 

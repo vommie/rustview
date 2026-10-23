@@ -14,10 +14,7 @@ impl MigrationLogger {
     /// Initializes the migration logger. If enabled, creates the log file in `~/` or custom path.
     pub fn new(enabled: bool, custom_path: Option<PathBuf>) -> io::Result<Self> {
         if !enabled {
-            return Ok(Self {
-                file: None,
-                path: None,
-            });
+            return Ok(Self { file: None, path: None });
         }
 
         let log_path = match custom_path {
@@ -54,17 +51,20 @@ impl MigrationLogger {
         self.path.as_deref()
     }
 
-    pub fn log_header(
-        &mut self,
-        source_db: &Path,
-        target_dir: &Path,
-        skip_missing: bool,
-        root_filter: Option<&Path>,
-    ) {
+    pub fn log_header(&mut self, source_db: &Path, target_dir: &Path, skip_missing: bool, root_filter: Option<&Path>) {
         if let Some(ref mut f) = self.file {
-            let _ = writeln!(f, "================================================================================");
-            let _ = writeln!(f, "               RUSTVIEW - XNVIEWMP DATABASE MIGRATION AUDIT LOG                 ");
-            let _ = writeln!(f, "================================================================================");
+            let _ = writeln!(
+                f,
+                "================================================================================"
+            );
+            let _ = writeln!(
+                f,
+                "               RUSTVIEW - XNVIEWMP DATABASE MIGRATION AUDIT LOG                 "
+            );
+            let _ = writeln!(
+                f,
+                "================================================================================"
+            );
             let _ = writeln!(f, "Timestamp          : {}", current_timestamp_string());
             let _ = writeln!(f, "Source Database    : {}", LogObscurer::path(source_db));
             let _ = writeln!(f, "Target RustView Dir: {}", LogObscurer::path(target_dir));
@@ -95,7 +95,10 @@ impl MigrationLogger {
                 }
             );
             let _ = writeln!(f, "ID Re-indexing     : Contiguous 1-based sequential mapping");
-            let _ = writeln!(f, "--------------------------------------------------------------------------------");
+            let _ = writeln!(
+                f,
+                "--------------------------------------------------------------------------------"
+            );
             let _ = writeln!(f, "DETAILED MIGRATION TRACE & AUDIT TRAIL:");
             let _ = writeln!(f);
             let _ = f.flush();
@@ -138,13 +141,7 @@ impl MigrationLogger {
         }
     }
 
-    pub fn log_tag_migrated(
-        &mut self,
-        old_id: i64,
-        new_id: u32,
-        name: &str,
-        new_parent_id: Option<u32>,
-    ) {
+    pub fn log_tag_migrated(&mut self, old_id: i64, new_id: u32, name: &str, new_parent_id: Option<u32>) {
         if let Some(ref mut f) = self.file {
             let parent_info = match new_parent_id {
                 Some(p) => format!("Parent: Tag #{}", p),
@@ -165,7 +162,10 @@ impl MigrationLogger {
     pub fn log_tag_tree(&mut self, root_nodes: &[MigratedTagTreeNode]) {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(f);
-            let _ = writeln!(f, "--------------------------------------------------------------------------------");
+            let _ = writeln!(
+                f,
+                "--------------------------------------------------------------------------------"
+            );
             let _ = writeln!(f, "MAPPED TAG TREE HIERARCHY (XnViewMP -> RustView):");
             if root_nodes.is_empty() {
                 let _ = writeln!(f, "  <No tags found in XnViewMP database>");
@@ -180,18 +180,16 @@ impl MigrationLogger {
                     let _ = writeln!(f, "{}", line);
                 }
             }
-            let _ = writeln!(f, "--------------------------------------------------------------------------------");
+            let _ = writeln!(
+                f,
+                "--------------------------------------------------------------------------------"
+            );
             let _ = writeln!(f);
             let _ = f.flush();
         }
     }
 
-    fn render_tree_node(
-        node: &MigratedTagTreeNode,
-        prefix: &str,
-        is_last: bool,
-        lines: &mut Vec<String>,
-    ) {
+    fn render_tree_node(node: &MigratedTagTreeNode, prefix: &str, is_last: bool, lines: &mut Vec<String>) {
         let display_name = if LogObscurer::is_active() {
             format!("Tag#{}", node.new_id)
         } else {
@@ -213,12 +211,7 @@ impl MigrationLogger {
         }
     }
 
-    pub fn log_subfolder_entry_skipped(
-        &mut self,
-        old_image_id: i64,
-        name: &str,
-        folder_info: &str,
-    ) {
+    pub fn log_subfolder_entry_skipped(&mut self, old_image_id: i64, name: &str, folder_info: &str) {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
@@ -230,12 +223,7 @@ impl MigrationLogger {
         }
     }
 
-    pub fn log_unsupported_file_skipped(
-        &mut self,
-        old_image_id: i64,
-        filename: &str,
-        folder_info: &str,
-    ) {
+    pub fn log_unsupported_file_skipped(&mut self, old_image_id: i64, filename: &str, folder_info: &str) {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
@@ -247,12 +235,7 @@ impl MigrationLogger {
         }
     }
 
-    pub fn log_media_outside_root(
-        &mut self,
-        old_image_id: i64,
-        filename: &str,
-        folder_info: &str,
-    ) {
+    pub fn log_media_outside_root(&mut self, old_image_id: i64, filename: &str, folder_info: &str) {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
@@ -264,13 +247,7 @@ impl MigrationLogger {
         }
     }
 
-    pub fn log_media_skipped(
-        &mut self,
-        old_image_id: i64,
-        filename: &str,
-        folder_info: &str,
-        reason: &str,
-    ) {
+    pub fn log_media_skipped(&mut self, old_image_id: i64, filename: &str, folder_info: &str, reason: &str) {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
@@ -322,12 +299,7 @@ impl MigrationLogger {
         }
     }
 
-    pub fn log_tag_assignment_skipped(
-        &mut self,
-        old_image_id: i64,
-        old_tag_id: i64,
-        reason: &str,
-    ) {
+    pub fn log_tag_assignment_skipped(&mut self, old_image_id: i64, old_tag_id: i64, reason: &str) {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
@@ -337,13 +309,7 @@ impl MigrationLogger {
         }
     }
 
-    pub fn log_external_hash_migrated(
-        &mut self,
-        old_hash_id: i64,
-        new_hash_id: u64,
-        hash: &str,
-        date_time: &str,
-    ) {
+    pub fn log_external_hash_migrated(&mut self, old_hash_id: i64, new_hash_id: u64, hash: &str, date_time: &str) {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
@@ -356,7 +322,10 @@ impl MigrationLogger {
     pub fn log_summary(&mut self, stats: &MigrationStats) {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(f);
-            let _ = writeln!(f, "--------------------------------------------------------------------------------");
+            let _ = writeln!(
+                f,
+                "--------------------------------------------------------------------------------"
+            );
             let _ = writeln!(f, "FINAL MIGRATION AUDIT SUMMARY:");
             let _ = writeln!(
                 f,
@@ -413,22 +382,26 @@ impl MigrationLogger {
             let _ = writeln!(
                 f,
                 "  • Tag Associations          : {:>8} | Skipped: {:>7} | Migrated: {:>8}",
-                stats.extracted_tag_assignments,
-                stats.skipped_tag_assignments_orphaned,
-                stats.total_tag_assignments
+                stats.extracted_tag_assignments, stats.skipped_tag_assignments_orphaned, stats.total_tag_assignments
             );
             let _ = writeln!(
                 f,
                 "  • Dedicated External Hashes : {:>8} | Migrated: {:>8}",
                 stats.extracted_external_hashes, stats.total_external_hashes
             );
-            let _ = writeln!(f, "--------------------------------------------------------------------------------");
+            let _ = writeln!(
+                f,
+                "--------------------------------------------------------------------------------"
+            );
             let _ = writeln!(f, "PERFORMANCE TIMINGS:");
             let _ = writeln!(f, "  • SQLite Extraction Phase   : {:>7} ms", stats.read_time_ms);
             let _ = writeln!(f, "  • Mapping & Disk Probing    : {:>7} ms", stats.map_time_ms);
             let _ = writeln!(f, "  • Wipe & LMDB Commit        : {:>7} ms", stats.write_time_ms);
             let _ = writeln!(f, "  • Total Migration Time      : {:>7} ms", stats.total_time_ms);
-            let _ = writeln!(f, "================================================================================");
+            let _ = writeln!(
+                f,
+                "================================================================================"
+            );
             let _ = f.flush();
         }
     }

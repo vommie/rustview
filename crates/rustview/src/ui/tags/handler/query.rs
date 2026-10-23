@@ -1,26 +1,24 @@
 //! Querying by tags and ratings and restoring the folder view afterwards.
 
+use super::TagTreeSync;
+use super::{BridgeTags, TagActionContext};
+use super::{QueryTimings, TagActionHandler};
+use crate::ui::list_loader;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::{BridgeMedia, MediaReloadOptions, PendingList};
-use crate::ui::list_loader;
-use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::models::rgb8_to_shared_buffer;
+use crate::ui::status_bar::StatusBarBridge;
 use rustview_core::library::models::{FolderId, MediaId, MediaRecord, MediaSearchParams};
 use rustview_core::query::{MediaStore, ScopeMode, lay_out};
 use rustview_core::thumbnails::ThumbnailConfig;
-use slint::{ComponentHandle};
+use slint::ComponentHandle;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use super::{BridgeTags, TagActionContext};
-use super::TagTreeSync;
-use super::{QueryTimings, TagActionHandler};
 
 impl TagActionHandler {
-    pub fn reset_query(
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn reset_query(ctx: &TagActionContext<'_>) {
         let (current_f_id, current_f_path) = {
             let mut st = ctx.state.write();
             st.selected_rating = 0;
@@ -68,9 +66,7 @@ impl TagActionHandler {
         StatusBarBridge::info(ctx.window, "Query reset to default folder view.");
     }
 
-    pub fn execute_query_flow(
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn execute_query_flow(ctx: &TagActionContext<'_>) {
         let t_flow_start = Instant::now();
 
         ctx.window.set_search_query("".into());
@@ -113,8 +109,7 @@ impl TagActionHandler {
             ctx.window.set_virtual_folder_count(0);
         }
 
-        let is_query_active =
-            params.rating.map(|r| r > 0).unwrap_or(false) || !params.tag_ids.is_empty();
+        let is_query_active = params.rating.map(|r| r > 0).unwrap_or(false) || !params.tag_ids.is_empty();
 
         if !is_query_active {
             let t_restore = Instant::now();
@@ -198,13 +193,23 @@ impl TagActionHandler {
             ctx,
             &params,
             &search_results,
-            QueryTimings { t_flow_start, db_search_us, preindex_us, t_reload },
+            QueryTimings {
+                t_flow_start,
+                db_search_us,
+                preindex_us,
+                t_reload,
+            },
         );
     }
 
     /// Everything that follows once a tag or rating query is shown: inspector, status and benchmark log, then the automatic
     /// completion of external stubs among the results.
-    pub(in crate::ui::tags) fn finish_query(ctx: &TagActionContext<'_>, params: &MediaSearchParams, search_results: &[MediaRecord], timings: QueryTimings) {
+    pub(in crate::ui::tags) fn finish_query(
+        ctx: &TagActionContext<'_>,
+        params: &MediaSearchParams,
+        search_results: &[MediaRecord],
+        timings: QueryTimings,
+    ) {
         let result_count = search_results.len();
         BridgeInspector::update(ctx.window, ctx.state);
         BridgeMedia::update_virtual_folder_button_state(ctx.window, ctx.library, ctx.state);
@@ -215,10 +220,7 @@ impl TagActionHandler {
 
         let scope_str = params.scope_mode.as_str();
         if result_count == 0 {
-            StatusBarBridge::info(
-                ctx.window,
-                format!("Query ({}) returned no results.", scope_str),
-            );
+            StatusBarBridge::info(ctx.window, format!("Query ({}) returned no results.", scope_str));
         } else {
             StatusBarBridge::info(
                 ctx.window,
@@ -301,14 +303,12 @@ impl TagActionHandler {
                         });
 
                         let store = thumb_arc.store();
-                        let (report, completed_items) = lib_arc
-                            .external_media_completer()
-                            .complete_candidates(
-                                ready_stubs,
-                                &config,
-                                store,
-                                Some(move |cur, tot| progress_cb(cur, tot)),
-                            );
+                        let (report, completed_items) = lib_arc.external_media_completer().complete_candidates(
+                            ready_stubs,
+                            &config,
+                            store,
+                            Some(move |cur, tot| progress_cb(cur, tot)),
+                        );
 
                         let _ = w_weak.upgrade_in_event_loop(move |w| {
                             {
@@ -316,7 +316,10 @@ impl TagActionHandler {
                                 st.is_refreshing_media = false;
 
                                 for item in &completed_items {
-                                    if item.primary_width > 0 && item.primary_height > 0 && !item.primary_pixels.is_empty() {
+                                    if item.primary_width > 0
+                                        && item.primary_height > 0
+                                        && !item.primary_pixels.is_empty()
+                                    {
                                         let shared_buf = rgb8_to_shared_buffer(
                                             &item.primary_pixels,
                                             item.primary_width,
@@ -341,7 +344,10 @@ impl TagActionHandler {
                             let busy = BridgeMedia::is_system_busy(&w, &thumb_arc, &st_arc);
                             w.set_is_system_busy(busy);
                             StatusBarBridge::update_metrics(&w, &st_arc);
-                            StatusBarBridge::success(&w, format!("Auto-completed {} external media item(s).", report.completed_count));
+                            StatusBarBridge::success(
+                                &w,
+                                format!("Auto-completed {} external media item(s).", report.completed_count),
+                            );
                         });
                     })
                     .ok();
@@ -365,15 +371,27 @@ impl TagActionHandler {
 
     /// The query runs over a large library: the view shows an empty list while a worker thread searches, indexes, filters and
     /// sorts the results; the UI thread only swaps them in. A newer folder selection or query supersedes it.
-    pub(in crate::ui::tags) fn query_deferred(ctx: &TagActionContext<'_>, params: MediaSearchParams, t_flow_start: Instant) {
+    pub(in crate::ui::tags) fn query_deferred(
+        ctx: &TagActionContext<'_>,
+        params: MediaSearchParams,
+        t_flow_start: Instant,
+    ) {
         let job = list_loader::begin_folder_load();
-        tracing::info!(job, "[ListLoader: Query] Large library; running the query on the worker thread");
+        tracing::info!(
+            job,
+            "[ListLoader: Query] Large library; running the query on the worker thread"
+        );
         BridgeMedia::show_empty_list(ctx.window, ctx.thumbnails, ctx.state);
         StatusBarBridge::info(ctx.window, "Searching...");
 
         let weak = ctx.window.as_weak();
-        let (library, thumbnails, tab_manager, settings, state) =
-            (ctx.library.clone(), ctx.thumbnails.clone(), ctx.tab_manager.clone(), ctx.settings.clone(), ctx.state.clone());
+        let (library, thumbnails, tab_manager, settings, state) = (
+            ctx.library.clone(),
+            ctx.thumbnails.clone(),
+            ctx.tab_manager.clone(),
+            ctx.settings.clone(),
+            ctx.state.clone(),
+        );
         list_loader::worker().submit(move || {
             if !list_loader::folder_load_is_current(job) {
                 return;
@@ -397,8 +415,20 @@ impl TagActionHandler {
                     return;
                 }
                 let t_reload = Instant::now();
-                let pending = PendingList { store: Some(store), layout, query };
-                BridgeMedia::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, MediaReloadOptions::new(false, false));
+                let pending = PendingList {
+                    store: Some(store),
+                    layout,
+                    query,
+                };
+                BridgeMedia::commit_layout(
+                    &window,
+                    &library,
+                    &thumbnails,
+                    &settings,
+                    &state,
+                    pending,
+                    MediaReloadOptions::new(false, false),
+                );
                 let ctx = TagActionContext {
                     window: &window,
                     library: &library,
@@ -408,7 +438,17 @@ impl TagActionHandler {
                     state: &state,
                 };
                 TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
-                Self::finish_query(&ctx, &params, &search_results, QueryTimings { t_flow_start, db_search_us, preindex_us, t_reload });
+                Self::finish_query(
+                    &ctx,
+                    &params,
+                    &search_results,
+                    QueryTimings {
+                        t_flow_start,
+                        db_search_us,
+                        preindex_us,
+                        t_reload,
+                    },
+                );
             });
         });
     }
@@ -423,18 +463,32 @@ impl TagActionHandler {
         t_restore: Instant,
     ) {
         let job = list_loader::begin_folder_load();
-        tracing::info!(job, folder_id, "[ListLoader: Query] Large folder; restoring it on the worker thread");
+        tracing::info!(
+            job,
+            folder_id,
+            "[ListLoader: Query] Large folder; restoring it on the worker thread"
+        );
         BridgeMedia::show_empty_list(ctx.window, ctx.thumbnails, ctx.state);
         StatusBarBridge::info(ctx.window, "Loading...");
 
         let weak = ctx.window.as_weak();
-        let (library, thumbnails, tab_manager, settings, state) =
-            (ctx.library.clone(), ctx.thumbnails.clone(), ctx.tab_manager.clone(), ctx.settings.clone(), ctx.state.clone());
+        let (library, thumbnails, tab_manager, settings, state) = (
+            ctx.library.clone(),
+            ctx.thumbnails.clone(),
+            ctx.tab_manager.clone(),
+            ctx.settings.clone(),
+            ctx.state.clone(),
+        );
         list_loader::worker().submit(move || {
             if !list_loader::folder_load_is_current(job) {
                 return;
             }
-            let store = MediaStore::from_records(BridgeMedia::fetch_folder_records(&library, folder_id, &folder_path, is_virtual_folder));
+            let store = MediaStore::from_records(BridgeMedia::fetch_folder_records(
+                &library,
+                folder_id,
+                &folder_path,
+                is_virtual_folder,
+            ));
             if !list_loader::folder_load_is_current(job) {
                 return;
             }
@@ -446,8 +500,20 @@ impl TagActionHandler {
                 if !list_loader::folder_load_is_current(job) {
                     return;
                 }
-                let pending = PendingList { store: Some(store), layout, query };
-                BridgeMedia::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, MediaReloadOptions::new(false, false));
+                let pending = PendingList {
+                    store: Some(store),
+                    layout,
+                    query,
+                };
+                BridgeMedia::commit_layout(
+                    &window,
+                    &library,
+                    &thumbnails,
+                    &settings,
+                    &state,
+                    pending,
+                    MediaReloadOptions::new(false, false),
+                );
                 let ctx = TagActionContext {
                     window: &window,
                     library: &library,

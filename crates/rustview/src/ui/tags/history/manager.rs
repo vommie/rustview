@@ -6,38 +6,25 @@ pub struct TagHistoryManager;
 
 impl TagHistoryManager {
     /// Records a tag as used/assigned: moves to front (position 0), deduplicates, and truncates to `max_items`.
-    pub fn record_tag_used(
-        history: &mut Vec<TagId>,
-        tag_id: TagId,
-        max_items: usize,
-    ) {
+    pub fn record_tag_used(history: &mut Vec<TagId>, tag_id: TagId, max_items: usize) {
         history.retain(|&id| id != tag_id);
         history.insert(0, tag_id);
         history.truncate(max_items);
     }
 
     /// Prunes invalid tag IDs that do not exist in the database.
-    pub fn prune_invalid(
-        history: &mut Vec<TagId>,
-        valid_tag_ids: &HashSet<TagId>,
-    ) {
+    pub fn prune_invalid(history: &mut Vec<TagId>, valid_tag_ids: &HashSet<TagId>) {
         history.retain(|id| valid_tag_ids.contains(id));
     }
 
     /// Prunes deleted tag IDs from history.
-    pub fn prune_tags(
-        history: &mut Vec<TagId>,
-        tags_to_remove: &HashSet<TagId>,
-    ) {
+    pub fn prune_tags(history: &mut Vec<TagId>, tags_to_remove: &HashSet<TagId>) {
         history.retain(|id| !tags_to_remove.contains(id));
     }
 
     /// Generates a hierarchical tree tooltip for a given tag without any action text.
     /// Root tags return only their clean name. Child tags return an ASCII tree representation of their lineage.
-    pub fn build_hierarchy_tooltip(
-        tag_id: TagId,
-        all_tags_map: &HashMap<TagId, TagRecord>,
-    ) -> String {
+    pub fn build_hierarchy_tooltip(tag_id: TagId, all_tags_map: &HashMap<TagId, TagRecord>) -> String {
         let Some(tag) = all_tags_map.get(&tag_id) else {
             return String::new();
         };

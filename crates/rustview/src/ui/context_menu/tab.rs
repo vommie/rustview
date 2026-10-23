@@ -1,18 +1,18 @@
+use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
+use crate::icons::Icon;
+use crate::system::DesktopApp;
+use crate::ui::MainWindow;
 use crate::ui::context_menu::media::MediaContextMenu;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::*;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::MainWindow;
-use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
-use crate::icons::Icon;
+use crate::ui::tabs::grid_bridge::BridgeTabGrid;
+use crate::viewer::{MediaTabSession, TabId, ViewerTabManager};
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::media::MediaType;
 use rustview_core::settings::{LogObscurer, SettingsManager};
-use crate::system::DesktopApp;
-use crate::viewer::{MediaTabSession, TabId, ViewerTabManager};
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::sync::Arc;
 
@@ -62,16 +62,14 @@ impl TabContextMenu {
         let is_solo = tab.single_media_id().is_some();
         let builder = CtxMenuBuilder::new()
             .header_with_tooltip(header_title, header_tooltip)
-            .action(
-                CTX_TAB_DUPLICATE,
-                "Duplicate Tab",
-                None,
-                Some(Icon::Copy),
-                is_solo,
-            )
+            .action(CTX_TAB_DUPLICATE, "Duplicate Tab", None, Some(Icon::Copy), is_solo)
             .action(
                 CTX_TAB_OPEN_MULTIVIEW,
-                if is_solo { "Open in Fullscreen" } else { "Open in Fullscreen (Multiview)" },
+                if is_solo {
+                    "Open in Fullscreen"
+                } else {
+                    "Open in Fullscreen (Multiview)"
+                },
                 None,
                 Some(Icon::OpenMultiview),
                 true,
@@ -132,13 +130,7 @@ impl TabContextMenu {
                     has_other_tabs,
                 )
             })
-            .action(
-                CTX_TAB_CLOSE,
-                "Close Tab",
-                Some("Ctrl+W"),
-                Some(Icon::Close),
-                true,
-            );
+            .action(CTX_TAB_CLOSE, "Close Tab", Some("Ctrl+W"), Some(Icon::Close), true);
 
         // A tab of several media has no single file: the file sections do not apply (and the drive is not probed for it)
         if !is_solo {
@@ -146,8 +138,8 @@ impl TabContextMenu {
         }
 
         // Section 2: Shared File Open Actions (Open, Open With..., Open in File Manager)
-        let target_file_exists = tab.file_path.is_file()
-            && tab.file_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
+        let target_file_exists =
+            tab.file_path.is_file() && tab.file_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
 
         builder = builder.separator();
         builder = MediaContextMenu::append_file_open_entries(
@@ -175,11 +167,7 @@ impl TabContextMenu {
     }
 
     /// Handles tab-management context menu action routing (IDs 4001..4009).
-    pub fn handle_action(
-        action_id: CtxMenuActionId,
-        ctx: TabActionContext<'_>,
-        target_tab_id: Option<TabId>,
-    ) {
+    pub fn handle_action(action_id: CtxMenuActionId, ctx: TabActionContext<'_>, target_tab_id: Option<TabId>) {
         let Some(tab_id) = target_tab_id else {
             tracing::warn!("[TabContextMenu] No target tab ID found for action");
             return;
@@ -204,18 +192,26 @@ impl TabContextMenu {
                     Ok(new_tab_id) => {
                         BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
 
-                        BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
+                        BridgeViewerTabs::sync_video_embedding(
+                            ctx.window,
+                            ctx.tab_manager,
+                            ctx.fullscreen,
+                            ctx.settings,
+                        );
 
                         if ctx.window.get_active_view_mode() == 2 {
-                            BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                            BridgeTabGrid::sync_tab_grid_ui(
+                                ctx.window,
+                                ctx.tab_manager,
+                                ctx.library,
+                                ctx.settings,
+                                ctx.state,
+                            );
                         }
 
                         let all_tabs = ctx.tab_manager.list_tabs();
                         let new_title = ViewerTabManager::compute_tab_title(&all_tabs, new_tab_id);
-                        StatusBarBridge::success(
-                            ctx.window,
-                            format!("Duplicated tab '{}'", new_title),
-                        );
+                        StatusBarBridge::success(ctx.window, format!("Duplicated tab '{}'", new_title));
                     }
                     Err(e) => {
                         tracing::error!(tab_id, error = %e, "[TabContextMenu: DuplicateError] Failed to duplicate tab");
@@ -224,20 +220,25 @@ impl TabContextMenu {
                 }
             }
             CTX_TAB_OPEN_MULTIVIEW => {
-                tracing::info!(tab_id, "[TabContextMenu: OpenMultiview] Open the Multiview tab in fullscreen");
-                ctx.fullscreen.open_tab(
+                tracing::info!(
                     tab_id,
-                    ctx.tab_manager,
-                    ctx.settings,
-                    ctx.window.as_weak(),
+                    "[TabContextMenu: OpenMultiview] Open the Multiview tab in fullscreen"
                 );
+                ctx.fullscreen
+                    .open_tab(tab_id, ctx.tab_manager, ctx.settings, ctx.window.as_weak());
             }
             CTX_TAB_MOVE_TO_START => {
                 tracing::info!(tab_id, "[TabContextMenu: Move] Move tab to start requested");
                 if ctx.tab_manager.move_tab_to_start(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                     if ctx.window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                        BridgeTabGrid::sync_tab_grid_ui(
+                            ctx.window,
+                            ctx.tab_manager,
+                            ctx.library,
+                            ctx.settings,
+                            ctx.state,
+                        );
                     }
                 }
             }
@@ -246,7 +247,13 @@ impl TabContextMenu {
                 if ctx.tab_manager.move_tab_left(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                     if ctx.window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                        BridgeTabGrid::sync_tab_grid_ui(
+                            ctx.window,
+                            ctx.tab_manager,
+                            ctx.library,
+                            ctx.settings,
+                            ctx.state,
+                        );
                     }
                 }
             }
@@ -255,7 +262,13 @@ impl TabContextMenu {
                 if ctx.tab_manager.move_tab_right(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                     if ctx.window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                        BridgeTabGrid::sync_tab_grid_ui(
+                            ctx.window,
+                            ctx.tab_manager,
+                            ctx.library,
+                            ctx.settings,
+                            ctx.state,
+                        );
                     }
                 }
             }
@@ -264,7 +277,13 @@ impl TabContextMenu {
                 if ctx.tab_manager.move_to_end(tab_id) {
                     BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                     if ctx.window.get_active_view_mode() == 2 {
-                        BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
+                        BridgeTabGrid::sync_tab_grid_ui(
+                            ctx.window,
+                            ctx.tab_manager,
+                            ctx.library,
+                            ctx.settings,
+                            ctx.state,
+                        );
                     }
                 }
             }

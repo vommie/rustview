@@ -6,9 +6,15 @@
 /// `(component, how the shutdown closes it)`.
 pub const WINDOWS: &[(&str, &str)] = &[
     ("MainWindow", "its close request starts the shutdown"),
-    ("MultiviewFullscreenWindow", "MultiviewHandle::shutdown closes the session (pinned or not) and hides the window; Slint destroys it when the event loop ends"),
+    (
+        "MultiviewFullscreenWindow",
+        "MultiviewHandle::shutdown closes the session (pinned or not) and hides the window; Slint destroys it when the event loop ends",
+    ),
     ("MultiviewBarWindow", "bar_overlay::shutdown destroys both bar windows"),
-    ("SettingsWindow", "SettingsDialogController::close; the changes that were not saved are discarded"),
+    (
+        "SettingsWindow",
+        "SettingsDialogController::close; the changes that were not saved are discarded",
+    ),
     ("ColorPickerWindow", "color_picker::shutdown"),
     ("FileRenameDialog", "hidden directly"),
     ("FavoriteRenameDialog", "FavoriteRenameDialogController::close"),
@@ -23,9 +29,21 @@ pub const WINDOWS: &[(&str, &str)] = &[
     ("RenameFolderDialog", "FolderDialogController::close_rename"),
     ("NewFolderDialog", "FolderDialogController::close_new"),
     ("DeleteFolderDialog", "FolderDialogController::close_delete"),
-    ("DeleteSelectionDialog", "FolderDialogController::close_delete_selection"),
-    ("MissingFolderDeleteDialog", "FolderDialogController::close_missing_delete"),
-    ("RemoveOrphanedFolderDialog", "FolderDialogController::close_remove_orphaned"),
-    ("RebornFolderDeleteWarnDialog", "FolderDialogController::close_reborn_warn"),
+    (
+        "DeleteSelectionDialog",
+        "FolderDialogController::close_delete_selection",
+    ),
+    (
+        "MissingFolderDeleteDialog",
+        "FolderDialogController::close_missing_delete",
+    ),
+    (
+        "RemoveOrphanedFolderDialog",
+        "FolderDialogController::close_remove_orphaned",
+    ),
+    (
+        "RebornFolderDeleteWarnDialog",
+        "FolderDialogController::close_reborn_warn",
+    ),
     ("MoveFolderToDialog", "FolderDialogController::close_move"),
 ];

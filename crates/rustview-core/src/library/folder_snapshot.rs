@@ -97,8 +97,7 @@ impl<'a> FolderSnapshotBuilder<'a> {
             }
         }
 
-        let mut children_map: HashMap<Option<FolderId>, Vec<FolderId>> =
-            HashMap::with_capacity(child_lists.len() + 1);
+        let mut children_map: HashMap<Option<FolderId>, Vec<FolderId>> = HashMap::with_capacity(child_lists.len() + 1);
         for (pid, list) in child_lists {
             children_map.insert(Some(pid), list);
         }
@@ -302,15 +301,7 @@ fn collect_reachable(root_id: FolderId, lists: &ChildLists) -> (HashSet<FolderId
 
 /// Sorts siblings case-insensitively by name with the id as a deterministic tie-breaker.
 fn sort_children_by_name(list: &mut [FolderId], nodes: &NodeMap) {
-    list.sort_by_cached_key(|id| {
-        (
-            nodes
-                .get(id)
-                .map(|n| n.name.to_lowercase())
-                .unwrap_or_default(),
-            *id,
-        )
-    });
+    list.sort_by_cached_key(|id| (nodes.get(id).map(|n| n.name.to_lowercase()).unwrap_or_default(), *id));
 }
 
 #[cfg(test)]

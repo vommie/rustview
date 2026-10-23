@@ -42,19 +42,25 @@ pub fn recolor_svg(icon: Icon, color: &str) -> String {
 
 /// Renders an icon into straight (non-premultiplied) RGBA pixels of `size_px` x `size_px`.
 pub fn render_rgba(icon: Icon, size_px: u32, color: &str) -> Result<Vec<u8>, RasterError> {
-    let mut pixmap =
-        tiny_skia::Pixmap::new(size_px, size_px).ok_or(RasterError::InvalidSize(size_px))?;
+    let mut pixmap = tiny_skia::Pixmap::new(size_px, size_px).ok_or(RasterError::InvalidSize(size_px))?;
     let svg = recolor_svg(icon, color);
-    let tree = usvg::Tree::from_str(&svg, &usvg::Options::default())
-        .map_err(|e| RasterError::Parse(e.to_string()))?;
+    let tree = usvg::Tree::from_str(&svg, &usvg::Options::default()).map_err(|e| RasterError::Parse(e.to_string()))?;
 
     let scale = size_px as f32 / tree.size().width().max(1.0);
-    resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+    resvg::render(
+        &tree,
+        tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
 
-    Ok(pixmap.pixels().iter().flat_map(|p| {
-        let c = p.demultiply();
-        [c.red(), c.green(), c.blue(), c.alpha()]
-    }).collect())
+    Ok(pixmap
+        .pixels()
+        .iter()
+        .flat_map(|p| {
+            let c = p.demultiply();
+            [c.red(), c.green(), c.blue(), c.alpha()]
+        })
+        .collect())
 }
 
 /// Renders an icon and writes it as PNG to `dest`.
@@ -94,6 +100,9 @@ mod tests {
 
     #[test]
     fn rejects_zero_size() {
-        assert!(matches!(render_rgba(Icon::File, 0, "#000000"), Err(RasterError::InvalidSize(0))));
+        assert!(matches!(
+            render_rgba(Icon::File, 0, "#000000"),
+            Err(RasterError::InvalidSize(0))
+        ));
     }
 }

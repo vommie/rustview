@@ -1,16 +1,16 @@
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tags::{TagActionHandler, TagSelectionStats, TagTreeSync};
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tags::history::{TagHistoryItem, TagHistoryLayoutEngine, TagHistoryManager};
+use crate::ui::tags::{TagActionHandler, TagSelectionStats, TagTreeSync};
 use crate::ui::{MainWindow, TagHistoryItemModel, TagHistoryRowModel};
-use rustview_core::library::models::TagId;
-use rustview_core::library::Library;
-use rustview_core::settings::{LogObscurer, SettingsManager};
-use rustview_core::thumbnails::ThumbnailManager;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::library::models::TagId;
+use rustview_core::settings::{LogObscurer, SettingsManager};
+use rustview_core::thumbnails::ThumbnailManager;
 use slint::{Model, ModelRc, VecModel};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -22,12 +22,7 @@ pub struct BridgeTagHistory;
 
 impl BridgeTagHistory {
     /// Validates and initializes Tag History from settings and database, synchronizing with UI.
-    pub fn init(
-        window: &MainWindow,
-        library: &Library,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn init(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
         let t0 = Instant::now();
         let app_settings = settings.get();
         let mut history_ids = app_settings.tags.history_tag_ids.clone();
@@ -70,22 +65,11 @@ impl BridgeTagHistory {
     }
 
     /// Synchronizes tag history items, formatting, and row packing to the Slint `MainWindow`.
-    pub fn sync_ui(
-        window: &MainWindow,
-        library: &Library,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn sync_ui(window: &MainWindow, library: &Library, state: &RwLock<UiState>) {
         let t0 = Instant::now();
         let is_tab_mode = window.get_active_view_mode() == 1;
 
-        let (
-            history_ids,
-            is_collapsed,
-            history_height,
-            available_w,
-            selected_file_ids,
-            has_selection,
-        ) = {
+        let (history_ids, is_collapsed, history_height, available_w, selected_file_ids, has_selection) = {
             let s = state.read();
             let file_ids = if is_tab_mode {
                 s.active_tab_selection().unwrap_or_default()
@@ -308,11 +292,7 @@ impl BridgeTagHistory {
     }
 
     /// Handles toggling the collapsed state of the Tag History panel.
-    pub fn handle_collapsed_toggled(
-        is_collapsed: bool,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn handle_collapsed_toggled(is_collapsed: bool, settings: &SettingsManager, state: &RwLock<UiState>) {
         {
             let mut st = state.write();
             st.is_tag_history_collapsed = is_collapsed;
@@ -329,11 +309,7 @@ impl BridgeTagHistory {
     }
 
     /// Records that a tag was assigned (e.g. from Tag Tree or shortcut) and puts it at the front of history.
-    pub fn record_tag_assigned(
-        tag_id: TagId,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn record_tag_assigned(tag_id: TagId, settings: &SettingsManager, state: &RwLock<UiState>) {
         let max_items = state.read().max_history_tags;
         let mut st = state.write();
         TagHistoryManager::record_tag_used(&mut st.tag_history_ids, tag_id, max_items);
@@ -344,11 +320,7 @@ impl BridgeTagHistory {
     }
 
     /// Prunes deleted tags from the history and persists changes.
-    pub fn prune_deleted_tags(
-        deleted_ids: &HashSet<TagId>,
-        settings: &SettingsManager,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn prune_deleted_tags(deleted_ids: &HashSet<TagId>, settings: &SettingsManager, state: &RwLock<UiState>) {
         let mut st = state.write();
         TagHistoryManager::prune_tags(&mut st.tag_history_ids, deleted_ids);
 

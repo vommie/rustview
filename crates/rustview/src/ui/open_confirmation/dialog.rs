@@ -1,6 +1,6 @@
 use super::policy::{self, OpenKind};
-use rustview_core::settings::SettingsManager;
 use crate::ui::{MainWindow, OpenManyFilesDialog};
+use rustview_core::settings::SettingsManager;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 

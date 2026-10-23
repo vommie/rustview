@@ -11,9 +11,7 @@ impl HighResImageLoader {
     /// Loads and decodes a full-resolution image from disk into a thread-safe `SharedPixelBuffer`.
     /// First attempts native decoding via the `image` crate with a 256 KiB read buffer;
     /// falls back to the resilient FFmpeg decoder for specialized formats (e.g. PSD, exotic TIFF).
-    pub fn load_full_resolution(
-        path: &Path,
-    ) -> Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), ViewerError> {
+    pub fn load_full_resolution(path: &Path) -> Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), ViewerError> {
         let t0 = Instant::now();
 
         if !path.exists() {
@@ -66,7 +64,9 @@ impl HighResImageLoader {
                 return Ok((grid.width, grid.height, pixel_buffer));
             }
             Ok(_) => {}
-            Err(e) => tracing::warn!(error = %e, "[HighResImageLoader] Tile grid could not be composed; falling back to the first stream"),
+            Err(e) => {
+                tracing::warn!(error = %e, "[HighResImageLoader] Tile grid could not be composed; falling back to the first stream")
+            }
         }
 
         // 3. Resilient Fallback to FFmpeg decoder (AVIF, JPEG XL, JPEG 2000, PSD, DPX, legacy formats, exotic variants),
@@ -102,7 +102,8 @@ impl HighResImageLoader {
 
     fn load_svg(path: &Path, t0: Instant) -> Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), ViewerError> {
         let (iw, ih) = svg::intrinsic_size(path).map_err(|e| ViewerError::DecodeFailed(e.to_string()))?;
-        let raster = svg::rasterize(path, svg::viewer_edge(iw, ih)).map_err(|e| ViewerError::DecodeFailed(e.to_string()))?;
+        let raster =
+            svg::rasterize(path, svg::viewer_edge(iw, ih)).map_err(|e| ViewerError::DecodeFailed(e.to_string()))?;
         let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(raster.width, raster.height);
         pixel_buffer.make_mut_bytes().copy_from_slice(&raster.rgb);
 

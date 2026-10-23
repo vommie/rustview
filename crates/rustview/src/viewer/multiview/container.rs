@@ -94,8 +94,8 @@ impl Projection {
     /// Largest uniform scale that fits the container into `host`, centered inside it.
     pub fn fit(container: &Container, host: Rect) -> Self {
         let (host_w, host_h) = (host.w.max(1), host.h.max(1));
-        let scale = (f64::from(host_w) / f64::from(container.width))
-            .min(f64::from(host_h) / f64::from(container.height));
+        let scale =
+            (f64::from(host_w) / f64::from(container.width)).min(f64::from(host_h) / f64::from(container.height));
         let width = ((f64::from(container.width) * scale).round() as i32).clamp(1, host_w);
         let height = ((f64::from(container.height) * scale).round() as i32).clamp(1, host_h);
         let screen = Rect::new(
@@ -128,12 +128,8 @@ impl Projection {
 
     /// Maps a host point (for example the pointer) to container coordinates.
     pub fn point_to_container(&self, x: i32, y: i32) -> (i32, i32) {
-        let to_container =
-            |v: i32, origin: i32| (f64::from(v - origin) / self.scale).round() as i32;
-        (
-            to_container(x, self.screen.x),
-            to_container(y, self.screen.y),
-        )
+        let to_container = |v: i32, origin: i32| (f64::from(v - origin) / self.scale).round() as i32;
+        (to_container(x, self.screen.x), to_container(y, self.screen.y))
     }
 
     /// Converts a distance in host pixels (drag delta, snap radius) to container pixels.

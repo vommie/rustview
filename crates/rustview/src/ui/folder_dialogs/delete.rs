@@ -1,11 +1,11 @@
-use crate::ui::folder_dialogs::missing_delete::MissingFolderDeleteDialogController;
 use crate::ui::folder_dialogs::FolderDialogContext;
+use crate::ui::folder_dialogs::missing_delete::MissingFolderDeleteDialogController;
 use crate::ui::folder_tree::BridgeFolders;
-use crate::ui::selection::delete::missing_in_subtree_hint;
 use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::selection::delete::missing_in_subtree_hint;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tags::BridgeTags;
 use crate::ui::tabs::BridgeViewerTabs;
+use crate::ui::tags::BridgeTags;
 use crate::ui::{DeleteFolderDialog, MainWindow};
 use rustview_core::library::folder_operations::FolderSubtreeMetrics;
 use rustview_core::library::models::{FolderId, MediaId};
@@ -86,13 +86,7 @@ impl DeleteFolderDialogController {
     }
 
     /// Executes folder deletion (Trash or Permanent) and synchronizes storage, media records, tabs, and UI trees.
-    pub fn execute(
-        &self,
-        folder_id: FolderId,
-        to_trash: bool,
-        ctx: &FolderDialogContext,
-        window: &MainWindow,
-    ) {
+    pub fn execute(&self, folder_id: FolderId, to_trash: bool, ctx: &FolderDialogContext, window: &MainWindow) {
         let metrics_opt = ctx.library.folder_operations().get_metrics(folder_id).ok();
         let fallback = [folder_id];
         let affected_ids = metrics_opt
@@ -108,11 +102,7 @@ impl DeleteFolderDialogController {
             &ctx.state,
         );
 
-        match ctx
-            .library
-            .folder_operations()
-            .delete_folder(folder_id, to_trash)
-        {
+        match ctx.library.folder_operations().delete_folder(folder_id, to_trash) {
             Ok(report) => {
                 // 1. Notify tab manager for all affected media files
                 for &mid in &report.deleted_media_ids {
@@ -126,7 +116,9 @@ impl DeleteFolderDialogController {
                     let deleted_mids_set: HashSet<MediaId> = report.deleted_media_ids.iter().copied().collect();
 
                     for item in st.all_folder_media.iter_mut() {
-                        if deleted_fids_set.contains(&item.record.folder_id) || deleted_mids_set.contains(&item.record.id) {
+                        if deleted_fids_set.contains(&item.record.folder_id)
+                            || deleted_mids_set.contains(&item.record.id)
+                        {
                             item.mark_deleted();
                         }
                     }
@@ -135,11 +127,7 @@ impl DeleteFolderDialogController {
                 }
 
                 // 3. Prune expanded folders state
-                BridgeFolders::prune_expanded_folders(
-                    &report.deleted_folder_ids,
-                    &ctx.settings,
-                    &ctx.state,
-                );
+                BridgeFolders::prune_expanded_folders(&report.deleted_folder_ids, &ctx.settings, &ctx.state);
 
                 self.close(window);
 
@@ -169,13 +157,7 @@ impl DeleteFolderDialogController {
 
                 BridgeInspector::update(window, &ctx.state);
                 BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
-                BridgeViewerTabs::sync_ui(
-                    window,
-                    &ctx.tab_manager,
-                    &ctx.library,
-                    &ctx.settings,
-                    &ctx.state,
-                );
+                BridgeViewerTabs::sync_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
                 StatusBarBridge::update_metrics(window, &ctx.state);
             }
             Err(e) => {
@@ -232,16 +214,15 @@ impl DeleteFolderDialogController {
         });
     }
 
-    fn populate_dialog_fields(
-        &self,
-        win: &DeleteFolderDialog,
-        folder_name: &str,
-        metrics: &FolderSubtreeMetrics,
-    ) {
+    fn populate_dialog_fields(&self, win: &DeleteFolderDialog, folder_name: &str, metrics: &FolderSubtreeMetrics) {
         win.set_folder_name(folder_name.into());
         win.set_subfolders_count(metrics.subfolders_count as i32);
         win.set_files_count(metrics.media_files_count as i32);
-        win.set_missing_note(missing_in_subtree_hint(metrics.missing_subfolders, metrics.missing_media).unwrap_or_default().into());
+        win.set_missing_note(
+            missing_in_subtree_hint(metrics.missing_subfolders, metrics.missing_media)
+                .unwrap_or_default()
+                .into(),
+        );
         win.set_error_message("".into());
     }
 }

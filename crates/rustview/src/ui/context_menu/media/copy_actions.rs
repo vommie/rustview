@@ -1,20 +1,16 @@
 //! Actions of the media context menu that copy a name, a path or the picture to the clipboard.
 
+use super::{MediaActionContext, MediaContextMenu};
+use crate::system::SystemClipboard;
+use crate::ui::MainWindow;
 use crate::ui::file_dialogs::missing::MissingFileItem;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::MainWindow;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::LogObscurer;
-use crate::system::SystemClipboard;
 use slint::ComponentHandle;
-use super::{MediaActionContext, MediaContextMenu};
 
 impl MediaContextMenu {
-    pub(super) fn handle_copy_name_action(
-        window: &MainWindow,
-        ctx: &MediaActionContext<'_>,
-        target_ids: &[MediaId],
-    ) {
+    pub(super) fn handle_copy_name_action(window: &MainWindow, ctx: &MediaActionContext<'_>, target_ids: &[MediaId]) {
         if target_ids.is_empty() {
             return;
         }
@@ -55,11 +51,7 @@ impl MediaContextMenu {
         }
     }
 
-    pub(super) fn handle_copy_path_action(
-        window: &MainWindow,
-        ctx: &MediaActionContext<'_>,
-        target_ids: &[MediaId],
-    ) {
+    pub(super) fn handle_copy_path_action(window: &MainWindow, ctx: &MediaActionContext<'_>, target_ids: &[MediaId]) {
         let paths = Self::collect_paths_for_ids(ctx, target_ids);
         if paths.is_empty() {
             tracing::warn!("[MediaContextMenu] No valid paths resolved for copy path action");
@@ -84,11 +76,7 @@ impl MediaContextMenu {
         }
     }
 
-    pub(super) fn handle_copy_image_action(
-        window: &MainWindow,
-        ctx: &MediaActionContext<'_>,
-        target_ids: &[MediaId],
-    ) {
+    pub(super) fn handle_copy_image_action(window: &MainWindow, ctx: &MediaActionContext<'_>, target_ids: &[MediaId]) {
         let Some(&single_id) = target_ids.first() else {
             return;
         };
@@ -137,10 +125,7 @@ impl MediaContextMenu {
             "[MediaContextMenu] Copying raw image content asynchronously to clipboard"
         );
 
-        StatusBarBridge::info(
-            window,
-            format!("Copying image content '{}' to clipboard...", filename),
-        );
+        StatusBarBridge::info(window, format!("Copying image content '{}' to clipboard...", filename));
 
         let w_weak = window.as_weak();
         let fname_clone = filename.clone();

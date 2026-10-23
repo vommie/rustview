@@ -1,5 +1,10 @@
 //! Building and showing the menu of a kind of item.
 
+use super::calculate_all_active_menu_cutouts;
+use super::{BridgeContextMenu, FolderMenuContext, MediaMenuContext};
+use crate::ctx_menu::CtxMenu;
+use crate::system::DesktopIntegration;
+use crate::ui::MainWindow;
 pub use crate::ui::context_menu::favorite::FavoriteContextMenu;
 pub use crate::ui::context_menu::folder::FolderContextMenu;
 pub use crate::ui::context_menu::media::MediaContextMenu;
@@ -7,24 +12,14 @@ pub use crate::ui::context_menu::presenter::CtxMenuPresenter;
 pub use crate::ui::context_menu::tab::TabContextMenu;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::*;
-use crate::ui::MainWindow;
-use crate::ctx_menu::CtxMenu;
-use rustview_core::library::models::{FolderId, MediaId};
-use crate::system::DesktopIntegration;
-use rustview_core::thumbnails::ThumbnailManager;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
+use rustview_core::library::models::{FolderId, MediaId};
+use rustview_core::thumbnails::ThumbnailManager;
 use std::sync::Arc;
-use super::{BridgeContextMenu, FolderMenuContext, MediaMenuContext};
-use super::calculate_all_active_menu_cutouts;
 
 impl BridgeContextMenu {
-    pub fn show_media_menu(
-        ctx: MediaMenuContext<'_>,
-        media_id: MediaId,
-        x: f32,
-        y: f32,
-    ) {
+    pub fn show_media_menu(ctx: MediaMenuContext<'_>, media_id: MediaId, x: f32, y: f32) {
         ctx.state.write().active_tab_dialog_target = None;
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let show_hidden = ctx.settings.get().folders.show_hidden_folders;
@@ -47,12 +42,7 @@ impl BridgeContextMenu {
         Self::open_custom_menu(ctx.window, ctx.state, ctx.tab_manager, menu, x, y);
     }
 
-    pub fn show_folder_menu(
-        ctx: FolderMenuContext<'_>,
-        folder_id: FolderId,
-        x: f32,
-        y: f32,
-    ) {
+    pub fn show_folder_menu(ctx: FolderMenuContext<'_>, folder_id: FolderId, x: f32, y: f32) {
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let app_settings = ctx.settings.get();
         let root_setting = app_settings.general.root_folder;
@@ -82,10 +72,7 @@ impl BridgeContextMenu {
             st.active_tab_dialog_target = None;
         }
 
-        let is_root = root_setting
-            .as_ref()
-            .map(|r| target_node.path == *r)
-            .unwrap_or(false);
+        let is_root = root_setting.as_ref().map(|r| target_node.path == *r).unwrap_or(false);
 
         let is_favorite = ctx.favorites.read().has_path(&target_node.path);
 
@@ -131,14 +118,7 @@ impl BridgeContextMenu {
             st.active_associated_apps = associated_apps.clone();
         }
 
-        let menu = TabContextMenu::build_menu(
-            tab,
-            tab_idx,
-            total_tabs,
-            &tabs,
-            &associated_apps,
-            is_busy,
-        );
+        let menu = TabContextMenu::build_menu(tab, tab_idx, total_tabs, &tabs, &associated_apps, is_busy);
         Self::open_custom_menu(window, state, tab_manager, menu, x, y + 10.0);
     }
 

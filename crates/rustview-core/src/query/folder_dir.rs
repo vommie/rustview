@@ -21,7 +21,11 @@ impl FolderDir {
             let text = path.to_string_lossy();
             (SharedString::from(&*text), text.to_lowercase())
         };
-        Arc::new(Self { path, path_str, path_lower })
+        Arc::new(Self {
+            path,
+            path_str,
+            path_lower,
+        })
     }
 
     #[inline]

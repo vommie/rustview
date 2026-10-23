@@ -14,11 +14,11 @@ use super::views::sync_model;
 use crate::ctx_menu::{CtxMenuDispatcher, CtxMenuItem};
 use crate::ui::{ContextMenuItemModel, MultiviewBarButtonView, MultiviewBarWindow};
 use crate::viewer::multiview::bar_menu::OutsidePress;
-use crate::viewer::multiview::media_actions::MediaActionId;
-use crate::viewer::multiview::view::ZoomBubbleView;
 use crate::viewer::multiview::bar_placement::{BarCorner, BarPlacement, in_reveal_zone, place_bar_in, rounded_region};
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::layout::Rect;
+use crate::viewer::multiview::media_actions::MediaActionId;
+use crate::viewer::multiview::view::ZoomBubbleView;
 use crate::viewer::{OverlayServer, XRectangle, get_raw_window_xid};
 use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
 use slint::winit_030::winit::window::WindowAttributes;
@@ -133,7 +133,10 @@ pub fn set_tooltip_settings(enabled: bool, delay_ms: i32) {
 /// them does not delay the first appearance of a bar.
 pub fn prepare() {
     prepare_media_bars(1);
-    if !all_overlays().iter().any(|cell| cell.try_borrow().is_ok_and(|o| o.kind == BarKind::Primary)) {
+    if !all_overlays()
+        .iter()
+        .any(|cell| cell.try_borrow().is_ok_and(|o| o.kind == BarKind::Primary))
+    {
         add_overlay(BarKind::Primary);
     }
 }
@@ -160,11 +163,17 @@ fn add_overlay(kind: BarKind) -> Option<Rc<RefCell<Overlay>>> {
 /// the pool, if the tile has none yet; one is created when all are in use).
 fn overlay_for(request: &BarRequest) -> Option<Rc<RefCell<Overlay>>> {
     if request.kind == BarKind::Primary {
-        return overlays_of(BarKind::Primary).into_iter().next().or_else(|| add_overlay(BarKind::Primary));
+        return overlays_of(BarKind::Primary)
+            .into_iter()
+            .next()
+            .or_else(|| add_overlay(BarKind::Primary));
     }
     let media = overlays_of(BarKind::Media);
     let assigned = |cell: &Rc<RefCell<Overlay>>| cell.try_borrow().ok().and_then(|o| o.assigned);
-    if let Some(cell) = media.iter().find(|cell| assigned(cell) == Some((request.owner, request.key))) {
+    if let Some(cell) = media
+        .iter()
+        .find(|cell| assigned(cell) == Some((request.owner, request.key)))
+    {
         return Some(cell.clone());
     }
     let free = media.iter().find(|cell| cell.try_borrow().is_ok_and(|o| o.is_free()));
@@ -192,7 +201,8 @@ pub fn show(request: &BarRequest) -> bool {
 pub fn open_menu(kind: BarKind, opener_action: i32, items: &[CtxMenuItem]) {
     let clicked = LAST_CLICKED.with(Cell::get);
     let cell = overlays_of(kind).into_iter().find(|cell| {
-        cell.try_borrow().is_ok_and(|o| kind == BarKind::Primary || (o.shown && o.assigned.map(|(_, key)| key) == clicked))
+        cell.try_borrow()
+            .is_ok_and(|o| kind == BarKind::Primary || (o.shown && o.assigned.map(|(_, key)| key) == clicked))
     });
     if let Some(cell) = cell
         && let Ok(mut overlay) = cell.try_borrow_mut()
@@ -200,7 +210,9 @@ pub fn open_menu(kind: BarKind, opener_action: i32, items: &[CtxMenuItem]) {
     {
         let opener = overlay.last_actions.iter().position(|a| a.id == opener_action);
         overlay.window.set_menu_owner_index(opener.map_or(-1, |i| i as i32));
-        overlay.window.set_menu_items(CtxMenuDispatcher::items_to_slint_model(items, 0));
+        overlay
+            .window
+            .set_menu_items(CtxMenuDispatcher::items_to_slint_model(items, 0));
         overlay.window.set_menu_open(true);
         let down = overlay.pointer_state().is_some_and(|(_, down)| down);
         overlay.outside.arm(down);
@@ -254,8 +266,12 @@ pub fn open_menu_keys(owner: BarOwner) -> Vec<TileKey> {
 /// that has a slider open is in `zooms`, every other bar of `owner` closes its slider.
 pub fn sync_zooms(owner: BarOwner, zooms: &[ZoomBubbleView]) {
     for cell in overlays_of(BarKind::Media) {
-        let Ok(mut overlay) = cell.try_borrow_mut() else { continue };
-        let Some((assigned_to, key)) = overlay.assigned else { continue };
+        let Ok(mut overlay) = cell.try_borrow_mut() else {
+            continue;
+        };
+        let Some((assigned_to, key)) = overlay.assigned else {
+            continue;
+        };
         if assigned_to == owner {
             overlay.sync_zoom(zooms.iter().find(|z| z.key == key));
         }
@@ -279,7 +295,10 @@ pub fn close_clicked_menu(kind: BarKind) -> bool {
     let clicked = LAST_CLICKED.with(Cell::get);
     overlays_of(kind)
         .into_iter()
-        .find(|cell| cell.try_borrow().is_ok_and(|o| kind == BarKind::Primary || o.assigned.map(|(_, key)| key) == clicked))
+        .find(|cell| {
+            cell.try_borrow()
+                .is_ok_and(|o| kind == BarKind::Primary || o.assigned.map(|(_, key)| key) == clicked)
+        })
         .is_some_and(|cell| cell.try_borrow().is_ok_and(|o| o.close_menu()))
 }
 
@@ -302,7 +321,9 @@ pub fn hide_kind_except(kind: BarKind, owner: BarOwner, keep: &[TileKey]) {
             tracing::debug!("[Multiview: Overlay] Skipped a re-entrant call");
             continue;
         };
-        let kept = overlay.assigned.is_some_and(|(o, key)| o == owner && keep.contains(&key));
+        let kept = overlay
+            .assigned
+            .is_some_and(|(o, key)| o == owner && keep.contains(&key));
         if overlay.owner == Some(owner) && !kept {
             overlay.hide();
         }
@@ -327,7 +348,10 @@ fn all_overlays() -> Vec<Rc<RefCell<Overlay>>> {
 }
 
 fn overlays_of(kind: BarKind) -> Vec<Rc<RefCell<Overlay>>> {
-    all_overlays().into_iter().filter(|cell| cell.try_borrow().is_ok_and(|o| o.kind == kind)).collect()
+    all_overlays()
+        .into_iter()
+        .filter(|cell| cell.try_borrow().is_ok_and(|o| o.kind == kind))
+        .collect()
 }
 
 /// What the callbacks of the window need as well.
@@ -481,8 +505,8 @@ impl Overlay {
             };
             let scale = state.scale.max(0.5);
             let px = |logical: f32| (logical * scale).round() as i32;
-            state.tooltip = (visible && w > 2.0 && h > 2.0)
-                .then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
+            state.tooltip =
+                (visible && w > 2.0 && h > 2.0).then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
             state.apply_shape();
         });
         let for_pill = shared.clone();
@@ -612,7 +636,7 @@ impl Overlay {
     /// See `sync_zoom`.
     fn sync_zoom(&mut self, zoom: Option<&ZoomBubbleView>) {
         let Some(zoom) = zoom else {
-                if self.window.get_zoom_open() {
+            if self.window.get_zoom_open() {
                 self.window.set_zoom_open(false);
                 if !self.window.get_menu_open() {
                     self.window.set_menu_owner_index(-1);
@@ -624,14 +648,18 @@ impl Overlay {
             // One bubble at a time.
             clear_menu(&self.window, &self.shared);
         }
-        let opener = self.last_actions.iter().position(|a| a.id == MediaActionId::Zoom.code());
+        let opener = self
+            .last_actions
+            .iter()
+            .position(|a| a.id == MediaActionId::Zoom.code());
         self.window.set_menu_owner_index(opener.map_or(-1, |i| i as i32));
         self.window.set_tile(zoom.tile as i32);
         self.window.set_zoom_permille(zoom.permille);
         self.window.set_zoom_min_permille(zoom.min_permille);
         self.window.set_zoom_max_permille(zoom.max_permille);
         if self.last_zoom_snaps != zoom.snaps {
-            self.window.set_zoom_snaps(ModelRc::new(VecModel::from(zoom.snaps.clone())));
+            self.window
+                .set_zoom_snaps(ModelRc::new(VecModel::from(zoom.snaps.clone())));
             self.last_zoom_snaps.clone_from(&zoom.snaps);
         }
         if !self.window.get_zoom_open() {
@@ -650,13 +678,17 @@ impl Overlay {
             // A window manager that does not tell cannot be asked; the pointer decides alone then.
             return false;
         };
-        active == host_xid || server.top_level_of(active).is_some_and(|top| Some(top) == server.top_level_of(host_xid))
+        active == host_xid
+            || server
+                .top_level_of(active)
+                .is_some_and(|top| Some(top) == server.top_level_of(host_xid))
     }
 
     /// Whether the user is looking at the host: the pointer is over it (or over the bar) or it is the active window. A bar that
     /// stays by itself (open menu or slider) goes away when this is false, so it never floats over another application.
     fn host_in_use(&self) -> bool {
-        self.host_xid != 0 && (self.host_state(self.host_xid).is_some_and(|(_, in_front)| in_front) || self.host_active(self.host_xid))
+        self.host_xid != 0
+            && (self.host_state(self.host_xid).is_some_and(|(_, in_front)| in_front) || self.host_active(self.host_xid))
     }
 
     /// While a drop-down menu is open: a click outside the bar and the menu closes it, and so does the user leaving the application
@@ -677,7 +709,11 @@ impl Overlay {
             let state = self.shared.x.borrow();
             match state.placed {
                 Some(placed) => std::iter::once(placed.bar)
-                    .chain(state.menu.map(|m| Rect::new(placed.window.x + m.x, placed.window.y + m.y, m.w, m.h)))
+                    .chain(
+                        state
+                            .menu
+                            .map(|m| Rect::new(placed.window.x + m.x, placed.window.y + m.y, m.w, m.h)),
+                    )
                     .collect(),
                 None => Vec::new(),
             }
@@ -706,9 +742,9 @@ impl Overlay {
         let server = x.server.as_ref()?;
         let origin = server.origin_in_root(host_xid)?;
         let host_top = server.top_level_of(host_xid)?;
-        let in_front = server.top_level_at_pointer().is_some_and(|front| {
-            front == host_top || OVERLAY_XIDS.with(|ids| ids.borrow().contains(&front))
-        });
+        let in_front = server
+            .top_level_at_pointer()
+            .is_some_and(|front| front == host_top || OVERLAY_XIDS.with(|ids| ids.borrow().contains(&front)));
         Some((origin, in_front))
     }
 
@@ -776,8 +812,7 @@ impl Overlay {
         let translucent = {
             let state = self.shared.x.borrow();
             state.server.as_ref().is_some_and(|server| {
-                server.compositor_running()
-                    && state.xid.is_none_or(|xid| server.window_depth(xid) == Some(32))
+                server.compositor_running() && state.xid.is_none_or(|xid| server.window_depth(xid) == Some(32))
             })
         };
         let changed = {

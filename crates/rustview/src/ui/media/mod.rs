@@ -6,19 +6,17 @@ pub mod video_preview;
 
 use rustview_core::library::models::{MediaId, MediaRecord};
 use rustview_core::query::{ListLayout, MediaStore};
-use rustview_core::thumbnails::{
-    ThumbnailLocation, VideoPreviewRecord,
-};
+use rustview_core::thumbnails::{ThumbnailLocation, VideoPreviewRecord};
 use slint::Timer;
 use std::cell::RefCell;
 
-mod query_callbacks;
-mod virtual_folder;
-mod view;
-mod metadata_refresh;
 mod media_refresh;
+mod metadata_refresh;
+mod query_callbacks;
 mod records;
 mod reload;
+mod view;
+mod virtual_folder;
 
 thread_local! {
     static ACTIVE_PREVIEW_TIMER: RefCell<Option<Timer>> = const { RefCell::new(None) };
@@ -71,9 +69,7 @@ struct RefreshedMetadataOnlyItem {
 
 pub struct BridgeMedia;
 
-impl BridgeMedia {
-
-}
+impl BridgeMedia {}
 
 /// A finished layout waiting to be committed; `store` carries freshly loaded records (folder switch) built off the UI thread.
 pub struct PendingList {

@@ -5,8 +5,8 @@
 //! the tiles that are showing. A date stays cached; every reload of the list marks the cache stale, and a stale date is shown until
 //! the fresh one has arrived.
 
-use rustview_core::library::models::FolderId;
 use parking_lot::Mutex;
+use rustview_core::library::models::FolderId;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -28,9 +28,14 @@ impl FolderStamp {
             return Self::default();
         };
         let secs = |time: std::io::Result<SystemTime>| {
-            time.ok().and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64)
+            time.ok()
+                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
         };
-        Self { created: secs(metadata.created()), modified: secs(metadata.modified()) }
+        Self {
+            created: secs(metadata.created()),
+            modified: secs(metadata.modified()),
+        }
     }
 }
 
@@ -84,7 +89,11 @@ impl FolderTimes {
     /// The date of a folder for a row that is being built: the cached one (stale ones too); a missing or stale date is requested.
     pub fn get(self: &Arc<Self>, id: FolderId, path: &Path) -> Option<FolderStamp> {
         let generation = self.generation.load(Ordering::Relaxed);
-        let cached = self.entries.lock().get(&id).map(|entry| (entry.stamp, entry.generation));
+        let cached = self
+            .entries
+            .lock()
+            .get(&id)
+            .map(|entry| (entry.stamp, entry.generation));
         if cached.is_none_or(|(_, entry_generation)| entry_generation != generation) {
             self.request(id, path);
         }

@@ -55,10 +55,18 @@ impl BadgeColor {
         let background = relative_luminance(self.r, self.g, self.b);
         let contrast_with = |(r, g, b): (u8, u8, u8)| {
             let other = relative_luminance(r, g, b);
-            let (hi, lo) = if background > other { (background, other) } else { (other, background) };
+            let (hi, lo) = if background > other {
+                (background, other)
+            } else {
+                (other, background)
+            };
             (hi + 0.05) / (lo + 0.05)
         };
-        let (r, g, b) = if contrast_with(DARK_TEXT) >= contrast_with(LIGHT_TEXT) { DARK_TEXT } else { LIGHT_TEXT };
+        let (r, g, b) = if contrast_with(DARK_TEXT) >= contrast_with(LIGHT_TEXT) {
+            DARK_TEXT
+        } else {
+            LIGHT_TEXT
+        };
         Color::from_rgb_u8(r, g, b)
     }
 }
@@ -67,7 +75,11 @@ impl BadgeColor {
 fn relative_luminance(r: u8, g: u8, b: u8) -> f32 {
     let linear = |c: u8| {
         let v = c as f32 / 255.0;
-        if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+        if v <= 0.03928 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
     };
     0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
 }
@@ -80,9 +92,18 @@ mod tests {
     fn parses_all_supported_hex_forms() {
         assert_eq!(BadgeColor::from_hex("#f00"), Ok(BadgeColor::rgba(255, 0, 0, 255)));
         assert_eq!(BadgeColor::from_hex("#f008"), Ok(BadgeColor::rgba(255, 0, 0, 136)));
-        assert_eq!(BadgeColor::from_hex("#89dceb"), Ok(BadgeColor::rgba(0x89, 0xdc, 0xeb, 255)));
-        assert_eq!(BadgeColor::from_hex("89dcebcc"), Ok(BadgeColor::rgba(0x89, 0xdc, 0xeb, 0xcc)));
-        assert_eq!(BadgeColor::from_hex("  #FFFFFF "), Ok(BadgeColor::rgba(255, 255, 255, 255)));
+        assert_eq!(
+            BadgeColor::from_hex("#89dceb"),
+            Ok(BadgeColor::rgba(0x89, 0xdc, 0xeb, 255))
+        );
+        assert_eq!(
+            BadgeColor::from_hex("89dcebcc"),
+            Ok(BadgeColor::rgba(0x89, 0xdc, 0xeb, 0xcc))
+        );
+        assert_eq!(
+            BadgeColor::from_hex("  #FFFFFF "),
+            Ok(BadgeColor::rgba(255, 255, 255, 255))
+        );
     }
 
     #[test]
@@ -94,7 +115,13 @@ mod tests {
 
     #[test]
     fn contrast_text_is_dark_on_light_and_light_on_dark() {
-        assert_eq!(BadgeColor::rgba(255, 255, 255, 255).contrast_text(), Color::from_rgb_u8(0x11, 0x11, 0x1b));
-        assert_eq!(BadgeColor::rgba(0, 0, 0, 255).contrast_text(), Color::from_rgb_u8(255, 255, 255));
+        assert_eq!(
+            BadgeColor::rgba(255, 255, 255, 255).contrast_text(),
+            Color::from_rgb_u8(0x11, 0x11, 0x1b)
+        );
+        assert_eq!(
+            BadgeColor::rgba(0, 0, 0, 255).contrast_text(),
+            Color::from_rgb_u8(255, 255, 255)
+        );
     }
 }

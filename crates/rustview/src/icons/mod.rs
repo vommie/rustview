@@ -115,8 +115,7 @@ mod tests {
 
     #[test]
     fn only_ratings_are_colored() {
-        let colored: HashSet<Icon> =
-            Icon::ALL.iter().copied().filter(|i| !i.is_monochrome()).collect();
+        let colored: HashSet<Icon> = Icon::ALL.iter().copied().filter(|i| !i.is_monochrome()).collect();
         let expected: HashSet<Icon> = [
             Icon::RatingClear,
             Icon::Rating0,

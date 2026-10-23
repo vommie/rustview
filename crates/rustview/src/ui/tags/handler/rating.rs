@@ -1,20 +1,17 @@
 //! Rating the selected media.
 
+use super::TagActionContext;
+use super::TagActionHandler;
+use super::TagTreeSync;
+use crate::ui::browse_window::update_tile;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::browse_window::update_tile;
 use rustview_core::library::models::MediaId;
 use std::collections::HashSet;
-use super::TagActionContext;
-use super::TagTreeSync;
-use super::TagActionHandler;
 
 impl TagActionHandler {
-    pub fn apply_rating(
-        rating: Option<u8>,
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn apply_rating(rating: Option<u8>, ctx: &TagActionContext<'_>) {
         let is_tab_active = ctx.window.get_active_view_mode() == 1 || ctx.tab_manager.active_tab_id().is_some();
 
         let (selected_ids, is_assign_raw) = {
@@ -41,11 +38,7 @@ impl TagActionHandler {
                 StatusBarBridge::info(ctx.window, "Select one or more files to apply rating.");
                 return;
             }
-            Self::apply_rating_to_ids(
-                &selected_ids,
-                rating_val,
-                ctx,
-            );
+            Self::apply_rating_to_ids(&selected_ids, rating_val, ctx);
         } else {
             let (prev_rating, is_query) = {
                 let s = ctx.state.read();
@@ -66,11 +59,7 @@ impl TagActionHandler {
         }
     }
 
-    pub fn apply_rating_to_ids(
-        ids: &HashSet<MediaId>,
-        rating: u8,
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn apply_rating_to_ids(ids: &HashSet<MediaId>, rating: u8, ctx: &TagActionContext<'_>) {
         for &id in ids {
             let _ = ctx.library.media().set_rating(id, rating);
             if let Ok(Some(updated)) = ctx.library.media().get(id) {
@@ -95,13 +84,7 @@ impl TagActionHandler {
 
         TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
         BridgeInspector::update(ctx.window, ctx.state);
-        BridgeViewerTabs::sync_ui(
-            ctx.window,
-            ctx.tab_manager,
-            ctx.library,
-            ctx.settings,
-            ctx.state,
-        );
+        BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
         StatusBarBridge::update_metrics(ctx.window, ctx.state);
 
         StatusBarBridge::success(

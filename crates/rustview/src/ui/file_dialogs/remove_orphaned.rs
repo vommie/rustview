@@ -1,10 +1,10 @@
 use crate::ui::file_dialogs::FileDialogContext;
-use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::BridgeMedia;
+use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::status_bar::StatusBarBridge;
+use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tags::BridgeTags;
-use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::{MainWindow, RemoveOrphanedFileDialog};
 use rustview_core::library::models::MediaId;
 use slint::{CloseRequestResponse, ComponentHandle};
@@ -24,12 +24,7 @@ impl RemoveOrphanedFileDialogController {
     }
 
     /// Displays the confirmation dialog to remove missing file records from the database.
-    pub fn show(
-        &self,
-        window: &MainWindow,
-        media_ids: Vec<MediaId>,
-        ctx: FileDialogContext,
-    ) {
+    pub fn show(&self, window: &MainWindow, media_ids: Vec<MediaId>, ctx: FileDialogContext) {
         if media_ids.is_empty() {
             return;
         }
@@ -49,9 +44,9 @@ impl RemoveOrphanedFileDialogController {
                         .map(|m| m.record.filename.clone())
                 })
                 .or_else(|| {
-                    media_ids.first().and_then(|&id| {
-                        ctx.tab_manager.get_tab_by_media_id(id).map(|t| t.filename)
-                    })
+                    media_ids
+                        .first()
+                        .and_then(|&id| ctx.tab_manager.get_tab_by_media_id(id).map(|t| t.filename))
                 })
                 .unwrap_or_else(|| "Selected file".to_string())
         };
@@ -77,12 +72,7 @@ impl RemoveOrphanedFileDialogController {
     }
 
     /// Executes database purge of the missing media file records from LMDB.
-    pub fn execute(
-        &self,
-        media_ids: &[MediaId],
-        ctx: &FileDialogContext,
-        window: &MainWindow,
-    ) {
+    pub fn execute(&self, media_ids: &[MediaId], ctx: &FileDialogContext, window: &MainWindow) {
         let count = media_ids.len();
         let _ = ctx.library.file_operations().purge_media_from_db(media_ids);
 
@@ -102,13 +92,7 @@ impl RemoveOrphanedFileDialogController {
         };
         StatusBarBridge::success(window, msg);
 
-        BridgeViewerTabs::sync_ui(
-            window,
-            &ctx.tab_manager,
-            &ctx.library,
-            &ctx.settings,
-            &ctx.state,
-        );
+        BridgeViewerTabs::sync_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
         BridgeMedia::reload(
             window,
             &ctx.library,
@@ -122,13 +106,7 @@ impl RemoveOrphanedFileDialogController {
         BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
 
         if window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(
-                window,
-                &ctx.tab_manager,
-                &ctx.library,
-                &ctx.settings,
-                &ctx.state,
-            );
+            BridgeTabGrid::sync_tab_grid_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
         }
 
         StatusBarBridge::update_metrics(window, &ctx.state);
@@ -137,8 +115,7 @@ impl RemoveOrphanedFileDialogController {
     fn ensure_dialog_instantiated(&self) {
         let mut d_ref = self.dialog.borrow_mut();
         if d_ref.is_none() {
-            let win = RemoveOrphanedFileDialog::new()
-                .expect("Failed to instantiate RemoveOrphanedFileDialog");
+            let win = RemoveOrphanedFileDialog::new().expect("Failed to instantiate RemoveOrphanedFileDialog");
             *d_ref = Some(win);
         }
     }

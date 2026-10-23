@@ -41,7 +41,9 @@ pub enum UiAction {
     CloseActiveTab,
     RequestRename,
     ActivateTab,
-    ScrollGrid { up: bool },
+    ScrollGrid {
+        up: bool,
+    },
     /// Action button: open the medium as a normal background tab.
     OpenTileAsTab(u64),
     /// Action button: the medium left the Multiview, so it is deselected in the Browse view too.
@@ -58,7 +60,9 @@ pub enum UiAction {
     /// Primary bar button: the mouse cursor hiding after it rested is switched on or off (a setting of the application).
     SetIdleCursorHide(bool),
     /// Previous/next medium of the single image the Multiview shows (keys and mouse wheel).
-    Navigate { forward: bool },
+    Navigate {
+        forward: bool,
+    },
 }
 
 pub fn route(mode: HostMode, origin: OriginKind, event: RoutedEvent, click: ClickKind) -> UiAction {

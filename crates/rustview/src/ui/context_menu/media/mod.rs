@@ -1,38 +1,36 @@
-use crate::ui::folder_tree::projection::FolderProjection;
+use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuDispatcher};
+use crate::icons::Icon;
+use crate::system::DesktopApp;
+use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::file_dialogs::conflict::FileOpsConflictDialogController;
 use crate::ui::file_dialogs::delete::DeleteFileDialogController;
 use crate::ui::file_dialogs::missing::MissingFileDialogController;
 use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
-use crate::ui::selection::BridgeFileSelection;
-use crate::ui::multiview::MultiviewHandle;
+use crate::ui::folder_tree::projection::FolderProjection;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::open_with::MediaOpenWith;
-use crate::ui::state::*;
-use crate::ui::browse_folders::BrowseFolders;
-use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::selection::model::FileSelectionModel;
+use crate::ui::multiview::MultiviewHandle;
 use crate::ui::multiview::{OpenSummary, eligibility as multiview_eligibility};
-use crate::ui::thumbnail_regeneration::eligibility::RegenerationEligibility;
+use crate::ui::selection::BridgeFileSelection;
+use crate::ui::selection::model::FileSelectionModel;
+use crate::ui::state::*;
+use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
+use crate::ui::thumbnail_regeneration::eligibility::RegenerationEligibility;
 use crate::ui::{FileRenameDialog, MainWindow};
-use crate::ctx_menu::{
-    CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuDispatcher,
-};
-use crate::icons::Icon;
-use rustview_core::library::models::{FolderHierarchySnapshot, FolderId, MediaId};
-use rustview_core::library::Library;
-use rustview_core::media::MediaType;
-use rustview_core::settings::SettingsManager;
-use crate::system::DesktopApp;
-use rustview_core::thumbnails::ThumbnailManager;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::library::models::{FolderHierarchySnapshot, FolderId, MediaId};
+use rustview_core::media::MediaType;
+use rustview_core::settings::SettingsManager;
+use rustview_core::thumbnails::ThumbnailManager;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-mod open_actions;
 mod copy_actions;
+mod open_actions;
 
 pub struct MediaActionContext<'a> {
     pub library: &'a Arc<Library>,
@@ -303,13 +301,7 @@ impl MediaContextMenu {
                 }
                 sub_builder
             })
-            .action(
-                delete_action_id,
-                delete_action_text,
-                Some("Del"),
-                delete_icon,
-                !is_busy,
-            );
+            .action(delete_action_id, delete_action_text, Some("Del"), delete_icon, !is_busy);
 
         builder
     }
@@ -376,8 +368,7 @@ impl MediaContextMenu {
             } else {
                 "File: "
             };
-            let (header_title, header_tooltip) =
-                CtxMenuBuilder::format_header_title(prefix, &meta.single_filename, 24);
+            let (header_title, header_tooltip) = CtxMenuBuilder::format_header_title(prefix, &meta.single_filename, 24);
             builder = builder.header_with_tooltip(header_title, header_tooltip);
         } else {
             builder = builder.header(format!("Selected Files ({})", meta.selected_count));
@@ -419,12 +410,8 @@ impl MediaContextMenu {
 
         // 3. Move To... / Copy To... Submenus Projected directly from SPoT with zero disk I/O
         if let Some(snap) = snapshot {
-            let copy_menu_items = snap.project_target_folder_menu(
-                CTX_ACTION_COPY_TO_BASE,
-                None,
-                meta.current_folder_id,
-                show_hidden,
-            );
+            let copy_menu_items =
+                snap.project_target_folder_menu(CTX_ACTION_COPY_TO_BASE, None, meta.current_folder_id, show_hidden);
             if !copy_menu_items.is_empty() {
                 builder = builder.submenu("Copy to...", Some(Icon::Copy), true, move |sub| {
                     let mut s = sub;
@@ -435,12 +422,8 @@ impl MediaContextMenu {
                 });
             }
 
-            let move_menu_items = snap.project_target_folder_menu(
-                CTX_ACTION_MOVE_TO_BASE,
-                None,
-                meta.current_folder_id,
-                show_hidden,
-            );
+            let move_menu_items =
+                snap.project_target_folder_menu(CTX_ACTION_MOVE_TO_BASE, None, meta.current_folder_id, show_hidden);
             if !move_menu_items.is_empty() {
                 builder = builder.submenu("Move to...", Some(Icon::MoveTo), !is_busy, move |sub| {
                     let mut s = sub;
@@ -466,50 +449,40 @@ impl MediaContextMenu {
         // 5. Ratings, Refresh & Selection Utilities
         builder = builder
             .separator()
-            .submenu(
-                "Rate Selection",
-                Some(Icon::Rate),
-                meta.selected_count > 0,
-                |sub| {
-                    sub.action(CTX_ACTION_RATE_5, "5 Stars", None, Some(Icon::Rating5), true)
-                        .action(CTX_ACTION_RATE_4, "4 Stars", None, Some(Icon::Rating4), true)
-                        .action(CTX_ACTION_RATE_3, "3 Stars", None, Some(Icon::Rating3), true)
-                        .action(CTX_ACTION_RATE_2, "2 Stars", None, Some(Icon::Rating2), true)
-                        .action(CTX_ACTION_RATE_1, "1 Star", None, Some(Icon::Rating1), true)
-                        .separator()
-                        .action(CTX_ACTION_RATE_0, "Clear Rating", None, Some(Icon::RatingClear), true)
-                },
-            )
+            .submenu("Rate Selection", Some(Icon::Rate), meta.selected_count > 0, |sub| {
+                sub.action(CTX_ACTION_RATE_5, "5 Stars", None, Some(Icon::Rating5), true)
+                    .action(CTX_ACTION_RATE_4, "4 Stars", None, Some(Icon::Rating4), true)
+                    .action(CTX_ACTION_RATE_3, "3 Stars", None, Some(Icon::Rating3), true)
+                    .action(CTX_ACTION_RATE_2, "2 Stars", None, Some(Icon::Rating2), true)
+                    .action(CTX_ACTION_RATE_1, "1 Star", None, Some(Icon::Rating1), true)
+                    .separator()
+                    .action(CTX_ACTION_RATE_0, "Clear Rating", None, Some(Icon::RatingClear), true)
+            })
             .separator()
-            .submenu(
-                "Refresh",
-                Some(Icon::Refresh),
-                can_refresh,
-                |sub| {
-                    sub.action(
-                        CTX_ACTION_REFRESH_FILES,
-                        refresh_full_text,
-                        Some("F5"),
-                        Some(Icon::Refresh),
-                        can_refresh,
-                    )
-                    .action(
-                        CTX_ACTION_REFRESH_METADATA,
-                        refresh_meta_text,
-                        None,
-                        Some(Icon::Refresh),
-                        can_refresh,
-                    )
-                    .action_with_tooltip(
-                        CTX_ACTION_REGENERATE_THUMB_RANDOM,
-                        regen_thumb_text,
-                        None,
-                        Some(Icon::RegenerateThumbnail),
-                        can_regenerate_thumbs,
-                        regen_thumb_tooltip,
-                    )
-                },
-            )
+            .submenu("Refresh", Some(Icon::Refresh), can_refresh, |sub| {
+                sub.action(
+                    CTX_ACTION_REFRESH_FILES,
+                    refresh_full_text,
+                    Some("F5"),
+                    Some(Icon::Refresh),
+                    can_refresh,
+                )
+                .action(
+                    CTX_ACTION_REFRESH_METADATA,
+                    refresh_meta_text,
+                    None,
+                    Some(Icon::Refresh),
+                    can_refresh,
+                )
+                .action_with_tooltip(
+                    CTX_ACTION_REGENERATE_THUMB_RANDOM,
+                    regen_thumb_text,
+                    None,
+                    Some(Icon::RegenerateThumbnail),
+                    can_regenerate_thumbs,
+                    regen_thumb_tooltip,
+                )
+            })
             .separator()
             .action(
                 CTX_ACTION_SELECT_ALL,
@@ -529,11 +502,7 @@ impl MediaContextMenu {
         builder.build()
     }
 
-    pub fn handle_action(
-        action_id: CtxMenuActionId,
-        window: &MainWindow,
-        ctx: &MediaActionContext<'_>,
-    ) {
+    pub fn handle_action(action_id: CtxMenuActionId, window: &MainWindow, ctx: &MediaActionContext<'_>) {
         let selected_ids: Vec<MediaId> = ctx.state.read().get_selected_ids_ordered();
         let fallback_ids = if selected_ids.is_empty() {
             ctx.state.read().file_selection.selected_ids().iter().copied().collect()
@@ -543,7 +512,6 @@ impl MediaContextMenu {
 
         Self::handle_file_action_for_ids(action_id, window, ctx, &fallback_ids);
     }
-
 }
 
 #[cfg(test)]
@@ -588,7 +556,11 @@ mod tests {
     }
 
     fn regenerate_entry(menu: &CtxMenu) -> CtxMenuItem {
-        let refresh = menu.items.iter().find(|i| i.text == "Refresh").expect("refresh submenu");
+        let refresh = menu
+            .items
+            .iter()
+            .find(|i| i.text == "Refresh")
+            .expect("refresh submenu");
         refresh
             .children
             .iter()
@@ -611,7 +583,13 @@ mod tests {
             assert!(!entry.is_enabled);
             assert_eq!(entry.text, "Thumbnail (Random Pos.)");
         }
-        assert!(images_only.tooltip.as_deref().unwrap_or("").contains("no available video"));
+        assert!(
+            images_only
+                .tooltip
+                .as_deref()
+                .unwrap_or("")
+                .contains("no available video")
+        );
     }
 
     #[test]
@@ -623,7 +601,13 @@ mod tests {
         let mixed = regeneration_menu(5, 2, false);
         assert!(mixed.is_enabled);
         assert_eq!(mixed.text, "Thumbnails (Random Pos.) (2 Videos)");
-        assert!(mixed.tooltip.as_deref().unwrap_or("").contains("3 other selected files are skipped"));
+        assert!(
+            mixed
+                .tooltip
+                .as_deref()
+                .unwrap_or("")
+                .contains("3 other selected files are skipped")
+        );
     }
 
     #[test]
@@ -637,7 +621,11 @@ mod tests {
     fn open_with_entries_fall_back_to_the_generic_application_icon() {
         let menu = MediaContextMenu::build_menu(&meta(1, false), false, None, false);
         let open_with = menu.items.iter().find(|i| i.text == "Open With...").expect("submenu");
-        let app_entry = open_with.children.iter().find(|i| i.text == "Viewer").expect("app entry");
+        let app_entry = open_with
+            .children
+            .iter()
+            .find(|i| i.text == "Viewer")
+            .expect("app entry");
         assert_eq!(app_entry.icon, Some(Icon::AppWindow));
     }
 

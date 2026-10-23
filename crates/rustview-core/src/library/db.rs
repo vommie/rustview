@@ -51,24 +51,18 @@ impl LibraryDatabase {
 
         let mut wtxn = env.write_txn()?;
 
-        let meta: Database<Str, SerdeBincode<DatabaseMeta>> =
-            env.create_database(&mut wtxn, Some(DB_META))?;
-        let sequences: Database<Str, U64<BE>> =
-            env.create_database(&mut wtxn, Some(DB_SEQUENCES))?;
-        let folders: Database<U64<BE>, FolderRecordCodec> =
-            env.create_database(&mut wtxn, Some(DB_FOLDERS))?;
-        let folders_by_path: Database<Str, U64<BE>> =
-            env.create_database(&mut wtxn, Some(DB_FOLDERS_BY_PATH))?;
+        let meta: Database<Str, SerdeBincode<DatabaseMeta>> = env.create_database(&mut wtxn, Some(DB_META))?;
+        let sequences: Database<Str, U64<BE>> = env.create_database(&mut wtxn, Some(DB_SEQUENCES))?;
+        let folders: Database<U64<BE>, FolderRecordCodec> = env.create_database(&mut wtxn, Some(DB_FOLDERS))?;
+        let folders_by_path: Database<Str, U64<BE>> = env.create_database(&mut wtxn, Some(DB_FOLDERS_BY_PATH))?;
         let folders_by_parent: Database<U64<BE>, SerdeBincode<Vec<FolderId>>> =
             env.create_database(&mut wtxn, Some(DB_FOLDERS_BY_PARENT))?;
-        let media: Database<U64<BE>, MediaRecordCodec> =
-            env.create_database(&mut wtxn, Some(DB_MEDIA))?;
+        let media: Database<U64<BE>, MediaRecordCodec> = env.create_database(&mut wtxn, Some(DB_MEDIA))?;
         let media_by_folder: Database<U64<BE>, SerdeBincode<Vec<MediaId>>> =
             env.create_database(&mut wtxn, Some(DB_MEDIA_BY_FOLDER))?;
         let media_by_hash: Database<Bytes, SerdeBincode<Vec<MediaId>>> =
             env.create_database(&mut wtxn, Some(DB_MEDIA_BY_HASH))?;
-        let tags: Database<U32<BE>, SerdeBincode<TagRecord>> =
-            env.create_database(&mut wtxn, Some(DB_TAGS))?;
+        let tags: Database<U32<BE>, SerdeBincode<TagRecord>> = env.create_database(&mut wtxn, Some(DB_TAGS))?;
         let tags_by_parent_name: Database<Str, U32<BE>> =
             env.create_database(&mut wtxn, Some(DB_TAGS_BY_PARENT_NAME))?;
         let tags_by_media: Database<U64<BE>, SerdeBincode<Vec<TagId>>> =
@@ -94,9 +88,7 @@ impl LibraryDatabase {
                 schema_version: CURRENT_SCHEMA_VERSION,
                 hash_algorithm: HASH_ALGORITHM.to_string(),
                 thumbnail_version: CURRENT_THUMBNAIL_VERSION,
-                database_uuid: MediaHasher::to_hex(&MediaHasher::hash_bytes(
-                    path.to_string_lossy().as_bytes(),
-                )),
+                database_uuid: MediaHasher::to_hex(&MediaHasher::hash_bytes(path.to_string_lossy().as_bytes())),
                 created_at: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_secs() as i64)

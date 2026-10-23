@@ -14,7 +14,10 @@ pub struct RingWindow {
 impl RingWindow {
     /// An empty window over a pool of `pool` slots (`pool` is at least 1).
     pub fn new(pool: usize) -> Self {
-        Self { pool: pool.max(1), range: 0..0 }
+        Self {
+            pool: pool.max(1),
+            range: 0..0,
+        }
     }
 
     pub fn pool(&self) -> usize {
@@ -44,7 +47,11 @@ impl RingWindow {
     /// Moves the window to `target` (at most `pool` positions) and returns the positions whose slots need new content, in
     /// ascending order. Positions that stay inside the window are not returned.
     pub fn advance(&mut self, target: Range<usize>) -> Vec<usize> {
-        let target = if target.len() > self.pool { target.start..target.start + self.pool } else { target };
+        let target = if target.len() > self.pool {
+            target.start..target.start + self.pool
+        } else {
+            target
+        };
         let old = std::mem::replace(&mut self.range, target.clone());
         if old.is_empty() || old.end <= target.start || target.end <= old.start {
             return target.collect();

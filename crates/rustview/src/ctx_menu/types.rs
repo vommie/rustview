@@ -238,8 +238,13 @@ mod tests {
             .action(1, "With icon", None, Some(Icon::Copy), true)
             .action(2, "Without icon", None, None, true)
             .separator()
-            .submenu("Group", Some(Icon::Folder), true, |sub| sub.action(3, "Nested without icon", None, None, true))
+            .submenu("Group", Some(Icon::Folder), true, |sub| {
+                sub.action(3, "Nested without icon", None, None, true)
+            })
             .build();
-        assert_eq!(menu.entries_without_icon(), vec!["Without icon".to_string(), "Nested without icon".to_string()]);
+        assert_eq!(
+            menu.entries_without_icon(),
+            vec!["Without icon".to_string(), "Nested without icon".to_string()]
+        );
     }
 }

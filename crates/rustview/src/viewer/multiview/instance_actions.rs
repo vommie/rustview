@@ -1,9 +1,9 @@
 //! Instance behavior around the action buttons of the hover bar: which buttons a tile offers, what a click does to the
 //! Multiview itself (sticky, sound, remove) and what the application has to do about it (open as tab, deselect, close).
 
-use super::media_actions::{BarClick, MediaBarContext, MediaActionId, media_actions_for};
 use super::follow::{FollowPlan, Slot, TileKey};
 use super::instance::MultiviewInstance;
+use super::media_actions::{BarClick, MediaActionId, MediaBarContext, media_actions_for};
 use super::model::TileKind;
 use super::prefs;
 use super::route::{HostMode, OriginKind, UiAction};
@@ -98,7 +98,11 @@ impl MultiviewInstance {
             MediaActionId::Duplicate => {
                 self.duplicate_tile(key);
                 // A tab of one medium is a tab of several now: the application catches up (title bar, inspector, tab description).
-                if self.origin == OriginKind::Tab { UiAction::TabMembersChanged } else { UiAction::None }
+                if self.origin == OriginKind::Tab {
+                    UiAction::TabMembersChanged
+                } else {
+                    UiAction::None
+                }
             }
             MediaActionId::Zoom => {
                 self.toggle_zoom_slider(index);
@@ -229,11 +233,7 @@ impl MultiviewInstance {
 
     /// The application finished what a button asked for: the button flashes green, or red if it failed.
     pub fn action_finished(&mut self, id: MediaId, action: MediaActionId, ok: bool) {
-        let kind = if ok {
-            FeedbackKind::Success
-        } else {
-            FeedbackKind::Error
-        };
+        let kind = if ok { FeedbackKind::Success } else { FeedbackKind::Error };
         self.trigger_feedback(id, action, kind);
     }
 

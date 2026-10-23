@@ -1,9 +1,9 @@
 //! The one place that turns an indexed record into the row the grid and the table show.
 
 use super::record_labels::RecordLabels;
+use crate::ui::MediaItemView;
 use rustview_core::media::MediaType;
 use rustview_core::query::IndexedMediaRecord;
-use crate::ui::MediaItemView;
 use slint::Image;
 
 /// A complete row for the item at list `position`.

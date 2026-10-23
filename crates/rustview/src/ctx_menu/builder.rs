@@ -24,24 +24,15 @@ impl CtxMenuBuilder {
         self
     }
 
-    pub fn header_with_tooltip(
-        mut self,
-        text: impl Into<String>,
-        tooltip: impl Into<String>,
-    ) -> Self {
-        self.items
-            .push(CtxMenuItem::new_header_with_tooltip(text, tooltip));
+    pub fn header_with_tooltip(mut self, text: impl Into<String>, tooltip: impl Into<String>) -> Self {
+        self.items.push(CtxMenuItem::new_header_with_tooltip(text, tooltip));
         self
     }
 
     /// Single Point of Truth (SPoT): Formats a dynamic header with a sticky prefix and left-side ellipsis (...filename.ext)
     /// to prevent visual overflow in context menus while preserving the category prefix and the file extension.
     /// Returns `(display_text, full_tooltip_text)`.
-    pub fn format_header_title(
-        prefix: &str,
-        name: &str,
-        max_name_chars: usize,
-    ) -> (String, String) {
+    pub fn format_header_title(prefix: &str, name: &str, max_name_chars: usize) -> (String, String) {
         let trimmed_name = name.trim();
         let full_text = format!("{}{}", prefix, trimmed_name);
 
@@ -188,13 +179,7 @@ impl CtxMenuBuilder {
         self
     }
 
-    pub fn submenu<F>(
-        mut self,
-        text: impl Into<String>,
-        icon: Option<Icon>,
-        is_enabled: bool,
-        builder_fn: F,
-    ) -> Self
+    pub fn submenu<F>(mut self, text: impl Into<String>, icon: Option<Icon>, is_enabled: bool, builder_fn: F) -> Self
     where
         F: FnOnce(CtxMenuBuilder) -> CtxMenuBuilder,
     {

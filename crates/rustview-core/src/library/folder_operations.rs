@@ -108,7 +108,11 @@ impl<'a> FolderOperations<'a> {
     }
 
     /// `get_metrics` with the missing folders looked up once for many calls.
-    pub fn get_metrics_with(&self, folder_id: FolderId, missing: &MissingChildren) -> Result<FolderSubtreeMetrics, LibraryError> {
+    pub fn get_metrics_with(
+        &self,
+        folder_id: FolderId,
+        missing: &MissingChildren,
+    ) -> Result<FolderSubtreeMetrics, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let folder = self
             .db
@@ -123,7 +127,10 @@ impl<'a> FolderOperations<'a> {
 
         while let Some(current) = queue.pop() {
             let indexed = self.db.folders_by_parent.get(&rtxn, &current)?.unwrap_or_default();
-            for cid in indexed.into_iter().chain(missing.0.get(&current).into_iter().flatten().copied()) {
+            for cid in indexed
+                .into_iter()
+                .chain(missing.0.get(&current).into_iter().flatten().copied())
+            {
                 if seen.insert(cid) {
                     affected_folders.push(cid);
                     queue.push(cid);
@@ -136,8 +143,8 @@ impl<'a> FolderOperations<'a> {
         let mut missing_subfolders = 0;
         for &id in &affected_folders {
             // Everything below a folder that is missing is missing with it, whatever its own flag says.
-            let folder_is_missing = id != folder_id
-                && self.db.folders.get(&rtxn, &id)?.is_some_and(|rec| rec.is_deleted);
+            let folder_is_missing =
+                id != folder_id && self.db.folders.get(&rtxn, &id)?.is_some_and(|rec| rec.is_deleted);
             if folder_is_missing {
                 missing_subfolders += 1;
             }
@@ -167,11 +174,7 @@ impl<'a> FolderOperations<'a> {
         })
     }
 
-    pub fn check_rename_conflict(
-        &self,
-        folder_id: FolderId,
-        new_name: &str,
-    ) -> Result<Option<PathBuf>, LibraryError> {
+    pub fn check_rename_conflict(&self, folder_id: FolderId, new_name: &str) -> Result<Option<PathBuf>, LibraryError> {
         let valid_name = FolderValidator::validate(new_name)?;
 
         let rtxn = self.db.env.read_txn()?;
@@ -223,11 +226,7 @@ impl<'a> FolderOperations<'a> {
     }
 
     /// Atomically renames a folder physically and updates all descendant path indices in LMDB.
-    pub fn rename_folder(
-        &self,
-        folder_id: FolderId,
-        new_name: &str,
-    ) -> Result<FolderRecord, LibraryError> {
+    pub fn rename_folder(&self, folder_id: FolderId, new_name: &str) -> Result<FolderRecord, LibraryError> {
         let t0 = Instant::now();
         let valid_name = FolderValidator::validate(new_name)?;
 
@@ -240,9 +239,9 @@ impl<'a> FolderOperations<'a> {
             .ok_or(LibraryError::FolderNotFound(folder_id))?;
 
         let old_path = PathBuf::from(&record.path);
-        let parent_path = old_path.parent().ok_or_else(|| {
-            LibraryError::FileOperationRenameFailed("Cannot rename root directory".into())
-        })?;
+        let parent_path = old_path
+            .parent()
+            .ok_or_else(|| LibraryError::FileOperationRenameFailed("Cannot rename root directory".into()))?;
 
         let new_path = parent_path.join(&valid_name);
 
@@ -287,9 +286,7 @@ impl<'a> FolderOperations<'a> {
             let updated_p_str = updated_p.to_string_lossy().to_string();
 
             self.db.folders_by_path.delete(&mut wtxn, &rec.path)?;
-            self.db
-                .folders_by_path
-                .put(&mut wtxn, &updated_p_str, &id)?;
+            self.db.folders_by_path.put(&mut wtxn, &updated_p_str, &id)?;
 
             rec.path = updated_p_str;
             if id == folder_id {
@@ -312,11 +309,7 @@ impl<'a> FolderOperations<'a> {
 
     /// Deletes a folder physically on disk (Trash or Permanent Delete) and flags the folder and all
     /// contained media records in the database with `is_deleted = true`, adjusting count rollups.
-    pub fn delete_folder(
-        &self,
-        folder_id: FolderId,
-        to_trash: bool,
-    ) -> Result<FolderDeleteReport, LibraryError> {
+    pub fn delete_folder(&self, folder_id: FolderId, to_trash: bool) -> Result<FolderDeleteReport, LibraryError> {
         let metrics = self.get_metrics(folder_id)?;
         let folder_path = metrics.path;
 
@@ -332,10 +325,7 @@ impl<'a> FolderOperations<'a> {
         if folder_path.exists() {
             if to_trash {
                 trash::delete(&folder_path).map_err(|e| {
-                    LibraryError::FileOperationRenameFailed(format!(
-                        "Failed to move folder to Trash: {}",
-                        e
-                    ))
+                    LibraryError::FileOperationRenameFailed(format!("Failed to move folder to Trash: {}", e))
                 })?;
             } else {
                 std::fs::remove_dir_all(&folder_path)?;
@@ -438,10 +428,7 @@ impl<'a> FolderOperations<'a> {
     }
 
     /// Permanently purges folder records and media from LMDB tables when cleaning missing/orphaned folders.
-    pub fn purge_folder_from_db(
-        &self,
-        folder_id: FolderId,
-    ) -> Result<FolderDeleteReport, LibraryError> {
+    pub fn purge_folder_from_db(&self, folder_id: FolderId) -> Result<FolderDeleteReport, LibraryError> {
         let metrics = self.get_metrics(folder_id)?;
 
         let mut wtxn = self.db.env.write_txn()?;
@@ -496,9 +483,7 @@ impl<'a> FolderOperations<'a> {
 
                 self.db.media_by_folder.delete(&mut wtxn, &id)?;
                 self.db.folders_by_parent.delete(&mut wtxn, &id)?;
-                self.db
-                    .folders_by_path
-                    .delete(&mut wtxn, &folder_rec.path)?;
+                self.db.folders_by_path.delete(&mut wtxn, &folder_rec.path)?;
                 self.db.folders.delete(&mut wtxn, &id)?;
             }
         }
@@ -529,11 +514,7 @@ impl<'a> FolderOperations<'a> {
 
     /// Moves a folder (including its subtree) below another folder, on disk and in LMDB.
     /// Delegates to `FolderMoveExecutor`, which stages database changes, renames on disk and commits atomically.
-    pub fn move_folder(
-        &self,
-        folder_id: FolderId,
-        new_parent_id: FolderId,
-    ) -> Result<FolderMoveReport, LibraryError> {
+    pub fn move_folder(&self, folder_id: FolderId, new_parent_id: FolderId) -> Result<FolderMoveReport, LibraryError> {
         FolderMoveExecutor::new(self.db).execute(folder_id, new_parent_id)
     }
 }

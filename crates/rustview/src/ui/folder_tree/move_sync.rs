@@ -1,18 +1,18 @@
 //! UI-side orchestration after a successful folder move: patches the in-memory SPoT snapshot surgically, rebases
 //! runtime state that still holds old paths, and refreshes only the affected parts of the folder tree.
 
+use crate::ui::MainWindow;
 use crate::ui::folder_dialogs::FolderDialogContext;
-use crate::ui::folder_tree::tree_sync::FolderTreeSync;
 use crate::ui::folder_tree::BridgeFolders;
+use crate::ui::folder_tree::tree_sync::FolderTreeSync;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::MainWindow;
+use parking_lot::RwLock;
 use rustview_core::library::folder_move::{FolderMovePatch, FolderMoveReport};
 use rustview_core::library::models::FolderId;
 use rustview_core::query::FolderDir;
 use rustview_core::settings::LogObscurer;
-use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -135,9 +135,7 @@ impl BridgeFolderMoveSync {
         let snapshot = BridgeFolders::ensure_snapshot(&ctx.library, &ctx.state);
 
         let mut to_expand: Vec<FolderId> = vec![patch.new_parent_id];
-        let mut current = snapshot
-            .get_node(patch.new_parent_id)
-            .and_then(|n| n.parent_id);
+        let mut current = snapshot.get_node(patch.new_parent_id).and_then(|n| n.parent_id);
         while let Some(parent_id) = current {
             to_expand.push(parent_id);
             if to_expand.len() >= MAX_CHAIN_WALK {
@@ -155,8 +153,7 @@ impl BridgeFolderMoveSync {
 
     /// Rewrites runtime paths that still point below the old location. Returns the number of rebased media items.
     fn rebase_runtime_state(patch: &FolderMovePatch, state: &RwLock<UiState>) -> usize {
-        let subtree_ids: HashSet<FolderId> =
-            patch.subtree_records.iter().map(|r| r.id).collect();
+        let subtree_ids: HashSet<FolderId> = patch.subtree_records.iter().map(|r| r.id).collect();
 
         let mut st = state.write();
 
@@ -212,10 +209,7 @@ impl BridgeFolderMoveSync {
 
     /// Decides whether the active folder must be reloaded: it lies inside the moved subtree (paths changed), or the
     /// recursive (virtual) view includes the old or new location (its content changed).
-    fn resolve_reselect_target(
-        patch: &FolderMovePatch,
-        ctx: &FolderDialogContext,
-    ) -> Option<(FolderId, PathBuf)> {
+    fn resolve_reselect_target(patch: &FolderMovePatch, ctx: &FolderDialogContext) -> Option<(FolderId, PathBuf)> {
         let (current_id, current_path, is_virtual) = {
             let st = ctx.state.read();
             (

@@ -1,8 +1,8 @@
 use super::diff::SettingsDiff;
-use crate::media::FormatPolicy;
 use super::obscurer::LogObscurer;
 use super::schema::AppSettings;
 use super::store::SettingsStore;
+use crate::media::FormatPolicy;
 use parking_lot::RwLock;
 use std::path::Path;
 use std::sync::Arc;

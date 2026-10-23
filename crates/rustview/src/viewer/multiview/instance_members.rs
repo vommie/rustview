@@ -2,9 +2,9 @@
 //! instance from the records it already holds in memory; the drive is never touched.
 
 use super::audio::{self, TileAudio};
-use super::prefs;
 use super::instance::MultiviewInstance;
 use super::model::{AspectSource, aspect_differs, aspect_from_size};
+use super::prefs;
 use super::teardown::teardown_videos;
 use rustview_core::library::models::{MediaId, MediaRecord};
 use rustview_core::settings::LogObscurer;
@@ -35,10 +35,7 @@ impl MultiviewInstance {
         let mut videos = Vec::new();
         let mut found = false;
         for tile in self.tiles.iter_mut().filter(|t| t.media_id == id) {
-            tile.error = Some(format!(
-                "Media file not found on disk:\n{}",
-                tile.path.display()
-            ));
+            tile.error = Some(format!("Media file not found on disk:\n{}", tile.path.display()));
             tile.is_loading = false;
             tile.pixels = None;
             tile.audio = None;

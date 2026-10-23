@@ -49,10 +49,7 @@ fn sibling_sort_key(name: &str, id: FolderId) -> (String, FolderId) {
 
 impl FolderHierarchySnapshot {
     /// Applies a folder move to the snapshot. On error the snapshot may be partially modified and must be discarded.
-    pub fn apply_folder_move(
-        &mut self,
-        patch: &FolderMovePatch,
-    ) -> Result<SnapshotPatchStats, SnapshotPatchError> {
+    pub fn apply_folder_move(&mut self, patch: &FolderMovePatch) -> Result<SnapshotPatchStats, SnapshotPatchError> {
         if self.root_ids.contains(&patch.moved_folder_id) {
             return Err(SnapshotPatchError::RootMoveRejected(patch.moved_folder_id));
         }
@@ -158,8 +155,7 @@ impl FolderHierarchySnapshot {
     /// Rebuilds the moved subtree from the final database records and links it below the new parent.
     /// Only records reachable from the moved folder via `parent_id` are inserted (mirrors the snapshot builder).
     fn attach_subtree(&mut self, patch: &FolderMovePatch) -> Result<usize, SnapshotPatchError> {
-        let by_id: HashMap<FolderId, &FolderRecord> =
-            patch.subtree_records.iter().map(|r| (r.id, r)).collect();
+        let by_id: HashMap<FolderId, &FolderRecord> = patch.subtree_records.iter().map(|r| (r.id, r)).collect();
         if !by_id.contains_key(&patch.moved_folder_id) {
             return Err(SnapshotPatchError::MissingMovedRecord(patch.moved_folder_id));
         }
@@ -218,10 +214,7 @@ impl FolderHierarchySnapshot {
     }
 
     /// BFS over record children starting at `root` (the root is always included first).
-    fn reachable_record_ids(
-        root: FolderId,
-        children_of: &HashMap<FolderId, Vec<FolderId>>,
-    ) -> Vec<FolderId> {
+    fn reachable_record_ids(root: FolderId, children_of: &HashMap<FolderId, Vec<FolderId>>) -> Vec<FolderId> {
         let mut order = Vec::new();
         let mut visited: HashSet<FolderId> = HashSet::new();
         let mut queue: VecDeque<FolderId> = VecDeque::new();
@@ -245,11 +238,7 @@ impl FolderHierarchySnapshot {
 
     /// Inserts `child` into the sorted children list of `parent` (node list and children map stay in sync).
     fn insert_child_sorted(&mut self, parent: FolderId, child: FolderId) {
-        let Some(child_key) = self
-            .nodes
-            .get(&child)
-            .map(|n| sibling_sort_key(&n.name, n.id))
-        else {
+        let Some(child_key) = self.nodes.get(&child).map(|n| sibling_sort_key(&n.name, n.id)) else {
             return;
         };
 
@@ -369,10 +358,7 @@ mod tests {
             new_parent_id: 3,
             old_path: PathBuf::from("/r/a/mm"),
             new_path: PathBuf::from("/r/b/mm"),
-            subtree_records: vec![
-                rec(4, Some(3), "mm", "/r/b/mm"),
-                rec(5, Some(4), "y", "/r/b/mm/y"),
-            ],
+            subtree_records: vec![rec(4, Some(3), "mm", "/r/b/mm"), rec(5, Some(4), "y", "/r/b/mm/y")],
             ancestor_records: Vec::new(),
         }
     }

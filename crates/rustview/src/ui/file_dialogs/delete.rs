@@ -1,11 +1,11 @@
 use crate::ui::file_dialogs::FileDialogContext;
-use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::BridgeMedia;
+use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::selection::delete::missing_files_hint;
 use crate::ui::status_bar::StatusBarBridge;
+use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tags::BridgeTags;
-use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::{DeleteFileDialog, MainWindow};
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::LogObscurer;
@@ -30,12 +30,7 @@ impl DeleteFileDialogController {
     }
 
     /// Displays the Delete File modal dialog.
-    pub fn show(
-        &self,
-        window: &MainWindow,
-        media_ids: Vec<MediaId>,
-        ctx: FileDialogContext,
-    ) {
+    pub fn show(&self, window: &MainWindow, media_ids: Vec<MediaId>, ctx: FileDialogContext) {
         self.show_with_followup(window, media_ids, ctx, None);
     }
 
@@ -181,13 +176,7 @@ impl DeleteFileDialogController {
         };
         StatusBarBridge::success(window, msg);
 
-        BridgeViewerTabs::sync_ui(
-            window,
-            &ctx.tab_manager,
-            &ctx.library,
-            &ctx.settings,
-            &ctx.state,
-        );
+        BridgeViewerTabs::sync_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
         BridgeMedia::reload(
             window,
             &ctx.library,
@@ -201,13 +190,7 @@ impl DeleteFileDialogController {
         BridgeTags::sync_tag_selection(window, &ctx.library, &ctx.state);
 
         if window.get_active_view_mode() == 2 {
-            BridgeTabGrid::sync_tab_grid_ui(
-                window,
-                &ctx.tab_manager,
-                &ctx.library,
-                &ctx.settings,
-                &ctx.state,
-            );
+            BridgeTabGrid::sync_tab_grid_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
         }
 
         StatusBarBridge::update_metrics(window, &ctx.state);

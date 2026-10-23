@@ -2,9 +2,7 @@ use super::logger::MigrationLogger;
 use super::stats::MigrationStats;
 use super::types::*;
 use crate::library::folders::normalize_path;
-use crate::library::models::{
-    ExternalHashRecord, FolderId, FolderRecord, MediaId, MediaRecord, TagId, TagRecord,
-};
+use crate::library::models::{ExternalHashRecord, FolderId, FolderRecord, MediaId, MediaRecord, TagId, TagRecord};
 use crate::media::{FileHash, MediaFormat, MediaHasher, MediaType, MetadataExtractor};
 use crate::settings::LogObscurer;
 use std::collections::HashMap;
@@ -85,12 +83,7 @@ impl XnViewMapper {
                 hash_lookup_map.insert(h.hash_id, file_hash);
             }
 
-            logger.log_external_hash_migrated(
-                h.hash_id,
-                next_ext_hash_id,
-                &hash_clean,
-                &h.date_time,
-            );
+            logger.log_external_hash_migrated(h.hash_id, next_ext_hash_id, &hash_clean, &h.date_time);
 
             external_hashes.push(ExternalHashRecord {
                 hash_id: next_ext_hash_id,
@@ -103,12 +96,9 @@ impl XnViewMapper {
         // 2. Folder Filtering & Bulk Directory Cache
         let mut folders = Vec::with_capacity(raw.folders.len());
         let mut folder_id_map: HashMap<i64, FolderId> = HashMap::with_capacity(raw.folders.len());
-        let mut folder_path_map: HashMap<FolderId, PathBuf> =
-            HashMap::with_capacity(raw.folders.len());
-        let mut path_to_folder_id: HashMap<PathBuf, FolderId> =
-            HashMap::with_capacity(raw.folders.len());
-        let mut folder_dir_entries_cache: HashMap<FolderId, HashMap<String, DirItemInfo>> =
-            HashMap::new();
+        let mut folder_path_map: HashMap<FolderId, PathBuf> = HashMap::with_capacity(raw.folders.len());
+        let mut path_to_folder_id: HashMap<PathBuf, FolderId> = HashMap::with_capacity(raw.folders.len());
+        let mut folder_dir_entries_cache: HashMap<FolderId, HashMap<String, DirItemInfo>> = HashMap::new();
 
         let mut next_folder_id = 1u64;
         let now_secs = std::time::SystemTime::now()
@@ -120,8 +110,7 @@ impl XnViewMapper {
             let normalized_path_buf = normalize_path(Path::new(f.pathname.trim()));
 
             if let Some(root_path) = root_filter {
-                let is_under_root =
-                    normalized_path_buf == root_path || normalized_path_buf.starts_with(root_path);
+                let is_under_root = normalized_path_buf == root_path || normalized_path_buf.starts_with(root_path);
 
                 if !is_under_root {
                     stats.skipped_folders_outside_root += 1;
@@ -133,11 +122,7 @@ impl XnViewMapper {
             let exists_on_disk = normalized_path_buf.is_dir();
             if skip_missing && !exists_on_disk {
                 stats.skipped_folders_missing += 1;
-                logger.log_folder_skipped(
-                    f.folder_id,
-                    &normalized_path_buf,
-                    "Directory does not exist on disk",
-                );
+                logger.log_folder_skipped(f.folder_id, &normalized_path_buf, "Directory does not exist on disk");
                 continue;
             }
 
@@ -174,17 +159,13 @@ impl XnViewMapper {
                                         let mt = m
                                             .modified()
                                             .ok()
-                                            .and_then(|t| {
-                                                t.duration_since(std::time::UNIX_EPOCH).ok()
-                                            })
+                                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                                             .map(|d| d.as_secs() as i64)
                                             .unwrap_or(0);
                                         let ct = m
                                             .created()
                                             .ok()
-                                            .and_then(|t| {
-                                                t.duration_since(std::time::UNIX_EPOCH).ok()
-                                            })
+                                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                                             .map(|d| d.as_secs() as i64)
                                             .unwrap_or(mt);
                                         (s, mt, ct)
@@ -290,9 +271,7 @@ impl XnViewMapper {
 
             let folder_dir = folder_path_map.get(&mapped_folder_id);
             let dir_cache = folder_dir_entries_cache.get(&mapped_folder_id);
-            let folder_display = folder_dir
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
+            let folder_display = folder_dir.map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
 
             let item_in_cache = dir_cache.and_then(|c| c.get(&img.filename));
 
@@ -330,12 +309,11 @@ impl XnViewMapper {
             let file_path = folder_dir.map(|p| p.join(&img.filename));
             let media_type = format.media_type().unwrap_or(MediaType::Image);
 
-            let (mut width, mut height, mut duration_ms) =
-                if let Some(info) = raw.image_info.get(&img.image_id) {
-                    (info.width, info.height, info.duration)
-                } else {
-                    (0, 0, 0)
-                };
+            let (mut width, mut height, mut duration_ms) = if let Some(info) = raw.image_info.get(&img.image_id) {
+                (info.width, info.height, info.duration)
+            } else {
+                (0, 0, 0)
+            };
 
             let mut file_size = img.size.max(0) as u64;
             let mut mtime = img.modified_date.max(0);
@@ -359,9 +337,7 @@ impl XnViewMapper {
             } else if let Some(ref path) = file_path
                 && file_physically_exists
             {
-                if (width == 0
-                    || height == 0
-                    || (media_type == MediaType::Video && duration_ms == 0))
+                if (width == 0 || height == 0 || (media_type == MediaType::Video && duration_ms == 0))
                     && let Ok(raw_meta) = MetadataExtractor::extract(path)
                 {
                     width = raw_meta.width;
@@ -417,15 +393,9 @@ impl XnViewMapper {
                 source: None,
             };
 
-            media_by_folder
-                .entry(mapped_folder_id)
-                .or_default()
-                .push(new_media_id);
+            media_by_folder.entry(mapped_folder_id).or_default().push(new_media_id);
 
-            media_by_hash
-                .entry(file_hash)
-                .or_default()
-                .push(new_media_id);
+            media_by_hash.entry(file_hash).or_default().push(new_media_id);
 
             media.push(record);
         }
@@ -445,14 +415,8 @@ impl XnViewMapper {
 
         // Direct media counts
         for folder in &mut folders {
-            folder.media_count = media_by_folder
-                .get(&folder.id)
-                .map(|v| v.len() as u32)
-                .unwrap_or(0);
-            folder.subfolder_count = folders_by_parent
-                .get(&folder.id)
-                .map(|v| v.len() as u32)
-                .unwrap_or(0);
+            folder.media_count = media_by_folder.get(&folder.id).map(|v| v.len() as u32).unwrap_or(0);
+            folder.subfolder_count = folders_by_parent.get(&folder.id).map(|v| v.len() as u32).unwrap_or(0);
         }
 
         // Recursive roll-up from deepest to shallowest
@@ -485,10 +449,9 @@ impl XnViewMapper {
         let mut mapped_link_count = 0usize;
 
         for link in raw.tag_links {
-            if let (Some(&new_media_id), Some(&new_tag_id)) = (
-                media_id_map.get(&link.image_id),
-                tag_id_map.get(&link.tag_id),
-            ) {
+            if let (Some(&new_media_id), Some(&new_tag_id)) =
+                (media_id_map.get(&link.image_id), tag_id_map.get(&link.tag_id))
+            {
                 let m_tags = tags_by_media.entry(new_media_id).or_default();
                 if !m_tags.contains(&new_tag_id) {
                     m_tags.push(new_tag_id);
@@ -499,12 +462,7 @@ impl XnViewMapper {
                     t_media.push(new_media_id);
                 }
 
-                logger.log_tag_assignment_migrated(
-                    new_media_id,
-                    new_tag_id,
-                    link.image_id,
-                    link.tag_id,
-                );
+                logger.log_tag_assignment_migrated(new_media_id, new_tag_id, link.image_id, link.tag_id);
                 mapped_link_count += 1;
             } else {
                 stats.skipped_tag_assignments_orphaned += 1;
@@ -555,11 +513,7 @@ impl XnViewMapper {
     fn reindex_tags(
         raw_tags: Vec<XnViewTag>,
         logger: &mut MigrationLogger,
-    ) -> (
-        Vec<TagRecord>,
-        HashMap<i64, TagId>,
-        Vec<MigratedTagTreeNode>,
-    ) {
+    ) -> (Vec<TagRecord>, HashMap<i64, TagId>, Vec<MigratedTagTreeNode>) {
         let mut old_tags_map: HashMap<i64, XnViewTag> = HashMap::new();
         let mut children_map: HashMap<Option<i64>, Vec<i64>> = HashMap::new();
 
@@ -611,12 +565,8 @@ impl XnViewMapper {
                         clean_name
                     };
 
-                    ctx.logger.log_tag_migrated(
-                        child_old_id,
-                        new_id,
-                        &tag_name,
-                        current_new_parent,
-                    );
+                    ctx.logger
+                        .log_tag_migrated(child_old_id, new_id, &tag_name, current_new_parent);
 
                     ctx.output_tags.push(TagRecord {
                         id: new_id,
@@ -624,8 +574,7 @@ impl XnViewMapper {
                         name: tag_name.clone(),
                     });
 
-                    let child_tree =
-                        Self::traverse_and_reindex(Some(child_old_id), Some(new_id), ctx);
+                    let child_tree = Self::traverse_and_reindex(Some(child_old_id), Some(new_id), ctx);
 
                     nodes.push(MigratedTagTreeNode {
                         old_id: child_old_id,

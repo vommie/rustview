@@ -34,12 +34,7 @@ impl TabDndGeometry {
     }
 
     /// Computes unshifted horizontal slots (start_x, width, center_x) for all tabs in sequence.
-    pub fn compute_tab_slots(
-        tab_ids: &[TabId],
-        widths: &[f32],
-        spacing: f32,
-        padding_start: f32,
-    ) -> Vec<TabSlotInfo> {
+    pub fn compute_tab_slots(tab_ids: &[TabId], widths: &[f32], spacing: f32, padding_start: f32) -> Vec<TabSlotInfo> {
         let mut slots = Vec::with_capacity(tab_ids.len());
         let mut current_x = padding_start;
 
@@ -200,11 +195,7 @@ impl TabDndSession {
 
     #[inline]
     pub fn dragged_center_x(&self) -> f32 {
-        let source_slot_w = self
-            .slots
-            .get(self.source_index)
-            .map(|s| s.width)
-            .unwrap_or(120.0);
+        let source_slot_w = self.slots.get(self.source_index).map(|s| s.width).unwrap_or(120.0);
         let left = self.current_cursor_x - self.grab_offset_x;
         left + (source_slot_w / 2.0)
     }
@@ -311,8 +302,7 @@ impl TabDndAutoScroller {
                     return;
                 }
 
-                let speed_boost = (TAB_BAR_AUTOSCROLL_MAX_SPEED_PX - TAB_BAR_AUTOSCROLL_BASE_SPEED_PX)
-                    * prox.powf(1.4);
+                let speed_boost = (TAB_BAR_AUTOSCROLL_MAX_SPEED_PX - TAB_BAR_AUTOSCROLL_BASE_SPEED_PX) * prox.powf(1.4);
                 let current_speed = TAB_BAR_AUTOSCROLL_BASE_SPEED_PX + speed_boost;
 
                 let delta_x = match dir {

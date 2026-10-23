@@ -9,8 +9,7 @@ use super::layout::{self, Gutter, GutterKind, Layout, LayoutParams};
 use super::layout_pins::{self, Pins};
 use super::model::TileKind;
 use rustview_core::settings::schema::{
-    MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_COLUMN_LOGICAL_PX, MULTIVIEW_SNAP_LOGICAL_PX,
-    MULTIVIEW_WRAP_MIN_ASPECT,
+    MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_COLUMN_LOGICAL_PX, MULTIVIEW_SNAP_LOGICAL_PX, MULTIVIEW_WRAP_MIN_ASPECT,
 };
 
 /// A gutter drag in progress: distances are always applied to the arrangement at drag start, never accumulated.
@@ -39,7 +38,8 @@ impl MultiviewInstance {
     /// solving container, which is the shape of that area (`lone_medium_fills_host`), and an image is fitted inside the tile.
     fn aspects(&self) -> Vec<f32> {
         if let [only] = self.tiles.as_slice()
-            && ((only.kind == TileKind::Video && only.error.is_none()) || lone_medium_fills_host(self.host.surface.mode, 1))
+            && ((only.kind == TileKind::Video && only.error.is_none())
+                || lone_medium_fills_host(self.host.surface.mode, 1))
         {
             let container = self.solving_container();
             let height = container.height.max(1);
@@ -97,9 +97,7 @@ impl MultiviewInstance {
         let projection = self.host.projection;
         let dpi = self.host.surface.dpi;
         let delta = projection.length_to_container(distance * dpi).round() as i32;
-        let snap = projection
-            .length_to_container(MULTIVIEW_SNAP_LOGICAL_PX * dpi)
-            .round() as i32;
+        let snap = projection.length_to_container(MULTIVIEW_SNAP_LOGICAL_PX * dpi).round() as i32;
         let next = layout_pins::drag_pins(
             &drag.start_pins,
             &drag.start_layout,

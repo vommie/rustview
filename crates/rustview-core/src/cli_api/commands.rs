@@ -218,7 +218,10 @@ impl ApiSubcommand {
                         "At least one MD5 hash string is required (--hashes <MD5,MD5...>, --hashes-file <FILE>, or positional arguments)".into(),
                     ));
                 }
-                Ok(ApiCommand::CheckHashes { hashes, json: args.output.json })
+                Ok(ApiCommand::CheckHashes {
+                    hashes,
+                    json: args.output.json,
+                })
             }
         }
     }
@@ -275,7 +278,8 @@ mod tests {
 
     /// Parses a command line the way the application does and returns the API command.
     fn parse(args: &[&str]) -> Result<ApiCommand, String> {
-        let cli = TestCli::try_parse_from(std::iter::once("rustview").chain(args.iter().copied())).map_err(|e| e.to_string())?;
+        let cli = TestCli::try_parse_from(std::iter::once("rustview").chain(args.iter().copied()))
+            .map_err(|e| e.to_string())?;
         cli.command.into_command().map_err(|e| e.to_string())
     }
 
@@ -284,10 +288,24 @@ mod tests {
         assert_eq!(parse(&["tag-tree", "--json"]), Ok(ApiCommand::TagTree { json: true }));
         assert_eq!(
             parse(&["get-media", "--path", "/media/clip.mp4", "--json"]),
-            Ok(ApiCommand::GetMedia { path: "/media/clip.mp4".into(), json: true })
+            Ok(ApiCommand::GetMedia {
+                path: "/media/clip.mp4".into(),
+                json: true
+            })
         );
         assert_eq!(
-            parse(&["set-media", "--path", "/media/clip.mp4", "--rating", "5", "--tags", "1,4,7", "--source", "PyCutRv", "--json"]),
+            parse(&[
+                "set-media",
+                "--path",
+                "/media/clip.mp4",
+                "--rating",
+                "5",
+                "--tags",
+                "1,4,7",
+                "--source",
+                "PyCutRv",
+                "--json"
+            ]),
             Ok(ApiCommand::SetMedia {
                 path: "/media/clip.mp4".into(),
                 rating: Some(5),
@@ -299,24 +317,42 @@ mod tests {
         );
         assert_eq!(
             parse(&["check-hash", "--hash", "D5DD11D265F453DEE9D51A40BA717EFB", "--json"]),
-            Ok(ApiCommand::CheckHash { hash: "d5dd11d265f453dee9d51a40ba717efb".into(), json: true })
+            Ok(ApiCommand::CheckHash {
+                hash: "d5dd11d265f453dee9d51a40ba717efb".into(),
+                json: true
+            })
         );
     }
 
     #[test]
     fn the_command_works_without_the_api_word_and_under_its_aliases() {
-        let expected = Ok(ApiCommand::GetMedia { path: "/a.jpg".into(), json: false });
+        let expected = Ok(ApiCommand::GetMedia {
+            path: "/a.jpg".into(),
+            json: false,
+        });
         assert_eq!(parse(&["get-media", "--path", "/a.jpg"]), expected);
         assert_eq!(parse(&["get", "/a.jpg"]), expected);
         assert_eq!(parse(&["info", "-p", "/a.jpg"]), expected);
         assert_eq!(parse(&["tags"]), Ok(ApiCommand::TagTree { json: false }));
-        assert_eq!(parse(&["remove", "/a.jpg", "--json"]), Ok(ApiCommand::DeleteMedia { path: "/a.jpg".into(), json: true }));
+        assert_eq!(
+            parse(&["remove", "/a.jpg", "--json"]),
+            Ok(ApiCommand::DeleteMedia {
+                path: "/a.jpg".into(),
+                json: true
+            })
+        );
     }
 
     #[test]
     fn the_equals_form_and_the_old_option_spellings_work() {
         assert_eq!(
-            parse(&["set-media", "--path=/a.jpg", "--rating=3", "--tags=1;2 3", "--source-app=Tool"]),
+            parse(&[
+                "set-media",
+                "--path=/a.jpg",
+                "--rating=3",
+                "--tags=1;2 3",
+                "--source-app=Tool"
+            ]),
             Ok(ApiCommand::SetMedia {
                 path: "/a.jpg".into(),
                 rating: Some(3),
@@ -338,21 +374,39 @@ mod tests {
 
     #[test]
     fn a_missing_path_or_hash_is_reported() {
-        assert!(parse(&["get-media"]).unwrap_err().contains("Target file path is required"));
-        assert!(parse(&["check-hash"]).unwrap_err().contains("MD5 hash string is required"));
+        assert!(
+            parse(&["get-media"])
+                .unwrap_err()
+                .contains("Target file path is required")
+        );
+        assert!(
+            parse(&["check-hash"])
+                .unwrap_err()
+                .contains("MD5 hash string is required")
+        );
     }
 
     #[test]
     fn hash_lists_are_split_and_lower_cased() {
         assert_eq!(
             parse(&["check-hashes", "--hashes", "AA,bb;cc dd", "ee"]),
-            Ok(ApiCommand::CheckHashes { hashes: ["aa", "bb", "cc", "dd", "ee"].map(String::from).to_vec(), json: false })
+            Ok(ApiCommand::CheckHashes {
+                hashes: ["aa", "bb", "cc", "dd", "ee"].map(String::from).to_vec(),
+                json: false
+            })
         );
-        assert!(parse(&["check-hashes"]).unwrap_err().contains("At least one MD5 hash string"));
+        assert!(
+            parse(&["check-hashes"])
+                .unwrap_err()
+                .contains("At least one MD5 hash string")
+        );
     }
 
     #[test]
     fn hash_files_skip_comments_and_blank_lines() {
-        assert_eq!(hashes_from_lines("# list\nAA bb\n\n  cc,dd  \n"), ["aa", "bb", "cc", "dd"].map(String::from).to_vec());
+        assert_eq!(
+            hashes_from_lines("# list\nAA bb\n\n  cc,dd  \n"),
+            ["aa", "bb", "cc", "dd"].map(String::from).to_vec()
+        );
     }
 }

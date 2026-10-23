@@ -5,7 +5,6 @@
 //! tiles, arrangement, sound and interaction state), `tile`/`teardown`/`image_decode` its native parts, `events` the
 //! channel from player threads back to the UI and `view` the Slint-free description a host draws.
 
-pub mod media_actions;
 pub mod audio;
 pub mod bar_menu;
 pub mod bar_placement;
@@ -28,6 +27,7 @@ mod instance_tiles;
 mod instance_zoom;
 pub mod layout;
 pub mod layout_pins;
+pub mod media_actions;
 pub mod model;
 pub mod navigation;
 pub mod prefs;

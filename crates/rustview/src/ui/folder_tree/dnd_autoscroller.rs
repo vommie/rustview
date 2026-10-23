@@ -91,7 +91,13 @@ impl DndFolderTreeAutoScroller {
         if cursor_y >= tree_bottom_y - FOLDER_TREE_AUTOSCROLL_EDGE_ZONE_PX {
             let dist_from_bottom = (tree_bottom_y - cursor_y).max(0.0);
             let proximity = 1.0 - (dist_from_bottom / FOLDER_TREE_AUTOSCROLL_EDGE_ZONE_PX).clamp(0.0, 1.0);
-            self.set_active_zone(window, FolderTreeAutoScrollDirection::Down, cursor_x, cursor_y, proximity);
+            self.set_active_zone(
+                window,
+                FolderTreeAutoScrollDirection::Down,
+                cursor_x,
+                cursor_y,
+                proximity,
+            );
             return;
         }
 
@@ -150,16 +156,14 @@ impl DndFolderTreeAutoScroller {
             if inner.direction == FolderTreeAutoScrollDirection::Idle {
                 return;
             }
-            let elapsed = inner
-                .zone_enter_time
-                .map(|t| t.elapsed().as_secs_f32())
-                .unwrap_or(0.0);
+            let elapsed = inner.zone_enter_time.map(|t| t.elapsed().as_secs_f32()).unwrap_or(0.0);
             (inner.direction, elapsed, inner.proximity, inner.cursor_y)
         };
 
         // Smooth acceleration physics: base speed + non-linear power curve over time, scaled by edge proximity
         let accel_ratio = (elapsed_secs / FOLDER_TREE_AUTOSCROLL_ACCEL_DURATION_SECS).clamp(0.0, 1.0);
-        let time_boost = (FOLDER_TREE_AUTOSCROLL_MAX_SPEED_PX - FOLDER_TREE_AUTOSCROLL_BASE_SPEED_PX) * accel_ratio.powf(1.4);
+        let time_boost =
+            (FOLDER_TREE_AUTOSCROLL_MAX_SPEED_PX - FOLDER_TREE_AUTOSCROLL_BASE_SPEED_PX) * accel_ratio.powf(1.4);
         let proximity_factor = 0.35 + (0.65 * proximity);
         let current_speed = (FOLDER_TREE_AUTOSCROLL_BASE_SPEED_PX + time_boost) * proximity_factor;
 

@@ -42,7 +42,11 @@ impl SystemMemory {
             .ok()
             .and_then(|groups| groups.0.into_iter().find(|group| group.hierarchy == 0))
             .and_then(|group| smallest_cgroup_limit(&group.pathname));
-        Self { total_bytes, available_bytes, cgroup_limit_bytes }
+        Self {
+            total_bytes,
+            available_bytes,
+            cgroup_limit_bytes,
+        }
     }
 
     /// Installed RAM, reduced by the cgroup limit.
@@ -66,7 +70,10 @@ fn smallest_cgroup_limit(path: &str) -> Option<u64> {
     let mut current = path.trim_end_matches('/').to_string();
     loop {
         let file = format!("/sys/fs/cgroup{current}/memory.max");
-        if let Some(value) = fs::read_to_string(&file).ok().and_then(|text| parse_cgroup_limit(&text)) {
+        if let Some(value) = fs::read_to_string(&file)
+            .ok()
+            .and_then(|text| parse_cgroup_limit(&text))
+        {
             limit = Some(limit.map_or(value, |known| known.min(value)));
         }
         match current.rfind('/') {
@@ -105,7 +112,8 @@ impl MemoryPlan {
         } else {
             u64::from(setting_mb) * BYTES_PER_MB
         };
-        let mut thumbnail_cache_bytes = percent_of(budget_bytes, THUMBNAIL_CACHE_PERCENT).max(MIN_THUMBNAIL_CACHE_BYTES);
+        let mut thumbnail_cache_bytes =
+            percent_of(budget_bytes, THUMBNAIL_CACHE_PERCENT).max(MIN_THUMBNAIL_CACHE_BYTES);
         if automatic {
             thumbnail_cache_bytes = thumbnail_cache_bytes.min(AUTO_THUMBNAIL_CACHE_CAP_BYTES);
         }
@@ -116,13 +124,25 @@ impl MemoryPlan {
                 warnings.push(MemoryWarning::BelowMinimum { budget_bytes });
             }
             if system.available_bytes > 0 && budget_bytes > system.available_bytes {
-                warnings.push(MemoryWarning::AboveAvailable { budget_bytes, available_bytes: system.available_bytes });
+                warnings.push(MemoryWarning::AboveAvailable {
+                    budget_bytes,
+                    available_bytes: system.available_bytes,
+                });
             }
             if usable > 0 && budget_bytes > percent_of(usable, WARN_TOTAL_PERCENT) {
-                warnings.push(MemoryWarning::AboveTotalShare { budget_bytes, usable_bytes: usable });
+                warnings.push(MemoryWarning::AboveTotalShare {
+                    budget_bytes,
+                    usable_bytes: usable,
+                });
             }
         }
-        Self { automatic, budget_bytes, thumbnail_cache_bytes, system, warnings }
+        Self {
+            automatic,
+            budget_bytes,
+            thumbnail_cache_bytes,
+            system,
+            warnings,
+        }
     }
 
     /// One line for the settings page and the log.
@@ -132,7 +152,11 @@ impl MemoryPlan {
             format_bytes(self.system.usable_total_bytes()),
             format_bytes(self.system.available_bytes),
             format_bytes(self.budget_bytes),
-            if self.automatic { " (automatic: half of the RAM)" } else { "" },
+            if self.automatic {
+                " (automatic: half of the RAM)"
+            } else {
+                ""
+            },
             format_bytes(self.thumbnail_cache_bytes),
         )
     }
@@ -191,7 +215,11 @@ mod tests {
 
     #[test]
     fn a_cgroup_limit_caps_the_installed_ram() {
-        let memory = SystemMemory { total_bytes: 16 * 1024 * BYTES_PER_MB, available_bytes: 8 * 1024 * BYTES_PER_MB, cgroup_limit_bytes: Some(2 * 1024 * BYTES_PER_MB) };
+        let memory = SystemMemory {
+            total_bytes: 16 * 1024 * BYTES_PER_MB,
+            available_bytes: 8 * 1024 * BYTES_PER_MB,
+            cgroup_limit_bytes: Some(2 * 1024 * BYTES_PER_MB),
+        };
         assert_eq!(memory.usable_total_bytes(), 2 * 1024 * BYTES_PER_MB);
     }
 

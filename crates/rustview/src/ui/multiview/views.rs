@@ -1,14 +1,14 @@
 //! Conversion of the Slint-free description of a Multiview (physical pixels) into the Slint view structs (logical pixels).
 
+use crate::ui::button_feedback::ButtonFeedback;
 use crate::ui::button_feedback_bridge;
-use crate::ui::{
-    MultiviewBarButtonView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView,
-};
+use crate::ui::{MultiviewBarButtonView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView};
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::model::TileKind;
-use crate::ui::button_feedback::ButtonFeedback;
-use crate::viewer::multiview::view::{MediaActionView, PrimaryActionView, GutterView, HostedView, Navigation, TileView, ZoomContentView};
+use crate::viewer::multiview::view::{
+    GutterView, HostedView, MediaActionView, Navigation, PrimaryActionView, TileView, ZoomContentView,
+};
 use slint::{Model, VecModel};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -100,7 +100,14 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
             };
             (true, hq, zoom.area, zoom.dest, clip, zoom.pixelated)
         }
-        None => (false, false, minimap_area.unwrap_or_default(), Rect::default(), Rect::default(), false),
+        None => (
+            false,
+            false,
+            minimap_area.unwrap_or_default(),
+            Rect::default(),
+            Rect::default(),
+            false,
+        ),
     };
     let minimap = tile.minimap.as_ref();
     let mm_rect = minimap.map_or(Rect::default(), |m| m.rect);
@@ -213,12 +220,7 @@ pub fn action_views(actions: &[MediaActionView]) -> Vec<MultiviewBarButtonView> 
 pub fn physical_rect(x: f32, y: f32, width: f32, height: f32, scale: f32) -> Rect {
     let edge = |logical: f32| (logical * scale).round() as i32;
     let (x0, y0) = (edge(x), edge(y));
-    Rect::new(
-        x0,
-        y0,
-        (edge(x + width) - x0).max(1),
-        (edge(y + height) - y0).max(1),
-    )
+    Rect::new(x0, y0, (edge(x + width) - x0).max(1), (edge(y + height) - y0).max(1))
 }
 
 /// Where the projected container sits inside the canvas of the host.
@@ -233,17 +235,11 @@ pub fn screen_view(view: &HostedView) -> MultiviewScreenView {
 }
 
 pub fn tile_views(view: &HostedView, images: &mut ImageCache) -> Vec<MultiviewTileView> {
-    view.tiles
-        .iter()
-        .map(|t| tile_view(t, view.dpi, images))
-        .collect()
+    view.tiles.iter().map(|t| tile_view(t, view.dpi, images)).collect()
 }
 
 pub fn gutter_views(view: &HostedView) -> Vec<MultiviewGutterView> {
-    view.gutters
-        .iter()
-        .map(|g| gutter_view(g, view.dpi))
-        .collect()
+    view.gutters.iter().map(|g| gutter_view(g, view.dpi)).collect()
 }
 
 /// The Slint models a host draws a Multiview from.

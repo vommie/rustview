@@ -1,21 +1,21 @@
 //! Rename and delete actions: their callbacks and the entry points shared by the keyboard, the menus and the Multiview.
 
+use super::{DeleteActionParams, RenameActionParams, UiBridge};
+use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::favorites::BridgeFavorites;
 use crate::ui::file_dialogs::delete::DeleteFollowup;
 use crate::ui::file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
 use crate::ui::folder_dialogs::FolderDialogContext;
-use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::media::BridgeMedia;
+use crate::ui::multiview::tab_host;
 use crate::ui::state::*;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::multiview::tab_host;
 use rustview_core::library::folders::normalize_path;
 use rustview_core::library::models::{FolderId, MediaId};
 use rustview_core::settings::LogObscurer;
 use slint::ComponentHandle;
 use std::path::Path;
 use std::rc::Rc;
-use super::{DeleteActionParams, RenameActionParams, UiBridge};
 
 impl UiBridge {
     pub(super) fn register_rename_callbacks(&self) {
@@ -62,10 +62,22 @@ impl UiBridge {
             self.state.clone(),
         );
 
-        let (win, lib, set, st) = (self.window.clone_strong(), self.library.clone(), self.settings.clone(), self.state.clone());
-        self.window.on_browse_go_up_requested(move || BrowseFolders::go_up(&win, &lib, &set, &st));
-        let (win, lib, set, st) = (self.window.clone_strong(), self.library.clone(), self.settings.clone(), self.state.clone());
-        self.window.on_browse_history_requested(move |direction| BrowseFolders::go_history(direction, &win, &lib, &set, &st));
+        let (win, lib, set, st) = (
+            self.window.clone_strong(),
+            self.library.clone(),
+            self.settings.clone(),
+            self.state.clone(),
+        );
+        self.window
+            .on_browse_go_up_requested(move || BrowseFolders::go_up(&win, &lib, &set, &st));
+        let (win, lib, set, st) = (
+            self.window.clone_strong(),
+            self.library.clone(),
+            self.settings.clone(),
+            self.state.clone(),
+        );
+        self.window
+            .on_browse_history_requested(move |direction| BrowseFolders::go_history(direction, &win, &lib, &set, &st));
 
         let win = self.window.clone_strong();
         let ctx = FolderDialogContext {
@@ -131,10 +143,7 @@ impl UiBridge {
         }
 
         if BridgeMedia::is_system_busy(window, params.thumbnails, params.state) {
-            StatusBarBridge::warn(
-                window,
-                "Cannot delete: an active operation is in progress.",
-            );
+            StatusBarBridge::warn(window, "Cannot delete: an active operation is in progress.");
             return;
         }
 
@@ -176,9 +185,7 @@ impl UiBridge {
 
         if effective_panel == LastActivePanel::Favorite {
             let selected_fav_path = params.state.read().selected_favorite_path.clone();
-            let path_to_remove = selected_fav_path.or_else(|| {
-                params.state.read().current_folder_path.clone()
-            });
+            let path_to_remove = selected_fav_path.or_else(|| params.state.read().current_folder_path.clone());
 
             // The entry is copied out first: a read guard in the `if let` would live through the block, where the favorite is
             // changed under the write lock.
@@ -186,8 +193,7 @@ impl UiBridge {
                 let entry = params.favorites.read().get_by_path(&path).cloned();
                 entry.map(|entry| (path, entry))
             });
-            if let Some((path, entry)) = found
-            {
+            if let Some((path, entry)) = found {
                 tracing::info!(
                     path = %LogObscurer::path(&path),
                     alias = %entry.alias,
@@ -218,11 +224,16 @@ impl UiBridge {
                     files = files.len(),
                     "[UiBridge: DeleteAction] Delete requested on a selection of folders and files: opening the combined dialog"
                 );
-                params.folder_dialogs.show_delete_selection(window, files, browse_folders, ctx);
+                params
+                    .folder_dialogs
+                    .show_delete_selection(window, files, browse_folders, ctx);
                 return;
             }
 
-            let current_folder_id = browse_folders.first().copied().or(params.state.read().current_folder_id);
+            let current_folder_id = browse_folders
+                .first()
+                .copied()
+                .or(params.state.read().current_folder_id);
             let Some(folder_id) = current_folder_id else {
                 StatusBarBridge::info(window, "No folder selected to delete (Del).");
                 return;
@@ -280,13 +291,17 @@ impl UiBridge {
                 folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
                 "[UiBridge: DeleteAction] Delete requested on a missing folder: opening remove_orphaned folder dialog"
             );
-            params.folder_dialogs.show_remove_orphaned(window, folder_id, &folder_name, folder_ctx);
+            params
+                .folder_dialogs
+                .show_remove_orphaned(window, folder_id, &folder_name, folder_ctx);
         } else {
             tracing::info!(
                 folder = %LogObscurer::folder(Some(folder_id), Path::new(&folder_name)),
                 "[UiBridge: DeleteAction] Delete requested on an active folder: opening delete folder dialog"
             );
-            params.folder_dialogs.show_delete(window, folder_id, &folder_name, folder_ctx);
+            params
+                .folder_dialogs
+                .show_delete(window, folder_id, &folder_name, folder_ctx);
         }
     }
 
@@ -327,7 +342,9 @@ impl UiBridge {
                 count = media_ids.len(),
                 "[UiBridge: DeleteAction] DEL pressed on media selection: opening delete files dialog"
             );
-            params.delete_file_dialog.show_with_followup(window, media_ids, dialog_ctx, followup);
+            params
+                .delete_file_dialog
+                .show_with_followup(window, media_ids, dialog_ctx, followup);
         }
     }
 
@@ -379,9 +396,7 @@ impl UiBridge {
 
         if effective_panel == LastActivePanel::Favorite {
             let selected_fav_path = params.state.read().selected_favorite_path.clone();
-            let path_to_rename = selected_fav_path.or_else(|| {
-                params.state.read().current_folder_path.clone()
-            });
+            let path_to_rename = selected_fav_path.or_else(|| params.state.read().current_folder_path.clone());
 
             // The entry is copied out first: a read guard in the `if let` would live through the block, where the favorite is
             // changed under the write lock.
@@ -389,8 +404,7 @@ impl UiBridge {
                 let entry = params.favorites.read().get_by_path(&path).cloned();
                 entry.map(|entry| (path, entry))
             });
-            if let Some((path, entry)) = found
-            {
+            if let Some((path, entry)) = found {
                 tracing::info!(
                     path = %LogObscurer::path(&path),
                     alias = %entry.alias,
@@ -415,7 +429,10 @@ impl UiBridge {
                 StatusBarBridge::warn(window, "Cannot rename several items at once. Select a single item.");
                 return;
             }
-            let current_folder_id = browse_folders.first().copied().or(params.state.read().current_folder_id);
+            let current_folder_id = browse_folders
+                .first()
+                .copied()
+                .or(params.state.read().current_folder_id);
             let Some(folder_id) = current_folder_id else {
                 StatusBarBridge::info(window, "No folder selected to rename (F2).");
                 return;
@@ -458,12 +475,9 @@ impl UiBridge {
                 "[UiBridge: RenameAction] F2 pressed on Folder Tree focus: Opening Rename Folder dialog"
             );
 
-            params.folder_dialogs.show_rename(
-                window,
-                folder_id,
-                &folder_name,
-                folder_ctx,
-            );
+            params
+                .folder_dialogs
+                .show_rename(window, folder_id, &folder_name, folder_ctx);
             return;
         }
 
@@ -474,10 +488,7 @@ impl UiBridge {
         } else if sel_ids.is_empty() {
             StatusBarBridge::info(window, "Select a file to rename (F2).");
         } else {
-            StatusBarBridge::warn(
-                window,
-                "Cannot rename multiple files at once. Select a single file.",
-            );
+            StatusBarBridge::warn(window, "Cannot rename multiple files at once. Select a single file.");
         }
     }
 

@@ -1,18 +1,15 @@
 //! State questions and view-level events of the Browse list: scan/busy state, grid/table toggle and viewport changes.
 
-use crate::ui::state::UiState;
-use crate::ui::browse_window::{
-    GRID_MARGIN_ROWS, TABLE_MARGIN_ROWS, ViewGeometry,
-    sync_window, timed,
-};
+use super::BridgeMedia;
 use crate::ui::MainWindow;
+use crate::ui::browse_window::{GRID_MARGIN_ROWS, TABLE_MARGIN_ROWS, ViewGeometry, sync_window, timed};
+use crate::ui::state::UiState;
+use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
-use super::BridgeMedia;
 
 impl BridgeMedia {
     /// A scan, refresh or indexing run is going on (the thumbnail pipeline is not counted). Operations that move files must not run
@@ -26,11 +23,7 @@ impl BridgeMedia {
         window.get_is_indexing_media() || window.get_is_refreshing_folders()
     }
 
-    pub fn is_system_busy(
-        window: &MainWindow,
-        thumbnails: &ThumbnailManager,
-        state: &RwLock<UiState>,
-    ) -> bool {
+    pub fn is_system_busy(window: &MainWindow, thumbnails: &ThumbnailManager, state: &RwLock<UiState>) -> bool {
         if let Some(st) = state.try_read()
             && (st.is_refreshing_media || st.is_refreshing_folders)
         {

@@ -6,9 +6,9 @@
 //! its previous thumbnail because `ThumbnailScheduler::regenerate_sync` writes to the database only after a
 //! successful generation.
 
-use super::ram_cache::CachedThumbnail;
-use super::types::{generate_random_video_offset_percent, ThumbnailConfig};
 use super::ThumbnailManager;
+use super::ram_cache::CachedThumbnail;
+use super::types::{ThumbnailConfig, generate_random_video_offset_percent};
 use crate::library::models::MediaId;
 use rayon::prelude::*;
 use std::path::PathBuf;
@@ -81,22 +81,37 @@ fn regenerate_one(
     let fail = |path: PathBuf, reason: String| FailedRegeneration { media_id, path, reason };
 
     if !path.is_file() {
-        tracing::warn!(media_id, "[ThumbnailRegeneration: Skip] File not found on disk; library left untouched");
+        tracing::warn!(
+            media_id,
+            "[ThumbnailRegeneration: Skip] File not found on disk; library left untouched"
+        );
         return Err(fail(path, "File not found on disk".to_string()));
     }
 
     let is_video = manager.is_video_media(media_id, &path);
     let (offset_percent, result) = if is_video {
         let pct = generate_random_video_offset_percent();
-        (Some(pct), manager.regenerate_with_offset_sync(media_id, &path, config, pct))
+        (
+            Some(pct),
+            manager.regenerate_with_offset_sync(media_id, &path, config, pct),
+        )
     } else {
         (None, manager.regenerate_sync(media_id, &path, config))
     };
 
     match result {
         Ok(thumbnail) => {
-            tracing::debug!(media_id, ?offset_percent, "[ThumbnailRegeneration: Item] Thumbnail regenerated");
-            Ok(RegeneratedThumbnail { media_id, path, thumbnail, offset_percent })
+            tracing::debug!(
+                media_id,
+                ?offset_percent,
+                "[ThumbnailRegeneration: Item] Thumbnail regenerated"
+            );
+            Ok(RegeneratedThumbnail {
+                media_id,
+                path,
+                thumbnail,
+                offset_percent,
+            })
         }
         Err(e) => {
             tracing::warn!(media_id, error = %e, "[ThumbnailRegeneration: Item] Generation failed; previous thumbnail kept");
@@ -109,8 +124,8 @@ fn regenerate_one(
 mod tests {
     use super::*;
     use crate::library::Library;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn manager_in(dir: &std::path::Path) -> (Arc<Library>, ThumbnailManager) {
         let library = Arc::new(Library::open(&dir.join("library")).expect("open library"));
@@ -119,7 +134,9 @@ mod tests {
     }
 
     fn write_png(path: &std::path::Path) {
-        image::RgbImage::from_pixel(64, 48, image::Rgb([200, 40, 40])).save(path).expect("write png");
+        image::RgbImage::from_pixel(64, 48, image::Rgb([200, 40, 40]))
+            .save(path)
+            .expect("write png");
     }
 
     fn stored_location(library: &Library, media_id: MediaId) -> Option<crate::thumbnails::ThumbnailLocation> {
@@ -138,7 +155,10 @@ mod tests {
         let result = regenerate_batch(
             &manager,
             &ThumbnailConfig::default(),
-            vec![RegenerationTarget { media_id: 7, path: file }],
+            vec![RegenerationTarget {
+                media_id: 7,
+                path: file,
+            }],
             &|| {
                 done.fetch_add(1, Ordering::Relaxed);
             },
@@ -160,7 +180,10 @@ mod tests {
         let result = regenerate_batch(
             &manager,
             &ThumbnailConfig::default(),
-            vec![RegenerationTarget { media_id: 9, path: dir.path().join("gone.png") }],
+            vec![RegenerationTarget {
+                media_id: 9,
+                path: dir.path().join("gone.png"),
+            }],
             &|| {
                 done.fetch_add(1, Ordering::Relaxed);
             },
@@ -180,12 +203,28 @@ mod tests {
         write_png(&file);
         let cfg = ThumbnailConfig::default();
 
-        let first = regenerate_batch(&manager, &cfg, vec![RegenerationTarget { media_id: 3, path: file.clone() }], &|| {});
+        let first = regenerate_batch(
+            &manager,
+            &cfg,
+            vec![RegenerationTarget {
+                media_id: 3,
+                path: file.clone(),
+            }],
+            &|| {},
+        );
         assert_eq!(first.succeeded.len(), 1);
         let before = stored_location(&library, 3).expect("thumbnail stored");
 
         std::fs::write(&file, b"not an image").expect("corrupt file");
-        let second = regenerate_batch(&manager, &cfg, vec![RegenerationTarget { media_id: 3, path: file }], &|| {});
+        let second = regenerate_batch(
+            &manager,
+            &cfg,
+            vec![RegenerationTarget {
+                media_id: 3,
+                path: file,
+            }],
+            &|| {},
+        );
         assert_eq!(second.failed.len(), 1);
         assert_eq!(stored_location(&library, 3), Some(before));
     }

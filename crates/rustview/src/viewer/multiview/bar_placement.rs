@@ -7,11 +7,10 @@
 //! corner of the hovered tile. All rectangles are physical pixels on the screen (root window coordinates).
 
 use super::layout::Rect;
-use rustview_core::settings::schema::{
-    MULTIVIEW_BAR_MARGIN_LOGICAL_PX, MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX,
-    MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX,
-};
 use crate::viewer::XRectangle;
+use rustview_core::settings::schema::{
+    MULTIVIEW_BAR_MARGIN_LOGICAL_PX, MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX, MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BarPlacement {
@@ -88,13 +87,7 @@ pub fn near_bar_corner(corner: BarCorner, area: Rect, pointer: (i32, i32), scale
 /// The pointer is on the bar or within `reveal_px` (logical pixels) of its edge.
 pub fn in_reveal_zone(bar: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32) -> bool {
     let reveal = (reveal_px as f32 * scale.max(0.5)).round() as i32;
-    Rect::new(
-        bar.x - reveal,
-        bar.y - reveal,
-        bar.w + 2 * reveal,
-        bar.h + 2 * reveal,
-    )
-    .contains(pointer.0, pointer.1)
+    Rect::new(bar.x - reveal, bar.y - reveal, bar.w + 2 * reveal, bar.h + 2 * reveal).contains(pointer.0, pointer.1)
 }
 
 /// `rect` with rounded corners as the list of rectangles the X shape extension wants (one per pixel row of the corners,

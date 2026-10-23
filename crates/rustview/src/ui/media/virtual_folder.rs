@@ -1,52 +1,52 @@
 //! The virtual (recursive) folder view: its toolbar button and its toggle.
 
+use super::BridgeMedia;
+use crate::ui::MainWindow;
+use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::{BridgeTags, TagActionContext};
-use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::virtual_folder_wording;
-use crate::ui::MainWindow;
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::query::ScopeMode;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
-use super::BridgeMedia;
 
 impl BridgeMedia {
-    pub fn update_virtual_folder_button_state(
-        window: &MainWindow,
-        library: &Library,
-        state: &RwLock<UiState>,
-    ) {
+    pub fn update_virtual_folder_button_state(window: &MainWindow, library: &Library, state: &RwLock<UiState>) {
         let st = state.read();
 
         let is_virtual = st.is_virtual_folder_mode;
-        let (is_enabled, disabled_reason): (bool, Option<&str>) = if st.is_query_active && st.filter.scope_mode == ScopeMode::Global {
-            (false, Some("Recursive folder view is disabled during global query"))
-        } else if st.is_query_active {
-            (false, Some("Recursive folder view is disabled while query filter is active"))
-        } else if let Some(folder_id) = st.current_folder_id {
-            let has_subfolders = library
-                .folders()
-                .get_descendant_folder_ids(folder_id)
-                .map(|ids| ids.len() > 1)
-                .unwrap_or(false);
+        let (is_enabled, disabled_reason): (bool, Option<&str>) =
+            if st.is_query_active && st.filter.scope_mode == ScopeMode::Global {
+                (false, Some("Recursive folder view is disabled during global query"))
+            } else if st.is_query_active {
+                (
+                    false,
+                    Some("Recursive folder view is disabled while query filter is active"),
+                )
+            } else if let Some(folder_id) = st.current_folder_id {
+                let has_subfolders = library
+                    .folders()
+                    .get_descendant_folder_ids(folder_id)
+                    .map(|ids| ids.len() > 1)
+                    .unwrap_or(false);
 
-            if has_subfolders {
-                (true, None)
+                if has_subfolders {
+                    (true, None)
+                } else {
+                    (false, Some("No subfolders available in current folder"))
+                }
             } else {
-                (false, Some("No subfolders available in current folder"))
-            }
-        } else {
-            (false, Some("No folder selected"))
-        };
+                (false, Some("No folder selected"))
+            };
 
         drop(st);
 
@@ -88,7 +88,11 @@ impl BridgeMedia {
             st.file_selection.clear();
             st.invalidate_view_window();
 
-            (st.current_folder_id, st.current_folder_path.clone(), st.is_virtual_folder_mode)
+            (
+                st.current_folder_id,
+                st.current_folder_path.clone(),
+                st.is_virtual_folder_mode,
+            )
         };
 
         window.set_is_virtual_folder(new_mode);
@@ -111,7 +115,10 @@ impl BridgeMedia {
                 });
             } else {
                 let target_folder_ids = if new_mode {
-                    library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
+                    library
+                        .folders()
+                        .get_descendant_folder_ids(folder_id)
+                        .unwrap_or_else(|_| vec![folder_id])
                 } else {
                     vec![folder_id]
                 };
@@ -173,7 +180,9 @@ impl BridgeMedia {
                         window,
                         format!(
                             "Recursive view enabled: Showing {} folder(s) under '{}' ({}ms)",
-                            virtual_count, folder_name, t0.elapsed().as_millis()
+                            virtual_count,
+                            folder_name,
+                            t0.elapsed().as_millis()
                         ),
                     );
                 } else {
@@ -181,7 +190,8 @@ impl BridgeMedia {
                         window,
                         format!(
                             "Recursive view disabled: Showing '{}' only ({}ms)",
-                            folder_name, t0.elapsed().as_millis()
+                            folder_name,
+                            t0.elapsed().as_millis()
                         ),
                     );
                 }

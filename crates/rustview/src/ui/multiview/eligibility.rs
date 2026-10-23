@@ -4,15 +4,15 @@
 //! is used (`is_deleted`, `is_pending`, `is_corrupted`, the loaded row map); the drive is never touched. The Multiview
 //! shows the first `MULTIVIEW_MAX_TILES` playable items in the current view order (the selection itself has no order).
 
-use rustview_core::library::models::MediaId;
-use rustview_core::media::MediaType;
-use rustview_core::query::filters::IndexedMediaRecord;
-use rustview_core::settings::schema::{MULTIVIEW_FALLBACK_ASPECT, MULTIVIEW_MAX_TILES};
 use crate::ui::state::UiState;
 use crate::ui::thumbnail_regeneration::eligibility::loaded_item;
 use crate::viewer::multiview::follow::Wanted;
 use crate::viewer::multiview::model::{TileKind, aspect_from_size};
 use crate::viewer::multiview::tile::TileSeed;
+use rustview_core::library::models::MediaId;
+use rustview_core::media::MediaType;
+use rustview_core::query::filters::IndexedMediaRecord;
+use rustview_core::settings::schema::{MULTIVIEW_FALLBACK_ASPECT, MULTIVIEW_MAX_TILES};
 
 /// What the context menu needs without resolving any tile (cheap, `Copy`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -48,15 +48,10 @@ impl OpenSummary {
         let mut text = if self.shown() == 1 {
             "Show the selected medium in fullscreen".to_string()
         } else {
-            format!(
-                "Show {} media side by side in one fullscreen window",
-                self.shown()
-            )
+            format!("Show {} media side by side in one fullscreen window", self.shown())
         };
         if self.playable > MULTIVIEW_MAX_TILES {
-            text.push_str(&format!(
-                " (only the first {MULTIVIEW_MAX_TILES} in view order)"
-            ));
+            text.push_str(&format!(" (only the first {MULTIVIEW_MAX_TILES} in view order)"));
         }
         let skipped = self.selected - self.playable;
         match skipped {
@@ -124,11 +119,7 @@ pub fn plan_tile(item: &IndexedMediaRecord) -> TileSeed {
         } else {
             TileKind::Image
         },
-        aspect_from_size(
-            item.record.width,
-            item.record.height,
-            MULTIVIEW_FALLBACK_ASPECT,
-        ),
+        aspect_from_size(item.record.width, item.record.height, MULTIVIEW_FALLBACK_ASPECT),
         item.full_path(),
         item.record.filename.clone(),
     )
@@ -151,7 +142,5 @@ pub fn plan_open(st: &UiState) -> OpenPlan {
 
 /// A single tile for an item that joined the selection later (following the selection).
 pub fn plan_tile_for(st: &UiState, id: MediaId) -> Option<TileSeed> {
-    loaded_item(st, id)
-        .filter(|item| is_playable(item))
-        .map(plan_tile)
+    loaded_item(st, id).filter(|item| is_playable(item)).map(plan_tile)
 }

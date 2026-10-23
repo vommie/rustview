@@ -84,7 +84,8 @@ pub fn rasterize(path: &Path, longest_edge: u32) -> Result<SvgRaster, SvgError> 
 
     let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or(SvgError::EmptySize)?;
     pixmap.fill(tiny_skia::Color::WHITE);
-    let transform = tiny_skia::Transform::from_scale(width as f32 / tree.size().width(), height as f32 / tree.size().height());
+    let transform =
+        tiny_skia::Transform::from_scale(width as f32 / tree.size().width(), height as f32 / tree.size().height());
     resvg::render(&tree, transform, &mut pixmap.as_mut());
 
     // The background is opaque, so the premultiplied channels are the colors.
@@ -103,5 +104,7 @@ pub fn rasterize(path: &Path, longest_edge: u32) -> Result<SvgRaster, SvgError> 
 
 /// The edge the viewer renders an SVG with: its own size, kept between `VIEWER_MIN_EDGE` and `VIEWER_MAX_EDGE`.
 pub fn viewer_edge(intrinsic_width: u32, intrinsic_height: u32) -> u32 {
-    intrinsic_width.max(intrinsic_height).clamp(VIEWER_MIN_EDGE, VIEWER_MAX_EDGE)
+    intrinsic_width
+        .max(intrinsic_height)
+        .clamp(VIEWER_MIN_EDGE, VIEWER_MAX_EDGE)
 }

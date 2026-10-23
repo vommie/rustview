@@ -6,9 +6,9 @@
 //! they belong to; at most one of the two holds them (`browse_anchor`, `browse_cursor`).
 
 use super::rows::{FolderRowRef, Slot};
-use rustview_core::library::models::{FolderId, MediaId};
-use crate::ui::state::UiState;
 use crate::ui::selection::model::FileSelectionModel;
+use crate::ui::state::UiState;
+use rustview_core::library::models::{FolderId, MediaId};
 use std::collections::HashSet;
 
 /// One selectable thing of the Browse view.
@@ -66,7 +66,11 @@ impl UiState {
                     .selected_folders_ordered()
                     .first()
                     .map(|&id| BrowseItem::Folder(FolderRowRef::Folder(id)))
-                    .or_else(|| self.folder_rows.up_selected().then_some(BrowseItem::Folder(FolderRowRef::Up)))
+                    .or_else(|| {
+                        self.folder_rows
+                            .up_selected()
+                            .then_some(BrowseItem::Folder(FolderRowRef::Up))
+                    })
             })
     }
 
@@ -125,7 +129,10 @@ impl UiState {
     }
 
     fn selection_before(&self) -> (HashSet<MediaId>, FolderSelectionSnapshot) {
-        (self.file_selection.selected_ids().clone(), self.folder_rows.selection_snapshot())
+        (
+            self.file_selection.selected_ids().clone(),
+            self.folder_rows.selection_snapshot(),
+        )
     }
 
     fn delta_since(&self, before: &(HashSet<MediaId>, FolderSelectionSnapshot)) -> SelectionDelta {
@@ -154,7 +161,11 @@ impl UiState {
         if shift {
             let anchor = self.browse_anchor().unwrap_or(item);
             let range = self.browse_range(anchor, item);
-            let mut media: HashSet<MediaId> = if ctrl { self.file_selection.selected_ids().clone() } else { HashSet::new() };
+            let mut media: HashSet<MediaId> = if ctrl {
+                self.file_selection.selected_ids().clone()
+            } else {
+                HashSet::new()
+            };
             if !ctrl {
                 self.folder_rows.clear_selection();
             }

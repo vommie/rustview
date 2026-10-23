@@ -31,13 +31,7 @@ pub struct CtxMenuPresenter;
 
 impl CtxMenuPresenter {
     /// Opens the context menu at the specified screen coordinates and displays Level 0.
-    pub fn open(
-        window: &MainWindow,
-        active_menu_slot: &mut Option<CtxMenu>,
-        mut menu: CtxMenu,
-        x: f32,
-        y: f32,
-    ) {
+    pub fn open(window: &MainWindow, active_menu_slot: &mut Option<CtxMenu>, mut menu: CtxMenu, x: f32, y: f32) {
         menu.index_items();
 
         let scale = window.window().scale_factor();
@@ -46,9 +40,7 @@ impl CtxMenuPresenter {
         let win_h = (win_size.height as f32 / scale).max(200.0);
 
         // Max height capped at 70% of window height (desktop UX best practice)
-        let max_h = (win_h * 0.70)
-            .max(180.0)
-            .min(win_h - (MENU_WINDOW_MARGIN * 2.0));
+        let max_h = (win_h * 0.70).max(180.0).min(win_h - (MENU_WINDOW_MARGIN * 2.0));
         let content_h = Self::calculate_items_content_height(&menu.items);
         let effective_h = content_h.min(max_h);
 
@@ -115,9 +107,7 @@ impl CtxMenuPresenter {
         }
 
         // 2. If the submenu for menu_idx is ALREADY open at depth + 1: return immediately without touching UI models
-        if state.open_levels.len() > depth + 1
-            && state.open_levels[depth + 1].invoking_menu_idx == menu_idx
-        {
+        if state.open_levels.len() > depth + 1 && state.open_levels[depth + 1].invoking_menu_idx == menu_idx {
             return;
         }
 
@@ -144,9 +134,7 @@ impl CtxMenuPresenter {
         let win_w = (win_size.width as f32 / scale).max(200.0);
         let win_h = (win_size.height as f32 / scale).max(200.0);
 
-        let max_h = (win_h * 0.70)
-            .max(180.0)
-            .min(win_h - (MENU_WINDOW_MARGIN * 2.0));
+        let max_h = (win_h * 0.70).max(180.0).min(win_h - (MENU_WINDOW_MARGIN * 2.0));
         let content_h = Self::calculate_items_content_height(&children);
         let effective_h = content_h.min(max_h);
 
@@ -196,15 +184,10 @@ impl CtxMenuPresenter {
             items: CtxMenuDispatcher::items_to_slint_model(&children, new_depth as i32),
         };
 
-        if let Some(vec_model) = levels
-            .as_any()
-            .downcast_ref::<VecModel<ContextMenuLevelModel>>()
-        {
+        if let Some(vec_model) = levels.as_any().downcast_ref::<VecModel<ContextMenuLevelModel>>() {
             vec_model.push(new_level);
         } else {
-            tracing::warn!(
-                "Context menu levels model is not a VecModel; submenu level not appended"
-            );
+            tracing::warn!("Context menu levels model is not a VecModel; submenu level not appended");
         }
     }
 
@@ -220,17 +203,12 @@ impl CtxMenuPresenter {
         state.open_levels.truncate(depth + 1);
 
         let levels = window.get_context_menu_levels();
-        if let Some(vec_model) = levels
-            .as_any()
-            .downcast_ref::<VecModel<ContextMenuLevelModel>>()
-        {
+        if let Some(vec_model) = levels.as_any().downcast_ref::<VecModel<ContextMenuLevelModel>>() {
             while vec_model.row_count() > depth + 1 {
                 vec_model.remove(vec_model.row_count() - 1);
             }
         } else {
-            tracing::warn!(
-                "Context menu levels model is not a VecModel; deeper levels not removed"
-            );
+            tracing::warn!("Context menu levels model is not a VecModel; deeper levels not removed");
         }
 
         Self::set_submenu_highlight(&levels, depth, previous_active_idx, false);
@@ -238,12 +216,7 @@ impl CtxMenuPresenter {
 
     /// Updates the highlight flag of exactly one item row (the submenu parent row with `menu_idx`)
     /// inside the existing items model of the level at `depth`. No rows are added, removed or recreated.
-    fn set_submenu_highlight(
-        levels: &ModelRc<ContextMenuLevelModel>,
-        depth: usize,
-        menu_idx: usize,
-        active: bool,
-    ) {
+    fn set_submenu_highlight(levels: &ModelRc<ContextMenuLevelModel>, depth: usize, menu_idx: usize, active: bool) {
         if menu_idx == 0 {
             return;
         }

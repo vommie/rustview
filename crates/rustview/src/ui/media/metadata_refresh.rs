@@ -1,27 +1,25 @@
 //! Refresh of the metadata of selected files only (no hashing, no thumbnails).
 
+use super::{BridgeMedia, RefreshedMetadataOnlyItem};
+use crate::ui::MainWindow;
+use crate::ui::browse_window::{apply_record, update_tile};
 use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::BridgeTags;
-use crate::ui::browse_window::{
-    apply_record, update_tile,
-};
-use crate::ui::MainWindow;
-use rustview_core::library::models::{MediaId, MediaRecord};
+use parking_lot::RwLock;
+use rayon::prelude::*;
 use rustview_core::library::Library;
+use rustview_core::library::models::{MediaId, MediaRecord};
 use rustview_core::media::metadata::MetadataExtractor;
 use rustview_core::settings::LogObscurer;
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
-use rayon::prelude::*;
 use slint::ComponentHandle;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-use super::{BridgeMedia, RefreshedMetadataOnlyItem};
 
 impl BridgeMedia {
     pub fn execute_metadata_only_refresh(
@@ -52,10 +50,7 @@ impl BridgeMedia {
         window.set_is_system_busy(true);
 
         StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
-        StatusBarBridge::info(
-            window,
-            format!("Refreshing metadata for {}...", operation_desc),
-        );
+        StatusBarBridge::info(window, format!("Refreshing metadata for {}...", operation_desc));
 
         let w_weak = window.as_weak();
         let lib_arc = library.clone();
@@ -219,10 +214,7 @@ impl BridgeMedia {
                                 .file_name()
                                 .map(|n| n.to_string_lossy().to_string())
                                 .unwrap_or_default();
-                            missing_files.push(MissingFileItem {
-                                filename: fname,
-                                path,
-                            });
+                            missing_files.push(MissingFileItem { filename: fname, path });
                         }
                     }
                 }
@@ -258,7 +250,8 @@ impl BridgeMedia {
                         }
 
                         for missing in &missing_files {
-                            if let Some(target_indexed) = st.all_folder_media.iter_mut().find(|m| m.is_at(&missing.path))
+                            if let Some(target_indexed) =
+                                st.all_folder_media.iter_mut().find(|m| m.is_at(&missing.path))
                                 && !target_indexed.is_pending
                             {
                                 target_indexed.mark_deleted();
@@ -360,13 +353,6 @@ impl BridgeMedia {
             format!("{} selected files", count)
         };
 
-        Self::execute_metadata_only_refresh(
-            targets,
-            window,
-            library,
-            thumbnails,
-            state,
-            &desc,
-        );
+        Self::execute_metadata_only_refresh(targets, window, library, thumbnails, state, &desc);
     }
 }

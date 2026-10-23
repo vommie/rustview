@@ -1,10 +1,10 @@
-use crate::ui::models::format_filesize;
-use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
 use crate::ui::MainWindow;
+use crate::ui::models::format_filesize;
+use crate::ui::state::UiState;
+use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
+use parking_lot::RwLock;
 use rustview_core::settings::LogObscurer;
 use rustview_core::thumbnails::ThumbnailProgressSnapshot;
-use crate::ui::state::UiState;
-use parking_lot::RwLock;
 
 /// Semantic message severity level for status bar notifications.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -23,11 +23,7 @@ pub struct StatusBarBridge;
 
 impl StatusBarBridge {
     /// Sets a status message on the main window with explicit severity level.
-    pub fn set_message(
-        window: &MainWindow,
-        message: impl Into<String>,
-        level: StatusMessageLevel,
-    ) {
+    pub fn set_message(window: &MainWindow, message: impl Into<String>, level: StatusMessageLevel) {
         let msg = message.into();
         tracing::debug!(
             level = ?level,
@@ -126,32 +122,20 @@ impl StatusBarBridge {
     }
 
     /// Updates the folder structure scan progress section.
-    pub fn update_folder_scan_progress(
-        window: &MainWindow,
-        is_refreshing: bool,
-        scanned_count: usize,
-    ) {
+    pub fn update_folder_scan_progress(window: &MainWindow, is_refreshing: bool, scanned_count: usize) {
         window.set_is_refreshing_folders(is_refreshing);
         window.set_folder_scan_count(scanned_count as i32);
     }
 
     /// Updates the media files discovery/indexing progress section.
-    pub fn update_media_index_progress(
-        window: &MainWindow,
-        is_indexing: bool,
-        current: usize,
-        total: usize,
-    ) {
+    pub fn update_media_index_progress(window: &MainWindow, is_indexing: bool, current: usize, total: usize) {
         window.set_is_indexing_media(is_indexing);
         window.set_media_index_current(current as i32);
         window.set_media_index_total(total as i32);
     }
 
     /// Updates the thumbnail pipeline progress bars.
-    pub fn update_thumbnail_progress(
-        window: &MainWindow,
-        progress: &ThumbnailProgressSnapshot,
-    ) {
+    pub fn update_thumbnail_progress(window: &MainWindow, progress: &ThumbnailProgressSnapshot) {
         window.set_is_preloading(progress.is_preloading);
         window.set_preload_current(progress.preload_current as i32);
         window.set_preload_total(progress.preload_total as i32);

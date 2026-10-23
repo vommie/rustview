@@ -1,27 +1,24 @@
 //! Toggling a tag: assigning or removing it on the selection, or adding it to the query.
 
+use super::TagActionContext;
+use super::TagActionHandler;
+use super::TagSelectionStats;
+use super::TagTreeSync;
+use crate::ui::MainWindow;
+use crate::ui::browse_window::update_tile;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::*;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::browse_window::update_tile;
-use crate::ui::MainWindow;
-use rustview_core::library::models::{MediaId, TagId};
-use rustview_core::library::Library;
-use rustview_core::settings::LogObscurer;
+use crate::ui::tags::history_bridge::BridgeTagHistory;
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::library::models::{MediaId, TagId};
+use rustview_core::settings::LogObscurer;
 use std::collections::HashSet;
-use super::TagActionContext;
-use super::{TagSelectionStats};
-use super::TagTreeSync;
-use super::TagActionHandler;
 
 impl TagActionHandler {
-    pub fn toggle_tag(
-        tag_id: TagId,
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub fn toggle_tag(tag_id: TagId, ctx: &TagActionContext<'_>) {
         let is_tab_active = ctx.window.get_active_view_mode() == 1 || ctx.tab_manager.active_tab_id().is_some();
 
         let (selected_ids, is_assign_raw) = {
@@ -52,17 +49,9 @@ impl TagActionHandler {
             .unwrap_or_else(|| format!("Tag #{}", tag_id));
 
         if is_assign {
-            Self::handle_assign_mode_toggle(
-                tag_id,
-                &tag_name,
-                &selected_ids,
-                ctx,
-            );
+            Self::handle_assign_mode_toggle(tag_id, &tag_name, &selected_ids, ctx);
         } else {
-            Self::handle_query_mode_toggle(
-                tag_id,
-                ctx,
-            );
+            Self::handle_query_mode_toggle(tag_id, ctx);
         }
     }
 
@@ -119,21 +108,12 @@ impl TagActionHandler {
         Self::update_grid_tag_badges(selected_ids, ctx.window, ctx.library, ctx.state);
         TagTreeSync::sync_in_place(ctx.window, ctx.library, ctx.state);
         BridgeInspector::update(ctx.window, ctx.state);
-        BridgeViewerTabs::sync_ui(
-            ctx.window,
-            ctx.tab_manager,
-            ctx.library,
-            ctx.settings,
-            ctx.state,
-        );
+        BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
         StatusBarBridge::update_metrics(ctx.window, ctx.state);
         BridgeTagHistory::sync_ui(ctx.window, ctx.library, ctx.state);
     }
 
-    pub(in crate::ui::tags) fn handle_query_mode_toggle(
-        tag_id: TagId,
-        ctx: &TagActionContext<'_>,
-    ) {
+    pub(in crate::ui::tags) fn handle_query_mode_toggle(tag_id: TagId, ctx: &TagActionContext<'_>) {
         {
             let mut st = ctx.state.write();
             if st.filter.tag_ids.contains(&tag_id) {

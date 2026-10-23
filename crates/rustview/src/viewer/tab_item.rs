@@ -8,11 +8,7 @@ pub struct TabTitleFormatter;
 impl TabTitleFormatter {
     /// Allocates a unique, permanent title for a new tab session referencing `media_id`.
     /// Reuses the base filename if not already taken; otherwise finds the lowest available `(1)`, `(2)`, etc.
-    pub fn allocate_tab_title(
-        existing_tabs: &[MediaTabSession],
-        media_id: MediaId,
-        base_filename: &str,
-    ) -> String {
+    pub fn allocate_tab_title(existing_tabs: &[MediaTabSession], media_id: MediaId, base_filename: &str) -> String {
         let taken_titles: HashSet<&str> = existing_tabs
             .iter()
             .filter(|t| t.media_id == media_id)
@@ -52,9 +48,7 @@ pub struct TabCollection {
 
 impl TabCollection {
     pub fn new() -> Self {
-        Self {
-            sessions: Vec::new(),
-        }
+        Self { sessions: Vec::new() }
     }
 
     // =========================================================================
@@ -220,11 +214,7 @@ impl TabCollection {
             Some(p) => p,
             None => return false,
         };
-        if pos > 0 {
-            self.move_tab(tab_id, pos - 1)
-        } else {
-            false
-        }
+        if pos > 0 { self.move_tab(tab_id, pos - 1) } else { false }
     }
 
     pub fn move_right(&mut self, tab_id: TabId) -> bool {

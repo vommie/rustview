@@ -38,13 +38,9 @@ pub fn run_api_with_library(cmd: ApiCommand, library: &Library) -> Result<i32, A
             source,
             json,
         } => ApiHandler::set_media(library, &path, rating, tags, hash, source, json),
-        ApiCommand::DeleteMedia { path, json } => {
-            ApiHandler::delete_media(library, &path, json)
-        }
+        ApiCommand::DeleteMedia { path, json } => ApiHandler::delete_media(library, &path, json),
         ApiCommand::CheckHash { hash, json } => ApiHandler::check_hash(library, &hash, json),
-        ApiCommand::CheckHashes { hashes, json } => {
-            ApiHandler::check_hashes(library, &hashes, json)
-        }
+        ApiCommand::CheckHashes { hashes, json } => ApiHandler::check_hashes(library, &hashes, json),
         ApiCommand::InsertHash { hash, json } => ApiHandler::insert_hash(library, &hash, json),
     }
 }

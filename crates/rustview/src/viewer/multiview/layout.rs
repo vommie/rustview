@@ -229,17 +229,11 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], pins: &Pins) -> Layout {
                 });
             }
         }
-        return Layout {
-            tiles,
-            gutters,
-            rows,
-        };
+        return Layout { tiles, gutters, rows };
     }
 
     let available = (p.height - p.gutter).max(2);
-    let pinned_rows = pins
-        .rows
-        .filter(|r| r.iter().all(|f| f.is_finite() && *f > 0.0));
+    let pinned_rows = pins.rows.filter(|r| r.iter().all(|f| f.is_finite() && *f > 0.0));
     let heights = match pinned_rows {
         Some(fr) => proportional(available, &fr),
         None => {
@@ -297,11 +291,7 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], pins: &Pins) -> Layout {
             });
         }
     }
-    Layout {
-        tiles,
-        gutters,
-        rows,
-    }
+    Layout { tiles, gutters, rows }
 }
 
 impl Layout {

@@ -1,8 +1,6 @@
 use super::error::ThumbnailError;
 use super::image::DecodedThumbnailFrame;
-use super::types::{
-    calculate_aspect_dimensions, ScalingAlgorithm, ThumbnailConfig, VideoThumbnailEngine,
-};
+use super::types::{ScalingAlgorithm, ThumbnailConfig, VideoThumbnailEngine, calculate_aspect_dimensions};
 use crate::media::metadata::ensure_ffmpeg_initialized;
 use crate::settings::LogObscurer;
 use ffmpeg_next::format::Pixel;
@@ -23,11 +21,7 @@ pub struct VideoExtractionResult {
 
 pub trait VideoFrameDecoder: Send + Sync {
     /// Extracts both primary thumbnail and optional multi-frame preview in a single open-context pass.
-    fn extract_video(
-        &self,
-        path: &Path,
-        config: &ThumbnailConfig,
-    ) -> Result<VideoExtractionResult, ThumbnailError>;
+    fn extract_video(&self, path: &Path, config: &ThumbnailConfig) -> Result<VideoExtractionResult, ThumbnailError>;
 
     /// Extracts a single frame at the given timestamp percentage (fallback).
     fn extract_frame(
@@ -76,27 +70,19 @@ impl DynamicScaler {
     }
 
     /// Converts and scales a decoded video frame to tightly packed RGB24 bytes via FFmpeg's native libswscale.
-    pub fn scale_frame(
-        &mut self,
-        decoded: &ffmpeg_next::frame::Video,
-    ) -> Result<Vec<u8>, ThumbnailError> {
+    pub fn scale_frame(&mut self, decoded: &ffmpeg_next::frame::Video) -> Result<Vec<u8>, ThumbnailError> {
         let fmt = decoded.format();
         let w = decoded.width();
         let h = decoded.height();
 
         if self.scaler.is_none() || self.src_fmt != fmt || self.src_w != w || self.src_h != h {
-            let new_scaler = SwsContext::get(
-                fmt,
-                w,
-                h,
-                Pixel::RGB24,
-                self.dst_w,
-                self.dst_h,
-                self.flags,
-            ).map_err(|e| ThumbnailError::Ffmpeg(format!(
-                "Failed to initialize swscale context ({:?} {}x{} -> RGB24 {}x{}): {}",
-                fmt, w, h, self.dst_w, self.dst_h, e
-            )))?;
+            let new_scaler =
+                SwsContext::get(fmt, w, h, Pixel::RGB24, self.dst_w, self.dst_h, self.flags).map_err(|e| {
+                    ThumbnailError::Ffmpeg(format!(
+                        "Failed to initialize swscale context ({:?} {}x{} -> RGB24 {}x{}): {}",
+                        fmt, w, h, self.dst_w, self.dst_h, e
+                    ))
+                })?;
 
             self.scaler = Some(new_scaler);
             self.src_fmt = fmt;
@@ -106,7 +92,8 @@ impl DynamicScaler {
 
         let scaler = self.scaler.as_mut().unwrap();
         let mut rgb_frame = ffmpeg_next::frame::Video::empty();
-        scaler.run(decoded, &mut rgb_frame)
+        scaler
+            .run(decoded, &mut rgb_frame)
             .map_err(|e| ThumbnailError::Ffmpeg(format!("swscale conversion failed: {}", e)))?;
 
         let actual_w = rgb_frame.width();
@@ -128,7 +115,10 @@ impl DynamicScaler {
             } else {
                 return Err(ThumbnailError::Ffmpeg(format!(
                     "Incomplete video frame buffer: row {}/{} exceeded plane length (stride: {}, len: {})",
-                    y, actual_h, stride, plane_data.len()
+                    y,
+                    actual_h,
+                    stride,
+                    plane_data.len()
                 )));
             }
         }
@@ -138,12 +128,7 @@ impl DynamicScaler {
 }
 
 /// Applies orientation rotation if container or stream tags require 90°, 180°, or 270° rotation.
-pub fn apply_rotation_if_needed(
-    pixels: Vec<u8>,
-    width: u32,
-    height: u32,
-    rotation: i32,
-) -> (u32, u32, Vec<u8>) {
+pub fn apply_rotation_if_needed(pixels: Vec<u8>, width: u32, height: u32, rotation: i32) -> (u32, u32, Vec<u8>) {
     let norm_rot = rotation.rem_euclid(360);
     if norm_rot != 90 && norm_rot != 180 && norm_rot != 270 {
         return (width, height, pixels);
@@ -239,9 +224,7 @@ impl FfmpegVideoThumbnailer {
         let num_previews = params.target_preview_count.clamp(2, 100);
         let primary_offset_pct = params.primary_offset_pct;
 
-        let calc_seek_ts = |sec: f64| -> i64 {
-            (sec * f64::from(ffmpeg_next::ffi::AV_TIME_BASE)) as i64
-        };
+        let calc_seek_ts = |sec: f64| -> i64 { (sec * f64::from(ffmpeg_next::ffi::AV_TIME_BASE)) as i64 };
 
         // 1. Extract Primary Thumbnail Frame
         let prim_sec = (duration_secs * primary_offset_pct).clamp(0.0, duration_secs);
@@ -286,10 +269,7 @@ impl FfmpegVideoThumbnailer {
                         preview_frames.push(frame);
                     }
                     Err(_) => {
-                        let fallback = preview_frames
-                            .last()
-                            .cloned()
-                            .unwrap_or_else(|| primary_frame.clone());
+                        let fallback = preview_frames.last().cloned().unwrap_or_else(|| primary_frame.clone());
                         preview_frames.push(fallback);
                     }
                 }
@@ -343,12 +323,8 @@ impl FfmpegVideoThumbnailer {
 
                         if pts_sec >= target_pts_sec - 0.02 {
                             let raw_rgb = scaler.scale_frame(&decoded_frame)?;
-                            let (w, h, rot_pixels) = apply_rotation_if_needed(
-                                raw_rgb,
-                                scaler.dst_w,
-                                scaler.dst_h,
-                                stream_ctx.norm_rot,
-                            );
+                            let (w, h, rot_pixels) =
+                                apply_rotation_if_needed(raw_rgb, scaler.dst_w, scaler.dst_h, stream_ctx.norm_rot);
                             return Ok(DecodedThumbnailFrame {
                                 width: w,
                                 height: h,
@@ -370,12 +346,7 @@ impl FfmpegVideoThumbnailer {
 
         if let Some(frame) = latest_frame_unscaled {
             let raw_rgb = scaler.scale_frame(&frame)?;
-            let (w, h, rot_pixels) = apply_rotation_if_needed(
-                raw_rgb,
-                scaler.dst_w,
-                scaler.dst_h,
-                stream_ctx.norm_rot,
-            );
+            let (w, h, rot_pixels) = apply_rotation_if_needed(raw_rgb, scaler.dst_w, scaler.dst_h, stream_ctx.norm_rot);
             return Ok(DecodedThumbnailFrame {
                 width: w,
                 height: h,
@@ -389,12 +360,8 @@ impl FfmpegVideoThumbnailer {
         while decoder.receive_frame(&mut decoded_frame).is_ok() {
             if decoded_frame.width() > 0 && decoded_frame.height() > 0 {
                 let raw_rgb = scaler.scale_frame(&decoded_frame)?;
-                let (w, h, rot_pixels) = apply_rotation_if_needed(
-                    raw_rgb,
-                    scaler.dst_w,
-                    scaler.dst_h,
-                    stream_ctx.norm_rot,
-                );
+                let (w, h, rot_pixels) =
+                    apply_rotation_if_needed(raw_rgb, scaler.dst_w, scaler.dst_h, stream_ctx.norm_rot);
                 return Ok(DecodedThumbnailFrame {
                     width: w,
                     height: h,
@@ -405,7 +372,9 @@ impl FfmpegVideoThumbnailer {
             }
         }
 
-        Err(ThumbnailError::Ffmpeg("Failed to decode video frame at target timestamp".into()))
+        Err(ThumbnailError::Ffmpeg(
+            "Failed to decode video frame at target timestamp".into(),
+        ))
     }
 
     /// Single Linear Forward Sweep for videos <= 30.0s (or unknown duration).
@@ -471,7 +440,8 @@ impl FfmpegVideoThumbnailer {
                 frame_idx += 1;
 
                 let is_primary_hit = if target_preview_secs.is_some() {
-                    primary_frame.is_none() && (pts_sec >= target_primary_sec || (primary_offset_pct == 0.0 && frame_idx == 1))
+                    primary_frame.is_none()
+                        && (pts_sec >= target_primary_sec || (primary_offset_pct == 0.0 && frame_idx == 1))
                 } else {
                     primary_frame.is_none()
                 };
@@ -484,15 +454,14 @@ impl FfmpegVideoThumbnailer {
                     Vec::new()
                 };
 
-                if (is_primary_hit || !matching_preview_slots.is_empty() || (target_preview_secs.is_none() && all_scaled_reservoir.len() < num_previews) || first_decoded_frame.is_none())
+                if (is_primary_hit
+                    || !matching_preview_slots.is_empty()
+                    || (target_preview_secs.is_none() && all_scaled_reservoir.len() < num_previews)
+                    || first_decoded_frame.is_none())
                     && let Ok(raw_rgb) = scaler.scale_frame(&decoded_video_frame)
                 {
-                    let (w, h, rot_pixels) = apply_rotation_if_needed(
-                        raw_rgb,
-                        scaler.dst_w,
-                        scaler.dst_h,
-                        stream_ctx.norm_rot,
-                    );
+                    let (w, h, rot_pixels) =
+                        apply_rotation_if_needed(raw_rgb, scaler.dst_w, scaler.dst_h, stream_ctx.norm_rot);
                     let frame = DecodedThumbnailFrame {
                         width: w,
                         height: h,
@@ -556,15 +525,12 @@ impl FfmpegVideoThumbnailer {
         if primary_frame.is_none() || preview_frames.iter().any(|f| f.is_none()) {
             let _ = decoder.send_eof();
             while decoder.receive_frame(&mut decoded_video_frame).is_ok() {
-                if decoded_video_frame.width() > 0 && decoded_video_frame.height() > 0
+                if decoded_video_frame.width() > 0
+                    && decoded_video_frame.height() > 0
                     && let Ok(raw_rgb) = scaler.scale_frame(&decoded_video_frame)
                 {
-                    let (w, h, rot_pixels) = apply_rotation_if_needed(
-                        raw_rgb,
-                        scaler.dst_w,
-                        scaler.dst_h,
-                        stream_ctx.norm_rot,
-                    );
+                    let (w, h, rot_pixels) =
+                        apply_rotation_if_needed(raw_rgb, scaler.dst_w, scaler.dst_h, stream_ctx.norm_rot);
                     let frame = DecodedThumbnailFrame {
                         width: w,
                         height: h,
@@ -604,7 +570,8 @@ impl FfmpegVideoThumbnailer {
                 let idx = if num_previews > 1 {
                     let start_idx = 0;
                     let end_idx = total.saturating_sub(1);
-                    start_idx + (((end_idx - start_idx) as f64) * (k as f64 / (num_previews - 1) as f64)).round() as usize
+                    start_idx
+                        + (((end_idx - start_idx) as f64) * (k as f64 / (num_previews - 1) as f64)).round() as usize
                 } else {
                     0
                 };
@@ -630,11 +597,7 @@ impl FfmpegVideoThumbnailer {
 }
 
 impl VideoFrameDecoder for FfmpegVideoThumbnailer {
-    fn extract_video(
-        &self,
-        path: &Path,
-        config: &ThumbnailConfig,
-    ) -> Result<VideoExtractionResult, ThumbnailError> {
+    fn extract_video(&self, path: &Path, config: &ThumbnailConfig) -> Result<VideoExtractionResult, ThumbnailError> {
         let t0 = Instant::now();
         ensure_ffmpeg_initialized();
 
@@ -651,9 +614,8 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
 
         let norm_rot = crate::media::orientation::stream_rotation(&stream, &ictx.metadata());
 
-        let mut context_decoder =
-            ffmpeg_next::codec::context::Context::from_parameters(stream.parameters())
-                .map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
+        let mut context_decoder = ffmpeg_next::codec::context::Context::from_parameters(stream.parameters())
+            .map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
 
         let mut flags = ffmpeg_next::codec::flag::Flags::empty();
         flags.insert(ffmpeg_next::codec::flag::Flags::LOW_DELAY);
@@ -713,11 +675,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
             } else {
                 let r2 = stream.rate();
                 let val2 = f64::from(r2);
-                if val2 > 0.1 && val2.is_finite() {
-                    val2
-                } else {
-                    25.0
-                }
+                if val2 > 0.1 && val2.is_finite() { val2 } else { 25.0 }
             }
         };
 
@@ -847,11 +805,7 @@ impl MpvVideoThumbnailer {
 }
 
 impl VideoFrameDecoder for MpvVideoThumbnailer {
-    fn extract_video(
-        &self,
-        path: &Path,
-        config: &ThumbnailConfig,
-    ) -> Result<VideoExtractionResult, ThumbnailError> {
+    fn extract_video(&self, path: &Path, config: &ThumbnailConfig) -> Result<VideoExtractionResult, ThumbnailError> {
         if let Ok(mpv) = Mpv::with_initializer(|init| {
             init.set_property("vo", "null")?;
             init.set_property("ao", "null")?;

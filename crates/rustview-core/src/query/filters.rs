@@ -1,7 +1,7 @@
-use crate::library::models::TagId;
 use crate::library::Library;
+use crate::library::models::TagId;
 use crate::media::MediaType;
-use crate::settings::{LogObscurer, DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE};
+use crate::settings::{DEFAULT_MEDIA_TYPE_FILTER, DEFAULT_TAG_MATCH_MODE, DEFAULT_TAG_SCOPE_MODE, LogObscurer};
 use memchr::memmem;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
@@ -105,9 +105,7 @@ impl ScopeMode {
     pub fn from_str_name(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
             "folder" => Self::Folder,
-            "folderandsubfolders" | "subfolders" | "recursive" | "folder & subfolders" => {
-                Self::FolderAndSubfolders
-            }
+            "folderandsubfolders" | "subfolders" | "recursive" | "folder & subfolders" => Self::FolderAndSubfolders,
             _ => Self::Global,
         }
     }

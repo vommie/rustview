@@ -1,17 +1,17 @@
 //! "Open With" for media: the applications that can open a file, launching one of them and the native application chooser.
 //! One implementation for every place that offers it (the context menu of a medium, the action bar of the Multiview).
 
+use crate::ctx_menu::{CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
+use crate::icons::Icon;
+use crate::system::{DesktopApp, DesktopIntegration};
 use crate::ui::MainWindow;
 use crate::ui::state::UiState;
 use crate::ui::state::{CTX_ACTION_OPEN_WITH_APP_BASE, CTX_ACTION_OPEN_WITH_OTHER};
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ctx_menu::{CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
-use crate::icons::Icon;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::LogObscurer;
-use crate::system::{DesktopApp, DesktopIntegration};
-use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
 
 /// What a chosen item of the "Open With" menu stands for.
@@ -63,7 +63,13 @@ impl MediaOpenWith {
             menu = menu.separator();
         }
 
-        menu.action(CTX_ACTION_OPEN_WITH_OTHER, "Other Application...", None, Some(Icon::OpenWith), true)
+        menu.action(
+            CTX_ACTION_OPEN_WITH_OTHER,
+            "Other Application...",
+            None,
+            Some(Icon::OpenWith),
+            true,
+        )
     }
 
     /// The drop-down of the Multiview action bar.
@@ -77,7 +83,9 @@ impl MediaOpenWith {
             return Some(OpenWithChoice::Other);
         }
         let offset = action_id.checked_sub(CTX_ACTION_OPEN_WITH_APP_BASE)?;
-        (0..MAX_APPS).contains(&offset).then_some(OpenWithChoice::App(offset as usize))
+        (0..MAX_APPS)
+            .contains(&offset)
+            .then_some(OpenWithChoice::App(offset as usize))
     }
 
     /// Opens `paths` with application `app_idx` of the list `discover_apps` (or the context menu) stored last.
@@ -104,10 +112,7 @@ impl MediaOpenWith {
             tracing::error!(error = %e, app = %app.name, "[OpenWith] Failed to launch desktop app");
             StatusBarBridge::error(window, format!("Failed to launch '{}': {}", app.name, e));
         } else {
-            StatusBarBridge::success(
-                window,
-                format!("Launched '{}' with {} file(s).", app.name, paths.len()),
-            );
+            StatusBarBridge::success(window, format!("Launched '{}' with {} file(s).", app.name, paths.len()));
         }
     }
 

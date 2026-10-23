@@ -10,8 +10,8 @@ use super::instance_layout::layout_params;
 use super::layout::{GutterKind, LayoutParams, Rect};
 use super::route::HostMode;
 use super::view::{GutterView, HostedView, TileView};
-use rustview_core::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
 use crate::viewer::{SubwindowGeometry, ViewportBounds, XRectangle};
+use rustview_core::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
 
 /// The rectangle a host gives to a Multiview, in physical pixels of the window `parent_xid`.
 #[derive(Debug, Clone, PartialEq)]
@@ -41,12 +41,7 @@ impl HostSurface {
     }
 
     /// The media area of the active viewer tab inside the main window.
-    pub fn tab_view(
-        parent_xid: u64,
-        rect: Rect,
-        dpi: f32,
-        overlay_cutouts: Vec<XRectangle>,
-    ) -> Self {
+    pub fn tab_view(parent_xid: u64, rect: Rect, dpi: f32, overlay_cutouts: Vec<XRectangle>) -> Self {
         Self {
             mode: HostMode::TabView,
             parent_xid,
@@ -58,13 +53,7 @@ impl HostSurface {
     }
 
     /// The canvas of a tab-grid item; `clip` is the visible part of the grid.
-    pub fn tab_grid(
-        parent_xid: u64,
-        rect: Rect,
-        dpi: f32,
-        clip: Rect,
-        overlay_cutouts: Vec<XRectangle>,
-    ) -> Self {
+    pub fn tab_grid(parent_xid: u64, rect: Rect, dpi: f32, clip: Rect, overlay_cutouts: Vec<XRectangle>) -> Self {
         Self {
             mode: HostMode::TabGrid,
             parent_xid,
@@ -383,10 +372,7 @@ impl MultiviewInstance {
                 continue;
             };
             video.window.reset_clip_shape();
-            if let Err(e) = video
-                .window
-                .reparent(parent_xid, rect.x, rect.y, width, height)
-            {
+            if let Err(e) = video.window.reparent(parent_xid, rect.x, rect.y, width, height) {
                 failed = Some(e.to_string());
             }
             video.window.hide();

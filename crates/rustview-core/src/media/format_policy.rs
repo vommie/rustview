@@ -51,7 +51,11 @@ impl FormatMask {
     pub fn with(self, format: MediaFormat, enabled: bool) -> Self {
         let bit = 1u128 << (format as u32);
         Self {
-            disabled: if enabled { self.disabled & !bit } else { self.disabled | bit },
+            disabled: if enabled {
+                self.disabled & !bit
+            } else {
+                self.disabled | bit
+            },
         }
     }
 
@@ -66,7 +70,10 @@ impl FormatMask {
 
     /// The settings ids of the disabled formats in table order (what is written to the settings file).
     pub fn disabled_ids(self) -> Vec<String> {
-        self.disabled_formats().into_iter().map(|f| f.spec().id.to_string()).collect()
+        self.disabled_formats()
+            .into_iter()
+            .map(|f| f.spec().id.to_string())
+            .collect()
     }
 
     /// Formats whose state differs between the two masks, with their state in `self`.

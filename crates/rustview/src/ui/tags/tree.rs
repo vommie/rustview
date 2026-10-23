@@ -1,18 +1,18 @@
 //! The tag tree: building the hierarchy, flattening it into columns of tag items and syncing the Slint model in place.
 
+use super::TagSelectionStats;
+use super::{TAG_ITEM_HEIGHT, TAG_PADDING_V, TAG_ROW_SPACING};
 use crate::ui::state::*;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::{MainWindow, TagColumnView, TagNodeView};
-use rustview_core::library::models::{TagId, TagRecord};
-use rustview_core::library::Library;
-use rustview_core::query::MatchMode;
 use parking_lot::RwLock;
 use regex::Regex;
+use rustview_core::library::Library;
+use rustview_core::library::models::{TagId, TagRecord};
+use rustview_core::query::MatchMode;
 use slint::{Model, ModelRc, VecModel};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
-use super::{TAG_ITEM_HEIGHT, TAG_PADDING_V, TAG_ROW_SPACING};
-use super::{TagSelectionStats};
 
 #[derive(Debug, Clone)]
 pub struct TagTreeNode {
@@ -76,8 +76,7 @@ impl TagTreeBuilder {
         for node in nodes {
             let has_children = !node.children.is_empty();
             let is_expanded = ctx.expanded_set.contains(&node.record.id);
-            let is_selected =
-                !ctx.is_assign_mode && ctx.selected_query_tags.contains(&node.record.id);
+            let is_selected = !ctx.is_assign_mode && ctx.selected_query_tags.contains(&node.record.id);
 
             let name_match = if !is_filtering {
                 false
@@ -126,10 +125,7 @@ impl TagTreeBuilder {
         any_match_in_branch
     }
 
-    pub fn chunk_into_columns(
-        nodes: Vec<TagNodeView>,
-        available_height: f32,
-    ) -> (Vec<TagColumnView>, usize) {
+    pub fn chunk_into_columns(nodes: Vec<TagNodeView>, available_height: f32) -> (Vec<TagColumnView>, usize) {
         let total_items = nodes.len();
         if total_items == 0 {
             return (Vec::new(), 1);
@@ -157,9 +153,7 @@ impl TagTreeSync {
     pub fn strip_count_suffix(name: &str) -> &str {
         if let Some(pos) = name.rfind(" (")
             && name.ends_with(')')
-            && name[pos + 2..name.len() - 1]
-                .chars()
-                .all(|c| c.is_ascii_digit())
+            && name[pos + 2..name.len() - 1].chars().all(|c| c.is_ascii_digit())
         {
             &name[..pos]
         } else {

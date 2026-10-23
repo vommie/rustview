@@ -5,15 +5,15 @@ pub mod rubberband;
 pub mod rubberband_bridge;
 
 use crate::ui::MainWindow;
+use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::{LastActivePanel, UiState};
-use crate::ui::browse_folders::BrowseFolders;
+use crate::viewer::ViewerTabManager;
+use parking_lot::{Mutex, RwLock};
 use rustview_core::library::Library;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::SettingsManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::{Mutex, RwLock};
-use slint::{ComponentHandle};
+use slint::ComponentHandle;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -95,8 +95,14 @@ impl BridgeFileSelection {
             );
         });
 
-        let (win_enter, lib_enter, set_enter, st_enter, tm_enter, fs_enter) =
-            (window.clone_strong(), library.clone(), settings.clone(), state.clone(), tab_manager.clone(), fullscreen.clone());
+        let (win_enter, lib_enter, set_enter, st_enter, tm_enter, fs_enter) = (
+            window.clone_strong(),
+            library.clone(),
+            settings.clone(),
+            state.clone(),
+            tab_manager.clone(),
+            fullscreen.clone(),
+        );
         window.on_browse_enter_pressed(move || {
             if BrowseFolders::open_selected_row(&win_enter, &lib_enter, &set_enter, &st_enter) {
                 return;
@@ -108,7 +114,9 @@ impl BridgeFileSelection {
                     .flatten()
             };
             if let Some(media_id) = single {
-                Self::handle_double_click(media_id, &st_enter, &lib_enter, &set_enter, &tm_enter, &win_enter, &fs_enter);
+                Self::handle_double_click(
+                    media_id, &st_enter, &lib_enter, &set_enter, &tm_enter, &win_enter, &fs_enter,
+                );
             }
         });
 
@@ -146,9 +154,10 @@ impl BridgeFileSelection {
         let lib_clr_sel = library;
         let st_clr_sel = state;
         window.on_clear_media_selection(move || {
-            tracing::info!("[FileSelection: Shortcut] Ctrl+Shift+A / Esc shortcut received in Browse View: clearing selection");
+            tracing::info!(
+                "[FileSelection: Shortcut] Ctrl+Shift+A / Esc shortcut received in Browse View: clearing selection"
+            );
             Self::clear_selection(&win_clr_sel, &lib_clr_sel, &st_clr_sel);
         });
     }
-
 }

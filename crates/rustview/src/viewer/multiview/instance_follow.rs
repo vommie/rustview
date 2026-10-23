@@ -7,10 +7,10 @@
 //! settings carry over.
 
 use super::audio::{self, TileAudio};
-use super::prefs;
 use super::follow::{self, FollowPlan, Shown, Slot, TileKey, Wanted};
 use super::instance::MultiviewInstance;
 use super::model::TileKind;
+use super::prefs;
 use super::teardown::teardown_videos;
 use super::tile::{StaleProbe, TileSeed, TileState, VideoTile};
 use rustview_core::settings::schema::{MULTIVIEW_MAX_TILES, MULTIVIEW_STALE_PROBE_TICKS};
@@ -35,13 +35,10 @@ fn take_over(leaving: &mut TileState, recycle: bool, keep_width: bool) -> Inheri
         stale: None,
     };
     if recycle && let Some(video) = leaving.video.take() {
-        inherited.stale = video
-            .player
-            .video_display_params()
-            .map(|params| StaleProbe {
-                params,
-                ticks_left: MULTIVIEW_STALE_PROBE_TICKS,
-            });
+        inherited.stale = video.player.video_display_params().map(|params| StaleProbe {
+            params,
+            ticks_left: MULTIVIEW_STALE_PROBE_TICKS,
+        });
         inherited.audio = leaving.audio;
         inherited.video = Some(video);
     }
@@ -76,8 +73,7 @@ impl MultiviewInstance {
         }
         self.drag = None;
         self.clear_hover();
-        let mut old: HashMap<TileKey, TileState> =
-            self.tiles.drain(..).map(|t| (t.key, t)).collect();
+        let mut old: HashMap<TileKey, TileState> = self.tiles.drain(..).map(|t| (t.key, t)).collect();
 
         let one_for_one = plan.add.len() == plan.remove.len();
         let mut inherited: HashMap<usize, Inherited> = HashMap::new();
@@ -158,7 +154,10 @@ impl MultiviewInstance {
         if self.solo_tile().is_none() {
             return false;
         }
-        let wanted = [Wanted { id: seed.media_id, is_video: seed.kind == TileKind::Video }];
+        let wanted = [Wanted {
+            id: seed.media_id,
+            is_video: seed.kind == TileKind::Video,
+        }];
         let plan = self.plan_follow(&wanted);
         if plan.is_noop() {
             return false;

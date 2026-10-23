@@ -3,18 +3,18 @@ pub mod grid;
 pub mod grid_bridge;
 pub mod icon;
 
-use crate::ui::multiview::MultiviewHandle;
 use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::tags::BridgeTags;
 use crate::ui::tabs::dnd::TabDndAutoScroller;
 use crate::ui::tabs::icon::tab_icon;
+use crate::ui::tags::BridgeTags;
 use crate::ui::{MainWindow, TabItemModel};
-use rustview_core::library::Library;
-use rustview_core::settings::SettingsManager;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::settings::SettingsManager;
 use slint::{ModelRc, VecModel};
 use std::sync::Arc;
 
@@ -39,7 +39,6 @@ pub struct TabDragEndParams<'a> {
 pub struct BridgeViewerTabs;
 
 impl BridgeViewerTabs {
-
     /// Synchronizes open tabs, active view modes, viewer image buffers, right sidebar locking, and auto-scrolls the active tab into view.
     pub fn sync_ui(
         window: &MainWindow,
@@ -95,7 +94,9 @@ impl BridgeViewerTabs {
         window.set_viewer_background_mode(bg_mode_idx);
 
         // 2. Synchronize the toolbar of the tab view: title, size, previous/next of a tab of one medium
-        if target_mode == 1 && let Some(active_tab) = tab_manager.get_active_tab() {
+        if target_mode == 1
+            && let Some(active_tab) = tab_manager.get_active_tab()
+        {
             window.set_viewer_tab_id(active_tab.id as i32);
             window.set_viewer_filename(active_tab.title.clone().into());
 

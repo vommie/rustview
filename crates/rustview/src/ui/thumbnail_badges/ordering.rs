@@ -49,7 +49,9 @@ pub fn order_badges(badges: Vec<ThumbnailBadge>) -> Vec<ThumbnailBadge> {
 
 /// Finds the free slot closest to `target`, preferring later slots on a tie.
 fn nearest_free_slot(slots: &[Option<ThumbnailBadge>], target: usize) -> Option<usize> {
-    (target..slots.len()).chain((0..target).rev()).find(|&i| slots[i].is_none())
+    (target..slots.len())
+        .chain((0..target).rev())
+        .find(|&i| slots[i].is_none())
 }
 
 #[cfg(test)]
@@ -82,7 +84,10 @@ mod tests {
 
     #[test]
     fn colliding_slots_use_next_free_slot_in_registration_order() {
-        assert_eq!(ids(order_badges(vec![b("a").slot(0), b("b").slot(0), b("c")])), ["a", "b", "c"]);
+        assert_eq!(
+            ids(order_badges(vec![b("a").slot(0), b("b").slot(0), b("c")])),
+            ["a", "b", "c"]
+        );
     }
 
     #[test]

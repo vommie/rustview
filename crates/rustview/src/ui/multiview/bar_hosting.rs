@@ -50,7 +50,12 @@ impl BarTargets {
 /// Shows, moves or hides both bars. With `active` false (the host does not show its content) both go away. Returns whether
 /// any bar is visible now.
 pub(super) fn update(host: &BarHost, targets: BarTargets, active: bool) -> bool {
-    let BarTargets { media, primary, zoom, tiles } = targets;
+    let BarTargets {
+        media,
+        primary,
+        zoom,
+        tiles,
+    } = targets;
     if active {
         bar_overlay::prepare_media_bars(tiles);
         bar_overlay::service_menus(host.owner);

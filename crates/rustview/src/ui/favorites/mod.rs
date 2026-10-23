@@ -1,17 +1,17 @@
 pub mod manager;
 pub mod rename_dialog;
 
-use crate::ui::folder_tree::BridgeFolders;
-use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::favorites::manager::FavoriteManager;
+use crate::ui::folder_tree::BridgeFolders;
+use crate::ui::state::{LastActivePanel, UiState};
+use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::{FavoriteItemView, MainWindow};
+use parking_lot::RwLock;
+use rustview_core::library::Library;
 use rustview_core::library::folders::normalize_path;
 use rustview_core::library::models::FolderId;
-use rustview_core::library::Library;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::ui::state::{LastActivePanel, UiState};
-use parking_lot::RwLock;
 use slint::{Model, ModelRc, VecModel};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -115,10 +115,7 @@ impl BridgeFavorites {
             }
         });
 
-        StatusBarBridge::success(
-            window,
-            format!("Added folder '{}' to favorites.", new_entry.alias),
-        );
+        StatusBarBridge::success(window, format!("Added folder '{}' to favorites.", new_entry.alias));
 
         Ok(())
     }
@@ -165,11 +162,7 @@ impl BridgeFavorites {
     }
 
     /// Surgically removes a favorite entry from the Slint model without destroying the list.
-    pub fn remove_favorite(
-        window: &MainWindow,
-        favorites: &Arc<RwLock<FavoriteManager>>,
-        path: &Path,
-    ) {
+    pub fn remove_favorite(window: &MainWindow, favorites: &Arc<RwLock<FavoriteManager>>, path: &Path) {
         let t0 = Instant::now();
         let normalized = normalize_path(path);
         let removed_res = favorites.write().remove_by_path(path);
@@ -201,10 +194,7 @@ impl BridgeFavorites {
         }
 
         if let Ok(entry) = removed_res {
-            StatusBarBridge::success(
-                window,
-                format!("Removed '{}' from favorites.", entry.alias),
-            );
+            StatusBarBridge::success(window, format!("Removed '{}' from favorites.", entry.alias));
         }
     }
 

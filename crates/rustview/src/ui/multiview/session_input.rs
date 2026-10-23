@@ -6,15 +6,15 @@ use super::bar_overlay::{self, BarKind, BarOwner};
 use super::cursor;
 use super::eligibility;
 use super::session::Session;
-use rustview_core::library::models::MediaId;
 use crate::system::MonitorInfo;
 use crate::viewer::PointerProbe;
 use crate::viewer::multiview::HostSurface;
+use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
-use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
+use rustview_core::library::models::MediaId;
 use slint::ComponentHandle;
 
 /// The pointer in the coordinates of the fullscreen window, which covers its monitor.
@@ -50,9 +50,7 @@ impl Session {
 
     pub(super) fn on_tick(&mut self) {
         let (probe, monitor) = (&self.probe, &self.monitor);
-        self.instance
-            .lock()
-            .tick(|| pointer_in_window(probe, monitor));
+        self.instance.lock().tick(|| pointer_in_window(probe, monitor));
         self.refresh();
         self.update_bar_overlay();
     }
@@ -173,7 +171,11 @@ impl Session {
             .main_window()
             .and_then(|main| main.upgrade())
             .is_some_and(|main| main.get_is_modal_locked());
-        let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(BarOwner::Fullscreen, &self.instance, !dialog_open), !dialog_open);
+        let bars_visible = bar_hosting::update(
+            &host,
+            BarTargets::of_instance(BarOwner::Fullscreen, &self.instance, !dialog_open),
+            !dialog_open,
+        );
         if dialog_open {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
         } else {
@@ -249,12 +251,12 @@ impl Session {
         }
         let seeds: Vec<Option<TileSeed>> = {
             let st = state.read();
-            plan.add
-                .iter()
-                .map(|&id| eligibility::plan_tile_for(&st, id))
-                .collect()
+            plan.add.iter().map(|&id| eligibility::plan_tile_for(&st, id)).collect()
         };
-        tracing::debug!(added = plan.add.len(), "[Multiview: Follow] Following the Browse selection");
+        tracing::debug!(
+            added = plan.add.len(),
+            "[Multiview: Follow] Following the Browse selection"
+        );
         let mut instance = self.instance.lock();
         instance.apply_follow(&plan, seeds);
         {

@@ -28,7 +28,9 @@ impl LatestJobWorker {
     pub fn spawn(name: &str) -> Self {
         let shared = Arc::new(Shared::default());
         let worker = shared.clone();
-        let spawned = std::thread::Builder::new().name(name.to_string()).spawn(move || Self::run(&worker));
+        let spawned = std::thread::Builder::new()
+            .name(name.to_string())
+            .spawn(move || Self::run(&worker));
         if let Err(e) = spawned {
             tracing::error!(error = %e, "[ListLoader] The list worker thread could not be started");
         }

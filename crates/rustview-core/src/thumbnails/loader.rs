@@ -7,12 +7,10 @@ use super::progress::{ThumbnailProgressSnapshot, ThumbnailProgressTracker};
 use super::ram_cache::{CachedThumbnail, ThumbnailRamCache};
 use super::ready_queue::ReadyQueue;
 use super::store::PackStore;
-use super::types::{
-    ThumbnailConfig, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord,
-};
+use super::types::{ThumbnailConfig, ThumbnailLocation, ThumbnailStorageStats, VideoPreviewRecord};
 use super::view_loader::{ViewLoader, ViewLoaderDeps};
-use crate::library::models::MediaId;
 use crate::library::Library;
+use crate::library::models::MediaId;
 use crate::media::{MediaFormat, MediaType};
 use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
 use parking_lot::{Mutex, RwLock};
@@ -21,8 +19,8 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
 /// Threads that decode the thumbnails the Browse view shows (small decodes, latency matters more than throughput): half of the
@@ -262,12 +260,15 @@ impl ThumbnailScheduler {
     }
 
     /// Fast non-blocking lookup for cached preview frames in LMDB / PackStore (0.05ms).
-    pub fn try_load_preview_frames(
-        &self,
-        media_id: MediaId,
-    ) -> Option<Vec<(u32, u32, Vec<u8>)>> {
+    pub fn try_load_preview_frames(&self, media_id: MediaId) -> Option<Vec<(u32, u32, Vec<u8>)>> {
         let rtxn = self.library.raw_db().env.read_txn().ok()?;
-        let p_rec = self.library.raw_db().video_previews.get(&rtxn, &media_id).ok().flatten()?;
+        let p_rec = self
+            .library
+            .raw_db()
+            .video_previews
+            .get(&rtxn, &media_id)
+            .ok()
+            .flatten()?;
 
         let mut frames = Vec::with_capacity(p_rec.frame_locations.len());
         for loc in &p_rec.frame_locations {
@@ -278,11 +279,7 @@ impl ThumbnailScheduler {
             }
         }
 
-        if frames.is_empty() {
-            None
-        } else {
-            Some(frames)
-        }
+        if frames.is_empty() { None } else { Some(frames) }
     }
 
     /// Fast non-blocking lookup for cached animated preview in RAM (e.g. GIF).
@@ -307,12 +304,7 @@ impl ThumbnailScheduler {
 
         let cache = self.animated_cache.clone();
         self.pool.spawn(move || {
-            let res = GifThumbnailer::extract_frames(
-                &path,
-                config.max_bound,
-                config.scaling_algorithm,
-            )
-            .map(Arc::new);
+            let res = GifThumbnailer::extract_frames(&path, config.max_bound, config.scaling_algorithm).map(Arc::new);
 
             if let Ok(ref preview) = res {
                 cache.insert(media_id, preview.clone());
@@ -323,12 +315,7 @@ impl ThumbnailScheduler {
     }
 
     /// Launches dedicated full-folder thumbnail pipeline processing ALL items in the folder.
-    pub fn start_folder_pipeline(
-        self: &Arc<Self>,
-        folder_id: u64,
-        items: Vec<PipelineItem>,
-        config: ThumbnailConfig,
-    ) {
+    pub fn start_folder_pipeline(self: &Arc<Self>, folder_id: u64, items: Vec<PipelineItem>, config: ThumbnailConfig) {
         self.cancel_current_pipeline();
 
         let total_items = items.len();
@@ -356,13 +343,7 @@ impl ThumbnailScheduler {
         let scheduler = self.clone();
         let bench_clone = bench;
         self.pool.spawn(move || {
-            scheduler.execute_orchestration(
-                pipeline_id,
-                folder_id,
-                items,
-                config,
-                bench_clone,
-            );
+            scheduler.execute_orchestration(pipeline_id, folder_id, items, config, bench_clone);
         });
     }
 
@@ -418,7 +399,14 @@ impl ThumbnailScheduler {
                     return;
                 }
 
-                let has_primary = self.library.raw_db().thumbnails.get(&rtxn, &item.media_id).ok().flatten().is_some();
+                let has_primary = self
+                    .library
+                    .raw_db()
+                    .thumbnails
+                    .get(&rtxn, &item.media_id)
+                    .ok()
+                    .flatten()
+                    .is_some();
 
                 let previews_ok = if item.is_video && config.generate_video_previews {
                     if let Ok(Some(prev)) = self.library.raw_db().video_previews.get(&rtxn, &item.media_id) {
@@ -428,7 +416,13 @@ impl ThumbnailScheduler {
                     }
                 } else if item.animatable && config.generate_video_previews && item.upgrade_animated {
                     // Any record, also the "checked, not animated" marker, means the picture was looked at already.
-                    self.library.raw_db().video_previews.get(&rtxn, &item.media_id).ok().flatten().is_some()
+                    self.library
+                        .raw_db()
+                        .video_previews
+                        .get(&rtxn, &item.media_id)
+                        .ok()
+                        .flatten()
+                        .is_some()
                 } else {
                     true
                 };
@@ -436,7 +430,14 @@ impl ThumbnailScheduler {
                 if has_primary && previews_ok {
                     existing_count += 1;
                 } else if let Some(file_path) = self.item_path(&rtxn, &mut folder_paths, item.media_id) {
-                    missing_targets.push(PreparedTarget { pipeline_id, folder_id, media_id: item.media_id, file_path, is_video: item.is_video, animatable: item.animatable });
+                    missing_targets.push(PreparedTarget {
+                        pipeline_id,
+                        folder_id,
+                        media_id: item.media_id,
+                        file_path,
+                        is_video: item.is_video,
+                        animatable: item.animatable,
+                    });
                 }
             }
         }
@@ -484,13 +485,7 @@ impl ThumbnailScheduler {
                 let t_p2 = t_phase2_start.clone();
 
                 self.pool.spawn(move || {
-                    scheduler.worker_generation_loop(
-                        pipeline_id,
-                        folder_id,
-                        cfg,
-                        bench_gen,
-                        t_p2,
-                    );
+                    scheduler.worker_generation_loop(pipeline_id, folder_id, cfg, bench_gen, t_p2);
                 });
             }
         }
@@ -504,8 +499,7 @@ impl ThumbnailScheduler {
         benchmark: Arc<ThumbnailPipelineBenchmark>,
         t_phase2_start: Arc<Instant>,
     ) {
-        let mut batched_db_writes: Vec<BatchedDbWriteItem> =
-            Vec::with_capacity(config.batch_commit_size);
+        let mut batched_db_writes: Vec<BatchedDbWriteItem> = Vec::with_capacity(config.batch_commit_size);
 
         while !self.is_pipeline_stale(pipeline_id) {
             let target = {
@@ -530,10 +524,7 @@ impl ThumbnailScheduler {
 
             if is_video {
                 let t_vid = Instant::now();
-                match self
-                    .generator
-                    .generate_video_thumbnails(&target.file_path, &config)
-                {
+                match self.generator.generate_video_thumbnails(&target.file_path, &config) {
                     Ok(video_res) => {
                         benchmark.record_video_extract(t_vid.elapsed().as_micros() as u64);
 
@@ -552,10 +543,8 @@ impl ThumbnailScheduler {
                             config.format,
                             config.quality,
                         ) {
-                            benchmark.record_compress(
-                                compressed_primary.len() as u64,
-                                t_comp.elapsed().as_micros() as u64,
-                            );
+                            benchmark
+                                .record_compress(compressed_primary.len() as u64, t_comp.elapsed().as_micros() as u64);
 
                             let t_app = Instant::now();
                             if let Ok(primary_loc) = self.store.append(&compressed_primary) {
@@ -566,15 +555,13 @@ impl ThumbnailScheduler {
 
                                 let mut preview_rec = None;
                                 if !video_res.preview_frames.is_empty() {
-                                    let (p_format, p_quality) =
-                                        if config.custom_preview_settings {
-                                            (config.preview_format, config.preview_quality)
-                                        } else {
-                                            (config.format, config.quality)
-                                        };
+                                    let (p_format, p_quality) = if config.custom_preview_settings {
+                                        (config.preview_format, config.preview_quality)
+                                    } else {
+                                        (config.format, config.quality)
+                                    };
 
-                                    let mut locations =
-                                        Vec::with_capacity(video_res.preview_frames.len());
+                                    let mut locations = Vec::with_capacity(video_res.preview_frames.len());
                                     for p_frame in &video_res.preview_frames {
                                         if let Ok(p_bytes) = self.generator.compress(
                                             &p_frame.rgb_pixels,
@@ -615,9 +602,9 @@ impl ThumbnailScheduler {
                                     });
 
                                     let pixel_buffer = self
-                                    .cache
-                                    .insert_rgb(target.media_id, primary.width, primary.height, &primary.rgb_pixels)
-                                    .pixels;
+                                        .cache
+                                        .insert_rgb(target.media_id, primary.width, primary.height, &primary.rgb_pixels)
+                                        .pixels;
 
                                     let depth = self.ready_drain_queue.push(ReadyThumbnailItem {
                                         pipeline_id,
@@ -660,10 +647,8 @@ impl ThumbnailScheduler {
                             config.format,
                             config.quality,
                         ) {
-                            benchmark.record_compress(
-                                compressed_bytes.len() as u64,
-                                t_comp.elapsed().as_micros() as u64,
-                            );
+                            benchmark
+                                .record_compress(compressed_bytes.len() as u64, t_comp.elapsed().as_micros() as u64);
 
                             let t_app = Instant::now();
                             if let Ok(location) = self.store.append(&compressed_bytes) {
@@ -699,9 +684,9 @@ impl ThumbnailScheduler {
                                     });
 
                                     let pixel_buffer = self
-                                    .cache
-                                    .insert_rgb(target.media_id, frame.width, frame.height, &frame.rgb_pixels)
-                                    .pixels;
+                                        .cache
+                                        .insert_rgb(target.media_id, frame.width, frame.height, &frame.rgb_pixels)
+                                        .pixels;
 
                                     let depth = self.ready_drain_queue.push(ReadyThumbnailItem {
                                         pipeline_id,
@@ -781,13 +766,23 @@ impl ThumbnailScheduler {
                 };
                 let locations: Vec<_> = frames
                     .iter()
-                    .filter_map(|f| self.generator.compress(&f.rgb_pixels, f.width, f.height, format, quality).ok())
+                    .filter_map(|f| {
+                        self.generator
+                            .compress(&f.rgb_pixels, f.width, f.height, format, quality)
+                            .ok()
+                    })
                     .filter_map(|bytes| self.store.append(&bytes).ok())
                     .collect();
                 let frame_count = locations.len() as u32;
-                (frame_count > 1).then_some(VideoPreviewRecord { frame_count, frame_locations: locations })
+                (frame_count > 1).then_some(VideoPreviewRecord {
+                    frame_count,
+                    frame_locations: locations,
+                })
             }
-            Ok(None) => Some(VideoPreviewRecord { frame_count: 0, frame_locations: Vec::new() }),
+            Ok(None) => Some(VideoPreviewRecord {
+                frame_count: 0,
+                frame_locations: Vec::new(),
+            }),
             Err(e) => {
                 tracing::debug!(media_id = target.media_id, error = %e, "[ThumbnailPipeline] Animation check failed; the picture stays unchecked");
                 None
@@ -795,11 +790,7 @@ impl ThumbnailScheduler {
         }
     }
 
-    fn flush_db_batch(
-        &self,
-        batch: &mut Vec<BatchedDbWriteItem>,
-        benchmark: &ThumbnailPipelineBenchmark,
-    ) {
+    fn flush_db_batch(&self, batch: &mut Vec<BatchedDbWriteItem>, benchmark: &ThumbnailPipelineBenchmark) {
         if batch.is_empty() {
             return;
         }
@@ -850,8 +841,7 @@ impl ThumbnailScheduler {
     }
 
     fn is_pipeline_stale(&self, pipeline_id: usize) -> bool {
-        self.is_cancelled.load(Ordering::Acquire)
-            || self.active_pipeline_id.load(Ordering::Acquire) != pipeline_id
+        self.is_cancelled.load(Ordering::Acquire) || self.active_pipeline_id.load(Ordering::Acquire) != pipeline_id
     }
 
     fn clone_handle(&self) -> Self {
@@ -914,11 +904,8 @@ impl ThumbnailScheduler {
                 .generate_video_thumbnails(file_path, &config)?
                 .primary_frame
         } else {
-            self.generator.generate_image_thumbnail(
-                file_path,
-                config.max_bound,
-                config.scaling_algorithm,
-            )?
+            self.generator
+                .generate_image_thumbnail(file_path, config.max_bound, config.scaling_algorithm)?
         };
 
         let compressed = self.generator.compress(
@@ -932,10 +919,7 @@ impl ThumbnailScheduler {
 
         {
             let mut wtxn = self.library.raw_db().env.write_txn()?;
-            self.library
-                .raw_db()
-                .thumbnails
-                .put(&mut wtxn, &media_id, &location)?;
+            self.library.raw_db().thumbnails.put(&mut wtxn, &media_id, &location)?;
             wtxn.commit()?;
         }
 
@@ -954,9 +938,7 @@ impl ThumbnailScheduler {
     ) -> Result<CachedThumbnail, ThumbnailError> {
         let is_video = self.is_video_media(media_id, file_path);
         let (frame, video_preview_rec) = if is_video {
-            let video_res = self
-                .generator
-                .generate_video_thumbnails(file_path, config)?;
+            let video_res = self.generator.generate_video_thumbnails(file_path, config)?;
             let primary = video_res.primary_frame;
             let mut preview_rec = None;
             if !video_res.preview_frames.is_empty() {
@@ -968,13 +950,10 @@ impl ThumbnailScheduler {
 
                 let mut locations = Vec::with_capacity(video_res.preview_frames.len());
                 for p_frame in &video_res.preview_frames {
-                    if let Ok(p_bytes) = self.generator.compress(
-                        &p_frame.rgb_pixels,
-                        p_frame.width,
-                        p_frame.height,
-                        p_format,
-                        p_quality,
-                    ) && let Ok(p_loc) = self.store.append(&p_bytes)
+                    if let Ok(p_bytes) =
+                        self.generator
+                            .compress(&p_frame.rgb_pixels, p_frame.width, p_frame.height, p_format, p_quality)
+                        && let Ok(p_loc) = self.store.append(&p_bytes)
                     {
                         locations.push(p_loc);
                     }
@@ -988,11 +967,9 @@ impl ThumbnailScheduler {
             }
             (primary, preview_rec)
         } else {
-            let f = self.generator.generate_image_thumbnail(
-                file_path,
-                config.max_bound,
-                config.scaling_algorithm,
-            )?;
+            let f = self
+                .generator
+                .generate_image_thumbnail(file_path, config.max_bound, config.scaling_algorithm)?;
             (f, None)
         };
 
@@ -1007,21 +984,11 @@ impl ThumbnailScheduler {
 
         {
             let mut wtxn = self.library.raw_db().env.write_txn()?;
-            self.library
-                .raw_db()
-                .thumbnails
-                .put(&mut wtxn, &media_id, &location)?;
+            self.library.raw_db().thumbnails.put(&mut wtxn, &media_id, &location)?;
             if let Some(p_rec) = video_preview_rec {
-                self.library
-                    .raw_db()
-                    .video_previews
-                    .put(&mut wtxn, &media_id, &p_rec)?;
+                self.library.raw_db().video_previews.put(&mut wtxn, &media_id, &p_rec)?;
             } else {
-                let _ = self
-                    .library
-                    .raw_db()
-                    .video_previews
-                    .delete(&mut wtxn, &media_id);
+                let _ = self.library.raw_db().video_previews.delete(&mut wtxn, &media_id);
             }
             wtxn.commit()?;
         }

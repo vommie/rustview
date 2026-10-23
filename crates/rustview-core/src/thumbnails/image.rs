@@ -1,9 +1,9 @@
 use super::error::ThumbnailError;
-use super::types::{calculate_aspect_dimensions, ScalingAlgorithm};
+use super::types::{ScalingAlgorithm, calculate_aspect_dimensions};
 use super::video::{FfmpegVideoThumbnailer, VideoFrameDecoder};
+use crate::media::{MediaFormat, image_decode, svg, tile_grid};
 use fast_image_resize::images::Image;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
-use crate::media::{MediaFormat, image_decode, svg, tile_grid};
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -56,14 +56,22 @@ impl ImageDecoder for SimdImageThumbnailer {
             && let Ok(dynamic_img) = reader_guessed.decode()
         {
             let (orig_w, orig_h) = (dynamic_img.width(), dynamic_img.height());
-            return Self::resize_rgb(dynamic_img.into_rgb8().into_raw(), orig_w, orig_h, max_bound, scaling_algo);
+            return Self::resize_rgb(
+                dynamic_img.into_rgb8().into_raw(),
+                orig_w,
+                orig_h,
+                max_bound,
+                scaling_algo,
+            );
         }
 
         // 2. FFmpeg: a picture stored as a grid of tiles (HEIC photos, AVIF grids) is put together first
         match tile_grid::decode(path) {
             Ok(Some(grid)) => return Self::resize_rgb(grid.rgb, grid.width, grid.height, max_bound, scaling_algo),
             Ok(None) => {}
-            Err(e) => tracing::warn!(error = %e, "[ImageThumbnailer] Tile grid could not be composed; falling back to the first stream"),
+            Err(e) => {
+                tracing::warn!(error = %e, "[ImageThumbnailer] Tile grid could not be composed; falling back to the first stream")
+            }
         }
 
         // 3. Resilient Fallback to FFmpeg decoder (AVIF, JPEG XL, JPEG 2000, PSD, DPX, legacy formats, exotic variants)

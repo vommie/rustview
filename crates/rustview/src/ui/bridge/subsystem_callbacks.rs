@@ -1,27 +1,25 @@
 //! Callbacks of the main window that belong to no single feature: modal dismissal, tooltips, keyboard navigation, type-ahead, sidebar resizers.
 
-use crate::ui::context_menu::{
-    BridgeContextMenu, ContextMenuRegistration,
-};
+use super::UiBridge;
+use crate::ui::context_menu::{BridgeContextMenu, ContextMenuRegistration};
 use crate::ui::favorites::BridgeFavorites;
 use crate::ui::file_dialogs::FileRenameDialogController;
-use crate::ui::selection::BridgeFileSelection;
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::media::BridgeMedia;
+use crate::ui::selection::BridgeFileSelection;
+use crate::ui::selection::keyboard::{KeyboardNavigateParams, handle_keyboard_navigate};
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
 use crate::ui::state::*;
-use crate::ui::tabs::grid_bridge::BridgeTabGrid;
-use crate::ui::tags::history_bridge::BridgeTagHistory;
-use crate::ui::tags::BridgeTags;
 use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::selection::keyboard::{handle_keyboard_navigate, KeyboardNavigateParams};
+use crate::ui::tabs::grid_bridge::BridgeTabGrid;
+use crate::ui::tags::BridgeTags;
+use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::type_ahead::{TypeAheadParams, TypeAheadState, handle_type_ahead_key};
 use parking_lot::Mutex;
 use slint::ComponentHandle;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-use super::UiBridge;
 
 impl UiBridge {
     pub(super) fn register_subsystem_callbacks(&self) {
@@ -44,11 +42,7 @@ impl UiBridge {
             self.settings_dialog.clone(),
         );
 
-        BridgeSidebarPanelTabs::register_callbacks(
-            &self.window,
-            self.settings.clone(),
-            self.state.clone(),
-        );
+        BridgeSidebarPanelTabs::register_callbacks(&self.window, self.settings.clone(), self.state.clone());
 
         BridgeFileSelection::register_callbacks(
             &self.window,
@@ -119,12 +113,7 @@ impl UiBridge {
         let lib_th_geom = self.library.clone();
         let st_th_geom = self.state.clone();
         self.window.on_tag_history_geometry_changed(move |avail_w| {
-            BridgeTagHistory::handle_geometry_changed(
-                avail_w,
-                &win_th_geom,
-                &lib_th_geom,
-                &st_th_geom,
-            );
+            BridgeTagHistory::handle_geometry_changed(avail_w, &win_th_geom, &lib_th_geom, &st_th_geom);
         });
 
         let last_th_resize = Arc::new(Mutex::new(Instant::now()));
@@ -266,17 +255,18 @@ impl UiBridge {
         let tm = self.tab_manager.clone();
         let win_weak = self.window.as_weak();
 
-        self.window.on_global_tooltip_state_changed(move |is_visible, x, y, w, h| {
-            if let Some(win) = win_weak.upgrade() {
-                if is_visible && w > 2.0 && h > 2.0 {
-                    let scale = win.window().scale_factor();
-                    let cutouts = crate::ui::context_menu::make_rounded_cutout_rectangles(x, y, w, h, scale);
-                    tm.set_tooltip_cutouts(cutouts);
-                } else {
-                    tm.clear_tooltip_cutouts();
+        self.window
+            .on_global_tooltip_state_changed(move |is_visible, x, y, w, h| {
+                if let Some(win) = win_weak.upgrade() {
+                    if is_visible && w > 2.0 && h > 2.0 {
+                        let scale = win.window().scale_factor();
+                        let cutouts = crate::ui::context_menu::make_rounded_cutout_rectangles(x, y, w, h, scale);
+                        tm.set_tooltip_cutouts(cutouts);
+                    } else {
+                        tm.clear_tooltip_cutouts();
+                    }
                 }
-            }
-        });
+            });
     }
 
     pub(super) fn register_keyboard_navigation_callbacks(&self) {
@@ -287,19 +277,20 @@ impl UiBridge {
         let st = self.state.clone();
         let fs = self.fullscreen.clone();
 
-        self.window.on_media_navigate(move |direction_code, is_shift, page_rows| {
-            handle_keyboard_navigate(KeyboardNavigateParams {
-                direction_code,
-                is_shift,
-                page_rows,
-                window: &win,
-                library: &lib,
-                thumbnails: &thumb,
-                settings: &set,
-                state: &st,
-                fullscreen: &fs,
+        self.window
+            .on_media_navigate(move |direction_code, is_shift, page_rows| {
+                handle_keyboard_navigate(KeyboardNavigateParams {
+                    direction_code,
+                    is_shift,
+                    page_rows,
+                    window: &win,
+                    library: &lib,
+                    thumbnails: &thumb,
+                    settings: &set,
+                    state: &st,
+                    fullscreen: &fs,
+                });
             });
-        });
     }
 
     pub(super) fn register_type_ahead_callbacks(&self) {
@@ -426,7 +417,13 @@ impl UiBridge {
             if win_right_fin.get_active_view_mode() == 1 {
                 BridgeViewerTabs::sync_video_embedding(&win_right_fin, &tm_right_fin, &fs_right_fin, &set_right_fin);
             } else if win_right_fin.get_active_view_mode() == 2 {
-                BridgeTabGrid::sync_tab_grid_ui(&win_right_fin, &tm_right_fin, &lib_right_fin, &set_right_fin, &st_right_fin);
+                BridgeTabGrid::sync_tab_grid_ui(
+                    &win_right_fin,
+                    &tm_right_fin,
+                    &lib_right_fin,
+                    &set_right_fin,
+                    &st_right_fin,
+                );
             }
         });
     }

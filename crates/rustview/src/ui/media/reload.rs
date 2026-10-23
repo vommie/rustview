@@ -1,30 +1,27 @@
 //! Reloading and re-laying out the Browse list: synchronous and deferred (worker) variants and the commit of a finished layout.
 
+use super::{BridgeMedia, MediaReloadOptions, PendingList};
+use crate::ui::MainWindow;
+use crate::ui::browse_folders::BrowseFolders;
+use crate::ui::browse_window::{
+    DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, ViewGeometry, margin_rows_for, sync_window,
+};
+use crate::ui::list_loader;
+use crate::ui::media::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::BridgeTags;
-use crate::ui::browse_folders::BrowseFolders;
-use crate::ui::browse_window::{
-    DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, ViewGeometry, margin_rows_for,
-    sync_window,
-};
-use crate::ui::media::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator};
-use crate::ui::list_loader;
-use crate::ui::MainWindow;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::media::FormatPolicy;
 use rustview_core::query::{ListRequest, lay_out};
 use rustview_core::settings::SettingsManager;
-use rustview_core::thumbnails::{
-    ThumbnailConfig, ThumbnailManager,
-};
-use parking_lot::RwLock;
+use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use slint::ComponentHandle;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
-use super::{BridgeMedia, MediaReloadOptions, PendingList};
 
 impl BridgeMedia {
     pub fn reload(
@@ -47,16 +44,33 @@ impl BridgeMedia {
     }
 
     /// Refills the tile pool for the list that is already laid out (view mode switch); nothing is filtered or sorted again.
-    pub(super) fn refill_view(window: &MainWindow, thumbnails: &ThumbnailManager, state: &RwLock<UiState>, anchor_index: usize) {
+    pub(super) fn refill_view(
+        window: &MainWindow,
+        thumbnails: &ThumbnailManager,
+        state: &RwLock<UiState>,
+        anchor_index: usize,
+    ) {
         let is_table = window.get_is_table_view();
         let total = usize::try_from(window.get_total_items_count()).unwrap_or(0);
         let mut st = state.write();
         st.invalidate_view_window();
-        let geometry = st
-            .view_geometry
-            .unwrap_or_else(|| ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table)));
-        let outcome = sync_window(window, &mut st, thumbnails, geometry, anchor_index / geometry.columns, total, true);
-        tracing::debug!(rows_written = outcome.rows_written, requested = outcome.requested, "[BrowseWindow: ViewMode] Tile pool refilled for the new view mode");
+        let geometry = st.view_geometry.unwrap_or_else(|| {
+            ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table))
+        });
+        let outcome = sync_window(
+            window,
+            &mut st,
+            thumbnails,
+            geometry,
+            anchor_index / geometry.columns,
+            total,
+            true,
+        );
+        tracing::debug!(
+            rows_written = outcome.rows_written,
+            requested = outcome.requested,
+            "[BrowseWindow: ViewMode] Tile pool refilled for the new view mode"
+        );
     }
 
     /// Shows an empty list at once (a large folder is loading): the tiles of the previous list must not stay on screen and clickable
@@ -67,9 +81,9 @@ impl BridgeMedia {
         st.media_row_map.clear();
         st.active_indices.clear();
         st.invalidate_view_window();
-        let geometry = st
-            .view_geometry
-            .unwrap_or_else(|| ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table)));
+        let geometry = st.view_geometry.unwrap_or_else(|| {
+            ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table))
+        });
         window.set_total_items_count(0);
         sync_window(window, &mut st, thumbnails, geometry, 0, 0, true);
     }
@@ -79,7 +93,8 @@ impl BridgeMedia {
         let st = state.read();
         let current_query = st.filter.search_query.trim().to_string();
         let last_query = &st.last_executed_query;
-        let is_refinement = !current_query.is_empty() && !last_query.is_empty() && current_query.starts_with(last_query.as_str());
+        let is_refinement =
+            !current_query.is_empty() && !last_query.is_empty() && current_query.starts_with(last_query.as_str());
         let request = ListRequest {
             filter: st.filter.clone(),
             sort_column: st.sort_column,
@@ -109,7 +124,19 @@ impl BridgeMedia {
             let st = state.read();
             lay_out(library, &st.all_folder_media, &request)
         };
-        Self::commit_layout(window, library, thumbnails, settings, state, PendingList { store: None, layout, query: current_query }, options);
+        Self::commit_layout(
+            window,
+            library,
+            thumbnails,
+            settings,
+            state,
+            PendingList {
+                store: None,
+                layout,
+                query: current_query,
+            },
+            options,
+        );
     }
 
     /// Like `reload_with_options` for a user action that changes only how the list is filtered or sorted: a large list is laid out on
@@ -134,11 +161,16 @@ impl BridgeMedia {
             (st.all_folder_media.snapshot(), st.all_folder_media.generation())
         };
         let job = list_loader::begin_relayout();
-        tracing::debug!(job, records = len, "[ListLoader: Relayout] Large list; laying it out on the worker thread");
+        tracing::debug!(
+            job,
+            records = len,
+            "[ListLoader: Relayout] Large list; laying it out on the worker thread"
+        );
         let started = Instant::now();
 
         let weak = window.as_weak();
-        let (library, thumbnails, settings, state) = (library.clone(), thumbnails.clone(), settings.clone(), state.clone());
+        let (library, thumbnails, settings, state) =
+            (library.clone(), thumbnails.clone(), settings.clone(), state.clone());
         list_loader::worker().submit(move || {
             if !list_loader::relayout_is_current(job) {
                 return;
@@ -150,14 +182,21 @@ impl BridgeMedia {
                     return;
                 }
                 if state.read().all_folder_media.generation() != generation {
-                    tracing::debug!(job, "[ListLoader: Relayout] The records changed while the list was laid out; laying out again");
+                    tracing::debug!(
+                        job,
+                        "[ListLoader: Relayout] The records changed while the list was laid out; laying out again"
+                    );
                     Self::reload_with_options(&window, &library, &thumbnails, &settings, &state, options);
                     return;
                 }
                 let matched = layout.indices.len();
                 let layout_ms = started.elapsed().as_secs_f64() * 1000.0;
                 let t_commit = Instant::now();
-                let pending = PendingList { store: None, layout, query: current_query };
+                let pending = PendingList {
+                    store: None,
+                    layout,
+                    query: current_query,
+                };
                 Self::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, options);
                 tracing::info!(
                     job,
@@ -172,7 +211,11 @@ impl BridgeMedia {
 
     /// Shows or hides the empty-state overlay of the Browse view for what the state holds now (memory only, except the check of
     /// the root folder when the folder holds nothing at all).
-    pub(in crate::ui) fn update_fallback_view(window: &MainWindow, app_settings: &rustview_core::settings::AppSettings, state: &RwLock<UiState>) {
+    pub(in crate::ui) fn update_fallback_view(
+        window: &MainWindow,
+        app_settings: &rustview_core::settings::AppSettings,
+        state: &RwLock<UiState>,
+    ) {
         let (filter, is_query_active, path_opt, total_in_dataset, matched_count) = {
             let st = state.read();
             (
@@ -186,8 +229,13 @@ impl BridgeMedia {
         };
         let has_root = app_settings.general.root_folder.is_some();
         // The root is only probed when the folder holds nothing at all; any record proves that the root was there.
-        let root_exists =
-            total_in_dataset > 0 || app_settings.general.root_folder.as_ref().map(|p| p.is_dir()).unwrap_or(false);
+        let root_exists = total_in_dataset > 0
+            || app_settings
+                .general
+                .root_folder
+                .as_ref()
+                .map(|p| p.is_dir())
+                .unwrap_or(false);
         let current_folder_name = path_opt.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str());
 
         let fallback_state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
@@ -245,7 +293,9 @@ impl BridgeMedia {
 
             let prev_sel_count = st_write.file_selection.count();
             if prev_sel_count > 0 {
-                st_write.file_selection.prune_where(|id| layout.row_map.contains_key(id));
+                st_write
+                    .file_selection
+                    .prune_where(|id| layout.row_map.contains_key(id));
                 selection_pruned = st_write.file_selection.count() != prev_sel_count;
             }
 
@@ -258,9 +308,9 @@ impl BridgeMedia {
             let view_len = st_write.view_len();
             folder_row_count = st_write.folder_rows.folder_rows();
 
-            let geometry = st_write
-                .view_geometry
-                .unwrap_or_else(|| ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table)));
+            let geometry = st_write.view_geometry.unwrap_or_else(|| {
+                ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table))
+            });
             let first_row = options.anchor_index.unwrap_or(0) / geometry.columns;
             window.set_total_items_count(view_len as i32);
             let outcome = sync_window(window, &mut st_write, thumbnails, geometry, first_row, view_len, true);
@@ -276,7 +326,9 @@ impl BridgeMedia {
         Self::update_fallback_view(window, &app_settings, state);
 
         if let Some(ref bench) = bench_opt {
-            bench.slint_commit_time_us.store(t_slint_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+            bench
+                .slint_commit_time_us
+                .store(t_slint_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         }
 
         // Folder rows the new list no longer shows (filter, hidden folders) took their highlight with them.

@@ -4,9 +4,9 @@
 //! the pure `cyclic_neighbor`. Deleted, pending and corrupted items are skipped because the Multiview cannot show them.
 
 use super::eligibility::is_playable;
-use rustview_core::library::models::MediaId;
 use crate::ui::state::UiState;
 use crate::viewer::multiview::navigation::cyclic_neighbor;
+use rustview_core::library::models::MediaId;
 
 /// The medium after (`forward`) or before `current` in the Browse view, wrapping around. `None` if there is no other
 /// showable medium.

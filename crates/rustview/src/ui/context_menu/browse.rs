@@ -1,29 +1,29 @@
 //! Context menus of the Browse view that belong to no single file or folder: the free space between the tiles and a selection
 //! that mixes folders and files. Every entry is an action that exists elsewhere (same ids, same handlers).
 
-use crate::ui::bridge::{DeleteActionParams, UiBridge};
-use crate::ui::context_menu::BridgeContextMenu;
-use crate::ui::context_menu::folder::FolderContextMenu;
-use crate::ui::file_dialogs::delete::DeleteFileDialogController;
-use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
-use crate::ui::selection::BridgeFileSelection;
-use crate::ui::folder_dialogs::FolderDialogController;
-use crate::ui::media::BridgeMedia;
-use crate::ui::state::*;
-use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::browse_folders::BrowseFolders;
-use crate::ui::favorites::manager::FavoriteManager;
-use crate::ui::multiview::MultiviewHandle;
-use crate::ui::open_confirmation::{OpenConfirmation, OpenKind};
-use crate::ui::MainWindow;
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder};
 use crate::icons::Icon;
-use rustview_core::library::Library;
-use rustview_core::settings::SettingsManager;
 use crate::system::SystemFileHandler;
-use rustview_core::thumbnails::ThumbnailManager;
+use crate::ui::MainWindow;
+use crate::ui::bridge::{DeleteActionParams, UiBridge};
+use crate::ui::browse_folders::BrowseFolders;
+use crate::ui::context_menu::BridgeContextMenu;
+use crate::ui::context_menu::folder::FolderContextMenu;
+use crate::ui::favorites::manager::FavoriteManager;
+use crate::ui::file_dialogs::delete::DeleteFileDialogController;
+use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
+use crate::ui::folder_dialogs::FolderDialogController;
+use crate::ui::media::BridgeMedia;
+use crate::ui::multiview::MultiviewHandle;
+use crate::ui::open_confirmation::{OpenConfirmation, OpenKind};
+use crate::ui::selection::BridgeFileSelection;
+use crate::ui::state::*;
+use crate::ui::status_bar::StatusBarBridge;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::settings::SettingsManager;
+use rustview_core::thumbnails::ThumbnailManager;
 use slint::ComponentHandle;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -79,7 +79,11 @@ impl BrowseContextMenus {
         let title = match (folders, files) {
             (folders, 0) => Self::plural(folders, "Folder", "Folders"),
             (0, files) => Self::plural(files, "File", "Files"),
-            (folders, files) => format!("{}, {}", Self::plural(folders, "Folder", "Folders"), Self::plural(files, "File", "Files")),
+            (folders, files) => format!(
+                "{}, {}",
+                Self::plural(folders, "Folder", "Folders"),
+                Self::plural(files, "File", "Files")
+            ),
         };
         CtxMenuBuilder::new()
             .header(format!("Selection: {title}"))
@@ -143,7 +147,13 @@ impl BrowseContextMenus {
                     "Disabled: Folder does not exist on physical disk",
                 )
             } else {
-                builder.action(CTX_FOLDER_OPEN_IN_FILE_MANAGER, "Open in File Manager", None, Some(Icon::FolderOpen), true)
+                builder.action(
+                    CTX_FOLDER_OPEN_IN_FILE_MANAGER,
+                    "Open in File Manager",
+                    None,
+                    Some(Icon::FolderOpen),
+                    true,
+                )
             };
             builder = builder.separator();
             builder = if is_missing {
@@ -178,8 +188,21 @@ impl BrowseContextMenus {
         }
 
         builder = builder
-            .action(CTX_ACTION_SELECT_ALL, "Select All", Some("Ctrl+A"), Some(Icon::SelectAll), info.has_items)
-            .checkable(CTX_BROWSE_TOGGLE_FOLDERS, "Show Folders", info.show_folders, None, Some(Icon::Folders), true);
+            .action(
+                CTX_ACTION_SELECT_ALL,
+                "Select All",
+                Some("Ctrl+A"),
+                Some(Icon::SelectAll),
+                info.has_items,
+            )
+            .checkable(
+                CTX_BROWSE_TOGGLE_FOLDERS,
+                "Show Folders",
+                info.show_folders,
+                None,
+                Some(Icon::Folders),
+                true,
+            );
 
         if info.folder.is_some() {
             builder = builder.separator();
@@ -200,7 +223,12 @@ impl BrowseContextMenus {
             let folder = st
                 .current_folder_id
                 .filter(|_| st.is_plain_folder_view())
-                .and_then(|id| st.folder_hierarchy.as_ref().and_then(|snapshot| snapshot.get_node(id)).map(|node| (id, node)))
+                .and_then(|id| {
+                    st.folder_hierarchy
+                        .as_ref()
+                        .and_then(|snapshot| snapshot.get_node(id))
+                        .map(|node| (id, node))
+                })
                 .map(|(id, node)| (id, node.name.clone(), node.path.clone(), node.is_deleted));
             st.active_folder_dialog_target = folder.as_ref().map(|(id, ..)| *id);
             BackgroundMenuInfo {

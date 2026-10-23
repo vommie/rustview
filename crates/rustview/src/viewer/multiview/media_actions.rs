@@ -38,7 +38,11 @@ pub enum BarClick {
     /// The handle of the slider is at this position (0..=10000 of its length); Rust snaps it and turns it into a zoom.
     ZoomPos(i32),
     /// A step on the slider: the wheel over it, or its plus and minus buttons.
-    ZoomStep { up: bool, shift: bool, ctrl: bool },
+    ZoomStep {
+        up: bool,
+        shift: bool,
+        ctrl: bool,
+    },
     /// The reset (100%).
     ZoomReset,
 }
@@ -61,7 +65,11 @@ impl BarClick {
             (code == Self::ZOOM_RESET).then_some(Self::ZoomReset)
         } else if code >= Self::ZOOM_STEP {
             let flags = code - Self::ZOOM_STEP;
-            (flags < 8).then_some(Self::ZoomStep { up: flags & 1 != 0, shift: flags & 2 != 0, ctrl: flags & 4 != 0 })
+            (flags < 8).then_some(Self::ZoomStep {
+                up: flags & 1 != 0,
+                shift: flags & 2 != 0,
+                ctrl: flags & 4 != 0,
+            })
         } else if code >= Self::ZOOM_TO {
             Some(Self::ZoomTo((code - Self::ZOOM_TO).min(Self::MAX_ZOOM_PERMILLE)))
         } else if code >= Self::FIRST_MENU_ITEM {
@@ -75,7 +83,9 @@ impl BarClick {
     pub fn zoom_code(self) -> Option<i32> {
         match self {
             Self::ZoomTo(permille) => Some(Self::ZOOM_TO + permille.clamp(0, Self::MAX_ZOOM_PERMILLE)),
-            Self::ZoomStep { up, shift, ctrl } => Some(Self::ZOOM_STEP + i32::from(up) + 2 * i32::from(shift) + 4 * i32::from(ctrl)),
+            Self::ZoomStep { up, shift, ctrl } => {
+                Some(Self::ZOOM_STEP + i32::from(up) + 2 * i32::from(shift) + 4 * i32::from(ctrl))
+            }
             Self::ZoomReset => Some(Self::ZOOM_RESET),
             Self::ZoomPos(position) => Some(Self::ZOOM_POS + position.clamp(0, Self::MAX_ZOOM_POS)),
             Self::Action(_) | Self::MenuItem(_) => None,
@@ -158,7 +168,17 @@ impl MediaActionSpec {
 type Provider = fn(&MediaBarContext) -> Option<MediaActionSpec>;
 
 /// Order of the buttons in the bar, left to right.
-const PROVIDERS: &[Provider] = &[mute, sticky, duplicate, open_as_tab, open_with, delete, zoom, remove, close];
+const PROVIDERS: &[Provider] = &[
+    mute,
+    sticky,
+    duplicate,
+    open_as_tab,
+    open_with,
+    delete,
+    zoom,
+    remove,
+    close,
+];
 
 /// The bar exists in the fullscreen window and in the viewer tab; the tab-grid miniature is a picture.
 fn interactive(ctx: &MediaBarContext) -> bool {
@@ -184,7 +204,11 @@ fn sticky(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
         active: Some(ctx.sticky),
         ..MediaActionSpec::on(
             MediaActionId::Sticky,
-            if ctx.sticky { Icon::MultiviewStickyOn } else { Icon::MultiviewSticky },
+            if ctx.sticky {
+                Icon::MultiviewStickyOn
+            } else {
+                Icon::MultiviewSticky
+            },
             if ctx.sticky {
                 "Sticky: stays when the selection changes (click to release)"
             } else {
@@ -221,7 +245,11 @@ fn duplicate(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
 /// the fullscreen of a tab are tabs themselves.
 fn open_as_tab(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     (interactive(ctx) && ctx.origin == OriginKind::Browse).then(|| {
-        MediaActionSpec::on(MediaActionId::OpenAsTab, Icon::OpenInBackgroundTab, "Open in a background tab")
+        MediaActionSpec::on(
+            MediaActionId::OpenAsTab,
+            Icon::OpenInBackgroundTab,
+            "Open in a background tab",
+        )
     })
 }
 
@@ -237,7 +265,11 @@ fn zoom(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
         ..MediaActionSpec::on(
             MediaActionId::Zoom,
             Icon::ZoomIn,
-            if open { "Hide the zoom slider" } else { "Zoom (also Ctrl + mouse wheel over the image)" },
+            if open {
+                "Hide the zoom slider"
+            } else {
+                "Zoom (also Ctrl + mouse wheel over the image)"
+            },
         )
     })
 }
@@ -267,7 +299,11 @@ fn close(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
         MediaActionSpec::on(
             MediaActionId::Close,
             Icon::Close,
-            if ctx.host == HostMode::Fullscreen { "Close fullscreen" } else { "Close tab" },
+            if ctx.host == HostMode::Fullscreen {
+                "Close fullscreen"
+            } else {
+                "Close tab"
+            },
         )
     })
 }

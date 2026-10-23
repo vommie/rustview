@@ -1,9 +1,9 @@
 use super::error::ApiError;
 use super::models::*;
+use crate::library::Library;
 use crate::library::folders::normalize_path;
 use crate::library::models::{ExternalHashRecord, MediaRecord, TagId};
 use crate::library::schema::*;
-use crate::library::Library;
 use crate::media::{MediaFormat, MediaHasher, MetadataExtractor};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -56,11 +56,7 @@ impl ApiHandler {
         let media_opt = match folder_opt {
             Some(folder) => {
                 let rtxn = lib.raw_db().env.read_txn()?;
-                let media_ids = lib
-                    .raw_db()
-                    .media_by_folder
-                    .get(&rtxn, &folder.id)?
-                    .unwrap_or_default();
+                let media_ids = lib.raw_db().media_by_folder.get(&rtxn, &folder.id)?.unwrap_or_default();
 
                 let mut found_record = None;
                 for mid in media_ids {
@@ -116,10 +112,7 @@ impl ApiHandler {
             message: if found {
                 None
             } else {
-                Some(format!(
-                    "File '{}' is not registered in the database.",
-                    path.display()
-                ))
+                Some(format!("File '{}' is not registered in the database.", path.display()))
             },
         };
 
@@ -140,10 +133,7 @@ impl ApiHandler {
             println!("  • Corrupted : {}", m.is_corrupted);
             println!("  • Deleted   : {}", m.is_deleted);
         } else {
-            println!(
-                "Notice: File '{}' is not registered in the database.",
-                path.display()
-            );
+            println!("Notice: File '{}' is not registered in the database.", path.display());
         }
 
         Ok(if found { 0 } else { 2 })
@@ -172,11 +162,7 @@ impl ApiHandler {
 
         {
             let rtxn = lib.raw_db().env.read_txn()?;
-            let media_ids = lib
-                .raw_db()
-                .media_by_folder
-                .get(&rtxn, &folder.id)?
-                .unwrap_or_default();
+            let media_ids = lib.raw_db().media_by_folder.get(&rtxn, &folder.id)?.unwrap_or_default();
 
             for mid in media_ids {
                 if let Some(rec) = lib.raw_db().media.get(&rtxn, &mid)?
@@ -213,12 +199,8 @@ impl ApiHandler {
                     && let Ok(new_hash) = MediaHasher::from_hex(h_str)
                     && new_hash != old_hash
                 {
-                    lib.raw_db().update_media_hash_index(
-                        &mut wtxn,
-                        mid,
-                        Some(&old_hash),
-                        Some(&new_hash),
-                    )?;
+                    lib.raw_db()
+                        .update_media_hash_index(&mut wtxn, mid, Some(&old_hash), Some(&new_hash))?;
                     rec.file_hash = new_hash;
                 }
 
@@ -264,9 +246,7 @@ impl ApiHandler {
                 let new_id = lib.raw_db().next_id(&mut wtxn, SEQ_MEDIA_ID)?;
 
                 let format = MediaFormat::from_path(Path::new(&filename));
-                let mut media_type = format
-                    .media_type()
-                    .unwrap_or(crate::media::MediaType::Image);
+                let mut media_type = format.media_type().unwrap_or(crate::media::MediaType::Image);
 
                 let mut file_size = 0u64;
                 let mut mtime = now_secs; // Default to current time so newest sort places it at top
@@ -307,9 +287,8 @@ impl ApiHandler {
                 {
                     parsed
                 } else if path.exists() && file_size > 0 {
-                    MediaHasher::hash_file(path).unwrap_or_else(|_| {
-                        MediaHasher::hash_bytes(path.to_string_lossy().as_bytes())
-                    })
+                    MediaHasher::hash_file(path)
+                        .unwrap_or_else(|_| MediaHasher::hash_bytes(path.to_string_lossy().as_bytes()))
                 } else {
                     MediaHasher::hash_bytes(format!("{}/{}", folder.id, filename).as_bytes())
                 };
@@ -337,23 +316,13 @@ impl ApiHandler {
                 };
 
                 lib.raw_db().media.put(&mut wtxn, &new_id, &new_rec)?;
-                lib.raw_db().update_media_hash_index(
-                    &mut wtxn,
-                    new_id,
-                    None,
-                    Some(&file_hash),
-                )?;
+                lib.raw_db()
+                    .update_media_hash_index(&mut wtxn, new_id, None, Some(&file_hash))?;
 
-                let mut folder_media = lib
-                    .raw_db()
-                    .media_by_folder
-                    .get(&wtxn, &folder.id)?
-                    .unwrap_or_default();
+                let mut folder_media = lib.raw_db().media_by_folder.get(&wtxn, &folder.id)?.unwrap_or_default();
                 if !folder_media.contains(&new_id) {
                     folder_media.push(new_id);
-                    lib.raw_db()
-                        .media_by_folder
-                        .put(&mut wtxn, &folder.id, &folder_media)?;
+                    lib.raw_db().media_by_folder.put(&mut wtxn, &folder.id, &folder_media)?;
                 }
 
                 ("created", new_rec, new_id)
@@ -361,11 +330,7 @@ impl ApiHandler {
         };
 
         if let Some(target_tag_ids) = tags_opt {
-            let unique_tags: Vec<TagId> = target_tag_ids
-                .into_iter()
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect();
+            let unique_tags: Vec<TagId> = target_tag_ids.into_iter().collect::<HashSet<_>>().into_iter().collect();
 
             if let Some(old_tags) = lib.raw_db().tags_by_media.get(&wtxn, &target_media_id)? {
                 for old_t in old_tags {
@@ -374,9 +339,7 @@ impl ApiHandler {
                         if t_media.is_empty() {
                             lib.raw_db().media_by_tag.delete(&mut wtxn, &old_t)?;
                         } else {
-                            lib.raw_db()
-                                .media_by_tag
-                                .put(&mut wtxn, &old_t, &t_media)?;
+                            lib.raw_db().media_by_tag.put(&mut wtxn, &old_t, &t_media)?;
                         }
                     }
                 }
@@ -384,24 +347,16 @@ impl ApiHandler {
 
             for &tag_id in &unique_tags {
                 if lib.raw_db().tags.get(&wtxn, &tag_id)?.is_some() {
-                    let mut t_media = lib
-                        .raw_db()
-                        .media_by_tag
-                        .get(&wtxn, &tag_id)?
-                        .unwrap_or_default();
+                    let mut t_media = lib.raw_db().media_by_tag.get(&wtxn, &tag_id)?.unwrap_or_default();
                     if !t_media.contains(&target_media_id) {
                         t_media.push(target_media_id);
-                        lib.raw_db()
-                            .media_by_tag
-                            .put(&mut wtxn, &tag_id, &t_media)?;
+                        lib.raw_db().media_by_tag.put(&mut wtxn, &tag_id, &t_media)?;
                     }
                 }
             }
 
             if unique_tags.is_empty() {
-                lib.raw_db()
-                    .tags_by_media
-                    .delete(&mut wtxn, &target_media_id)?;
+                lib.raw_db().tags_by_media.delete(&mut wtxn, &target_media_id)?;
             } else {
                 lib.raw_db()
                     .tags_by_media
@@ -435,10 +390,7 @@ impl ApiHandler {
         if json {
             println!("{}", serde_json::to_string_pretty(&response)?);
         } else {
-            println!(
-                "✓ Media #{} successfully {}:",
-                response.media_id, response.action
-            );
+            println!("✓ Media #{} successfully {}:", response.media_id, response.action);
             println!("  • File      : {}/{}", folder.path, response.filename);
             println!("  • Rating    : {} ★", response.rating);
             println!("  • Tags      : {:?}", response.tags);
@@ -461,11 +413,7 @@ impl ApiHandler {
 
         if let Some(folder) = folder_opt {
             let mut wtxn = lib.raw_db().env.write_txn()?;
-            let mut media_ids = lib
-                .raw_db()
-                .media_by_folder
-                .get(&wtxn, &folder.id)?
-                .unwrap_or_default();
+            let mut media_ids = lib.raw_db().media_by_folder.get(&wtxn, &folder.id)?.unwrap_or_default();
 
             let mut found_id = None;
             for &mid in &media_ids {
@@ -488,16 +436,12 @@ impl ApiHandler {
 
                 if let Some(tags) = lib.raw_db().tags_by_media.get(&wtxn, &mid)? {
                     for tag_id in tags {
-                        if let Some(mut t_media) =
-                            lib.raw_db().media_by_tag.get(&wtxn, &tag_id)?
-                        {
+                        if let Some(mut t_media) = lib.raw_db().media_by_tag.get(&wtxn, &tag_id)? {
                             t_media.retain(|&id| id != mid);
                             if t_media.is_empty() {
                                 lib.raw_db().media_by_tag.delete(&mut wtxn, &tag_id)?;
                             } else {
-                                lib.raw_db()
-                                    .media_by_tag
-                                    .put(&mut wtxn, &tag_id, &t_media)?;
+                                lib.raw_db().media_by_tag.put(&mut wtxn, &tag_id, &t_media)?;
                             }
                         }
                     }
@@ -505,9 +449,7 @@ impl ApiHandler {
                 }
 
                 media_ids.retain(|&id| id != mid);
-                lib.raw_db()
-                    .media_by_folder
-                    .put(&mut wtxn, &folder.id, &media_ids)?;
+                lib.raw_db().media_by_folder.put(&mut wtxn, &folder.id, &media_ids)?;
 
                 wtxn.commit()?;
             }
@@ -630,16 +572,15 @@ impl ApiHandler {
             {
                 for mid in media_ids {
                     if let Some(m_rec) = lib.raw_db().media.get(&rtxn, &mid)? {
-                        let folder_path =
-                            folder_path_cache.entry(m_rec.folder_id).or_insert_with(|| {
-                                lib.raw_db()
-                                    .folders
-                                    .get(&rtxn, &m_rec.folder_id)
-                                    .ok()
-                                    .flatten()
-                                    .map(|f| f.path)
-                                    .unwrap_or_default()
-                            });
+                        let folder_path = folder_path_cache.entry(m_rec.folder_id).or_insert_with(|| {
+                            lib.raw_db()
+                                .folders
+                                .get(&rtxn, &m_rec.folder_id)
+                                .ok()
+                                .flatten()
+                                .map(|f| f.path)
+                                .unwrap_or_default()
+                        });
 
                         if !folder_path.is_empty() {
                             associated_files.push(format!("{}/{}", folder_path, m_rec.filename));
@@ -688,10 +629,7 @@ impl ApiHandler {
             println!();
             for item in &response.results {
                 if item.known {
-                    let id_str = item
-                        .hash_id
-                        .map(|id| format!(" [Ext #{}]", id))
-                        .unwrap_or_default();
+                    let id_str = item.hash_id.map(|id| format!(" [Ext #{}]", id)).unwrap_or_default();
                     println!("  ✓ {} -> KNOWN{}", item.hash, id_str);
                     for f in &item.associated_files {
                         println!("      └─ {}", f);
@@ -738,9 +676,7 @@ impl ApiHandler {
                     date_time: now_str.clone(),
                 };
 
-                lib.raw_db()
-                    .external_hashes
-                    .put(&mut wtxn, &new_id, &record)?;
+                lib.raw_db().external_hashes.put(&mut wtxn, &new_id, &record)?;
                 wtxn.commit()?;
                 (true, new_id, now_str)
             }
@@ -762,10 +698,7 @@ impl ApiHandler {
         if json {
             println!("{}", serde_json::to_string_pretty(&response)?);
         } else {
-            println!(
-                "✓ Hash #{}: {} ({})",
-                response.hash_id, response.hash, response.message
-            );
+            println!("✓ Hash #{}: {} ({})", response.hash_id, response.hash, response.message);
         }
 
         Ok(0)

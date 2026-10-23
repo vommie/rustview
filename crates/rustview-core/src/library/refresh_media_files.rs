@@ -34,8 +34,7 @@ impl<'a> MediaItemRefresher<'a> {
         let (record, file_path) = self.resolve_media_path(&wtxn, media_id)?;
         let attributes = self.inspect_physical_file(&file_path)?;
 
-        let updated_record =
-            self.commit_refreshed_record(&mut wtxn, media_id, record, attributes)?;
+        let updated_record = self.commit_refreshed_record(&mut wtxn, media_id, record, attributes)?;
 
         wtxn.commit()?;
 
@@ -55,11 +54,7 @@ impl<'a> MediaItemRefresher<'a> {
     }
 
     /// Resolves existing MediaRecord and its absolute filesystem path.
-    fn resolve_media_path(
-        &self,
-        txn: &heed::RoTxn,
-        media_id: MediaId,
-    ) -> Result<(MediaRecord, PathBuf), LibraryError> {
+    fn resolve_media_path(&self, txn: &heed::RoTxn, media_id: MediaId) -> Result<(MediaRecord, PathBuf), LibraryError> {
         let record = self
             .db
             .media
@@ -85,10 +80,7 @@ impl<'a> MediaItemRefresher<'a> {
     }
 
     /// Inspects physical file on disk: reads metadata, hashes file content, and extracts container dimensions & duration.
-    pub fn inspect_physical_file(
-        &self,
-        file_path: &Path,
-    ) -> Result<RefreshedFileAttributes, LibraryError> {
+    pub fn inspect_physical_file(&self, file_path: &Path) -> Result<RefreshedFileAttributes, LibraryError> {
         tracing::debug!(
             file = %LogObscurer::path(file_path),
             "[MediaItemRefresher] Inspecting physical file on disk..."
@@ -156,7 +148,8 @@ impl<'a> MediaItemRefresher<'a> {
             }
         };
 
-        let is_corrupted = is_zero_byte || !hash_ok || !meta_ok || (raw_metadata.width == 0 && raw_metadata.height == 0);
+        let is_corrupted =
+            is_zero_byte || !hash_ok || !meta_ok || (raw_metadata.width == 0 && raw_metadata.height == 0);
 
         Ok(RefreshedFileAttributes {
             file_size,
@@ -177,12 +170,8 @@ impl<'a> MediaItemRefresher<'a> {
         attributes: RefreshedFileAttributes,
     ) -> Result<MediaRecord, LibraryError> {
         if attributes.file_hash != record.file_hash {
-            self.db.update_media_hash_index(
-                wtxn,
-                media_id,
-                Some(&record.file_hash),
-                Some(&attributes.file_hash),
-            )?;
+            self.db
+                .update_media_hash_index(wtxn, media_id, Some(&record.file_hash), Some(&attributes.file_hash))?;
         }
 
         record.file_hash = attributes.file_hash;

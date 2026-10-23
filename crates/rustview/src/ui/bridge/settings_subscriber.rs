@@ -1,32 +1,29 @@
 //! Reacts to changed settings: applies every group of settings to the live UI.
 
+use super::UiBridge;
+use crate::ui::MainWindow;
 use crate::ui::folder_tree::BridgeFolders;
-use crate::ui::multiview::{self, bar_overlay};
-use crate::viewer::multiview::prefs;
-use crate::viewer::zoom::prefs as zoom_prefs;
+use crate::ui::formats_policy::{FormatPolicyApplier, FormatPolicyContext};
 use crate::ui::media::BridgeMedia;
+use crate::ui::multiview::{self, bar_overlay};
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
 use crate::ui::state::*;
 use crate::ui::status_bar::StatusBarBridge;
+use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
-use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::formats_policy::{FormatPolicyApplier, FormatPolicyContext};
 use crate::ui::thumbnail_badges::ThumbnailBadgeBridge;
 use crate::ui::type_ahead::{self};
-use crate::ui::MainWindow;
+use crate::viewer::ViewerTabManager;
+use crate::viewer::multiview::prefs;
+use crate::viewer::zoom::prefs as zoom_prefs;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
-use rustview_core::settings::{
-    AppSettings, GridAspectRatio, LogObscurer, SettingsDiff,
-    SettingsManager,
-};
+use rustview_core::settings::{AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager};
 use rustview_core::thumbnails::ThumbnailConfig;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::sync::Arc;
-use super::UiBridge;
 
 impl UiBridge {
     pub(super) fn register_settings_subscriber(&self) {

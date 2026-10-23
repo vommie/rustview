@@ -22,7 +22,11 @@ pub fn elapsed_ms() -> f64 {
 
 /// Logs that the launch reached `stage`.
 pub fn mark(stage: &str) {
-    tracing::info!(stage, elapsed_ms = format!("{:.1}", elapsed_ms()), "[Startup: Stage] Launch stage reached");
+    tracing::info!(
+        stage,
+        elapsed_ms = format!("{:.1}", elapsed_ms()),
+        "[Startup: Stage] Launch stage reached"
+    );
 }
 
 /// Logs the first rendered frame (once; later calls are one atomic load).

@@ -3,17 +3,17 @@
 //! A video tile is an `X11VideoSubwindow` below the host window with an `MpvPlayer` attached to it, the usual callbacks,
 //! `load_file` + `play`. mpv does whatever it does inside its rectangle; the layout only decides where that rectangle is.
 
-use super::media_actions::MediaActionId;
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
 use super::follow::TileKey;
 use super::instance::WeakInstance;
 use super::layout::Rect;
+use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use crate::ui::button_feedback::ButtonFeedback;
-use rustview_core::library::models::MediaId;
 use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
+use rustview_core::library::models::MediaId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -118,7 +118,11 @@ impl TileState {
             filename: seed.filename,
             path: seed.path,
             aspect: seed.aspect,
-            aspect_source: if decoded { AspectSource::Probed } else { AspectSource::Library },
+            aspect_source: if decoded {
+                AspectSource::Probed
+            } else {
+                AspectSource::Library
+            },
             pixels: seed.pixels,
             is_loading: !is_video && !decoded,
             error: None,
@@ -187,14 +191,8 @@ pub fn create_video(
     tile: TileKey,
     path: &Path,
 ) -> Result<VideoTile, String> {
-    let mut window = X11VideoSubwindow::new(
-        parent_xid,
-        rect.x,
-        rect.y,
-        rect.w.max(16) as u32,
-        rect.h.max(16) as u32,
-    )
-    .map_err(|e| e.to_string())?;
+    let mut window = X11VideoSubwindow::new(parent_xid, rect.x, rect.y, rect.w.max(16) as u32, rect.h.max(16) as u32)
+        .map_err(|e| e.to_string())?;
     let wid = window.xid();
     window.show();
 

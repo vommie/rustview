@@ -174,8 +174,7 @@ impl<'a> FolderManager<'a> {
 
             while let Some(pid) = current_pid {
                 if let Some(mut ancestor) = self.db.folders.get(&wtxn, &pid)? {
-                    let adjusted =
-                        (ancestor.recursive_media_count as i64 + delta_media).max(0) as u32;
+                    let adjusted = (ancestor.recursive_media_count as i64 + delta_media).max(0) as u32;
                     ancestor.recursive_media_count = adjusted;
                     self.db.folders.put(&mut wtxn, &pid, &ancestor)?;
                     current_pid = ancestor.parent_id;
@@ -225,14 +224,10 @@ impl<'a> FolderManager<'a> {
             "[FolderScan: FullRoot] Starting manual filesystem hierarchy scan..."
         );
 
-        let cb_arc: Option<ScanProgressCallback> =
-            progress_callback.map(|cb| Arc::new(cb) as ScanProgressCallback);
+        let cb_arc: Option<ScanProgressCallback> = progress_callback.map(|cb| Arc::new(cb) as ScanProgressCallback);
 
         // The system mount table is read on every scan so changes (new/removed mounts) are always respected.
-        let ignored_mounts = FolderMountFilter::resolve_ignored_mounts(
-            &canonical_root,
-            options.ignore_nested_mounts,
-        );
+        let ignored_mounts = FolderMountFilter::resolve_ignored_mounts(&canonical_root, options.ignore_nested_mounts);
 
         let t_walk = Instant::now();
         let walk = walk_directory_tree(&canonical_root, cb_arc.as_ref(), &ignored_mounts);
@@ -254,15 +249,10 @@ impl<'a> FolderManager<'a> {
         let existing_in_scope = existing_all.len();
 
         // Records at or below ignored mounts are detached/removed here and never marked as missing.
-        let (mount_cleanup, mut existing_folders) = FolderMountFilter::cleanup_ignored_records(
-            self.db,
-            &mut wtxn,
-            existing_all,
-            &ignored_mounts,
-        )?;
+        let (mount_cleanup, mut existing_folders) =
+            FolderMountFilter::cleanup_ignored_records(self.db, &mut wtxn, existing_all, &ignored_mounts)?;
 
-        let mut path_to_id: HashMap<PathBuf, FolderId> =
-            HashMap::with_capacity(scanned_items.len());
+        let mut path_to_id: HashMap<PathBuf, FolderId> = HashMap::with_capacity(scanned_items.len());
         let mut new_records: Vec<FolderRecord> = Vec::with_capacity(scanned_items.len());
         let mut previous_root_parent: Option<FolderId> = None;
         let mut created_folders = 0usize;
@@ -293,9 +283,7 @@ impl<'a> FolderManager<'a> {
                     created_folders += 1;
                     let new_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
                     self.db.folders_by_path.put(&mut wtxn, &p_str, &new_id)?;
-                    self.db
-                        .media_by_folder
-                        .put(&mut wtxn, &new_id, &Vec::new())?;
+                    self.db.media_by_folder.put(&mut wtxn, &new_id, &Vec::new())?;
                     (new_id, now_secs)
                 }
             };
@@ -326,8 +314,7 @@ impl<'a> FolderManager<'a> {
             }
         }
 
-        let parent_to_children =
-            Self::link_parents(&scanned_items, &path_to_id, &anchor, &mut new_records);
+        let parent_to_children = Self::link_parents(&scanned_items, &path_to_id, &anchor, &mut new_records);
         Self::aggregate_counts(&mut new_records, &parent_to_children);
 
         for r in &new_records {
@@ -435,15 +422,9 @@ impl<'a> FolderManager<'a> {
     }
 
     /// Bottom-up aggregation of subfolder counts and recursive media counts (deepest folders first).
-    fn aggregate_counts(
-        new_records: &mut [FolderRecord],
-        parent_to_children: &HashMap<FolderId, Vec<FolderId>>,
-    ) {
-        let id_to_record_idx: HashMap<FolderId, usize> = new_records
-            .iter()
-            .enumerate()
-            .map(|(idx, r)| (r.id, idx))
-            .collect();
+    fn aggregate_counts(new_records: &mut [FolderRecord], parent_to_children: &HashMap<FolderId, Vec<FolderId>>) {
+        let id_to_record_idx: HashMap<FolderId, usize> =
+            new_records.iter().enumerate().map(|(idx, r)| (r.id, idx)).collect();
 
         let mut depth_sorted_indices: Vec<usize> = (0..new_records.len()).collect();
         depth_sorted_indices.sort_by(|&a, &b| new_records[b].depth.cmp(&new_records[a].depth));
@@ -474,9 +455,7 @@ impl<'a> FolderManager<'a> {
             && siblings.contains(&folder_id)
         {
             siblings.retain(|&x| x != folder_id);
-            self.db
-                .folders_by_parent
-                .put(wtxn, &old_parent_id, &siblings)?;
+            self.db.folders_by_parent.put(wtxn, &old_parent_id, &siblings)?;
             tracing::info!(
                 folder_id,
                 old_parent_id,
@@ -499,15 +478,13 @@ impl<'a> FolderManager<'a> {
 
         if let Some(mut folder_rec) = db.folders.get(wtxn, &folder_id)? {
             folder_rec.media_count = (folder_rec.media_count as i64 + delta).max(0) as u32;
-            folder_rec.recursive_media_count =
-                (folder_rec.recursive_media_count as i64 + delta).max(0) as u32;
+            folder_rec.recursive_media_count = (folder_rec.recursive_media_count as i64 + delta).max(0) as u32;
             db.folders.put(wtxn, &folder_id, &folder_rec)?;
 
             let mut current_pid = folder_rec.parent_id;
             while let Some(pid) = current_pid {
                 if let Some(mut ancestor) = db.folders.get(wtxn, &pid)? {
-                    ancestor.recursive_media_count =
-                        (ancestor.recursive_media_count as i64 + delta).max(0) as u32;
+                    ancestor.recursive_media_count = (ancestor.recursive_media_count as i64 + delta).max(0) as u32;
                     db.folders.put(wtxn, &pid, &ancestor)?;
                     current_pid = ancestor.parent_id;
                 } else {
@@ -561,8 +538,7 @@ impl<'a> FolderManager<'a> {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| path_str.clone());
 
-        let is_hidden =
-            name.starts_with('.') || parent_rec.as_ref().map(|p| p.is_hidden).unwrap_or(false);
+        let is_hidden = name.starts_with('.') || parent_rec.as_ref().map(|p| p.is_hidden).unwrap_or(false);
 
         let folder_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
         let record = FolderRecord {
@@ -584,19 +560,11 @@ impl<'a> FolderManager<'a> {
         };
 
         self.db.folders.put(&mut wtxn, &folder_id, &record)?;
-        self.db
-            .folders_by_path
-            .put(&mut wtxn, &path_str, &folder_id)?;
-        self.db
-            .media_by_folder
-            .put(&mut wtxn, &folder_id, &Vec::new())?;
+        self.db.folders_by_path.put(&mut wtxn, &path_str, &folder_id)?;
+        self.db.media_by_folder.put(&mut wtxn, &folder_id, &Vec::new())?;
 
         if let Some(pid) = parent_id {
-            let mut siblings = self
-                .db
-                .folders_by_parent
-                .get(&wtxn, &pid)?
-                .unwrap_or_default();
+            let mut siblings = self.db.folders_by_parent.get(&wtxn, &pid)?.unwrap_or_default();
             if !siblings.contains(&folder_id) {
                 siblings.push(folder_id);
                 self.db.folders_by_parent.put(&mut wtxn, &pid, &siblings)?;
@@ -638,10 +606,7 @@ impl<'a> FolderManager<'a> {
     }
 
     /// Recursively collects `folder_id` and all descendant IDs using relational parent indices.
-    pub fn get_descendant_folder_ids(
-        &self,
-        folder_id: FolderId,
-    ) -> Result<Vec<FolderId>, LibraryError> {
+    pub fn get_descendant_folder_ids(&self, folder_id: FolderId) -> Result<Vec<FolderId>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let mut ids = vec![folder_id];
         let mut queue = vec![folder_id];
@@ -700,12 +665,8 @@ impl<'a> FolderManager<'a> {
             if let Some(media_ids) = self.db.media_by_folder.get(&wtxn, &id)? {
                 for media_id in media_ids {
                     if let Some(media_record) = self.db.media.get(&wtxn, &media_id)? {
-                        self.db.update_media_hash_index(
-                            &mut wtxn,
-                            media_id,
-                            Some(&media_record.file_hash),
-                            None,
-                        )?;
+                        self.db
+                            .update_media_hash_index(&mut wtxn, media_id, Some(&media_record.file_hash), None)?;
                     }
                     self.db.media.delete(&mut wtxn, &media_id)?;
                     self.db.tags_by_media.delete(&mut wtxn, &media_id)?;

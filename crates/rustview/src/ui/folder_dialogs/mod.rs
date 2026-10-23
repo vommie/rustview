@@ -12,17 +12,17 @@ pub use crate::ui::folder_dialogs::move_to::MoveFolderDialogController;
 pub use crate::ui::folder_dialogs::new_folder::NewFolderDialogController;
 pub use crate::ui::folder_dialogs::reborn_warn::RebornFolderWarnDialogController;
 pub use crate::ui::folder_dialogs::remove_orphaned::RemoveOrphanedFolderDialogController;
-pub use crate::ui::selection::delete::DeleteSelectionDialogController;
 pub use crate::ui::folder_dialogs::rename::RenameFolderDialogController;
+pub use crate::ui::selection::delete::DeleteSelectionDialogController;
 
-use crate::ui::state::UiState;
 use crate::ui::MainWindow;
+use crate::ui::state::UiState;
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::FolderId;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use std::sync::Arc;
 
 /// Thread-safe context bundle shared across folder dialog operations.
@@ -64,13 +64,7 @@ impl FolderDialogController {
     }
 
     #[inline]
-    pub fn show_rename(
-        &self,
-        window: &MainWindow,
-        folder_id: FolderId,
-        current_name: &str,
-        ctx: FolderDialogContext,
-    ) {
+    pub fn show_rename(&self, window: &MainWindow, folder_id: FolderId, current_name: &str, ctx: FolderDialogContext) {
         self.rename.show(window, folder_id, current_name, ctx);
     }
 
@@ -80,13 +74,7 @@ impl FolderDialogController {
     }
 
     #[inline]
-    pub fn show_delete(
-        &self,
-        window: &MainWindow,
-        folder_id: FolderId,
-        folder_name: &str,
-        ctx: FolderDialogContext,
-    ) {
+    pub fn show_delete(&self, window: &MainWindow, folder_id: FolderId, folder_name: &str, ctx: FolderDialogContext) {
         self.delete
             .show(window, folder_id, folder_name, ctx, &self.missing_delete);
     }
@@ -105,7 +93,8 @@ impl FolderDialogController {
         folders: Vec<FolderId>,
         ctx: FolderDialogContext,
     ) {
-        self.delete_selection.show(window, files, folders, ctx, &self.reborn_warn);
+        self.delete_selection
+            .show(window, files, folders, ctx, &self.reborn_warn);
     }
 
     #[inline]

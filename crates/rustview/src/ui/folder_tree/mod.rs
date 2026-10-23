@@ -3,23 +3,23 @@ pub mod move_sync;
 pub mod projection;
 pub mod tree_sync;
 
-use crate::ui::state::UiState;
 use crate::ui::MainWindow;
-use rustview_core::library::models::{FolderId, MediaRecord};
+use crate::ui::state::UiState;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
+use rustview_core::library::models::{FolderId, MediaRecord};
 use rustview_core::query::IndexedMediaRecord;
 use rustview_core::settings::SettingsManager;
 use rustview_core::telemetry::FolderLoadBenchmark;
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 mod callbacks;
-mod snapshot;
 mod refresh;
 mod selection;
+mod snapshot;
 mod tree_state;
 
 pub struct FolderNavigationContext<'a> {
@@ -53,6 +53,4 @@ struct LoadedFolder {
 
 pub struct BridgeFolders;
 
-impl BridgeFolders {
-
-}
+impl BridgeFolders {}

@@ -1,20 +1,20 @@
 //! The folder tree snapshot: scrolling to the selection, ensuring the snapshot, ancestors, the remembered folder and the root.
 
-use crate::ui::state::UiState;
-use crate::ui::MainWindow;
+use super::BridgeFolders;
 use crate::icons::Icon;
+use crate::ui::MainWindow;
+use crate::ui::state::UiState;
+use parking_lot::RwLock;
+use rustview_core::library::Library;
 use rustview_core::library::folders::normalize_path;
 use rustview_core::library::models::{FolderHierarchySnapshot, FolderId};
-use rustview_core::library::Library;
 use rustview_core::settings::{GridAspectRatio, LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::{ComponentHandle, Model, Timer};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
-use super::BridgeFolders;
 
 impl BridgeFolders {
     pub fn scroll_to_selected(window: &MainWindow) {
@@ -32,10 +32,7 @@ impl BridgeFolders {
 
     /// Returns the cached SPoT snapshot or lazily loads it from the database (zero filesystem access).
     /// A failed load is logged and yields an empty snapshot that is NOT cached, so the next call retries.
-    pub fn ensure_snapshot(
-        library: &Library,
-        state: &RwLock<UiState>,
-    ) -> Arc<FolderHierarchySnapshot> {
+    pub fn ensure_snapshot(library: &Library, state: &RwLock<UiState>) -> Arc<FolderHierarchySnapshot> {
         let existing = state.read().folder_hierarchy.clone();
         if let Some(snap) = existing {
             return snap;
@@ -98,10 +95,7 @@ impl BridgeFolders {
             return None;
         }
         let normalized = normalize_path(last_path);
-        snapshot
-            .path_index
-            .get(&normalized)
-            .map(|&id| (id, normalized.clone()))
+        snapshot.path_index.get(&normalized).map(|&id| (id, normalized.clone()))
     }
 
     pub fn collapse_all_except_active(
@@ -118,14 +112,8 @@ impl BridgeFolders {
         if let Some(&root_id) = snapshot.root_ids.first() {
             keep_expanded_ids.insert(root_id);
 
-            if let (Some(root_node), Some(target_p)) =
-                (snapshot.get_node(root_id), target_path_opt.as_ref())
-            {
-                keep_expanded_ids.extend(Self::collect_ancestor_ids(
-                    &snapshot,
-                    &root_node.path,
-                    target_p,
-                ));
+            if let (Some(root_node), Some(target_p)) = (snapshot.get_node(root_id), target_path_opt.as_ref()) {
+                keep_expanded_ids.extend(Self::collect_ancestor_ids(&snapshot, &root_node.path, target_p));
             }
         }
 
@@ -173,11 +161,7 @@ impl BridgeFolders {
                 "[FolderTree: RootMissing] Configured root directory does not exist on disk. Showing empty folder tree."
             );
             library.set_folder_tree_root(None);
-            Self::clear_view(
-                window,
-                state,
-                "Configured Root Directory does not exist on disk.",
-            );
+            Self::clear_view(window, state, "Configured Root Directory does not exist on disk.");
             return;
         }
 

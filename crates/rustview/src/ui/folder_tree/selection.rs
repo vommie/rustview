@@ -1,31 +1,31 @@
 //! Selecting a folder: loading its media list, immediately or on the worker for large folders, and the work after the list is ready.
 
+use super::{BridgeFolders, FolderNavigationContext, FolderSelection, LoadedFolder};
+use crate::ui::MainWindow;
+use crate::ui::browse_folders::BrowseFolders;
 use crate::ui::favorites::BridgeFavorites;
+use crate::ui::list_loader;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::{BridgeMedia, MediaReloadOptions, PendingList};
-use crate::ui::browse_folders::BrowseFolders;
+use crate::ui::models::rgb8_to_shared_buffer;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::BridgeTags;
-use crate::ui::list_loader;
-use crate::ui::models::rgb8_to_shared_buffer;
-use crate::ui::MainWindow;
+use parking_lot::RwLock;
+use rustview_core::library::Library;
 use rustview_core::library::folders::normalize_path;
 use rustview_core::library::models::{FolderId, MediaId, MediaRecord};
 use rustview_core::library::refresh::RefreshReport;
-use rustview_core::library::Library;
 use rustview_core::query::{MediaStore, lay_out};
 use rustview_core::settings::SettingsManager;
 use rustview_core::telemetry::FolderLoadBenchmark;
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
-use parking_lot::RwLock;
-use slint::{ComponentHandle};
+use slint::ComponentHandle;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
-use super::{BridgeFolders, FolderNavigationContext, FolderSelection, LoadedFolder};
 
 impl BridgeFolders {
     pub fn select_folder(
@@ -134,7 +134,10 @@ impl BridgeFolders {
         BridgeFavorites::set_selected_path(Some(&normalized_path));
 
         let target_folder_ids = if is_virtual_folder {
-            ctx.library.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
+            ctx.library
+                .folders()
+                .get_descendant_folder_ids(folder_id)
+                .unwrap_or_else(|_| vec![folder_id])
         } else {
             vec![folder_id]
         };
@@ -172,7 +175,15 @@ impl BridgeFolders {
             s.all_folder_media.replace(loaded.indexed);
         }
 
-        BridgeMedia::reload(ctx.window, ctx.library, ctx.thumbnails, ctx.settings, ctx.state, false, false);
+        BridgeMedia::reload(
+            ctx.window,
+            ctx.library,
+            ctx.thumbnails,
+            ctx.settings,
+            ctx.state,
+            false,
+            false,
+        );
         Self::after_folder_list_ready(&ctx, selection, is_empty_in_db, stub_candidates);
     }
 
@@ -187,12 +198,19 @@ impl BridgeFolders {
                 }
             }
         }
-        selection.bench.lmdb_id_fetch_time_us.store(t_id_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+        selection
+            .bench
+            .lmdb_id_fetch_time_us
+            .store(t_id_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         media_ids
     }
 
     /// Reads the records of `media_ids` and indexes them for the view (no UI access, safe on any thread).
-    pub(super) fn load_folder_records(library: &Library, selection: &FolderSelection, media_ids: Vec<MediaId>) -> LoadedFolder {
+    pub(super) fn load_folder_records(
+        library: &Library,
+        selection: &FolderSelection,
+        media_ids: Vec<MediaId>,
+    ) -> LoadedFolder {
         let bench = &selection.bench;
         let t_rec_start = Instant::now();
         let mut known_media = Vec::with_capacity(media_ids.len());
@@ -207,7 +225,9 @@ impl BridgeFolders {
                 }
             }
         }
-        bench.lmdb_record_fetch_time_us.store(t_rec_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+        bench
+            .lmdb_record_fetch_time_us
+            .store(t_rec_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         bench.total_records_fetched.store(known_media.len(), Ordering::Relaxed);
 
         let is_empty_in_db = known_media.is_empty();
@@ -218,13 +238,23 @@ impl BridgeFolders {
         } else {
             BridgeMedia::preindex(library, known_media, &selection.normalized_path)
         };
-        bench.preindex_time_us.store(t_pre.elapsed().as_micros() as u64, Ordering::Relaxed);
-        LoadedFolder { indexed, is_empty_in_db, stub_candidates }
+        bench
+            .preindex_time_us
+            .store(t_pre.elapsed().as_micros() as u64, Ordering::Relaxed);
+        LoadedFolder {
+            indexed,
+            is_empty_in_db,
+            stub_candidates,
+        }
     }
 
     /// A large folder: the view shows an empty list while a worker thread loads, filters and sorts the records; the UI thread only
     /// swaps the finished list in. A newer folder selection supersedes this one.
-    pub(super) fn load_folder_deferred(ctx: &FolderNavigationContext<'_>, selection: FolderSelection, media_ids: Vec<MediaId>) {
+    pub(super) fn load_folder_deferred(
+        ctx: &FolderNavigationContext<'_>,
+        selection: FolderSelection,
+        media_ids: Vec<MediaId>,
+    ) {
         let job = list_loader::begin_folder_load();
         tracing::info!(
             job,
@@ -237,7 +267,12 @@ impl BridgeFolders {
         let started = Instant::now();
 
         let weak = ctx.window.as_weak();
-        let (library, thumbnails, settings, state) = (ctx.library.clone(), ctx.thumbnails.clone(), ctx.settings.clone(), ctx.state.clone());
+        let (library, thumbnails, settings, state) = (
+            ctx.library.clone(),
+            ctx.thumbnails.clone(),
+            ctx.settings.clone(),
+            ctx.state.clone(),
+        );
         list_loader::worker().submit(move || {
             if !list_loader::folder_load_is_current(job) || selection.cancel_flag.load(Ordering::Acquire) {
                 return;
@@ -254,15 +289,31 @@ impl BridgeFolders {
             let worker_ms = started.elapsed().as_secs_f64() * 1000.0;
 
             let _ = weak.upgrade_in_event_loop(move |window| {
-                let still_selected = list_loader::folder_load_is_current(job) && state.read().active_folder_token == selection.request_token;
+                let still_selected = list_loader::folder_load_is_current(job)
+                    && state.read().active_folder_token == selection.request_token;
                 if !still_selected {
-                    tracing::debug!(job, "[ListLoader: FolderLoad] Superseded by a newer selection; the result is dropped");
+                    tracing::debug!(
+                        job,
+                        "[ListLoader: FolderLoad] Superseded by a newer selection; the result is dropped"
+                    );
                     return;
                 }
                 let records = store.len();
                 let t_commit = Instant::now();
-                let pending = PendingList { store: Some(store), layout, query };
-                BridgeMedia::commit_layout(&window, &library, &thumbnails, &settings, &state, pending, MediaReloadOptions::new(false, false));
+                let pending = PendingList {
+                    store: Some(store),
+                    layout,
+                    query,
+                };
+                BridgeMedia::commit_layout(
+                    &window,
+                    &library,
+                    &thumbnails,
+                    &settings,
+                    &state,
+                    pending,
+                    MediaReloadOptions::new(false, false),
+                );
                 tracing::info!(
                     job,
                     records,
@@ -271,7 +322,13 @@ impl BridgeFolders {
                     total_ms = format!("{:.1}", started.elapsed().as_secs_f64() * 1000.0),
                     "[ListLoader: FolderLoad] Folder list ready"
                 );
-                let ctx = FolderNavigationContext { window: &window, library: &library, thumbnails: &thumbnails, settings: &settings, state: &state };
+                let ctx = FolderNavigationContext {
+                    window: &window,
+                    library: &library,
+                    thumbnails: &thumbnails,
+                    settings: &settings,
+                    state: &state,
+                };
                 Self::after_folder_list_ready(&ctx, selection, is_empty_in_db, stub_candidates);
             });
         });
@@ -330,7 +387,10 @@ impl BridgeFolders {
                     ctx.window.set_is_system_busy(true);
 
                     ctx.thumbnails.tracker().set_generate_total(stubs_count);
-                    StatusBarBridge::info(ctx.window, format!("Auto-completing {} external file(s)...", stubs_count));
+                    StatusBarBridge::info(
+                        ctx.window,
+                        format!("Auto-completing {} external file(s)...", stubs_count),
+                    );
 
                     let w_weak = ctx.window.as_weak();
                     let lib_arc = ctx.library.clone();
@@ -359,14 +419,12 @@ impl BridgeFolders {
                             });
 
                             let store = thumb_arc.store();
-                            let (report, completed_items) = lib_arc
-                                .external_media_completer()
-                                .complete_candidates(
-                                    ready_stubs,
-                                    &config,
-                                    store,
-                                    Some(move |cur, tot| progress_cb(cur, tot)),
-                                );
+                            let (report, completed_items) = lib_arc.external_media_completer().complete_candidates(
+                                ready_stubs,
+                                &config,
+                                store,
+                                Some(move |cur, tot| progress_cb(cur, tot)),
+                            );
 
                             let _ = w_weak.upgrade_in_event_loop(move |w| {
                                 {
@@ -374,7 +432,10 @@ impl BridgeFolders {
                                     st.is_refreshing_media = false;
 
                                     for item in &completed_items {
-                                        if item.primary_width > 0 && item.primary_height > 0 && !item.primary_pixels.is_empty() {
+                                        if item.primary_width > 0
+                                            && item.primary_height > 0
+                                            && !item.primary_pixels.is_empty()
+                                        {
                                             let shared_buf = rgb8_to_shared_buffer(
                                                 &item.primary_pixels,
                                                 item.primary_width,
@@ -398,7 +459,10 @@ impl BridgeFolders {
                                 let busy = BridgeMedia::is_system_busy(&w, &thumb_arc, &st_arc);
                                 w.set_is_system_busy(busy);
                                 StatusBarBridge::update_metrics(&w, &st_arc);
-                                StatusBarBridge::success(&w, format!("Auto-completed {} external media item(s).", report.completed_count));
+                                StatusBarBridge::success(
+                                    &w,
+                                    format!("Auto-completed {} external media item(s).", report.completed_count),
+                                );
                             });
                         })
                         .ok();
@@ -415,7 +479,10 @@ impl BridgeFolders {
         StatusBarBridge::info(
             ctx.window,
             if is_virtual_folder {
-                format!("Scanning media files in '{}' (Recursive: {} folders)...", folder_name, virtual_count)
+                format!(
+                    "Scanning media files in '{}' (Recursive: {} folders)...",
+                    folder_name, virtual_count
+                )
             } else {
                 format!("Scanning media files in '{}'...", folder_name)
             },
@@ -440,7 +507,10 @@ impl BridgeFolders {
                 let auto_detect = set_scanner.get().formats.auto_detect_extensionless_media;
 
                 let scan_folder_ids = if is_virtual_folder {
-                    lib_scanner.folders().get_descendant_folder_ids(folder_id).unwrap_or_else(|_| vec![folder_id])
+                    lib_scanner
+                        .folders()
+                        .get_descendant_folder_ids(folder_id)
+                        .unwrap_or_else(|_| vec![folder_id])
                 } else {
                     vec![folder_id]
                 };
@@ -491,12 +561,24 @@ impl BridgeFolders {
                     return;
                 }
 
-                bench_scanner.files_scanned.store(combined_report.total_scanned, Ordering::Relaxed);
-                bench_scanner.new_files.store(combined_report.new_media, Ordering::Relaxed);
-                bench_scanner.updated_files.store(combined_report.updated_media, Ordering::Relaxed);
-                bench_scanner.unchanged_files.store(combined_report.unchanged_media, Ordering::Relaxed);
-                bench_scanner.deleted_files.store(combined_report.deleted_media, Ordering::Relaxed);
-                bench_scanner.restored_files.store(combined_report.restored_media, Ordering::Relaxed);
+                bench_scanner
+                    .files_scanned
+                    .store(combined_report.total_scanned, Ordering::Relaxed);
+                bench_scanner
+                    .new_files
+                    .store(combined_report.new_media, Ordering::Relaxed);
+                bench_scanner
+                    .updated_files
+                    .store(combined_report.updated_media, Ordering::Relaxed);
+                bench_scanner
+                    .unchanged_files
+                    .store(combined_report.unchanged_media, Ordering::Relaxed);
+                bench_scanner
+                    .deleted_files
+                    .store(combined_report.deleted_media, Ordering::Relaxed);
+                bench_scanner
+                    .restored_files
+                    .store(combined_report.restored_media, Ordering::Relaxed);
 
                 let mut media_ids = Vec::new();
                 if let Ok(rtxn) = lib_scanner.raw_db().env.read_txn() {
@@ -551,8 +633,20 @@ impl BridgeFolders {
                     };
 
                     if is_still_current {
-                        let pending = PendingList { store: Some(store), layout, query };
-                        BridgeMedia::commit_layout(&w, &lib_scanner, &thumb_scanner, &set_scanner, &st_scanner, pending, MediaReloadOptions::new(false, false));
+                        let pending = PendingList {
+                            store: Some(store),
+                            layout,
+                            query,
+                        };
+                        BridgeMedia::commit_layout(
+                            &w,
+                            &lib_scanner,
+                            &thumb_scanner,
+                            &set_scanner,
+                            &st_scanner,
+                            pending,
+                            MediaReloadOptions::new(false, false),
+                        );
                         BridgeInspector::update(&w, &st_scanner);
                         BridgeTags::sync_tag_selection(&w, &lib_scanner, &st_scanner);
                         BridgeMedia::update_virtual_folder_button_state(&w, &lib_scanner, &st_scanner);

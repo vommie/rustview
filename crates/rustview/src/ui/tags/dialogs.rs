@@ -1,14 +1,14 @@
-use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::BridgeMedia;
+use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::state::UiState;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::tags::{BridgeTags, TagActionDialogs};
 use crate::ui::{AddTagDialog, DeleteTagDialog, MainWindow, RenameTagDialog};
-use rustview_core::library::models::TagId;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
+use rustview_core::library::models::TagId;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -73,13 +73,7 @@ impl TagDialogController {
         let st_ren = state.clone();
 
         let show_rename = Box::new(move |tag_id: TagId, current_name: &str| {
-            ctrl_ren.show_rename(
-                &win_ren,
-                tag_id,
-                current_name,
-                lib_ren.clone(),
-                st_ren.clone(),
-            );
+            ctrl_ren.show_rename(&win_ren, tag_id, current_name, lib_ren.clone(), st_ren.clone());
         });
 
         let ctrl_del = self.clone();
@@ -89,24 +83,22 @@ impl TagDialogController {
         let set_del = settings.clone();
         let st_del = state.clone();
 
-        let show_delete = Box::new(
-            move |tag_id: TagId, tag_name: &str, children: Vec<String>| {
-                ctrl_del.show_delete(
-                    &win_del,
-                    DeleteTagParams {
-                        tag_id,
-                        tag_name: tag_name.to_string(),
-                        children,
-                    },
-                    TagDialogContext {
-                        library: lib_del.clone(),
-                        thumbnails: thumb_del.clone(),
-                        settings: set_del.clone(),
-                        state: st_del.clone(),
-                    },
-                );
-            },
-        );
+        let show_delete = Box::new(move |tag_id: TagId, tag_name: &str, children: Vec<String>| {
+            ctrl_del.show_delete(
+                &win_del,
+                DeleteTagParams {
+                    tag_id,
+                    tag_name: tag_name.to_string(),
+                    children,
+                },
+                TagDialogContext {
+                    library: lib_del.clone(),
+                    thumbnails: thumb_del.clone(),
+                    settings: set_del.clone(),
+                    state: st_del.clone(),
+                },
+            );
+        });
 
         TagActionDialogs {
             show_add,
@@ -141,14 +133,7 @@ impl TagDialogController {
             let set_confirm = settings.clone();
             let st_confirm = state.clone();
             win.on_confirmed(move |name| {
-                ctrl_confirm.execute_add(
-                    &name,
-                    parent_id,
-                    &lib_confirm,
-                    &set_confirm,
-                    &st_confirm,
-                    &win_confirm,
-                );
+                ctrl_confirm.execute_add(&name, parent_id, &lib_confirm, &set_confirm, &st_confirm, &win_confirm);
             });
 
             let ctrl_cancel = self.clone();

@@ -23,11 +23,7 @@ impl<'a> MediaRepository<'a> {
     /// Resolves the absolute physical filesystem path of a media file via its registered folder_id in LMDB.
     pub fn resolve_path(&self, id: MediaId) -> Result<PathBuf, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
-        let rec = self
-            .db
-            .media
-            .get(&rtxn, &id)?
-            .ok_or(LibraryError::MediaNotFound(id))?;
+        let rec = self.db.media.get(&rtxn, &id)?.ok_or(LibraryError::MediaNotFound(id))?;
         let folder = self
             .db
             .folders
@@ -39,11 +35,7 @@ impl<'a> MediaRepository<'a> {
     /// Retrieves all active (non-deleted) media records for the specified folder with ID deduplication.
     pub fn get_by_folder(&self, folder_id: FolderId) -> Result<Vec<MediaRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
-        let media_ids = self
-            .db
-            .media_by_folder
-            .get(&rtxn, &folder_id)?
-            .unwrap_or_default();
+        let media_ids = self.db.media_by_folder.get(&rtxn, &folder_id)?.unwrap_or_default();
         let mask = FormatPolicy::mask();
         let mut records = Vec::with_capacity(media_ids.len());
         let mut seen = HashSet::new();
@@ -64,11 +56,7 @@ impl<'a> MediaRepository<'a> {
     /// Retrieves all media records (including soft-deleted/missing) for the specified folder with ID deduplication.
     pub fn get_all_by_folder(&self, folder_id: FolderId) -> Result<Vec<MediaRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
-        let media_ids = self
-            .db
-            .media_by_folder
-            .get(&rtxn, &folder_id)?
-            .unwrap_or_default();
+        let media_ids = self.db.media_by_folder.get(&rtxn, &folder_id)?.unwrap_or_default();
         let mut records = Vec::with_capacity(media_ids.len());
         let mut seen = HashSet::new();
 
@@ -86,11 +74,7 @@ impl<'a> MediaRepository<'a> {
     /// Counts only active (non-deleted) media files associated with the folder.
     pub fn get_active_count(&self, folder_id: FolderId) -> Result<usize, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
-        let media_ids = self
-            .db
-            .media_by_folder
-            .get(&rtxn, &folder_id)?
-            .unwrap_or_default();
+        let media_ids = self.db.media_by_folder.get(&rtxn, &folder_id)?.unwrap_or_default();
         let mask = FormatPolicy::mask();
         let mut count = 0;
         let mut seen = HashSet::new();
@@ -123,11 +107,7 @@ impl<'a> MediaRepository<'a> {
 
     pub fn get_by_hash(&self, hash: &FileHash) -> Result<Vec<MediaRecord>, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
-        let media_ids = self
-            .db
-            .media_by_hash
-            .get(&rtxn, &hash[..])?
-            .unwrap_or_default();
+        let media_ids = self.db.media_by_hash.get(&rtxn, &hash[..])?.unwrap_or_default();
         let mut records = Vec::with_capacity(media_ids.len());
         let mut seen = HashSet::new();
 
@@ -219,11 +199,7 @@ impl<'a> MediaRepository<'a> {
                 let Some(f_id) = params.folder_id else {
                     return Ok(Vec::new());
                 };
-                let folder_media = self
-                    .db
-                    .media_by_folder
-                    .get(&rtxn, &f_id)?
-                    .unwrap_or_default();
+                let folder_media = self.db.media_by_folder.get(&rtxn, &f_id)?.unwrap_or_default();
                 candidate_ids.extend(folder_media);
             }
             ScopeMode::FolderAndSubfolders => {

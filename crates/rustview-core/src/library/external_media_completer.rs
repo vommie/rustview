@@ -2,15 +2,13 @@ use super::db::LibraryDatabase;
 use super::models::{FolderId, MediaId, MediaRecord};
 use crate::media::{MediaFormat, MediaHasher, MediaType, MetadataExtractor};
 use crate::settings::LogObscurer;
-use crate::thumbnails::{
-    PackStore, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, VideoPreviewRecord,
-};
+use crate::thumbnails::{PackStore, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, VideoPreviewRecord};
 use procfs::process::{FDPermissions, FDTarget};
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 /// Detailed summary report returned after completing external media stubs.
@@ -51,11 +49,7 @@ impl<'a> ExternalMediaCompleter<'a> {
     pub fn find_pending_stubs_by_folder_ids(
         &self,
         folder_ids: &[FolderId],
-    ) -> (
-        Vec<(MediaId, PathBuf, MediaRecord)>,
-        usize,
-        Vec<String>,
-    ) {
+    ) -> (Vec<(MediaId, PathBuf, MediaRecord)>, usize, Vec<String>) {
         let rtxn = match self.db.env.read_txn() {
             Ok(txn) => txn,
             Err(e) => {
@@ -84,11 +78,7 @@ impl<'a> ExternalMediaCompleter<'a> {
     pub fn find_pending_stubs_in_records(
         &self,
         records: &[MediaRecord],
-    ) -> (
-        Vec<(MediaId, PathBuf, MediaRecord)>,
-        usize,
-        Vec<String>,
-    ) {
+    ) -> (Vec<(MediaId, PathBuf, MediaRecord)>, usize, Vec<String>) {
         let t0 = Instant::now();
         let rtxn = match self.db.env.read_txn() {
             Ok(txn) => txn,
@@ -101,8 +91,7 @@ impl<'a> ExternalMediaCompleter<'a> {
         let mut ready_candidates = Vec::new();
         let mut still_pending_count = 0usize;
         let mut sources_set = HashSet::new();
-        let mut folder_path_cache: std::collections::HashMap<FolderId, PathBuf> =
-            std::collections::HashMap::new();
+        let mut folder_path_cache: std::collections::HashMap<FolderId, PathBuf> = std::collections::HashMap::new();
 
         for rec in records {
             // Check 1: Must be explicitly tagged with an external source application!
@@ -111,19 +100,10 @@ impl<'a> ExternalMediaCompleter<'a> {
             };
 
             // Check 2: Does this record need completion?
-            let has_thumbnail = self
-                .db
-                .thumbnails
-                .get(&rtxn, &rec.id)
-                .ok()
-                .flatten()
-                .is_some();
+            let has_thumbnail = self.db.thumbnails.get(&rtxn, &rec.id).ok().flatten().is_some();
 
-            let needs_completion = rec.file_size == 0
-                || rec.width == 0
-                || rec.height == 0
-                || rec.is_corrupted
-                || !has_thumbnail;
+            let needs_completion =
+                rec.file_size == 0 || rec.width == 0 || rec.height == 0 || rec.is_corrupted || !has_thumbnail;
 
             if !needs_completion {
                 continue;
@@ -196,7 +176,10 @@ impl<'a> ExternalMediaCompleter<'a> {
 
         // 2. Linux /proc Active Writer Process Check
         if Self::is_file_open_for_writing(path) {
-            return (false, "File is currently held open by an active writer process in /proc");
+            return (
+                false,
+                "File is currently held open by an active writer process in /proc",
+            );
         }
 
         // 3. Time Since Last Modification & Size Stability Sampling
@@ -223,17 +206,21 @@ impl<'a> ExternalMediaCompleter<'a> {
             match MetadataExtractor::extract(path) {
                 Ok(raw_meta) => {
                     if raw_meta.duration_ms == 0 && time_since_mod < Duration::from_secs(60) {
-                        return (false, "Video container duration is 0ms (incomplete render header / cues missing)");
+                        return (
+                            false,
+                            "Video container duration is 0ms (incomplete render header / cues missing)",
+                        );
                     }
-                    if (raw_meta.width == 0 || raw_meta.height == 0)
-                        && time_since_mod < Duration::from_secs(60)
-                    {
+                    if (raw_meta.width == 0 || raw_meta.height == 0) && time_since_mod < Duration::from_secs(60) {
                         return (false, "Video stream dimensions are 0x0 (render stream incomplete)");
                     }
                 }
                 Err(_) => {
                     if time_since_mod < Duration::from_secs(60) {
-                        return (false, "Video container header could not be parsed yet (file still rendering)");
+                        return (
+                            false,
+                            "Video container header could not be parsed yet (file still rendering)",
+                        );
                     }
                 }
             }
@@ -287,10 +274,7 @@ impl<'a> ExternalMediaCompleter<'a> {
         config: &ThumbnailConfig,
         store: &PackStore,
         progress_callback: Option<F>,
-    ) -> (
-        ExternalMediaCompletionReport,
-        Vec<ProcessedCompletionItem>,
-    )
+    ) -> (ExternalMediaCompletionReport, Vec<ProcessedCompletionItem>)
     where
         F: Fn(usize, usize) + Send + Sync + 'static,
     {
@@ -343,7 +327,9 @@ impl<'a> ExternalMediaCompleter<'a> {
                 };
 
                 let format = MediaFormat::from_path(&file_path);
-                let is_video = MetadataExtractor::resolve_media_type(&file_path, format.media_type().unwrap_or(MediaType::Image)) == MediaType::Video;
+                let is_video =
+                    MetadataExtractor::resolve_media_type(&file_path, format.media_type().unwrap_or(MediaType::Image))
+                        == MediaType::Video;
 
                 // Extract metadata (dimensions, duration)
                 let (raw_meta, meta_ok) = match MetadataExtractor::extract(&file_path) {
@@ -372,8 +358,7 @@ impl<'a> ExternalMediaCompleter<'a> {
                                     (cfg.format, cfg.quality)
                                 };
 
-                                let mut locations =
-                                    Vec::with_capacity(video_res.preview_frames.len());
+                                let mut locations = Vec::with_capacity(video_res.preview_frames.len());
                                 for p_frame in &video_res.preview_frames {
                                     if let Ok(p_bytes) = generator.compress(
                                         &p_frame.rgb_pixels,
@@ -401,11 +386,7 @@ impl<'a> ExternalMediaCompleter<'a> {
                         }
                     }
                 } else {
-                    match generator.generate_image_thumbnail(
-                        &file_path,
-                        cfg.max_bound,
-                        cfg.scaling_algorithm,
-                    ) {
+                    match generator.generate_image_thumbnail(&file_path, cfg.max_bound, cfg.scaling_algorithm) {
                         Ok(frame) => (Some(frame), None),
                         Err(e) => {
                             return Err((media_id, format!("Image generation failed: {}", e)));
@@ -511,12 +492,9 @@ impl<'a> ExternalMediaCompleter<'a> {
                 }
 
                 // Update hash secondary index
-                let _ = self.db.update_media_hash_index(
-                    &mut wtxn,
-                    item.media_id,
-                    None,
-                    Some(&rec.file_hash),
-                );
+                let _ = self
+                    .db
+                    .update_media_hash_index(&mut wtxn, item.media_id, None, Some(&rec.file_hash));
             }
             let _ = wtxn.commit();
         }

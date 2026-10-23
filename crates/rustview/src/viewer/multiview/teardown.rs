@@ -1,11 +1,11 @@
 //! Ordered destruction of video tiles.
 
 use super::tile::VideoTile;
+use crate::viewer::install_nonfatal_error_handler;
 use crate::viewer::mpv_engine::MpvPlayer;
 use crate::viewer::x11::X11VideoSubwindow;
-use rustview_core::settings::schema::PLAYER_TEARDOWN_WAIT_MS;
-use crate::viewer::install_nonfatal_error_handler;
 use parking_lot::{Condvar, Mutex};
+use rustview_core::settings::schema::PLAYER_TEARDOWN_WAIT_MS;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -55,7 +55,9 @@ pub fn teardown_video_deferred(player: Arc<MpvPlayer>, window: Option<X11VideoSu
                 std::thread::sleep(Duration::from_millis(5));
             }
             if Arc::strong_count(&player) > 1 {
-                tracing::warn!("[Multiview: Teardown] A closed video tab's player is still referenced; its window is left alone");
+                tracing::warn!(
+                    "[Multiview: Teardown] A closed video tab's player is still referenced; its window is left alone"
+                );
                 std::mem::forget(window);
                 return;
             }
@@ -124,7 +126,10 @@ pub fn wait_for_teardowns(limit: Duration) -> bool {
     }
     let left = *running;
     if left > 0 {
-        tracing::warn!(left, "[Multiview: Teardown] Teardown threads were still running at the deadline");
+        tracing::warn!(
+            left,
+            "[Multiview: Teardown] Teardown threads were still running at the deadline"
+        );
     }
     left == 0
 }

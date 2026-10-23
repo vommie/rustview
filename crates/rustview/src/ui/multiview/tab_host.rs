@@ -11,16 +11,16 @@ use super::cursor;
 use super::handle::MultiviewHandle;
 use super::router;
 use super::views::{self, ImageCache, ViewModels};
-use rustview_core::library::models::MediaId;
-use rustview_core::settings::schema::MULTIVIEW_TICK_MS;
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
-use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
-use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
+use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
+use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
+use rustview_core::library::models::MediaId;
+use rustview_core::settings::schema::MULTIVIEW_TICK_MS;
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -152,10 +152,9 @@ pub fn action_finished(media_id: MediaId, action: MediaActionId, ok: bool) {
 /// in the viewer tab: a fullscreen over it has its own bars), and hides the mouse cursor while it rests and no bar is in use.
 fn update_bar_overlay() {
     super::pointer_lock::service();
-    let Some((window, instance, host_xid)) = with_host(|h| {
-        Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))
-    })
-    .flatten() else {
+    let Some((window, instance, host_xid)) =
+        with_host(|h| Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))).flatten()
+    else {
         bar_overlay::hide(BarOwner::TabView);
         return;
     };
@@ -168,7 +167,11 @@ fn update_bar_overlay() {
         media_click: Rc::new(on_action),
         primary_click: Rc::new(|_, action| on_primary_action(action)),
     };
-    let bars_visible = bar_hosting::update(&host, BarTargets::of_instance(BarOwner::TabView, &instance, in_tab_view), in_tab_view);
+    let bars_visible = bar_hosting::update(
+        &host,
+        BarTargets::of_instance(BarOwner::TabView, &instance, in_tab_view),
+        in_tab_view,
+    );
     let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);
     if in_tab_view {
         cursor::sync(window.window(), &instance, bars_visible, &mut window_hidden);
@@ -238,16 +241,15 @@ pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &Shar
         h.main_xid = main_xid;
         if h.probe.is_none() {
             h.probe = PointerProbe::new()
-                .map_err(|e| tracing::warn!(error = %e, "[Multiview: TabView] No pointer probe; the hover bar is disabled"))
+                .map_err(
+                    |e| tracing::warn!(error = %e, "[Multiview: TabView] No pointer probe; the hover bar is disabled"),
+                )
                 .ok();
         }
         if h.probe.is_some() {
             if !h.tick.running() {
-                h.tick.start(
-                    TimerMode::Repeated,
-                    Duration::from_millis(MULTIVIEW_TICK_MS),
-                    on_tick,
-                );
+                h.tick
+                    .start(TimerMode::Repeated, Duration::from_millis(MULTIVIEW_TICK_MS), on_tick);
             }
         } else {
             h.tick.stop();
@@ -299,8 +301,7 @@ pub fn shutdown() {
 
 /// Brings the bus in line with the instance when it changed since the last sync (no X11 work).
 pub fn refresh() {
-    let Some((window, instance)) =
-        with_host(|h| Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?))).flatten()
+    let Some((window, instance)) = with_host(|h| Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?))).flatten()
     else {
         return;
     };

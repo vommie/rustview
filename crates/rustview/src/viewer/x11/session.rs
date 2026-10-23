@@ -31,7 +31,13 @@ impl Session {
 
     /// The atom `name`; with `only_if_exists` `None` when no client ever used it.
     pub(super) fn atom(&self, name: &str, only_if_exists: bool) -> Option<Atom> {
-        let atom = self.conn.intern_atom(only_if_exists, name.as_bytes()).ok()?.reply().ok()?.atom;
+        let atom = self
+            .conn
+            .intern_atom(only_if_exists, name.as_bytes())
+            .ok()?
+            .reply()
+            .ok()?
+            .atom;
         (atom != 0).then_some(atom)
     }
 

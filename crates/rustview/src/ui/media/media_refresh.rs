@@ -1,33 +1,29 @@
 //! Full refresh of selected files: metadata, hash, thumbnails and library records.
 
+use super::{BridgeMedia, ProcessedRefreshedItem};
+use crate::ui::MainWindow;
+use crate::ui::browse_window::{apply_record, update_tile};
 use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
 use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::models::rgb8_to_shared_buffer;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
+use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tags::BridgeTags;
-use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::browse_window::{
-    apply_record, update_tile,
-};
-use crate::ui::models::rgb8_to_shared_buffer;
-use crate::ui::MainWindow;
-use rustview_core::library::models::{MediaId, MediaRecord};
-use rustview_core::library::Library;
-use rustview_core::media::{MediaFormat, MediaHasher, MediaType};
-use rustview_core::settings::{LogObscurer, SettingsManager};
-use rustview_core::thumbnails::{
-    ThumbnailConfig, ThumbnailGenerator, ThumbnailManager, VideoPreviewRecord,
-};
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use rayon::prelude::*;
+use rustview_core::library::Library;
+use rustview_core::library::models::{MediaId, MediaRecord};
+use rustview_core::media::{MediaFormat, MediaHasher, MediaType};
+use rustview_core::settings::{LogObscurer, SettingsManager};
+use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailGenerator, ThumbnailManager, VideoPreviewRecord};
 use slint::{ComponentHandle, Image};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
-use super::{BridgeMedia, ProcessedRefreshedItem};
 
 impl BridgeMedia {
     pub fn refresh_selected_media(
@@ -38,14 +34,7 @@ impl BridgeMedia {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        Self::execute_media_refresh(
-            window,
-            library,
-            thumbnails,
-            tab_manager,
-            settings,
-            state,
-        );
+        Self::execute_media_refresh(window, library, thumbnails, tab_manager, settings, state);
     }
 
     pub(super) fn execute_media_refresh(

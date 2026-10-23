@@ -37,7 +37,9 @@ pub struct ListLayout {
 
 pub fn lay_out(library: &Library, records: &[IndexedMediaRecord], request: &ListRequest) -> ListLayout {
     let started = Instant::now();
-    let mut matched = request.filter.execute_indexed_refs(library, records, request.refine_from.as_deref());
+    let mut matched = request
+        .filter
+        .execute_indexed_refs(library, records, request.refine_from.as_deref());
     let filter_us = started.elapsed().as_micros() as u64;
 
     let started = Instant::now();
@@ -55,5 +57,12 @@ pub fn lay_out(library: &Library, records: &[IndexedMediaRecord], request: &List
     }
     let map_us = started.elapsed().as_micros() as u64;
 
-    ListLayout { indices, row_map, total_bytes, filter_us, sort_us, map_us }
+    ListLayout {
+        indices,
+        row_map,
+        total_bytes,
+        filter_us,
+        sort_us,
+        map_us,
+    }
 }

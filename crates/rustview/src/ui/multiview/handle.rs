@@ -5,25 +5,25 @@
 use super::bar_overlay::{self, BarKind};
 use super::eligibility;
 use super::navigation;
-use super::tab_host;
 use super::session::{self, Session, TabReturn};
-use rustview_core::library::Library;
-use rustview_core::library::models::MediaId;
-use rustview_core::settings::SettingsManager;
-use rustview_core::thumbnails::ThumbnailManager;
+use super::tab_host;
 use crate::ui::MainWindow;
+use crate::ui::media::open_with::{MediaOpenWith, OpenWithChoice};
 use crate::ui::selection::BridgeFileSelection;
 use crate::ui::state::UiState;
-use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tabs::BridgeViewerTabs;
-use crate::ui::media::open_with::{MediaOpenWith, OpenWithChoice};
-use rustview_core::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
+use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::viewer::multiview::click::{ClickDetector, ClickKind};
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
 use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::view::Navigation;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::{Mutex, RwLock};
+use rustview_core::library::Library;
+use rustview_core::library::models::MediaId;
+use rustview_core::settings::SettingsManager;
+use rustview_core::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
+use rustview_core::thumbnails::ThumbnailManager;
 use slint::ComponentHandle;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -250,7 +250,12 @@ impl MultiviewHandle {
                     );
                     return;
                 };
-                tracing::info!(current, target, forward, "[Multiview: Navigate] Moving on in the Browse view");
+                tracing::info!(
+                    current,
+                    target,
+                    forward,
+                    "[Multiview: Navigate] Moving on in the Browse view"
+                );
                 BridgeFileSelection::select_and_reveal_media(
                     target,
                     &window,
@@ -302,13 +307,7 @@ impl MultiviewHandle {
             return true;
         }
         *self.shared.main_window.lock() = Some(main_window.clone());
-        session::open(
-            self.clone(),
-            plan,
-            settings.clone(),
-            state.clone(),
-            main_window,
-        )
+        session::open(self.clone(), plan, settings.clone(), state.clone(), main_window)
     }
 
     /// Shows tab `tab_id` in the fullscreen window (from the tab view or the tab grid): the Multiview the tab owns, as it is. UI thread only.
@@ -324,17 +323,12 @@ impl MultiviewHandle {
             return false;
         };
         let instance = tab.multiview.instance.clone();
-        let origin_mode = main_window
-            .upgrade()
-            .map_or(1, |w| w.get_active_view_mode());
+        let origin_mode = main_window.upgrade().map_or(1, |w| w.get_active_view_mode());
         *self.shared.main_window.lock() = Some(main_window.clone());
         session::open_tab(
             self.clone(),
             instance,
-            TabReturn {
-                tab_id,
-                origin_mode,
-            },
+            TabReturn { tab_id, origin_mode },
             settings.clone(),
             main_window,
         )
@@ -365,7 +359,10 @@ impl MultiviewHandle {
         let mut settings = app.settings.get();
         settings.fullscreen.primary_bar.hide_idle_cursor = on;
         app.settings.update(settings);
-        tracing::info!(on, "[Multiview: Cursor] Hiding of the idle mouse cursor changed by the bar button");
+        tracing::info!(
+            on,
+            "[Multiview: Cursor] Hiding of the idle mouse cursor changed by the bar button"
+        );
     }
 
     /// The application exits: the fullscreen (pinned or not) and the windows of both action bars are closed. UI thread only.
@@ -432,7 +429,11 @@ impl MultiviewHandle {
             return;
         };
         let apps = MediaOpenWith::discover_apps(&app.state, &path);
-        bar_overlay::open_menu(BarKind::Media, MediaActionId::OpenWith.code(), &MediaOpenWith::menu_items(&apps));
+        bar_overlay::open_menu(
+            BarKind::Media,
+            MediaActionId::OpenWith.code(),
+            &MediaOpenWith::menu_items(&apps),
+        );
     }
 
     /// An item of the "Open With" drop-down was chosen: the medium is opened with that application, or the native chooser
@@ -458,7 +459,11 @@ impl MultiviewHandle {
         MediaOpenWith::paths_for(&app.state, &app.library, &[media_id])
             .into_iter()
             .next()
-            .or_else(|| app.tab_manager.get_tab_by_media_id(media_id).map(|tab| tab.file_path.clone()))
+            .or_else(|| {
+                app.tab_manager
+                    .get_tab_by_media_id(media_id)
+                    .map(|tab| tab.file_path.clone())
+            })
     }
 
     /// Closes the tab that is shown in the main window (Ctrl+W on a video of a Multiview tab).
@@ -508,13 +513,8 @@ impl MultiviewHandle {
         });
     }
 
-    fn on_tab_of_instance(
-        &self,
-        instance_id: u64,
-        f: impl FnOnce(&MainWindow, TabId) + Send + 'static,
-    ) {
-        let (Some(tab_manager), Some(main_window)) = (self.tab_manager(), self.main_window())
-        else {
+    fn on_tab_of_instance(&self, instance_id: u64, f: impl FnOnce(&MainWindow, TabId) + Send + 'static) {
+        let (Some(tab_manager), Some(main_window)) = (self.tab_manager(), self.main_window()) else {
             return;
         };
         let Some(tab_id) = tab_manager.tab_id_of_instance(instance_id) else {
@@ -526,9 +526,7 @@ impl MultiviewHandle {
     /// Scrolls the tab grid (wheel over a grid item that shows a Multiview).
     pub(super) fn scroll_grid(&self, up: bool) {
         if let Some(main_window) = self.main_window() {
-            let _ = main_window.upgrade_in_event_loop(move |w| {
-                w.invoke_scroll_media_by(if up { 40.0 } else { -40.0 })
-            });
+            let _ = main_window.upgrade_in_event_loop(move |w| w.invoke_scroll_media_by(if up { 40.0 } else { -40.0 }));
         }
     }
 }

@@ -1,9 +1,9 @@
 use super::error::ViewerError;
 use super::types::MpvPlaybackState;
-use rustview_core::settings::LogObscurer;
-use rustview_core::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
 use libmpv2::Mpv;
 use parking_lot::{Mutex, RwLock};
+use rustview_core::settings::LogObscurer;
+use rustview_core::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -178,10 +178,7 @@ impl MpvPlayer {
         // Define the dedicated tabgrid input section for Grid View (active ONLY in Tab-Grid mode).
         // This isolates wheel and click hijacking to Tab-Grid mode without overriding or ignoring normal wheel bindings.
         let tabgrid_bindings = "MBTN_LEFT no-osd cycle ontop\nMBTN_MID no-osd cycle border\nWHEEL_UP no-osd cycle deinterlace\nWHEEL_DOWN no-osd cycle sub-visibility\nF2 no-osd cycle snap-window\nf2 no-osd cycle snap-window\n";
-        if let Err(e) = mpv_instance.command(
-            "define-section",
-            &["rustview_tabgrid", tabgrid_bindings, "force"],
-        ) {
+        if let Err(e) = mpv_instance.command("define-section", &["rustview_tabgrid", tabgrid_bindings, "force"]) {
             tracing::warn!(
                 error = ?e,
                 "[MpvPlayer: Init] Failed to define 'rustview_tabgrid' input section"
@@ -201,24 +198,15 @@ impl MpvPlayer {
         let is_tab_grid_mode = Arc::new(AtomicBool::new(false));
         let observer_running = Arc::new(AtomicBool::new(true));
         let callbacks: Arc<RwLock<Vec<MpvEventCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
-        let close_tab_callbacks: Arc<RwLock<Vec<MpvCloseTabCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
-        let grid_left_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
-        let grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
-        let grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
-        let grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
-        let convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
-        let rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
-        let delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>> =
-            Arc::new(RwLock::new(Vec::new()));
+        let fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let close_tab_callbacks: Arc<RwLock<Vec<MpvCloseTabCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let grid_left_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>> = Arc::new(RwLock::new(Vec::new()));
 
@@ -314,21 +302,13 @@ impl MpvPlayer {
 
             // Restore standard bindings with Middle-Click Fullscreen toggle and Ctrl+DoubleClick
             let _ = self.mpv.command("keybind", &["MBTN_LEFT", "ignore"]);
-            let _ = self
-                .mpv
-                .command("keybind", &["MBTN_MID", "cycle fullscreen"]);
-            let _ = self
-                .mpv
-                .command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
+            let _ = self.mpv.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
+            let _ = self.mpv.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
             let _ = self.mpv.command("keybind", &["ESC", "cycle fullscreen"]);
 
             // Re-assert F2 binding
-            let _ = self
-                .mpv
-                .command("keybind", &["F2", "no-osd cycle snap-window"]);
-            let _ = self
-                .mpv
-                .command("keybind", &["f2", "no-osd cycle snap-window"]);
+            let _ = self.mpv.command("keybind", &["F2", "no-osd cycle snap-window"]);
+            let _ = self.mpv.command("keybind", &["f2", "no-osd cycle snap-window"]);
             bind_delete_key(&self.mpv);
 
             let convert_keys = [
@@ -344,9 +324,7 @@ impl MpvPlayer {
                 "ctrl+MBTN_LEFT_HOLD",
             ];
             for k in convert_keys {
-                let _ = self
-                    .mpv
-                    .command("keybind", &[k, "no-osd cycle window-maximized"]);
+                let _ = self.mpv.command("keybind", &[k, "no-osd cycle window-maximized"]);
             }
         }
     }
@@ -370,14 +348,10 @@ impl MpvPlayer {
             let user_paused = self.is_user_paused.load(Ordering::SeqCst);
             if !user_paused {
                 let _ = self.mpv.set_property("pause", false);
-                tracing::debug!(
-                    "[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed (playback active)"
-                );
+                tracing::debug!("[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed (playback active)");
             } else {
                 let _ = self.mpv.set_property("pause", true);
-                tracing::debug!(
-                    "[MpvPlayer: StayPaused] Foregrounded video tab kept paused (user-paused)"
-                );
+                tracing::debug!("[MpvPlayer: StayPaused] Foregrounded video tab kept paused (user-paused)");
             }
         }
 
@@ -411,9 +385,7 @@ impl MpvPlayer {
 
         self.mpv
             .command("loadfile", &[&path_str, "replace"])
-            .map_err(|e| {
-                ViewerError::Mpv(format!("Failed to execute 'loadfile' command: {:?}", e))
-            })?;
+            .map_err(|e| ViewerError::Mpv(format!("Failed to execute 'loadfile' command: {:?}", e)))?;
 
         self.is_user_paused.store(false, Ordering::SeqCst);
         let _ = self.mpv.set_property("pause", false);
@@ -477,9 +449,7 @@ impl MpvPlayer {
     }
 
     pub fn pause(&self) -> Result<(), ViewerError> {
-        if self.is_view_active.load(Ordering::SeqCst)
-            && !self.is_tab_grid_mode.load(Ordering::SeqCst)
-        {
+        if self.is_view_active.load(Ordering::SeqCst) && !self.is_tab_grid_mode.load(Ordering::SeqCst) {
             self.is_user_paused.store(true, Ordering::SeqCst);
         }
         self.mpv
@@ -570,10 +540,7 @@ impl MpvPlayer {
     pub fn video_display_params(&self) -> Option<(i64, i64, i64)> {
         let width = self.mpv.get_property::<i64>("video-params/dw").ok()?;
         let height = self.mpv.get_property::<i64>("video-params/dh").ok()?;
-        let rotate = self
-            .mpv
-            .get_property::<i64>("video-params/rotate")
-            .unwrap_or(0);
+        let rotate = self.mpv.get_property::<i64>("video-params/rotate").unwrap_or(0);
         Some((width, height, rotate))
     }
 
@@ -590,9 +557,7 @@ impl MpvPlayer {
     }
 
     pub fn is_eof(&self) -> bool {
-        self.mpv
-            .get_property::<bool>("eof-reached")
-            .unwrap_or(false)
+        self.mpv.get_property::<bool>("eof-reached").unwrap_or(false)
     }
 
     pub fn stop(&self) {
@@ -764,14 +729,14 @@ impl MpvPlayer {
 
                 while running.load(Ordering::Relaxed) {
                     // A player that is neither shown nor in the tab grid has nobody to react to: poll it less often.
-                    let hidden = !is_view_active.load(Ordering::Relaxed)
-                        && !is_tab_grid_mode.load(Ordering::Relaxed);
+                    let hidden = !is_view_active.load(Ordering::Relaxed) && !is_tab_grid_mode.load(Ordering::Relaxed);
                     let poll_ms = if hidden {
                         MPV_OBSERVER_IDLE_POLL_MS
                     } else {
                         MPV_OBSERVER_ACTIVE_POLL_MS
                     };
-                    if let Some(Ok(libmpv2::events::Event::ClientMessage(args))) = mpv.wait_event(poll_ms as f64 / 1000.0)
+                    if let Some(Ok(libmpv2::events::Event::ClientMessage(args))) =
+                        mpv.wait_event(poll_ms as f64 / 1000.0)
                         && args.first() == Some(&DELETE_KEY_MESSAGE)
                     {
                         let delete_cbs = delete_callbacks.read().clone();
@@ -803,8 +768,7 @@ impl MpvPlayer {
                         }
 
                         // Wheel Up in TabGrid Mode (scrolls grid up)
-                        let deinterlace_val =
-                            mpv.get_property::<bool>("deinterlace").unwrap_or(false);
+                        let deinterlace_val = mpv.get_property::<bool>("deinterlace").unwrap_or(false);
                         if deinterlace_val != last_deinterlace {
                             last_deinterlace = deinterlace_val;
                             let cbs = grid_wheel_up_callbacks.read().clone();
@@ -814,8 +778,7 @@ impl MpvPlayer {
                         }
 
                         // Wheel Down in TabGrid Mode (scrolls grid down)
-                        let sub_vis_val =
-                            mpv.get_property::<bool>("sub-visibility").unwrap_or(true);
+                        let sub_vis_val = mpv.get_property::<bool>("sub-visibility").unwrap_or(true);
                         if sub_vis_val != last_sub_vis {
                             last_sub_vis = sub_vis_val;
                             let cbs = grid_wheel_down_callbacks.read().clone();
@@ -846,9 +809,7 @@ impl MpvPlayer {
                     }
 
                     // 4. Intercept Ctrl+W Close Tab triggers from MPV via window-minimized toggle
-                    let close_requested = mpv
-                        .get_property::<bool>("window-minimized")
-                        .unwrap_or(false);
+                    let close_requested = mpv.get_property::<bool>("window-minimized").unwrap_or(false);
                     if close_requested {
                         let _ = mpv.set_property("window-minimized", false);
                         let close_cbs = close_callbacks.read().clone();
@@ -858,9 +819,7 @@ impl MpvPlayer {
                     }
 
                     // 5. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert the fullscreen Multiview to a background tab
-                    let convert_requested = mpv
-                        .get_property::<bool>("window-maximized")
-                        .unwrap_or(false);
+                    let convert_requested = mpv.get_property::<bool>("window-maximized").unwrap_or(false);
                     if convert_requested {
                         let _ = mpv.set_property("window-maximized", false);
                         let convert_cbs = convert_callbacks.read().clone();
@@ -875,11 +834,11 @@ impl MpvPlayer {
                     // The pause state counts as the user's choice only if the view stayed active while it was read.
                     // `set_view_active` stores the flag first and pauses afterwards, so a pause it caused is always
                     // seen with the flag already cleared on one of the two samples.
-                    let active_before = is_view_active.load(Ordering::SeqCst)
-                        && !is_tab_grid_mode.load(Ordering::SeqCst);
+                    let active_before =
+                        is_view_active.load(Ordering::SeqCst) && !is_tab_grid_mode.load(Ordering::SeqCst);
                     let paused = mpv.get_property::<bool>("pause").unwrap_or(false);
-                    let active_after = is_view_active.load(Ordering::SeqCst)
-                        && !is_tab_grid_mode.load(Ordering::SeqCst);
+                    let active_after =
+                        is_view_active.load(Ordering::SeqCst) && !is_tab_grid_mode.load(Ordering::SeqCst);
                     let vol = mpv.get_property::<f64>("volume").unwrap_or(100.0);
                     let eof = mpv.get_property::<bool>("eof-reached").unwrap_or(false);
                     let idle = mpv.get_property::<bool>("idle-active").unwrap_or(true);

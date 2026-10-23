@@ -37,9 +37,17 @@ impl Limits {
     /// Limits with `min <= 1 < max` guaranteed. A `min` of 1 means the picture cannot be made smaller than the fit; otherwise the
     /// slider has the reset in its middle.
     pub fn new(min: f64, max: f64) -> Self {
-        let min = if min.is_finite() { min.clamp(0.01, 1.0) } else { Self::DEFAULT.min };
+        let min = if min.is_finite() {
+            min.clamp(0.01, 1.0)
+        } else {
+            Self::DEFAULT.min
+        };
         let min = if min > 0.99 { 1.0 } else { min };
-        let max = if max.is_finite() { max.clamp(1.01, 64.0) } else { Self::DEFAULT.max };
+        let max = if max.is_finite() {
+            max.clamp(1.01, 64.0)
+        } else {
+            Self::DEFAULT.max
+        };
         Self { min, max }
     }
 
@@ -49,7 +57,11 @@ impl Limits {
     }
 
     pub fn clamp(&self, zoom: f64) -> f64 {
-        if zoom.is_finite() { zoom.clamp(self.min, self.max) } else { 1.0 }
+        if zoom.is_finite() {
+            zoom.clamp(self.min, self.max)
+        } else {
+            1.0
+        }
     }
 }
 
@@ -62,7 +74,11 @@ pub struct ZoomView {
 }
 
 impl ZoomView {
-    pub const FIT: Self = Self { zoom: 1.0, cx: 0.5, cy: 0.5 };
+    pub const FIT: Self = Self {
+        zoom: 1.0,
+        cx: 0.5,
+        cy: 0.5,
+    };
 
     /// The view of 100%: the plain, fitted picture (the centre does not matter at 100% of the fitted size, it is always the
     /// middle, so a zoom of 1.0 is the fit).
@@ -131,7 +147,12 @@ pub struct Placement {
 impl Placement {
     /// Where `window` is in the room.
     pub fn dest(&self) -> IRect {
-        IRect { x: self.x + self.window.x, y: self.y + self.window.y, w: self.window.w, h: self.window.h }
+        IRect {
+            x: self.x + self.window.x,
+            y: self.y + self.window.y,
+            w: self.window.w,
+            h: self.window.h,
+        }
     }
 }
 
@@ -145,7 +166,15 @@ pub struct Area {
 impl Area {
     /// A room that is exactly the tile.
     pub fn plain(tile: (i32, i32)) -> Self {
-        Self { size: tile, home: IRect { x: 0, y: 0, w: tile.0, h: tile.1 } }
+        Self {
+            size: tile,
+            home: IRect {
+                x: 0,
+                y: 0,
+                w: tile.0,
+                h: tile.1,
+            },
+        }
     }
 
     /// The tile `home` grown by the free space around it, `home` being given relative to the room's top left corner.
@@ -182,7 +211,12 @@ impl Frame {
             image_h: f64::from(image.1),
             tile_w: f64::from(area.size.0),
             tile_h: f64::from(area.size.1),
-            home: RectF::new(f64::from(area.home.x), f64::from(area.home.y), f64::from(area.home.w), f64::from(area.home.h)),
+            home: RectF::new(
+                f64::from(area.home.x),
+                f64::from(area.home.y),
+                f64::from(area.home.w),
+                f64::from(area.home.h),
+            ),
         })
     }
 
@@ -274,9 +308,21 @@ impl Frame {
         let (ex, ey) = self.extent(view.zoom);
         let rect = self.image_rect(view);
         let (dx, dy) = (dx.round(), dy.round());
-        let cx = if ex > self.tile_w + EPS { (self.tile_w / 2.0 - (snap(rect.x) + dx)) / ex } else { view.cx };
-        let cy = if ey > self.tile_h + EPS { (self.tile_h / 2.0 - (snap(rect.y) + dy)) / ey } else { view.cy };
-        self.clamp_center(ZoomView { zoom: view.zoom, cx, cy })
+        let cx = if ex > self.tile_w + EPS {
+            (self.tile_w / 2.0 - (snap(rect.x) + dx)) / ex
+        } else {
+            view.cx
+        };
+        let cy = if ey > self.tile_h + EPS {
+            (self.tile_h / 2.0 - (snap(rect.y) + dy)) / ey
+        } else {
+            view.cy
+        };
+        self.clamp_center(ZoomView {
+            zoom: view.zoom,
+            cx,
+            cy,
+        })
     }
 
     /// Where the image starts on an axis: pushed from its home into the room while it is smaller than the room, else placed by
@@ -330,7 +376,12 @@ impl Frame {
             return None;
         }
         Some(Visible {
-            dest: IRect { x: x0 as i32, y: y0 as i32, w: (x1 - x0) as i32, h: (y1 - y0) as i32 },
+            dest: IRect {
+                x: x0 as i32,
+                y: y0 as i32,
+                w: (x1 - x0) as i32,
+                h: (y1 - y0) as i32,
+            },
             src: RectF::new(sx0, sy0, sx1 - sx0, sy1 - sy0),
         })
     }
@@ -345,7 +396,18 @@ impl Frame {
         let (room_w, room_h) = (self.tile_w.round() as i32, self.tile_h.round() as i32);
         let (x0, y0) = ((-x).max(0), (-y).max(0));
         let (x1, y1) = (w.min(room_w - x), h.min(room_h - y));
-        (x1 > x0 && y1 > y0).then(|| Placement { x, y, w, h, window: IRect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } })
+        (x1 > x0 && y1 > y0).then(|| Placement {
+            x,
+            y,
+            w,
+            h,
+            window: IRect {
+                x: x0,
+                y: y0,
+                w: x1 - x0,
+                h: y1 - y0,
+            },
+        })
     }
 
     /// Source pixels per pixel of the virtual image of `zoom` (the inverse of the scale).
@@ -356,6 +418,10 @@ impl Frame {
     /// A drag of the minimap's rectangle: the centre the view gets when the rectangle's middle is at (`nx`, `ny`), shares of
     /// the image. On an axis where the whole image is visible nothing moves.
     pub fn center_for_viewport(&self, view: ZoomView, nx: f64, ny: f64) -> ZoomView {
-        self.clamp_center(ZoomView { zoom: view.zoom, cx: nx, cy: ny })
+        self.clamp_center(ZoomView {
+            zoom: view.zoom,
+            cx: nx,
+            cy: ny,
+        })
     }
 }

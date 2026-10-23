@@ -39,8 +39,7 @@ impl RebornFolderWarnDialogController {
     fn ensure_dialog_instantiated(&self) {
         let mut d_ref = self.dialog.borrow_mut();
         if d_ref.is_none() {
-            let win = RebornFolderDeleteWarnDialog::new()
-                .expect("Failed to instantiate RebornFolderDeleteWarnDialog");
+            let win = RebornFolderDeleteWarnDialog::new().expect("Failed to instantiate RebornFolderDeleteWarnDialog");
             *d_ref = Some(win);
         }
     }

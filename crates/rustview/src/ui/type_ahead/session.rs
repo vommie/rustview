@@ -115,10 +115,19 @@ impl TypeAhead {
     fn is_running(&self, now: Instant, cursor: Option<BrowseItem>, config: &TypeAheadConfig) -> bool {
         !self.buffer.is_empty()
             && self.landed == cursor
-            && self.last_input.is_some_and(|last| now.saturating_duration_since(last) <= config.timeout)
+            && self
+                .last_input
+                .is_some_and(|last| now.saturating_duration_since(last) <= config.timeout)
     }
 
-    pub fn key(&mut self, class: KeyClass<'_>, now: Instant, cursor: Cursor, names: &dyn NameSource, config: &TypeAheadConfig) -> Reaction {
+    pub fn key(
+        &mut self,
+        class: KeyClass<'_>,
+        now: Instant,
+        cursor: Cursor,
+        names: &dyn NameSource,
+        config: &TypeAheadConfig,
+    ) -> Reaction {
         match class {
             KeyClass::Modifier => Reaction::NotHandled,
             KeyClass::Other => {
@@ -128,7 +137,11 @@ impl TypeAhead {
             KeyClass::Escape => {
                 let running = self.is_running(now, cursor.item, config);
                 self.reset();
-                if running { Reaction::Consumed } else { Reaction::NotHandled }
+                if running {
+                    Reaction::Consumed
+                } else {
+                    Reaction::NotHandled
+                }
             }
             KeyClass::Backspace => {
                 if !self.is_running(now, cursor.item, config) {
@@ -154,7 +167,14 @@ impl TypeAhead {
         }
     }
 
-    fn text(&mut self, text: &str, now: Instant, cursor: Cursor, names: &dyn NameSource, config: &TypeAheadConfig) -> Reaction {
+    fn text(
+        &mut self,
+        text: &str,
+        now: Instant,
+        cursor: Cursor,
+        names: &dyn NameSource,
+        config: &TypeAheadConfig,
+    ) -> Reaction {
         let running = self.is_running(now, cursor.item, config);
         let gap = self.last_input.map(|last| now.saturating_duration_since(last));
         if !running {
@@ -176,7 +196,11 @@ impl TypeAhead {
 
         // 1. The whole string. A new search starts after the cursor (typing the same letter again moves on to the next item of
         //    that letter); a running one starts at the cursor, so refining the string keeps the item it is on while it still fits.
-        let start = if running { start_at(cursor.position, count, false) } else { next };
+        let start = if running {
+            start_at(cursor.position, count, false)
+        } else {
+            next
+        };
         if let Some(position) = find(names, &self.buffer, start) {
             self.last_success.clone_from(&self.buffer);
             return Reaction::Jump(position);
@@ -233,5 +257,7 @@ fn find(names: &dyn NameSource, needle: &str, start: usize) -> Option<usize> {
         return None;
     }
     let start = start.min(count - 1);
-    (start..count).chain(0..start).find(|&position| names.starts_with(position, needle))
+    (start..count)
+        .chain(0..start)
+        .find(|&position| names.starts_with(position, needle))
 }

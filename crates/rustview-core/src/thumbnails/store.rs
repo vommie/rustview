@@ -101,10 +101,7 @@ impl PackStore {
                 .write(true)
                 .open(&new_path)?;
             writer.current_size = 0;
-            tracing::info!(
-                new_pack_id = writer.pack_id,
-                "Rotated to new Pack container."
-            );
+            tracing::info!(new_pack_id = writer.pack_id, "Rotated to new Pack container.");
         }
 
         let offset = writer.current_size;

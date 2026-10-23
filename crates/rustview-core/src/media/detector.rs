@@ -99,10 +99,14 @@ impl MediaDetector {
         if b.starts_with(b"#?RADIANCE\n") || b.starts_with(b"#?RGBE\n") {
             return Some(MediaFormat::Hdr);
         }
-        if b.starts_with(&[0xFF, 0x0A]) || b.starts_with(&[0, 0, 0, 0x0C, b'J', b'X', b'L', b' ', 0x0D, 0x0A, 0x87, 0x0A]) {
+        if b.starts_with(&[0xFF, 0x0A])
+            || b.starts_with(&[0, 0, 0, 0x0C, b'J', b'X', b'L', b' ', 0x0D, 0x0A, 0x87, 0x0A])
+        {
             return Some(MediaFormat::Jxl);
         }
-        if b.starts_with(&[0, 0, 0, 0x0C, b'j', b'P', b' ', b' ', 0x0D, 0x0A, 0x87, 0x0A]) || b.starts_with(&[0xFF, 0x4F, 0xFF, 0x51]) {
+        if b.starts_with(&[0, 0, 0, 0x0C, b'j', b'P', b' ', b' ', 0x0D, 0x0A, 0x87, 0x0A])
+            || b.starts_with(&[0xFF, 0x4F, 0xFF, 0x51])
+        {
             return Some(MediaFormat::Jp2);
         }
         if b.starts_with(b"SDPX") || b.starts_with(b"XPDS") {
@@ -152,7 +156,8 @@ impl MediaDetector {
             if brands.has_any(HEIF_BRANDS) {
                 return Some(MediaFormat::Heic);
             }
-            if brands.major.starts_with(b"M4A") || brands.major.starts_with(b"M4B") || brands.major.starts_with(b"M4P") {
+            if brands.major.starts_with(b"M4A") || brands.major.starts_with(b"M4B") || brands.major.starts_with(b"M4P")
+            {
                 return None;
             }
             return Some(match brands.major {
@@ -172,7 +177,11 @@ impl MediaDetector {
     fn detect_video(b: &[u8]) -> Option<MediaFormat> {
         if b.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
             let window = &b[..b.len().min(128)];
-            return Some(if memmem::find(window, b"webm").is_some() { MediaFormat::Webm } else { MediaFormat::Mkv });
+            return Some(if memmem::find(window, b"webm").is_some() {
+                MediaFormat::Webm
+            } else {
+                MediaFormat::Mkv
+            });
         }
         if b.starts_with(b"FLV\x01") {
             return Some(MediaFormat::Flv);
@@ -221,10 +230,16 @@ impl MediaDetector {
 /// HEIF/HEIC brands (AVIF files carry `mif1` too, so AVIF is checked first).
 const HEIF_BRANDS: &[&[u8; 4]] = &[b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"];
 
-const ASF_HEADER_GUID: [u8; 16] = [0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C];
-const WTV_HEADER_GUID: [u8; 16] = [0xB7, 0xD8, 0x00, 0x20, 0x37, 0x49, 0xDA, 0x11, 0xA6, 0x4E, 0x00, 0x07, 0xE9, 0x5E, 0xAD, 0x8D];
+const ASF_HEADER_GUID: [u8; 16] = [
+    0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C,
+];
+const WTV_HEADER_GUID: [u8; 16] = [
+    0xB7, 0xD8, 0x00, 0x20, 0x37, 0x49, 0xDA, 0x11, 0xA6, 0x4E, 0x00, 0x07, 0xE9, 0x5E, 0xAD, 0x8D,
+];
 /// ASF stream type "video media"; an ASF without one is a WMA audio file.
-const ASF_VIDEO_STREAM_GUID: [u8; 16] = [0xC0, 0xEF, 0x19, 0xBC, 0x4D, 0x5B, 0xCF, 0x11, 0xA8, 0xFD, 0x00, 0x80, 0x5F, 0x5C, 0x44, 0x2B];
+const ASF_VIDEO_STREAM_GUID: [u8; 16] = [
+    0xC0, 0xEF, 0x19, 0xBC, 0x4D, 0x5B, 0xCF, 0x11, 0xA8, 0xFD, 0x00, 0x80, 0x5F, 0x5C, 0x44, 0x2B,
+];
 
 /// The brands of an `ftyp` box.
 struct IsoBrands<'a> {
@@ -238,7 +253,11 @@ impl<'a> IsoBrands<'a> {
             return None;
         }
         let box_size = u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize;
-        let end = if box_size >= 16 { box_size.min(b.len()) } else { b.len().min(64) };
+        let end = if box_size >= 16 {
+            box_size.min(b.len())
+        } else {
+            b.len().min(64)
+        };
         Some(Self {
             major: &b[8..12],
             compatible: &b[16..end.max(16)],
@@ -263,7 +282,10 @@ fn is_bmp(b: &[u8]) -> bool {
     if b.len() < 18 || &b[0..2] != b"BM" || b[6..10] != [0, 0, 0, 0] {
         return false;
     }
-    matches!(u32::from_le_bytes([b[14], b[15], b[16], b[17]]), 12 | 40 | 52 | 56 | 64 | 108 | 124)
+    matches!(
+        u32::from_le_bytes([b[14], b[15], b[16], b[17]]),
+        12 | 40 | 52 | 56 | 64 | 108 | 124
+    )
 }
 
 fn is_ico(b: &[u8]) -> bool {
@@ -277,11 +299,17 @@ fn is_ico(b: &[u8]) -> bool {
 }
 
 fn is_sgi(b: &[u8]) -> bool {
-    b.len() >= 8 && b[0] == 0x01 && b[1] == 0xDA && b[2] <= 1 && (b[3] == 1 || b[3] == 2) && (1..=3).contains(&u16::from_be_bytes([b[4], b[5]]))
+    b.len() >= 8
+        && b[0] == 0x01
+        && b[1] == 0xDA
+        && b[2] <= 1
+        && (b[3] == 1 || b[3] == 2)
+        && (1..=3).contains(&u16::from_be_bytes([b[4], b[5]]))
 }
 
 fn is_pcx(b: &[u8]) -> bool {
-    if b.len() < 12 || b[0] != 0x0A || !matches!(b[1], 0 | 2 | 3 | 4 | 5) || b[2] != 1 || !matches!(b[3], 1 | 2 | 4 | 8) {
+    if b.len() < 12 || b[0] != 0x0A || !matches!(b[1], 0 | 2 | 3 | 4 | 5) || b[2] != 1 || !matches!(b[3], 1 | 2 | 4 | 8)
+    {
         return false;
     }
     let (xmin, ymin) = (u16::from_le_bytes([b[4], b[5]]), u16::from_le_bytes([b[6], b[7]]));
@@ -291,13 +319,20 @@ fn is_pcx(b: &[u8]) -> bool {
 
 /// `P1`..`P7`, `Pf`, `PF` followed by white space and a number or a comment.
 fn is_pnm(b: &[u8]) -> bool {
-    if b.len() < 4 || b[0] != b'P' || !matches!(b[1], b'1'..=b'7' | b'f' | b'F') || !matches!(b[2], b' ' | b'\t' | b'\n' | b'\r') {
+    if b.len() < 4
+        || b[0] != b'P'
+        || !matches!(b[1], b'1'..=b'7' | b'f' | b'F')
+        || !matches!(b[2], b' ' | b'\t' | b'\n' | b'\r')
+    {
         return false;
     }
     if b[1] == b'7' {
         return b[2] == b'\n' && (b[3..].starts_with(b"WIDTH") || b[3..].starts_with(b"#"));
     }
-    b[3..].iter().find(|c| !c.is_ascii_whitespace()).is_some_and(|c| c.is_ascii_digit() || *c == b'#')
+    b[3..]
+        .iter()
+        .find(|c| !c.is_ascii_whitespace())
+        .is_some_and(|c| c.is_ascii_digit() || *c == b'#')
 }
 
 /// Text that is an `<svg` element or starts like an XML document (prolog, doctype or comment) and mentions `<svg` early.
@@ -322,6 +357,9 @@ fn is_transport_stream(header: &[u8], packet: usize, lead: usize) -> bool {
 }
 
 fn looks_like_text(header: &[u8]) -> bool {
-    let printable = header.iter().filter(|c| matches!(c, b'\t' | b'\n' | b'\r' | 0x20..=0x7E)).count();
+    let printable = header
+        .iter()
+        .filter(|c| matches!(c, b'\t' | b'\n' | b'\r' | 0x20..=0x7E))
+        .count();
     printable * 100 >= header.len() * 95
 }

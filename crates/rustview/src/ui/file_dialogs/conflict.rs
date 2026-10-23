@@ -1,14 +1,12 @@
-use crate::ui::models::{
-    format_filesize, format_timestamp, rgb8_to_slint_image,
-};
+use crate::system::SystemFileHandler;
 use crate::ui::media::video_preview::VideoPreviewAnimator;
+use crate::ui::models::{format_filesize, format_timestamp, rgb8_to_slint_image};
 use crate::ui::{ConflictFileView, FileOpsConflictDialog, MainWindow};
 use rustview_core::library::models::{
     FileConflictItemDetails, FileConflictReport, FileConflictResolution, FileTransferKind, MediaId,
 };
 use rustview_core::media::{MediaFormat, MediaHasher, MediaType};
 use rustview_core::settings::{LogObscurer, SettingsManager};
-use crate::system::SystemFileHandler;
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailGenerator, ThumbnailManager};
 use slint::{CloseRequestResponse, ComponentHandle, Image, Timer};
 use std::cell::RefCell;
@@ -62,11 +60,8 @@ impl FileOpsConflictDialogController {
     }
 
     /// Displays the File Conflict modal dialog with rich visual comparison, animated GIF/video hover previews, and resolution buttons.
-    pub fn show<F>(
-        &self,
-        params: ConflictDialogParams<'_>,
-        on_resolve: F,
-    ) where
+    pub fn show<F>(&self, params: ConflictDialogParams<'_>, on_resolve: F)
+    where
         F: Fn(FileConflictResolution, bool) + 'static,
     {
         let t0 = Instant::now();
@@ -78,8 +73,18 @@ impl FileOpsConflictDialogController {
         if let Some(ref win) = *self.dialog.borrow() {
             let t_thumb = Instant::now();
             let thumb_config = ThumbnailConfig::from_performance_settings(&params.settings.get().performance);
-            let src_thumb = load_conflict_thumbnail(params.thumbnails, &thumb_config, &params.report.source.full_path, params.report.source.media_id);
-            let dst_thumb = load_conflict_thumbnail(params.thumbnails, &thumb_config, &params.report.destination.full_path, params.report.destination.media_id);
+            let src_thumb = load_conflict_thumbnail(
+                params.thumbnails,
+                &thumb_config,
+                &params.report.source.full_path,
+                params.report.source.media_id,
+            );
+            let dst_thumb = load_conflict_thumbnail(
+                params.thumbnails,
+                &thumb_config,
+                &params.report.destination.full_path,
+                params.report.destination.media_id,
+            );
             let thumb_load_us = t_thumb.elapsed().as_micros();
 
             let src_view = convert_details_to_view(&params.report.source, src_thumb.clone());
@@ -297,13 +302,14 @@ impl FileOpsConflictDialogController {
                             && let Some(preview) = thumb_mgr.try_get_animated_preview(media_id)
                         {
                             let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
-                            let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
-                                if let Some(w) = win_w.upgrade() {
-                                    let mut src_file = w.get_source_file();
-                                    src_file.thumbnail = img;
-                                    w.set_source_file(src_file);
-                                }
-                            });
+                            let timer =
+                                VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                                    if let Some(w) = win_w.upgrade() {
+                                        let mut src_file = w.get_source_file();
+                                        src_file.thumbnail = img;
+                                        w.set_source_file(src_file);
+                                    }
+                                });
                             CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                         } else {
                             let config = ThumbnailConfig::default();
@@ -316,14 +322,21 @@ impl FileOpsConflictDialogController {
                                 move |res| {
                                     if let Ok(preview) = res {
                                         let _ = win_w_async.upgrade_in_event_loop(move |w| {
-                                            let is_still_hovered = CONFLICT_HOVER_TARGET.with(|t| *t.borrow() == Some("source"));
+                                            let is_still_hovered =
+                                                CONFLICT_HOVER_TARGET.with(|t| *t.borrow() == Some("source"));
                                             if is_still_hovered {
-                                                let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
-                                                let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
-                                                    let mut src_file = w.get_source_file();
-                                                    src_file.thumbnail = img;
-                                                    w.set_source_file(src_file);
-                                                });
+                                                let timed_frames =
+                                                    VideoPreviewAnimator::convert_animated_preview_to_timed_frames(
+                                                        &preview,
+                                                    );
+                                                let timer = VideoPreviewAnimator::start_variable_delay_animation(
+                                                    timed_frames,
+                                                    move |img| {
+                                                        let mut src_file = w.get_source_file();
+                                                        src_file.thumbnail = img;
+                                                        w.set_source_file(src_file);
+                                                    },
+                                                );
                                                 CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                                             }
                                         });
@@ -392,13 +405,14 @@ impl FileOpsConflictDialogController {
                             && let Some(preview) = thumb_mgr.try_get_animated_preview(media_id)
                         {
                             let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
-                            let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
-                                if let Some(w) = win_w.upgrade() {
-                                    let mut dst_file = w.get_destination_file();
-                                    dst_file.thumbnail = img;
-                                    w.set_destination_file(dst_file);
-                                }
-                            });
+                            let timer =
+                                VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
+                                    if let Some(w) = win_w.upgrade() {
+                                        let mut dst_file = w.get_destination_file();
+                                        dst_file.thumbnail = img;
+                                        w.set_destination_file(dst_file);
+                                    }
+                                });
                             CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                         } else {
                             let config = ThumbnailConfig::default();
@@ -411,14 +425,21 @@ impl FileOpsConflictDialogController {
                                 move |res| {
                                     if let Ok(preview) = res {
                                         let _ = win_w_async.upgrade_in_event_loop(move |w| {
-                                            let is_still_hovered = CONFLICT_HOVER_TARGET.with(|t| *t.borrow() == Some("dest"));
+                                            let is_still_hovered =
+                                                CONFLICT_HOVER_TARGET.with(|t| *t.borrow() == Some("dest"));
                                             if is_still_hovered {
-                                                let timed_frames = VideoPreviewAnimator::convert_animated_preview_to_timed_frames(&preview);
-                                                let timer = VideoPreviewAnimator::start_variable_delay_animation(timed_frames, move |img| {
-                                                    let mut dst_file = w.get_destination_file();
-                                                    dst_file.thumbnail = img;
-                                                    w.set_destination_file(dst_file);
-                                                });
+                                                let timed_frames =
+                                                    VideoPreviewAnimator::convert_animated_preview_to_timed_frames(
+                                                        &preview,
+                                                    );
+                                                let timer = VideoPreviewAnimator::start_variable_delay_animation(
+                                                    timed_frames,
+                                                    move |img| {
+                                                        let mut dst_file = w.get_destination_file();
+                                                        dst_file.thumbnail = img;
+                                                        w.set_destination_file(dst_file);
+                                                    },
+                                                );
                                                 CONFLICT_PREVIEW_TIMER.with(|t| *t.borrow_mut() = timer);
                                             }
                                         });
@@ -485,7 +506,9 @@ fn load_conflict_thumbnail(
     if let Some(id) = media_id {
         match thumbnails.get_or_load_sync(id, path, config.clone()) {
             Ok(cached) => return slint::Image::from_rgb8(cached.pixels),
-            Err(e) => tracing::warn!(media_id = id, error = %e, "[ConflictDialog: Thumbnail] Stored/generated thumbnail unavailable, using transient fallback"),
+            Err(e) => {
+                tracing::warn!(media_id = id, error = %e, "[ConflictDialog: Thumbnail] Stored/generated thumbnail unavailable, using transient fallback")
+            }
         }
     }
     generate_transient_thumbnail(config, path)
@@ -494,9 +517,12 @@ fn load_conflict_thumbnail(
 fn generate_transient_thumbnail(config: &ThumbnailConfig, path: &Path) -> Image {
     let generator = ThumbnailGenerator::new();
     let extension_type = MediaFormat::from_path(path).media_type().unwrap_or(MediaType::Image);
-    let is_video = rustview_core::media::MetadataExtractor::resolve_media_type(path, extension_type) == MediaType::Video;
+    let is_video =
+        rustview_core::media::MetadataExtractor::resolve_media_type(path, extension_type) == MediaType::Video;
     let frame = if is_video {
-        generator.generate_video_thumbnails(path, config).map(|r| r.primary_frame)
+        generator
+            .generate_video_thumbnails(path, config)
+            .map(|r| r.primary_frame)
     } else {
         generator.generate_image_thumbnail(path, config.max_bound, config.scaling_algorithm)
     };
@@ -518,10 +544,17 @@ mod tests {
     fn transient_thumbnail_is_generated_for_images_and_empty_for_missing_files() {
         let dir = tempfile::tempdir().expect("tempdir");
         let file = dir.path().join("c.png");
-        image::RgbImage::from_pixel(64, 48, image::Rgb([10, 120, 200])).save(&file).expect("write png");
+        image::RgbImage::from_pixel(64, 48, image::Rgb([10, 120, 200]))
+            .save(&file)
+            .expect("write png");
         let config = ThumbnailConfig::default();
 
         assert!(generate_transient_thumbnail(&config, &file).size().width > 0);
-        assert_eq!(generate_transient_thumbnail(&config, &dir.path().join("none.png")).size().width, 0);
+        assert_eq!(
+            generate_transient_thumbnail(&config, &dir.path().join("none.png"))
+                .size()
+                .width,
+            0
+        );
     }
 }

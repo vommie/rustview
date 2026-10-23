@@ -1,21 +1,20 @@
-use crate::ui::selection::BridgeFileSelection;
+use crate::ui::MainWindow;
 use crate::ui::browse_folders::{BrowseItem, FolderRowRef, SelectionDelta};
-use rustview_core::library::models::{FolderId, MediaId};
-use std::collections::HashSet;
 use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::multiview::handle::{self as multiview_handle, Pace};
+use crate::ui::selection::BridgeFileSelection;
+use crate::ui::selection::model::FileSelectionModel;
+use crate::ui::selection::rubberband::{
+    GridLayoutConfig, RubberbandAutoScroller, RubberbandGeometry, RubberbandStartParams, TableLayoutConfig,
+};
 use crate::ui::state::{LastActivePanel, UiState};
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tags::BridgeTags;
-use crate::ui::selection::model::FileSelectionModel;
-use crate::ui::selection::rubberband::{
-    GridLayoutConfig, RubberbandAutoScroller, RubberbandGeometry, RubberbandStartParams,
-    TableLayoutConfig,
-};
-use crate::ui::MainWindow;
-use crate::ui::multiview::handle::{self as multiview_handle, Pace};
-use rustview_core::library::Library;
 use parking_lot::RwLock;
+use rustview_core::library::Library;
+use rustview_core::library::models::{FolderId, MediaId};
 use slint::ComponentHandle;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -122,42 +121,41 @@ impl BridgeRubberband {
         let lib_weak = params.library.clone();
         let st_weak = params.state.clone();
 
-        params.autoscroller.update_cursor(params.window, params.view_y, move |dy| {
-            if let Some(w) = win_weak.upgrade() {
-                w.invoke_scroll_media_by(dy);
-                let new_viewport_y = w.invoke_get_media_viewport_y();
+        params
+            .autoscroller
+            .update_cursor(params.window, params.view_y, move |dy| {
+                if let Some(w) = win_weak.upgrade() {
+                    w.invoke_scroll_media_by(dy);
+                    let new_viewport_y = w.invoke_get_media_viewport_y();
 
-                let (last_vx, last_vy) = {
-                    let st_r = st_weak.read();
-                    (st_r.rubberband_session.last_view_x, st_r.rubberband_session.last_view_y)
-                };
+                    let (last_vx, last_vy) = {
+                        let st_r = st_weak.read();
+                        (st_r.rubberband_session.last_view_x, st_r.rubberband_session.last_view_y)
+                    };
 
-                let new_content_y = last_vy - new_viewport_y;
-                let new_content_x = last_vx;
+                    let new_content_y = last_vy - new_viewport_y;
+                    let new_content_x = last_vx;
 
-                {
-                    let mut st = st_weak.write();
-                    st.last_active_panel = LastActivePanel::Media;
-                    st.rubberband_session.update_content_point(new_content_x, new_content_y, last_vx, last_vy);
+                    {
+                        let mut st = st_weak.write();
+                        st.last_active_panel = LastActivePanel::Media;
+                        st.rubberband_session
+                            .update_content_point(new_content_x, new_content_y, last_vx, last_vy);
+                    }
+
+                    let new_rect = st_weak.read().rubberband_session.content_rect();
+                    w.set_rubberband_x(new_rect.x);
+                    w.set_rubberband_y(new_rect.y);
+                    w.set_rubberband_width(new_rect.width);
+                    w.set_rubberband_height(new_rect.height);
+
+                    Self::evaluate_selection(&w, &lib_weak, &st_weak);
                 }
-
-                let new_rect = st_weak.read().rubberband_session.content_rect();
-                w.set_rubberband_x(new_rect.x);
-                w.set_rubberband_y(new_rect.y);
-                w.set_rubberband_width(new_rect.width);
-                w.set_rubberband_height(new_rect.height);
-
-                Self::evaluate_selection(&w, &lib_weak, &st_weak);
-            }
-        });
+            });
     }
 
     /// Evaluates current rectangle intersection against dataset items and synchronizes selection.
-    fn evaluate_selection(
-        window: &MainWindow,
-        library: &Arc<Library>,
-        state: &Arc<RwLock<UiState>>,
-    ) {
+    fn evaluate_selection(window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
         let is_table = window.get_is_table_view();
 
         let (rect, is_ctrl, is_shift, baseline, baseline_folders) = {
@@ -189,7 +187,10 @@ impl BridgeRubberband {
                 + window.get_col_format_width()
                 + window.get_col_flags_width();
 
-            let config = TableLayoutConfig { row_height: 28.0, content_width: col_w_sum };
+            let config = TableLayoutConfig {
+                row_height: 28.0,
+                content_width: col_w_sum,
+            };
             RubberbandGeometry::table_hit_positions(rect, total_items, config)
         } else {
             let thumb_size = window.get_thumb_size() as f32;
@@ -242,7 +243,8 @@ impl BridgeRubberband {
 
         drop(st);
 
-        let target_selection = RubberbandGeometry::evaluate_modifier_selection(&baseline, &intersected, is_ctrl, is_shift);
+        let target_selection =
+            RubberbandGeometry::evaluate_modifier_selection(&baseline, &intersected, is_ctrl, is_shift);
         let target_folders =
             RubberbandGeometry::evaluate_modifier_selection(&baseline_folders, &intersected_folders, is_ctrl, is_shift);
 

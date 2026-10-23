@@ -41,7 +41,11 @@ pub fn position_of(zoom: f64, limits: Limits) -> f64 {
 
 /// The zoom factor at a position of the slider (0..1).
 pub fn zoom_at(position: f64, limits: Limits) -> f64 {
-    let p = if position.is_finite() { position.clamp(0.0, 1.0) } else { position_of(1.0, limits) };
+    let p = if position.is_finite() {
+        position.clamp(0.0, 1.0)
+    } else {
+        position_of(1.0, limits)
+    };
     limits.min * (limits.max / limits.min).powf(p)
 }
 
@@ -50,12 +54,34 @@ pub fn ticks(limits: Limits, width_px: f64) -> Vec<Tick> {
     let width = width_px.max(1.0);
     let at = |zoom: f64| position_of(zoom, limits) * width;
     // (mark, priority): the reset first, then the ends, then the steps by their rank.
-    let mut candidates = vec![(Tick { zoom: 1.0, rank: 0 }, 0u8), (Tick { zoom: limits.min, rank: 1 }, 1), (Tick { zoom: limits.max, rank: 1 }, 1)];
+    let mut candidates = vec![
+        (Tick { zoom: 1.0, rank: 0 }, 0u8),
+        (
+            Tick {
+                zoom: limits.min,
+                rank: 1,
+            },
+            1,
+        ),
+        (
+            Tick {
+                zoom: limits.max,
+                rank: 1,
+            },
+            1,
+        ),
+    ];
     // The steps of 25% above the reset. A step belongs to a grid (25, 50 or 100%) and is drawn while that grid still has room: the
     // distance to the next step of the same grid is what decides, so a grid never ends in the middle of a gap.
     let mut d = 25u32;
     while 1.0 + f64::from(d) / 100.0 < limits.max * 0.999 {
-        let (grid, rank) = if d.is_multiple_of(100) { (100, 1) } else if d.is_multiple_of(50) { (50, 2) } else { (25, 3) };
+        let (grid, rank) = if d.is_multiple_of(100) {
+            (100, 1)
+        } else if d.is_multiple_of(50) {
+            (50, 2)
+        } else {
+            (25, 3)
+        };
         let zoom = 1.0 + f64::from(d) / 100.0;
         let gap = if rank == 3 { GAP_DOT_PX } else { GAP_LINE_PX };
         if at(zoom + f64::from(grid) / 100.0) - at(zoom) >= gap {
@@ -94,12 +120,20 @@ pub fn snap_zooms(limits: Limits, width_px: f64) -> Vec<f64> {
 
 /// Pulls a handle position to the nearest snap point that is within a few pixels of it. `width_px` is the length of the track.
 pub fn snap_position(position: f64, width_px: f64, limits: Limits) -> f64 {
-    let p = if position.is_finite() { position.clamp(0.0, 1.0) } else { position_of(1.0, limits) };
+    let p = if position.is_finite() {
+        position.clamp(0.0, 1.0)
+    } else {
+        position_of(1.0, limits)
+    };
     let width = width_px.max(1.0);
     let mut best: Option<(f64, f64)> = None;
     for zoom in snap_zooms(limits, width) {
         let target = position_of(zoom, limits);
-        let reach = if (zoom - 1.0).abs() < 1e-9 { SNAP_RESET_PX } else { SNAP_PX };
+        let reach = if (zoom - 1.0).abs() < 1e-9 {
+            SNAP_RESET_PX
+        } else {
+            SNAP_PX
+        };
         let distance = (target - p).abs() * width;
         if distance <= reach && best.is_none_or(|(_, d)| distance < d) {
             best = Some((target, distance));

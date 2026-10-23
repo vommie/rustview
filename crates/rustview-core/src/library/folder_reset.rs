@@ -99,8 +99,7 @@ impl FolderTreeReset {
             db.folders.put(&mut wtxn, &rec.id, &rec)?;
 
             if db.folders_by_path.get(&wtxn, rec.path.as_str())? != Some(rec.id) {
-                db.folders_by_path
-                    .put(&mut wtxn, rec.path.as_str(), &rec.id)?;
+                db.folders_by_path.put(&mut wtxn, rec.path.as_str(), &rec.id)?;
                 report.path_entries_repaired += 1;
             }
         }

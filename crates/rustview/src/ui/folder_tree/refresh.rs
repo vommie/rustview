@@ -1,20 +1,20 @@
 //! Refreshing the folder tree and its subtrees against the drive (explicit user actions only).
 
+use super::{BridgeFolders, FolderNavigationContext};
+use crate::ui::MainWindow;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
-use crate::ui::MainWindow;
-use rustview_core::library::folders::{normalize_path, FolderScanOptions};
-use rustview_core::library::models::{FolderId, MediaId, MediaRecord};
+use parking_lot::RwLock;
 use rustview_core::library::Library;
+use rustview_core::library::folders::{FolderScanOptions, normalize_path};
+use rustview_core::library::models::{FolderId, MediaId, MediaRecord};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use super::{BridgeFolders, FolderNavigationContext};
 
 impl BridgeFolders {
     /// Full root scan: scans the complete directory tree starting from configured root path on disk,
@@ -117,7 +117,10 @@ impl BridgeFolders {
 
                             StatusBarBridge::success(
                                 &w,
-                                format!("Tree scan completed in {}ms: {} total dirs updated.", elapsed_ms, total_dirs),
+                                format!(
+                                    "Tree scan completed in {}ms: {} total dirs updated.",
+                                    elapsed_ms, total_dirs
+                                ),
                             );
 
                             let has_current_folder = st.read().current_folder_id.is_some();
@@ -282,10 +285,7 @@ impl BridgeFolders {
         state: &Arc<RwLock<UiState>>,
     ) {
         if BridgeMedia::is_system_busy(window, thumbnails, state) {
-            StatusBarBridge::warn(
-                window,
-                "Cannot refresh: another operation is already in progress.",
-            );
+            StatusBarBridge::warn(window, "Cannot refresh: another operation is already in progress.");
             return;
         }
 
@@ -312,10 +312,7 @@ impl BridgeFolders {
         state: &Arc<RwLock<UiState>>,
     ) {
         if BridgeMedia::is_system_busy(window, thumbnails, state) {
-            StatusBarBridge::warn(
-                window,
-                "Cannot refresh: another operation is already in progress.",
-            );
+            StatusBarBridge::warn(window, "Cannot refresh: another operation is already in progress.");
             return;
         }
 

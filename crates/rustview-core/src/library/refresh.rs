@@ -1,6 +1,6 @@
 use super::db::LibraryDatabase;
-use super::folders::FolderManager;
 use super::error::LibraryError;
+use super::folders::FolderManager;
 use super::models::{FolderId, MediaId, MediaRecord};
 use super::schema::SEQ_MEDIA_ID;
 use crate::media::{
@@ -11,8 +11,8 @@ use crate::settings::LogObscurer;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -148,14 +148,20 @@ impl<'a> FolderRefresher<'a> {
         if let Some(ref flag) = cancel_flag
             && flag.load(Ordering::Acquire)
         {
-            tracing::debug!(folder_id = folder_id, "Folder refresh aborted early due to cancellation");
+            tracing::debug!(
+                folder_id = folder_id,
+                "Folder refresh aborted early due to cancellation"
+            );
             return Ok(report);
         }
 
         tracing::info!(folder = %LogObscurer::folder(Some(folder_id), folder_path), "Scanning folder on filesystem...");
 
         let mask = FormatPolicy::mask();
-        let ScanResult { files: scanned_files, ignored } = DirectoryScanner::scan_with(folder_path, false, mask);
+        let ScanResult {
+            files: scanned_files,
+            ignored,
+        } = DirectoryScanner::scan_with(folder_path, false, mask);
         report.total_scanned = scanned_files.len();
         report.ignored = ignored;
 
@@ -168,20 +174,18 @@ impl<'a> FolderRefresher<'a> {
         if let Some(ref flag) = cancel_flag
             && flag.load(Ordering::Acquire)
         {
-            tracing::debug!(folder_id = folder_id, "Folder refresh aborted early due to cancellation");
+            tracing::debug!(
+                folder_id = folder_id,
+                "Folder refresh aborted early due to cancellation"
+            );
             return Ok(report);
         }
 
         // 1. Snapshot existing media records from LMDB and deduplicate by filename
         let rtxn = self.db.env.read_txn()?;
-        let existing_ids = self
-            .db
-            .media_by_folder
-            .get(&rtxn, &folder_id)?
-            .unwrap_or_default();
+        let existing_ids = self.db.media_by_folder.get(&rtxn, &folder_id)?.unwrap_or_default();
 
-        let mut existing_map: HashMap<String, (MediaId, MediaRecord)> =
-            HashMap::with_capacity(existing_ids.len());
+        let mut existing_map: HashMap<String, (MediaId, MediaRecord)> = HashMap::with_capacity(existing_ids.len());
         let mut seen_ids = HashSet::new();
         // Records of switched-off formats are not part of this refresh at all: they are neither compared with the
         // directory (which no longer lists their files) nor marked missing, and they stay in the folder's list.
@@ -307,7 +311,10 @@ impl<'a> FolderRefresher<'a> {
                         } else {
                             match MediaHasher::hash_file(&scanned.path) {
                                 Ok(h) => (h, true),
-                                Err(_) => (MediaHasher::hash_bytes(scanned.path.to_string_lossy().as_bytes()), false),
+                                Err(_) => (
+                                    MediaHasher::hash_bytes(scanned.path.to_string_lossy().as_bytes()),
+                                    false,
+                                ),
                             }
                         };
 
@@ -350,7 +357,8 @@ impl<'a> FolderRefresher<'a> {
                             }
                         };
 
-                        let is_corrupted = is_zero_byte || !hash_ok || !meta_ok || (raw_meta.width == 0 && raw_meta.height == 0);
+                        let is_corrupted =
+                            is_zero_byte || !hash_ok || !meta_ok || (raw_meta.width == 0 && raw_meta.height == 0);
 
                         if !is_corrupted && new_hash == existing_record.file_hash && !existing_record.is_corrupted {
                             ProcessedResult::ModifiedHashUnchanged {
@@ -391,7 +399,10 @@ impl<'a> FolderRefresher<'a> {
                         } else {
                             match MediaHasher::hash_file(&scanned.path) {
                                 Ok(h) => (h, true),
-                                Err(_) => (MediaHasher::hash_bytes(scanned.path.to_string_lossy().as_bytes()), false),
+                                Err(_) => (
+                                    MediaHasher::hash_bytes(scanned.path.to_string_lossy().as_bytes()),
+                                    false,
+                                ),
                             }
                         };
 
@@ -434,7 +445,8 @@ impl<'a> FolderRefresher<'a> {
                             }
                         };
 
-                        let is_corrupted = is_zero_byte || !hash_ok || !meta_ok || (raw_meta.width == 0 && raw_meta.height == 0);
+                        let is_corrupted =
+                            is_zero_byte || !hash_ok || !meta_ok || (raw_meta.width == 0 && raw_meta.height == 0);
 
                         ProcessedResult::NewItem {
                             filename: scanned.filename,
@@ -460,7 +472,10 @@ impl<'a> FolderRefresher<'a> {
         if let Some(ref flag) = cancel_flag
             && flag.load(Ordering::Acquire)
         {
-            tracing::debug!(folder_id = folder_id, "Folder refresh aborted before commit due to cancellation");
+            tracing::debug!(
+                folder_id = folder_id,
+                "Folder refresh aborted before commit due to cancellation"
+            );
             return Ok(report);
         }
 
@@ -522,7 +537,8 @@ impl<'a> FolderRefresher<'a> {
                     is_corrupted,
                     was_deleted,
                 } => {
-                    self.db.update_media_hash_index(&mut wtxn, existing_id, Some(&old_hash), Some(&new_hash))?;
+                    self.db
+                        .update_media_hash_index(&mut wtxn, existing_id, Some(&old_hash), Some(&new_hash))?;
 
                     let updated_record = MediaRecord {
                         id: existing_id,
@@ -586,7 +602,8 @@ impl<'a> FolderRefresher<'a> {
                     };
 
                     self.db.media.put(&mut wtxn, &new_media_id, &new_record)?;
-                    self.db.update_media_hash_index(&mut wtxn, new_media_id, None, Some(&file_hash))?;
+                    self.db
+                        .update_media_hash_index(&mut wtxn, new_media_id, None, Some(&file_hash))?;
 
                     active_media_ids.push(new_media_id);
                     if is_corrupted {
@@ -700,7 +717,10 @@ impl<'a> FolderRefresher<'a> {
                 // "photo" becomes "photo.jpg"; only when that name is taken is a counter added ("photo (1).jpg")
                 let target_filename = format!("{}.{}", filename, ext);
                 let unique_filename = if folder_path.join(&target_filename).exists() {
-                    crate::library::file_operations::FileOperations::generate_unique_filename(folder_path, &target_filename)
+                    crate::library::file_operations::FileOperations::generate_unique_filename(
+                        folder_path,
+                        &target_filename,
+                    )
                 } else {
                     target_filename
                 };

@@ -116,10 +116,7 @@ impl FavoriteManager {
     pub fn add(&mut self, path: PathBuf, alias: Option<String>) -> Result<FavoriteEntry, String> {
         let normalized = normalize_path(&path);
         if self.has_path(&normalized) {
-            return Err(format!(
-                "Folder '{}' is already in your favorites",
-                path.display()
-            ));
+            return Err(format!("Folder '{}' is already in your favorites", path.display()));
         }
 
         let final_alias = alias.unwrap_or_else(|| {
@@ -153,11 +150,7 @@ impl FavoriteManager {
         }
 
         let normalized = normalize_path(path);
-        if let Some(entry) = self
-            .entries
-            .iter_mut()
-            .find(|e| normalize_path(&e.path) == normalized)
-        {
+        if let Some(entry) = self.entries.iter_mut().find(|e| normalize_path(&e.path) == normalized) {
             tracing::info!(
                 old_alias = %entry.alias,
                 new_alias = %trimmed_alias,
@@ -175,11 +168,7 @@ impl FavoriteManager {
     /// Removes a favorite entry by its filesystem path.
     pub fn remove_by_path(&mut self, path: &Path) -> Result<FavoriteEntry, String> {
         let normalized = normalize_path(path);
-        if let Some(idx) = self
-            .entries
-            .iter()
-            .position(|e| normalize_path(&e.path) == normalized)
-        {
+        if let Some(idx) = self.entries.iter().position(|e| normalize_path(&e.path) == normalized) {
             let removed = self.entries.remove(idx);
             tracing::info!(
                 alias = %removed.alias,

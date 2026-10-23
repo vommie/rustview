@@ -5,7 +5,9 @@
 
 use super::super::models::format_timestamp;
 use rustview_core::media::MediaType;
-use rustview_core::media::formats::{approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms, format_filesize_mb};
+use rustview_core::media::formats::{
+    approximate_aspect_ratio, format_duration_compact, format_duration_hms_ms, format_filesize_mb,
+};
 use rustview_core::query::IndexedMediaRecord;
 use slint::SharedString;
 
@@ -48,5 +50,9 @@ impl RecordLabels {
 }
 
 fn dimension(pixels: u32) -> SharedString {
-    if pixels > 0 { pixels.to_string().into() } else { "-".into() }
+    if pixels > 0 {
+        pixels.to_string().into()
+    } else {
+        "-".into()
+    }
 }

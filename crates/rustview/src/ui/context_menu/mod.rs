@@ -18,27 +18,27 @@ pub use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingF
 pub use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
 pub use crate::ui::file_dialogs::{FileDialogContext, FileRenameContext, FileRenameDialogController};
 
+use crate::ctx_menu::CtxMenuDispatcher;
+use crate::ui::favorites::manager::FavoriteManager;
 use crate::ui::favorites::rename_dialog::FavoriteRenameDialogController;
 use crate::ui::folder_dialogs::FolderDialogController;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::*;
 use crate::ui::tags::dialogs::TagDialogController;
-use crate::ui::favorites::manager::FavoriteManager;
 use crate::ui::{FileRenameDialog, MainWindow};
-use crate::ctx_menu::CtxMenuDispatcher;
+use crate::viewer::ViewerTabManager;
+use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::viewer::ViewerTabManager;
-use parking_lot::RwLock;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-mod registration;
-mod dispatcher;
-mod show;
 pub mod cutouts;
+mod dispatcher;
+mod registration;
+mod show;
 pub use cutouts::{calculate_all_active_menu_cutouts, make_rounded_cutout_rectangles};
 
 pub struct MediaMenuContext<'a> {
@@ -83,12 +83,26 @@ pub struct BridgeContextMenu;
 
 impl BridgeContextMenu {
     pub fn register_callbacks(window: &MainWindow, reg: ContextMenuRegistration) {
-        Self::register_media_menu(window, &reg.library, &reg.thumbnails, &reg.tab_manager, &reg.settings, &reg.state);
-        Self::register_folder_menu(window, &reg.library, &reg.thumbnails, &reg.settings, &reg.favorites, &reg.tab_manager, &reg.state);
+        Self::register_media_menu(
+            window,
+            &reg.library,
+            &reg.thumbnails,
+            &reg.tab_manager,
+            &reg.settings,
+            &reg.state,
+        );
+        Self::register_folder_menu(
+            window,
+            &reg.library,
+            &reg.thumbnails,
+            &reg.settings,
+            &reg.favorites,
+            &reg.tab_manager,
+            &reg.state,
+        );
         Self::register_tab_menu(window, &reg.tab_manager, &reg.thumbnails, &reg.state);
         Self::register_favorite_menu(window, &reg.tab_manager, &reg.state);
         Self::register_popup_events(window, &reg.tab_manager, &reg.state);
         Self::register_action_dispatcher(window, reg);
     }
-
 }

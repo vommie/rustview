@@ -11,9 +11,9 @@
 //!
 //! Every item is independent: one that fails is reported and the others still run; a failed item never loses its database record.
 
+use super::Library;
 use super::error::LibraryError;
 use super::models::{FolderId, MediaId};
-use super::Library;
 use crate::settings::LogObscurer;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -93,12 +93,16 @@ impl SelectionDeletePlan {
 
     /// Nothing is left on the drive to delete: the dialog only offers the database cleanup.
     pub fn is_database_only(&self) -> bool {
-        !self.is_empty() && self.present_files().next().is_none() && self.folders_in(FolderState::Present).next().is_none()
+        !self.is_empty()
+            && self.present_files().next().is_none()
+            && self.folders_in(FolderState::Present).next().is_none()
     }
 
     /// Drops the folders that came back on disk (after they were restored) and returns them.
     pub fn take_reborn(&mut self) -> Vec<FolderPlan> {
-        let (reborn, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.folders).into_iter().partition(|f| f.state == FolderState::Reborn);
+        let (reborn, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.folders)
+            .into_iter()
+            .partition(|f| f.state == FolderState::Reborn);
         self.folders = rest;
         reborn
     }
@@ -157,10 +161,14 @@ impl SelectionDeletePlanner {
         }
 
         // A folder that lies inside another selected folder goes with it.
-        let all_affected: Vec<(FolderId, HashSet<FolderId>)> =
-            candidates.iter().map(|c| (c.id, c.affected.iter().copied().collect())).collect();
+        let all_affected: Vec<(FolderId, HashSet<FolderId>)> = candidates
+            .iter()
+            .map(|c| (c.id, c.affected.iter().copied().collect()))
+            .collect();
         for candidate in candidates {
-            let inside_other = all_affected.iter().any(|(other, set)| *other != candidate.id && set.contains(&candidate.id));
+            let inside_other = all_affected
+                .iter()
+                .any(|(other, set)| *other != candidate.id && set.contains(&candidate.id));
             if inside_other {
                 plan.nested_folders += 1;
             } else {
@@ -185,7 +193,12 @@ impl SelectionDeletePlanner {
             }
             let path = library.resolve_media_path(id)?;
             let missing = record.is_deleted || !path.exists();
-            plan.files.push(FilePlan { id, name: record.filename, path, missing });
+            plan.files.push(FilePlan {
+                id,
+                name: record.filename,
+                path,
+                missing,
+            });
         }
 
         Ok(plan)
@@ -241,7 +254,11 @@ impl SelectionDeleteReport {
 
     /// Every folder id whose subtree left the library or was flagged.
     pub fn all_folder_ids(&self) -> Vec<FolderId> {
-        self.folders_deleted.iter().chain(&self.folders_purged).copied().collect()
+        self.folders_deleted
+            .iter()
+            .chain(&self.folders_purged)
+            .copied()
+            .collect()
     }
 }
 
@@ -280,7 +297,12 @@ impl SelectionDeleteExecutor {
         }
     }
 
-    fn delete_files(library: &Library, plan: &SelectionDeletePlan, mode: DeleteMode, report: &mut SelectionDeleteReport) {
+    fn delete_files(
+        library: &Library,
+        plan: &SelectionDeletePlan,
+        mode: DeleteMode,
+        report: &mut SelectionDeleteReport,
+    ) {
         let mut to_purge: Vec<(MediaId, bool)> = Vec::new();
         for file in &plan.files {
             if file.missing {
@@ -291,7 +313,10 @@ impl SelectionDeleteExecutor {
                 Ok(()) => to_purge.push((file.id, true)),
                 Err(reason) => {
                     tracing::warn!(path = %LogObscurer::path(&file.path), %reason, "[SelectionDelete: File] The file could not be removed; its record stays");
-                    report.file_failures.push(ItemFailure { name: file.name.clone(), reason });
+                    report.file_failures.push(ItemFailure {
+                        name: file.name.clone(),
+                        reason,
+                    });
                 }
             }
         }
@@ -312,13 +337,21 @@ impl SelectionDeleteExecutor {
             Err(e) => {
                 tracing::error!(error = %e, "[SelectionDelete: File] The records could not be purged");
                 for file in plan.files.iter().filter(|f| ids.contains(&f.id)) {
-                    report.file_failures.push(ItemFailure { name: file.name.clone(), reason: format!("database: {e}") });
+                    report.file_failures.push(ItemFailure {
+                        name: file.name.clone(),
+                        reason: format!("database: {e}"),
+                    });
                 }
             }
         }
     }
 
-    fn delete_folders(library: &Library, plan: &SelectionDeletePlan, mode: DeleteMode, report: &mut SelectionDeleteReport) {
+    fn delete_folders(
+        library: &Library,
+        plan: &SelectionDeletePlan,
+        mode: DeleteMode,
+        report: &mut SelectionDeleteReport,
+    ) {
         let to_trash = mode == DeleteMode::Trash;
         for folder in &plan.folders {
             // The same check the single dialogs make right before they act: a folder that is back on disk is never purged.
@@ -326,16 +359,25 @@ impl SelectionDeleteExecutor {
             if folder.state != FolderState::Present && exists_now {
                 match library.folder_operations().check_and_restore_if_exists(folder.id) {
                     Ok(_) => report.folders_reborn.push(folder.clone()),
-                    Err(e) => report.folder_failures.push(ItemFailure { name: folder.name.clone(), reason: e.to_string() }),
+                    Err(e) => report.folder_failures.push(ItemFailure {
+                        name: folder.name.clone(),
+                        reason: e.to_string(),
+                    }),
                 }
                 continue;
             }
 
             let result = if exists_now {
-                library.folder_operations().delete_folder(folder.id, to_trash).map(|r| (r, false))
+                library
+                    .folder_operations()
+                    .delete_folder(folder.id, to_trash)
+                    .map(|r| (r, false))
             } else {
                 // Gone from the drive (also when it vanished after the plan was made): the database is cleaned.
-                library.folder_operations().purge_folder_from_db(folder.id).map(|r| (r, true))
+                library
+                    .folder_operations()
+                    .purge_folder_from_db(folder.id)
+                    .map(|r| (r, true))
             };
 
             match result {
@@ -352,7 +394,10 @@ impl SelectionDeleteExecutor {
                 }
                 Err(e) => {
                     tracing::error!(folder = %LogObscurer::path(&folder.path), error = %e, "[SelectionDelete: Folder] The folder could not be deleted");
-                    report.folder_failures.push(ItemFailure { name: folder.name.clone(), reason: e.to_string() });
+                    report.folder_failures.push(ItemFailure {
+                        name: folder.name.clone(),
+                        reason: e.to_string(),
+                    });
                 }
             }
         }

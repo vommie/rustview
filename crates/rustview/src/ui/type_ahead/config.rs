@@ -1,12 +1,12 @@
 //! The user's type-ahead options (Settings > Appearance & Grid > Type-Ahead Find) as a small `Copy` value that every key press reads
 //! without cloning the whole settings.
 
-use rustview_core::settings::schema::{
-    AppearanceSettings, DEFAULT_TYPE_AHEAD_CENTER_TARGET, DEFAULT_TYPE_AHEAD_CYCLE_REPEATED_KEYS, DEFAULT_TYPE_AHEAD_ENABLED,
-    DEFAULT_TYPE_AHEAD_INCLUDE_FOLDERS, DEFAULT_TYPE_AHEAD_MULTIVIEW_DELAY_MS, DEFAULT_TYPE_AHEAD_NEW_SEARCH_GAP_MS,
-    DEFAULT_TYPE_AHEAD_NO_MATCH_MESSAGE, DEFAULT_TYPE_AHEAD_TIMEOUT_MS,
-};
 use parking_lot::RwLock;
+use rustview_core::settings::schema::{
+    AppearanceSettings, DEFAULT_TYPE_AHEAD_CENTER_TARGET, DEFAULT_TYPE_AHEAD_CYCLE_REPEATED_KEYS,
+    DEFAULT_TYPE_AHEAD_ENABLED, DEFAULT_TYPE_AHEAD_INCLUDE_FOLDERS, DEFAULT_TYPE_AHEAD_MULTIVIEW_DELAY_MS,
+    DEFAULT_TYPE_AHEAD_NEW_SEARCH_GAP_MS, DEFAULT_TYPE_AHEAD_NO_MATCH_MESSAGE, DEFAULT_TYPE_AHEAD_TIMEOUT_MS,
+};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,7 +57,11 @@ impl Default for TypeAheadConfig {
 }
 
 const fn gap_of(ms: u32) -> Option<Duration> {
-    if ms == 0 { None } else { Some(Duration::from_millis(ms as u64)) }
+    if ms == 0 {
+        None
+    } else {
+        Some(Duration::from_millis(ms as u64))
+    }
 }
 
 static CURRENT: RwLock<TypeAheadConfig> = RwLock::new(TypeAheadConfig::DEFAULT);

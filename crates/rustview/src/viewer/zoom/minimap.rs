@@ -39,8 +39,12 @@ impl MinimapLayout {
         let box_w = (MAX_W_LOGICAL * dpi).min(tile_w * MAX_SHARE);
         let box_h = (MAX_H_LOGICAL * dpi).min(tile_h * MAX_SHARE);
         let scale = (box_w / f64::from(image.0)).min(box_h / f64::from(image.1));
-        let (w, h) = ((f64::from(image.0) * scale).round(), (f64::from(image.1) * scale).round());
-        if w < MIN_W_LOGICAL * dpi || h < MIN_H_LOGICAL * dpi || w + 2.0 * margin > tile_w || h + 2.0 * margin > tile_h {
+        let (w, h) = (
+            (f64::from(image.0) * scale).round(),
+            (f64::from(image.1) * scale).round(),
+        );
+        if w < MIN_W_LOGICAL * dpi || h < MIN_H_LOGICAL * dpi || w + 2.0 * margin > tile_w || h + 2.0 * margin > tile_h
+        {
             return None;
         }
         let x = match corner {
@@ -48,11 +52,24 @@ impl MinimapLayout {
             MinimapCorner::BottomRight => tile_w - margin - w,
         };
         let y = tile_h - margin - h;
-        Some(Self { rect: IRect { x: x as i32, y: y as i32, w: w as i32, h: h as i32 }, dpi })
+        Some(Self {
+            rect: IRect {
+                x: x as i32,
+                y: y as i32,
+                w: w as i32,
+                h: h as i32,
+            },
+            dpi,
+        })
     }
 
     fn rect_f(&self) -> RectF {
-        RectF::new(f64::from(self.rect.x), f64::from(self.rect.y), f64::from(self.rect.w), f64::from(self.rect.h))
+        RectF::new(
+            f64::from(self.rect.x),
+            f64::from(self.rect.y),
+            f64::from(self.rect.w),
+            f64::from(self.rect.h),
+        )
     }
 
     /// The pointer (tile pixels) is on the minimap or in the margin around it that reveals it.
@@ -82,7 +99,10 @@ impl Grab {
     /// A press at (`nx`, `ny`) with `viewport` (shares of the image) visible.
     pub fn at(nx: f64, ny: f64, viewport: RectF) -> Self {
         if viewport.contains(nx, ny) {
-            Self { dx: nx - (viewport.x + viewport.w / 2.0), dy: ny - (viewport.y + viewport.h / 2.0) }
+            Self {
+                dx: nx - (viewport.x + viewport.w / 2.0),
+                dy: ny - (viewport.y + viewport.h / 2.0),
+            }
         } else {
             Self { dx: 0.0, dy: 0.0 }
         }
@@ -114,7 +134,11 @@ pub fn drag_gain(screen_per_pointer_px: f64, speed: f64) -> f64 {
     } else {
         1.0
     };
-    let t = if speed.is_finite() { ((speed - FAST_FROM_PX_S) / (FAST_TO_PX_S - FAST_FROM_PX_S)).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if speed.is_finite() {
+        ((speed - FAST_FROM_PX_S) / (FAST_TO_PX_S - FAST_FROM_PX_S)).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let smooth = t * t * (3.0 - 2.0 * t);
     slow + (1.0 - slow) * smooth
 }

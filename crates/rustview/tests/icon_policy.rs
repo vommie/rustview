@@ -81,7 +81,11 @@ fn slint_ui_has_no_emoji_or_unicode_symbols() {
             offenders.push(format!("{}:{line}: {text}", path.display()));
         }
     }
-    assert!(offenders.is_empty(), "non-ASCII symbols in Slint UI (use icons):\n{}", offenders.join("\n"));
+    assert!(
+        offenders.is_empty(),
+        "non-ASCII symbols in Slint UI (use icons):\n{}",
+        offenders.join("\n")
+    );
 }
 
 #[test]
@@ -98,7 +102,11 @@ fn rust_ui_modules_have_no_emoji_or_unicode_symbols() {
             offenders.push(format!("{}:{line}: {text}", path.display()));
         }
     }
-    assert!(offenders.is_empty(), "non-ASCII symbols in UI strings (use icons):\n{}", offenders.join("\n"));
+    assert!(
+        offenders.is_empty(),
+        "non-ASCII symbols in UI strings (use icons):\n{}",
+        offenders.join("\n")
+    );
 }
 
 #[test]
@@ -120,8 +128,14 @@ fn tabler_files_match_the_manifest() {
     let mut wanted = table.tabler_files;
     wanted.sort();
     wanted.dedup();
-    assert_eq!(on_disk, wanted, "run scripts/sync-tabler-icons.sh to sync assets/icons/tabler with icons.toml");
-    assert!(tabler_root.join("LICENSE").is_file(), "the Tabler MIT license must ship with the icons");
+    assert_eq!(
+        on_disk, wanted,
+        "run scripts/sync-tabler-icons.sh to sync assets/icons/tabler with icons.toml"
+    );
+    assert!(
+        tabler_root.join("LICENSE").is_file(),
+        "the Tabler MIT license must ship with the icons"
+    );
 }
 
 /// Minimal line-based reader for the one-line `[icons]` entries (avoids a TOML dev-dependency).

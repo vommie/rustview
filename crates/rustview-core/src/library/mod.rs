@@ -24,10 +24,8 @@ pub mod tags;
 
 pub use db::LibraryDatabase;
 pub use error::LibraryError;
-pub use external_media_completer::{
-    ExternalMediaCompleter, ExternalMediaCompletionReport, ProcessedCompletionItem,
-};
-pub use file_operations::{is_same_file_path, robust_move_file, FileOperations, FilenameValidator};
+pub use external_media_completer::{ExternalMediaCompleter, ExternalMediaCompletionReport, ProcessedCompletionItem};
+pub use file_operations::{FileOperations, FilenameValidator, is_same_file_path, robust_move_file};
 pub use folder_diagnostics::FolderDiagnostics;
 pub use folder_format_counts::{FolderFormatCounts, FormatCountReport};
 pub use folder_mount_filter::FolderMountFilter;
@@ -40,10 +38,9 @@ pub use folder_reset::FolderTreeReset;
 pub use folders::{FolderManager, FolderScanOptions};
 pub use media::MediaRepository;
 pub use models::{
-    BatchMoveSummary, CachedFolderNode, DatabaseMeta, ExternalHashRecord, FileConflictItemDetails,
-    FileConflictReport, FileConflictResolution, FileTransferKind, FolderHierarchySnapshot,
-    FolderId, FolderRecord, FolderRecordCodec, MediaId, MediaRecord, MediaSearchParams, TagId,
-    TagRecord,
+    BatchMoveSummary, CachedFolderNode, DatabaseMeta, ExternalHashRecord, FileConflictItemDetails, FileConflictReport,
+    FileConflictResolution, FileTransferKind, FolderHierarchySnapshot, FolderId, FolderRecord, FolderRecordCodec,
+    MediaId, MediaRecord, MediaSearchParams, TagId, TagRecord,
 };
 pub use refresh::{FolderRefresher, RefreshReport};
 pub use refresh_media_files::{MediaItemRefresher, RefreshedFileAttributes};
