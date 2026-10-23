@@ -91,6 +91,7 @@ impl SettingsDialogController {
     }
 
     fn populate_ui(&self, window: &SettingsWindow, settings: &AppSettings) {
+        window.set_app_version(env!("CARGO_PKG_VERSION").into());
         window.set_root_folder_path(
             settings
                 .general

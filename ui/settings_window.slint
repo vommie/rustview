@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIdentity } from "app_identity.slint";
 import { SettingsSidebar } from "settings_sidebar.slint";
 import { SettingsPageGeneral } from "settings_page_general.slint";
 import { SettingsPageFolders } from "settings_page_folders.slint";
@@ -33,6 +34,7 @@ export { SmoothScrollArea } from "smooth_scroll_view.slint";
 
 export component SettingsWindow inherits Window {
     title: "RustView - Settings";
+    icon: AppIdentity.window-icon;
     preferred-width: 860px;
     preferred-height: 640px;
     min-width: 740px;
@@ -40,6 +42,7 @@ export component SettingsWindow inherits Window {
     background: Theme.background;
 
     in-out property <int> active-category: 0;
+    in property <string> app-version: "";
 
     // General options
     in-out property <string> root-folder-path: "";
@@ -252,6 +255,7 @@ export component SettingsWindow inherits Window {
                             confirm-delete <=> root.confirm-delete;
                             confirm-open-file-count <=> root.confirm-open-file-count;
                             deletion-mode-idx <=> root.deletion-mode-idx;
+                            app-version: root.app-version;
                             browse-root-folder => { root.browse-root-folder(); }
                         }
 

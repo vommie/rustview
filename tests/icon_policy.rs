@@ -1,6 +1,7 @@
 //! Repository-level icon policy checks.
 //!
 //! - Icons only come from the icon library (`assets/icons/icons.toml`): no raw `@image-url` in hand-written Slint.
+//! - The one exception is `ui/app_identity.slint`: the window icon is the colored app icon, not a Tabler icon.
 //! - No emoji or Unicode symbols are used as icon substitutes in UI strings; real SVG icons are used instead.
 //! - Every Tabler file below `assets/icons/tabler` is referenced by the manifest and nothing is missing.
 
@@ -52,6 +53,9 @@ fn non_ascii_code_lines(path: &Path) -> Vec<(usize, String)> {
 fn slint_icons_only_come_from_the_registry() {
     let ui_dir = project_root().join("ui");
     for path in files_with_extension(&ui_dir, "slint") {
+        if path.file_name().is_some_and(|name| name == "app_identity.slint") {
+            continue;
+        }
         let text = fs::read_to_string(&path).expect("readable slint file");
         for (index, line) in text.lines().enumerate() {
             let code = line.trim_start();

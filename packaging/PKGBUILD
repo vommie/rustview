@@ -1,32 +1,39 @@
-# Maintainer: Your Name <your.email@example.com>
-
+# Maintainer: vommie
+# Packs the release binary that build-package.sh has just built (target/release/rustview); the version is synchronized from Cargo.toml.
 pkgname=rustview
-pkgver=0.3.81
+pkgver=0.3.82
 pkgrel=1
-pkgdesc="Image and video viewer with hierarchical tagging and metadata inspection"
+pkgdesc='Fast image and video browser with folders, tags and ratings (Rust, Slint, FFmpeg, mpv)'
 arch=('x86_64')
+url='https://github.com/vommie/rustview'
 license=('MIT')
-
 depends=(
-    'ffmpeg'
-    'mpv'
-    'hicolor-icon-theme'
+  'ffmpeg'
+  'mpv'
+  'hicolor-icon-theme'
 )
 
 package() {
-    install -Dm755 \
-        "$startdir/../target/release/rustview" \
-        "$pkgdir/usr/bin/rustview"
+    local root="$startdir/.."
+    install -Dm755 "$root/target/release/rustview" "$pkgdir/usr/bin/rustview"
 
-    install -Dm644 \
-        "$startdir/rustview.desktop" \
-        "$pkgdir/usr/share/applications/rustview.desktop"
+    install -Dm644 "$startdir/io.github.vommie.rustview.desktop" \
+        "$pkgdir/usr/share/applications/io.github.vommie.rustview.desktop"
 
-    install -Dm644 \
-        "$startdir/rustview.svg" \
-        "$pkgdir/usr/share/icons/hicolor/scalable/apps/rustview.svg"
+    sed -e "s/@VERSION@/$pkgver/" \
+        -e "s/@DATE@/$(date -u +%F -d "@${SOURCE_DATE_EPOCH:-$(date +%s)}")/" \
+        "$startdir/io.github.vommie.rustview.metainfo.xml" > "$srcdir/io.github.vommie.rustview.metainfo.xml"
+    install -Dm644 "$srcdir/io.github.vommie.rustview.metainfo.xml" \
+        "$pkgdir/usr/share/metainfo/io.github.vommie.rustview.metainfo.xml"
 
-    install -Dm644 \
-        "$startdir/../LICENSE" \
-        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    # Color icon (scalable and PNG sizes) and the monochrome icon that the desktop recolors to the active color scheme.
+    install -Dm644 "$startdir/rustview.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/rustview.svg"
+    install -Dm644 "$startdir/rustview-symbolic.svg" "$pkgdir/usr/share/icons/hicolor/symbolic/apps/rustview-symbolic.svg"
+    for size in 16 22 24 32 48 64 128 256 512; do
+        install -Dm644 "$startdir/icons/rustview-$size.png" "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/rustview.png"
+    done
+
+    install -Dm644 "$root/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 "$root/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 "$root/CHANGELOG.md" "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md"
 }

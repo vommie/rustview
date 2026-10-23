@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIdentity } from "app_identity.slint";
 import { MultiviewTileView, MultiviewGutterView } from "multiview_types.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
 
@@ -8,6 +9,7 @@ import { MultiviewCanvas } from "multiview_canvas.slint";
 /// (`navigation`); a video keeps all of them for mpv.
 export component MultiviewFullscreenWindow inherits Window {
     title: "RustView - Fullscreen (Multiview)";
+    icon: AppIdentity.window-icon;
     no-frame: true;
 
     in property <[MultiviewTileView]> tiles;

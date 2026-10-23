@@ -195,7 +195,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Register XDG Desktop Application ID after platform initialization
-    if let Err(e) = slint::set_xdg_app_id("org.rustview.app") {
+    if let Err(e) = slint::set_xdg_app_id(rustview::util::app_identity::APP_ID) {
         tracing::warn!(error = %e, "[WindowState: Init] Failed to register XDG App ID");
     }
 

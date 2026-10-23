@@ -1,4 +1,5 @@
 import { Theme } from "styles.slint";
+import { AppIdentity } from "app_identity.slint";
 import { IconId, IconSize, IconSlot } from "icons.slint";
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
@@ -54,6 +55,7 @@ export { ThumbnailBadgeEngine, ThumbnailBadgeConfig, ThumbnailBadgeView, Thumbna
 
 export component MainWindow inherits Window {
     title: "RustView";
+    icon: AppIdentity.window-icon;
     preferred-width: 1280px;
     preferred-height: 800px;
     min-width: 900px;

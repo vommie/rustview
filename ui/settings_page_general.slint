@@ -1,4 +1,4 @@
-import { Button, LineEdit, CheckBox, SpinBox } from "std-widgets.slint";
+import { Button, LineEdit, CheckBox, SpinBox, AboutSlint } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { SettingsCard } from "settings_card.slint";
 
@@ -11,6 +11,7 @@ export component SettingsPageGeneral inherits VerticalLayout {
     in-out property <bool> confirm-delete: true;
     in-out property <int> confirm-open-file-count: 5;
     in-out property <int> deletion-mode-idx: 0;
+    in property <string> app-version: "";
 
     callback browse-root-folder();
 
@@ -82,6 +83,22 @@ export component SettingsPageGeneral inherits VerticalLayout {
             font-size: 11px;
             color: Theme.text-muted;
             wrap: word-wrap;
+        }
+    }
+
+    SettingsCard {
+        title: "About";
+        description: "RustView " + root.app-version + " - media browser for images and videos. MIT License, Copyright (c) 2026 vommie.";
+
+        Text {
+            text: "The user interface is built with Slint, used under the Slint Royalty-free License 2.0. Videos play through mpv and FFmpeg.";
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+
+        AboutSlint {
+            height: 88px;
         }
     }
 }

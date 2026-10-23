@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=RustView
+GenericName=Media Browser
+Comment=Fast image and video browser with folders, tags and ratings
+Exec=rustview
+TryExec=rustview
+Icon=rustview
+Terminal=false
+Categories=Graphics;Viewer;
+Keywords=image;photo;picture;video;media;gallery;viewer;catalog;tagging;rating;thumbnail;
+StartupWMClass=io.github.vommie.rustview
+StartupNotify=true
+SingleMainWindow=true

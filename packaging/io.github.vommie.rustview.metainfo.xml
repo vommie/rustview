@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.vommie.rustview</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>RustView</name>
+  <developer id="io.github.vommie">
+    <name>vommie</name>
+  </developer>
+  <summary>Fast image and video browser with folders, tags and ratings</summary>
+  <description>
+    <p>
+      RustView is a media browser for large libraries of images and videos. It keeps its own library, scrolls
+      through hundreds of thousands of thumbnails without stutter and never touches the drive unless you start a refresh.
+    </p>
+    <ul>
+      <li>Thumbnail grid and table view with a folder tree, favorites, hierarchical tags and ratings</li>
+      <li>Hover previews for videos and animated pictures, thumbnail badges, type-ahead find</li>
+      <li>Multiview: up to four images or videos side by side, in a fullscreen or in a tab, with image zoom</li>
+      <li>Embedded mpv player and FFmpeg decoding for dozens of image and video formats</li>
+      <li>Copy, move, rename and delete with conflict handling, drag and drop to other applications</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.vommie.rustview.desktop</launchable>
+  <url type="homepage">https://github.com/vommie/rustview</url>
+  <url type="bugtracker">https://github.com/vommie/rustview/issues</url>
+  <categories>
+    <category>Graphics</category>
+    <category>Viewer</category>
+  </categories>
+  <provides>
+    <binary>rustview</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="@VERSION@" date="@DATE@" />
+  </releases>
+</component>

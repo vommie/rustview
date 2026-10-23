@@ -1,26 +1,24 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-# RustView Arch Linux package builder
+# RustView Arch Linux package builder.
 #
 # Run from the project root:
 #
 #   ./build-package.sh
 #
-# Expected project layout:
+# Builds the release binary (cargo build --release --locked), synchronizes pkgver in packaging/PKGBUILD with Cargo.toml, runs makepkg
+# and namcap, and leaves dist/rustview-<version>-1-x86_64.pkg.tar.zst (install with `sudo pacman -U`).
 #
 #   rustview/
-#   ├── Cargo.toml
-#   ├── Cargo.lock
-#   ├── LICENSE
-#   ├── build-package.sh
-#   ├── target/
-#   │   └── release/
-#   │       └── rustview
+#   ├── Cargo.toml, Cargo.lock, LICENSE, README.md, CHANGELOG.md
+#   ├── target/release/rustview        (built by this script)
 #   └── packaging/
 #       ├── PKGBUILD
-#       ├── rustview.desktop
-#       └── rustview.svg
+#       ├── io.github.vommie.rustview.desktop
+#       ├── io.github.vommie.rustview.metainfo.xml
+#       ├── rustview.svg, rustview-symbolic.svg
+#       └── icons/rustview-<size>.png
+set -euo pipefail
+cd "$(dirname "$0")"
 
 PROJECT_ROOT="$(pwd)"
 PACKAGING_DIR="${PROJECT_ROOT}/packaging"
@@ -39,10 +37,13 @@ for file in \
     "${CARGO_TOML}" \
     "${PROJECT_ROOT}/Cargo.lock" \
     "${PROJECT_ROOT}/LICENSE" \
-    "${BINARY}" \
+    "${PROJECT_ROOT}/README.md" \
+    "${PROJECT_ROOT}/CHANGELOG.md" \
     "${PKGBUILD}" \
-    "${PACKAGING_DIR}/rustview.desktop" \
-    "${PACKAGING_DIR}/rustview.svg"
+    "${PACKAGING_DIR}/io.github.vommie.rustview.desktop" \
+    "${PACKAGING_DIR}/io.github.vommie.rustview.metainfo.xml" \
+    "${PACKAGING_DIR}/rustview.svg" \
+    "${PACKAGING_DIR}/rustview-symbolic.svg"
 do
     if [[ ! -f "${file}" ]]; then
         echo "[-] Error: Required file not found: ${file}" >&2
@@ -50,44 +51,18 @@ do
     fi
 done
 
-if [[ ! -x "${BINARY}" ]]; then
-    echo "[-] Error: Release binary is not executable: ${BINARY}" >&2
-    exit 1
-fi
+for size in 16 22 24 32 48 64 128 256 512; do
+    if [[ ! -f "${PACKAGING_DIR}/icons/rustview-${size}.png" ]]; then
+        echo "[-] Error: icon size ${size} is missing; run scripts/gen-app-icons.sh" >&2
+        exit 1
+    fi
+done
 
 # ---------------------------------------------------------------------------
-# 2. Read version from [package] in Cargo.toml
+# 2. Read version from [package] in Cargo.toml (the first version line of the file)
 # ---------------------------------------------------------------------------
 
-VERSION="$(
-    python - "${CARGO_TOML}" <<'PY'
-import re
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as f:
-    cargo_toml = f.read()
-
-match = re.search(
-    r'(?ms)^\[package\]\s*(.*?)(?=^\[|\Z)',
-    cargo_toml,
-)
-
-if not match:
-    raise SystemExit("Could not find [package] section")
-
-package_section = match.group(1)
-
-match = re.search(
-    r'(?m)^version\s*=\s*"([^"]+)"\s*$',
-    package_section,
-)
-
-if not match:
-    raise SystemExit("Could not find package version")
-
-print(match.group(1))
-PY
-)"
+VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' "${CARGO_TOML}" | head -n 1)"
 
 if [[ -z "${VERSION}" ]]; then
     echo "[-] Error: Could not determine version from Cargo.toml." >&2
@@ -97,20 +72,39 @@ fi
 echo "[+] Detected version: ${VERSION}"
 
 # ---------------------------------------------------------------------------
-# 3. Synchronize pkgver
+# 3. Build the release binary, so the package always holds the current tree
 # ---------------------------------------------------------------------------
 
-if ! grep -q '^pkgver=' "${PKGBUILD}"; then
-    echo "[-] Error: PKGBUILD does not contain pkgver=." >&2
+echo "[+] Building the release binary..."
+cargo build --release --locked
+
+if [[ ! -x "${BINARY}" ]]; then
+    echo "[-] Error: Release binary is missing or not executable: ${BINARY}" >&2
     exit 1
 fi
 
-sed -i "s/^pkgver=.*/pkgver=${VERSION}/" "${PKGBUILD}"
+# ---------------------------------------------------------------------------
+# 4. Synchronize pkgver and validate the desktop integration files
+# ---------------------------------------------------------------------------
 
+sed -i "s/^pkgver=.*/pkgver=${VERSION}/" "${PKGBUILD}"
 echo "[+] PKGBUILD version synchronized: ${VERSION}"
 
+if command -v desktop-file-validate >/dev/null 2>&1; then
+    desktop-file-validate "${PACKAGING_DIR}/io.github.vommie.rustview.desktop"
+    echo "[+] Desktop file is valid"
+fi
+
+if command -v appstreamcli >/dev/null 2>&1; then
+    METAINFO_CHECK="$(mktemp --suffix=.metainfo.xml)"
+    sed -e "s/@VERSION@/${VERSION}/" -e "s/@DATE@/$(date -u +%F)/" \
+        "${PACKAGING_DIR}/io.github.vommie.rustview.metainfo.xml" > "${METAINFO_CHECK}"
+    appstreamcli validate --no-net "${METAINFO_CHECK}"
+    rm -f "${METAINFO_CHECK}"
+fi
+
 # ---------------------------------------------------------------------------
-# 4. Prepare dist/
+# 5. Prepare dist/ and clean previous makepkg artifacts
 # ---------------------------------------------------------------------------
 
 mkdir -p "${DIST_DIR}"
@@ -120,10 +114,6 @@ find "${DIST_DIR}" \
     -type f \
     -name 'rustview-*.pkg.tar.*' \
     -delete
-
-# ---------------------------------------------------------------------------
-# 5. Clean previous makepkg artifacts
-# ---------------------------------------------------------------------------
 
 rm -rf \
     "${PACKAGING_DIR}/pkg" \
@@ -198,14 +188,11 @@ fi
 
 echo
 echo "============================================================"
-echo "[✓] RustView Arch package built successfully!"
-echo "    Version: ${VERSION}"
-echo "    Package: ${FINAL_PKG}"
+echo "[OK] RustView Arch package built successfully!"
+echo "     Version: ${VERSION}"
+echo "     Package: ${FINAL_PKG}"
 echo "============================================================"
 echo
 echo "Install locally:"
 echo "    sudo pacman -U \"${FINAL_PKG}\""
-echo
-echo "Transfer to another Arch system:"
-echo "    scp \"${FINAL_PKG}\" user@remote-pc:/tmp/"
 echo

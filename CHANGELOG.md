@@ -9,6 +9,16 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+- **A real app icon:** a thumbnail grid with an eye over it. The colored icon (scalable and PNG sizes from 16 to 512 px) works on light and
+  dark panels; a monochrome symbolic icon follows the KDE color scheme. The main, settings and fullscreen windows carry it as their window icon.
+- **About card** in Settings > General with the version, the license and the Slint attribution.
+- The package ships the AppStream metadata (software centers), the README and this changelog.
+
+### Changed
+- **The application id is now `io.github.vommie.rustview`** (it was `org.rustview.app`) and matches the desktop file, so the desktop shows the
+  launcher icon for the window. If you pinned RustView to the taskbar, pin it again once after updating. Settings and library are untouched, no migration.
+
 ## [0.3.81] - 2026-10-23
 
 ### Changed

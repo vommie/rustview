@@ -1,0 +1,5 @@
+// The application's own identity. This is the only hand-written Slint file that may use `@image-url`
+// (`tests/icon_policy.rs`): the window icon is the colored app icon, not a monochrome Tabler icon.
+export global AppIdentity {
+    out property <image> window-icon: @image-url("../assets/app/window-icon.png");
+}
