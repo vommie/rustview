@@ -73,7 +73,7 @@ impl<'a> MediaItemRefresher<'a> {
         if !file_path.exists() {
             return Err(LibraryError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Media file not found on disk: {file_path:?}"),
+                format!("Media file not found on disk: {}", file_path.display()),
             )));
         }
 

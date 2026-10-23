@@ -150,7 +150,7 @@ impl MediaDetector {
     /// MP4, `QuickTime`, 3GPP and AVIF share the ISO base media container; the `ftyp` brands tell them apart.
     fn detect_iso_media(b: &[u8]) -> Option<MediaFormat> {
         if let Some(brands) = IsoBrands::parse(b) {
-            if brands.has(b"avif") || brands.has(b"avis") {
+            if brands.has(*b"avif") || brands.has(*b"avis") {
                 return Some(MediaFormat::Avif);
             }
             if brands.has_any(HEIF_BRANDS) {
@@ -264,12 +264,12 @@ impl<'a> IsoBrands<'a> {
         })
     }
 
-    fn has(&self, brand: &[u8; 4]) -> bool {
-        self.major == brand || self.compatible.as_chunks::<4>().0.iter().any(|c| c == brand)
+    fn has(&self, brand: [u8; 4]) -> bool {
+        self.major == brand || self.compatible.as_chunks::<4>().0.contains(&brand)
     }
 
     fn has_any(&self, brands: &[&[u8; 4]]) -> bool {
-        brands.iter().any(|b| self.has(b))
+        brands.iter().any(|&b| self.has(*b))
     }
 }
 

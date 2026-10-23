@@ -52,7 +52,7 @@ impl SettingsStore {
             match fs::read_to_string(&self.file_path) {
                 Ok(content) => match serde_json::from_str::<AppSettings>(&content) {
                     Ok(mut settings) => {
-                        self.validate_and_sanitize(&mut settings);
+                        Self::validate_and_sanitize(&mut settings);
                         return settings;
                     }
                     Err(e) => {
@@ -76,7 +76,7 @@ impl SettingsStore {
         }
 
         let mut defaults = AppSettings::default();
-        self.validate_and_sanitize(&mut defaults);
+        Self::validate_and_sanitize(&mut defaults);
         let _ = self.save(&defaults);
         defaults
     }
@@ -103,7 +103,7 @@ impl SettingsStore {
         Ok(())
     }
 
-    fn validate_and_sanitize(&self, settings: &mut AppSettings) {
+    fn validate_and_sanitize(settings: &mut AppSettings) {
         settings.general.confirm_open_file_count = settings
             .general
             .confirm_open_file_count
@@ -277,7 +277,7 @@ impl SettingsStore {
         if fb_lower != "same" && fb_lower != "different" {
             settings.fullscreen.fallback_target = DEFAULT_FULLSCREEN_FALLBACK_TARGET.to_string();
         }
-        self.sanitize_fullscreen_extras(&mut settings.fullscreen);
+        Self::sanitize_fullscreen_extras(&mut settings.fullscreen);
 
         // Tag Settings Sanitization (including Tag History limits and height)
         settings.tags.max_history_tags = settings
@@ -376,7 +376,7 @@ impl SettingsStore {
     }
 
     /// Action bar, sound and background of the fullscreen: a hand-edited file can never leave an unknown mode or color.
-    fn sanitize_fullscreen_extras(&self, fullscreen: &mut FullscreenSettings) {
+    fn sanitize_fullscreen_extras(fullscreen: &mut FullscreenSettings) {
         let bar = &mut fullscreen.media_bar;
         bar.reveal_distance_px = bar.reveal_distance_px.clamp(
             MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,

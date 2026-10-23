@@ -34,7 +34,7 @@ impl std::fmt::Debug for MultiviewTabPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MultiviewTabPayload")
             .field("instance_id", &self.instance_id)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -65,7 +65,7 @@ impl std::fmt::Debug for MediaTabSession {
             .field("multiview", &self.multiview)
             .field("created_at", &self.created_at)
             .field("last_accessed", &self.last_accessed)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

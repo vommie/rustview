@@ -187,6 +187,10 @@ impl SettingsDiff {
     }
 
     /// Generates human-readable descriptions of all modified settings for diagnostics and structured logging.
+    #[allow(
+        clippy::float_cmp,
+        reason = "a change report: any difference in a stored setting counts, the values are never computed"
+    )]
     pub fn detailed_summary(&self, old: &AppSettings, new: &AppSettings) -> Vec<String> {
         let mut changes = Vec::new();
 

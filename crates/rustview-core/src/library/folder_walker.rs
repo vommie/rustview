@@ -45,6 +45,10 @@ struct WalkContext<'a> {
 }
 
 /// Recursively walks `root` and returns all directories in pre-order, skipping ignored mount points.
+#[allow(
+    clippy::implicit_hasher,
+    reason = "the mount set is always built with the default hasher"
+)]
 pub fn walk_directory_tree(
     root: &Path,
     progress: Option<&ScanProgressCallback>,

@@ -22,14 +22,18 @@ pub struct Pins {
 /// Pinned shares that add up to at least this much leave no room: the row counts as completely set by the user.
 const FULL_ROW_SHARE: f64 = 0.98;
 
-fn valid_share(share: &f64) -> bool {
-    share.is_finite() && *share > 0.0
+fn valid_share(share: f64) -> bool {
+    share.is_finite() && share > 0.0
 }
 
 impl Pins {
     /// The pinned share of a tile; garbage (NaN, zero, negative) counts as automatic.
     pub fn col(&self, tile: usize) -> Option<f64> {
-        self.cols.get(tile).copied().flatten().filter(valid_share)
+        self.cols
+            .get(tile)
+            .copied()
+            .flatten()
+            .filter(|&share| valid_share(share))
     }
 
     pub fn is_auto(&self) -> bool {
@@ -70,7 +74,7 @@ pub fn split_columns(usable: i32, caps: &[i32], pins: &[Option<f64>], floor: i32
     }
     let usable = usable.max(n.saturating_as::<i32>());
     let wants: Vec<Option<f64>> = (0..n)
-        .map(|i| pins.get(i).copied().flatten().filter(valid_share))
+        .map(|i| pins.get(i).copied().flatten().filter(|&share| valid_share(share)))
         .collect();
     if n == 1 || wants.iter().all(Option::is_none) {
         return fair_share(usable, caps);

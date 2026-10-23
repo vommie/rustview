@@ -52,7 +52,7 @@ impl MissingFolderDeleteDialogController {
 
         if let Some(ref win) = *self.dialog.borrow() {
             self.bind_dialog_events(win, window, folder_id, ctx);
-            self.populate_dialog_fields(win, folder_name, folder_path, &metrics);
+            Self::populate_dialog_fields(win, folder_name, folder_path, &metrics);
 
             window.set_is_modal_locked(true);
             let _ = win.show();
@@ -103,8 +103,7 @@ impl MissingFolderDeleteDialogController {
         let fallback = [folder_id];
         let affected_ids = metrics_opt
             .as_ref()
-            .map(|m| m.affected_folder_ids.as_slice())
-            .unwrap_or(&fallback);
+            .map_or(&fallback[..], |m| m.affected_folder_ids.as_slice());
 
         let successor_target = BridgeFolders::find_visible_successor_folder(
             folder_id,
@@ -193,7 +192,6 @@ impl MissingFolderDeleteDialogController {
     }
 
     fn populate_dialog_fields(
-        &self,
         win: &MissingFolderDeleteDialog,
         folder_name: &str,
         folder_path: &str,

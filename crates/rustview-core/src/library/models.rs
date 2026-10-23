@@ -148,10 +148,7 @@ impl FolderHierarchySnapshot {
 
     #[inline]
     pub fn get_children(&self, parent_id: Option<FolderId>) -> &[FolderId] {
-        self.children_map
-            .get(&parent_id)
-            .map(std::vec::Vec::as_slice)
-            .unwrap_or(&[])
+        self.children_map.get(&parent_id).map_or(&[][..], Vec::as_slice)
     }
 
     #[inline]

@@ -65,6 +65,10 @@ impl HostSurface {
         }
     }
 
+    #[allow(
+        clippy::float_cmp,
+        reason = "the DPI is copied from the window, never computed; any difference means a re-layout"
+    )]
     fn same_geometry(&self, other: &Self) -> bool {
         self.mode == other.mode
             && self.parent_xid == other.parent_xid

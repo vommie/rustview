@@ -213,10 +213,7 @@ impl FfmpegVideoThumbnailer {
     }
 
     /// Chronological Forward-Seek Extraction (D > 30.0s).
-    fn extract_seek_forward(
-        &self,
-        params: SeekForwardExtractionParams<'_>,
-    ) -> Result<VideoExtractionResult, ThumbnailError> {
+    fn extract_seek_forward(params: SeekForwardExtractionParams<'_>) -> Result<VideoExtractionResult, ThumbnailError> {
         let mut ictx = params.ictx;
         let mut decoder = params.decoder;
         let mut scaler = params.scaler;
@@ -379,7 +376,6 @@ impl FfmpegVideoThumbnailer {
     /// Single Linear Forward Sweep for videos <= 30.0s (or unknown duration).
     /// Features hard packet/frame limits to prevent hangs on truncated or in-flight renders.
     fn extract_targeted_sequential(
-        &self,
         params: SequentialExtractionParams<'_>,
     ) -> Result<VideoExtractionResult, ThumbnailError> {
         let mut ictx = params.ictx;
@@ -717,7 +713,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                 primary_offset_pct = primary_offset_pct,
                 "[VideoThumbnailer] Executing single forward-pass sweep for video"
             );
-            self.extract_targeted_sequential(SequentialExtractionParams {
+            Self::extract_targeted_sequential(SequentialExtractionParams {
                 ictx,
                 decoder,
                 scaler: dynamic_scaler,
@@ -737,7 +733,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
                 primary_offset_pct = primary_offset_pct,
                 "[VideoThumbnailer] Executing forward keyframe seeks across video timeline"
             );
-            self.extract_seek_forward(SeekForwardExtractionParams {
+            Self::extract_seek_forward(SeekForwardExtractionParams {
                 ictx,
                 decoder,
                 scaler: dynamic_scaler,

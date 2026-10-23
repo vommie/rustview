@@ -39,7 +39,7 @@ impl RenameFolderDialogController {
 
         if let Some(ref win) = *self.dialog.borrow() {
             self.bind_dialog_events(win, window, folder_id, parent_path_opt, ctx);
-            self.populate_dialog_fields(win, current_name);
+            Self::populate_dialog_fields(win, current_name);
 
             window.set_is_modal_locked(true);
             let _ = win.show();
@@ -58,7 +58,7 @@ impl RenameFolderDialogController {
     pub fn execute(&self, folder_id: FolderId, new_name: &str, ctx: &FolderDialogContext, window: &MainWindow) {
         match ctx.library.folder_operations().rename_folder(folder_id, new_name) {
             Ok(updated) => {
-                let is_active = self.update_in_memory_state(folder_id, &updated.path, &ctx.state);
+                let is_active = Self::update_in_memory_state(folder_id, &updated.path, &ctx.state);
 
                 self.close(window);
                 StatusBarBridge::success(window, format!("Renamed folder to '{new_name}'"));
@@ -184,7 +184,7 @@ impl RenameFolderDialogController {
         });
     }
 
-    fn populate_dialog_fields(&self, win: &RenameFolderDialog, current_name: &str) {
+    fn populate_dialog_fields(win: &RenameFolderDialog, current_name: &str) {
         win.set_initial_name(current_name.into());
         win.set_new_name(current_name.into());
         win.set_has_conflict(false);
@@ -193,7 +193,7 @@ impl RenameFolderDialogController {
         win.set_error_message("".into());
     }
 
-    fn update_in_memory_state(&self, folder_id: FolderId, new_path_str: &str, state: &RwLock<UiState>) -> bool {
+    fn update_in_memory_state(folder_id: FolderId, new_path_str: &str, state: &RwLock<UiState>) -> bool {
         let is_active = state.read().current_folder_id == Some(folder_id);
         let new_path = PathBuf::from(new_path_str);
         let mut st = state.write();

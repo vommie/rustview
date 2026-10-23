@@ -29,6 +29,11 @@ pub struct PackStore {
     readers: RwLock<HashMap<u32, Arc<File>>>,
 }
 
+/// The id part of a pack file name (`pack-<id>.bin`); `None` for every other file in the cache directory.
+fn pack_stem(file_name: &str) -> Option<&str> {
+    file_name.strip_prefix("pack-")?.strip_suffix(".bin")
+}
+
 impl PackStore {
     pub fn open(base_dir: &Path) -> Result<Self, ThumbnailError> {
         std::fs::create_dir_all(base_dir)?;
@@ -37,9 +42,8 @@ impl PackStore {
         for entry in std::fs::read_dir(base_dir)? {
             let entry = entry?;
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("pack-")
-                && name.ends_with(".bin")
-                && let Ok(id) = name[5..name.len() - 4].parse::<u32>()
+            if let Some(stem) = pack_stem(&name)
+                && let Ok(id) = stem.parse::<u32>()
             {
                 latest_id = latest_id.max(id);
             }
@@ -156,8 +160,7 @@ impl PackStore {
         if let Ok(entries) = std::fs::read_dir(&self.base_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("pack-")
-                    && name.ends_with(".bin")
+                if pack_stem(&name).is_some()
                     && let Ok(meta) = entry.metadata()
                 {
                     total += meta.len();
@@ -173,7 +176,7 @@ impl PackStore {
         if let Ok(entries) = std::fs::read_dir(&self.base_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("pack-") && name.ends_with(".bin") {
+                if pack_stem(&name).is_some() {
                     count += 1;
                 }
             }

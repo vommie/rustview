@@ -203,12 +203,12 @@ impl BridgeRubberband {
 
             let thumb_h = match aspect_idx {
                 0 => thumb_size,
-                1 => (thumb_size * 3.0 / 4.0).round(),
                 2 => (thumb_size * 4.0 / 5.0).round(),
                 3 => (thumb_size * 9.0 / 16.0).round(),
                 4 => (thumb_size * 4.0 / 3.0).round(),
                 5 => (thumb_size * 5.0 / 4.0).round(),
                 6 => (thumb_size * 16.0 / 9.0).round(),
+                // 1 (3:4), the default aspect, and every unknown index.
                 _ => (thumb_size * 3.0 / 4.0).round(),
             };
 

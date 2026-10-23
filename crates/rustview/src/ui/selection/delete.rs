@@ -304,7 +304,7 @@ impl DeleteSelectionDialogController {
 
         self.ensure_dialog_instantiated();
         if let Some(ref win) = *self.dialog.borrow() {
-            self.populate(win, &DialogTexts::of(&plan, reborn_restored));
+            Self::populate(win, &DialogTexts::of(&plan, reborn_restored));
             self.bind_dialog_events(win, window, &Rc::new(plan), ctx);
             window.set_is_modal_locked(true);
             let _ = win.show();
@@ -329,7 +329,7 @@ impl DeleteSelectionDialogController {
         protected
     }
 
-    fn populate(&self, win: &DeleteSelectionDialog, texts: &DialogTexts) {
+    fn populate(win: &DeleteSelectionDialog, texts: &DialogTexts) {
         let list = |lines: &[String]| {
             ModelRc::new(VecModel::from(
                 lines.iter().map(|l| SharedString::from(l.as_str())).collect::<Vec<_>>(),

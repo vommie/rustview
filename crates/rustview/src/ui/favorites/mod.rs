@@ -84,7 +84,7 @@ impl BridgeFavorites {
     pub fn add_favorite(
         window: &MainWindow,
         favorites: &Arc<RwLock<FavoriteManager>>,
-        path: &PathBuf,
+        path: &Path,
         alias: Option<String>,
     ) -> Result<(), String> {
         let t0 = Instant::now();

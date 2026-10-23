@@ -32,9 +32,9 @@ pub struct TagDialogContext {
 
 #[derive(Default, Clone)]
 pub struct TagDialogController {
-    add_dialog: Rc<RefCell<Option<AddTagDialog>>>,
-    rename_dialog: Rc<RefCell<Option<RenameTagDialog>>>,
-    delete_dialog: Rc<RefCell<Option<DeleteTagDialog>>>,
+    add: Rc<RefCell<Option<AddTagDialog>>>,
+    rename: Rc<RefCell<Option<RenameTagDialog>>>,
+    delete: Rc<RefCell<Option<DeleteTagDialog>>>,
 }
 
 impl TagDialogController {
@@ -120,7 +120,7 @@ impl TagDialogController {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        let mut d_ref = self.add_dialog.borrow_mut();
+        let mut d_ref = self.add.borrow_mut();
         if d_ref.is_none() {
             let win = AddTagDialog::new().expect("Failed to instantiate AddTagDialog");
             *d_ref = Some(win);
@@ -158,7 +158,7 @@ impl TagDialogController {
     }
 
     pub fn close_add(&self, window: &MainWindow) {
-        if let Some(ref win) = *self.add_dialog.borrow() {
+        if let Some(ref win) = *self.add.borrow() {
             let _ = win.hide();
         }
         window.set_is_modal_locked(false);
@@ -192,7 +192,7 @@ impl TagDialogController {
             }
             Err(e) => {
                 tracing::warn!(error = %e, "[TagManager: Create Error] Failed to create tag");
-                if let Some(ref win) = *self.add_dialog.borrow() {
+                if let Some(ref win) = *self.add.borrow() {
                     win.set_error_message(e.to_string().into());
                 }
             }
@@ -211,7 +211,7 @@ impl TagDialogController {
         library: &Arc<Library>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        let mut d_ref = self.rename_dialog.borrow_mut();
+        let mut d_ref = self.rename.borrow_mut();
         if d_ref.is_none() {
             let win = RenameTagDialog::new().expect("Failed to instantiate RenameTagDialog");
             *d_ref = Some(win);
@@ -248,7 +248,7 @@ impl TagDialogController {
     }
 
     pub fn close_rename(&self, window: &MainWindow) {
-        if let Some(ref win) = *self.rename_dialog.borrow() {
+        if let Some(ref win) = *self.rename.borrow() {
             let _ = win.hide();
         }
         window.set_is_modal_locked(false);
@@ -276,7 +276,7 @@ impl TagDialogController {
             }
             Err(e) => {
                 tracing::warn!(error = %e, "[TagManager: Rename Error] Failed to rename tag");
-                if let Some(ref win) = *self.rename_dialog.borrow() {
+                if let Some(ref win) = *self.rename.borrow() {
                     win.set_error_message(e.to_string().into());
                 }
             }
@@ -288,7 +288,7 @@ impl TagDialogController {
     // =========================================================================
 
     pub fn show_delete(&self, window: &MainWindow, params: DeleteTagParams, ctx: TagDialogContext) {
-        let mut d_ref = self.delete_dialog.borrow_mut();
+        let mut d_ref = self.delete.borrow_mut();
         if d_ref.is_none() {
             let win = DeleteTagDialog::new().expect("Failed to instantiate DeleteTagDialog");
             *d_ref = Some(win);
@@ -334,7 +334,7 @@ impl TagDialogController {
     }
 
     pub fn close_delete(&self, window: &MainWindow) {
-        if let Some(ref win) = *self.delete_dialog.borrow() {
+        if let Some(ref win) = *self.delete.borrow() {
             let _ = win.hide();
         }
         window.set_is_modal_locked(false);
@@ -380,7 +380,7 @@ impl TagDialogController {
             }
             Err(e) => {
                 tracing::warn!(error = %e, "[TagManager: Delete Error] Failed to delete tag");
-                if let Some(ref win) = *self.delete_dialog.borrow() {
+                if let Some(ref win) = *self.delete.borrow() {
                     win.set_error_message(e.to_string().into());
                 }
             }

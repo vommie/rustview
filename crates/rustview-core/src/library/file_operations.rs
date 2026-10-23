@@ -177,7 +177,7 @@ impl<'a> FileOperations<'a> {
             .get(&wtxn, &record.folder_id)?
             .ok_or(LibraryError::FolderNotFound(record.folder_id))?;
 
-        let paths = self.resolve_rename_paths(&folder, &record, validated_name.clone())?;
+        let paths = Self::resolve_rename_paths(&folder, &record, validated_name.clone());
 
         if is_same_file_path(&paths.old_path, &paths.new_path) {
             return Ok(record);
@@ -870,20 +870,15 @@ impl<'a> FileOperations<'a> {
         refresher.refresh_media(media_id)
     }
 
-    fn resolve_rename_paths(
-        &self,
-        folder: &FolderRecord,
-        record: &MediaRecord,
-        validated_name: String,
-    ) -> Result<RenamePaths, LibraryError> {
+    fn resolve_rename_paths(folder: &FolderRecord, record: &MediaRecord, validated_name: String) -> RenamePaths {
         let folder_path = Path::new(&folder.path);
         let old_path = folder_path.join(&record.filename);
         let new_path = folder_path.join(&validated_name);
 
-        Ok(RenamePaths {
+        RenamePaths {
             old_path,
             new_path,
             validated_name,
-        })
+        }
     }
 }

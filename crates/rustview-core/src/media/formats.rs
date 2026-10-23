@@ -236,12 +236,6 @@ fn format_sub_second(duration_ms: u64) -> String {
 /// Approximates image/video dimensions to the closest standard Aspect Ratio bucket:
 /// 1:1, 5:4, 4:3, 16:9, 4:5, 3:4, 9:16.
 pub fn approximate_aspect_ratio(width: u32, height: u32) -> &'static str {
-    if width == 0 || height == 0 {
-        return "-";
-    }
-
-    let q = f64::from(width) / f64::from(height);
-
     const BUCKETS: [(&str, f64); 7] = [
         ("9:16", 9.0 / 16.0), // 0.5625
         ("3:4", 3.0 / 4.0),   // 0.7500
@@ -251,6 +245,12 @@ pub fn approximate_aspect_ratio(width: u32, height: u32) -> &'static str {
         ("4:3", 4.0 / 3.0),   // 1.3333
         ("16:9", 16.0 / 9.0), // 1.7778
     ];
+
+    if width == 0 || height == 0 {
+        return "-";
+    }
+
+    let q = f64::from(width) / f64::from(height);
 
     let mut best_label = "1:1";
     let mut min_diff = f64::MAX;

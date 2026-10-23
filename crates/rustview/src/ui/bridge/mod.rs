@@ -44,7 +44,7 @@ use rustview_core::thumbnails::ThumbnailManager;
 use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -412,7 +412,7 @@ impl UiBridge {
         );
     }
 
-    pub fn select_folder(&self, folder_id: FolderId, path: &PathBuf) {
+    pub fn select_folder(&self, folder_id: FolderId, path: &Path) {
         BridgeFolders::select_folder(
             folder_id,
             path,
@@ -424,7 +424,7 @@ impl UiBridge {
         );
     }
 
-    pub fn refresh_folder_explicit(&self, folder_id: FolderId, path: &PathBuf) {
+    pub fn refresh_folder_explicit(&self, folder_id: FolderId, path: &Path) {
         BridgeFolders::refresh_folder_explicit(
             folder_id,
             path,

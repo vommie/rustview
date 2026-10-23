@@ -76,10 +76,9 @@ pub fn route(mode: HostMode, origin: OriginKind, event: RoutedEvent, click: Clic
             (ClickKind::CtrlDouble, OriginKind::Tab) => UiAction::CloseFullscreen,
             _ => UiAction::None,
         },
-        (HostMode::TabView, ToggleFullscreen) => UiAction::OpenTabFullscreen,
+        (HostMode::TabView, ToggleFullscreen) | (HostMode::TabGrid, GridMiddle) => UiAction::OpenTabFullscreen,
         (HostMode::TabView, CloseTab) => UiAction::CloseActiveTab,
         (HostMode::TabGrid, GridLeft) => UiAction::ActivateTab,
-        (HostMode::TabGrid, GridMiddle) => UiAction::OpenTabFullscreen,
         (HostMode::TabGrid, GridWheel { up }) => UiAction::ScrollGrid { up },
         _ => UiAction::None,
     }

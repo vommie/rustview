@@ -60,9 +60,9 @@ impl TabDndGeometry {
         target_tab_id: TabId,
         show_rating_badge: bool,
     ) -> Option<(f32, f32)> {
-        let mut current_x = 2.0f32; // padding-left: 2px in tab-layout
         const SPACING: f32 = 4.0f32; // spacing: 4px in tab-layout
 
+        let mut current_x = 2.0f32; // padding-left: 2px in tab-layout
         for session in tabs {
             let has_rating = show_rating_badge && session.record.rating > 0;
             let width = Self::estimate_tab_width(&session.title, has_rating);
@@ -84,6 +84,9 @@ impl TabDndGeometry {
         dragged_center_x: f32,
         current_target_index: usize,
     ) -> usize {
+        // 6px hysteresis margin prevents rapid flip-flopping at exact midpoint boundaries
+        const HYSTERESIS_PX: f32 = 6.0;
+
         let total = slots.len();
         if total <= 1 || source_index >= total {
             return 0;
@@ -91,9 +94,6 @@ impl TabDndGeometry {
 
         let source_idx = source_index.min(total - 1);
         let mut best_target = source_idx;
-
-        // 6px hysteresis margin prevents rapid flip-flopping at exact midpoint boundaries
-        const HYSTERESIS_PX: f32 = 6.0;
 
         if dragged_center_x > slots[source_idx].center_x {
             // Dragging to the RIGHT

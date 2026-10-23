@@ -19,8 +19,8 @@ use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 
 /// The pointer in the coordinates of the fullscreen window, which covers its monitor.
-fn pointer_in_window(probe: &Option<PointerProbe>, monitor: &MonitorInfo) -> Option<(i32, i32)> {
-    let (root_x, root_y) = probe.as_ref()?.position()?;
+fn pointer_in_window(probe: Option<&PointerProbe>, monitor: &MonitorInfo) -> Option<(i32, i32)> {
+    let (root_x, root_y) = probe?.position()?;
     Some((root_x - monitor.x, root_y - monitor.y))
 }
 
@@ -50,7 +50,7 @@ impl Session {
     }
 
     pub(super) fn on_tick(&mut self) {
-        let (probe, monitor) = (&self.probe, &self.monitor);
+        let (probe, monitor) = (self.probe.as_ref(), &self.monitor);
         self.instance.lock().tick(|| pointer_in_window(probe, monitor));
         self.refresh();
         self.update_bar_overlay();
@@ -210,7 +210,7 @@ impl Session {
 
     /// F2 acts on the tile under the pointer, else the last hovered one, else the first.
     pub(super) fn rename_hovered(&mut self) -> UiAction {
-        let pointer = pointer_in_window(&self.probe, &self.monitor);
+        let pointer = pointer_in_window(self.probe.as_ref(), &self.monitor);
         match self.instance.lock().rename_hovered(pointer) {
             Some(_) => UiAction::RequestRename,
             None => UiAction::None,

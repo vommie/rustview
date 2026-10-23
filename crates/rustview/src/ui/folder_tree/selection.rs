@@ -23,7 +23,7 @@ use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -31,7 +31,7 @@ use std::time::Instant;
 impl BridgeFolders {
     pub fn select_folder(
         folder_id: FolderId,
-        path: &PathBuf,
+        path: &Path,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,

@@ -509,7 +509,6 @@ impl UiBridge {
             media_id,
             ctx: &dialog_ctx,
             conflict_dialog: params.conflict_dialog,
-            missing_dialog: params.missing_dialog,
             fullscreen: params.fullscreen,
         });
     }

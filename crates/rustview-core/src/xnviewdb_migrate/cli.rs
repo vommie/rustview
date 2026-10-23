@@ -99,7 +99,10 @@ pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> 
     };
 
     if !xnview_db_path.exists() {
-        eprintln!("Error: Specified XnViewMP database file does not exist: {xnview_db_path:?}");
+        eprintln!(
+            "Error: Specified XnViewMP database file does not exist: {}",
+            xnview_db_path.display()
+        );
         return Err(MigrationError::FileNotFound(
             xnview_db_path.to_string_lossy().to_string(),
         ));
@@ -112,7 +115,10 @@ pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> 
     if let Some(explicit_root) = explicit_root_path {
         let norm_root = normalize_input_path(&explicit_root);
         if !norm_root.is_dir() {
-            eprintln!("Error: Specified base root directory does not exist: {norm_root:?}");
+            eprintln!(
+                "Error: Specified base root directory does not exist: {}",
+                norm_root.display()
+            );
             return Err(MigrationError::FileNotFound(norm_root.to_string_lossy().to_string()));
         }
 
@@ -163,7 +169,10 @@ pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> 
 
                 let norm_root = normalize_input_path(Path::new(raw_input));
                 if !norm_root.is_dir() {
-                    eprintln!("Error: Entered directory does not exist on disk: {norm_root:?}");
+                    eprintln!(
+                        "Error: Entered directory does not exist on disk: {}",
+                        norm_root.display()
+                    );
                     return Err(MigrationError::FileNotFound(norm_root.to_string_lossy().to_string()));
                 }
 

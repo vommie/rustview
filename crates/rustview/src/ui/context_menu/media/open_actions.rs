@@ -398,7 +398,6 @@ impl MediaContextMenu {
                 media_id: target_id,
                 ctx: &dialog_ctx,
                 conflict_dialog: ctx.conflict_dialog,
-                missing_dialog: ctx.missing_file_dialog,
                 fullscreen: ctx.fullscreen,
             });
         }

@@ -29,7 +29,7 @@ impl MediaHasher {
         let file = File::open(path)?;
         let mut reader = BufReader::with_capacity(64 * 1024, file);
         let mut hasher = Md5::new();
-        let mut buffer = [0u8; 64 * 1024];
+        let mut buffer = vec![0u8; 64 * 1024];
 
         loop {
             let bytes_read = reader.read(&mut buffer)?;

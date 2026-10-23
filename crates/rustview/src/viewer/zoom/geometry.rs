@@ -280,6 +280,9 @@ impl Frame {
     /// Zooms to `zoom`. With an `anchor` (a point of the room in pixels, for example the pointer) the point of the image under
     /// it stays under it; an anchor that is not over the image zooms around the middle of the view instead.
     pub fn zoom_to(&self, view: ZoomView, zoom: f64, anchor: Option<(f64, f64)>, limits: Limits) -> ZoomView {
+        // A hair outside (rounding) still is over the image.
+        const SLACK: f64 = 1e-9;
+
         let zoom = limits.clamp(zoom);
         let (new_x, new_y) = self.extent(zoom);
         let mut cx = view.cx;
@@ -288,8 +291,6 @@ impl Frame {
             let old = self.image_rect(view);
             // The point of the image under the anchor, 0..1.
             let (px, py) = ((ax - old.x) / old.w, (ay - old.y) / old.h);
-            // A hair outside (rounding) still is over the image.
-            const SLACK: f64 = 1e-9;
             if (-SLACK..=1.0 + SLACK).contains(&px) && (-SLACK..=1.0 + SLACK).contains(&py) {
                 let (px, py) = (px.clamp(0.0, 1.0), py.clamp(0.0, 1.0));
                 // Where the image has to start for that point to stay under the anchor, as a centre of the view.

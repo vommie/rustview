@@ -93,8 +93,7 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         Some(zoom) => {
             let hq = matches!(zoom.content, ZoomContentView::Rendered { .. });
             let clip = match &zoom.content {
-                ZoomContentView::Preview { clip } => *clip,
-                ZoomContentView::Rendered { clip, .. } => *clip,
+                ZoomContentView::Preview { clip } | ZoomContentView::Rendered { clip, .. } => *clip,
             };
             (true, hq, zoom.area, zoom.dest, clip, zoom.pixelated)
         }

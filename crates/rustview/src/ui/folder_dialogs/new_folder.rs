@@ -22,8 +22,9 @@ pub struct NewFolderDialogController {
 /// The text of an error for the dialog (the library errors carry a prefix that only makes sense in logs).
 fn dialog_message(error: &LibraryError) -> String {
     match error {
-        LibraryError::FileOperationInvalidFilename(message) => message.clone(),
-        LibraryError::FileOperationAlreadyExists(message) => message.clone(),
+        LibraryError::FileOperationInvalidFilename(message) | LibraryError::FileOperationAlreadyExists(message) => {
+            message.clone()
+        }
         other => other.to_string(),
     }
 }

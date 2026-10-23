@@ -53,6 +53,8 @@ impl SidebarPanelTabDndGeometry {
         dragged_center_x: f32,
         current_target_index: usize,
     ) -> usize {
+        const HYSTERESIS_PX: f32 = 6.0;
+
         let total = slots.len();
         if total <= 1 || source_index >= total {
             return 0;
@@ -60,8 +62,6 @@ impl SidebarPanelTabDndGeometry {
 
         let source_idx = source_index.min(total - 1);
         let mut best_target = source_idx;
-
-        const HYSTERESIS_PX: f32 = 6.0;
 
         if dragged_center_x > slots[source_idx].center_x {
             for (idx, slot) in slots.iter().enumerate().skip(source_idx + 1) {

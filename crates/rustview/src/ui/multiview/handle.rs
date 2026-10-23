@@ -424,7 +424,7 @@ impl MultiviewHandle {
         let Some((app, _)) = self.app_and_window() else {
             return;
         };
-        let Some(path) = self.media_path(&app, media_id) else {
+        let Some(path) = Self::media_path(&app, media_id) else {
             tracing::warn!(media_id, "[Multiview: OpenWith] No file path known for the medium");
             return;
         };
@@ -443,7 +443,7 @@ impl MultiviewHandle {
         let Some((app, window)) = self.app_and_window() else {
             return;
         };
-        let Some(path) = self.media_path(&app, media_id) else {
+        let Some(path) = Self::media_path(&app, media_id) else {
             return;
         };
         let paths = [path];
@@ -455,7 +455,7 @@ impl MultiviewHandle {
     }
 
     /// The file of a medium: the loaded folder or the library know it, else the tab that shows it.
-    fn media_path(&self, app: &AppContext, media_id: MediaId) -> Option<std::path::PathBuf> {
+    fn media_path(app: &AppContext, media_id: MediaId) -> Option<std::path::PathBuf> {
         MediaOpenWith::paths_for(&app.state, &app.library, &[media_id])
             .into_iter()
             .next()

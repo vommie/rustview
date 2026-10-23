@@ -50,7 +50,6 @@ pub struct RenameDialogParams<'a> {
     pub media_id: MediaId,
     pub ctx: &'a FileDialogContext,
     pub conflict_dialog: &'a FileOpsConflictDialogController,
-    pub missing_dialog: &'a MissingFileDialogController,
     pub fullscreen: &'a MultiviewHandle,
 }
 
@@ -65,7 +64,6 @@ impl FileRenameDialogController {
         let media_id = params.media_id;
         let ctx = params.ctx;
         let conflict_dialog = params.conflict_dialog;
-        let _missing_dialog = params.missing_dialog;
         let fullscreen = params.fullscreen;
 
         let current_target = {

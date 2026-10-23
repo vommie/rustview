@@ -275,7 +275,7 @@ impl BridgeFolders {
 
     pub fn refresh_folder_explicit(
         folder_id: FolderId,
-        path: &PathBuf,
+        path: &Path,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,

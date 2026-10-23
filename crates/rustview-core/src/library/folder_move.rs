@@ -103,7 +103,7 @@ impl<'a> FolderMoveExecutor<'a> {
         );
 
         Self::rename_on_disk(&mv.src_path, &mv.dst_path)?;
-        self.commit_or_revert(wtxn, &mv)?;
+        Self::commit_or_revert(wtxn, &mv)?;
 
         tracing::info!(
             folder_id,
@@ -427,7 +427,7 @@ impl<'a> FolderMoveExecutor<'a> {
     }
 
     /// Commits the staged transaction; if that fails the physical rename is reverted (best effort).
-    fn commit_or_revert(&self, wtxn: heed::RwTxn<'_>, mv: &MoveContext) -> Result<(), LibraryError> {
+    fn commit_or_revert(wtxn: heed::RwTxn<'_>, mv: &MoveContext) -> Result<(), LibraryError> {
         if let Err(commit_err) = wtxn.commit() {
             tracing::error!(
                 error = %commit_err,
