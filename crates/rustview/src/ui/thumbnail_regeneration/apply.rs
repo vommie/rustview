@@ -3,10 +3,10 @@
 use super::wording::{self, RegenerationSummary};
 use rustview_core::thumbnails::regeneration::{RegeneratedThumbnail, RegenerationBatchResult};
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::ui::bridge_inspector::BridgeInspector;
-use crate::ui::bridge_media::BridgeMedia;
-use crate::ui::bridge_state::UiState;
-use crate::ui::bridge_status_bar::StatusBarBridge;
+use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::media::BridgeMedia;
+use crate::ui::state::UiState;
+use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::browse_window::update_tile;
 use crate::ui::MainWindow;
 use parking_lot::RwLock;

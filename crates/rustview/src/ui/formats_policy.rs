@@ -2,13 +2,13 @@
 //! open list are built again without (or with) the records of the formats that changed. Reads only the library, never
 //! the drive: files of a newly switched-on format that were never indexed appear with the next refresh.
 
-use super::bridge_folders::BridgeFolders;
-use super::bridge_inspector::BridgeInspector;
-use super::bridge_media::BridgeMedia;
-use super::bridge_state::UiState;
-use super::bridge_status_bar::StatusBarBridge;
-use super::bridge_tags::{BridgeTags, TagActionContext};
-use super::MainWindow;
+use crate::ui::folder_tree::BridgeFolders;
+use crate::ui::media::inspector::BridgeInspector;
+use crate::ui::media::BridgeMedia;
+use crate::ui::state::UiState;
+use crate::ui::status_bar::StatusBarBridge;
+use crate::ui::tags::{BridgeTags, TagActionContext};
+use crate::ui::MainWindow;
 use rustview_core::library::{FormatCountReport, Library};
 use rustview_core::media::{FormatMask, MediaFormat};
 use rustview_core::settings::SettingsManager;

@@ -3,7 +3,7 @@
 
 use rustview_core::settings::schema::TYPE_AHEAD_NO_MATCH_MESSAGE_MS;
 use crate::ui::MainWindow;
-use crate::ui::bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
+use crate::ui::status_bar::{StatusBarBridge, StatusMessageLevel};
 use slint::{ComponentHandle, SharedString, Timer, TimerMode};
 use std::cell::RefCell;
 use std::time::Duration;

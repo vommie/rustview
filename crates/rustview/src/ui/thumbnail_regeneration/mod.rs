@@ -13,8 +13,8 @@ mod runner;
 mod targets;
 pub mod wording;
 
-use super::bridge_state::{LastActivePanel, UiState};
-use super::bridge_status_bar::StatusBarBridge;
+use crate::ui::state::{LastActivePanel, UiState};
+use crate::ui::status_bar::StatusBarBridge;
 use super::MainWindow;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
@@ -67,7 +67,7 @@ impl ThumbnailRegeneration {
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
     ) {
-        if super::bridge_media::BridgeMedia::is_system_busy(window, thumbnails, state) {
+        if crate::ui::media::BridgeMedia::is_system_busy(window, thumbnails, state) {
             StatusBarBridge::warn(window, wording::busy_message());
             return;
         }

@@ -5,7 +5,7 @@
 //! what the Slint item draws. The instance stays the only copy of the Multiview.
 
 use super::views::{self, ImageCache};
-use crate::ui::tab_grid::canvas::{LogicalRect, viewport_bounds};
+use crate::ui::tabs::grid::canvas::{LogicalRect, viewport_bounds};
 use crate::ui::{MainWindow, MultiviewGutterView, MultiviewScreenView, MultiviewTileView};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::instance::SharedInstance;

@@ -21,7 +21,7 @@ use rustview_core::settings::schema::{
     MULTIVIEW_TICK_MS,
 };
 use crate::system::{MonitorInfo, SystemDisplayService};
-use crate::ui::bridge_state::UiState;
+use crate::ui::state::UiState;
 use crate::ui::MainWindow;
 use crate::ui::MultiviewFullscreenWindow;
 use crate::viewer::{TabId, ViewerTabManager};

@@ -7,8 +7,8 @@
 
 use super::rows::{FolderRowRef, Slot};
 use rustview_core::library::models::{FolderId, MediaId};
-use crate::ui::bridge_state::UiState;
-use crate::ui::file_selection::FileSelectionModel;
+use crate::ui::state::UiState;
+use crate::ui::selection::model::FileSelectionModel;
 use std::collections::HashSet;
 
 /// One selectable thing of the Browse view.

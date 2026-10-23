@@ -8,7 +8,7 @@
 use rustview_core::library::models::MediaId;
 use rustview_core::media::MediaType;
 use rustview_core::query::filters::IndexedMediaRecord;
-use crate::ui::bridge_state::UiState;
+use crate::ui::state::UiState;
 
 /// The facts about one media item that decide whether its thumbnail can be regenerated at a random position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -132,7 +132,7 @@ pub struct CachedFolderNode {
 ///
 /// The snapshot is scoped to the configured root directory: `root_ids` contains exactly the root folder
 /// (or is empty when no root is configured / registered) and `children_map[None]` mirrors it.
-/// Tree rows and target-folder menus are projected from it (see `ui/folder_projection.rs` of the application crate),
+/// Tree rows and target-folder menus are projected from it (see `ui/folder_tree/projection.rs` of the application crate),
 /// and it is built by `folder_snapshot.rs`.
 #[derive(Debug, Clone, Default)]
 pub struct FolderHierarchySnapshot {

@@ -1,142 +1,100 @@
 slint::include_modules!();
 
 pub mod bridge;
-pub mod bridge_ctx_menu;
-pub mod bridge_ctx_menu_browse;
-pub mod bridge_ctx_menu_favorite;
-pub mod bridge_ctx_menu_folder;
-pub mod bridge_ctx_menu_media;
-pub mod bridge_ctx_menu_presenter;
-pub mod bridge_ctx_menu_tab;
-pub mod bridge_ctx_menu_tag;
-pub mod bridge_dnd;
-pub mod bridge_favorite_dialog_rename;
-pub mod bridge_favorites;
-pub mod bridge_file_dialog_conflict;
-pub mod bridge_file_dialog_delete;
-pub mod bridge_file_dialog_missing;
-pub mod bridge_file_dialog_remove_orphaned;
-pub mod bridge_file_dialogs;
-pub mod bridge_file_selection;
-pub mod bridge_folder_dialog_delete;
-pub mod bridge_folder_dialog_missing_delete;
-pub mod bridge_folder_dialog_move;
-pub mod bridge_folder_dialog_new;
-pub mod bridge_folder_dialog_reborn_warn;
-pub mod bridge_folder_dialog_remove_orphaned;
-pub mod bridge_folder_dialog_rename;
-pub mod bridge_folder_dialogs;
-pub mod bridge_folder_move_sync;
-pub mod bridge_folder_tree_sync;
-pub mod bridge_folders;
-pub mod bridge_inspector;
-pub mod bridge_media;
-pub mod bridge_rubberband;
-pub mod bridge_selection_delete;
-pub mod bridge_sidebar_panel_tabs;
-pub mod bridge_state;
-pub mod bridge_status_bar;
-pub mod bridge_tab_grid;
-pub mod bridge_tag_dialogs;
-pub mod bridge_tag_history;
-pub mod bridge_tags;
-pub mod bridge_thumbnails;
-pub mod bridge_viewer_tabs;
+pub mod context_menu;
+pub mod dnd;
+pub mod favorites;
+pub mod file_dialogs;
+pub mod folder_dialogs;
+pub mod folder_tree;
+pub mod media;
+pub mod selection;
+pub mod sidebar;
+pub mod state;
+pub mod status_bar;
+pub mod tabs;
+pub mod tags;
 pub mod browse_folders;
 pub mod browse_window;
 pub mod button_feedback;
 pub mod button_feedback_bridge;
 pub mod color_picker;
-pub mod dnd_foldertree_autoscroller;
-pub mod fallback_view;
-pub mod favorites;
-pub mod folder_projection;
 pub mod formats_policy;
-pub mod file_selection;
-pub mod keyboard_navigation;
 pub mod list_loader;
-pub mod media_open_with;
 pub mod models;
 pub mod multiview;
-pub mod rubberband_selection;
 pub mod settings_dialog;
 pub mod open_confirmation;
 pub mod shutdown;
-pub mod sidebar_panel_tab_dnd;
-pub mod tab_dnd;
-pub mod tab_grid;
-pub mod tab_icon;
-pub mod tag_history;
 pub mod thumbnail_badges;
 pub mod thumbnail_regeneration;
 pub mod type_ahead;
-pub mod video_preview_animator;
 pub mod virtual_folder_wording;
 
 pub use bridge::{RenameActionParams, UiBridge};
-pub use bridge_ctx_menu::{FolderMenuContext, MediaMenuContext};
-pub use bridge_ctx_menu_favorite::FavoriteContextMenu;
-pub use bridge_ctx_menu_folder::FolderContextMenu;
-pub use bridge_ctx_menu_media::MediaContextMenu;
-pub use bridge_ctx_menu_presenter::CtxMenuPresenter;
-pub use bridge_ctx_menu_tab::{TabActionContext, TabContextMenu};
-pub use bridge_ctx_menu_tag::TagContextMenu;
-pub use bridge_dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
-pub use bridge_favorite_dialog_rename::FavoriteRenameDialogController;
-pub use bridge_favorites::BridgeFavorites;
-pub use bridge_file_dialog_conflict::{
+pub use context_menu::{FolderMenuContext, MediaMenuContext};
+pub use context_menu::favorite::FavoriteContextMenu;
+pub use context_menu::folder::FolderContextMenu;
+pub use context_menu::media::MediaContextMenu;
+pub use context_menu::presenter::CtxMenuPresenter;
+pub use context_menu::tab::{TabActionContext, TabContextMenu};
+pub use context_menu::tag::TagContextMenu;
+pub use dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
+pub use favorites::rename_dialog::FavoriteRenameDialogController;
+pub use favorites::BridgeFavorites;
+pub use file_dialogs::conflict::{
     ConflictDialogParams, ConflictThumbInfo, FileOpsConflictDialogController,
 };
-pub use bridge_file_dialog_delete::DeleteFileDialogController;
-pub use bridge_file_dialog_missing::{MissingFileDialogController, MissingFileItem};
-pub use bridge_file_dialog_remove_orphaned::RemoveOrphanedFileDialogController;
-pub use bridge_file_dialogs::{FileRenameContext, FileRenameDialogController, RenameDialogParams};
-pub use bridge_file_selection::{
+pub use file_dialogs::delete::DeleteFileDialogController;
+pub use file_dialogs::missing::{MissingFileDialogController, MissingFileItem};
+pub use file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
+pub use file_dialogs::{FileRenameContext, FileRenameDialogController, RenameDialogParams};
+pub use selection::{
     BridgeFileSelection, FileClickContext, FileClickEvent, LastClickRecord,
 };
-pub use bridge_folder_dialog_delete::DeleteFolderDialogController;
-pub use bridge_folder_dialog_missing_delete::MissingFolderDeleteDialogController;
-pub use bridge_folder_dialog_move::MoveFolderDialogController;
-pub use bridge_folder_dialog_reborn_warn::RebornFolderWarnDialogController;
-pub use bridge_folder_dialog_remove_orphaned::RemoveOrphanedFolderDialogController;
-pub use bridge_folder_dialog_rename::RenameFolderDialogController;
-pub use bridge_folder_dialogs::{FolderDialogContext, FolderDialogController};
-pub use bridge_folder_move_sync::BridgeFolderMoveSync;
-pub use bridge_folder_tree_sync::FolderTreeSync;
+pub use folder_dialogs::delete::DeleteFolderDialogController;
+pub use folder_dialogs::missing_delete::MissingFolderDeleteDialogController;
+pub use folder_dialogs::move_to::MoveFolderDialogController;
+pub use folder_dialogs::reborn_warn::RebornFolderWarnDialogController;
+pub use folder_dialogs::remove_orphaned::RemoveOrphanedFolderDialogController;
+pub use folder_dialogs::rename::RenameFolderDialogController;
+pub use folder_dialogs::{FolderDialogContext, FolderDialogController};
+pub use folder_tree::move_sync::BridgeFolderMoveSync;
+pub use folder_tree::tree_sync::FolderTreeSync;
 pub use multiview::MultiviewHandle;
-pub use bridge_rubberband::{
+pub use selection::rubberband_bridge::{
     BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams,
 };
-pub use bridge_sidebar_panel_tabs::BridgeSidebarPanelTabs;
-pub use bridge_state::*;
-pub use bridge_status_bar::{StatusBarBridge, StatusMessageLevel};
-pub use bridge_tab_grid::BridgeTabGrid;
-pub use bridge_tag_dialogs::TagDialogController;
-pub use bridge_tag_history::BridgeTagHistory;
-pub use bridge_tags::{BridgeTags, TagActionContext};
-pub use bridge_viewer_tabs::{BridgeViewerTabs, TabDragEndParams};
-pub use dnd_foldertree_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
-pub use fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, FallbackViewState};
-pub use favorites::{FavoriteEntry, FavoriteManager};
-pub use folder_projection::FolderProjection;
+pub use sidebar::BridgeSidebarPanelTabs;
+pub use state::*;
+pub use status_bar::{StatusBarBridge, StatusMessageLevel};
+pub use tabs::grid_bridge::BridgeTabGrid;
+pub use tags::dialogs::TagDialogController;
+pub use tags::history_bridge::BridgeTagHistory;
+pub use tags::{BridgeTags, TagActionContext};
+pub use tabs::{BridgeViewerTabs, TabDragEndParams};
+pub use folder_tree::dnd_autoscroller::{DndFolderTreeAutoScroller, FolderTreeAutoScrollDirection};
+pub use media::fallback_view::{FallbackEvaluationParams, FallbackViewEvaluator, FallbackViewState};
+pub use favorites::manager::{FavoriteEntry, FavoriteManager};
+pub use folder_tree::projection::FolderProjection;
 pub use settings_dialog::{FormatCounter, SettingsDialogController};
-pub use file_selection::{FileSelectionModel, FileSelectionSummary};
-pub use keyboard_navigation::{
+pub use selection::model::{FileSelectionModel, FileSelectionSummary};
+pub use selection::keyboard::{
     calculate_target_index, handle_keyboard_navigate, KeyboardNavigateParams, NavigationDirection,
 };
 pub use thumbnail_badges::ThumbnailBadgeBridge;
-pub use rubberband_selection::{
+pub use selection::rubberband::{
     GridLayoutConfig, RectF32, RubberbandAutoScroller, RubberbandGeometry, RubberbandSession,
     RubberbandStartParams, TableLayoutConfig,
 };
-pub use sidebar_panel_tab_dnd::{
+pub use sidebar::panel_tab_dnd::{
     SidebarPanelTabDndGeometry, SidebarPanelTabDndSession, SidebarPanelTabSlotInfo,
 };
-pub use tab_dnd::{
+pub use tabs::dnd::{
     TabAutoScrollDirection, TabDndAutoScroller, TabDndGeometry, TabDndSession, TabSlotInfo,
 };
-pub use tab_grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
-pub use tag_history::{
+pub use tabs::grid::{MasonryRect, ResponsiveBreakpoints, TabGridMasonryEngine, TabGridTile};
+pub use tags::history::{
     TagHistoryItem, TagHistoryLayoutEngine, TagHistoryManager, TagHistoryRow,
 };
-pub use video_preview_animator::{VideoPreviewAnimator, DEFAULT_PREVIEW_INTERVAL_MS};
+pub use media::video_preview::{VideoPreviewAnimator, DEFAULT_PREVIEW_INTERVAL_MS};

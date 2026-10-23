@@ -1,7 +1,7 @@
 //! Targeted updates of the tiles that exist: the one place that maps a media id to the model row (slot) that shows it.
 
 use rustview_core::library::models::MediaId;
-use crate::ui::bridge_state::UiState;
+use crate::ui::state::UiState;
 use crate::ui::{MainWindow, MediaItemView};
 use slint::Model;
 

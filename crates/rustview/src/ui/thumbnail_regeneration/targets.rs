@@ -2,7 +2,7 @@
 
 use super::eligibility;
 use rustview_core::thumbnails::regeneration::RegenerationTarget;
-use crate::ui::bridge_state::UiState;
+use crate::ui::state::UiState;
 
 /// One target per selected valid video. Images and unavailable files (deleted, pending, corrupted) are skipped, and
 /// no database or drive access happens: the stored path of the loaded record is used as is.

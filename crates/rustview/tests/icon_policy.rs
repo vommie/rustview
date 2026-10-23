@@ -90,7 +90,6 @@ fn rust_ui_modules_have_no_emoji_or_unicode_symbols() {
     let mut paths = files_with_extension(&root.join("ui"), "rs");
     paths.extend(files_with_extension(&root.join("ctx_menu"), "rs"));
     paths.extend(files_with_extension(&root.join("icons"), "rs"));
-    paths.push(root.join("library/folder_projection.rs"));
     paths.push(root.join("system/dnd.rs"));
 
     let mut offenders = Vec::new();

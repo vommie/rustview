@@ -5,7 +5,7 @@
 
 use super::eligibility::is_playable;
 use rustview_core::library::models::MediaId;
-use crate::ui::bridge_state::UiState;
+use crate::ui::state::UiState;
 use crate::viewer::multiview::navigation::cyclic_neighbor;
 
 /// The medium after (`forward`) or before `current` in the Browse view, wrapping around. `None` if there is no other

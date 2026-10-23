@@ -19,8 +19,8 @@ pub use view::{folder_row_view, stamp_labels};
 use rustview_core::library::Library;
 use rustview_core::library::models::FolderHierarchySnapshot;
 use rustview_core::settings::schema::FolderSettings;
-use crate::ui::bridge_folders::BridgeFolders;
-use crate::ui::bridge_state::UiState;
+use crate::ui::folder_tree::BridgeFolders;
+use crate::ui::state::UiState;
 use parking_lot::RwLock;
 use std::sync::Arc;
 

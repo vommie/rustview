@@ -9,7 +9,7 @@ use super::geometry::ViewGeometry;
 use super::view_builder::build_view;
 use rustview_core::library::models::MediaId;
 use rustview_core::thumbnails::ThumbnailManager;
-use crate::ui::bridge_state::UiState;
+use crate::ui::state::UiState;
 use crate::ui::browse_folders::{Slot, folder_row_view};
 use crate::ui::{MainWindow, MediaItemView};
 use slint::{Image, Model, ModelRc, VecModel};

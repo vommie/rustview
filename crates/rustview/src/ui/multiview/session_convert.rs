@@ -6,7 +6,7 @@
 
 use super::handle;
 use super::session::{Session, finish_close, take_session};
-use crate::ui::bridge_status_bar::StatusBarBridge;
+use crate::ui::status_bar::StatusBarBridge;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::route::OriginKind;
 use crate::viewer::{TabId, get_slint_window_xid};
