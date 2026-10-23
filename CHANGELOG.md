@@ -16,7 +16,7 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   while the focus is in a video's own window (mpv), and on the numpad. Key repeat does not rate again; nothing is rated while a dialog or the settings window is
   open, while a text field has the focus, or during a drag.
 - **Rating animation:** the icon of the new rating (about 50x50 px) appears in the middle of every tile of a rated medium at once, stays for 0.75 s and fades out
-  in the next 0.25 s (1 s in all). A new rating cancels the running animation immediately and shows its icon at full strength, with no cross-fade. On a video
+  in the next 0.25 s (1 s in all). The digit is filled white (the icon sits on a white disc), so the picture never shines through it. A new rating cancels the running animation immediately and shows its icon at full strength, with no cross-fade. On a video
   tile the icon is drawn by mpv itself, so it needs no compositor and works on Wayland too. Settings > Fullscreen > Rating switches the animation off
   (the rating itself is always saved).
 
