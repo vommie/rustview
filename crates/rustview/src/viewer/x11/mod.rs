@@ -10,6 +10,7 @@ mod session;
 mod subwindow;
 mod windows;
 mod wm_state;
+mod xdnd;
 
 pub use error_handler::install_nonfatal_error_handler;
 pub use ghost::{GhostPixels, GhostWindow};
@@ -24,3 +25,4 @@ pub use wm_state::{
     force_x11_fullscreen, force_x11_fullscreen_on_monitor, force_x11_maximized, is_x11_window_maximized,
     set_x11_initial_maximized, x11_root_size,
 };
+pub use xdnd::{XdndOutcome, drop_on_window_under_pointer};

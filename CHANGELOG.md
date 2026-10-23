@@ -15,6 +15,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 - **"Open With > Other Application..." asks the desktop portal directly** (the application chooser of your desktop, KDE's own dialog on Plasma). It no longer starts
   a Python script (PyQt6) or `kdialog`, so it works on every system that has `xdg-desktop-portal`; cancelling the dialog does nothing, as it should.
+- **Dropping files on other programs no longer needs Python:** the X11 drag and drop handshake (XDND) that hands the files to Dolphin, a browser or any other
+  program is part of RustView now (it used to start a Python script with `libX11`). Without `python3` on the system the drop used to do nothing without a message.
 - **The drag ghost is drawn by RustView itself:** the small card with the thumbnail, the file name and the file count that follows the pointer while you drag files
   out of RustView no longer needs Python with GTK or Qt. It appears at once (no interpreter start), and it is opaque with square corners when no compositor runs.
 
