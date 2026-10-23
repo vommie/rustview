@@ -1,5 +1,4 @@
 pub mod animated_frames;
-pub mod arena;
 pub mod cache;
 pub mod error;
 pub mod gc;
@@ -16,7 +15,6 @@ pub mod types;
 pub mod video;
 pub mod view_loader;
 
-pub use arena::ThumbnailArena;
 pub use cache::L1AnimatedPreviewCache;
 pub use error::ThumbnailError;
 pub use gc::ThumbnailGarbageCollector;
@@ -28,7 +26,7 @@ pub use ram_cache::{CachedThumbnail, RamCacheStats, ThumbnailRamCache};
 pub use store::PackStore;
 pub use types::{
     anonymize_target, calculate_aspect_dimensions, generate_random_video_offset_percent,
-    FitMode, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat, ThumbnailHandle,
+    FitMode, ScalingAlgorithm, ThumbnailConfig, ThumbnailFormat,
     ThumbnailLocation, ThumbnailPriority, ThumbnailStorageStats, VideoPreviewRecord,
     VideoThumbnailEngine, DEFAULT_THUMBNAIL_BOUND, THUMBNAIL_BYTE_SIZE, THUMBNAIL_CHANNELS,
     THUMBNAIL_PIXELS, THUMBNAIL_SIZE,

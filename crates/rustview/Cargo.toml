@@ -21,6 +21,9 @@ path = "src/lib.rs"
 name = "rustview"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 rustview-core.workspace = true
 slint.workspace = true

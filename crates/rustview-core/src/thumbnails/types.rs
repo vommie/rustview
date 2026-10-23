@@ -264,12 +264,6 @@ pub enum FitMode {
     Cover,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ThumbnailHandle {
-    pub slot_index: u32,
-    pub generation: u32,
-}
-
 #[inline]
 pub fn calculate_aspect_dimensions(orig_w: u32, orig_h: u32, max_bound: u32) -> (u32, u32) {
     if orig_w == 0 || orig_h == 0 {

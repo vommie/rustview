@@ -40,6 +40,8 @@ impl LibraryDatabase {
     pub fn open(path: &Path) -> Result<Self, LibraryError> {
         fs::create_dir_all(path)?;
 
+        // SAFETY: LMDB memory-maps the file, which is only sound while nothing else modifies it behind LMDB's back. The library folder
+        // belongs to RustView alone, and heed keeps a single environment per path inside the process.
         let env = unsafe {
             EnvOpenOptions::new()
                 .map_size(128 * 1024 * 1024 * 1024)

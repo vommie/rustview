@@ -74,6 +74,13 @@ rust-ini = "0.21"
 x11rb = { version = "0.13", features = ["shape", "xfixes"] }
 x11-dl = "2"
 
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# Every `unsafe` block says why it is sound.
+undocumented_unsafe_blocks = "deny"
+
 # Development builds optimize everything (decoding and thumbnailing are unusably slow otherwise) but keep only line tables of
 # the own crates and no debug info of the dependencies, which keeps backtraces readable and `target/` small. For a debugger
 # session build with `cargo build --profile debug-full` (full debug info, binary in target/debug-full/).

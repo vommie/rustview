@@ -30,9 +30,6 @@ pub enum ThumbnailError {
         length: u32,
     },
 
-    #[error("Thumbnail arena exhausted")]
-    ArenaExhausted,
-
     #[error("Database engine error: {0}")]
     Heed(#[from] heed::Error),
 
