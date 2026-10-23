@@ -76,6 +76,8 @@ x11-dl = "2"
 # The desktop portal (the application chooser of "Open With"): the same D-Bus service that sandboxed apps use, no helper processes.
 ashpd = { version = "0.13", default-features = false, features = ["async-io", "open_uri"] }
 async-io = "2"
+# Embeds the thumbnail of the drag ghost into the SVG that draws it.
+base64 = "0.23"
 # Numeric conversions that say what happens on overflow (saturate, wrap) instead of the silent truncation of `as`.
 az = "1"
 

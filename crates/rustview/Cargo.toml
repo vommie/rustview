@@ -59,6 +59,7 @@ x11rb.workspace = true
 x11-dl.workspace = true
 ashpd.workspace = true
 async-io.workspace = true
+base64.workspace = true
 
 [build-dependencies]
 slint-build.workspace = true

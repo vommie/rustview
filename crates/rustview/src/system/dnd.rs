@@ -1,18 +1,20 @@
 use crate::icons::Icon;
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
-use std::process::Child;
 use std::sync::LazyLock;
+use std::sync::mpsc::Sender;
 
 mod drop;
 mod ghost;
+mod ghost_image;
 
-/// Edge length of the ghost window's thumbnail/icon slot (matches the scaling in the helper script below).
+/// Edge length of the ghost window's thumbnail/icon slot (`ghost_image` draws it at this size).
 const GHOST_ICON_SIZE_PX: u32 = 24;
 /// Color of the ghost fallback icon; equals `Theme.text` in `ui/styles.slint` (the helper window cannot read the theme).
 const GHOST_ICON_COLOR: &str = "#cdd6f4";
 
-static ACTIVE_GHOST_CHILD: LazyLock<Mutex<Option<Child>>> = LazyLock::new(|| Mutex::new(None));
+/// The signal that dismisses the ghost window that is showing (if any); dropping it has the same effect.
+static ACTIVE_GHOST: LazyLock<Mutex<Option<Sender<()>>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Detailed telemetry metrics for external Drag & Drop export sessions.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

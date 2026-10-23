@@ -3,6 +3,7 @@
 //! The one exception is `error_handler`: libmpv draws through Xlib and installs a process-wide Xlib error handler.
 
 mod error_handler;
+mod ghost;
 mod overlay_server;
 mod pointer;
 mod session;
@@ -11,6 +12,7 @@ mod windows;
 mod wm_state;
 
 pub use error_handler::install_nonfatal_error_handler;
+pub use ghost::{GhostPixels, GhostWindow};
 pub use overlay_server::OverlayServer;
 pub use pointer::PointerProbe;
 pub use subwindow::{SubwindowGeometry, ViewportBounds, X11VideoSubwindow, XRectangle};

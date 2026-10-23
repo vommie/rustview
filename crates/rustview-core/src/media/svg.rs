@@ -38,7 +38,7 @@ pub struct SvgRaster {
 
 /// Parse options shared by every SVG: system fonts are loaded once (on the first SVG), and nothing outside the file
 /// is read (`href`s to other files resolve to nothing; embedded `data:` pictures work).
-fn options() -> &'static usvg::Options<'static> {
+pub fn options() -> &'static usvg::Options<'static> {
     static OPTIONS: OnceLock<usvg::Options<'static>> = OnceLock::new();
     OPTIONS.get_or_init(|| {
         let mut fonts = usvg::fontdb::Database::new();

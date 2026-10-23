@@ -4735,6 +4735,7 @@ dependencies = [
  "ashpd",
  "async-io",
  "az",
+ "base64",
  "chrono",
  "clap",
  "directories",

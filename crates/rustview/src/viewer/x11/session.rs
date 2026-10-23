@@ -55,6 +55,19 @@ impl Session {
         Some(atoms)
     }
 
+    /// True while a compositing manager owns the `_NET_WM_CM_S<screen>` selection: only then are the alpha channels of windows blended
+    /// with what is below them. Without one a window with an alpha channel shows its raw color bits.
+    pub(super) fn compositor_running(&self) -> bool {
+        let Some(atom) = self.atom(&format!("_NET_WM_CM_S{}", self.screen), true) else {
+            return false;
+        };
+        self.conn
+            .get_selection_owner(atom)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .is_some_and(|reply| reply.owner != x11rb::NONE)
+    }
+
     /// Sends the queued requests. Events and errors that arrived meanwhile are dropped: nothing here ever reads them, and they must
     /// not pile up for the whole life of the connection.
     pub(super) fn flush(&self) {

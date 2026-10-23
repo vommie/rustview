@@ -30,18 +30,9 @@ impl OverlayServer {
         u32::try_from(xid).ok()
     }
 
-    /// True while a compositing manager owns the `_NET_WM_CM_S<screen>` selection: only then are the alpha channels of
-    /// windows blended with what is below them. Without one a window with an alpha channel shows its raw color bits.
+    /// True while a compositing manager runs: only then are the alpha channels of windows blended with what is below them.
     pub fn compositor_running(&self) -> bool {
-        let Some(atom) = self.session.atom(&format!("_NET_WM_CM_S{}", self.session.screen), true) else {
-            return false;
-        };
-        self.session
-            .conn
-            .get_selection_owner(atom)
-            .ok()
-            .and_then(|cookie| cookie.reply().ok())
-            .is_some_and(|reply| reply.owner != x11rb::NONE)
+        self.session.compositor_running()
     }
 
     /// The color depth of a window (32 = it has an alpha channel).
