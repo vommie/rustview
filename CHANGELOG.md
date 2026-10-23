@@ -25,6 +25,11 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   established libraries instead of hand-written code (no change in behavior, except the fixes below).
 - The X11 window handling (video windows, action bar windows, maximize/fullscreen state, pointer lock) runs on the pure Rust `x11rb` instead of
   hand-written Xlib calls (no change in behavior; X errors are logged instead of ending the process).
+- The whole code base passes `clippy::pedantic` and is formatted with rustfmt. Numeric conversions no longer wrap or truncate silently: sizes,
+  indexes and pixel values that do not fit their target type are clamped instead (ids that pass through Slint keep their old wrapping behavior). No
+  change in behavior for any value that occurred before. The messages of the XnView MP migration show paths without quotes.
+- Removed an unused thumbnail memory arena that wrote through a shared reference (undefined behavior if it had ever been used); every remaining
+  `unsafe` block now carries a safety comment.
 - **The application id is now `io.github.vommie.rustview`** (it was `org.rustview.app`) and matches the desktop file, so the desktop shows the
   launcher icon for the window. If you pinned RustView to the taskbar, pin it again once after updating. Settings and library are untouched, no migration.
 
