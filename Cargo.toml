@@ -78,8 +78,25 @@ x11-dl = "2"
 unsafe_op_in_unsafe_fn = "deny"
 
 [workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
 # Every `unsafe` block says why it is sound.
 undocumented_unsafe_blocks = "deny"
+
+# Pedantic lints that are switched off on purpose. Everything else of `pedantic` is fixed, not allowed.
+# Both crates are applications that are never published, so there is no consumer of a public API that `#[must_use]`
+# attributes and `# Errors` / `# Panics` sections would guide; the types (`Result`, `Option`, builders) already carry that.
+must_use_candidate = "allow"
+return_self_not_must_use = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Naming noise (`tx`/`rx`, `win_hover`/`win_unhover`); the pairs are deliberate and read well in their functions.
+similar_names = "allow"
+# A function that wires many Slint callbacks or maps a long list of settings is long by nature; splitting them would be an
+# invasive refactor that the lint alone does not justify (they are listed in the final structure review).
+too_many_lines = "allow"
+# State and settings structs mirror one switch per UI control and per settings key; a state machine or enum would not be clearer.
+struct_excessive_bools = "allow"
+fn_params_excessive_bools = "allow"
 
 # Development builds optimize everything (decoding and thumbnailing are unusably slow otherwise) but keep only line tables of
 # the own crates and no debug info of the dependencies, which keeps backtraces readable and `target/` small. For a debugger
