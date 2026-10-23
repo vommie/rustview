@@ -70,6 +70,9 @@ rustix = { version = "1", features = ["system", "fs", "process"] }
 freedesktop-desktop-entry = { version = "0.8", default-features = false }
 freedesktop-icons = "0.4"
 rust-ini = "0.21"
+# The X11 protocol in pure Rust (video windows, overlay windows, window manager state); x11-dl only for libmpv's Xlib error handler.
+x11rb = { version = "0.13", features = ["shape", "xfixes"] }
+x11-dl = "2"
 
 # Development builds optimize everything (decoding and thumbnailing are unusably slow otherwise) but keep only line tables of
 # the own crates and no debug info of the dependencies, which keeps backtraces readable and `target/` small. For a debugger

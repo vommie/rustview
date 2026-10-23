@@ -7,7 +7,7 @@ pub mod tab_item;
 mod tab_native;
 pub mod tab_ui_gate;
 pub mod types;
-pub mod x11_embed;
+pub mod x11;
 pub mod zoom;
 
 pub use error::ViewerError;
@@ -16,7 +16,7 @@ pub use manager::ViewerTabManager;
 pub use mpv_engine::{MpvEventCallback, MpvFullscreenCallback, MpvPlayer};
 pub use tab_item::{TabCollection, TabTitleFormatter};
 pub use types::{MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, MpvPlaybackState, MultiviewTabPayload, TabId, ViewerAction};
-pub use x11_embed::{
+pub use x11::{
     find_window_by_pid_and_title, find_window_by_title, force_x11_fullscreen,
     force_x11_fullscreen_on_monitor, force_x11_maximized, get_raw_window_xid,
     get_slint_window_xid, get_slint_window_xid_with_title_fallback,

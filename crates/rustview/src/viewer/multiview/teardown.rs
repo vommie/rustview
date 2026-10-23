@@ -2,7 +2,7 @@
 
 use super::tile::VideoTile;
 use crate::viewer::mpv_engine::MpvPlayer;
-use crate::viewer::x11_embed::X11VideoSubwindow;
+use crate::viewer::x11::X11VideoSubwindow;
 use rustview_core::settings::schema::PLAYER_TEARDOWN_WAIT_MS;
 use crate::viewer::install_nonfatal_error_handler;
 use parking_lot::{Condvar, Mutex};

@@ -2,7 +2,7 @@
 //! The tab manager asks the tab instead of knowing what it owns.
 
 use super::types::MediaTabSession;
-use super::x11_embed::XRectangle;
+use super::x11::XRectangle;
 
 impl MediaTabSession {
     /// The tab stops being the shown one: its windows are hidden and its players paused (the user's pause state is kept).

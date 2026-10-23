@@ -4744,6 +4744,8 @@ dependencies = [
  "tracing-subscriber",
  "trash",
  "url",
+ "x11-dl",
+ "x11rb",
 ]
 
 [[package]]

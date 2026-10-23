@@ -1,0 +1,24 @@
+//! Everything the viewer needs from the X server, written on x11rb (a pure Rust implementation of the X11 protocol): the native
+//! video windows that mpv draws into, the floating action bar windows, the window manager state of the main window and the pointer.
+//! The one exception is `error_handler`: libmpv draws through Xlib and installs a process-wide Xlib error handler.
+
+mod error_handler;
+mod overlay_server;
+mod pointer;
+mod session;
+mod subwindow;
+mod windows;
+mod wm_state;
+
+pub use error_handler::install_nonfatal_error_handler;
+pub use overlay_server::OverlayServer;
+pub use pointer::PointerProbe;
+pub use subwindow::{SubwindowGeometry, ViewportBounds, X11VideoSubwindow, XRectangle};
+pub use windows::{
+    find_window_by_pid_and_title, find_window_by_title, get_raw_window_xid, get_slint_window_xid,
+    get_slint_window_xid_with_title_fallback,
+};
+pub use wm_state::{
+    force_x11_fullscreen, force_x11_fullscreen_on_monitor, force_x11_maximized, is_x11_window_maximized,
+    set_x11_initial_maximized, x11_root_size,
+};

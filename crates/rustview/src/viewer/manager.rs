@@ -8,7 +8,7 @@ use super::multiview::teardown;
 use super::tab_item::{TabCollection, TabTitleFormatter};
 use super::tab_ui_gate::TabUiGate;
 use super::types::{MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, TabId};
-use super::x11_embed::{X11VideoSubwindow, XRectangle};
+use super::x11::{X11VideoSubwindow, XRectangle};
 use rustview_core::library::models::{MediaId, MediaRecord};
 use rustview_core::library::Library;
 use rustview_core::media::MediaType;

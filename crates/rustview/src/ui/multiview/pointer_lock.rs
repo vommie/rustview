@@ -9,7 +9,7 @@
 //! This is done on the X server (`XWarpPointer`, the cursor hidden with XFixes). Where it does not work (Wayland, a pointer that
 //! does not follow, no X connection) `begin` says so and the drag stays absolute: the rectangle under the pointer.
 
-use crate::viewer::x11_embed::OverlayServer;
+use crate::viewer::x11::OverlayServer;
 use std::cell::RefCell;
 
 struct Lock {

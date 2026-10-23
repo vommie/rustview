@@ -51,6 +51,8 @@ signal-hook.workspace = true
 freedesktop-desktop-entry.workspace = true
 freedesktop-icons.workspace = true
 rust-ini.workspace = true
+x11rb.workspace = true
+x11-dl.workspace = true
 
 [build-dependencies]
 slint-build.workspace = true
