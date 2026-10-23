@@ -104,14 +104,15 @@ component ThumbnailBadgeZone inherits Rectangle {
 
     FlexboxLayout {
         spacing: ThumbnailBadgeMetrics.gap;
-        align-content: FlexboxLayoutAlignContent.start;
+        cross-axis-line-alignment: LayoutAlignment.start;
         cross-axis-alignment: CrossAxisAlignment.start;
         flex-wrap: root.from-bottom ? FlexboxLayoutWrap.wrap-reverse : FlexboxLayoutWrap.wrap;
         alignment: root.align-right ? LayoutAlignment.end : LayoutAlignment.start;
 
         for badge in root.badges : ThumbnailBadge {
             view: badge;
-            flex-shrink: 0;
+            // Slint 1.18 has no flex-shrink: a flex item shrinks unless its min-width forbids it, and a badge never shrinks.
+            min-width: badge.kind == ThumbnailBadgeKind.round ? max(ThumbnailBadgeMetrics.round-size, self.preferred-width) : self.preferred-width;
             // A badge wider than its whole area can never be shown completely, so hide it.
             visible: self.preferred-width <= root.width;
         }

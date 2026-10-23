@@ -2,10 +2,21 @@
 name = "rustview"
 version = "0.3.82"
 edition = "2024"
+# The lowest toolchain known to work: the code uses `AtomicUsize::try_update` (1.95). rust-toolchain.toml pins `stable`.
+rust-version = "1.95"
+description = "Fast image and video browser with folders, tags and ratings (Rust, Slint, FFmpeg, mpv)"
+license = "MIT"
+repository = "https://github.com/vommie/rustview"
+homepage = "https://github.com/vommie/rustview"
+readme = "README.md"
+keywords = ["media", "image-viewer", "video", "gallery", "slint"]
+categories = ["multimedia", "gui"]
+# An application, never published to crates.io.
+publish = false
 build = "build.rs"
 
 [dependencies]
-slint = { version = "1", features = ["raw-window-handle-06", "unstable-winit-030"] }
+slint = { version = "1.18", features = ["raw-window-handle-06", "unstable-winit-030"] }
 raw-window-handle = "0.6"
 heed = "0.22"
 md-5 = "0.11"
@@ -16,45 +27,58 @@ fast_image_resize = "6"
 ffmpeg-next = "9"
 libmpv2 = "6"
 rayon = "1"
-memmap2 = "0.9"
 memchr = "2"
 walkdir = "2"
-anyhow = "1"
 thiserror = "2"
-tracing = "0"
-tracing-subscriber = { version = "0", features = ["env-filter", "fmt"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 regex = "1"
+# The library stores its records with bincode 1: the format is part of the on-disk data and must not change.
 bincode = "1"
 parking_lot = "0.12"
-rfd = "0.15"
+rfd = "0.17"
 trash = "5"
-rusqlite = { version = "0", features = ["bundled"] }
+# Only the XnView MP database migration reads SQLite.
+rusqlite = { version = "0.40", features = ["bundled"] }
 webp = "0.3"
 arboard = "3"
 num-format = { version = "0.4", features = ["with-system-locale"] }
 # SVG rasterizer (already used by Slint); renders icons for native helper windows outside of Slint and the SVG files of the
 # library (text and system fonts for labels, raster-images for embedded pictures).
-resvg = { version = "0.47", default-features = false, features = ["text", "system-fonts", "raster-images"] }
+resvg = { version = "0.48", default-features = false, features = ["text", "system-fonts", "raster-images"] }
 
 [build-dependencies]
-slint-build = "1"
+slint-build = "1.18"
 toml = "1"
 
 [dev-dependencies]
-criterion = { version = "0.8", features = ["html_reports"] }
 tempfile = "3"
 
-# Enable maximum SIMD & native optimizations for both the rustview crate and dependencies in dev cargo run
+# Development builds optimize everything (decoding and thumbnailing are unusably slow otherwise) but keep only line tables of
+# the own crate and no debug info of the dependencies, which keeps backtraces readable and `target/` small. For a debugger
+# session build with `cargo build --profile debug-full` (full debug info, binary in target/debug-full/).
 [profile.dev]
 opt-level = 3
+debug = "line-tables-only"
 
 [profile.dev.package."*"]
 opt-level = 3
+debug = false
+
+[profile.debug-full]
+inherits = "dev"
+debug = true
 
 [profile.release]
 opt-level = 3
 lto = "thin"
 codegen-units = 1
 panic = "abort"
+
+# `cargo build --profile profiling`, then `samply record target/profiling/rustview`: release code with symbols and no abort on panic.
+[profile.profiling]
+inherits = "release"
+debug = "line-tables-only"
+panic = "unwind"

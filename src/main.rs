@@ -328,7 +328,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     signal = termination::signal_name(signum),
                     "[Shutdown: Signal] Termination signal received; closing the application in order"
                 );
-                if let Err(e) = win.try_dispatch_event(slint::platform::WindowEvent::CloseRequested) {
+                if let Err(e) = win.dispatch_event_with_result(slint::platform::WindowEvent::CloseRequested) {
                     tracing::error!(error = %e, "[Shutdown: Signal] The close request could not be delivered");
                     termination::exit_now(termination::EXIT_SHUTDOWN_TIMEOUT);
                 }

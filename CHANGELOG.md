@@ -16,6 +16,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - The package ships the AppStream metadata (software centers), the README and this changelog.
 
 ### Changed
+- Updated to **Slint 1.18** and the current compatible versions of all dependencies (no behavior change; the thumbnail badges were adapted to the new
+  flexbox layout API).
 - **The application id is now `io.github.vommie.rustview`** (it was `org.rustview.app`) and matches the desktop file, so the desktop shows the
   launcher icon for the window. If you pinned RustView to the taskbar, pin it again once after updating. Settings and library are untouched, no migration.
 

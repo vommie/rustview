@@ -12,8 +12,7 @@ yanked = "deny"
 ignore = [
     { id = "RUSTSEC-2025-0141", reason = "bincode: the library stores its records with bincode 1 (src/library), so it cannot be replaced without a database migration, which the compatibility rule forbids; bincode 2 is used by the Slint compiler at build time only" },
     { id = "RUSTSEC-2024-0436", reason = "paste (proc macro, build time) is pulled in by the image and ffmpeg binding crates; no replacement is available to this project" },
-    { id = "RUSTSEC-2026-0206", reason = "rustybuzz comes from usvg/resvg (SVG text); the maintained successor harfrust is not used by resvg yet" },
-    { id = "RUSTSEC-2026-0192", reason = "ttf-parser comes from rustybuzz/resvg and the Wayland window decorations; it only reads local system fonts" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser comes from resvg and the Wayland window decorations; it only reads local system fonts" },
     { id = "RUSTSEC-2026-0370", reason = "zvariant: unmaintained notice for the zbus stack that Slint, rfd and arboard use" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names: same zbus stack notice" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive: same zbus stack notice" },
