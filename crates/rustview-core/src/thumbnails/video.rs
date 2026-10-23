@@ -33,7 +33,7 @@ pub trait VideoFrameDecoder: Send + Sync {
     ) -> Result<DecodedThumbnailFrame, ThumbnailError>;
 }
 
-/// Maps RustView ScalingAlgorithm domain enum to native FFmpeg libswscale flags with accurate rounding.
+/// Maps `RustView` `ScalingAlgorithm` domain enum to native `FFmpeg` libswscale flags with accurate rounding.
 #[inline]
 pub fn map_scaling_algorithm_to_sws_flags(algo: ScalingAlgorithm) -> SwsFlags {
     match algo {
@@ -69,7 +69,7 @@ impl DynamicScaler {
         }
     }
 
-    /// Converts and scales a decoded video frame to tightly packed RGB24 bytes via FFmpeg's native libswscale.
+    /// Converts and scales a decoded video frame to tightly packed RGB24 bytes via `FFmpeg`'s native libswscale.
     pub fn scale_frame(&mut self, decoded: &ffmpeg_next::frame::Video) -> Result<Vec<u8>, ThumbnailError> {
         let fmt = decoded.format();
         let w = decoded.width();
@@ -94,7 +94,7 @@ impl DynamicScaler {
         let mut rgb_frame = ffmpeg_next::frame::Video::empty();
         scaler
             .run(decoded, &mut rgb_frame)
-            .map_err(|e| ThumbnailError::Ffmpeg(format!("swscale conversion failed: {}", e)))?;
+            .map_err(|e| ThumbnailError::Ffmpeg(format!("swscale conversion failed: {e}")))?;
 
         let actual_w = rgb_frame.width();
         let actual_h = rgb_frame.height();
@@ -203,7 +203,7 @@ impl FfmpegVideoThumbnailer {
     }
 
     /// The first frame at the size the picture has (no scaling up like a thumbnail): what the viewer shows for the
-    /// image formats only FFmpeg decodes.
+    /// image formats only `FFmpeg` decodes.
     pub fn extract_native_frame(&self, path: &Path) -> Result<DecodedThumbnailFrame, ThumbnailError> {
         let (width, height, _) = crate::media::MetadataExtractor::probe_video_details(path)
             .map_err(|e| ThumbnailError::Ffmpeg(e.to_string()))?;
@@ -257,7 +257,7 @@ impl FfmpegVideoThumbnailer {
                     continue;
                 }
 
-                match Self::seek_and_decode_to_target(
+                if let Ok(frame) = Self::seek_and_decode_to_target(
                     &mut ictx,
                     &mut decoder,
                     &mut scaler,
@@ -265,13 +265,10 @@ impl FfmpegVideoThumbnailer {
                     calc_seek_ts(target_sec),
                     target_sec,
                 ) {
-                    Ok(frame) => {
-                        preview_frames.push(frame);
-                    }
-                    Err(_) => {
-                        let fallback = preview_frames.last().cloned().unwrap_or_else(|| primary_frame.clone());
-                        preview_frames.push(fallback);
-                    }
+                    preview_frames.push(frame);
+                } else {
+                    let fallback = preview_frames.last().cloned().unwrap_or_else(|| primary_frame.clone());
+                    preview_frames.push(fallback);
                 }
             }
         }
@@ -316,10 +313,9 @@ impl FfmpegVideoThumbnailer {
                 while decoder.receive_frame(&mut decoded_frame).is_ok() {
                     if decoded_frame.width() > 0 && decoded_frame.height() > 0 {
                         frame_idx += 1;
-                        let pts_sec = decoded_frame
-                            .pts()
-                            .map(|pts| pts as f64 * f64::from(stream_ctx.time_base))
-                            .unwrap_or(frame_idx as f64 / stream_ctx.fps);
+                        let pts_sec = decoded_frame.pts().map_or(frame_idx as f64 / stream_ctx.fps, |pts| {
+                            pts as f64 * f64::from(stream_ctx.time_base)
+                        });
 
                         if pts_sec >= target_pts_sec - 0.02 {
                             let raw_rgb = scaler.scale_frame(&decoded_frame)?;
@@ -435,8 +431,9 @@ impl FfmpegVideoThumbnailer {
 
                 let pts_sec = decoded_video_frame
                     .pts()
-                    .map(|pts| pts as f64 * f64::from(stream_ctx.time_base))
-                    .unwrap_or(frame_idx as f64 / stream_ctx.fps);
+                    .map_or(frame_idx as f64 / stream_ctx.fps, |pts| {
+                        pts as f64 * f64::from(stream_ctx.time_base)
+                    });
                 frame_idx += 1;
 
                 let is_primary_hit = if target_preview_secs.is_some() {
@@ -489,7 +486,7 @@ impl FfmpegVideoThumbnailer {
 
                 // Circuit breaker: If we have all required frames, stop immediately!
                 let has_all_previews = if target_preview_secs.is_some() {
-                    preview_frames.iter().all(|f| f.is_some())
+                    preview_frames.iter().all(std::option::Option::is_some)
                 } else {
                     all_scaled_reservoir.len() >= num_previews
                 };
@@ -501,7 +498,7 @@ impl FfmpegVideoThumbnailer {
 
             // Circuit breaker: stop packet decoding loop as soon as frames are gathered
             let has_all_previews = if target_preview_secs.is_some() {
-                preview_frames.iter().all(|f| f.is_some())
+                preview_frames.iter().all(std::option::Option::is_some)
             } else {
                 all_scaled_reservoir.len() >= num_previews
             };
@@ -522,7 +519,7 @@ impl FfmpegVideoThumbnailer {
         }
 
         // Flush decoder EOF if primary frame still missing
-        if primary_frame.is_none() || preview_frames.iter().any(|f| f.is_none()) {
+        if primary_frame.is_none() || preview_frames.iter().any(std::option::Option::is_none) {
             let _ = decoder.send_eof();
             while decoder.receive_frame(&mut decoded_video_frame).is_ok() {
                 if decoded_video_frame.width() > 0
@@ -544,7 +541,7 @@ impl FfmpegVideoThumbnailer {
                     if primary_frame.is_none() {
                         primary_frame = Some(frame.clone());
                     }
-                    for slot in preview_frames.iter_mut() {
+                    for slot in &mut preview_frames {
                         if slot.is_none() {
                             *slot = Some(frame.clone());
                         }
@@ -584,7 +581,7 @@ impl FfmpegVideoThumbnailer {
             }
         }
 
-        let dur_ms = duration_secs.map(|d| (d * 1000.0).round() as u64).unwrap_or(0);
+        let dur_ms = duration_secs.map_or(0, |d| (d * 1000.0).round() as u64);
 
         Ok(VideoExtractionResult {
             primary_frame: final_primary,
@@ -687,7 +684,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         }
 
         // Support full 1..=99% position extraction for dynamic random position selection
-        let primary_offset_pct = (config.video_offset_percent.clamp(1, 99) as f64) / 100.0;
+        let primary_offset_pct = f64::from(config.video_offset_percent.clamp(1, 99)) / 100.0;
         let preview_count = config.preview_frame_count.clamp(2, 100) as usize;
 
         let stream_ctx = VideoStreamContext {
@@ -699,7 +696,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
             orig_disp_h: disp_h,
         };
 
-        let threshold = (config.short_video_threshold_secs as f64).max(30.0);
+        let threshold = f64::from(config.short_video_threshold_secs).max(30.0);
         let is_short_or_unknown = match duration_secs {
             Some(d) => d <= threshold,
             None => true,

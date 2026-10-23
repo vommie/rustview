@@ -66,7 +66,7 @@ pub enum UiAction {
 }
 
 pub fn route(mode: HostMode, origin: OriginKind, event: RoutedEvent, click: ClickKind) -> UiAction {
-    use RoutedEvent::*;
+    use RoutedEvent::{CloseTab, CtrlClick, GridLeft, GridMiddle, GridWheel, Rename, ToggleFullscreen};
     match (mode, event) {
         (HostMode::Hidden, _) => UiAction::None,
         (_, Rename) => UiAction::RequestRename,

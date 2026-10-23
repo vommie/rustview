@@ -20,7 +20,7 @@ impl SidebarPanelTabDndGeometry {
         (33.0 + text_w).clamp(60.0, 110.0)
     }
 
-    /// Computes horizontal slots (start_x, width, center_x) for all panel tabs in sequence.
+    /// Computes horizontal slots (`start_x`, width, `center_x`) for all panel tabs in sequence.
     pub fn compute_tab_slots(
         tab_ids: &[String],
         widths: &[f32],
@@ -159,7 +159,7 @@ impl SidebarPanelTabDndSession {
 
     #[inline]
     pub fn dragged_center_x(&self) -> f32 {
-        let source_slot_w = self.slots.get(self.source_index).map(|s| s.width).unwrap_or(80.0);
+        let source_slot_w = self.slots.get(self.source_index).map_or(80.0, |s| s.width);
         let left = self.current_cursor_x - self.grab_offset_x;
         left + (source_slot_w / 2.0)
     }
@@ -171,6 +171,6 @@ impl SidebarPanelTabDndSession {
 
     #[inline]
     pub fn current_slot_width(&self) -> f32 {
-        self.slots.get(self.source_index).map(|s| s.width).unwrap_or(80.0)
+        self.slots.get(self.source_index).map_or(80.0, |s| s.width)
     }
 }

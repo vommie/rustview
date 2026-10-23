@@ -175,14 +175,12 @@ impl PageRows {
         let (image_on, image_total) = Self::totals(MediaType::Image, mask);
         let (video_on, video_total) = Self::totals(MediaType::Video, mask);
 
-        let hidden_files: u64 = counts
-            .map(|c| {
-                mask.disabled_formats()
-                    .iter()
-                    .map(|f| c.get(f).copied().unwrap_or(0))
-                    .sum()
-            })
-            .unwrap_or(0);
+        let hidden_files: u64 = counts.map_or(0, |c| {
+            mask.disabled_formats()
+                .iter()
+                .map(|f| c.get(f).copied().unwrap_or(0))
+                .sum()
+        });
         let hidden_notice = match hidden_files {
             0 => String::new(),
             1 => "1 indexed file belongs to a switched-off format. It stays in the library and is hidden everywhere until the format is switched on again.".to_string(),
@@ -214,7 +212,7 @@ impl PageRows {
             .map(|entry| {
                 let spec = entry.spec;
                 let enabled = mask.is_enabled(spec.format);
-                let indexed = counts.map(|c| c.get(&spec.format).copied().unwrap_or(0)).unwrap_or(0);
+                let indexed = counts.map_or(0, |c| c.get(&spec.format).copied().unwrap_or(0));
                 let count_text = match indexed {
                     0 => String::new(),
                     1 if enabled => "1 file".to_string(),

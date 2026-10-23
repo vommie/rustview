@@ -35,8 +35,13 @@ impl MultiviewInstance {
     fn tile_at_host(&self, x: i32, y: i32) -> Option<usize> {
         // A zoomed picture fills its whole room, which counts as the tile.
         let zoomed = (0..self.tiles.len()).find(|&i| {
-            self.host_tile_rect(i)
-                .is_some_and(|r| self.tiles[i].zoom.as_ref().is_some_and(|z| z.is_active()) && r.contains(x, y))
+            self.host_tile_rect(i).is_some_and(|r| {
+                self.tiles[i]
+                    .zoom
+                    .as_ref()
+                    .is_some_and(super::super::zoom::state::ZoomState::is_active)
+                    && r.contains(x, y)
+            })
         });
         if zoomed.is_some() {
             return zoomed;

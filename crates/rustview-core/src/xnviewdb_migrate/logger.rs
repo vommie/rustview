@@ -17,16 +17,15 @@ impl MigrationLogger {
             return Ok(Self { file: None, path: None });
         }
 
-        let log_path = match custom_path {
-            Some(p) => p,
-            None => {
-                let timestamp = current_timestamp_string();
-                let filename = format!("rustview_migration_{}.log", timestamp);
-                if let Ok(home) = std::env::var("HOME") {
-                    PathBuf::from(home).join(filename)
-                } else {
-                    PathBuf::from(filename)
-                }
+        let log_path = if let Some(p) = custom_path {
+            p
+        } else {
+            let timestamp = current_timestamp_string();
+            let filename = format!("rustview_migration_{timestamp}.log");
+            if let Ok(home) = std::env::var("HOME") {
+                PathBuf::from(home).join(filename)
+            } else {
+                PathBuf::from(filename)
             }
         };
 
@@ -144,7 +143,7 @@ impl MigrationLogger {
     pub fn log_tag_migrated(&mut self, old_id: i64, new_id: u32, name: &str, new_parent_id: Option<u32>) {
         if let Some(ref mut f) = self.file {
             let parent_info = match new_parent_id {
-                Some(p) => format!("Parent: Tag #{}", p),
+                Some(p) => format!("Parent: Tag #{p}"),
                 None => "Parent: Root".to_string(),
             };
             let _ = writeln!(
@@ -177,7 +176,7 @@ impl MigrationLogger {
                     Self::render_tree_node(root_node, "", is_last, &mut lines);
                 }
                 for line in lines {
-                    let _ = writeln!(f, "{}", line);
+                    let _ = writeln!(f, "{line}");
                 }
             }
             let _ = writeln!(
@@ -293,8 +292,7 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[TAG ASSIGNED]   Media #{:<6} (old #{}) -> Tag #{:<4} (old #{})",
-                new_media_id, old_image_id, new_tag_id, old_tag_id
+                "[TAG ASSIGNED]   Media #{new_media_id:<6} (old #{old_image_id}) -> Tag #{new_tag_id:<4} (old #{old_tag_id})"
             );
         }
     }
@@ -303,8 +301,7 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[TAG LINK SKIP]  Image #{:<6} -> Tag #{:<4} | Reason: {}",
-                old_image_id, old_tag_id, reason
+                "[TAG LINK SKIP]  Image #{old_image_id:<6} -> Tag #{old_tag_id:<4} | Reason: {reason}"
             );
         }
     }
@@ -313,8 +310,7 @@ impl MigrationLogger {
         if let Some(ref mut f) = self.file {
             let _ = writeln!(
                 f,
-                "[HASH MIGRATED]   Hash #{:<5} -> Hash #{:<5} | Hash: {} | Date: {}",
-                old_hash_id, new_hash_id, hash, date_time
+                "[HASH MIGRATED]   Hash #{old_hash_id:<5} -> Hash #{new_hash_id:<5} | Hash: {hash} | Date: {date_time}"
             );
         }
     }

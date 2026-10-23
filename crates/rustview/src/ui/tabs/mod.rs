@@ -66,7 +66,7 @@ impl BridgeViewerTabs {
                 format_str: t.format.default_extension().into(),
                 is_active: !is_tab_grid && Some(t.id) == active_id_opt,
                 icon: tab_icon(t),
-                rating: t.record.rating as i32,
+                rating: i32::from(t.record.rating),
                 has_tags: false,
                 shift_x: 0.0,
                 is_placeholder: false,
@@ -77,13 +77,7 @@ impl BridgeViewerTabs {
         window.set_is_browse_active(is_browse);
         window.set_is_tab_grid_active(is_tab_grid);
 
-        let target_mode = if is_tab_grid {
-            2
-        } else if is_browse {
-            0
-        } else {
-            1
-        };
+        let target_mode = if is_tab_grid { 2 } else { i32::from(!is_browse) };
         window.set_active_view_mode(target_mode);
 
         let bg_mode_idx = match settings.get().viewer.background_mode.to_lowercase().as_str() {
@@ -107,7 +101,7 @@ impl BridgeViewerTabs {
                 active_tab.display_size()
             };
             let res_str = if display_w > 0 && display_h > 0 {
-                format!("{} x {}", display_w, display_h)
+                format!("{display_w} x {display_h}")
             } else {
                 String::new()
             };
@@ -117,10 +111,10 @@ impl BridgeViewerTabs {
                 None => (false, false),
                 Some(media_id) => {
                     let st = state.read();
-                    let total_available = if !st.active_indices.is_empty() {
-                        st.active_indices.len()
-                    } else {
+                    let total_available = if st.active_indices.is_empty() {
                         st.all_folder_media.len()
+                    } else {
+                        st.active_indices.len()
                     };
                     match st.row_of(media_id) {
                         Some(pos) => (pos > 0, pos + 1 < total_available),

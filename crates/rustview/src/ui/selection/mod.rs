@@ -59,7 +59,7 @@ pub struct LastClickRecord {
 pub struct BridgeFileSelection;
 
 impl BridgeFileSelection {
-    /// Registers media click, middle click, background click, and global selection hotkey callbacks onto MainWindow.
+    /// Registers media click, middle click, background click, and global selection hotkey callbacks onto `MainWindow`.
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,

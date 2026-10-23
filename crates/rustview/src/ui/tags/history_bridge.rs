@@ -127,7 +127,7 @@ impl BridgeTagHistory {
                 let partial = stats.is_partially_assigned(tag_id);
                 let is_any_assigned = count > 0;
                 let text = if is_any_assigned {
-                    format!("{} ({})", tag_name, count)
+                    format!("{tag_name} ({count})")
                 } else {
                     tag_name.clone()
                 };
@@ -233,8 +233,7 @@ impl BridgeTagHistory {
             .get_tag(tag_id)
             .ok()
             .flatten()
-            .map(|t| t.name)
-            .unwrap_or_else(|| format!("Tag #{}", tag_id));
+            .map_or_else(|| format!("Tag #{tag_id}"), |t| t.name);
 
         let stats = TagSelectionStats::compute(&selected_ids, library);
         let total_selected = selected_ids.len();
@@ -255,7 +254,7 @@ impl BridgeTagHistory {
             }
             StatusBarBridge::success(
                 window,
-                format!("Removed tag '{}' from {} file(s)", tag_name, total_selected),
+                format!("Removed tag '{tag_name}' from {total_selected} file(s)"),
             );
             // Position in history is strictly preserved on unassign
         } else {
@@ -269,10 +268,7 @@ impl BridgeTagHistory {
             for &id in &selected_ids {
                 let _ = library.tags().assign_tag(id, tag_id);
             }
-            StatusBarBridge::success(
-                window,
-                format!("Assigned tag '{}' to {} file(s)", tag_name, total_selected),
-            );
+            StatusBarBridge::success(window, format!("Assigned tag '{tag_name}' to {total_selected} file(s)"));
 
             // Tag moves to position 0 ONLY when assigned
             let max_items = state.read().max_history_tags;

@@ -1,4 +1,4 @@
-//! SVG files are rasterized by resvg: FFmpeg's librsvg ignores the `viewBox` of a file without width and height (it shows
+//! SVG files are rasterized by resvg: `FFmpeg`'s librsvg ignores the `viewBox` of a file without width and height (it shows
 //! 100x100), and resvg also draws text with the installed fonts. Files the SVG references are never loaded.
 
 use resvg::{tiny_skia, usvg};

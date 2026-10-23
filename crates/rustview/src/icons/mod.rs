@@ -20,7 +20,7 @@ use std::fmt;
 /// Static description of one icon (generated from the manifest).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IconSpec {
-    /// Manifest id in snake_case, e.g. `rating_3`.
+    /// Manifest id in `snake_case`, e.g. `rating_3`.
     pub id: &'static str,
     /// SVG path relative to `assets/`, e.g. `icons/tabler/outline/folder.svg`.
     pub source: &'static str,

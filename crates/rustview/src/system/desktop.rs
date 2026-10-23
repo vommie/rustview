@@ -18,7 +18,7 @@ pub struct DesktopApp {
 
 /// Centralized Freedesktop desktop integration and application discovery subsystem.
 /// Identifies MIME-associated desktop applications, resolves real theme icons,
-/// and executes native application chooser dialogs via DBus Desktop Portals or KDE kdialog.
+/// and executes native application chooser dialogs via `DBus` Desktop Portals or KDE kdialog.
 pub struct DesktopIntegration;
 
 impl DesktopIntegration {
@@ -180,7 +180,7 @@ impl DesktopIntegration {
                 }
 
                 // 2. Secondary: Portal OpenFile via Python 3 (matching img_picker.py QDBus implementation)
-                let python_script = r#"
+                let python_script = r"
 import sys, os, time
 try:
     from PyQt6.QtWidgets import QApplication
@@ -203,7 +203,7 @@ try:
     sys.exit(0 if res.type() != QDBusMessage.MessageType.ErrorMessage else 1)
 except Exception:
     sys.exit(1)
-"#;
+";
 
                 if let Ok(mut child) = Command::new("python3")
                     .args(["-c", python_script, &path_str])

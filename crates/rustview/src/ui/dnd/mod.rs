@@ -121,13 +121,11 @@ impl BridgeDnd {
                 .copied()
                 .or_else(|| st.all_folder_media.find(params.media_id));
 
-            let name = first_item
-                .map(|m| m.record.filename.clone())
-                .unwrap_or_else(|| format!("Media #{}", params.media_id));
+            let name = first_item.map_or_else(|| format!("Media #{}", params.media_id), |m| m.record.filename.clone());
 
             let thumb_path_opt = first_item
                 .filter(|item| matches!(item.record.media_type, MediaType::Image))
-                .map(|item| item.full_path())
+                .map(rustview_core::query::IndexedMediaRecord::full_path)
                 .filter(|path| path.exists());
 
             let thumb = if let Some(buf) = st.thumbs.get(params.media_id) {
@@ -142,7 +140,10 @@ impl BridgeDnd {
                 name
             };
 
-            let mut paths: Vec<PathBuf> = ordered_selected.into_iter().map(|item| item.full_path()).collect();
+            let mut paths: Vec<PathBuf> = ordered_selected
+                .into_iter()
+                .map(rustview_core::query::IndexedMediaRecord::full_path)
+                .collect();
             if paths.is_empty()
                 && let Ok(p) = params.library.resolve_media_path(params.media_id)
             {
@@ -172,7 +173,7 @@ impl BridgeDnd {
 
         let thumb_opt = thumb_path_opt
             .as_deref()
-            .or_else(|| ordered_file_paths.first().map(|p| p.as_path()));
+            .or_else(|| ordered_file_paths.first().map(std::path::PathBuf::as_path));
         SystemDndHandler::start_ghost_overlay(&title, drag_count, thumb_opt);
     }
 
@@ -259,8 +260,7 @@ impl BridgeDnd {
             st.folder_hierarchy
                 .as_ref()
                 .and_then(|snap| snap.get_node(folder_id))
-                .map(|n| !n.is_deleted)
-                .unwrap_or(true)
+                .is_none_or(|n| !n.is_deleted)
         };
 
         if is_valid && window.get_drop_target_folder_id() != folder_id as i32 {
@@ -396,7 +396,7 @@ impl BridgeDnd {
         if items_to_transfer.is_empty() {
             StatusBarBridge::info(
                 params.window,
-                format!("All selected files are already in '{}'", target_folder_name),
+                format!("All selected files are already in '{target_folder_name}'"),
             );
             return;
         }

@@ -11,7 +11,7 @@ pub use crate::ui::context_menu::media::MediaContextMenu;
 pub use crate::ui::context_menu::presenter::CtxMenuPresenter;
 pub use crate::ui::context_menu::tab::TabContextMenu;
 use crate::ui::media::BridgeMedia;
-use crate::ui::state::*;
+use crate::ui::state::UiState;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
 use rustview_core::library::models::{FolderId, MediaId};
@@ -27,14 +27,13 @@ impl BridgeContextMenu {
 
         let snapshot = {
             let existing = ctx.state.read().folder_hierarchy.clone();
-            match existing {
-                Some(s) => s,
-                None => {
-                    let loaded = ctx.library.folders().load_hierarchy_snapshot().unwrap_or_default();
-                    let arc_snap = Arc::new(loaded);
-                    ctx.state.write().folder_hierarchy = Some(arc_snap.clone());
-                    arc_snap
-                }
+            if let Some(s) = existing {
+                s
+            } else {
+                let loaded = ctx.library.folders().load_hierarchy_snapshot().unwrap_or_default();
+                let arc_snap = Arc::new(loaded);
+                ctx.state.write().folder_hierarchy = Some(arc_snap.clone());
+                arc_snap
             }
         };
 
@@ -50,14 +49,13 @@ impl BridgeContextMenu {
 
         let snapshot = {
             let existing = ctx.state.read().folder_hierarchy.clone();
-            match existing {
-                Some(s) => s,
-                None => {
-                    let loaded = ctx.library.folders().load_hierarchy_snapshot().unwrap_or_default();
-                    let arc_snap = Arc::new(loaded);
-                    ctx.state.write().folder_hierarchy = Some(arc_snap.clone());
-                    arc_snap
-                }
+            if let Some(s) = existing {
+                s
+            } else {
+                let loaded = ctx.library.folders().load_hierarchy_snapshot().unwrap_or_default();
+                let arc_snap = Arc::new(loaded);
+                ctx.state.write().folder_hierarchy = Some(arc_snap.clone());
+                arc_snap
             }
         };
 
@@ -72,7 +70,7 @@ impl BridgeContextMenu {
             st.active_tab_dialog_target = None;
         }
 
-        let is_root = root_setting.as_ref().map(|r| target_node.path == *r).unwrap_or(false);
+        let is_root = root_setting.as_ref().is_some_and(|r| target_node.path == *r);
 
         let is_favorite = ctx.favorites.read().has_path(&target_node.path);
 

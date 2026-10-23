@@ -71,20 +71,15 @@ impl MissingFolderDeleteDialogController {
         match ctx.library.folder_operations().check_and_restore_if_exists(folder_id) {
             Ok(true) => {
                 self.close(window);
-                let (f_name, path_str) = ctx
-                    .library
-                    .folders()
-                    .get_folder(folder_id)
-                    .ok()
-                    .flatten()
-                    .map(|f| {
+                let (f_name, path_str) = ctx.library.folders().get_folder(folder_id).ok().flatten().map_or_else(
+                    || ("Folder".to_string(), String::new()),
+                    |f| {
                         let name = Path::new(&f.path)
                             .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| f.path.clone());
+                            .map_or_else(|| f.path.clone(), |n| n.to_string_lossy().to_string());
                         (name, f.path)
-                    })
-                    .unwrap_or_else(|| ("Folder".to_string(), "".to_string()));
+                    },
+                );
 
                 BridgeFolders::reload_tree_after_restore(window, &ctx.library, &ctx.settings, &ctx.state);
                 StatusBarBridge::info(window, "Folder re-detected on disk and restored.");

@@ -5,7 +5,7 @@
 //! 2. The physical `rename` is executed. If it fails, the transaction is dropped (aborted) and nothing changed.
 //! 3. The transaction is committed. If the commit fails, the rename is reverted on a best-effort basis.
 //!
-//! The returned `FolderMovePatch` contains the final, updated database records so the in-memory SPoT snapshot can be
+//! The returned `FolderMovePatch` contains the final, updated database records so the in-memory `SPoT` snapshot can be
 //! patched surgically (see `folder_snapshot_patch.rs`) instead of being rebuilt.
 
 use super::db::LibraryDatabase;

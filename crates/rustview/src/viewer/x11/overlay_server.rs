@@ -88,7 +88,7 @@ impl OverlayServer {
     }
 
     /// Puts the pointer at (`x`, `y`) on the screen (root window coordinates). The caller checks the result with
-    /// `pointer_and_buttons`: under XWayland this has no effect.
+    /// `pointer_and_buttons`: under `XWayland` this has no effect.
     pub fn warp_pointer(&self, x: i32, y: i32) {
         let to = |value: i32| i16::try_from(value).unwrap_or(if value < 0 { i16::MIN } else { i16::MAX });
         let _ = self

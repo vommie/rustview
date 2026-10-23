@@ -8,7 +8,7 @@ use crate::ui::file_dialogs::{FileDialogContext, FileRenameDialogController, Ren
 use crate::ui::folder_dialogs::FolderDialogContext;
 use crate::ui::media::BridgeMedia;
 use crate::ui::multiview::tab_host;
-use crate::ui::state::*;
+use crate::ui::state::LastActivePanel;
 use crate::ui::status_bar::StatusBarBridge;
 use rustview_core::library::folders::normalize_path;
 use rustview_core::library::models::{FolderId, MediaId};
@@ -315,12 +315,9 @@ impl UiBridge {
         let window = params.window;
         let all_selected_deleted = {
             let st = params.state.read();
-            media_ids.iter().all(|&id| {
-                st.all_folder_media
-                    .find(id)
-                    .map(|m| m.record.is_deleted)
-                    .unwrap_or(false)
-            })
+            media_ids
+                .iter()
+                .all(|&id| st.all_folder_media.find(id).is_some_and(|m| m.record.is_deleted))
         };
 
         let dialog_ctx = FileDialogContext {

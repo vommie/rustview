@@ -14,7 +14,7 @@ pub struct ScannedFile {
 }
 
 /// The files a scan walked past, grouped by why they were left out. Nothing here is indexed, hidden or removed: the
-/// counts only tell the user why a file they can see in a file manager is not in RustView.
+/// counts only tell the user why a file they can see in a file manager is not in `RustView`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct IgnoredFiles {
     /// Files of a format the user switched off in Settings > File Formats.
@@ -49,7 +49,7 @@ impl IgnoredFiles {
     }
 
     /// One sentence for the status line after a refresh, or `None` when nothing worth saying was left out: files of
-    /// switched-off formats, media extensions RustView cannot handle (phone photos, camera RAW), and files whose
+    /// switched-off formats, media extensions `RustView` cannot handle (phone photos, camera RAW), and files whose
     /// extension is shared with something else (TypeScript `.ts`). Unknown extensions such as `.txt` are not mentioned.
     pub fn describe(&self) -> Option<String> {
         let mut parts = Vec::new();
@@ -148,7 +148,7 @@ impl DirectoryScanner {
             .max_depth(max_depth)
             .follow_links(true)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             if !entry.file_type().is_file() {
                 continue;

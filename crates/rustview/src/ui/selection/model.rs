@@ -99,14 +99,14 @@ impl FileSelectionModel {
     /// Selects all visible media items and establishes predictable navigation boundaries.
     pub fn select_all(&mut self, visible_ids: &[MediaId]) {
         self.selected_ids = visible_ids.iter().copied().collect();
-        if !visible_ids.is_empty() {
+        if visible_ids.is_empty() {
+            self.anchor_id = None;
+            self.last_clicked_id = None;
+        } else {
             if self.anchor_id.is_none_or(|id| !self.selected_ids.contains(&id)) {
                 self.anchor_id = visible_ids.first().copied();
             }
             self.last_clicked_id = visible_ids.last().copied();
-        } else {
-            self.anchor_id = None;
-            self.last_clicked_id = None;
         }
     }
 
@@ -227,8 +227,8 @@ impl FileSelectionSummary {
                 max_dimensions: Some((rec.width, rec.height)),
                 is_uniform_dimensions: true,
                 format_breakdown,
-                avg_rating: rec.rating as f32,
-                rated_count: if rec.rating > 0 { 1 } else { 0 },
+                avg_rating: f32::from(rec.rating),
+                rated_count: usize::from(rec.rating > 0),
                 single_record: Some(rec.clone()),
             };
         }
@@ -246,7 +246,7 @@ impl FileSelectionSummary {
         for rec in records {
             total_size_bytes += rec.file_size;
 
-            let area = (rec.width as u64) * (rec.height as u64);
+            let area = u64::from(rec.width) * u64::from(rec.height);
             if area < min_dim.2 || (area == min_dim.2 && rec.width < min_dim.0) {
                 min_dim = (rec.width, rec.height, area);
             }
@@ -265,7 +265,7 @@ impl FileSelectionSummary {
             *format_counts.entry(rec.format).or_insert(0) += 1;
 
             if rec.rating > 0 {
-                total_rating += rec.rating as u32;
+                total_rating += u32::from(rec.rating);
                 rated_count += 1;
             }
         }
@@ -315,7 +315,7 @@ impl FileSelectionSummary {
             count += 1;
             total_size_bytes += item.record.file_size;
 
-            let area = (item.record.width as u64) * (item.record.height as u64);
+            let area = u64::from(item.record.width) * u64::from(item.record.height);
             if area < min_dim.2 || (area == min_dim.2 && item.record.width < min_dim.0) {
                 min_dim = (item.record.width, item.record.height, area);
             }
@@ -334,7 +334,7 @@ impl FileSelectionSummary {
             *format_counts.entry(item.record.format).or_insert(0) += 1;
 
             if item.record.rating > 0 {
-                total_rating += item.record.rating as u32;
+                total_rating += u32::from(item.record.rating);
                 rated_count += 1;
             }
 
@@ -357,8 +357,8 @@ impl FileSelectionSummary {
                 max_dimensions: Some((single.width, single.height)),
                 is_uniform_dimensions: true,
                 format_breakdown,
-                avg_rating: single.rating as f32,
-                rated_count: if single.rating > 0 { 1 } else { 0 },
+                avg_rating: f32::from(single.rating),
+                rated_count: usize::from(single.rating > 0),
                 single_record: None,
             };
         }

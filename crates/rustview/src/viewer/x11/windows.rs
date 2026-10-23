@@ -25,7 +25,7 @@ pub fn get_raw_window_xid(window: &slint::Window) -> Option<u64> {
     None
 }
 
-/// Retrieves the native X11 Window ID (`XID`) directly from a Slint Window with "RustView" title fallback.
+/// Retrieves the native X11 Window ID (`XID`) directly from a Slint Window with "`RustView`" title fallback.
 pub fn get_slint_window_xid(window: &slint::Window) -> Option<u64> {
     get_slint_window_xid_with_title_fallback(window, "RustView")
 }

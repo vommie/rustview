@@ -10,7 +10,7 @@ pub struct CatalogEntry {
     pub starts_group: bool,
 }
 
-/// Formats RustView cannot show, so the Settings page can say so (title, explanation).
+/// Formats `RustView` cannot show, so the Settings page can say so (title, explanation).
 pub const UNSUPPORTED_FORMATS: &[(&str, &str)] = &[
     (
         "Camera RAW (.cr2, .cr3, .nef, .arw, .dng, .orf, .rw2, .raf)",
@@ -26,7 +26,7 @@ pub const UNSUPPORTED_FORMATS: &[(&str, &str)] = &[
     ),
 ];
 
-/// Extensions of media files RustView does not handle but users expect to see (phone photos, camera RAW). A refresh names
+/// Extensions of media files `RustView` does not handle but users expect to see (phone photos, camera RAW). A refresh names
 /// the ones it skipped, so a missing picture is explained; other unknown extensions (.txt, .pdf, ...) are not mentioned.
 pub const KNOWN_UNSUPPORTED_EXTENSIONS: &[&str] = &[
     "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "orf", "rw2", "raf", "pef", "srw", "x3f", "3fr",

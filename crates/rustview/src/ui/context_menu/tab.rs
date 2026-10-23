@@ -4,7 +4,10 @@ use crate::system::DesktopApp;
 use crate::ui::MainWindow;
 use crate::ui::context_menu::media::MediaContextMenu;
 use crate::ui::multiview::MultiviewHandle;
-use crate::ui::state::*;
+use crate::ui::state::{
+    CTX_TAB_CLOSE, CTX_TAB_CLOSE_OTHERS, CTX_TAB_CLOSE_TO_LEFT, CTX_TAB_CLOSE_TO_RIGHT, CTX_TAB_DUPLICATE,
+    CTX_TAB_MOVE_LEFT, CTX_TAB_MOVE_RIGHT, CTX_TAB_MOVE_TO_END, CTX_TAB_MOVE_TO_START, CTX_TAB_OPEN_MULTIVIEW, UiState,
+};
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
@@ -44,10 +47,10 @@ impl TabContextMenu {
         let display_title = ViewerTabManager::compute_tab_title(all_tabs, tab.id);
 
         let (header_title, _) = CtxMenuBuilder::format_header_title("Tab: ", &display_title, 26);
-        let header_tooltip = if !tab.file_path.as_os_str().is_empty() {
-            format!("Tab: {} ({})", display_title, tab.file_path.display())
+        let header_tooltip = if tab.file_path.as_os_str().is_empty() {
+            format!("Tab: {display_title}")
         } else {
-            format!("Tab: {}", display_title)
+            format!("Tab: {} ({})", display_title, tab.file_path.display())
         };
 
         let can_move_left = tab_idx > 0;
@@ -138,8 +141,7 @@ impl TabContextMenu {
         }
 
         // Section 2: Shared File Open Actions (Open, Open With..., Open in File Manager)
-        let target_file_exists =
-            tab.file_path.is_file() && tab.file_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
+        let target_file_exists = tab.file_path.is_file() && tab.file_path.metadata().is_ok_and(|m| m.len() > 0);
 
         builder = builder.separator();
         builder = MediaContextMenu::append_file_open_entries(
@@ -211,11 +213,11 @@ impl TabContextMenu {
 
                         let all_tabs = ctx.tab_manager.list_tabs();
                         let new_title = ViewerTabManager::compute_tab_title(&all_tabs, new_tab_id);
-                        StatusBarBridge::success(ctx.window, format!("Duplicated tab '{}'", new_title));
+                        StatusBarBridge::success(ctx.window, format!("Duplicated tab '{new_title}'"));
                     }
                     Err(e) => {
                         tracing::error!(tab_id, error = %e, "[TabContextMenu: DuplicateError] Failed to duplicate tab");
-                        StatusBarBridge::error(ctx.window, format!("Failed to duplicate tab: {}", e));
+                        StatusBarBridge::error(ctx.window, format!("Failed to duplicate tab: {e}"));
                     }
                 }
             }
@@ -310,7 +312,7 @@ impl TabContextMenu {
                 if closed_count > 0 {
                     StatusBarBridge::success(
                         ctx.window,
-                        format!("Closed {} tab(s) to the left of '{}'", closed_count, tab_title),
+                        format!("Closed {closed_count} tab(s) to the left of '{tab_title}'"),
                     );
                 }
             }
@@ -337,7 +339,7 @@ impl TabContextMenu {
                 if closed_count > 0 {
                     StatusBarBridge::success(
                         ctx.window,
-                        format!("Closed {} tab(s) to the right of '{}'", closed_count, tab_title),
+                        format!("Closed {closed_count} tab(s) to the right of '{tab_title}'"),
                     );
                 }
             }
@@ -364,7 +366,7 @@ impl TabContextMenu {
                 if closed_count > 0 {
                     StatusBarBridge::success(
                         ctx.window,
-                        format!("Closed {} other tab(s), keeping '{}'", closed_count, tab_title),
+                        format!("Closed {closed_count} other tab(s), keeping '{tab_title}'"),
                     );
                 }
             }

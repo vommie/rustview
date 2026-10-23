@@ -62,8 +62,8 @@ fn to_view(badge: &ThumbnailBadge) -> ThumbnailBadgeView {
         text: SharedString::from(text),
         icon: crate::icons::to_slint(icon),
         has_custom_color: badge.color.is_some(),
-        custom_color: badge.color.map(|c| c.to_slint()).unwrap_or(transparent),
-        custom_text_color: badge.color.map(|c| c.contrast_text()).unwrap_or(transparent),
+        custom_color: badge.color.map_or(transparent, super::color::BadgeColor::to_slint),
+        custom_text_color: badge.color.map_or(transparent, super::color::BadgeColor::contrast_text),
     }
 }
 

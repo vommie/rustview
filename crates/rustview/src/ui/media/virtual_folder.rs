@@ -36,8 +36,7 @@ impl BridgeMedia {
                 let has_subfolders = library
                     .folders()
                     .get_descendant_folder_ids(folder_id)
-                    .map(|ids| ids.len() > 1)
-                    .unwrap_or(false);
+                    .is_ok_and(|ids| ids.len() > 1);
 
                 if has_subfolders {
                     (true, None)
@@ -170,10 +169,10 @@ impl BridgeMedia {
                 Self::update_virtual_folder_button_state(window, library, state);
                 StatusBarBridge::update_metrics(window, state);
 
-                let folder_name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| path.to_string_lossy().to_string());
+                let folder_name = path.file_name().map_or_else(
+                    || path.to_string_lossy().to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                );
 
                 if new_mode {
                     StatusBarBridge::info(

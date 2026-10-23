@@ -50,7 +50,7 @@ impl BridgeMedia {
         window.set_is_system_busy(true);
 
         StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
-        StatusBarBridge::info(window, format!("Refreshing metadata for {}...", operation_desc));
+        StatusBarBridge::info(window, format!("Refreshing metadata for {operation_desc}..."));
 
         let w_weak = window.as_weak();
         let lib_arc = library.clone();
@@ -110,15 +110,13 @@ impl BridgeMedia {
                             .modified()
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(old_record.modification_time);
+                            .map_or(old_record.modification_time, |d| d.as_secs() as i64);
 
                         let ctime = fs_meta
                             .created()
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(old_record.creation_time);
+                            .map_or(old_record.creation_time, |d| d.as_secs() as i64);
 
                         let is_zero_byte = file_size == 0;
 
@@ -163,11 +161,7 @@ impl BridgeMedia {
                             }
                         };
 
-                        let assigned_tags_count = lib_ref
-                            .tags()
-                            .get_tags_for_media(media_id)
-                            .map(|t| t.len())
-                            .unwrap_or(0);
+                        let assigned_tags_count = lib_ref.tags().get_tags_for_media(media_id).map_or(0, |t| t.len());
 
                         let is_corrupted = is_zero_byte || !meta_ok || (raw_meta.width == 0 && raw_meta.height == 0);
 
@@ -276,10 +270,7 @@ impl BridgeMedia {
                     } else if missing_count > 0 {
                         StatusBarBridge::warn(
                             &w,
-                            format!(
-                                "Refreshed metadata for {} file(s). ({} missing)",
-                                refreshed_count, missing_count
-                            ),
+                            format!("Refreshed metadata for {refreshed_count} file(s). ({missing_count} missing)"),
                         );
                     } else {
                         StatusBarBridge::success(
@@ -350,7 +341,7 @@ impl BridgeMedia {
         let desc = if count == 1 {
             "1 selected file".to_string()
         } else {
-            format!("{} selected files", count)
+            format!("{count} selected files")
         };
 
         Self::execute_metadata_only_refresh(targets, window, library, thumbnails, state, &desc);

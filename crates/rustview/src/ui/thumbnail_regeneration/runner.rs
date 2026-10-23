@@ -49,7 +49,7 @@ pub fn start(
     if let Err(e) = spawned {
         tracing::error!(error = %e, "[ThumbnailRegeneration: Start] Failed to spawn worker thread");
         apply::release_busy(window, thumbnails, state);
-        StatusBarBridge::error(window, format!("Could not start thumbnail regeneration: {}", e));
+        StatusBarBridge::error(window, format!("Could not start thumbnail regeneration: {e}"));
     }
 }
 

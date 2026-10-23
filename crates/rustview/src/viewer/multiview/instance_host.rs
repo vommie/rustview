@@ -264,27 +264,24 @@ impl MultiviewInstance {
                 video.window.hide();
                 continue;
             }
-            match (mode, clip) {
-                (HostMode::TabGrid, Some(clip)) => {
-                    video.window.update_geometry_and_clip(
-                        SubwindowGeometry {
-                            x: r.x,
-                            y: r.y,
-                            width: r.w as u32,
-                            height: r.h as u32,
-                        },
-                        ViewportBounds {
-                            x: clip.x,
-                            y: clip.y,
-                            width: clip.w.max(1) as u32,
-                            height: clip.h.max(1) as u32,
-                        },
-                    );
-                }
-                _ => {
-                    video.window.show();
-                    video.window.move_resize(r.x, r.y, r.w as u32, r.h as u32);
-                }
+            if let (HostMode::TabGrid, Some(clip)) = (mode, clip) {
+                video.window.update_geometry_and_clip(
+                    SubwindowGeometry {
+                        x: r.x,
+                        y: r.y,
+                        width: r.w as u32,
+                        height: r.h as u32,
+                    },
+                    ViewportBounds {
+                        x: clip.x,
+                        y: clip.y,
+                        width: clip.w.max(1) as u32,
+                        height: clip.h.max(1) as u32,
+                    },
+                );
+            } else {
+                video.window.show();
+                video.window.move_resize(r.x, r.y, r.w as u32, r.h as u32);
             }
         }
     }

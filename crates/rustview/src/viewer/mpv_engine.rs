@@ -108,7 +108,7 @@ impl MpvPlayer {
             Ok(())
         })
         .or_else(|_| Mpv::new())
-        .map_err(|e| ViewerError::Mpv(format!("Failed to initialize libmpv2 context: {:?}", e)))?;
+        .map_err(|e| ViewerError::Mpv(format!("Failed to initialize libmpv2 context: {e:?}")))?;
 
         // Ensure OSC deadzone is completely zeroed out
         let _ = mpv_instance.set_property("script-opts", "osc-deadzonesize=0,osc-minmousemove=0");
@@ -249,7 +249,7 @@ impl MpvPlayer {
         let t0 = Instant::now();
         self.mpv
             .set_property("wid", wid as i64)
-            .map_err(|e| ViewerError::Mpv(format!("Failed to set MPV 'wid' property: {:?}", e)))?;
+            .map_err(|e| ViewerError::Mpv(format!("Failed to set MPV 'wid' property: {e:?}")))?;
 
         if let Err(e) = self.mpv.set_property("vo", "gpu") {
             tracing::warn!(wid, error = ?e, "[MpvPlayer: Attach] Failed to switch the video output to 'gpu'");
@@ -338,21 +338,21 @@ impl MpvPlayer {
     pub fn set_view_active(&self, active: bool) {
         self.is_view_active.store(active, Ordering::SeqCst);
 
-        if !active {
+        if active {
+            let user_paused = self.is_user_paused.load(Ordering::SeqCst);
+            if user_paused {
+                let _ = self.mpv.set_property("pause", true);
+                tracing::debug!("[MpvPlayer: StayPaused] Foregrounded video tab kept paused (user-paused)");
+            } else {
+                let _ = self.mpv.set_property("pause", false);
+                tracing::debug!("[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed (playback active)");
+            }
+        } else {
             let _ = self.mpv.set_property("pause", true);
             tracing::debug!(
                 user_paused = self.is_user_paused.load(Ordering::SeqCst),
                 "[MpvPlayer: AutoPause] Video tab backgrounded and auto-paused"
             );
-        } else {
-            let user_paused = self.is_user_paused.load(Ordering::SeqCst);
-            if !user_paused {
-                let _ = self.mpv.set_property("pause", false);
-                tracing::debug!("[MpvPlayer: AutoResume] Foregrounded video tab auto-resumed (playback active)");
-            } else {
-                let _ = self.mpv.set_property("pause", true);
-                tracing::debug!("[MpvPlayer: StayPaused] Foregrounded video tab kept paused (user-paused)");
-            }
         }
 
         self.notify_subscribers();
@@ -385,15 +385,14 @@ impl MpvPlayer {
 
         self.mpv
             .command("loadfile", &[&path_str, "replace"])
-            .map_err(|e| ViewerError::Mpv(format!("Failed to execute 'loadfile' command: {:?}", e)))?;
+            .map_err(|e| ViewerError::Mpv(format!("Failed to execute 'loadfile' command: {e:?}")))?;
 
         self.is_user_paused.store(false, Ordering::SeqCst);
         let _ = self.mpv.set_property("pause", false);
 
         let filename = path
             .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| path_str.to_string());
+            .map_or_else(|| path_str.to_string(), |n| n.to_string_lossy().to_string());
 
         *self.current_file_path.write() = Some(path.to_path_buf());
 
@@ -436,7 +435,7 @@ impl MpvPlayer {
         self.is_user_paused.store(false, Ordering::SeqCst);
         self.mpv
             .set_property("pause", false)
-            .map_err(|e| ViewerError::Mpv(format!("Failed to unpause MPV: {:?}", e)))?;
+            .map_err(|e| ViewerError::Mpv(format!("Failed to unpause MPV: {e:?}")))?;
 
         {
             let mut st = self.state.write();
@@ -454,7 +453,7 @@ impl MpvPlayer {
         }
         self.mpv
             .set_property("pause", true)
-            .map_err(|e| ViewerError::Mpv(format!("Failed to pause MPV: {:?}", e)))?;
+            .map_err(|e| ViewerError::Mpv(format!("Failed to pause MPV: {e:?}")))?;
 
         {
             let mut st = self.state.write();
@@ -474,7 +473,7 @@ impl MpvPlayer {
         let sec_str = seconds.to_string();
         self.mpv
             .command("seek", &[&sec_str, "relative"])
-            .map_err(|e| ViewerError::Mpv(format!("Failed to seek relative: {:?}", e)))?;
+            .map_err(|e| ViewerError::Mpv(format!("Failed to seek relative: {e:?}")))?;
         Ok(())
     }
 
@@ -482,7 +481,7 @@ impl MpvPlayer {
         let sec_str = seconds.to_string();
         self.mpv
             .command("seek", &[&sec_str, "absolute"])
-            .map_err(|e| ViewerError::Mpv(format!("Failed to seek absolute: {:?}", e)))?;
+            .map_err(|e| ViewerError::Mpv(format!("Failed to seek absolute: {e:?}")))?;
         Ok(())
     }
 
@@ -490,7 +489,7 @@ impl MpvPlayer {
         let clamped = volume_percent.clamp(0.0, 150.0);
         self.mpv
             .set_property("volume", clamped)
-            .map_err(|e| ViewerError::Mpv(format!("Failed to set volume: {:?}", e)))?;
+            .map_err(|e| ViewerError::Mpv(format!("Failed to set volume: {e:?}")))?;
 
         self.state.write().volume = clamped;
         self.notify_subscribers();
@@ -532,7 +531,7 @@ impl MpvPlayer {
     pub fn set_mute(&self, muted: bool) -> Result<(), ViewerError> {
         self.mpv
             .set_property("mute", muted)
-            .map_err(|e| ViewerError::Mpv(format!("Failed to set mute: {:?}", e)))
+            .map_err(|e| ViewerError::Mpv(format!("Failed to set mute: {e:?}")))
     }
 
     /// Display size and rotation of the playing video as reported by mpv (`video-params/dw`, `dh`, `rotate`).

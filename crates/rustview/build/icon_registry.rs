@@ -93,7 +93,7 @@ fn parse_entry(id: &str, value: &toml::Value) -> Result<IconEntry, String> {
     Ok(IconEntry {
         id: id.to_owned(),
         source,
-        monochrome: !table.get("color").and_then(|v| v.as_bool()).unwrap_or(false),
+        monochrome: !table.get("color").and_then(toml::Value::as_bool).unwrap_or(false),
         doc: text("doc").unwrap_or_default().to_owned(),
         aliases,
     })

@@ -3,7 +3,10 @@ use super::mapper::MappedData;
 use super::stats::MigrationStats;
 use crate::library::db::LibraryDatabase;
 use crate::library::models::DatabaseMeta;
-use crate::library::schema::*;
+use crate::library::schema::{
+    CURRENT_SCHEMA_VERSION, CURRENT_THUMBNAIL_VERSION, HASH_ALGORITHM, SEQ_EXTERNAL_HASH_ID, SEQ_FOLDER_ID,
+    SEQ_MEDIA_ID, SEQ_REFRESH_GEN, SEQ_TAG_ID,
+};
 use crate::media::MediaHasher;
 use crate::settings::LogObscurer;
 use std::fs;
@@ -13,7 +16,7 @@ use std::time::Instant;
 pub struct XnViewDbWriter;
 
 impl XnViewDbWriter {
-    /// Wipes all existing RustView LMDB database files and thumbnail caches,
+    /// Wipes all existing `RustView` LMDB database files and thumbnail caches,
     /// then initializes fresh databases and commits the mapped records atomically.
     pub fn wipe_and_write(
         data_dir: &Path,
@@ -54,8 +57,7 @@ impl XnViewDbWriter {
             database_uuid: MediaHasher::to_hex(&MediaHasher::hash_bytes(db_path.to_string_lossy().as_bytes())),
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0),
+                .map_or(0, |d| d.as_secs() as i64),
         };
         db.meta.put(&mut wtxn, "meta", &meta_record)?;
 
@@ -83,7 +85,7 @@ impl XnViewDbWriter {
             let tag_media = mapped.media_by_tag.get(&tag.id).cloned().unwrap_or_default();
             db.media_by_tag.put(&mut wtxn, &tag.id, &tag_media)?;
         }
-        db.sequences.put(&mut wtxn, SEQ_TAG_ID, &(mapped.max_tag_id as u64))?;
+        db.sequences.put(&mut wtxn, SEQ_TAG_ID, &u64::from(mapped.max_tag_id))?;
 
         // 4. Write Media, Hash Index, and Tag Associations
         for item in &mapped.media {

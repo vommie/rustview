@@ -147,7 +147,7 @@ impl MediaDetector {
         }
     }
 
-    /// MP4, QuickTime, 3GPP and AVIF share the ISO base media container; the `ftyp` brands tell them apart.
+    /// MP4, `QuickTime`, 3GPP and AVIF share the ISO base media container; the `ftyp` brands tell them apart.
     fn detect_iso_media(b: &[u8]) -> Option<MediaFormat> {
         if let Some(brands) = IsoBrands::parse(b) {
             if brands.has(b"avif") || brands.has(b"avis") {

@@ -34,7 +34,7 @@ pub struct ProcessedCompletionItem {
 }
 
 /// Dedicated, decoupled subsystem managing the auto-completion of externally registered stub media files
-/// (e.g. from CLI API clients like PyCutRv) when their physical files become available and fully written on disk.
+/// (e.g. from CLI API clients like `PyCutRv`) when their physical files become available and fully written on disk.
 pub struct ExternalMediaCompleter<'a> {
     db: &'a LibraryDatabase,
 }
@@ -73,7 +73,7 @@ impl<'a> ExternalMediaCompleter<'a> {
         self.find_pending_stubs_in_records(&collected_records)
     }
 
-    /// Inspects an arbitrary slice of MediaRecords (e.g. from Query search results across any scope)
+    /// Inspects an arbitrary slice of `MediaRecords` (e.g. from Query search results across any scope)
     /// for pending external stubs that are verified to be complete, not open by writers, and ready on disk.
     pub fn find_pending_stubs_in_records(
         &self,
@@ -308,21 +308,19 @@ impl<'a> ExternalMediaCompleter<'a> {
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(old_record.modification_time);
+                    .map_or(old_record.modification_time, |d| d.as_secs() as i64);
 
                 let ctime = fs_meta
                     .created()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(old_record.creation_time);
+                    .map_or(old_record.creation_time, |d| d.as_secs() as i64);
 
                 // Compute real MD5 checksum of file
                 let new_hash = match MediaHasher::hash_file(&file_path) {
                     Ok(h) => h,
                     Err(e) => {
-                        return Err((media_id, format!("Hash computation failed: {}", e)));
+                        return Err((media_id, format!("Hash computation failed: {e}")));
                     }
                 };
 
@@ -340,7 +338,7 @@ impl<'a> ExternalMediaCompleter<'a> {
                             error = %e,
                             "[ExternalMediaCompleter] Metadata extraction warning (file might still be writing)"
                         );
-                        return Err((media_id, format!("Metadata extraction failed: {}", e)));
+                        return Err((media_id, format!("Metadata extraction failed: {e}")));
                     }
                 };
 
@@ -382,14 +380,14 @@ impl<'a> ExternalMediaCompleter<'a> {
                             (Some(primary), prev_rec)
                         }
                         Err(e) => {
-                            return Err((media_id, format!("Video generation failed: {}", e)));
+                            return Err((media_id, format!("Video generation failed: {e}")));
                         }
                     }
                 } else {
                     match generator.generate_image_thumbnail(&file_path, cfg.max_bound, cfg.scaling_algorithm) {
                         Ok(frame) => (Some(frame), None),
                         Err(e) => {
-                            return Err((media_id, format!("Image generation failed: {}", e)));
+                            return Err((media_id, format!("Image generation failed: {e}")));
                         }
                     }
                 };

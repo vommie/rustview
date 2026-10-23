@@ -198,13 +198,12 @@ impl SystemDisplayService {
                     "[SystemDisplayService] Target monitor resolved from specific configuration"
                 );
                 return matched.clone();
-            } else {
-                tracing::warn!(
-                    requested = %target_connector,
-                    total_available = monitors.len(),
-                    "[SystemDisplayService] Specific monitor unavailable/disconnected; evaluating fallback rule"
-                );
             }
+            tracing::warn!(
+                requested = %target_connector,
+                total_available = monitors.len(),
+                "[SystemDisplayService] Specific monitor unavailable/disconnected; evaluating fallback rule"
+            );
         }
 
         // 2. Identify the monitor currently hosting the Main UI
@@ -221,12 +220,11 @@ impl SystemDisplayService {
                         "[SystemDisplayService] Resolved different display from Main UI"
                     );
                     return different.clone();
-                } else {
-                    tracing::info!(
-                        main_ui_display = %main_ui_monitor.connector,
-                        "[SystemDisplayService] 'Different display' requested but only 1 monitor connected; using main display"
-                    );
                 }
+                tracing::info!(
+                    main_ui_display = %main_ui_monitor.connector,
+                    "[SystemDisplayService] 'Different display' requested but only 1 monitor connected; using main display"
+                );
             } else {
                 tracing::info!(
                     main_ui_display = %main_ui_monitor.connector,
@@ -369,8 +367,11 @@ impl SystemDisplayService {
 
         let mut raw_monitors = Vec::new();
         for out in outputs {
-            let is_connected = out.get("connected").and_then(|v| v.as_bool()).unwrap_or(false);
-            let is_enabled = out.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+            let is_connected = out
+                .get("connected")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            let is_enabled = out.get("enabled").and_then(serde_json::Value::as_bool).unwrap_or(true);
             if !is_connected || !is_enabled {
                 continue;
             }
@@ -380,17 +381,17 @@ impl SystemDisplayService {
                 .and_then(|v| v.as_str())
                 .unwrap_or("Unknown")
                 .to_string();
-            let is_primary = out.get("primary").and_then(|v| v.as_bool()).unwrap_or(false);
+            let is_primary = out.get("primary").and_then(serde_json::Value::as_bool).unwrap_or(false);
 
             let x = out
                 .get("pos")
                 .and_then(|p| p.get("x"))
-                .and_then(|v| v.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0) as i32;
             let y = out
                 .get("pos")
                 .and_then(|p| p.get("y"))
-                .and_then(|v| v.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0) as i32;
 
             let (width, height, refresh_rate) = if let Some(modes) = out.get("modes").and_then(|m| m.as_array()) {
@@ -403,10 +404,10 @@ impl SystemDisplayService {
                     let m_id = mode.get("id").and_then(|v| v.as_str()).unwrap_or("");
                     if m_id == current_mode_id || current_mode_id.is_empty() {
                         if let Some(size) = mode.get("size") {
-                            found_w = size.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                            found_h = size.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            found_w = size.get("width").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+                            found_h = size.get("height").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
                         }
-                        if let Some(rate) = mode.get("refreshRate").and_then(|v| v.as_f64()) {
+                        if let Some(rate) = mode.get("refreshRate").and_then(serde_json::Value::as_f64) {
                             found_rate = rate.round() as u32;
                         }
                         break;
@@ -417,12 +418,12 @@ impl SystemDisplayService {
                 let w = out
                     .get("size")
                     .and_then(|s| s.get("width"))
-                    .and_then(|v| v.as_u64())
+                    .and_then(serde_json::Value::as_u64)
                     .unwrap_or(1920) as u32;
                 let h = out
                     .get("size")
                     .and_then(|s| s.get("height"))
-                    .and_then(|v| v.as_u64())
+                    .and_then(serde_json::Value::as_u64)
                     .unwrap_or(1080) as u32;
                 (w, h, 60)
             };
@@ -655,8 +656,8 @@ impl SystemDisplayService {
                 .to_string();
             let model = out.get("model").and_then(|v| v.as_str()).unwrap_or(&name).to_string();
 
-            let x = out.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let y = out.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            let x = out.get("x").and_then(serde_json::Value::as_i64).unwrap_or(0) as i32;
+            let y = out.get("y").and_then(serde_json::Value::as_i64).unwrap_or(0) as i32;
 
             let mut width = 0u32;
             let mut height = 0u32;
@@ -664,15 +665,14 @@ impl SystemDisplayService {
 
             if let Some(modes) = out.get("modes").and_then(|m| m.as_array()) {
                 for m in modes {
-                    let is_current = m.get("current").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let is_current = m.get("current").and_then(serde_json::Value::as_bool).unwrap_or(false);
                     if is_current {
-                        width = m.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                        height = m.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        width = m.get("width").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+                        height = m.get("height").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
                         refresh_rate = m
                             .get("refresh")
-                            .and_then(|v| v.as_f64())
-                            .map(|r| r.round() as u32)
-                            .unwrap_or(60);
+                            .and_then(serde_json::Value::as_f64)
+                            .map_or(60, |r| r.round() as u32);
                         break;
                     }
                 }

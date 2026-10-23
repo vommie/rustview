@@ -1,5 +1,5 @@
-//! Read-only diagnostics for the folder tree schema (folders, folders_by_path, folders_by_parent)
-//! and for media path resolution (media.folder_id -> folders). Never mutates the database.
+//! Read-only diagnostics for the folder tree schema (folders, `folders_by_path`, `folders_by_parent`)
+//! and for media path resolution (`media.folder_id` -> folders). Never mutates the database.
 
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
@@ -19,7 +19,7 @@ pub struct MediaResolutionReport {
     pub total_media: usize,
     pub unresolvable_media: usize,
     pub undecodable_media: usize,
-    /// (media_id, folder_id) samples of media whose folder record is missing.
+    /// (`media_id`, `folder_id`) samples of media whose folder record is missing.
     pub samples: Vec<(u64, FolderId)>,
 }
 
@@ -87,12 +87,11 @@ impl FolderDiagnostics {
         let mut seen_path_hashes: HashSet<u64> = HashSet::new();
 
         for entry in db.folders.iter(&rtxn)? {
-            let (id, rec) = match entry {
-                Ok(v) => v,
-                Err(_) => {
-                    report.undecodable_folders += 1;
-                    continue;
-                }
+            let (id, rec) = if let Ok(v) = entry {
+                v
+            } else {
+                report.undecodable_folders += 1;
+                continue;
             };
 
             report.total_folders += 1;
@@ -280,6 +279,6 @@ impl FolderDiagnostics {
     /// Convenience used in log lines.
     #[allow(dead_code)]
     pub(crate) fn display_path(path: &Path) -> String {
-        LogObscurer::path(path).to_string()
+        LogObscurer::path(path).clone()
     }
 }

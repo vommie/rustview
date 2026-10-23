@@ -50,7 +50,7 @@ fn show_new_thumbnails(window: &MainWindow, state: &RwLock<UiState>, succeeded: 
 
         if !is_table {
             update_tile(window, &st, item.media_id, |view| {
-                view.thumbnail = Image::from_rgb8(buffer)
+                view.thumbnail = Image::from_rgb8(buffer);
             });
         }
     }

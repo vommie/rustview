@@ -7,7 +7,7 @@ use thiserror::Error;
 
 static FFMPEG_INIT: Once = Once::new();
 
-/// Ensures FFmpeg global subsystems are initialized exactly once across the process lifecycle.
+/// Ensures `FFmpeg` global subsystems are initialized exactly once across the process lifecycle.
 pub fn ensure_ffmpeg_initialized() {
     FFMPEG_INIT.call_once(|| {
         let _ = ffmpeg_next::init();
@@ -55,15 +55,13 @@ impl MetadataExtractor {
         let modification_time = fs_meta
             .modified()?
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs() as i64);
 
         let creation_time = fs_meta
             .created()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(modification_time);
+            .map_or(modification_time, |d| d.as_secs() as i64);
 
         let (width, height, duration_ms) = match media_type {
             MediaType::Image => {
@@ -110,7 +108,7 @@ impl MetadataExtractor {
         Ok((w, h))
     }
 
-    /// Width, height (after rotation) and duration of the first video stream, read through FFmpeg.
+    /// Width, height (after rotation) and duration of the first video stream, read through `FFmpeg`.
     pub fn probe_video_details(path: &Path) -> Result<(u32, u32, u64), MetadataError> {
         Self::extract_video_details(path)
     }

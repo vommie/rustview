@@ -226,15 +226,13 @@ impl<'a> FileOperations<'a> {
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(record.modification_time);
+                    .map_or(record.modification_time, |d| d.as_secs() as i64);
 
                 record.creation_time = fs_meta
                     .created()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(record.creation_time);
+                    .map_or(record.creation_time, |d| d.as_secs() as i64);
 
                 record.file_size = fs_meta.len();
             }
@@ -330,9 +328,9 @@ impl<'a> FileOperations<'a> {
         let mut counter = 1u32;
         loop {
             let candidate = if ext.is_empty() {
-                format!("{} ({})", stem, counter)
+                format!("{stem} ({counter})")
             } else {
-                format!("{} ({}).{}", stem, counter, ext)
+                format!("{stem} ({counter}).{ext}")
             };
 
             if !target_folder_path.join(&candidate).exists() {
@@ -343,12 +341,11 @@ impl<'a> FileOperations<'a> {
             if counter > 100_000 {
                 let timestamp = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
+                    .map_or(0, |d| d.as_secs());
                 return if ext.is_empty() {
-                    format!("{}_{}", stem, timestamp)
+                    format!("{stem}_{timestamp}")
                 } else {
-                    format!("{}_{}.{}", stem, timestamp, ext)
+                    format!("{stem}_{timestamp}.{ext}")
                 };
             }
         }
@@ -384,14 +381,12 @@ impl<'a> FileOperations<'a> {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
+                .map_or(0, |d| d.as_secs() as i64);
             let ctime = fs_meta
                 .created()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(mtime);
+                .map_or(mtime, |d| d.as_secs() as i64);
             (size, mtime, ctime)
         } else if let Some(ref rec) = db_record_opt {
             (rec.file_size, rec.modification_time, rec.creation_time)
@@ -556,15 +551,13 @@ impl<'a> FileOperations<'a> {
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(source_record.modification_time);
+                    .map_or(source_record.modification_time, |d| d.as_secs() as i64);
 
                 source_record.creation_time = fs_meta
                     .created()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(source_record.creation_time);
+                    .map_or(source_record.creation_time, |d| d.as_secs() as i64);
 
                 source_record.file_size = fs_meta.len();
             }
@@ -685,12 +678,10 @@ impl<'a> FileOperations<'a> {
         if is_same_file {
             if overwrite_existing {
                 return Ok(source_record);
-            } else {
-                return Err(LibraryError::FileOperationAlreadyExists(format!(
-                    "Cannot copy file onto itself in the same directory without renaming: {}",
-                    validated_name
-                )));
             }
+            return Err(LibraryError::FileOperationAlreadyExists(format!(
+                "Cannot copy file onto itself in the same directory without renaming: {validated_name}"
+            )));
         }
 
         if dst_path.exists() && !overwrite_existing {
@@ -710,15 +701,13 @@ impl<'a> FileOperations<'a> {
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(source_record.modification_time);
+                    .map_or(source_record.modification_time, |d| d.as_secs() as i64);
 
                 ctime = fs_meta
                     .created()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(source_record.creation_time);
+                    .map_or(source_record.creation_time, |d| d.as_secs() as i64);
             }
         }
 

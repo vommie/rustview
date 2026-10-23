@@ -36,9 +36,7 @@ impl SystemDndHandler {
     #[inline]
     pub fn detect_session_type() -> &'static str {
         if std::env::var_os("WAYLAND_DISPLAY").is_some()
-            || std::env::var("XDG_SESSION_TYPE")
-                .map(|v| v.eq_ignore_ascii_case("wayland"))
-                .unwrap_or(false)
+            || std::env::var("XDG_SESSION_TYPE").is_ok_and(|v| v.eq_ignore_ascii_case("wayland"))
         {
             "Wayland"
         } else {
@@ -51,9 +49,7 @@ impl SystemDndHandler {
         let abs_path = if path.is_absolute() {
             path.to_path_buf()
         } else {
-            std::env::current_dir()
-                .map(|cwd| cwd.join(path))
-                .unwrap_or_else(|_| path.to_path_buf())
+            std::env::current_dir().map_or_else(|_| path.to_path_buf(), |cwd| cwd.join(path))
         };
 
         url::Url::from_file_path(&abs_path)
@@ -95,7 +91,7 @@ impl SystemDndHandler {
         Some(dest)
     }
 
-    /// Starts the standalone, click-through OS-wide floating ghost window styled with RustView's theme palette and instant cursor tracking.
+    /// Starts the standalone, click-through OS-wide floating ghost window styled with `RustView`'s theme palette and instant cursor tracking.
     pub fn start_ghost_overlay(title: &str, count: usize, thumb_path: Option<&Path>) {
         Self::cancel_ghost_overlay();
 

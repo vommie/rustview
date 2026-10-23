@@ -76,11 +76,7 @@ impl FolderMountFilter {
                 continue;
             }
 
-            let has_media = db
-                .media_by_folder
-                .get(wtxn, &id)?
-                .map(|list| !list.is_empty())
-                .unwrap_or(false);
+            let has_media = db.media_by_folder.get(wtxn, &id)?.is_some_and(|list| !list.is_empty());
 
             if has_media {
                 Self::detach_record(db, wtxn, id, &mut rec)?;
@@ -100,7 +96,7 @@ impl FolderMountFilter {
         Ok((report, remaining))
     }
 
-    /// Keeps the record (media still resolve their path via folder_id) but removes it from the tree hierarchy.
+    /// Keeps the record (media still resolve their path via `folder_id`) but removes it from the tree hierarchy.
     fn detach_record(
         db: &LibraryDatabase,
         wtxn: &mut heed::RwTxn,

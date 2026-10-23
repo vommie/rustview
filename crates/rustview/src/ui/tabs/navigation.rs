@@ -175,13 +175,13 @@ impl BridgeViewerTabs {
                 };
 
                 target_pos.and_then(|t_idx| {
-                    if !st.active_indices.is_empty() {
+                    if st.active_indices.is_empty() {
+                        st.all_folder_media.get(t_idx).map(|m| m.record.id)
+                    } else {
                         st.active_indices
                             .get(t_idx)
                             .and_then(|&idx| st.all_folder_media.get(idx))
                             .map(|m| m.record.id)
-                    } else {
-                        st.all_folder_media.get(t_idx).map(|m| m.record.id)
                     }
                 })
             } else {

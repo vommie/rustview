@@ -89,7 +89,7 @@ impl BridgeFolders {
     }
 
     /// Clears folder tree, media grid and selection state and shows an empty-state message.
-    /// Does not touch the cached SPoT snapshot.
+    /// Does not touch the cached `SPoT` snapshot.
     pub fn clear_view_with_empty_state(
         window: &MainWindow,
         state: &Arc<RwLock<UiState>>,
@@ -212,8 +212,7 @@ impl BridgeFolders {
         let is_current_affected = state
             .read()
             .current_folder_id
-            .map(|id| affected_folder_ids.contains(&id))
-            .unwrap_or(false);
+            .is_some_and(|id| affected_folder_ids.contains(&id));
 
         if is_current_affected {
             if let Some((succ_id, succ_path)) = successor_target {
@@ -244,8 +243,7 @@ impl BridgeFolders {
         let is_current = state
             .read()
             .current_folder_id
-            .map(|id| affected_folder_ids.contains(&id))
-            .unwrap_or(false);
+            .is_some_and(|id| affected_folder_ids.contains(&id));
 
         if !is_current {
             return;

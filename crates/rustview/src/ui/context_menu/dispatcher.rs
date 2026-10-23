@@ -11,7 +11,10 @@ pub use crate::ui::context_menu::tab::{TabActionContext, TabContextMenu};
 pub use crate::ui::context_menu::tag::TagContextMenu;
 use crate::ui::favorites::BridgeFavorites;
 use crate::ui::folder_dialogs::FolderDialogContext;
-use crate::ui::state::*;
+use crate::ui::state::{
+    CTX_ACTION_COPY_TO_BASE, CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER, CTX_BROWSE_TOGGLE_FOLDERS,
+    CTX_FOLDER_ADD_TO_FAVORITES, CTX_FOLDER_MOVE_BASE, CTX_TAG_MOVE_TARGET_BASE,
+};
 use slint::ComponentHandle;
 
 impl BridgeContextMenu {

@@ -43,11 +43,11 @@ impl MediaContextMenu {
 
         if let Err(e) = SystemClipboard::copy_file_names(&names) {
             tracing::error!(error = %e, "[MediaContextMenu] Failed to copy file names to clipboard");
-            StatusBarBridge::error(window, format!("Failed to copy to clipboard: {}", e));
+            StatusBarBridge::error(window, format!("Failed to copy to clipboard: {e}"));
         } else if count == 1 {
             StatusBarBridge::success(window, format!("Copied file name to clipboard: '{}'", names[0]));
         } else {
-            StatusBarBridge::success(window, format!("Copied {} file names to clipboard.", count));
+            StatusBarBridge::success(window, format!("Copied {count} file names to clipboard."));
         }
     }
 
@@ -67,12 +67,12 @@ impl MediaContextMenu {
 
         if let Err(e) = SystemClipboard::copy_file_paths(&paths) {
             tracing::error!(error = %e, "[MediaContextMenu] Failed to copy file paths to clipboard");
-            StatusBarBridge::error(window, format!("Failed to copy to clipboard: {}", e));
+            StatusBarBridge::error(window, format!("Failed to copy to clipboard: {e}"));
         } else if count == 1 {
             let path_str = paths[0].display().to_string();
-            StatusBarBridge::success(window, format!("Copied file path to clipboard: '{}'", path_str));
+            StatusBarBridge::success(window, format!("Copied file path to clipboard: '{path_str}'"));
         } else {
-            StatusBarBridge::success(window, format!("Copied {} file paths to clipboard.", count));
+            StatusBarBridge::success(window, format!("Copied {count} file paths to clipboard."));
         }
     }
 
@@ -125,7 +125,7 @@ impl MediaContextMenu {
             "[MediaContextMenu] Copying raw image content asynchronously to clipboard"
         );
 
-        StatusBarBridge::info(window, format!("Copying image content '{}' to clipboard...", filename));
+        StatusBarBridge::info(window, format!("Copying image content '{filename}' to clipboard..."));
 
         let w_weak = window.as_weak();
         let fname_clone = filename.clone();
@@ -137,8 +137,7 @@ impl MediaContextMenu {
                     StatusBarBridge::success(
                         &w,
                         format!(
-                            "Copied image content ({} x {}) to clipboard in {}ms: '{}'",
-                            width, height, total_ms, fname_clone
+                            "Copied image content ({width} x {height}) to clipboard in {total_ms}ms: '{fname_clone}'"
                         ),
                     );
                 }
@@ -147,7 +146,7 @@ impl MediaContextMenu {
                         error = %e,
                         "[MediaContextMenu] Failed to copy image content to clipboard"
                     );
-                    StatusBarBridge::error(&w, format!("Failed to copy image to clipboard: {}", e));
+                    StatusBarBridge::error(&w, format!("Failed to copy image to clipboard: {e}"));
                 }
             });
         });

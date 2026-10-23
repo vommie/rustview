@@ -1,7 +1,7 @@
 //! Linux mount table access.
 //!
 //! Reads the kernel mount table of this process (`/proc/self/mounts`, parsed by the `proc-mounts` crate, which decodes the kernel's octal
-//! escapes such as `\040`) and answers which mount points are nested below a given directory. RustView only targets Linux.
+//! escapes such as `\040`) and answers which mount points are nested below a given directory. `RustView` only targets Linux.
 
 use crate::settings::LogObscurer;
 use proc_mounts::MountIter;

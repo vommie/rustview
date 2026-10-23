@@ -148,14 +148,14 @@ impl QueryFilter {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.search_query.trim().is_empty()
-            && self.rating.map(|r| r == 0).unwrap_or(true)
+            && self.rating.is_none_or(|r| r == 0)
             && self.tag_ids.is_empty()
             && self.media_type_filter == MediaTypeFilter::All
     }
 
     #[inline]
     pub fn is_query_filter_active(&self) -> bool {
-        self.rating.map(|r| r > 0).unwrap_or(false) || !self.tag_ids.is_empty()
+        self.rating.is_some_and(|r| r > 0) || !self.tag_ids.is_empty()
     }
 }
 
@@ -334,74 +334,71 @@ impl QueryFilter {
             None
         };
 
-        let filtered: Vec<&'a IndexedMediaRecord> = match candidate_indices {
-            Some(indices) => {
-                let input_count = indices.len();
-                let res: Vec<&'a IndexedMediaRecord> = indices
-                    .iter()
-                    .filter_map(|&idx| all_media.get(idx))
-                    .filter(|m| {
-                        if has_tag_filter && let Some(ref rtxn) = rtxn_opt {
-                            let tags = library
-                                .raw_db()
-                                .tags_by_media
-                                .get(rtxn, &m.record.id)
-                                .ok()
-                                .flatten()
-                                .unwrap_or_default();
-                            prepared.matches_indexed(m, &tags, simd_finder.as_ref())
-                        } else {
-                            prepared.matches_indexed(m, &[], simd_finder.as_ref())
-                        }
-                    })
-                    .collect();
+        let filtered: Vec<&'a IndexedMediaRecord> = if let Some(indices) = candidate_indices {
+            let input_count = indices.len();
+            let res: Vec<&'a IndexedMediaRecord> = indices
+                .iter()
+                .filter_map(|&idx| all_media.get(idx))
+                .filter(|m| {
+                    if has_tag_filter && let Some(ref rtxn) = rtxn_opt {
+                        let tags = library
+                            .raw_db()
+                            .tags_by_media
+                            .get(rtxn, &m.record.id)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_default();
+                        prepared.matches_indexed(m, &tags, simd_finder.as_ref())
+                    } else {
+                        prepared.matches_indexed(m, &[], simd_finder.as_ref())
+                    }
+                })
+                .collect();
 
-                let elapsed_us = t0.elapsed().as_micros();
-                tracing::debug!(
-                    query = %LogObscurer::query(&self.search_query),
-                    media_type = ?self.media_type_filter,
-                    is_regex = self.is_regex,
-                    mode = "Refinement Subset",
-                    input_candidates = input_count,
-                    matched = res.len(),
-                    elapsed_us = elapsed_us,
-                    "[SearchFilter: SIMD memmem] Zero-Copy filter executed"
-                );
-                res
-            }
-            None => {
-                let input_count = all_media.len();
-                let res: Vec<&'a IndexedMediaRecord> = all_media
-                    .iter()
-                    .filter(|m| {
-                        if has_tag_filter && let Some(ref rtxn) = rtxn_opt {
-                            let tags = library
-                                .raw_db()
-                                .tags_by_media
-                                .get(rtxn, &m.record.id)
-                                .ok()
-                                .flatten()
-                                .unwrap_or_default();
-                            prepared.matches_indexed(m, &tags, simd_finder.as_ref())
-                        } else {
-                            prepared.matches_indexed(m, &[], simd_finder.as_ref())
-                        }
-                    })
-                    .collect();
+            let elapsed_us = t0.elapsed().as_micros();
+            tracing::debug!(
+                query = %LogObscurer::query(&self.search_query),
+                media_type = ?self.media_type_filter,
+                is_regex = self.is_regex,
+                mode = "Refinement Subset",
+                input_candidates = input_count,
+                matched = res.len(),
+                elapsed_us = elapsed_us,
+                "[SearchFilter: SIMD memmem] Zero-Copy filter executed"
+            );
+            res
+        } else {
+            let input_count = all_media.len();
+            let res: Vec<&'a IndexedMediaRecord> = all_media
+                .iter()
+                .filter(|m| {
+                    if has_tag_filter && let Some(ref rtxn) = rtxn_opt {
+                        let tags = library
+                            .raw_db()
+                            .tags_by_media
+                            .get(rtxn, &m.record.id)
+                            .ok()
+                            .flatten()
+                            .unwrap_or_default();
+                        prepared.matches_indexed(m, &tags, simd_finder.as_ref())
+                    } else {
+                        prepared.matches_indexed(m, &[], simd_finder.as_ref())
+                    }
+                })
+                .collect();
 
-                let elapsed_us = t0.elapsed().as_micros();
-                tracing::debug!(
-                    query = %LogObscurer::query(&self.search_query),
-                    media_type = ?self.media_type_filter,
-                    is_regex = self.is_regex,
-                    mode = "Full Set",
-                    input_candidates = input_count,
-                    matched = res.len(),
-                    elapsed_us = elapsed_us,
-                    "[SearchFilter: SIMD memmem] Zero-Copy filter executed"
-                );
-                res
-            }
+            let elapsed_us = t0.elapsed().as_micros();
+            tracing::debug!(
+                query = %LogObscurer::query(&self.search_query),
+                media_type = ?self.media_type_filter,
+                is_regex = self.is_regex,
+                mode = "Full Set",
+                input_candidates = input_count,
+                matched = res.len(),
+                elapsed_us = elapsed_us,
+                "[SearchFilter: SIMD memmem] Zero-Copy filter executed"
+            );
+            res
         };
 
         filtered

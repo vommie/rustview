@@ -1,6 +1,14 @@
 use super::error::LibraryError;
-use super::models::*;
-use super::schema::*;
+use super::models::{
+    DatabaseMeta, ExternalHashRecord, FolderId, FolderRecordCodec, MediaId, MediaRecordCodec, TagId, TagRecord,
+    ThumbnailLocation, VideoPreviewRecord,
+};
+use super::schema::{
+    CURRENT_SCHEMA_VERSION, CURRENT_THUMBNAIL_VERSION, DB_EXTERNAL_HASHES, DB_FOLDERS, DB_FOLDERS_BY_PARENT,
+    DB_FOLDERS_BY_PATH, DB_MEDIA, DB_MEDIA_BY_FOLDER, DB_MEDIA_BY_HASH, DB_MEDIA_BY_TAG, DB_META, DB_SEQUENCES,
+    DB_TAGS, DB_TAGS_BY_MEDIA, DB_TAGS_BY_PARENT_NAME, DB_THUMBNAILS, DB_VIDEO_PREVIEWS, HASH_ALGORITHM,
+    SEQ_REFRESH_GEN,
+};
 use crate::media::{FileHash, MediaHasher};
 use heed::byteorder::BE;
 use heed::types::{Bytes, SerdeBincode, Str, U32, U64};
@@ -91,8 +99,7 @@ impl LibraryDatabase {
                 database_uuid: MediaHasher::to_hex(&MediaHasher::hash_bytes(path.to_string_lossy().as_bytes())),
                 created_at: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0),
+                    .map_or(0, |d| d.as_secs() as i64),
             };
             meta.put(&mut wtxn, "meta", &metadata)?;
         }
@@ -124,7 +131,7 @@ impl LibraryDatabase {
     /// Passing `None` results in an empty folder tree (e.g. first start without a configured root).
     pub fn set_tree_root(&self, root: Option<PathBuf>) {
         tracing::debug!(
-            root = ?root.as_ref().map(|p| crate::settings::LogObscurer::path(p).to_string()),
+            root = ?root.as_ref().map(|p| crate::settings::LogObscurer::path(p).clone()),
             "[FolderTree: Scope] Folder tree root scope updated"
         );
         *self.tree_root.write() = root;

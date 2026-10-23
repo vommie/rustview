@@ -28,7 +28,7 @@ impl MultiviewInstance {
                     );
                 }
                 Err(e) => {
-                    tracing::warn!(media_id = tile.media_id, error = %e, "[Multiview: Audio] Could not change the mute state")
+                    tracing::warn!(media_id = tile.media_id, error = %e, "[Multiview: Audio] Could not change the mute state");
                 }
             }
         }
@@ -97,7 +97,7 @@ impl MultiviewInstance {
                 );
             }
             Err(e) => {
-                tracing::warn!(media_id = tile.media_id, error = %e, "[Multiview: Audio] Mute toggle failed")
+                tracing::warn!(media_id = tile.media_id, error = %e, "[Multiview: Audio] Mute toggle failed");
             }
         }
         self.bump();

@@ -51,9 +51,10 @@ thread_local! {
 
 /// Runs `f` on the host state. Re-entrant calls are skipped instead of panicking.
 fn with_host<R>(f: impl FnOnce(&mut TabHost) -> R) -> Option<R> {
-    HOST.with(|cell| match cell.try_borrow_mut() {
-        Ok(mut host) => Some(f(&mut host)),
-        Err(_) => {
+    HOST.with(|cell| {
+        if let Ok(mut host) = cell.try_borrow_mut() {
+            Some(f(&mut host))
+        } else {
             tracing::debug!("[Multiview: TabView] Skipped a re-entrant event");
             None
         }

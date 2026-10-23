@@ -58,8 +58,7 @@ impl<'a> BytesDecode<'a> for FolderRecordCodec {
             let path_buf = PathBuf::from(&legacy2.path);
             let name = path_buf
                 .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| legacy2.path.clone());
+                .map_or_else(|| legacy2.path.clone(), |n| n.to_string_lossy().to_string());
             let is_hidden = name.starts_with('.');
 
             return Ok(FolderRecord {
@@ -82,8 +81,7 @@ impl<'a> BytesDecode<'a> for FolderRecordCodec {
         let path_buf = PathBuf::from(&legacy1.path);
         let name = path_buf
             .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| legacy1.path.clone());
+            .map_or_else(|| legacy1.path.clone(), |n| n.to_string_lossy().to_string());
         let is_hidden = name.starts_with('.');
 
         Ok(FolderRecord {
@@ -128,7 +126,7 @@ pub struct CachedFolderNode {
     pub children: Vec<FolderId>,
 }
 
-/// Central in-memory Single Point of Truth (SPoT) hierarchy snapshot.
+/// Central in-memory Single Point of Truth (`SPoT`) hierarchy snapshot.
 ///
 /// The snapshot is scoped to the configured root directory: `root_ids` contains exactly the root folder
 /// (or is empty when no root is configured / registered) and `children_map[None]` mirrors it.
@@ -150,7 +148,10 @@ impl FolderHierarchySnapshot {
 
     #[inline]
     pub fn get_children(&self, parent_id: Option<FolderId>) -> &[FolderId] {
-        self.children_map.get(&parent_id).map(|v| v.as_slice()).unwrap_or(&[])
+        self.children_map
+            .get(&parent_id)
+            .map(std::vec::Vec::as_slice)
+            .unwrap_or(&[])
     }
 
     #[inline]

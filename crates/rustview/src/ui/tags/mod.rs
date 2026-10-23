@@ -6,7 +6,7 @@ use crate::ctx_menu::CtxMenuActionId;
 use crate::ui::MainWindow;
 use crate::ui::context_menu::BridgeContextMenu;
 use crate::ui::context_menu::tag::TagContextMenu;
-use crate::ui::state::*;
+use crate::ui::state::UiState;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use regex::RegexBuilder;
@@ -156,7 +156,7 @@ impl BridgeTags {
     pub fn persist_expanded_tags(settings: &SettingsManager, expanded_set: &HashSet<TagId>) {
         let mut cur_settings = settings.get();
         let mut ids: Vec<u32> = expanded_set.iter().copied().collect();
-        ids.sort();
+        ids.sort_unstable();
         if cur_settings.tags.expanded_tag_ids != ids {
             cur_settings.tags.expanded_tag_ids = ids;
             settings.save_quiet(&cur_settings);

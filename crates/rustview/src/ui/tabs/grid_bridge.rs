@@ -17,7 +17,7 @@ use slint::{ComponentHandle, Image, ModelRc, VecModel};
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Central coordinator bridge for the TabGridView (Masonry View for Open Tabs).
+/// Central coordinator bridge for the `TabGridView` (Masonry View for Open Tabs).
 pub struct BridgeTabGrid;
 
 impl BridgeTabGrid {
@@ -106,14 +106,14 @@ impl BridgeTabGrid {
                 let r = &rects[idx];
                 let solo_kind = s.multiview.instance.lock().solo_tile().map(|(_, kind, _)| kind);
                 let (width, height) = s.display_size();
-                let multiview_item = grid_host
-                    .as_ref()
-                    .map(|host| host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v, scroll_y)))
-                    .unwrap_or_else(|| GridItemView {
+                let multiview_item = grid_host.as_ref().map_or_else(
+                    || GridItemView {
                         tiles: Vec::new(),
                         gutters: Vec::new(),
                         screen: Default::default(),
-                    });
+                    },
+                    |host| host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v, scroll_y)),
+                );
 
                 TabGridItemModel {
                     id: s.id as i32,
@@ -123,7 +123,7 @@ impl BridgeTabGrid {
                     is_video: solo_kind == Some(TileKind::Video),
                     is_multiview: true,
                     icon: tab_icon(s),
-                    rating: s.record.rating as i32,
+                    rating: i32::from(s.record.rating),
                     has_tags: false,
                     image: Image::default(),
                     is_loading: false,
@@ -190,7 +190,7 @@ impl BridgeTabGrid {
         }
     }
 
-    /// Handles Left-Click on a TabGrid item: switches to Tab Viewer view (mode 1) and foregrounds the tab (Requirement 5: seamless playback continuation).
+    /// Handles Left-Click on a `TabGrid` item: switches to Tab Viewer view (mode 1) and foregrounds the tab (Requirement 5: seamless playback continuation).
     pub fn handle_item_left_clicked(
         tab_id: TabId,
         window: &MainWindow,
@@ -214,7 +214,7 @@ impl BridgeTabGrid {
         BridgeViewerTabs::sync_video_embedding(window, tab_manager, fullscreen, settings);
     }
 
-    /// Handles Middle-Click on a TabGrid item: launches Fullscreen Viewer directly for that tab without changing active tab (Requirement 3: auto-plays).
+    /// Handles Middle-Click on a `TabGrid` item: launches Fullscreen Viewer directly for that tab without changing active tab (Requirement 3: auto-plays).
     pub fn handle_item_middle_clicked(
         tab_id: TabId,
         window: &MainWindow,
@@ -230,7 +230,7 @@ impl BridgeTabGrid {
         fullscreen.open_tab(tab_id, tab_manager, settings, window.as_weak());
     }
 
-    /// Handles Close Button on a TabGrid item.
+    /// Handles Close Button on a `TabGrid` item.
     pub fn handle_item_close_clicked(
         tab_id: TabId,
         window: &MainWindow,
@@ -246,7 +246,7 @@ impl BridgeTabGrid {
         Self::sync_tab_grid_ui(window, tab_manager, library, settings, state);
     }
 
-    /// Handles real-time scrolling in the TabGridView to keep video subwindows positioned and clamped in lockstep with UI tiles.
+    /// Handles real-time scrolling in the `TabGridView` to keep video subwindows positioned and clamped in lockstep with UI tiles.
     pub fn handle_scrolled(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -267,9 +267,7 @@ impl BridgeTabGrid {
         let cached_rects = state.read().cached_tab_grid_rects.clone();
         let scroll_y = window.get_tab_grid_scroll_y();
 
-        if !cached_rects.is_empty() {
-            Self::sync_video_subwindows(window, tab_manager, &cached_rects, scroll_y, p_h, p_v);
-        } else {
+        if cached_rects.is_empty() {
             let sessions = tab_manager.list_tabs();
             if sessions.is_empty() {
                 tab_manager.hide_all_video_subwindows();
@@ -314,6 +312,8 @@ impl BridgeTabGrid {
             }
 
             Self::sync_video_subwindows(window, tab_manager, &rects, scroll_y, p_h, p_v);
+        } else {
+            Self::sync_video_subwindows(window, tab_manager, &cached_rects, scroll_y, p_h, p_v);
         }
     }
 }

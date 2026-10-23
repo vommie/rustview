@@ -1,6 +1,6 @@
 //! Command line of the headless API, parsed with `clap`.
 //!
-//! External tools (PyCutRv, remove_dups) call `rustview api <command> [options]`; the same commands also work without the leading `api`.
+//! External tools (`PyCutRv`, `remove_dups`) call `rustview api <command> [options]`; the same commands also work without the leading `api`.
 //! The long list of aliases is the compatibility surface those tools were written against.
 
 use super::error::ApiError;

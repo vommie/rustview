@@ -14,7 +14,7 @@ pub struct TagHistoryItem {
     pub tooltip: String,
 }
 
-/// A horizontally packed row containing one or more flowing TagHistoryItems.
+/// A horizontally packed row containing one or more flowing `TagHistoryItems`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TagHistoryRow {
     pub items: Vec<TagHistoryItem>,

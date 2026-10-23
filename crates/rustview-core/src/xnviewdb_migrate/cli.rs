@@ -11,10 +11,10 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-/// Options of the XnView MP database migration (`rustview --migrate-xnview <XnView.db> [options]`).
+/// Options of the `XnView` MP database migration (`rustview --migrate-xnview <XnView.db> [options]`).
 #[derive(Debug, Clone, Default, Args)]
 pub struct MigrateOptions {
-    /// Migrate an existing XnView MP SQLite database (XnView.db) into RustView (destructive: wipes the current RustView database)
+    /// Migrate an existing `XnView` MP SQLite database (XnView.db) into `RustView` (destructive: wipes the current `RustView` database)
     #[arg(short = 'm', long = "migrate-xnview", aliases = ["migrate-xnview-db", "migrate"], value_name = "PATH")]
     pub xnview_db: Option<PathBuf>,
 
@@ -99,10 +99,7 @@ pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> 
     };
 
     if !xnview_db_path.exists() {
-        eprintln!(
-            "Error: Specified XnViewMP database file does not exist: {:?}",
-            xnview_db_path
-        );
+        eprintln!("Error: Specified XnViewMP database file does not exist: {xnview_db_path:?}");
         return Err(MigrationError::FileNotFound(
             xnview_db_path.to_string_lossy().to_string(),
         ));
@@ -115,7 +112,7 @@ pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> 
     if let Some(explicit_root) = explicit_root_path {
         let norm_root = normalize_input_path(&explicit_root);
         if !norm_root.is_dir() {
-            eprintln!("Error: Specified base root directory does not exist: {:?}", norm_root);
+            eprintln!("Error: Specified base root directory does not exist: {norm_root:?}");
             return Err(MigrationError::FileNotFound(norm_root.to_string_lossy().to_string()));
         }
 
@@ -166,7 +163,7 @@ pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> 
 
                 let norm_root = normalize_input_path(Path::new(raw_input));
                 if !norm_root.is_dir() {
-                    eprintln!("Error: Entered directory does not exist on disk: {:?}", norm_root);
+                    eprintln!("Error: Entered directory does not exist on disk: {norm_root:?}");
                     return Err(MigrationError::FileNotFound(norm_root.to_string_lossy().to_string()));
                 }
 

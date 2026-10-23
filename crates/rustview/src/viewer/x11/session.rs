@@ -64,7 +64,7 @@ impl Session {
 
     /// Waits until the X server has processed everything sent so far.
     pub(super) fn sync(&self) {
-        let _ = self.conn.get_input_focus().map(|cookie| cookie.reply());
+        let _ = self.conn.get_input_focus().map(x11rb::cookie::Cookie::reply);
         self.drain_events();
     }
 

@@ -147,7 +147,7 @@ impl BatchTransferRunner {
                                 "Copy File"
                             },
                             vec![MissingFileItem {
-                                filename: format!("Media #{}", media_id),
+                                filename: format!("Media #{media_id}"),
                                 path: missing_path,
                             }],
                         );
@@ -272,7 +272,7 @@ impl BatchTransferRunner {
 
         self.library
             .resolve_media_path(media_id)
-            .unwrap_or_else(|_| PathBuf::from(format!("Media_{}", media_id)))
+            .unwrap_or_else(|_| PathBuf::from(format!("Media_{media_id}")))
     }
 
     fn finish(self) {

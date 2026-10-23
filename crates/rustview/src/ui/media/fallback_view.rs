@@ -30,7 +30,7 @@ pub struct FallbackEvaluationParams<'a> {
 pub struct FallbackViewEvaluator;
 
 impl FallbackViewEvaluator {
-    /// Evaluates the current state and returns a context-sensitive FallbackViewState.
+    /// Evaluates the current state and returns a context-sensitive `FallbackViewState`.
     pub fn evaluate(params: FallbackEvaluationParams<'_>) -> FallbackViewState {
         // Fast Path: If media items are visible, empty state is inactive
         if params.matched_count > 0 {
@@ -77,24 +77,15 @@ impl FallbackViewEvaluator {
             let (title, description) = match media_type {
                 MediaTypeFilter::Videos => (
                     "No Matching Videos".to_string(),
-                    format!(
-                        "No video files {} match the active tag and rating criteria.",
-                        scope_desc
-                    ),
+                    format!("No video files {scope_desc} match the active tag and rating criteria."),
                 ),
                 MediaTypeFilter::Images => (
                     "No Matching Images".to_string(),
-                    format!(
-                        "No image files {} match the active tag and rating criteria.",
-                        scope_desc
-                    ),
+                    format!("No image files {scope_desc} match the active tag and rating criteria."),
                 ),
                 MediaTypeFilter::All => (
                     "No Query Results".to_string(),
-                    format!(
-                        "No media files {} match the active tag and rating criteria.",
-                        scope_desc
-                    ),
+                    format!("No media files {scope_desc} match the active tag and rating criteria."),
                 ),
             };
 
@@ -120,15 +111,15 @@ impl FallbackViewEvaluator {
             let (title, description) = match media_type {
                 MediaTypeFilter::Videos => (
                     "No Matching Videos".to_string(),
-                    format!("No video files match the filter \"{}\".", search_query),
+                    format!("No video files match the filter \"{search_query}\"."),
                 ),
                 MediaTypeFilter::Images => (
                     "No Matching Images".to_string(),
-                    format!("No image files match the filter \"{}\".", search_query),
+                    format!("No image files match the filter \"{search_query}\"."),
                 ),
                 MediaTypeFilter::All => (
                     "No Search Results".to_string(),
-                    format!("No files match the filter \"{}\".", search_query),
+                    format!("No files match the filter \"{search_query}\"."),
                 ),
             };
 

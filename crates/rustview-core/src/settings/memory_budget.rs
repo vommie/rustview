@@ -34,9 +34,8 @@ pub struct SystemMemory {
 impl SystemMemory {
     /// Reads `/proc/meminfo` and the cgroup limits (through procfs). Unreadable files yield zeros/`None` (the budget then falls back to a default).
     pub fn read() -> Self {
-        let (total_bytes, available_bytes) = Meminfo::current()
-            .map(|info| (info.mem_total, info.mem_available.unwrap_or(0)))
-            .unwrap_or((0, 0));
+        let (total_bytes, available_bytes) =
+            Meminfo::current().map_or((0, 0), |info| (info.mem_total, info.mem_available.unwrap_or(0)));
         let cgroup_limit_bytes = Process::myself()
             .and_then(|process| process.cgroups())
             .ok()

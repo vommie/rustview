@@ -88,7 +88,7 @@ impl MultiviewInstance {
                 zoom.zoom_to(scale::zoom_at(p, limits), None, &prefs, now);
             }
             BarClick::ZoomStep { up, shift, ctrl } => {
-                zoom.zoom_step(up, scale::slider_wheel_step(shift, ctrl), None, &prefs, now)
+                zoom.zoom_step(up, scale::slider_wheel_step(shift, ctrl), None, &prefs, now);
             }
             BarClick::ZoomReset => zoom.reset(&prefs, now),
             BarClick::Action(_) | BarClick::MenuItem(_) => return,
@@ -308,9 +308,11 @@ impl MultiviewInstance {
 
     /// Whether any picture is gliding to a new zoom (the host redraws every frame meanwhile).
     pub fn zoom_animating(&self) -> bool {
-        self.tiles
-            .iter()
-            .any(|t| t.zoom.as_ref().is_some_and(|z| z.animating()))
+        self.tiles.iter().any(|t| {
+            t.zoom
+                .as_ref()
+                .is_some_and(super::super::zoom::state::ZoomState::animating)
+        })
     }
 
     // ---- layout, time and work ------------------------------------------------------------------------------------------------
@@ -341,7 +343,12 @@ impl MultiviewInstance {
     /// The rectangle that counts as tile `index` for the pointer and the bar: its room while its picture is zoomed (it fills it),
     /// else the place of the medium.
     pub(super) fn host_tile_rect(&self, index: usize) -> Option<Rect> {
-        let zoomed = self.tiles.get(index)?.zoom.as_ref().is_some_and(|z| z.is_active());
+        let zoomed = self
+            .tiles
+            .get(index)?
+            .zoom
+            .as_ref()
+            .is_some_and(super::super::zoom::state::ZoomState::is_active);
         if zoomed {
             self.host_room(index)
         } else {

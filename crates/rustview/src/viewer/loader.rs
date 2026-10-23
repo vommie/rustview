@@ -10,7 +10,7 @@ pub struct HighResImageLoader;
 impl HighResImageLoader {
     /// Loads and decodes a full-resolution image from disk into a thread-safe `SharedPixelBuffer`.
     /// First attempts native decoding via the `image` crate with a 256 KiB read buffer;
-    /// falls back to the resilient FFmpeg decoder for specialized formats (e.g. PSD, exotic TIFF).
+    /// falls back to the resilient `FFmpeg` decoder for specialized formats (e.g. PSD, exotic TIFF).
     pub fn load_full_resolution(path: &Path) -> Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), ViewerError> {
         let t0 = Instant::now();
 
@@ -65,7 +65,7 @@ impl HighResImageLoader {
             }
             Ok(_) => {}
             Err(e) => {
-                tracing::warn!(error = %e, "[HighResImageLoader] Tile grid could not be composed; falling back to the first stream")
+                tracing::warn!(error = %e, "[HighResImageLoader] Tile grid could not be composed; falling back to the first stream");
             }
         }
 

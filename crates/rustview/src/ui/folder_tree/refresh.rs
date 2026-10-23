@@ -18,7 +18,7 @@ use std::time::Instant;
 
 impl BridgeFolders {
     /// Full root scan: scans the complete directory tree starting from configured root path on disk,
-    /// persists all relational records, and updates the in-memory SPoT snapshot.
+    /// persists all relational records, and updates the in-memory `SPoT` snapshot.
     /// MANUAL ONLY: triggered by the toolbar refresh menu or folder context menu.
     pub fn refresh_folder_tree(
         window: &MainWindow,
@@ -117,10 +117,7 @@ impl BridgeFolders {
 
                             StatusBarBridge::success(
                                 &w,
-                                format!(
-                                    "Tree scan completed in {}ms: {} total dirs updated.",
-                                    elapsed_ms, total_dirs
-                                ),
+                                format!("Tree scan completed in {elapsed_ms}ms: {total_dirs} total dirs updated."),
                             );
 
                             let has_current_folder = st.read().current_folder_id.is_some();
@@ -136,7 +133,7 @@ impl BridgeFolders {
                         }
                         Err(e) => {
                             tracing::error!(error = %e, "[FolderTreeScanError] Failed to scan folder tree");
-                            StatusBarBridge::error(&w, format!("Folder tree scan failed: {}", e));
+                            StatusBarBridge::error(&w, format!("Folder tree scan failed: {e}"));
                         }
                     }
                 });
@@ -164,7 +161,7 @@ impl BridgeFolders {
     }
 
     /// Surgical targeted scan: Scans ONLY the selected subtree physically on disk,
-    /// reconciles counts and records, rolls deltas up through ancestors in LMDB, and updates the in-memory SPoT snapshot.
+    /// reconciles counts and records, rolls deltas up through ancestors in LMDB, and updates the in-memory `SPoT` snapshot.
     /// MANUAL ONLY: triggered by the toolbar refresh menu or folder context menu.
     pub fn refresh_folder_subtree(
         folder_id: FolderId,
@@ -183,10 +180,10 @@ impl BridgeFolders {
             return;
         }
 
-        let folder_name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.to_string_lossy().to_string());
+        let folder_name = path.file_name().map_or_else(
+            || path.to_string_lossy().to_string(),
+            |n| n.to_string_lossy().to_string(),
+        );
 
         let scan_options = FolderScanOptions::from_general(&settings.get().general);
 
@@ -199,7 +196,7 @@ impl BridgeFolders {
         StatusBarBridge::update_folder_scan_progress(window, true, 0);
         StatusBarBridge::info(
             window,
-            format!("Surgically rescanning subtree under '{}'...", folder_name),
+            format!("Surgically rescanning subtree under '{folder_name}'..."),
         );
 
         tracing::info!(
@@ -217,7 +214,7 @@ impl BridgeFolders {
         let st = state.clone();
 
         std::thread::Builder::new()
-            .name(format!("folder-subtree-scanner-{}", folder_id))
+            .name(format!("folder-subtree-scanner-{folder_id}"))
             .spawn(move || {
                 let w_weak_progress = w_weak.clone();
                 let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
@@ -257,7 +254,7 @@ impl BridgeFolders {
 
                             StatusBarBridge::success(
                                 &w,
-                                format!("Subtree '{}' rescanned in {}ms.", folder_name, elapsed_ms),
+                                format!("Subtree '{folder_name}' rescanned in {elapsed_ms}ms."),
                             );
 
                             Self::reload_tree(&w, &lib, &set, &st);
@@ -267,7 +264,7 @@ impl BridgeFolders {
                         }
                         Err(e) => {
                             tracing::error!(folder_id, error = %e, "[SubtreeScanError] Failed to scan subtree");
-                            StatusBarBridge::error(&w, format!("Subtree scan failed: {}", e));
+                            StatusBarBridge::error(&w, format!("Subtree scan failed: {e}"));
                         }
                     }
                 });
@@ -317,16 +314,16 @@ impl BridgeFolders {
         }
 
         let normalized_path = normalize_path(&path);
-        let folder_name = normalized_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
+        let folder_name = normalized_path.file_name().map_or_else(
+            || normalized_path.to_string_lossy().to_string(),
+            |n| n.to_string_lossy().to_string(),
+        );
 
         let raw_media = library.media().get_all_by_folder(folder_id).unwrap_or_default();
         if raw_media.is_empty() {
             StatusBarBridge::info(
                 window,
-                format!("No media files in folder '{}' to refresh metadata.", folder_name),
+                format!("No media files in folder '{folder_name}' to refresh metadata."),
             );
             return;
         }
@@ -345,7 +342,7 @@ impl BridgeFolders {
             library,
             thumbnails,
             state,
-            &format!("folder '{}'", folder_name),
+            &format!("folder '{folder_name}'"),
         );
     }
 }

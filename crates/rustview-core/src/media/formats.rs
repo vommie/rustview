@@ -11,7 +11,7 @@ pub enum MediaType {
     Video,
 }
 
-/// Every format RustView knows. The library stores the variant INDEX (bincode), so variants are only ever appended after
+/// Every format `RustView` knows. The library stores the variant INDEX (bincode), so variants are only ever appended after
 /// `Unknown`, never inserted or reordered; `FORMAT_SPECS` follows the same order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MediaFormat {
@@ -93,7 +93,7 @@ impl MediaFormat {
 
     /// Every known format except `Unknown`, in enum order.
     pub fn all() -> impl Iterator<Item = MediaFormat> {
-        FORMAT_SPECS.iter().map(|s| s.format).filter(|f| f.is_supported())
+        FORMAT_SPECS.iter().map(|s| s.format).filter(MediaFormat::is_supported)
     }
 
     /// Looks a format up by its stable settings id.
@@ -121,8 +121,7 @@ impl MediaFormat {
     pub fn from_path(path: &Path) -> Self {
         path.extension()
             .and_then(|ext| ext.to_str())
-            .map(Self::from_extension)
-            .unwrap_or(Self::Unknown)
+            .map_or(Self::Unknown, Self::from_extension)
     }
 
     /// Identifies the high-level media type.
@@ -149,7 +148,7 @@ impl MediaFormat {
         self.spec().name
     }
 
-    /// Whether RustView knows this format at all (independent of the user's Settings; see `FormatPolicy` for that).
+    /// Whether `RustView` knows this format at all (independent of the user's Settings; see `FormatPolicy` for that).
     #[inline]
     pub fn is_supported(&self) -> bool {
         !matches!(self, Self::Unknown)
@@ -176,7 +175,7 @@ fn extension_map() -> &'static HashMap<&'static str, MediaFormat> {
 #[inline]
 pub fn format_filesize_mb(bytes: u64) -> String {
     let mb = bytes as f64 / (1024.0 * 1024.0);
-    format!("{:.2}", mb)
+    format!("{mb:.2}")
 }
 
 /// Formats a video duration in milliseconds to "hh:mm:ss.ms" format (e.g. "00:00:05.332").
@@ -190,7 +189,7 @@ pub fn format_duration_hms_ms(duration_ms: u64, is_video: bool) -> String {
     let s = total_secs % 60;
     let m = (total_secs / 60) % 60;
     let h = total_secs / 3600;
-    format!("{:02}:{:02}:{:02}.{:03}", h, m, s, ms)
+    format!("{h:02}:{m:02}:{s:02}.{ms:03}")
 }
 
 /// Formats a video duration compactly for thumbnail badges. Hours are the largest unit (no days).
@@ -211,15 +210,15 @@ pub fn format_duration_compact(duration_ms: u64, is_video: bool) -> String {
     }
     let total_secs = duration_ms / 1000;
     if total_secs < 60 {
-        return format!("{}s", total_secs);
+        return format!("{total_secs}s");
     }
     let s = total_secs % 60;
     let m = (total_secs / 60) % 60;
     let h = total_secs / 3600;
     if h == 0 {
-        format!("{:02}:{:02}", m, s)
+        format!("{m:02}:{s:02}")
     } else {
-        format!("{:02}:{:02}:{:02}", h, m, s)
+        format!("{h:02}:{m:02}:{s:02}")
     }
 }
 
@@ -229,7 +228,7 @@ fn format_sub_second(duration_ms: u64) -> String {
     match centis {
         100.. => "1s".to_string(),
         c if c % 10 == 0 => format!("0.{}s", c / 10),
-        c => format!("0.{:02}s", c),
+        c => format!("0.{c:02}s"),
     }
 }
 
@@ -240,7 +239,7 @@ pub fn approximate_aspect_ratio(width: u32, height: u32) -> &'static str {
         return "-";
     }
 
-    let q = (width as f64) / (height as f64);
+    let q = f64::from(width) / f64::from(height);
 
     const BUCKETS: [(&str, f64); 7] = [
         ("9:16", 9.0 / 16.0), // 0.5625

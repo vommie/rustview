@@ -7,7 +7,7 @@ use super::TagTreeSync;
 use crate::ui::MainWindow;
 use crate::ui::browse_window::update_tile;
 use crate::ui::media::inspector::BridgeInspector;
-use crate::ui::state::*;
+use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
@@ -45,8 +45,7 @@ impl TagActionHandler {
             .get_tag(tag_id)
             .ok()
             .flatten()
-            .map(|t| t.name)
-            .unwrap_or_else(|| format!("Tag #{}", tag_id));
+            .map_or_else(|| format!("Tag #{tag_id}"), |t| t.name);
 
         if is_assign {
             Self::handle_assign_mode_toggle(tag_id, &tag_name, &selected_ids, ctx);
@@ -84,7 +83,7 @@ impl TagActionHandler {
             }
             StatusBarBridge::success(
                 ctx.window,
-                format!("Removed tag '{}' from {} file(s)", tag_name, total_selected),
+                format!("Removed tag '{tag_name}' from {total_selected} file(s)"),
             );
         } else {
             tracing::info!(
@@ -98,7 +97,7 @@ impl TagActionHandler {
             }
             StatusBarBridge::success(
                 ctx.window,
-                format!("Assigned tag '{}' to {} file(s)", tag_name, total_selected),
+                format!("Assigned tag '{tag_name}' to {total_selected} file(s)"),
             );
 
             // Record tag assignment in history: automatically push to position 0

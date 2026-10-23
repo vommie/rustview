@@ -13,18 +13,17 @@ use std::time::Instant;
 
 /// Normalizes a filesystem path by resolving symlinks/canonical form and removing any trailing slash.
 pub fn normalize_path(path: &Path) -> PathBuf {
-    let canonical = match path.canonicalize() {
-        Ok(p) => p,
-        Err(_) => {
-            let mut normalized = PathBuf::new();
-            for comp in path.components() {
-                match comp {
-                    std::path::Component::CurDir => {}
-                    _ => normalized.push(comp.as_os_str()),
-                }
+    let canonical = if let Ok(p) = path.canonicalize() {
+        p
+    } else {
+        let mut normalized = PathBuf::new();
+        for comp in path.components() {
+            match comp {
+                std::path::Component::CurDir => {}
+                _ => normalized.push(comp.as_os_str()),
             }
-            normalized
         }
+        normalized
     };
     let s = canonical.to_string_lossy();
     if s.len() > 1 && (s.ends_with('/') || s.ends_with('\\')) {
@@ -148,8 +147,8 @@ impl<'a> FolderManager<'a> {
             "[FolderScan: SubtreeStart] Executing surgical targeted subtree rescan..."
         );
 
-        let old_recursive_media = target_rec.recursive_media_count as i64;
-        let old_subfolders = target_rec.subfolder_count as i64;
+        let old_recursive_media = i64::from(target_rec.recursive_media_count);
+        let old_subfolders = i64::from(target_rec.subfolder_count);
 
         let anchor = ScanAnchor {
             parent_id: target_rec.parent_id,
@@ -165,8 +164,8 @@ impl<'a> FolderManager<'a> {
             .ok_or(LibraryError::FolderNotFound(subtree_root_id))?;
         drop(rtxn2);
 
-        let delta_media = updated_target.recursive_media_count as i64 - old_recursive_media;
-        let delta_subfolders = updated_target.subfolder_count as i64 - old_subfolders;
+        let delta_media = i64::from(updated_target.recursive_media_count) - old_recursive_media;
+        let delta_subfolders = i64::from(updated_target.subfolder_count) - old_subfolders;
 
         if delta_media != 0 && updated_target.parent_id.is_some() {
             let mut wtxn = self.db.env.write_txn()?;
@@ -174,7 +173,7 @@ impl<'a> FolderManager<'a> {
 
             while let Some(pid) = current_pid {
                 if let Some(mut ancestor) = self.db.folders.get(&wtxn, &pid)? {
-                    let adjusted = (ancestor.recursive_media_count as i64 + delta_media).max(0) as u32;
+                    let adjusted = (i64::from(ancestor.recursive_media_count) + delta_media).max(0) as u32;
                     ancestor.recursive_media_count = adjusted;
                     self.db.folders.put(&mut wtxn, &pid, &ancestor)?;
                     current_pid = ancestor.parent_id;
@@ -261,31 +260,27 @@ impl<'a> FolderManager<'a> {
 
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs() as i64);
 
         for (idx, item) in scanned_items.iter().enumerate() {
             let p_str = item.path.to_string_lossy().to_string();
 
-            let (folder_id, added_at) = match existing_folders.remove(&p_str) {
-                Some((id, rec)) => {
-                    reused_folders += 1;
-                    if idx == 0 {
-                        previous_root_parent = rec.parent_id;
-                    }
-                    if self.db.folders_by_path.get(&wtxn, &p_str)? != Some(id) {
-                        self.db.folders_by_path.put(&mut wtxn, &p_str, &id)?;
-                        healed_path_entries += 1;
-                    }
-                    (id, rec.added_at)
+            let (folder_id, added_at) = if let Some((id, rec)) = existing_folders.remove(&p_str) {
+                reused_folders += 1;
+                if idx == 0 {
+                    previous_root_parent = rec.parent_id;
                 }
-                None => {
-                    created_folders += 1;
-                    let new_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
-                    self.db.folders_by_path.put(&mut wtxn, &p_str, &new_id)?;
-                    self.db.media_by_folder.put(&mut wtxn, &new_id, &Vec::new())?;
-                    (new_id, now_secs)
+                if self.db.folders_by_path.get(&wtxn, &p_str)? != Some(id) {
+                    self.db.folders_by_path.put(&mut wtxn, &p_str, &id)?;
+                    healed_path_entries += 1;
                 }
+                (id, rec.added_at)
+            } else {
+                created_folders += 1;
+                let new_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
+                self.db.folders_by_path.put(&mut wtxn, &p_str, &new_id)?;
+                self.db.media_by_folder.put(&mut wtxn, &new_id, &Vec::new())?;
+                (new_id, now_secs)
             };
 
             path_to_id.insert(item.path.clone(), folder_id);
@@ -477,14 +472,14 @@ impl<'a> FolderManager<'a> {
         }
 
         if let Some(mut folder_rec) = db.folders.get(wtxn, &folder_id)? {
-            folder_rec.media_count = (folder_rec.media_count as i64 + delta).max(0) as u32;
-            folder_rec.recursive_media_count = (folder_rec.recursive_media_count as i64 + delta).max(0) as u32;
+            folder_rec.media_count = (i64::from(folder_rec.media_count) + delta).max(0) as u32;
+            folder_rec.recursive_media_count = (i64::from(folder_rec.recursive_media_count) + delta).max(0) as u32;
             db.folders.put(wtxn, &folder_id, &folder_rec)?;
 
             let mut current_pid = folder_rec.parent_id;
             while let Some(pid) = current_pid {
                 if let Some(mut ancestor) = db.folders.get(wtxn, &pid)? {
-                    ancestor.recursive_media_count = (ancestor.recursive_media_count as i64 + delta).max(0) as u32;
+                    ancestor.recursive_media_count = (i64::from(ancestor.recursive_media_count) + delta).max(0) as u32;
                     db.folders.put(wtxn, &pid, &ancestor)?;
                     current_pid = ancestor.parent_id;
                 } else {
@@ -532,13 +527,12 @@ impl<'a> FolderManager<'a> {
         };
 
         let parent_id = parent_rec.as_ref().map(|p| p.id);
-        let depth = parent_rec.as_ref().map(|p| p.depth + 1).unwrap_or(0);
+        let depth = parent_rec.as_ref().map_or(0, |p| p.depth + 1);
         let name = canonical_path
             .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| path_str.clone());
+            .map_or_else(|| path_str.clone(), |n| n.to_string_lossy().to_string());
 
-        let is_hidden = name.starts_with('.') || parent_rec.as_ref().map(|p| p.is_hidden).unwrap_or(false);
+        let is_hidden = name.starts_with('.') || parent_rec.as_ref().is_some_and(|p| p.is_hidden);
 
         let folder_id = self.db.next_id(&mut wtxn, SEQ_FOLDER_ID)?;
         let record = FolderRecord {
@@ -554,8 +548,7 @@ impl<'a> FolderManager<'a> {
             recursive_media_count: 0,
             added_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0),
+                .map_or(0, |d| d.as_secs() as i64),
             last_scanned_at: 0,
         };
 

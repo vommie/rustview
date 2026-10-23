@@ -408,7 +408,7 @@ impl UiState {
     pub fn get_selected_paths_ordered(&self) -> Vec<PathBuf> {
         self.get_selected_media_ordered()
             .into_iter()
-            .map(|item| item.full_path())
+            .map(rustview_core::query::IndexedMediaRecord::full_path)
             .collect()
     }
 

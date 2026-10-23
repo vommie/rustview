@@ -2,7 +2,7 @@ use crate::viewer::{MediaTabSession, TabId};
 use rustview_core::library::models::MediaId;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-/// High-level layout item for an individual tab inside the TabGridView.
+/// High-level layout item for an individual tab inside the `TabGridView`.
 #[derive(Debug, Clone)]
 pub struct TabGridTile {
     pub tab_id: TabId,

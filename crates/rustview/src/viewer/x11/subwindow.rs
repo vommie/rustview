@@ -356,7 +356,7 @@ impl X11VideoSubwindow {
             }
         }
 
-        if self.last_applied_local_rects == container_cutouts && self.is_clipped == !container_cutouts.is_empty() {
+        if self.last_applied_local_rects == container_cutouts && self.is_clipped != container_cutouts.is_empty() {
             return;
         }
 

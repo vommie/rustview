@@ -334,7 +334,7 @@ impl SettingsStore {
             .left_sidebar_panel_tabs
             .retain(|t| valid_tabs.contains(&t.as_str()));
         if settings.view.left_sidebar_panel_tabs.is_empty() {
-            settings.view.left_sidebar_panel_tabs = valid_tabs.iter().map(|s| s.to_string()).collect();
+            settings.view.left_sidebar_panel_tabs = valid_tabs.iter().map(std::string::ToString::to_string).collect();
         }
         for &tab in valid_tabs {
             if !settings.view.left_sidebar_panel_tabs.iter().any(|t| t == tab) {
@@ -405,9 +405,10 @@ impl SettingsStore {
         } else {
             DEFAULT_FULLSCREEN_BACKGROUND_SOURCE.to_string()
         };
-        fullscreen.background.color = hex_color::parse_rgb(&fullscreen.background.color)
-            .map(hex_color::format_rgb)
-            .unwrap_or_else(|| DEFAULT_FULLSCREEN_BACKGROUND_COLOR.to_string());
+        fullscreen.background.color = hex_color::parse_rgb(&fullscreen.background.color).map_or_else(
+            || DEFAULT_FULLSCREEN_BACKGROUND_COLOR.to_string(),
+            hex_color::format_rgb,
+        );
 
         let zoom = &mut fullscreen.zoom;
         zoom.step_percent = zoom

@@ -23,7 +23,7 @@ use crate::ui::favorites::manager::FavoriteManager;
 use crate::ui::favorites::rename_dialog::FavoriteRenameDialogController;
 use crate::ui::folder_dialogs::FolderDialogController;
 use crate::ui::multiview::MultiviewHandle;
-use crate::ui::state::*;
+use crate::ui::state::UiState;
 use crate::ui::tags::dialogs::TagDialogController;
 use crate::ui::{FileRenameDialog, MainWindow};
 use crate::viewer::ViewerTabManager;

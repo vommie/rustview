@@ -74,11 +74,7 @@ impl FavoriteRenameDialogController {
 
     /// Checks if the dialog is currently visible.
     pub fn is_open(&self) -> bool {
-        self.dialog
-            .borrow()
-            .as_ref()
-            .map(|w| w.window().is_visible())
-            .unwrap_or(false)
+        self.dialog.borrow().as_ref().is_some_and(|w| w.window().is_visible())
     }
 
     fn execute(&self, window: &MainWindow, favorites: &Arc<RwLock<FavoriteManager>>, path: &Path, new_alias: &str) {
@@ -93,7 +89,7 @@ impl FavoriteRenameDialogController {
         match BridgeFavorites::rename_favorite(window, favorites, path, trimmed) {
             Ok(()) => {
                 self.close(window);
-                StatusBarBridge::success(window, format!("Renamed favorite to '{}'", trimmed));
+                StatusBarBridge::success(window, format!("Renamed favorite to '{trimmed}'"));
             }
             Err(e) => {
                 if let Some(ref win) = *self.dialog.borrow() {

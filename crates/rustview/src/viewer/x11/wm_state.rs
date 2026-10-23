@@ -44,7 +44,7 @@ pub fn is_x11_window_maximized(window_xid: u64) -> Option<bool> {
 }
 
 /// Size of the X screen (the root window, i.e. all monitors together) in pixels. One short connection, no subprocess; `None`
-/// without an X server (a Wayland session without XWayland).
+/// without an X server (a Wayland session without `XWayland`).
 pub fn x11_root_size() -> Option<(u32, u32)> {
     let session = Session::open("the screen size").ok()?;
     let geometry = session.conn.get_geometry(session.root).ok()?.reply().ok()?;

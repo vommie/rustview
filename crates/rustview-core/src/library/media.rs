@@ -20,7 +20,7 @@ impl<'a> MediaRepository<'a> {
         Ok(self.db.media.get(&rtxn, &id)?)
     }
 
-    /// Resolves the absolute physical filesystem path of a media file via its registered folder_id in LMDB.
+    /// Resolves the absolute physical filesystem path of a media file via its registered `folder_id` in LMDB.
     pub fn resolve_path(&self, id: MediaId) -> Result<PathBuf, LibraryError> {
         let rtxn = self.db.env.read_txn()?;
         let rec = self.db.media.get(&rtxn, &id)?.ok_or(LibraryError::MediaNotFound(id))?;
@@ -295,8 +295,7 @@ impl<'a> MediaRepository<'a> {
                     .get(&rtxn, &rec.folder_id)
                     .ok()
                     .flatten()
-                    .map(|f| !f.is_deleted)
-                    .unwrap_or(false)
+                    .is_some_and(|f| !f.is_deleted)
             });
 
             if !is_folder_active {

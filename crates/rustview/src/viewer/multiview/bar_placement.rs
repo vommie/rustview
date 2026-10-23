@@ -98,10 +98,10 @@ pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {
     let mut push = |x: i32, y: i32, w: i32, h: i32| {
         if w > 0 && h > 0 {
             rects.push(XRectangle {
-                x: x.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
-                y: y.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
-                width: w.min(u16::MAX as i32) as u16,
-                height: h.min(u16::MAX as i32) as u16,
+                x: x.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
+                y: y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
+                width: w.min(i32::from(u16::MAX)) as u16,
+                height: h.min(i32::from(u16::MAX)) as u16,
             });
         }
     };

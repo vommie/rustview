@@ -17,7 +17,10 @@ use crate::ui::media::BridgeMedia;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::open_confirmation::{OpenConfirmation, OpenKind};
 use crate::ui::selection::BridgeFileSelection;
-use crate::ui::state::*;
+use crate::ui::state::{
+    CTX_ACTION_SELECT_ALL, CTX_BROWSE_SELECTION_DELETE, CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER,
+    CTX_BROWSE_TOGGLE_FOLDERS, CTX_FOLDER_NEW, CTX_FOLDER_OPEN_IN_FILE_MANAGER, LastActivePanel, UiState,
+};
 use crate::ui::status_bar::StatusBarBridge;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
@@ -301,7 +304,7 @@ impl BrowseContextMenus {
             Ok(()) => StatusBarBridge::success(window, format!("Opened {} item(s) in File Manager.", paths.len())),
             Err(e) => {
                 tracing::error!(error = %e, "[BrowseContextMenu] Failed to open the selection in the File Manager");
-                StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
+                StatusBarBridge::error(window, format!("Failed to open File Manager: {e}"));
             }
         }
     }

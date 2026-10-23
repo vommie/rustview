@@ -1,4 +1,4 @@
-//! The one table of every media format RustView knows: stable id, names, extensions, kind, decoder and the order of the
+//! The one table of every media format `RustView` knows: stable id, names, extensions, kind, decoder and the order of the
 //! Settings page. Everything else (scanner, tree walker, detector, Settings page) reads this table.
 
 use super::formats::{MediaFormat, MediaType};
@@ -6,11 +6,11 @@ use super::formats::{MediaFormat, MediaType};
 /// How a format is decoded; shown on the Settings page so users know what a format depends on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FormatDecoder {
-    /// Decoded in-process by the `image` crate (thumbnails and viewer); FFmpeg is the fallback for damaged variants.
+    /// Decoded in-process by the `image` crate (thumbnails and viewer); `FFmpeg` is the fallback for damaged variants.
     Native,
-    /// Decoded through FFmpeg's libavcodec (thumbnails and viewer).
+    /// Decoded through `FFmpeg`'s libavcodec (thumbnails and viewer).
     FFmpeg,
-    /// Thumbnails and metadata through FFmpeg (or mpv), playback through mpv.
+    /// Thumbnails and metadata through `FFmpeg` (or mpv), playback through mpv.
     Player,
 }
 

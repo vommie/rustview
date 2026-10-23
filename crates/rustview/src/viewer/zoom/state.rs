@@ -606,7 +606,7 @@ impl ZoomState {
                     key: done.key,
                     pixels,
                     region: done.region,
-                })
+                });
             }
             Ok(_) => {}
             Err(why) => {

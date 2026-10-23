@@ -53,7 +53,7 @@ impl<'a> MediaItemRefresher<'a> {
         Ok(updated_record)
     }
 
-    /// Resolves existing MediaRecord and its absolute filesystem path.
+    /// Resolves existing `MediaRecord` and its absolute filesystem path.
     fn resolve_media_path(&self, txn: &heed::RoTxn, media_id: MediaId) -> Result<(MediaRecord, PathBuf), LibraryError> {
         let record = self
             .db
@@ -72,7 +72,7 @@ impl<'a> MediaItemRefresher<'a> {
         if !file_path.exists() {
             return Err(LibraryError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Media file not found on disk: {:?}", file_path),
+                format!("Media file not found on disk: {file_path:?}"),
             )));
         }
 
@@ -92,15 +92,13 @@ impl<'a> MediaItemRefresher<'a> {
             .modified()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs() as i64);
 
         let creation_time = fs_meta
             .created()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(modification_time);
+            .map_or(modification_time, |d| d.as_secs() as i64);
 
         let is_zero_byte = file_size == 0;
         let format = MediaFormat::from_path(file_path);

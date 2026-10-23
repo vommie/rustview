@@ -33,9 +33,9 @@ pub fn format_bytes_with_locale(bytes: u64) -> String {
     };
 
     if bytes == 1 {
-        format!("{} Byte", formatted_number)
+        format!("{formatted_number} Byte")
     } else {
-        format!("{} Bytes", formatted_number)
+        format!("{formatted_number} Bytes")
     }
 }
 

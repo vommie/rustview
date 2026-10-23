@@ -1,5 +1,5 @@
 use super::error::MigrationError;
-use super::types::*;
+use super::types::{XnViewFolder, XnViewHash, XnViewImage, XnViewImageInfo, XnViewRawData, XnViewTag, XnViewTagLink};
 use crate::settings::LogObscurer;
 use rusqlite::{Connection, OpenFlags};
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ use std::time::Instant;
 pub struct XnViewDbReader;
 
 impl XnViewDbReader {
-    /// Connects to the XnViewMP SQLite database in read-only mode and extracts all relevant entities.
+    /// Connects to the `XnViewMP` SQLite database in read-only mode and extracts all relevant entities.
     pub fn read_database(db_path: &Path) -> Result<XnViewRawData, MigrationError> {
         if !db_path.exists() {
             return Err(MigrationError::FileNotFound(db_path.to_string_lossy().to_string()));
@@ -90,14 +90,16 @@ impl XnViewDbReader {
 
     fn validate_schema(conn: &Connection) -> Result<(), MigrationError> {
         let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")?;
-        let table_names: Vec<String> = stmt.query_map([], |row| row.get(0))?.filter_map(|r| r.ok()).collect();
+        let table_names: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .filter_map(std::result::Result::ok)
+            .collect();
 
         let required = ["Folders", "Images", "Tags"];
         for req in required {
             if !table_names.iter().any(|t| t.eq_ignore_ascii_case(req)) {
                 return Err(MigrationError::InvalidDatabase(format!(
-                    "Required table '{}' not found in SQLite database",
-                    req
+                    "Required table '{req}' not found in SQLite database"
                 )));
             }
         }
@@ -225,7 +227,7 @@ impl XnViewDbReader {
         let mut pragma_stmt = conn.prepare("PRAGMA table_info(Images)")?;
         let cols: Vec<String> = pragma_stmt
             .query_map([], |row| row.get(1))?
-            .filter_map(|r| r.ok())
+            .filter_map(std::result::Result::ok)
             .collect();
 
         let has_hash_id = cols.iter().any(|c| c.eq_ignore_ascii_case("HashID"));

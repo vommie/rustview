@@ -6,7 +6,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Instant;
 
-/// Constants controlling FolderTree auto-scroll physics and geometry
+/// Constants controlling `FolderTree` auto-scroll physics and geometry
 pub const FOLDER_TREE_AUTOSCROLL_EDGE_ZONE_PX: f32 = 48.0;
 pub const FOLDER_TREE_AUTOSCROLL_BASE_SPEED_PX: f32 = 3.0;
 pub const FOLDER_TREE_AUTOSCROLL_MAX_SPEED_PX: f32 = 18.0;
@@ -14,7 +14,7 @@ pub const FOLDER_TREE_AUTOSCROLL_ACCEL_DURATION_SECS: f32 = 1.5;
 pub const FOLDER_TREE_AUTOSCROLL_TICK_INTERVAL_MS: u64 = 16; // ~60 FPS
 
 /// Fixed Y offset from window top to the first folder row:
-/// TopToolbar (38px) + Sidebar padding (8px) + SidebarPanelTabBar (28px) + spacing (6px) + FolderPanelToolbar (26px) + spacing (6px) = 112px.
+/// `TopToolbar` (38px) + Sidebar padding (8px) + `SidebarPanelTabBar` (28px) + spacing (6px) + `FolderPanelToolbar` (26px) + spacing (6px) = 112px.
 pub const FOLDER_TREE_TOP_OFFSET_PX: f32 = 112.0;
 pub const FOLDER_TREE_ROW_HEIGHT_PX: f32 = 24.0;
 
@@ -59,7 +59,7 @@ impl DndFolderTreeAutoScroller {
         Self::default()
     }
 
-    /// Evaluates cursor position relative to the FolderTree boundaries and starts/adjusts or stops auto-scrolling.
+    /// Evaluates cursor position relative to the `FolderTree` boundaries and starts/adjusts or stops auto-scrolling.
     pub fn update_cursor(&self, window: &MainWindow, cursor_x: f32, cursor_y: f32) {
         let active_tab = window.get_active_sidebar_panel_tab();
         if active_tab.as_str() != "folders" {
@@ -156,7 +156,7 @@ impl DndFolderTreeAutoScroller {
             if inner.direction == FolderTreeAutoScrollDirection::Idle {
                 return;
             }
-            let elapsed = inner.zone_enter_time.map(|t| t.elapsed().as_secs_f32()).unwrap_or(0.0);
+            let elapsed = inner.zone_enter_time.map_or(0.0, |t| t.elapsed().as_secs_f32());
             (inner.direction, elapsed, inner.proximity, inner.cursor_y)
         };
 
@@ -205,10 +205,7 @@ impl DndFolderTreeAutoScroller {
         // Boundary check logging
         if (new_scroll_y - prev_scroll_y).abs() < 0.01 {
             let mut inner = self.inner.borrow_mut();
-            let should_log = inner
-                .last_logged_tick
-                .map(|t| t.elapsed().as_millis() >= 500)
-                .unwrap_or(true);
+            let should_log = inner.last_logged_tick.is_none_or(|t| t.elapsed().as_millis() >= 500);
             if should_log {
                 inner.last_logged_tick = Some(Instant::now());
                 tracing::debug!(

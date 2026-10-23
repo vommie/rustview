@@ -88,7 +88,7 @@ impl RemoveOrphanedFileDialogController {
         let msg = if count == 1 {
             "Removed 1 missing file from database.".to_string()
         } else {
-            format!("Removed {} missing files from database.", count)
+            format!("Removed {count} missing files from database.")
         };
         StatusBarBridge::success(window, msg);
 

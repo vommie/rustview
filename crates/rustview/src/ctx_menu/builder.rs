@@ -34,7 +34,7 @@ impl CtxMenuBuilder {
     /// Returns `(display_text, full_tooltip_text)`.
     pub fn format_header_title(prefix: &str, name: &str, max_name_chars: usize) -> (String, String) {
         let trimmed_name = name.trim();
-        let full_text = format!("{}{}", prefix, trimmed_name);
+        let full_text = format!("{prefix}{trimmed_name}");
 
         let char_count = trimmed_name.chars().count();
         if char_count <= max_name_chars {
@@ -44,7 +44,7 @@ impl CtxMenuBuilder {
             let chars: Vec<char> = trimmed_name.chars().collect();
             let start_idx = char_count.saturating_sub(keep_count);
             let suffix: String = chars[start_idx..].iter().collect();
-            let display_text = format!("{}...{}", prefix, suffix);
+            let display_text = format!("{prefix}...{suffix}");
             (display_text, full_text)
         }
     }
@@ -65,7 +65,7 @@ impl CtxMenuBuilder {
         self.items.push(CtxMenuItem {
             id,
             text: text.into(),
-            shortcut: shortcut.map(|s| s.to_string()),
+            shortcut: shortcut.map(std::string::ToString::to_string),
             icon,
             icon_path: None,
             kind: CtxMenuItemKind::Action,
@@ -90,7 +90,7 @@ impl CtxMenuBuilder {
         self.items.push(CtxMenuItem {
             id,
             text: text.into(),
-            shortcut: shortcut.map(|s| s.to_string()),
+            shortcut: shortcut.map(std::string::ToString::to_string),
             icon,
             icon_path: None,
             kind: CtxMenuItemKind::Action,
@@ -116,7 +116,7 @@ impl CtxMenuBuilder {
         self.items.push(CtxMenuItem {
             id,
             text: text.into(),
-            shortcut: shortcut.map(|s| s.to_string()),
+            shortcut: shortcut.map(std::string::ToString::to_string),
             icon: Some(Icon::AppWindow),
             icon_path,
             kind: CtxMenuItemKind::Action,
@@ -141,7 +141,7 @@ impl CtxMenuBuilder {
         self.items.push(CtxMenuItem {
             id,
             text: text.into(),
-            shortcut: shortcut.map(|s| s.to_string()),
+            shortcut: shortcut.map(std::string::ToString::to_string),
             icon,
             icon_path: None,
             kind: CtxMenuItemKind::Checkable,
@@ -166,7 +166,7 @@ impl CtxMenuBuilder {
         self.items.push(CtxMenuItem {
             id,
             text: text.into(),
-            shortcut: shortcut.map(|s| s.to_string()),
+            shortcut: shortcut.map(std::string::ToString::to_string),
             icon,
             icon_path: None,
             kind: CtxMenuItemKind::Radio,

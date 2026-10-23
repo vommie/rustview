@@ -1,4 +1,4 @@
-//! Surgical in-memory updates of the SPoT folder hierarchy snapshot.
+//! Surgical in-memory updates of the `SPoT` folder hierarchy snapshot.
 //!
 //! A folder move only touches the moved subtree and the counters of the two parent chains. Instead of reloading all
 //! folder records, the moved subtree is detached from its old position and re-attached from the final database
@@ -31,10 +31,10 @@ impl fmt::Display for SnapshotPatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::RootMoveRejected(id) => {
-                write!(f, "folder {} is the tree root and cannot be moved", id)
+                write!(f, "folder {id} is the tree root and cannot be moved")
             }
             Self::MissingMovedRecord(id) => {
-                write!(f, "moved folder {} is missing from the patch records", id)
+                write!(f, "moved folder {id} is missing from the patch records")
             }
         }
     }

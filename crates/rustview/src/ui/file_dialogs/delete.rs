@@ -67,7 +67,7 @@ impl DeleteFileDialogController {
                     if idx == 0 {
                         name = rec.filename.clone();
                     }
-                    if rec.is_deleted || ctx.library.resolve_media_path(id).map(|p| !p.exists()).unwrap_or(false) {
+                    if rec.is_deleted || ctx.library.resolve_media_path(id).is_ok_and(|p| !p.exists()) {
                         missing += 1;
                     }
                 } else if let Some(tab) = ctx.tab_manager.get_tab_by_media_id(id) {
@@ -170,9 +170,9 @@ impl DeleteFileDialogController {
             "Permanently deleted"
         };
         let msg = if count == 1 {
-            format!("{} 1 file.", verb)
+            format!("{verb} 1 file.")
         } else {
-            format!("{} {} files.", verb, count)
+            format!("{verb} {count} files.")
         };
         StatusBarBridge::success(window, msg);
 

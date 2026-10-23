@@ -6,7 +6,12 @@ use crate::ui::folder_dialogs::{FolderDialogContext, FolderDialogController};
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::folder_tree::projection::FolderProjection;
 use crate::ui::media::BridgeMedia;
-use crate::ui::state::*;
+use crate::ui::state::{
+    CTX_FOLDER_ADD_TO_FAVORITES, CTX_FOLDER_DELETE, CTX_FOLDER_MOVE_BASE, CTX_FOLDER_NEW,
+    CTX_FOLDER_OPEN_IN_FILE_MANAGER, CTX_FOLDER_PURGE_DB, CTX_FOLDER_REFRESH, CTX_FOLDER_REFRESH_FILES_FULL,
+    CTX_FOLDER_REFRESH_FILES_META, CTX_FOLDER_REFRESH_METADATA, CTX_FOLDER_REFRESH_TREE_FULL,
+    CTX_FOLDER_REFRESH_TREE_RELATIVE, CTX_FOLDER_RENAME,
+};
 use crate::ui::status_bar::StatusBarBridge;
 use rustview_core::library::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use rustview_core::settings::LogObscurer;
@@ -19,7 +24,7 @@ const DISABLED_BUSY_REASON: &str = "Disabled: Another scan or refresh operation 
 pub struct FolderContextMenu;
 
 impl FolderContextMenu {
-    /// Builds the declarative context menu for a folder node directly from the in-memory SPoT snapshot with zero disk I/O.
+    /// Builds the declarative context menu for a folder node directly from the in-memory `SPoT` snapshot with zero disk I/O.
     /// Provides clear contextual tooltips on disabled options explaining why the action cannot be performed.
     pub fn build_menu(
         target_node: &CachedFolderNode,
@@ -91,10 +96,7 @@ impl FolderContextMenu {
                 None,
                 Some(Icon::FolderPlus),
                 false,
-                format!(
-                    "Create a new folder (or a path of folders) in this folder\n{}",
-                    DISABLED_BUSY_REASON
-                ),
+                format!("Create a new folder (or a path of folders) in this folder\n{DISABLED_BUSY_REASON}"),
             )
         } else {
             builder.action_with_tooltip(
@@ -140,15 +142,9 @@ impl FolderContextMenu {
         let can_favorite = !is_favorite && !target_node.is_deleted;
         let favorite_description = "Bookmark this folder in the Favorites sidebar";
         let favorite_tip = if is_favorite {
-            format!(
-                "{}\nDisabled: Folder is already added to Favorites",
-                favorite_description
-            )
+            format!("{favorite_description}\nDisabled: Folder is already added to Favorites")
         } else if target_node.is_deleted {
-            format!(
-                "{}\nDisabled: Cannot add a missing or deleted folder to Favorites",
-                favorite_description
-            )
+            format!("{favorite_description}\nDisabled: Cannot add a missing or deleted folder to Favorites")
         } else {
             favorite_description.to_string()
         };
@@ -193,9 +189,9 @@ impl FolderContextMenu {
         builder.submenu("Refresh...", Some(Icon::Refresh), can_refresh, |sub| {
             let reason_tip = |description: &str| {
                 if is_deleted {
-                    format!("{}\nDisabled: Folder does not exist on physical disk", description)
+                    format!("{description}\nDisabled: Folder does not exist on physical disk")
                 } else if is_busy {
-                    format!("{}\n{}", description, DISABLED_BUSY_REASON)
+                    format!("{description}\n{DISABLED_BUSY_REASON}")
                 } else {
                     description.to_string()
                 }
@@ -206,7 +202,7 @@ impl FolderContextMenu {
             let refresh_relative_tip = reason_tip("Rescan this folder and its subdirectories only");
             let refresh_tree_description = "Perform a complete scan of the entire directory tree on disk";
             let refresh_tree_tip = if is_busy {
-                format!("{}\n{}", refresh_tree_description, DISABLED_BUSY_REASON)
+                format!("{refresh_tree_description}\n{DISABLED_BUSY_REASON}")
             } else {
                 refresh_tree_description.to_string()
             };
@@ -247,7 +243,7 @@ impl FolderContextMenu {
         })
     }
 
-    /// Recursively builds the "Move to..." reparenting submenu directly from the in-memory SPoT snapshot with zero disk I/O.
+    /// Recursively builds the "Move to..." reparenting submenu directly from the in-memory `SPoT` snapshot with zero disk I/O.
     fn build_reparent_submenu(
         target_folder_id: FolderId,
         snapshot: &FolderHierarchySnapshot,
@@ -315,9 +311,9 @@ impl FolderContextMenu {
                         folder = %LogObscurer::folder(Some(fid), Path::new(&rec.path)),
                         "[FolderContextMenu] Failed to open folder in File Manager"
                     );
-                    StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
+                    StatusBarBridge::error(window, format!("Failed to open File Manager: {e}"));
                 } else {
-                    StatusBarBridge::success(window, format!("Opened folder '{}' in File Manager.", name));
+                    StatusBarBridge::success(window, format!("Opened folder '{name}' in File Manager."));
                 }
             } else if action_id == CTX_FOLDER_REFRESH || action_id == CTX_FOLDER_REFRESH_FILES_FULL {
                 BridgeFolders::refresh_folder_explicit(

@@ -167,7 +167,7 @@ fn ffmpeg_sequence(
         let stream = ictx
             .streams()
             .filter(|s| s.parameters().medium() == ffmpeg_next::media::Type::Video)
-            .max_by_key(|s| s.frames())
+            .max_by_key(ffmpeg_next::Stream::frames)
             .ok_or_else(|| ThumbnailError::Ffmpeg("No video stream found in container".into()))?;
         (
             stream.index(),

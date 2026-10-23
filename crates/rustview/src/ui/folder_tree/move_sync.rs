@@ -1,4 +1,4 @@
-//! UI-side orchestration after a successful folder move: patches the in-memory SPoT snapshot surgically, rebases
+//! UI-side orchestration after a successful folder move: patches the in-memory `SPoT` snapshot surgically, rebases
 //! runtime state that still holds old paths, and refreshes only the affected parts of the folder tree.
 
 use crate::ui::MainWindow;
@@ -47,36 +47,33 @@ impl BridgeFolderMoveSync {
 
         StatusBarBridge::success(window, "Folder moved successfully.");
 
-        match Self::resolve_reselect_target(patch, ctx) {
-            Some((current_id, current_path)) => {
-                tracing::info!(
-                    current_folder_id = current_id,
-                    path = %LogObscurer::path(&current_path),
-                    "[FolderMoveSync: Reselect] Active folder is affected by the move, reloading it"
-                );
-                BridgeFolders::select_folder(
-                    current_id,
-                    current_path,
-                    window,
-                    &ctx.library,
-                    &ctx.thumbnails,
-                    &ctx.settings,
-                    &ctx.state,
-                );
-            }
-            None => {
-                BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
-                BridgeMedia::reload(
-                    window,
-                    &ctx.library,
-                    &ctx.thumbnails,
-                    &ctx.settings,
-                    &ctx.state,
-                    false,
-                    true,
-                );
-                FolderTreeSync::scroll_to_folder(window, patch.moved_folder_id);
-            }
+        if let Some((current_id, current_path)) = Self::resolve_reselect_target(patch, ctx) {
+            tracing::info!(
+                current_folder_id = current_id,
+                path = %LogObscurer::path(&current_path),
+                "[FolderMoveSync: Reselect] Active folder is affected by the move, reloading it"
+            );
+            BridgeFolders::select_folder(
+                current_id,
+                current_path,
+                window,
+                &ctx.library,
+                &ctx.thumbnails,
+                &ctx.settings,
+                &ctx.state,
+            );
+        } else {
+            BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
+            BridgeMedia::reload(
+                window,
+                &ctx.library,
+                &ctx.thumbnails,
+                &ctx.settings,
+                &ctx.state,
+                false,
+                true,
+            );
+            FolderTreeSync::scroll_to_folder(window, patch.moved_folder_id);
         }
 
         StatusBarBridge::update_metrics(window, &ctx.state);

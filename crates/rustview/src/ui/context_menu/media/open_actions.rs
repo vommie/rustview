@@ -9,7 +9,14 @@ use crate::ui::media::BridgeMedia;
 use crate::ui::media::open_with::{MediaOpenWith, OpenWithChoice};
 use crate::ui::open_confirmation::{OpenConfirmation, OpenKind};
 use crate::ui::selection::BridgeFileSelection;
-use crate::ui::state::*;
+use crate::ui::state::{
+    CTX_ACTION_CLEAR_SELECTION, CTX_ACTION_COPY_IMAGE, CTX_ACTION_COPY_NAME, CTX_ACTION_COPY_PATH,
+    CTX_ACTION_COPY_TO_BASE, CTX_ACTION_DELETE_MEDIA, CTX_ACTION_MOVE_TO_BASE, CTX_ACTION_OPEN,
+    CTX_ACTION_OPEN_IN_BG_TAB, CTX_ACTION_OPEN_IN_FILE_MANAGER, CTX_ACTION_OPEN_IN_FULLSCREEN, CTX_ACTION_OPEN_IN_TAB,
+    CTX_ACTION_OPEN_WITH_OTHER, CTX_ACTION_RATE_0, CTX_ACTION_RATE_1, CTX_ACTION_RATE_2, CTX_ACTION_RATE_3,
+    CTX_ACTION_RATE_4, CTX_ACTION_RATE_5, CTX_ACTION_REFRESH_FILES, CTX_ACTION_REFRESH_METADATA,
+    CTX_ACTION_REGENERATE_THUMB_RANDOM, CTX_ACTION_REMOVE_FROM_DB, CTX_ACTION_RENAME, CTX_ACTION_SELECT_ALL,
+};
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tags::{BridgeTags, TagActionContext};
@@ -353,9 +360,9 @@ impl MediaContextMenu {
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
-                    StatusBarBridge::success(window, format!("Opened file '{}' in File Manager.", name));
+                    StatusBarBridge::success(window, format!("Opened file '{name}' in File Manager."));
                 } else {
-                    StatusBarBridge::success(window, format!("Opened {} files in File Manager.", count));
+                    StatusBarBridge::success(window, format!("Opened {count} files in File Manager."));
                 }
             }
             Err(e) => {
@@ -363,7 +370,7 @@ impl MediaContextMenu {
                     error = %e,
                     "[MediaContextMenu] Failed to open file(s) in File Manager"
                 );
-                StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
+                StatusBarBridge::error(window, format!("Failed to open File Manager: {e}"));
             }
         }
     }

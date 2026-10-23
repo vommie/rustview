@@ -74,13 +74,13 @@ impl CtxMenuDispatcher {
         }
     }
 
-    /// Converts a slice of CtxMenuItems into a Slint Model for any depth level with native icon and tooltip support.
+    /// Converts a slice of `CtxMenuItems` into a Slint Model for any depth level with native icon and tooltip support.
     pub fn items_to_slint_model(items: &[CtxMenuItem], depth: i32) -> ModelRc<ContextMenuItemModel> {
         let models: Vec<ContextMenuItemModel> = items.iter().map(|item| Self::to_slint_item(item, depth)).collect();
         ModelRc::new(VecModel::from(models))
     }
 
-    /// Converts a CtxMenu into top-level items and first-level submenu items for backward compatibility.
+    /// Converts a `CtxMenu` into top-level items and first-level submenu items for backward compatibility.
     pub fn to_slint_models(menu: &CtxMenu) -> (ModelRc<ContextMenuItemModel>, ModelRc<ContextMenuItemModel>) {
         let top_model = Self::items_to_slint_model(&menu.items, 0);
 

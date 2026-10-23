@@ -19,7 +19,7 @@ pub enum KeyClass<'a> {
     Text(&'a str),
     Backspace,
     Escape,
-    /// A modifier key on its own (Shift, Ctrl, Alt, AltGr, Meta, Caps Lock): typing a capital letter presses Shift first, which
+    /// A modifier key on its own (Shift, Ctrl, Alt, `AltGr`, Meta, Caps Lock): typing a capital letter presses Shift first, which
     /// must neither end nor extend the search.
     Modifier,
     /// Anything else (arrows, Enter, Tab, F-keys, shortcuts with Ctrl/Alt/Meta, ...): the search is over.

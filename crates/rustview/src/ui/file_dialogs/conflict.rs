@@ -160,7 +160,7 @@ impl FileOpsConflictDialogController {
             let ctrl_skip = self.clone();
             let win_main_skip = window.clone_strong();
             win.on_skip_clicked(move || {
-                let apply_all = win_dlg_skip.upgrade().map(|w| w.get_apply_to_all()).unwrap_or(false);
+                let apply_all = win_dlg_skip.upgrade().is_some_and(|w| w.get_apply_to_all());
                 tracing::info!(
                     apply_to_all = apply_all,
                     "[ConflictDialog: UserAction] User clicked SKIP"
@@ -177,7 +177,7 @@ impl FileOpsConflictDialogController {
             let ctrl_ren = self.clone();
             let win_main_ren = window.clone_strong();
             win.on_auto_rename_clicked(move || {
-                let apply_all = win_dlg_ren.upgrade().map(|w| w.get_apply_to_all()).unwrap_or(false);
+                let apply_all = win_dlg_ren.upgrade().is_some_and(|w| w.get_apply_to_all());
                 tracing::info!(
                     apply_to_all = apply_all,
                     "[ConflictDialog: UserAction] User clicked AUTO-RENAME"
@@ -194,7 +194,7 @@ impl FileOpsConflictDialogController {
             let ctrl_over = self.clone();
             let win_main_over = window.clone_strong();
             win.on_overwrite_clicked(move || {
-                let apply_all = win_dlg_over.upgrade().map(|w| w.get_apply_to_all()).unwrap_or(false);
+                let apply_all = win_dlg_over.upgrade().is_some_and(|w| w.get_apply_to_all());
                 tracing::info!(
                     apply_to_all = apply_all,
                     "[ConflictDialog: UserAction] User clicked OVERWRITE"
@@ -275,8 +275,7 @@ impl FileOpsConflictDialogController {
                 if !set_slot
                     .borrow()
                     .as_ref()
-                    .map(|s| s.get().appearance.enable_hover_previews)
-                    .unwrap_or(true)
+                    .is_none_or(|s| s.get().appearance.enable_hover_previews)
                 {
                     return;
                 }
@@ -378,8 +377,7 @@ impl FileOpsConflictDialogController {
                 if !set_slot_dst
                     .borrow()
                     .as_ref()
-                    .map(|s| s.get().appearance.enable_hover_previews)
-                    .unwrap_or(true)
+                    .is_none_or(|s| s.get().appearance.enable_hover_previews)
                 {
                     return;
                 }
@@ -507,7 +505,7 @@ fn load_conflict_thumbnail(
         match thumbnails.get_or_load_sync(id, path, config.clone()) {
             Ok(cached) => return slint::Image::from_rgb8(cached.pixels),
             Err(e) => {
-                tracing::warn!(media_id = id, error = %e, "[ConflictDialog: Thumbnail] Stored/generated thumbnail unavailable, using transient fallback")
+                tracing::warn!(media_id = id, error = %e, "[ConflictDialog: Thumbnail] Stored/generated thumbnail unavailable, using transient fallback");
             }
         }
     }

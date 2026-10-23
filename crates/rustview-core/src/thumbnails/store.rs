@@ -44,7 +44,7 @@ impl PackStore {
             }
         }
 
-        let pack_path = base_dir.join(format!("pack-{:06}.bin", latest_id));
+        let pack_path = base_dir.join(format!("pack-{latest_id:06}.bin"));
         let mut file = OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -68,7 +68,7 @@ impl PackStore {
     }
 
     fn pack_path(&self, pack_id: u32) -> PathBuf {
-        self.base_dir.join(format!("pack-{:06}.bin", pack_id))
+        self.base_dir.join(format!("pack-{pack_id:06}.bin"))
     }
 
     fn get_or_open_reader(&self, pack_id: u32) -> Result<Arc<File>, ThumbnailError> {
@@ -91,7 +91,7 @@ impl PackStore {
 
         let mut writer = self.writer.lock();
 
-        if writer.current_size + (len as u64) > PACK_MAX_SIZE {
+        if writer.current_size + u64::from(len) > PACK_MAX_SIZE {
             writer.pack_id += 1;
             let new_path = self.pack_path(writer.pack_id);
             writer.file = OpenOptions::new()
@@ -106,7 +106,7 @@ impl PackStore {
 
         let offset = writer.current_size;
         writer.file.write_all(compressed_bytes)?;
-        writer.current_size += len as u64;
+        writer.current_size += u64::from(len);
 
         let location = ThumbnailLocation {
             pack_id: writer.pack_id,
@@ -122,7 +122,7 @@ impl PackStore {
         let reader = self.get_or_open_reader(location.pack_id)?;
 
         let file_len = reader.metadata()?.len();
-        let required_end = location.offset + (location.length as u64);
+        let required_end = location.offset + u64::from(location.length);
 
         if required_end > file_len {
             return Err(ThumbnailError::PackOutOfBounds {

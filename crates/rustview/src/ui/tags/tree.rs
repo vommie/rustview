@@ -2,7 +2,7 @@
 
 use super::TagSelectionStats;
 use super::{TAG_ITEM_HEIGHT, TAG_PADDING_V, TAG_ROW_SPACING};
-use crate::ui::state::*;
+use crate::ui::state::UiState;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::{MainWindow, TagColumnView, TagNodeView};
 use parking_lot::RwLock;
@@ -199,7 +199,7 @@ impl TagTreeSync {
         let has_selection = stats.selected_files_count > 0;
 
         window.set_tag_is_assign_mode(is_assign);
-        window.set_tag_match_mode_idx(if match_mode == MatchMode::All { 0 } else { 1 });
+        window.set_tag_match_mode_idx(i32::from(match_mode != MatchMode::All));
         window.set_tag_scope_mode_idx(scope_mode.to_index());
         window.set_has_file_selection(if is_assign { has_selection } else { true });
         window.set_has_active_query(!is_tab_mode && is_resettable);
@@ -217,7 +217,7 @@ impl TagTreeSync {
 
             if has_selection && stats.ratings_in_selection.len() == 1 {
                 let single_r = *stats.ratings_in_selection.iter().next().unwrap();
-                window.set_selected_rating(single_r as i32);
+                window.set_selected_rating(i32::from(single_r));
             } else if !has_selection {
                 window.set_selected_rating(0);
             } else {
@@ -225,7 +225,7 @@ impl TagTreeSync {
             }
         } else {
             window.set_partial_ratings(ModelRc::new(VecModel::from(vec![false; 6])));
-            window.set_selected_rating(query_rating as i32);
+            window.set_selected_rating(i32::from(query_rating));
         }
 
         if col_count > 0 {

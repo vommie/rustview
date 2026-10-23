@@ -443,10 +443,10 @@ fn clear_menu(window: &MultiviewBarWindow, shared: &Shared) {
 
 fn xrectangle(rect: Rect) -> XRectangle {
     XRectangle {
-        x: rect.x.clamp(0, i16::MAX as i32) as i16,
-        y: rect.y.clamp(0, i16::MAX as i32) as i16,
-        width: rect.w.clamp(1, u16::MAX as i32) as u16,
-        height: rect.h.clamp(1, u16::MAX as i32) as u16,
+        x: rect.x.clamp(0, i32::from(i16::MAX)) as i16,
+        y: rect.y.clamp(0, i32::from(i16::MAX)) as i16,
+        width: rect.w.clamp(1, i32::from(u16::MAX)) as u16,
+        height: rect.h.clamp(1, i32::from(u16::MAX)) as u16,
     }
 }
 

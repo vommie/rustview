@@ -35,7 +35,7 @@ impl RenameFolderDialogController {
             .get_folder(folder_id)
             .ok()
             .flatten()
-            .and_then(|f| PathBuf::from(&f.path).parent().map(|p| p.to_path_buf()));
+            .and_then(|f| PathBuf::from(&f.path).parent().map(std::path::Path::to_path_buf));
 
         if let Some(ref win) = *self.dialog.borrow() {
             self.bind_dialog_events(win, window, folder_id, parent_path_opt, ctx);
@@ -61,7 +61,7 @@ impl RenameFolderDialogController {
                 let is_active = self.update_in_memory_state(folder_id, &updated.path, &ctx.state);
 
                 self.close(window);
-                StatusBarBridge::success(window, format!("Renamed folder to '{}'", new_name));
+                StatusBarBridge::success(window, format!("Renamed folder to '{new_name}'"));
 
                 BridgeFolders::reload_tree(window, &ctx.library, &ctx.settings, &ctx.state);
                 if is_active {
@@ -130,7 +130,7 @@ impl RenameFolderDialogController {
                         w.set_has_conflict(true);
                         w.set_suggested_name(suggestion.into());
                         w.set_conflict_message(
-                            format!("Folder '{}' already exists in parent directory.", folder_name).into(),
+                            format!("Folder '{folder_name}' already exists in parent directory.").into(),
                         );
                         w.set_error_message("".into());
                     }

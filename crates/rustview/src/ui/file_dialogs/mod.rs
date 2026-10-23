@@ -111,7 +111,7 @@ impl FileRenameDialogController {
         win.set_conflict_message("".into());
         win.set_error_message("".into());
 
-        let folder_path = full_path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        let folder_path = full_path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
 
         // 1. Real-time conflict inspection as user edits new name
         let win_weak_edit = win.as_weak();
@@ -318,7 +318,7 @@ impl FileRenameDialogController {
                         ),
                     );
                 } else {
-                    StatusBarBridge::success(window, format!("Renamed file to '{}'", new_name));
+                    StatusBarBridge::success(window, format!("Renamed file to '{new_name}'"));
                 }
                 BridgeInspector::update(window, &ctx.state);
                 BridgeViewerTabs::sync_ui(window, &ctx.tab_manager, &ctx.library, &ctx.settings, &ctx.state);
@@ -345,7 +345,7 @@ impl FileRenameDialogController {
                     error = %e,
                     "[FileRenameController: Error] Failed to rename file"
                 );
-                StatusBarBridge::error(window, format!("Failed to rename file: {}", e));
+                StatusBarBridge::error(window, format!("Failed to rename file: {e}"));
             }
         }
     }

@@ -54,7 +54,7 @@ impl BrowseFolders {
             state.clone(),
         );
         window.on_folder_row_clicked(move |id, ctrl, shift| {
-            Self::handle_click(id, ctrl, shift, &win, &lib, &thumb, &set, &st)
+            Self::handle_click(id, ctrl, shift, &win, &lib, &thumb, &set, &st);
         });
 
         // The date reader thread says that dates arrived: the tiles that show folders fill them in.

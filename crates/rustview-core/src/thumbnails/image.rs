@@ -70,7 +70,7 @@ impl ImageDecoder for SimdImageThumbnailer {
             Ok(Some(grid)) => return Self::resize_rgb(grid.rgb, grid.width, grid.height, max_bound, scaling_algo),
             Ok(None) => {}
             Err(e) => {
-                tracing::warn!(error = %e, "[ImageThumbnailer] Tile grid could not be composed; falling back to the first stream")
+                tracing::warn!(error = %e, "[ImageThumbnailer] Tile grid could not be composed; falling back to the first stream");
             }
         }
 

@@ -27,10 +27,10 @@ thread_local! {
 
 /// Computes the subtle original folder name suffix, e.g. "(pics/)"
 fn compute_original_folder_suffix(path: &Path) -> String {
-    let name = path
-        .file_name()
-        .map(|f| f.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.to_string_lossy().to_string());
+    let name = path.file_name().map_or_else(
+        || path.to_string_lossy().to_string(),
+        |f| f.to_string_lossy().to_string(),
+    );
     format!("({}/)", name.trim_end_matches(['/', '\\']))
 }
 
@@ -38,7 +38,7 @@ fn compute_original_folder_suffix(path: &Path) -> String {
 pub struct BridgeFavorites;
 
 impl BridgeFavorites {
-    /// Initializes and sets the permanent VecModel handle for the Favorites list.
+    /// Initializes and sets the permanent `VecModel` handle for the Favorites list.
     pub fn init(window: &MainWindow, favorites: &RwLock<FavoriteManager>) {
         let t0 = Instant::now();
         let fav_entries = favorites.read().entries().to_vec();
@@ -70,7 +70,7 @@ impl BridgeFavorites {
         );
     }
 
-    /// Full synchronized reload fallback (rebuilds the surgical VecModel if invalidated).
+    /// Full synchronized reload fallback (rebuilds the surgical `VecModel` if invalidated).
     pub fn reload(window: &MainWindow, favorites: &RwLock<FavoriteManager>) {
         Self::init(window, favorites);
     }
@@ -208,7 +208,7 @@ impl BridgeFavorites {
                 for idx in 0..count {
                     if let Some(mut row) = model.row_data(idx) {
                         let row_p = normalize_path(Path::new(row.path.as_str()));
-                        let should_select = normalized_opt.as_ref().map(|p| *p == row_p).unwrap_or(false);
+                        let should_select = normalized_opt.as_ref().is_some_and(|p| *p == row_p);
                         if row.is_selected != should_select {
                             row.is_selected = should_select;
                             model.set_row_data(idx, row);
@@ -283,7 +283,7 @@ impl BridgeFavorites {
                         folder = %LogObscurer::path(&normalized_target),
                         "[BridgeFavorites: Click] Failed to register favorite folder in database"
                     );
-                    StatusBarBridge::error(window, format!("Failed to open folder: {}", e));
+                    StatusBarBridge::error(window, format!("Failed to open folder: {e}"));
                     return;
                 }
             },

@@ -56,7 +56,7 @@ impl TagHistoryManager {
                     tree_repr.push_str(name);
                 } else {
                     let indent = "   ".repeat(idx.saturating_sub(1));
-                    tree_repr.push_str(&format!("\n{}`-- {}", indent, name));
+                    tree_repr.push_str(&format!("\n{indent}`-- {name}"));
                 }
             }
 

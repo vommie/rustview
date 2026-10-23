@@ -1,5 +1,5 @@
 //! How a picture has to be turned for display. Phones store a rotation next to the pixels: videos in the display matrix of
-//! the stream (older files in a `rotate` tag), HEIF and AVIF images in the `irot` property, which FFmpeg also exposes as a
+//! the stream (older files in a `rotate` tag), HEIF and AVIF images in the `irot` property, which `FFmpeg` also exposes as a
 //! display matrix. Mirroring is not handled (it is rare and never produced by a camera that was not mirrored on purpose).
 
 use ffmpeg_next::DictionaryRef;
@@ -21,7 +21,7 @@ pub fn clockwise_degrees_of_matrix(data: &[u8]) -> Option<i32> {
     clockwise_quarter_turn(counter_clockwise)
 }
 
-/// FFmpeg reports the angle counter-clockwise; the display needs it clockwise.
+/// `FFmpeg` reports the angle counter-clockwise; the display needs it clockwise.
 fn clockwise_quarter_turn(counter_clockwise_degrees: f64) -> Option<i32> {
     if !counter_clockwise_degrees.is_finite() {
         return None;

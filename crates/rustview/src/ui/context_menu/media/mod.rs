@@ -13,7 +13,14 @@ use crate::ui::multiview::MultiviewHandle;
 use crate::ui::multiview::{OpenSummary, eligibility as multiview_eligibility};
 use crate::ui::selection::BridgeFileSelection;
 use crate::ui::selection::model::FileSelectionModel;
-use crate::ui::state::*;
+use crate::ui::state::{
+    CTX_ACTION_CLEAR_SELECTION, CTX_ACTION_COPY_IMAGE, CTX_ACTION_COPY_NAME, CTX_ACTION_COPY_PATH,
+    CTX_ACTION_COPY_TO_BASE, CTX_ACTION_DELETE_MEDIA, CTX_ACTION_MOVE_TO_BASE, CTX_ACTION_OPEN,
+    CTX_ACTION_OPEN_IN_BG_TAB, CTX_ACTION_OPEN_IN_FILE_MANAGER, CTX_ACTION_OPEN_IN_FULLSCREEN, CTX_ACTION_OPEN_IN_TAB,
+    CTX_ACTION_OPEN_WITH_OTHER, CTX_ACTION_RATE_0, CTX_ACTION_RATE_1, CTX_ACTION_RATE_2, CTX_ACTION_RATE_3,
+    CTX_ACTION_RATE_4, CTX_ACTION_RATE_5, CTX_ACTION_REFRESH_FILES, CTX_ACTION_REFRESH_METADATA,
+    CTX_ACTION_REGENERATE_THUMB_RANDOM, CTX_ACTION_REMOVE_FROM_DB, CTX_ACTION_RENAME, CTX_ACTION_SELECT_ALL, UiState,
+};
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
 use crate::ui::thumbnail_regeneration::eligibility::RegenerationEligibility;
@@ -114,8 +121,7 @@ impl MediaContextMenu {
                     st.all_folder_media
                         .iter()
                         .find(|m| m.record.id == id)
-                        .map(|m| m.record.is_deleted)
-                        .unwrap_or(false)
+                        .is_some_and(|m| m.record.is_deleted)
                 });
 
             let (is_single_img, is_pending, fname, f_id) = if let Some(item) = st.all_folder_media.find(single_id) {
@@ -149,8 +155,7 @@ impl MediaContextMenu {
         let target_file_exists = if is_single {
             target_path_opt
                 .as_ref()
-                .map(|p| p.is_file() && p.metadata().map(|m| m.len() > 0).unwrap_or(false))
-                .unwrap_or(false)
+                .is_some_and(|p| p.is_file() && p.metadata().is_ok_and(|m| m.len() > 0))
         } else {
             !all_selected_deleted
         };
@@ -306,7 +311,7 @@ impl MediaContextMenu {
         builder
     }
 
-    /// Builds the complete media context menu using SPoT in-memory hierarchy projections for "Copy to..." and "Move to..." submenus.
+    /// Builds the complete media context menu using `SPoT` in-memory hierarchy projections for "Copy to..." and "Move to..." submenus.
     pub fn build_menu(
         meta: &MediaSelectionMeta,
         is_busy: bool,

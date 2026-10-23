@@ -136,7 +136,7 @@ impl ViewerTabManager {
         }
     }
 
-    /// Sets view-active and interactivity state across all video tabs (used when entering/leaving TabGrid mode).
+    /// Sets view-active and interactivity state across all video tabs (used when entering/leaving `TabGrid` mode).
     pub fn set_all_videos_view_active(&self, active: bool) {
         let tabs = self.tabs.read();
         for tab in tabs.all() {
@@ -148,7 +148,7 @@ impl ViewerTabManager {
     // Dynamic XShape Overlay Clipping (Menu & Tooltip Layer Hierarchy)
     // =========================================================================
 
-    /// Updates active context menu cutouts with deduplication to eliminate redundant XShape calls.
+    /// Updates active context menu cutouts with deduplication to eliminate redundant `XShape` calls.
     pub fn set_menu_cutouts(&self, cutouts: Vec<XRectangle>) {
         {
             let current = self.active_menu_cutouts.read();
@@ -207,10 +207,10 @@ impl ViewerTabManager {
     /// Re-applies all active cutouts to a specific subwindow (e.g. during scroll or resize).
     pub fn reapply_active_cutouts_to_subwindow(&self, sub: &mut X11VideoSubwindow) {
         let combined = self.get_combined_cutouts();
-        if !combined.is_empty() {
-            sub.clip_cutout_rectangles(&combined);
-        } else {
+        if combined.is_empty() {
             sub.reset_clip_shape();
+        } else {
+            sub.clip_cutout_rectangles(&combined);
         }
     }
 
@@ -644,12 +644,11 @@ impl ViewerTabManager {
     /// Shows `media_id` in the one tile of the active tab (previous/next of the tab toolbar). The tab keeps its title. Fails for a
     /// tab of several media.
     pub fn navigate_active_tab_to_media(&self, media_id: MediaId) -> Result<TabId, ViewerError> {
-        let active_id = match *self.active_tab_id.read() {
-            Some(id) => id,
-            None => {
-                let (id, _) = self.open_or_focus_media(media_id, false)?;
-                return Ok(id);
-            }
+        let active_id = if let Some(id) = *self.active_tab_id.read() {
+            id
+        } else {
+            let (id, _) = self.open_or_focus_media(media_id, false)?;
+            return Ok(id);
         };
         let instance: SharedInstance = self
             .tabs

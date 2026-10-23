@@ -1,6 +1,6 @@
 use rustview_core::settings::{MAX_TAB_GRID_COLUMNS, MIN_TAB_GRID_COLUMNS};
 
-/// Responsive width breakpoints for automatic column determination in the TabGrid Masonry view.
+/// Responsive width breakpoints for automatic column determination in the `TabGrid` Masonry view.
 pub struct ResponsiveBreakpoints;
 
 impl ResponsiveBreakpoints {

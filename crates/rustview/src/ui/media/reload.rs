@@ -229,13 +229,7 @@ impl BridgeMedia {
         };
         let has_root = app_settings.general.root_folder.is_some();
         // The root is only probed when the folder holds nothing at all; any record proves that the root was there.
-        let root_exists = total_in_dataset > 0
-            || app_settings
-                .general
-                .root_folder
-                .as_ref()
-                .map(|p| p.is_dir())
-                .unwrap_or(false);
+        let root_exists = total_in_dataset > 0 || app_settings.general.root_folder.as_ref().is_some_and(|p| p.is_dir());
         let current_folder_name = path_opt.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str());
 
         let fallback_state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {

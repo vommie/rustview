@@ -1,6 +1,6 @@
 //! Surgical synchronization of the folder tree Slint model.
 //!
-//! Instead of replacing the whole model on every update, the rows projected from the SPoT snapshot are reconciled
+//! Instead of replacing the whole model on every update, the rows projected from the `SPoT` snapshot are reconciled
 //! against the existing `VecModel` using keyed row operations (remove / move / insert / update in place).
 //! If the model is not a `VecModel` or the result does not match the desired rows, the model is replaced as a
 //! safety net so the view can never end up inconsistent.
@@ -32,7 +32,7 @@ pub struct RowSyncStats {
 pub struct FolderTreeSync;
 
 impl FolderTreeSync {
-    /// Projects the tree rows from the in-memory SPoT snapshot (zero filesystem I/O) and syncs them into the window.
+    /// Projects the tree rows from the in-memory `SPoT` snapshot (zero filesystem I/O) and syncs them into the window.
     pub fn refresh(window: &MainWindow, library: &Library, settings: &SettingsManager, state: &RwLock<UiState>) {
         let t0 = Instant::now();
         let app_settings = settings.get();

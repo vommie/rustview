@@ -56,10 +56,7 @@ impl SettingsDialogController {
 
     /// Checks if the settings window is currently open and mapped.
     pub fn is_open(&self) -> bool {
-        self.settings_window
-            .as_ref()
-            .map(|w| w.window().is_visible())
-            .unwrap_or(false)
+        self.settings_window.as_ref().is_some_and(|w| w.window().is_visible())
     }
 
     /// Programmatically closes and hides the settings window, releasing the main window modal lock.
@@ -170,34 +167,26 @@ impl SettingsDialogController {
         window.set_memory_budget_max_mb((system.usable_total_bytes() / BYTES_PER_MB).max(1024) as i32);
         Self::show_memory_plan(window, system);
         window.set_thumb_db_size(settings.performance.thumbnail_db_size as i32);
-        window.set_thumb_format_idx(if settings.performance.thumbnail_format.eq_ignore_ascii_case("jpeg") {
-            1
-        } else {
-            0
-        });
-        window.set_thumb_quality(settings.performance.thumbnail_quality as i32);
+        window.set_thumb_format_idx(i32::from(
+            settings.performance.thumbnail_format.eq_ignore_ascii_case("jpeg"),
+        ));
+        window.set_thumb_quality(i32::from(settings.performance.thumbnail_quality));
         window.set_scaling_algo_idx(match settings.performance.scaling_algorithm.to_lowercase().as_str() {
             "bilinear" | "triangle" => 1,
             "lanczos" | "lanczos3" => 2,
             "nearest" => 3,
             _ => 0, // CatmullRom
         });
-        window.set_video_engine_idx(if settings.performance.video_engine.eq_ignore_ascii_case("mpv") {
-            1
-        } else {
-            0
-        });
-        window.set_video_offset_percent(settings.performance.video_offset_percent as i32);
+        window.set_video_engine_idx(i32::from(settings.performance.video_engine.eq_ignore_ascii_case("mpv")));
+        window.set_video_offset_percent(i32::from(settings.performance.video_offset_percent));
         window.set_short_video_threshold_secs(settings.performance.short_video_threshold_secs as i32);
         window.set_generate_video_previews(settings.performance.generate_video_previews);
         window.set_preview_frame_count(settings.performance.preview_frame_count as i32);
         window.set_custom_preview_settings(settings.performance.custom_preview_settings);
-        window.set_preview_format_idx(if settings.performance.preview_format.eq_ignore_ascii_case("jpeg") {
-            1
-        } else {
-            0
-        });
-        window.set_preview_quality(settings.performance.preview_quality as i32);
+        window.set_preview_format_idx(i32::from(
+            settings.performance.preview_format.eq_ignore_ascii_case("jpeg"),
+        ));
+        window.set_preview_quality(i32::from(settings.performance.preview_quality));
 
         // Formats properties
         self.formats_page.populate(window, settings.formats.format_mask());
@@ -243,11 +232,7 @@ impl SettingsDialogController {
 
         window.set_fullscreen_enable_specific(settings.fullscreen.enable_specific_monitor);
         window.set_fullscreen_enable_fallback(settings.fullscreen.enable_fallback_rule);
-        let fallback_idx = if settings.fullscreen.fallback_target.eq_ignore_ascii_case("different") {
-            1
-        } else {
-            0
-        };
+        let fallback_idx = i32::from(settings.fullscreen.fallback_target.eq_ignore_ascii_case("different"));
         window.set_fullscreen_fallback_target_idx(fallback_idx);
         Self::populate_fullscreen_extras(window, &settings.fullscreen);
 

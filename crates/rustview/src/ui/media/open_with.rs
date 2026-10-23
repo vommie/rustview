@@ -130,7 +130,7 @@ impl MediaOpenWith {
 
         if let Err(e) = DesktopIntegration::open_with_dialog(first_path) {
             tracing::error!(error = %e, "[OpenWith] Failed to open native app chooser");
-            StatusBarBridge::error(window, format!("Failed to open application chooser: {}", e));
+            StatusBarBridge::error(window, format!("Failed to open application chooser: {e}"));
         } else {
             StatusBarBridge::info(window, "Opened native application chooser dialog.");
         }

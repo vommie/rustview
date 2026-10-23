@@ -195,7 +195,7 @@ impl ThumbnailManager {
         self.scheduler.regenerate_sync(media_id, file_path, config)
     }
 
-    /// Explicitly regenerates thumbnail & previews with an overridden video offset percentage, overwriting PackStore and LMDB index.
+    /// Explicitly regenerates thumbnail & previews with an overridden video offset percentage, overwriting `PackStore` and LMDB index.
     pub fn regenerate_with_offset_sync(
         &self,
         media_id: MediaId,

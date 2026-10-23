@@ -49,11 +49,11 @@ pub struct MigrationStats {
 
 impl MigrationStats {
     pub fn new(source_path: &str, skip_missing_enabled: bool, root_filter: Option<&str>) -> Self {
-        let size = std::fs::metadata(source_path).map(|m| m.len()).unwrap_or(0);
+        let size = std::fs::metadata(source_path).map_or(0, |m| m.len());
         Self {
             source_path: source_path.to_string(),
             source_size_bytes: size,
-            root_filter_path: root_filter.map(|s| s.to_string()),
+            root_filter_path: root_filter.map(std::string::ToString::to_string),
             skip_missing_enabled,
             hashes_table_found: false,
             ..Default::default()

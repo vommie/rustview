@@ -55,12 +55,11 @@ impl ImageCache {
     }
 
     fn zoomed_image_for(&mut self, tile: &TileView) -> slint::Image {
-        match tile.zoom.as_ref().map(|z| &z.content) {
-            Some(ZoomContentView::Rendered { pixels, .. }) => cached_image(&mut self.zoomed, tile.key, pixels),
-            _ => {
-                self.zoomed.remove(&tile.key);
-                slint::Image::default()
-            }
+        if let Some(ZoomContentView::Rendered { pixels, .. }) = tile.zoom.as_ref().map(|z| &z.content) {
+            cached_image(&mut self.zoomed, tile.key, pixels)
+        } else {
+            self.zoomed.remove(&tile.key);
+            slint::Image::default()
         }
     }
 
@@ -81,10 +80,8 @@ impl ImageCache {
 fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTileView {
     let kind = if tile.error.is_some() {
         2
-    } else if tile.kind == TileKind::Video {
-        1
     } else {
-        0
+        i32::from(tile.kind == TileKind::Video)
     };
     let Rect { x, y, w, h } = tile.rect;
     let image = images.image_for(tile);

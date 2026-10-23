@@ -3,7 +3,7 @@
 use super::{BridgeTags, TagActionContext, TagTreeSync};
 use crate::ui::MainWindow;
 use crate::ui::media::BridgeMedia;
-use crate::ui::state::*;
+use crate::ui::state::UiState;
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use rustview_core::library::Library;

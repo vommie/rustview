@@ -12,7 +12,7 @@ use crate::library::Library;
 use std::path::Path;
 use std::sync::Arc;
 
-/// Standalone CLI API runner executing commands against RustView's LMDB storage without initializing any GUI.
+/// Standalone CLI API runner executing commands against `RustView`'s LMDB storage without initializing any GUI.
 pub fn run_cli_api(command: ApiSubcommand, data_dir: &Path) -> Result<i32, ApiError> {
     let cmd = command.into_command()?;
 

@@ -189,8 +189,7 @@ impl BridgeFileSelection {
                 .resolve_media_path(media_id)
                 .ok()
                 .and_then(|p| std::fs::metadata(&p).ok())
-                .map(|m| m.is_file() && m.len() > 0)
-                .unwrap_or(false);
+                .is_some_and(|m| m.is_file() && m.len() > 0);
 
             if !file_exists_and_ready {
                 tracing::info!(
@@ -200,10 +199,7 @@ impl BridgeFileSelection {
                 );
                 StatusBarBridge::info(
                     window,
-                    format!(
-                        "'{}' is currently in the external render queue and not yet ready on disk.",
-                        filename
-                    ),
+                    format!("'{filename}' is currently in the external render queue and not yet ready on disk."),
                 );
                 return;
             }
@@ -271,8 +267,7 @@ impl BridgeFileSelection {
                 .resolve_media_path(media_id)
                 .ok()
                 .and_then(|p| std::fs::metadata(&p).ok())
-                .map(|m| m.is_file() && m.len() > 0)
-                .unwrap_or(false);
+                .is_some_and(|m| m.is_file() && m.len() > 0);
 
             if !file_exists_and_ready {
                 tracing::info!(
@@ -282,10 +277,7 @@ impl BridgeFileSelection {
                 );
                 StatusBarBridge::info(
                     window,
-                    format!(
-                        "'{}' is currently in the external render queue and not yet ready on disk.",
-                        filename
-                    ),
+                    format!("'{filename}' is currently in the external render queue and not yet ready on disk."),
                 );
                 return;
             }
@@ -349,8 +341,7 @@ impl BridgeFileSelection {
                         .get(media_id)
                         .ok()
                         .flatten()
-                        .map(|m| m.is_corrupted)
-                        .unwrap_or(false);
+                        .is_some_and(|m| m.is_corrupted);
                     (name, p, corrupt)
                 }
                 Err(e) => {
@@ -359,7 +350,7 @@ impl BridgeFileSelection {
                         error = %e,
                         "Failed to resolve media path from database"
                     );
-                    StatusBarBridge::error(window, format!("Media record not found in database: #{}", media_id));
+                    StatusBarBridge::error(window, format!("Media record not found in database: #{media_id}"));
                     return;
                 }
             },
@@ -403,15 +394,12 @@ impl BridgeFileSelection {
                 error = %e,
                 "Failed to launch system default application for media file"
             );
-            StatusBarBridge::error(window, format!("Failed to open file: {}", e));
+            StatusBarBridge::error(window, format!("Failed to open file: {e}"));
         } else {
             let status_msg = if is_corrupted {
-                format!(
-                    "Opened file '{}' (Flagged: Corrupted) with system application.",
-                    filename
-                )
+                format!("Opened file '{filename}' (Flagged: Corrupted) with system application.")
             } else {
-                format!("Opened '{}' with system default application.", filename)
+                format!("Opened '{filename}' with system default application.")
             };
             StatusBarBridge::success(window, status_msg);
         }

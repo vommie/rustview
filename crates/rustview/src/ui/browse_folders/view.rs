@@ -32,14 +32,12 @@ pub struct FolderFlags {
 
 impl FolderFlags {
     pub fn of(node: &CachedFolderNode, snapshot: Option<&FolderHierarchySnapshot>) -> Self {
-        let missing_children = snapshot
-            .map(|s| {
-                node.children
-                    .iter()
-                    .filter(|id| s.get_node(**id).is_some_and(|c| c.is_deleted))
-                    .count()
-            })
-            .unwrap_or(0);
+        let missing_children = snapshot.map_or(0, |s| {
+            node.children
+                .iter()
+                .filter(|id| s.get_node(**id).is_some_and(|c| c.is_deleted))
+                .count()
+        });
         Self {
             missing: node.is_deleted,
             hidden: node.is_hidden,

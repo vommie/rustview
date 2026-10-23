@@ -1,4 +1,4 @@
-//! Builds the in-memory Single Point of Truth (SPoT) folder hierarchy snapshot from LMDB.
+//! Builds the in-memory Single Point of Truth (`SPoT`) folder hierarchy snapshot from LMDB.
 //!
 //! Design rules:
 //! - The snapshot is scoped to the configured root directory (`LibraryDatabase::tree_root`).
@@ -245,7 +245,7 @@ pub(crate) fn scope_prefix(root: &str) -> String {
     if root.ends_with('/') {
         root.to_string()
     } else {
-        format!("{}/", root)
+        format!("{root}/")
     }
 }
 
@@ -265,9 +265,7 @@ fn link_children(nodes: &NodeMap, root_id: FolderId, stats: &mut SnapshotBuildSt
             _ => {
                 stats.orphan_nodes += 1;
                 if stats.orphan_samples.len() < MAX_LOGGED_SAMPLES {
-                    stats
-                        .orphan_samples
-                        .push((id, LogObscurer::path(&node.path).to_string()));
+                    stats.orphan_samples.push((id, LogObscurer::path(&node.path).clone()));
                 }
             }
         }

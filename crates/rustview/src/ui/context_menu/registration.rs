@@ -7,7 +7,7 @@ use crate::ui::browse_folders::{BrowseFolders, FolderRowRef};
 use crate::ui::context_menu::browse::{BrowseContextMenus, BrowseMenuContext};
 pub use crate::ui::context_menu::presenter::CtxMenuPresenter;
 use crate::ui::favorites::manager::FavoriteManager;
-use crate::ui::state::*;
+use crate::ui::state::{LastActivePanel, UiState};
 use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use rustview_core::library::Library;

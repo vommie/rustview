@@ -8,7 +8,7 @@ pub fn menu_label(videos: usize) -> String {
     if videos <= 1 {
         "Thumbnail (Random Pos.)".to_string()
     } else {
-        format!("Thumbnails (Random Pos.) ({} Videos)", videos)
+        format!("Thumbnails (Random Pos.) ({videos} Videos)")
     }
 }
 
@@ -34,8 +34,8 @@ pub fn hint(e: &RegenerationEligibility) -> String {
     };
     match e.skipped() {
         0 => base,
-        1 => format!("{} (1 other selected file is skipped)", base),
-        n => format!("{} ({} other selected files are skipped)", base, n),
+        1 => format!("{base} (1 other selected file is skipped)"),
+        n => format!("{base} ({n} other selected files are skipped)"),
     }
 }
 
@@ -56,10 +56,7 @@ pub fn start_message(total: usize) -> String {
     if total == 1 {
         "Regenerating thumbnail at a random video position...".to_string()
     } else {
-        format!(
-            "Regenerating thumbnails at random video positions for {} videos...",
-            total
-        )
+        format!("Regenerating thumbnails at random video positions for {total} videos...")
     }
 }
 
@@ -83,20 +80,16 @@ impl RegenerationSummary {
 
 /// Final status bar message; the caller picks the level (`failed() == 0` success, `succeeded == 0` error, else warning).
 pub fn result_message(s: &RegenerationSummary) -> String {
-    let failure_hint = s
-        .first_failure
-        .as_ref()
-        .map(|(name, reason)| format!("'{}': {}", name, reason))
-        .unwrap_or_else(|| "unexpected error".to_string());
+    let failure_hint = s.first_failure.as_ref().map_or_else(
+        || "unexpected error".to_string(),
+        |(name, reason)| format!("'{name}': {reason}"),
+    );
 
     if s.failed() == 0 {
         return success_message(s);
     }
     if s.succeeded == 0 && s.total == 1 {
-        return format!(
-            "Could not regenerate thumbnail for {}. The previous thumbnail was kept.",
-            failure_hint
-        );
+        return format!("Could not regenerate thumbnail for {failure_hint}. The previous thumbnail was kept.");
     }
     if s.succeeded == 0 {
         return format!(

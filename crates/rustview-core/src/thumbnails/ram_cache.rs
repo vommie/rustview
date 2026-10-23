@@ -10,7 +10,7 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
-/// Media ids are dense counters; a multiplicative hash is enough and much cheaper than SipHash.
+/// Media ids are dense counters; a multiplicative hash is enough and much cheaper than `SipHash`.
 #[derive(Default, Clone, Copy)]
 pub struct IdHasher(u64);
 
@@ -211,15 +211,12 @@ impl ThumbnailRamCache {
             prev: NIL,
             next: NIL,
         };
-        let slot = match inner.free.pop() {
-            Some(slot) => {
-                inner.nodes[slot] = node;
-                slot
-            }
-            None => {
-                inner.nodes.push(node);
-                inner.nodes.len() - 1
-            }
+        let slot = if let Some(slot) = inner.free.pop() {
+            inner.nodes[slot] = node;
+            slot
+        } else {
+            inner.nodes.push(node);
+            inner.nodes.len() - 1
         };
         inner.index.insert(id, slot);
         inner.used_bytes += bytes;

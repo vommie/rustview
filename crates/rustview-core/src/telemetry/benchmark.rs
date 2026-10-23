@@ -441,7 +441,7 @@ pub fn format_count(n: usize) -> String {
 /// Helper formatter for microseconds and milliseconds.
 pub fn format_duration_us(us: u64) -> String {
     if us < 1_000 {
-        format!("{} µs", us)
+        format!("{us} µs")
     } else if us < 1_000_000 {
         format!("{:.2} ms", us as f64 / 1_000.0)
     } else {
@@ -452,7 +452,7 @@ pub fn format_duration_us(us: u64) -> String {
 /// Helper formatter for bytes into KB, MB, GB.
 pub fn format_bytes_metric(bytes: u64) -> String {
     if bytes < 1024 {
-        format!("{} B", bytes)
+        format!("{bytes} B")
     } else if bytes < 1024 * 1024 {
         format!("{:.2} KB", bytes as f64 / 1024.0)
     } else if bytes < 1024 * 1024 * 1024 {
@@ -474,9 +474,7 @@ impl BenchmarkReportFormatter {
         let mut out = String::with_capacity(4096);
         let total_wall_us = thumb_bench.start_time.elapsed().as_micros() as u64;
 
-        let total_items = folder_bench
-            .map(|f| f.total_records_fetched.load(Ordering::Relaxed))
-            .unwrap_or(0);
+        let total_items = folder_bench.map_or(0, |f| f.total_records_fetched.load(Ordering::Relaxed));
 
         let p0_targets = thumb_bench.total_targets.load(Ordering::Relaxed);
 
@@ -500,8 +498,7 @@ impl BenchmarkReportFormatter {
                 fb.folder_id
             ));
             out.push_str(&format!(
-                "Total Media Items    : {:>7} active records in database\n",
-                total_items
+                "Total Media Items    : {total_items:>7} active records in database\n"
             ));
         } else {
             out.push_str(&format!("Folder ID Target     : Folder #{}\n", thumb_bench.folder_id));
@@ -511,7 +508,7 @@ impl BenchmarkReportFormatter {
             "Total Wall-Clock Time: {} (Initial Viewport Ready)\n",
             format_duration_us(total_wall_us)
         ));
-        out.push_str(&format!("Initial Throughput   : {}\n", overall_throughput));
+        out.push_str(&format!("Initial Throughput   : {overall_throughput}\n"));
         out.push_str(&format!(
             "Process Memory (RSS) : {:.2} MB (Virtual: {:.2} MB | System Avail: {:.1} GB / {:.1} GB)\n",
             mem.process_rss_mb,
@@ -680,8 +677,7 @@ impl BenchmarkReportFormatter {
 
         out.push_str("STAGE 3: THUMBNAIL CACHE & GENERATION PIPELINE\n");
         out.push_str(&format!(
-            "  • L1 RAM Cache Status     : {} hits / {} requests ({} hit ratio, {} misses)\n",
-            l1_hits, l1_total, l1_ratio, l1_misses
+            "  • L1 RAM Cache Status     : {l1_hits} hits / {l1_total} requests ({l1_ratio} hit ratio, {l1_misses} misses)\n"
         ));
         if decompress_count > 0 {
             out.push_str(&format!(
@@ -713,8 +709,7 @@ impl BenchmarkReportFormatter {
             ));
             if video_count > 0 {
                 out.push_str(&format!(
-                    "    ├─ Video Extractions    : {} videos | Avg: {:.2} ms / video\n",
-                    video_count, avg_video_extract_ms
+                    "    ├─ Video Extractions    : {video_count} videos | Avg: {avg_video_extract_ms:.2} ms / video\n"
                 ));
             }
             out.push_str(&format!(
@@ -735,20 +730,17 @@ impl BenchmarkReportFormatter {
         // STAGE 4: UI Drain & Slint Image Buffer Feed
         out.push_str("STAGE 4: SLINT UI DRAIN & IMAGE BUFFER FEED\n");
         out.push_str(&format!(
-            "  • Drain Timer Ticks       : {} cycles (capped batch: 64 items/tick)\n",
-            drain_ticks
+            "  • Drain Timer Ticks       : {drain_ticks} cycles (capped batch: 64 items/tick)\n"
         ));
         out.push_str(&format!(
-            "  • P0 Items Delivered to UI: {} / {} thumbnails displayed (100% viewport ready)\n",
-            drained_items, p0_targets
+            "  • P0 Items Delivered to UI: {drained_items} / {p0_targets} thumbnails displayed (100% viewport ready)\n"
         ));
         out.push_str(&format!(
             "  • Slint Row Model Updates : {} (set_row_data)\n",
             format_duration_us(row_set_us)
         ));
         out.push_str(&format!(
-            "  • Peak Drain Queue Depth  : {} items buffered in RAM\n",
-            peak_queue
+            "  • Peak Drain Queue Depth  : {peak_queue} items buffered in RAM\n"
         ));
         out.push_str(&format!(
             "  • Stage 4 Subtotal Time   : {}\n",

@@ -119,7 +119,7 @@ impl ThumbnailScheduler {
         let pool = Arc::new(
             ThreadPoolBuilder::new()
                 .num_threads(threads)
-                .thread_name(|i| format!("thumb-worker-{}", i))
+                .thread_name(|i| format!("thumb-worker-{i}"))
                 .build()
                 .expect("Failed to build high-performance thumbnail worker pool"),
         );
@@ -259,7 +259,7 @@ impl ThumbnailScheduler {
         None
     }
 
-    /// Fast non-blocking lookup for cached preview frames in LMDB / PackStore (0.05ms).
+    /// Fast non-blocking lookup for cached preview frames in LMDB / `PackStore` (0.05ms).
     pub fn try_load_preview_frames(&self, media_id: MediaId) -> Option<Vec<(u32, u32, Vec<u8>)>> {
         let rtxn = self.library.raw_db().env.read_txn().ok()?;
         let p_rec = self
@@ -929,7 +929,7 @@ impl ThumbnailScheduler {
         Ok(item)
     }
 
-    /// Explicitly regenerates thumbnail & previews from physical file, overwriting PackStore and LMDB index.
+    /// Explicitly regenerates thumbnail & previews from physical file, overwriting `PackStore` and LMDB index.
     pub fn regenerate_sync(
         &self,
         media_id: MediaId,
@@ -1000,7 +1000,7 @@ impl ThumbnailScheduler {
         Ok(item)
     }
 
-    /// Explicitly regenerates thumbnail & previews with an overridden video offset percentage, overwriting PackStore and LMDB index.
+    /// Explicitly regenerates thumbnail & previews with an overridden video offset percentage, overwriting `PackStore` and LMDB index.
     pub fn regenerate_with_offset_sync(
         &self,
         media_id: MediaId,

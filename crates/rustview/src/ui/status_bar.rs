@@ -59,10 +59,10 @@ impl StatusBarBridge {
         let st = state.read();
 
         let total_items = st.all_folder_media.len();
-        let visible_count = if !st.active_indices.is_empty() {
-            st.active_indices.len()
-        } else {
+        let visible_count = if st.active_indices.is_empty() {
             total_items
+        } else {
+            st.active_indices.len()
         };
 
         let selected_ids = st.file_selection.selected_ids();
@@ -84,16 +84,16 @@ impl StatusBarBridge {
 
         let metric_text = if is_query_active {
             if visible_count == total_items {
-                format!("Query Items: {}", visible_count)
+                format!("Query Items: {visible_count}")
             } else {
-                format!("Query Filter: {} / {}", visible_count, total_items)
+                format!("Query Filter: {visible_count} / {total_items}")
             }
         } else if is_virtual {
-            format!("Recursive Items: {} / {}", visible_count, total_items)
+            format!("Recursive Items: {visible_count} / {total_items}")
         } else if visible_count != total_items {
-            format!("Items: {} / {}", visible_count, total_items)
+            format!("Items: {visible_count} / {total_items}")
         } else {
-            format!("Items: {}", visible_count)
+            format!("Items: {visible_count}")
         };
 
         let total_size_str = if total_bytes > 0 {

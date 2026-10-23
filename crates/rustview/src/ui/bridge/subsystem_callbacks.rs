@@ -9,7 +9,7 @@ use crate::ui::media::BridgeMedia;
 use crate::ui::selection::BridgeFileSelection;
 use crate::ui::selection::keyboard::{KeyboardNavigateParams, handle_keyboard_navigate};
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
-use crate::ui::state::*;
+use crate::ui::state::LastActivePanel;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tags::BridgeTags;

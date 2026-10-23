@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-/// Single Point of Truth (SPoT) baseline constant for video hover preview frame interval (250ms).
+/// Single Point of Truth (`SPoT`) baseline constant for video hover preview frame interval (250ms).
 pub const DEFAULT_PREVIEW_INTERVAL_MS: u64 = 250;
 
 /// Individual timed frame holding the pre-rendered image and its duration in milliseconds.
@@ -20,7 +20,7 @@ pub struct TimedFrame {
 pub struct VideoPreviewAnimator;
 
 impl VideoPreviewAnimator {
-    /// Loads and decodes multi-frame video preview buffers from PackStore / LMDB into Slint Images.
+    /// Loads and decodes multi-frame video preview buffers from `PackStore` / LMDB into Slint Images.
     /// Fast non-blocking lookup (< 0.05ms): NEVER blocks the GUI event loop.
     pub fn load_preview_images(thumbnails: &ThumbnailManager, media_id: MediaId) -> Option<Vec<Image>> {
         let frames = thumbnails.try_load_preview_frames(media_id)?;
@@ -87,7 +87,7 @@ impl VideoPreviewAnimator {
         cumulative_offsets.push(0u64);
 
         for f in &frames {
-            let d = (f.delay_ms as u64).max(10);
+            let d = u64::from(f.delay_ms).max(10);
             total_duration_ms += d;
             cumulative_offsets.push(total_duration_ms);
         }

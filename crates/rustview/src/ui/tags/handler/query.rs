@@ -109,7 +109,7 @@ impl TagActionHandler {
             ctx.window.set_virtual_folder_count(0);
         }
 
-        let is_query_active = params.rating.map(|r| r > 0).unwrap_or(false) || !params.tag_ids.is_empty();
+        let is_query_active = params.rating.is_some_and(|r| r > 0) || !params.tag_ids.is_empty();
 
         if !is_query_active {
             let t_restore = Instant::now();
@@ -220,7 +220,7 @@ impl TagActionHandler {
 
         let scope_str = params.scope_mode.as_str();
         if result_count == 0 {
-            StatusBarBridge::info(ctx.window, format!("Query ({}) returned no results.", scope_str));
+            StatusBarBridge::info(ctx.window, format!("Query ({scope_str}) returned no results."));
         } else {
             StatusBarBridge::info(
                 ctx.window,
@@ -271,10 +271,7 @@ impl TagActionHandler {
 
                 // Activate ONLY ThumbnailPipelineProgress (prevent dual progress bar anomaly)
                 ctx.thumbnails.tracker().set_generate_total(stubs_count);
-                StatusBarBridge::info(
-                    ctx.window,
-                    format!("Auto-completing {} external file(s)...", stubs_count),
-                );
+                StatusBarBridge::info(ctx.window, format!("Auto-completing {stubs_count} external file(s)..."));
 
                 let w_weak = ctx.window.as_weak();
                 let lib_arc = ctx.library.clone();

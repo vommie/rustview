@@ -102,7 +102,7 @@ impl BridgeViewerTabs {
         let all_tabs = tab_manager.list_tabs();
         let last_title = ViewerTabManager::compute_tab_title(&all_tabs, tab_manager.active_tab_id().unwrap_or(0));
 
-        StatusBarBridge::success(window, format!("Opened {} tabs (Foreground: '{}')", total, last_title));
+        StatusBarBridge::success(window, format!("Opened {total} tabs (Foreground: '{last_title}')"));
 
         tracing::info!(
             total_opened = total,
@@ -148,7 +148,7 @@ impl BridgeViewerTabs {
             BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, library, settings, state);
         }
 
-        StatusBarBridge::success(window, format!("Opened {} tabs in background", opened_count));
+        StatusBarBridge::success(window, format!("Opened {opened_count} tabs in background"));
 
         tracing::info!(
             opened_count,
@@ -194,7 +194,7 @@ impl BridgeViewerTabs {
                     error = %e,
                     "[BridgeViewerTabs: OpenError] Failed to open media tab"
                 );
-                StatusBarBridge::error(window, format!("Failed to open tab for media #{}: {}", media_id, e));
+                StatusBarBridge::error(window, format!("Failed to open tab for media #{media_id}: {e}"));
             }
         }
     }
@@ -222,7 +222,7 @@ impl BridgeViewerTabs {
 
                 let all_tabs = tab_manager.list_tabs();
                 let tab_title = ViewerTabManager::compute_tab_title(&all_tabs, tab_id);
-                StatusBarBridge::success(window, format!("Opened '{}' in background tab", tab_title));
+                StatusBarBridge::success(window, format!("Opened '{tab_title}' in background tab"));
 
                 tracing::info!(
                     media_id,
@@ -242,7 +242,7 @@ impl BridgeViewerTabs {
                 );
                 StatusBarBridge::error(
                     window,
-                    format!("Failed to open background tab for media #{}: {}", media_id, e),
+                    format!("Failed to open background tab for media #{media_id}: {e}"),
                 );
                 None
             }

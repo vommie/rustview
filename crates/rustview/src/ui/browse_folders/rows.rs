@@ -353,7 +353,10 @@ impl BrowseFolderRows {
             dirty: false,
             look: hasher.finish(),
         };
-        if !self.selection.is_empty() {
+        if self.selection.is_empty() {
+            rows.anchor = self.anchor.filter(|r| matches!(r, FolderRowRef::Up) && up.is_some());
+            rows.cursor = self.cursor.filter(|r| matches!(r, FolderRowRef::Up) && up.is_some());
+        } else {
             let listed: HashSet<FolderId> = rows.front.iter().chain(&rows.tail).copied().collect();
             rows.selection = self
                 .selection
@@ -369,9 +372,6 @@ impl BrowseFolderRows {
             };
             rows.anchor = still_there(&self.anchor);
             rows.cursor = still_there(&self.cursor);
-        } else {
-            rows.anchor = self.anchor.filter(|r| matches!(r, FolderRowRef::Up) && up.is_some());
-            rows.cursor = self.cursor.filter(|r| matches!(r, FolderRowRef::Up) && up.is_some());
         }
         rows
     }

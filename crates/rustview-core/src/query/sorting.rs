@@ -184,15 +184,7 @@ impl MediaSorter {
                         .then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))
                 }
                 SortColumn::Flags => {
-                    let flag_val = |r: &MediaRecord| -> u8 {
-                        if r.is_deleted {
-                            2
-                        } else if r.is_corrupted {
-                            1
-                        } else {
-                            0
-                        }
-                    };
+                    let flag_val = |r: &MediaRecord| -> u8 { if r.is_deleted { 2 } else { u8::from(r.is_corrupted) } };
                     flag_val(a)
                         .cmp(&flag_val(b))
                         .then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase()))

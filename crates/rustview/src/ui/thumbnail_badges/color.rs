@@ -74,7 +74,7 @@ impl BadgeColor {
 /// WCAG relative luminance of an sRGB color.
 fn relative_luminance(r: u8, g: u8, b: u8) -> f32 {
     let linear = |c: u8| {
-        let v = c as f32 / 255.0;
+        let v = f32::from(c) / 255.0;
         if v <= 0.03928 {
             v / 12.92
         } else {

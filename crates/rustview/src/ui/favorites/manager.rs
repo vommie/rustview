@@ -120,10 +120,10 @@ impl FavoriteManager {
         }
 
         let final_alias = alias.unwrap_or_else(|| {
-            normalized
-                .file_name()
-                .map(|f| f.to_string_lossy().to_string())
-                .unwrap_or_else(|| normalized.to_string_lossy().to_string())
+            normalized.file_name().map_or_else(
+                || normalized.to_string_lossy().to_string(),
+                |f| f.to_string_lossy().to_string(),
+            )
         });
 
         let entry = FavoriteEntry {
@@ -187,7 +187,7 @@ impl FavoriteManager {
         &self.entries
     }
 
-    /// Backward-compatibility query returning (alias, path, is_valid_on_disk).
+    /// Backward-compatibility query returning (alias, path, `is_valid_on_disk`).
     pub fn list(&self) -> Vec<(String, PathBuf, bool)> {
         self.entries
             .iter()

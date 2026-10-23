@@ -79,9 +79,9 @@ impl FavoriteContextMenu {
                 if path.exists() {
                     if let Err(e) = SystemFileHandler::open_folder(&path) {
                         tracing::error!(error = %e, "[FavoriteContextMenu] Failed to open folder in File Manager");
-                        StatusBarBridge::error(window, format!("Failed to open File Manager: {}", e));
+                        StatusBarBridge::error(window, format!("Failed to open File Manager: {e}"));
                     } else {
-                        StatusBarBridge::success(window, format!("Opened favorite '{}' in File Manager.", alias));
+                        StatusBarBridge::success(window, format!("Opened favorite '{alias}' in File Manager."));
                     }
                 } else {
                     StatusBarBridge::warn(

@@ -203,8 +203,7 @@ pub fn generate_random_video_offset_percent() -> u8 {
 
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(42);
+        .map_or(42, |d| d.as_nanos() as u64);
 
     let prev = SEED.fetch_add(0x9E37_79B9_7F4A_7C15 ^ nanos, Ordering::Relaxed);
     let mut x = prev ^ nanos;
@@ -223,14 +222,14 @@ pub struct ThumbnailLocation {
     pub length: u32,
 }
 
-/// Container recording multi-frame preview positions inside the PackStore.
+/// Container recording multi-frame preview positions inside the `PackStore`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VideoPreviewRecord {
     pub frame_count: u32,
     pub frame_locations: Vec<ThumbnailLocation>,
 }
 
-/// Comprehensive storage footprint statistics across PackStore packfiles and LMDB database tables.
+/// Comprehensive storage footprint statistics across `PackStore` packfiles and LMDB database tables.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ThumbnailStorageStats {
     pub pack_files_count: usize,

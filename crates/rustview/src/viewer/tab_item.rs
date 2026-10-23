@@ -2,7 +2,7 @@ use super::types::{MediaTabSession, TabId};
 use rustview_core::library::models::{MediaId, MediaRecord};
 use std::collections::HashSet;
 
-/// Centralized, single point of truth (SPoT) formatter for tab titles and duplicate iteration suffixes.
+/// Centralized, single point of truth (`SPoT`) formatter for tab titles and duplicate iteration suffixes.
 pub struct TabTitleFormatter;
 
 impl TabTitleFormatter {
@@ -21,7 +21,7 @@ impl TabTitleFormatter {
 
         let mut counter = 1usize;
         loop {
-            let candidate = format!("{} ({})", base_filename, counter);
+            let candidate = format!("{base_filename} ({counter})");
             if !taken_titles.contains(candidate.as_str()) {
                 return candidate;
             }
@@ -117,10 +117,7 @@ impl TabCollection {
 
     /// Inserts a new session immediately after `after_tab_id` (used for tab duplication).
     pub fn insert_after(&mut self, after_tab_id: TabId, session: MediaTabSession) -> usize {
-        let insert_idx = self
-            .index_of(after_tab_id)
-            .map(|idx| idx + 1)
-            .unwrap_or(self.sessions.len());
+        let insert_idx = self.index_of(after_tab_id).map_or(self.sessions.len(), |idx| idx + 1);
 
         let clamped_idx = insert_idx.min(self.sessions.len());
         self.sessions.insert(clamped_idx, session);
@@ -243,7 +240,7 @@ impl TabCollection {
     // =========================================================================
 
     pub fn update_filename(&mut self, media_id: MediaId, new_filename: &str) {
-        for tab in self.sessions.iter_mut() {
+        for tab in &mut self.sessions {
             let mut guard = tab.multiview.instance.lock();
             guard.member_renamed(media_id, new_filename);
             drop(guard);
@@ -262,7 +259,7 @@ impl TabCollection {
     }
 
     pub fn mark_deleted(&mut self, media_id: MediaId) {
-        for tab in self.sessions.iter_mut() {
+        for tab in &mut self.sessions {
             if tab.media_id == media_id {
                 tab.record.is_deleted = true;
             }
@@ -271,7 +268,7 @@ impl TabCollection {
     }
 
     pub fn update_record(&mut self, media_id: MediaId, updated_record: &MediaRecord) {
-        for tab in self.sessions.iter_mut() {
+        for tab in &mut self.sessions {
             if tab.media_id == media_id {
                 tab.record = updated_record.clone();
             }

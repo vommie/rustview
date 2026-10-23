@@ -234,18 +234,17 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], pins: &Pins) -> Layout {
 
     let available = (p.height - p.gutter).max(2);
     let pinned_rows = pins.rows.filter(|r| r.iter().all(|f| f.is_finite() && *f > 0.0));
-    let heights = match pinned_rows {
-        Some(fr) => proportional(available, &fr),
-        None => {
-            let natural: Vec<i32> = rows
-                .iter()
-                .map(|r| {
-                    let sum: f64 = r.iter().map(|&i| f64::from(aspects[i])).sum();
-                    (f64::from(p.width - p.gutter) / sum.max(0.01)).round() as i32
-                })
-                .collect();
-            fair_share(available, &natural)
-        }
+    let heights = if let Some(fr) = pinned_rows {
+        proportional(available, &fr)
+    } else {
+        let natural: Vec<i32> = rows
+            .iter()
+            .map(|r| {
+                let sum: f64 = r.iter().map(|&i| f64::from(aspects[i])).sum();
+                (f64::from(p.width - p.gutter) / sum.max(0.01)).round() as i32
+            })
+            .collect();
+        fair_share(available, &natural)
     };
     let mut y = 0;
     for (ri, (row, &row_h)) in rows.iter().zip(&heights).enumerate() {

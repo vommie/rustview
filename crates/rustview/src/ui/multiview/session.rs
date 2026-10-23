@@ -90,9 +90,10 @@ pub(super) struct Session {
 /// Runs `f` on the session if there is one. Re-entrant calls are skipped instead of panicking. The action `f` returns runs
 /// after the session borrow is released, so it may close the session.
 pub(super) fn run(f: impl FnOnce(&mut Session) -> UiAction) {
-    let outcome = SESSION.with(|cell| match cell.try_borrow_mut() {
-        Ok(mut guard) => guard.as_mut().map(|session| (f(session), session.handle.clone())),
-        Err(_) => {
+    let outcome = SESSION.with(|cell| {
+        if let Ok(mut guard) = cell.try_borrow_mut() {
+            guard.as_mut().map(|session| (f(session), session.handle.clone()))
+        } else {
             tracing::debug!("[Multiview: Session] Skipped a re-entrant event");
             None
         }
@@ -194,7 +195,7 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
             d if d < 0.0 => UiAction::Navigate { forward: true },
             d if d > 0.0 => UiAction::Navigate { forward: false },
             _ => UiAction::None,
-        })
+        });
     });
     win.on_tile_zoom_wheel(|index, delta, x, y| with_session(|s| s.zoom_wheel(index.max(0) as usize, delta, x, y)));
     win.on_tile_pan(|index, dx, dy| with_session(|s| s.zoom_pan(index.max(0) as usize, dx, dy)));
@@ -330,7 +331,7 @@ fn launch(
         return false;
     }
     Timer::single_shot(Duration::from_millis(MULTIVIEW_OPEN_POLL_MS), move || {
-        finish_open(generation, 1)
+        finish_open(generation, 1);
     });
     tracing::info!(
         generation,
@@ -358,7 +359,7 @@ fn finish_open(generation: u64, attempt: u32) {
             close(true);
         } else {
             Timer::single_shot(Duration::from_millis(MULTIVIEW_OPEN_POLL_MS), move || {
-                finish_open(generation, attempt + 1)
+                finish_open(generation, attempt + 1);
             });
         }
         return;
@@ -411,7 +412,7 @@ pub(super) fn shutdown() {
         Ok(Some(session)) => finish_close(session, false),
         Ok(None) => {}
         Err(()) => {
-            tracing::warn!("[Shutdown: Windows] The fullscreen is busy with an event; it cannot be closed in order")
+            tracing::warn!("[Shutdown: Windows] The fullscreen is busy with an event; it cannot be closed in order");
         }
     }
 }
@@ -535,7 +536,7 @@ impl Session {
         }
         self.tick
             .start(TimerMode::Repeated, Duration::from_millis(MULTIVIEW_TICK_MS), || {
-                with_session(Session::on_tick)
+                with_session(Session::on_tick);
             });
         tracing::info!(
             generation = self.generation,
@@ -567,7 +568,7 @@ impl Session {
         let animating = self.instance.lock().zoom_animating();
         if animating && !self.glide.running() {
             self.glide.start(TimerMode::Repeated, Duration::from_millis(16), || {
-                with_session(Session::on_glide_frame)
+                with_session(Session::on_glide_frame);
             });
         } else if !animating && self.glide.running() {
             self.glide.stop();

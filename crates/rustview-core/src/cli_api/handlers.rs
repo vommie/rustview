@@ -1,9 +1,12 @@
 use super::error::ApiError;
-use super::models::*;
+use super::models::{
+    ApiBatchHashCheckItem, ApiBatchHashCheckResponse, ApiDeleteMediaResponse, ApiGetMediaResponse,
+    ApiHashCheckResponse, ApiHashInsertResponse, ApiMediaDetails, ApiSetMediaResponse, ApiTagItem, ApiTagTreeResponse,
+};
 use crate::library::Library;
 use crate::library::folders::normalize_path;
 use crate::library::models::{ExternalHashRecord, MediaRecord, TagId};
-use crate::library::schema::*;
+use crate::library::schema::{SEQ_EXTERNAL_HASH_ID, SEQ_MEDIA_ID};
 use crate::media::{MediaFormat, MediaHasher, MetadataExtractor};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -38,7 +41,7 @@ impl ApiHandler {
             println!("RustView Tag Tree ({} total tags):", response.total_tags);
             for t in &response.tags {
                 let parent_str = match t.parent_id {
-                    Some(pid) => format!(" (Parent: #{})", pid),
+                    Some(pid) => format!(" (Parent: #{pid})"),
                     None => " (Root)".to_string(),
                 };
                 println!("  • [#{:<3}] {}{}", t.id, t.name, parent_str);
@@ -128,7 +131,7 @@ impl ApiHandler {
             println!("  • Dimensions: {}x{}", m.width, m.height);
             println!("  • Size      : {} bytes", m.file_size);
             if let Some(ref src) = m.source {
-                println!("  • Source    : {}", src);
+                println!("  • Source    : {src}");
             }
             println!("  • Corrupted : {}", m.is_corrupted);
             println!("  • Deleted   : {}", m.is_deleted);
@@ -141,7 +144,7 @@ impl ApiHandler {
 
     /// Atomically sets/upserts media record, updates rating, tags, source application, and ensures folder registration.
     /// If the file does not yet exist on disk (render queued/in-progress), it initializes mtime to the current timestamp
-    /// so that it appears at the top when sorting by newest, and sets is_corrupted = false so it displays as a valid pending stub.
+    /// so that it appears at the top when sorting by newest, and sets `is_corrupted` = false so it displays as a valid pending stub.
     pub fn set_media(
         lib: &Library,
         path: &Path,
@@ -179,154 +182,146 @@ impl ApiHandler {
 
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs() as i64);
 
-        let (action, final_record, target_media_id) = match existing_record {
-            Some(mut rec) => {
-                let mid = rec.id;
-                let old_hash = rec.file_hash;
+        let (action, final_record, target_media_id) = if let Some(mut rec) = existing_record {
+            let mid = rec.id;
+            let old_hash = rec.file_hash;
 
-                if let Some(r) = rating_opt {
-                    rec.rating = r.min(5);
-                }
-
-                if let Some(ref s) = source_opt {
-                    rec.source = Some(s.clone());
-                }
-
-                if let Some(ref h_str) = hash_opt
-                    && let Ok(new_hash) = MediaHasher::from_hex(h_str)
-                    && new_hash != old_hash
-                {
-                    lib.raw_db()
-                        .update_media_hash_index(&mut wtxn, mid, Some(&old_hash), Some(&new_hash))?;
-                    rec.file_hash = new_hash;
-                }
-
-                let is_corrupted = false;
-
-                if path.exists() {
-                    if let Ok(meta) = std::fs::metadata(path) {
-                        rec.file_size = meta.len();
-                        rec.modification_time = meta
-                            .modified()
-                            .ok()
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(rec.modification_time);
-
-                        rec.creation_time = meta
-                            .created()
-                            .ok()
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(rec.modification_time);
-                    }
-                    if rec.file_size > 0
-                        && let Ok(raw_meta) = MetadataExtractor::extract(path)
-                    {
-                        rec.width = raw_meta.width;
-                        rec.height = raw_meta.height;
-                        rec.duration_ms = raw_meta.duration_ms;
-                    }
-                } else if rec.modification_time == 0 {
-                    rec.modification_time = now_secs;
-                    rec.creation_time = now_secs;
-                }
-
-                rec.last_seen = current_gen;
-                rec.is_deleted = false;
-                rec.is_corrupted = is_corrupted;
-
-                lib.raw_db().media.put(&mut wtxn, &mid, &rec)?;
-                ("updated", rec, mid)
+            if let Some(r) = rating_opt {
+                rec.rating = r.min(5);
             }
-            None => {
-                let new_id = lib.raw_db().next_id(&mut wtxn, SEQ_MEDIA_ID)?;
 
-                let format = MediaFormat::from_path(Path::new(&filename));
-                let mut media_type = format.media_type().unwrap_or(crate::media::MediaType::Image);
+            if let Some(ref s) = source_opt {
+                rec.source = Some(s.clone());
+            }
 
-                let mut file_size = 0u64;
-                let mut mtime = now_secs; // Default to current time so newest sort places it at top
-                let mut ctime = now_secs;
-                let mut width = 0u32;
-                let mut height = 0u32;
-                let mut duration_ms = 0u64;
-                let is_corrupted = false; // Fresh stub is pending, not corrupted
-
-                if path.exists() {
-                    if let Ok(meta) = std::fs::metadata(path) {
-                        file_size = meta.len();
-                        mtime = meta
-                            .modified()
-                            .ok()
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(now_secs);
-                        ctime = meta
-                            .created()
-                            .ok()
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(mtime);
-                    }
-                    if file_size > 0
-                        && let Ok(raw_meta) = MetadataExtractor::extract(path)
-                    {
-                        width = raw_meta.width;
-                        height = raw_meta.height;
-                        duration_ms = raw_meta.duration_ms;
-                        media_type = raw_meta.media_type;
-                    }
-                }
-
-                let file_hash = if let Some(ref h_str) = hash_opt
-                    && let Ok(parsed) = MediaHasher::from_hex(h_str)
-                {
-                    parsed
-                } else if path.exists() && file_size > 0 {
-                    MediaHasher::hash_file(path)
-                        .unwrap_or_else(|_| MediaHasher::hash_bytes(path.to_string_lossy().as_bytes()))
-                } else {
-                    MediaHasher::hash_bytes(format!("{}/{}", folder.id, filename).as_bytes())
-                };
-
-                let assigned_source = source_opt.or_else(|| Some("CLI-API".to_string()));
-
-                let new_rec = MediaRecord {
-                    id: new_id,
-                    folder_id: folder.id,
-                    filename: filename.clone(),
-                    file_hash,
-                    file_size,
-                    modification_time: mtime,
-                    creation_time: ctime,
-                    duration_ms,
-                    media_type,
-                    format,
-                    width,
-                    height,
-                    rating: rating_opt.unwrap_or(0).min(5),
-                    last_seen: current_gen,
-                    is_deleted: false,
-                    is_corrupted,
-                    source: assigned_source,
-                };
-
-                lib.raw_db().media.put(&mut wtxn, &new_id, &new_rec)?;
+            if let Some(ref h_str) = hash_opt
+                && let Ok(new_hash) = MediaHasher::from_hex(h_str)
+                && new_hash != old_hash
+            {
                 lib.raw_db()
-                    .update_media_hash_index(&mut wtxn, new_id, None, Some(&file_hash))?;
-
-                let mut folder_media = lib.raw_db().media_by_folder.get(&wtxn, &folder.id)?.unwrap_or_default();
-                if !folder_media.contains(&new_id) {
-                    folder_media.push(new_id);
-                    lib.raw_db().media_by_folder.put(&mut wtxn, &folder.id, &folder_media)?;
-                }
-
-                ("created", new_rec, new_id)
+                    .update_media_hash_index(&mut wtxn, mid, Some(&old_hash), Some(&new_hash))?;
+                rec.file_hash = new_hash;
             }
+
+            let is_corrupted = false;
+
+            if path.exists() {
+                if let Ok(meta) = std::fs::metadata(path) {
+                    rec.file_size = meta.len();
+                    rec.modification_time = meta
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map_or(rec.modification_time, |d| d.as_secs() as i64);
+
+                    rec.creation_time = meta
+                        .created()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map_or(rec.modification_time, |d| d.as_secs() as i64);
+                }
+                if rec.file_size > 0
+                    && let Ok(raw_meta) = MetadataExtractor::extract(path)
+                {
+                    rec.width = raw_meta.width;
+                    rec.height = raw_meta.height;
+                    rec.duration_ms = raw_meta.duration_ms;
+                }
+            } else if rec.modification_time == 0 {
+                rec.modification_time = now_secs;
+                rec.creation_time = now_secs;
+            }
+
+            rec.last_seen = current_gen;
+            rec.is_deleted = false;
+            rec.is_corrupted = is_corrupted;
+
+            lib.raw_db().media.put(&mut wtxn, &mid, &rec)?;
+            ("updated", rec, mid)
+        } else {
+            let new_id = lib.raw_db().next_id(&mut wtxn, SEQ_MEDIA_ID)?;
+
+            let format = MediaFormat::from_path(Path::new(&filename));
+            let mut media_type = format.media_type().unwrap_or(crate::media::MediaType::Image);
+
+            let mut file_size = 0u64;
+            let mut mtime = now_secs; // Default to current time so newest sort places it at top
+            let mut ctime = now_secs;
+            let mut width = 0u32;
+            let mut height = 0u32;
+            let mut duration_ms = 0u64;
+            let is_corrupted = false; // Fresh stub is pending, not corrupted
+
+            if path.exists() {
+                if let Ok(meta) = std::fs::metadata(path) {
+                    file_size = meta.len();
+                    mtime = meta
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map_or(now_secs, |d| d.as_secs() as i64);
+                    ctime = meta
+                        .created()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map_or(mtime, |d| d.as_secs() as i64);
+                }
+                if file_size > 0
+                    && let Ok(raw_meta) = MetadataExtractor::extract(path)
+                {
+                    width = raw_meta.width;
+                    height = raw_meta.height;
+                    duration_ms = raw_meta.duration_ms;
+                    media_type = raw_meta.media_type;
+                }
+            }
+
+            let file_hash = if let Some(ref h_str) = hash_opt
+                && let Ok(parsed) = MediaHasher::from_hex(h_str)
+            {
+                parsed
+            } else if path.exists() && file_size > 0 {
+                MediaHasher::hash_file(path)
+                    .unwrap_or_else(|_| MediaHasher::hash_bytes(path.to_string_lossy().as_bytes()))
+            } else {
+                MediaHasher::hash_bytes(format!("{}/{}", folder.id, filename).as_bytes())
+            };
+
+            let assigned_source = source_opt.or_else(|| Some("CLI-API".to_string()));
+
+            let new_rec = MediaRecord {
+                id: new_id,
+                folder_id: folder.id,
+                filename: filename.clone(),
+                file_hash,
+                file_size,
+                modification_time: mtime,
+                creation_time: ctime,
+                duration_ms,
+                media_type,
+                format,
+                width,
+                height,
+                rating: rating_opt.unwrap_or(0).min(5),
+                last_seen: current_gen,
+                is_deleted: false,
+                is_corrupted,
+                source: assigned_source,
+            };
+
+            lib.raw_db().media.put(&mut wtxn, &new_id, &new_rec)?;
+            lib.raw_db()
+                .update_media_hash_index(&mut wtxn, new_id, None, Some(&file_hash))?;
+
+            let mut folder_media = lib.raw_db().media_by_folder.get(&wtxn, &folder.id)?.unwrap_or_default();
+            if !folder_media.contains(&new_id) {
+                folder_media.push(new_id);
+                lib.raw_db().media_by_folder.put(&mut wtxn, &folder.id, &folder_media)?;
+            }
+
+            ("created", new_rec, new_id)
         };
 
         if let Some(target_tag_ids) = tags_opt {
@@ -384,7 +379,7 @@ impl ApiHandler {
             tags: final_tags,
             file_hash: hash_hex,
             source: final_record.source.clone(),
-            message: format!("Media record successfully {} in LMDB.", action),
+            message: format!("Media record successfully {action} in LMDB."),
         };
 
         if json {
@@ -396,7 +391,7 @@ impl ApiHandler {
             println!("  • Tags      : {:?}", response.tags);
             println!("  • Hash (MD5): {}", response.file_hash);
             if let Some(ref src) = response.source {
-                println!("  • Source    : {}", src);
+                println!("  • Source    : {src}");
             }
             println!("  • Corrupted : {}", final_record.is_corrupted);
         }
@@ -523,15 +518,15 @@ impl ApiHandler {
             println!("✓ Hash is KNOWN in database:");
             println!("  • Hash     : {}", response.hash);
             if let Some(id) = response.hash_id {
-                println!("  • Hash ID  : #{}", id);
+                println!("  • Hash ID  : #{id}");
             }
             if let Some(ref dt) = response.date_time {
-                println!("  • Date     : {}", dt);
+                println!("  • Date     : {dt}");
             }
             if !response.associated_files.is_empty() {
                 println!("  • Files ({}):", response.associated_files.len());
                 for f in &response.associated_files {
-                    println!("    - {}", f);
+                    println!("    - {f}");
                 }
             }
         } else {
@@ -582,10 +577,10 @@ impl ApiHandler {
                                 .unwrap_or_default()
                         });
 
-                        if !folder_path.is_empty() {
-                            associated_files.push(format!("{}/{}", folder_path, m_rec.filename));
-                        } else {
+                        if folder_path.is_empty() {
                             associated_files.push(m_rec.filename);
+                        } else {
+                            associated_files.push(format!("{}/{}", folder_path, m_rec.filename));
                         }
                     }
                 }
@@ -629,10 +624,10 @@ impl ApiHandler {
             println!();
             for item in &response.results {
                 if item.known {
-                    let id_str = item.hash_id.map(|id| format!(" [Ext #{}]", id)).unwrap_or_default();
+                    let id_str = item.hash_id.map(|id| format!(" [Ext #{id}]")).unwrap_or_default();
                     println!("  ✓ {} -> KNOWN{}", item.hash, id_str);
                     for f in &item.associated_files {
-                        println!("      └─ {}", f);
+                        println!("      └─ {f}");
                     }
                 } else {
                     println!("  ✗ {} -> UNKNOWN", item.hash);
@@ -663,23 +658,22 @@ impl ApiHandler {
         }
         drop(rtxn);
 
-        let (is_new, hash_id, date_time) = match existing_entry {
-            Some(existing) => (false, existing.hash_id, existing.date_time),
-            None => {
-                let mut wtxn = lib.raw_db().env.write_txn()?;
-                let new_id = lib.raw_db().next_id(&mut wtxn, SEQ_EXTERNAL_HASH_ID)?;
-                let now_str = current_datetime_string();
+        let (is_new, hash_id, date_time) = if let Some(existing) = existing_entry {
+            (false, existing.hash_id, existing.date_time)
+        } else {
+            let mut wtxn = lib.raw_db().env.write_txn()?;
+            let new_id = lib.raw_db().next_id(&mut wtxn, SEQ_EXTERNAL_HASH_ID)?;
+            let now_str = current_datetime_string();
 
-                let record = ExternalHashRecord {
-                    hash_id: new_id,
-                    hash: hash_clean.clone(),
-                    date_time: now_str.clone(),
-                };
+            let record = ExternalHashRecord {
+                hash_id: new_id,
+                hash: hash_clean.clone(),
+                date_time: now_str.clone(),
+            };
 
-                lib.raw_db().external_hashes.put(&mut wtxn, &new_id, &record)?;
-                wtxn.commit()?;
-                (true, new_id, now_str)
-            }
+            lib.raw_db().external_hashes.put(&mut wtxn, &new_id, &record)?;
+            wtxn.commit()?;
+            (true, new_id, now_str)
         };
 
         let response = ApiHashInsertResponse {

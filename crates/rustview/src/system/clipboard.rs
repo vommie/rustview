@@ -37,8 +37,8 @@ impl SystemClipboard {
         rustview_core::media::MediaFormat::from_path(path).spec().mime
     }
 
-    /// Decodes any image RustView can show to RGBA: the `image` crate first (with alpha), then the viewer's decoders
-    /// (FFmpeg formats, SVG).
+    /// Decodes any image `RustView` can show to RGBA: the `image` crate first (with alpha), then the viewer's decoders
+    /// (`FFmpeg` formats, SVG).
     fn decode_rgba(path: &Path) -> Result<(u32, u32, Vec<u8>), SystemHandlerError> {
         let native = if rustview_core::media::MediaFormat::from_path(path) == rustview_core::media::MediaFormat::Svg {
             None
@@ -102,7 +102,11 @@ impl SystemClipboard {
         if names.is_empty() {
             return Ok(0);
         }
-        let joined = names.iter().map(|n| n.as_ref()).collect::<Vec<_>>().join("\n");
+        let joined = names
+            .iter()
+            .map(std::convert::AsRef::as_ref)
+            .collect::<Vec<_>>()
+            .join("\n");
         Self::set_text(&joined)?;
         Ok(names.len())
     }
@@ -155,8 +159,7 @@ impl SystemClipboard {
         let is_source_png = path
             .extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case("png"))
-            .unwrap_or(false);
+            .is_some_and(|e| e.eq_ignore_ascii_case("png"));
         metrics.io_read_us = t_io.elapsed().as_micros();
 
         // 2. Prepare standardized PNG file on disk for xclip/wl-copy daemon streaming
@@ -192,9 +195,7 @@ impl SystemClipboard {
         // 3. Dispatch to Wayland / X11 native clipboard daemon using direct file handle
         let t_cli = Instant::now();
         let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
-            || std::env::var("XDG_SESSION_TYPE")
-                .map(|v| v.eq_ignore_ascii_case("wayland"))
-                .unwrap_or(false);
+            || std::env::var("XDG_SESSION_TYPE").is_ok_and(|v| v.eq_ignore_ascii_case("wayland"));
 
         let cli_success = if is_wayland {
             Self::set_image_via_wl_copy(&png_path)

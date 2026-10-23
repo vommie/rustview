@@ -1,4 +1,4 @@
-//! Large HEIC and some AVIF pictures are stored as a grid of tiles (iPhone photos: 512x512 tiles). FFmpeg's demuxer hands
+//! Large HEIC and some AVIF pictures are stored as a grid of tiles (iPhone photos: 512x512 tiles). `FFmpeg`'s demuxer hands
 //! the tiles over as separate video streams plus a "tile grid" stream group; only the `ffmpeg` command puts them together.
 //! This module does the same: it decodes every tile, places it, crops to the picture and applies the stored rotation.
 
@@ -265,7 +265,7 @@ struct RgbTile<'a> {
 /// Copies a tile into the canvas at (x, y); whatever lies outside the canvas is cut off.
 fn blit(canvas: &mut [u8], canvas_w: u32, canvas_h: u32, tile: &RgbTile<'_>, x: i32, y: i32) {
     let (tile_w, tile_h) = (tile.width, tile.height);
-    for ty in 0..tile_h as i64 {
+    for ty in 0..i64::from(tile_h) {
         let cy = i64::from(y) + ty;
         if cy < 0 || cy >= i64::from(canvas_h) {
             continue;

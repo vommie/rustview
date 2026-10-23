@@ -1,7 +1,10 @@
 use crate::ctx_menu::{CtxMenu, CtxMenuActionId, CtxMenuBuilder, CtxMenuItem};
 use crate::icons::Icon;
 use crate::ui::MainWindow;
-use crate::ui::state::*;
+use crate::ui::state::{
+    CTX_TAG_ADD_CHILD, CTX_TAG_ADD_ROOT, CTX_TAG_COLLAPSE_ALL, CTX_TAG_DELETE, CTX_TAG_EXPAND_ALL,
+    CTX_TAG_MOVE_TARGET_BASE, CTX_TAG_MOVE_TO_ROOT, CTX_TAG_REFRESH, CTX_TAG_RENAME, UiState,
+};
 use crate::ui::tags::{BridgeTags, TagActionDialogs};
 use parking_lot::RwLock;
 use rustview_core::library::Library;
@@ -84,7 +87,7 @@ impl TagContextMenu {
                 let mut child_sub_items = Vec::new();
                 child_sub_items.push(
                     CtxMenuItem::new_action(
-                        CTX_TAG_MOVE_TARGET_BASE + (child.id as CtxMenuActionId),
+                        CTX_TAG_MOVE_TARGET_BASE + CtxMenuActionId::from(child.id),
                         format!("Move under '{}'", child.name),
                     )
                     .with_icon(Icon::MoveTo),

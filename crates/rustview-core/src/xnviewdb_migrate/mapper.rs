@@ -1,6 +1,6 @@
 use super::logger::MigrationLogger;
 use super::stats::MigrationStats;
-use super::types::*;
+use super::types::{MigratedTagTreeNode, XnViewRawData, XnViewTag};
 use crate::library::folders::normalize_path;
 use crate::library::models::{ExternalHashRecord, FolderId, FolderRecord, MediaId, MediaRecord, TagId, TagRecord};
 use crate::media::{FileHash, MediaFormat, MediaHasher, MediaType, MetadataExtractor};
@@ -103,8 +103,7 @@ impl XnViewMapper {
         let mut next_folder_id = 1u64;
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs() as i64);
 
         for f in raw.folders {
             let normalized_path_buf = normalize_path(Path::new(f.pathname.trim()));
@@ -132,8 +131,7 @@ impl XnViewMapper {
             let normalized_path_str = normalized_path_buf.to_string_lossy().to_string();
             let folder_name = normalized_path_buf
                 .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| normalized_path_str.clone());
+                .map_or_else(|| normalized_path_str.clone(), |n| n.to_string_lossy().to_string());
 
             let is_hidden = folder_name.starts_with('.');
 
@@ -152,25 +150,20 @@ impl XnViewMapper {
                             let is_dir = ft.is_dir();
                             let is_file = ft.is_file() || ft.is_symlink();
                             let (size, mtime, ctime) = if is_file {
-                                entry
-                                    .metadata()
-                                    .map(|m| {
-                                        let s = m.len();
-                                        let mt = m
-                                            .modified()
-                                            .ok()
-                                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                                            .map(|d| d.as_secs() as i64)
-                                            .unwrap_or(0);
-                                        let ct = m
-                                            .created()
-                                            .ok()
-                                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                                            .map(|d| d.as_secs() as i64)
-                                            .unwrap_or(mt);
-                                        (s, mt, ct)
-                                    })
-                                    .unwrap_or((0, 0, 0))
+                                entry.metadata().map_or((0, 0, 0), |m| {
+                                    let s = m.len();
+                                    let mt = m
+                                        .modified()
+                                        .ok()
+                                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                                        .map_or(0, |d| d.as_secs() as i64);
+                                    let ct = m
+                                        .created()
+                                        .ok()
+                                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                                        .map_or(mt, |d| d.as_secs() as i64);
+                                    (s, mt, ct)
+                                })
                             } else {
                                 (0, 0, 0)
                             };
@@ -345,15 +338,12 @@ impl XnViewMapper {
                     duration_ms = raw_meta.duration_ms;
                 }
 
-                match MediaHasher::hash_file(path) {
-                    Ok(computed) => {
-                        stats.resolved_hashes_computed_live += 1;
-                        computed
-                    }
-                    Err(_) => {
-                        stats.fallback_hashes_generated += 1;
-                        MediaHasher::hash_bytes(path.to_string_lossy().as_bytes())
-                    }
+                if let Ok(computed) = MediaHasher::hash_file(path) {
+                    stats.resolved_hashes_computed_live += 1;
+                    computed
+                } else {
+                    stats.fallback_hashes_generated += 1;
+                    MediaHasher::hash_bytes(path.to_string_lossy().as_bytes())
                 }
             } else {
                 stats.fallback_hashes_generated += 1;
@@ -410,13 +400,13 @@ impl XnViewMapper {
         }
 
         for list in folders_by_parent.values_mut() {
-            list.sort();
+            list.sort_unstable();
         }
 
         // Direct media counts
         for folder in &mut folders {
-            folder.media_count = media_by_folder.get(&folder.id).map(|v| v.len() as u32).unwrap_or(0);
-            folder.subfolder_count = folders_by_parent.get(&folder.id).map(|v| v.len() as u32).unwrap_or(0);
+            folder.media_count = media_by_folder.get(&folder.id).map_or(0, |v| v.len() as u32);
+            folder.subfolder_count = folders_by_parent.get(&folder.id).map_or(0, |v| v.len() as u32);
         }
 
         // Recursive roll-up from deepest to shallowest
@@ -523,7 +513,7 @@ impl XnViewMapper {
         }
 
         for list in children_map.values_mut() {
-            list.sort();
+            list.sort_unstable();
         }
 
         let mut reindexed_tags = Vec::with_capacity(old_tags_map.len());
@@ -560,7 +550,7 @@ impl XnViewMapper {
 
                     let clean_name = old_tag.label.trim().to_string();
                     let tag_name = if clean_name.is_empty() {
-                        format!("Tag_{}", new_id)
+                        format!("Tag_{new_id}")
                     } else {
                         clean_name
                     };

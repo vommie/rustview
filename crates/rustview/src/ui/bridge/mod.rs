@@ -22,7 +22,7 @@ use crate::ui::selection::{BridgeFileSelection, FileClickContext, LastClickRecor
 use crate::ui::settings_dialog::SettingsDialogController;
 use crate::ui::shutdown::ShutdownTargets;
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
-use crate::ui::state::*;
+use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;

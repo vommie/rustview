@@ -63,10 +63,10 @@ impl BridgeFolders {
         is_explicit_refresh: bool,
     ) {
         let normalized_path = normalize_path(&path);
-        let folder_name = normalized_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| normalized_path.to_string_lossy().to_string());
+        let folder_name = normalized_path.file_name().map_or_else(
+            || normalized_path.to_string_lossy().to_string(),
+            |n| n.to_string_lossy().to_string(),
+        );
 
         ctx.thumbnails.cancel_pipeline();
         if !is_explicit_refresh {
@@ -387,10 +387,7 @@ impl BridgeFolders {
                     ctx.window.set_is_system_busy(true);
 
                     ctx.thumbnails.tracker().set_generate_total(stubs_count);
-                    StatusBarBridge::info(
-                        ctx.window,
-                        format!("Auto-completing {} external file(s)...", stubs_count),
-                    );
+                    StatusBarBridge::info(ctx.window, format!("Auto-completing {stubs_count} external file(s)..."));
 
                     let w_weak = ctx.window.as_weak();
                     let lib_arc = ctx.library.clone();
@@ -400,7 +397,7 @@ impl BridgeFolders {
                     let config = ThumbnailConfig::from_performance_settings(&ctx.settings.get().performance);
 
                     std::thread::Builder::new()
-                        .name(format!("folder-stubs-completer-{}", folder_id))
+                        .name(format!("folder-stubs-completer-{folder_id}"))
                         .spawn(move || {
                             let w_weak_progress = w_weak.clone();
                             let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));
@@ -479,12 +476,9 @@ impl BridgeFolders {
         StatusBarBridge::info(
             ctx.window,
             if is_virtual_folder {
-                format!(
-                    "Scanning media files in '{}' (Recursive: {} folders)...",
-                    folder_name, virtual_count
-                )
+                format!("Scanning media files in '{folder_name}' (Recursive: {virtual_count} folders)...")
             } else {
-                format!("Scanning media files in '{}'...", folder_name)
+                format!("Scanning media files in '{folder_name}'...")
             },
         );
 
@@ -498,7 +492,7 @@ impl BridgeFolders {
         let bench_scanner = bench.clone();
 
         std::thread::Builder::new()
-            .name(format!("media-scanner-fld-{}", folder_id))
+            .name(format!("media-scanner-fld-{folder_id}"))
             .spawn(move || {
                 let w_weak_progress = w_weak_scanner.clone();
                 let last_progress_report = Arc::new(parking_lot::Mutex::new(Instant::now()));

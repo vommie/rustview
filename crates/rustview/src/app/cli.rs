@@ -1,5 +1,5 @@
 //! The command line of the `rustview` binary (parsed with `clap`): no arguments start the application, `api ...` runs the headless
-//! API for other tools, `--migrate-xnview` runs the XnView MP database migration.
+//! API for other tools, `--migrate-xnview` runs the `XnView` MP database migration.
 
 use clap::{Parser, Subcommand};
 use rustview_core::cli_api::ApiSubcommand;

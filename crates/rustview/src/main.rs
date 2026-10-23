@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match rustview_core::cli_api::run_cli_api(command, &data_dir) {
             Ok(exit_code) => std::process::exit(exit_code),
             Err(e) => {
-                eprintln!("API Error: {}", e);
+                eprintln!("API Error: {e}");
                 std::process::exit(1);
             }
         }
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match rustview_core::xnviewdb_migrate::run_cli(&cli.migrate, &data_dir, &config_dir) {
             Ok(()) => std::process::exit(0),
             Err(e) => {
-                eprintln!("Migration Error: {}", e);
+                eprintln!("Migration Error: {e}");
                 std::process::exit(1);
             }
         }

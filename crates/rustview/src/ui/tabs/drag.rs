@@ -64,7 +64,7 @@ impl BridgeViewerTabs {
         window.set_drag_ghost_title(source_tab.title.clone().into());
         window.set_drag_ghost_format(source_tab.format.default_extension().into());
         window.set_drag_ghost_icon(tab_icon(source_tab));
-        window.set_drag_ghost_rating(source_tab.record.rating as i32);
+        window.set_drag_ghost_rating(i32::from(source_tab.record.rating));
         window.set_drag_ghost_is_active(Some(tab_id) == tab_manager.active_tab_id());
 
         for i in 0..tab_models.row_count() {
@@ -180,7 +180,13 @@ impl BridgeViewerTabs {
         let source_idx = session.source_index;
         let target_idx = session.target_index;
 
-        if source_idx != target_idx {
+        if source_idx == target_idx {
+            tracing::debug!(
+                tab_id = params.tab_id,
+                source_index = source_idx,
+                "[TabDnd: NoOp] Tab dropped in original slot"
+            );
+        } else {
             tracing::info!(
                 tab_id = params.tab_id,
                 source_index = source_idx,
@@ -196,12 +202,6 @@ impl BridgeViewerTabs {
             StatusBarBridge::success(
                 params.window,
                 format!("Reordered tab '{}' to position {}", title, target_idx + 1),
-            );
-        } else {
-            tracing::debug!(
-                tab_id = params.tab_id,
-                source_index = source_idx,
-                "[TabDnd: NoOp] Tab dropped in original slot"
             );
         }
 

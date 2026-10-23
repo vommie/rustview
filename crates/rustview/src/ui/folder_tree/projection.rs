@@ -181,8 +181,7 @@ fn flatten_into(
         let has_children = node.children.iter().any(|cid| {
             snapshot
                 .get_node(*cid)
-                .map(|c| is_node_visible(c, filter.show_deleted, filter.show_hidden))
-                .unwrap_or(false)
+                .is_some_and(|c| is_node_visible(c, filter.show_deleted, filter.show_hidden))
         });
         let is_expanded = filter.expanded_ids.contains(&node.id);
         let is_selected = filter.selected_id == Some(node.id);

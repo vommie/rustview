@@ -54,7 +54,7 @@ impl TagSelectionStats {
     pub fn format_display_name(&self, raw_name: &str, tag_id: TagId) -> String {
         let count = self.assigned_count(tag_id);
         if self.selected_files_count > 1 && count > 0 {
-            format!("{} ({})", raw_name, count)
+            format!("{raw_name} ({count})")
         } else {
             raw_name.to_string()
         }

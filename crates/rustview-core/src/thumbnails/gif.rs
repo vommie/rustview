@@ -74,14 +74,14 @@ impl GifThumbnailer {
         for frame in raw_frames {
             let (num, denom) = frame.delay().numer_denom_ms();
             let raw_delay = if denom > 0 {
-                (num as f64 / denom as f64).round() as u32
+                (f64::from(num) / f64::from(denom)).round() as u32
             } else {
                 num
             };
 
             // Standard Web Browser Compliance: If delay is <= 10ms or 0ms, default to 100ms (10 FPS)
             let delay_ms = if raw_delay <= 10 { 100 } else { raw_delay };
-            total_duration_ms += delay_ms as u64;
+            total_duration_ms += u64::from(delay_ms);
 
             let rgba = frame.into_buffer();
             let src_w = rgba.width();
@@ -100,10 +100,10 @@ impl GifThumbnailer {
                     rgb_raw.push(0);
                     rgb_raw.push(0);
                 } else {
-                    let alpha = a as f32 / 255.0;
-                    rgb_raw.push((r as f32 * alpha).round() as u8);
-                    rgb_raw.push((g as f32 * alpha).round() as u8);
-                    rgb_raw.push((b as f32 * alpha).round() as u8);
+                    let alpha = f32::from(a) / 255.0;
+                    rgb_raw.push((f32::from(r) * alpha).round() as u8);
+                    rgb_raw.push((f32::from(g) * alpha).round() as u8);
+                    rgb_raw.push((f32::from(b) * alpha).round() as u8);
                 }
             }
 

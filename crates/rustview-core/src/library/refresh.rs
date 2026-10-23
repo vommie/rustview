@@ -195,10 +195,10 @@ impl<'a> FolderRefresher<'a> {
             if seen_ids.insert(id)
                 && let Some(rec) = self.db.media.get(&rtxn, &id)?
             {
-                if !mask.shows(rec.format) {
-                    hidden_format_ids.push(id);
-                } else {
+                if mask.shows(rec.format) {
                     existing_map.insert(rec.filename.clone(), (id, rec));
+                } else {
+                    hidden_format_ids.push(id);
                 }
             }
         }
@@ -227,15 +227,13 @@ impl<'a> FolderRefresher<'a> {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
+                .map_or(0, |d| d.as_secs() as i64);
 
             let ctime = fs_meta
                 .created()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(mtime);
+                .map_or(mtime, |d| d.as_secs() as i64);
 
             if let Some((existing_id, existing_record)) = existing_map.remove(&scanned.filename) {
                 if !existing_record.is_deleted
@@ -715,7 +713,7 @@ impl<'a> FolderRefresher<'a> {
                 && mask.is_enabled(format)
             {
                 // "photo" becomes "photo.jpg"; only when that name is taken is a counter added ("photo (1).jpg")
-                let target_filename = format!("{}.{}", filename, ext);
+                let target_filename = format!("{filename}.{ext}");
                 let unique_filename = if folder_path.join(&target_filename).exists() {
                     crate::library::file_operations::FileOperations::generate_unique_filename(
                         folder_path,

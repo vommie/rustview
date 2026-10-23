@@ -59,10 +59,7 @@ pub fn walk_directory_tree(
         formats: FormatPolicy::mask(),
     };
 
-    let root_hidden = root
-        .file_name()
-        .map(|n| n.to_string_lossy().starts_with('.'))
-        .unwrap_or(false);
+    let root_hidden = root.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'));
 
     walk_dir(&mut ctx, root, None, 0, root_hidden);
 
@@ -91,8 +88,8 @@ fn walk_dir(ctx: &mut WalkContext<'_>, dir: &Path, parent: Option<&Path>, depth:
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let file_type = entry.file_type();
-            let is_dir = file_type.as_ref().map(|ft| ft.is_dir()).unwrap_or(false);
-            let is_file = file_type.as_ref().map(|ft| ft.is_file()).unwrap_or(false);
+            let is_dir = file_type.as_ref().is_ok_and(std::fs::FileType::is_dir);
+            let is_file = file_type.as_ref().is_ok_and(std::fs::FileType::is_file);
             let entry_name = entry.file_name().to_string_lossy().to_string();
 
             if is_dir {
@@ -129,7 +126,7 @@ fn walk_dir(ctx: &mut WalkContext<'_>, dir: &Path, parent: Option<&Path>, depth:
     ctx.items.push(ScannedDirItem {
         path: dir.to_path_buf(),
         name: dir_name,
-        parent_path: parent.map(|p| p.to_path_buf()),
+        parent_path: parent.map(std::path::Path::to_path_buf),
         depth,
         is_hidden: is_parent_hidden || starts_with_dot,
         media_files_count: media_count,

@@ -210,7 +210,7 @@ impl<'a> FolderOperations<'a> {
         let trimmed = original_name.trim();
         let mut counter = 1u32;
         loop {
-            let candidate = format!("{} ({})", trimmed, counter);
+            let candidate = format!("{trimmed} ({counter})");
             if !parent_path.join(&candidate).exists() {
                 return candidate;
             }
@@ -218,9 +218,8 @@ impl<'a> FolderOperations<'a> {
             if counter > 100_000 {
                 let timestamp = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
-                return format!("{}_{}", trimmed, timestamp);
+                    .map_or(0, |d| d.as_secs());
+                return format!("{trimmed}_{timestamp}");
             }
         }
     }
@@ -325,7 +324,7 @@ impl<'a> FolderOperations<'a> {
         if folder_path.exists() {
             if to_trash {
                 trash::delete(&folder_path).map_err(|e| {
-                    LibraryError::FileOperationRenameFailed(format!("Failed to move folder to Trash: {}", e))
+                    LibraryError::FileOperationRenameFailed(format!("Failed to move folder to Trash: {e}"))
                 })?;
             } else {
                 std::fs::remove_dir_all(&folder_path)?;

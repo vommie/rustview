@@ -30,7 +30,7 @@ impl BridgeFolders {
         }
     }
 
-    /// Returns the cached SPoT snapshot or lazily loads it from the database (zero filesystem access).
+    /// Returns the cached `SPoT` snapshot or lazily loads it from the database (zero filesystem access).
     /// A failed load is logged and yields an empty snapshot that is NOT cached, so the next call retries.
     pub fn ensure_snapshot(library: &Library, state: &RwLock<UiState>) -> Arc<FolderHierarchySnapshot> {
         let existing = state.read().folder_hierarchy.clone();

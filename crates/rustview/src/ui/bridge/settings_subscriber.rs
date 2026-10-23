@@ -7,7 +7,7 @@ use crate::ui::formats_policy::{FormatPolicyApplier, FormatPolicyContext};
 use crate::ui::media::BridgeMedia;
 use crate::ui::multiview::{self, bar_overlay};
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
-use crate::ui::state::*;
+use crate::ui::state::UiState;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;

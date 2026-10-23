@@ -20,7 +20,7 @@ impl ThumbnailGenerator {
         }
     }
 
-    /// Decodes image frame and SIMD resizes to aspect-ratio target within max_bound.
+    /// Decodes image frame and SIMD resizes to aspect-ratio target within `max_bound`.
     pub fn generate_image_thumbnail(
         &self,
         path: &Path,
@@ -42,7 +42,7 @@ impl ThumbnailGenerator {
     }
 
     /// Compresses raw RGB8 pixels to configured format (WebP or JPEG) with specified quality factor (10..100).
-    /// Uses native lossy WebP compression via libwebp or high-performance JPEG compression via JpegEncoder.
+    /// Uses native lossy WebP compression via libwebp or high-performance JPEG compression via `JpegEncoder`.
     pub fn compress(
         &self,
         rgb8_pixels: &[u8],
@@ -62,7 +62,7 @@ impl ThumbnailGenerator {
         let buffer = match format {
             ThumbnailFormat::Webp => {
                 let encoder = webp::Encoder::from_rgb(rgb8_pixels, width, height);
-                let webp_memory = encoder.encode(quality as f32);
+                let webp_memory = encoder.encode(f32::from(quality));
                 webp_memory.to_vec()
             }
             ThumbnailFormat::Jpeg => {

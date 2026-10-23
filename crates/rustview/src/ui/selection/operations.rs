@@ -99,7 +99,7 @@ impl BridgeFileSelection {
     }
 
     /// Surgically modifies only changed rows in the Slint Model translating global indices to local viewport offsets.
-    /// Employs an O(Viewport) threshold optimization when changed_ids is large (e.g. Select All / Deselect All)
+    /// Employs an O(Viewport) threshold optimization when `changed_ids` is large (e.g. Select All / Deselect All)
     /// to eliminate CPU freezes on large datasets.
     pub fn sync_selection_diff(window: &MainWindow, state: &RwLock<UiState>, changed_ids: &[MediaId]) {
         if changed_ids.is_empty() {
@@ -165,9 +165,9 @@ impl BridgeFileSelection {
 
         if folder_count + file_count > 0 {
             let message = match (folder_count, file_count) {
-                (0, files) => format!("Selected all {} media file(s).", files),
-                (folders, 0) => format!("Selected all {} folder(s).", folders),
-                (folders, files) => format!("Selected all: {} folder(s) and {} media file(s).", folders, files),
+                (0, files) => format!("Selected all {files} media file(s)."),
+                (folders, 0) => format!("Selected all {folders} folder(s)."),
+                (folders, files) => format!("Selected all: {folders} folder(s) and {files} media file(s)."),
             };
             StatusBarBridge::info(window, message);
         } else {
@@ -223,9 +223,9 @@ impl BridgeFileSelection {
 
         if prev_media + prev_folders > 0 {
             let message = match (prev_folders, prev_media) {
-                (0, files) => format!("Deselected {} media file(s).", files),
-                (folders, 0) => format!("Deselected {} folder(s).", folders),
-                (folders, files) => format!("Deselected {} folder(s) and {} media file(s).", folders, files),
+                (0, files) => format!("Deselected {files} media file(s)."),
+                (folders, 0) => format!("Deselected {folders} folder(s)."),
+                (folders, files) => format!("Deselected {folders} folder(s) and {files} media file(s)."),
             };
             StatusBarBridge::info(window, message);
         }

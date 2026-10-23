@@ -6,7 +6,7 @@
 //!
 //! - the window has a fixed `width` (no `min-width`, `preferred-width`, `max-height` or `height`);
 //! - its height follows the content, also when the content grows later: `preferred-height` and `min-height` are bound to
-//!   `dialog-layout.preferred-height`, where `dialog-layout` is the outer layout of the dialog (a FocusScope child alone would
+//!   `dialog-layout.preferred-height`, where `dialog-layout` is the outer layout of the dialog (a `FocusScope` child alone would
 //!   report the height of one line per wrapped text);
 //! - the layout containers that hold the texts have `width: root.width;` (outer and content container), which lets Slint measure
 //!   wrapped text at the real width.

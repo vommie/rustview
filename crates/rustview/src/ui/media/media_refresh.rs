@@ -104,7 +104,7 @@ impl BridgeMedia {
                 "Refreshing the selected file (Full)...".to_string()
             }
         } else {
-            format!("Refreshing {} selected files (Full)...", total_items)
+            format!("Refreshing {total_items} selected files (Full)...")
         };
         StatusBarBridge::info(window, start_msg);
 
@@ -174,15 +174,13 @@ impl BridgeMedia {
                             .modified()
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(old_record.modification_time);
+                            .map_or(old_record.modification_time, |d| d.as_secs() as i64);
 
                         let ctime = fs_meta
                             .created()
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(old_record.creation_time);
+                            .map_or(old_record.creation_time, |d| d.as_secs() as i64);
 
                         let is_zero_byte = file_size == 0;
 
@@ -276,8 +274,7 @@ impl BridgeMedia {
                         let assigned_tags_count = lib_ref
                             .tags()
                             .get_tags_for_media(media_id)
-                            .map(|t| t.len())
-                            .unwrap_or(0);
+                            .map_or(0, |t| t.len());
 
                         let is_corrupted = is_zero_byte || !hash_ok || !gen_ok || (orig_w == 0 && orig_h == 0);
 
@@ -333,7 +330,7 @@ impl BridgeMedia {
                         Ok(item) => successful_items.push(item),
                         Err((id, path, _err)) => {
                             let rec_opt = lib_arc.media().get(id).ok().flatten();
-                            let is_pending_stub = rec_opt.as_ref().map(|r| r.source.is_some() && (r.file_size == 0 || r.width == 0)).unwrap_or(false);
+                            let is_pending_stub = rec_opt.as_ref().is_some_and(|r| r.source.is_some() && (r.file_size == 0 || r.width == 0));
 
                             if !is_pending_stub {
                                 let _ = lib_arc.media().set_deleted(id, true);
@@ -451,8 +448,7 @@ impl BridgeMedia {
                         StatusBarBridge::warn(
                             &w,
                             format!(
-                                "Refreshed {} file(s). ({} missing / pending)",
-                                refreshed_count, missing_count
+                                "Refreshed {refreshed_count} file(s). ({missing_count} missing / pending)"
                             ),
                         );
                     } else {

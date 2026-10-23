@@ -194,7 +194,7 @@ pub const DEFAULT_PREVIEW_QUALITY: u8 = 40;
 /// Dynamically calculates default worker thread count, reserving CPU headroom for Slint UI responsiveness.
 #[inline]
 pub fn default_worker_threads() -> usize {
-    let available = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let available = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
 
     let reserved = if available > 4 {
         available.saturating_sub(2)
@@ -315,7 +315,7 @@ pub const MIN_FULLSCREEN_ZOOM_OUT_PERCENT: u32 = 0;
 pub const MAX_FULLSCREEN_ZOOM_OUT_PERCENT: u32 = 1000;
 /// Zooms glide (a short animation) instead of jumping.
 pub const DEFAULT_FULLSCREEN_ZOOM_SMOOTH: bool = true;
-/// "bottom_left" or "bottom_right".
+/// "`bottom_left`" or "`bottom_right`".
 pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION: &str = "bottom_left";
 /// The minimap is shown for as long as the picture is zoomed in (otherwise: mouse-over and a few seconds after a zoom).
 pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS: bool = false;
@@ -323,7 +323,7 @@ pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS: bool = false;
 pub const DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS: u32 = 3;
 pub const MIN_FULLSCREEN_ZOOM_MINIMAP_SECS: u32 = 1;
 pub const MAX_FULLSCREEN_ZOOM_MINIMAP_SECS: u32 = 30;
-/// "lanczos3" (best quality), "catmull_rom" (bicubic), "bilinear" or "nearest" (hard pixels).
+/// "lanczos3" (best quality), "`catmull_rom`" (bicubic), "bilinear" or "nearest" (hard pixels).
 pub const DEFAULT_FULLSCREEN_ZOOM_RESAMPLE: &str = "lanczos3";
 
 // --- Fullscreen background ---
@@ -676,7 +676,10 @@ impl Default for ViewSettings {
             sidebar_left_width: DEFAULT_SIDEBAR_LEFT_WIDTH,
             sidebar_right_width: DEFAULT_SIDEBAR_RIGHT_WIDTH,
 
-            left_sidebar_panel_tabs: DEFAULT_LEFT_SIDEBAR_PANEL_TABS.iter().map(|s| s.to_string()).collect(),
+            left_sidebar_panel_tabs: DEFAULT_LEFT_SIDEBAR_PANEL_TABS
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             left_sidebar_active_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
         }
     }

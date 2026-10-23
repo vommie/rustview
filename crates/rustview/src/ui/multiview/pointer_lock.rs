@@ -6,7 +6,7 @@
 //! the host window when the drag starts (so there is room in every direction), every movement is read as the distance from there
 //! and the pointer is put back at once, and the release puts it where it was pressed.
 //!
-//! This is done on the X server (`XWarpPointer`, the cursor hidden with XFixes). Where it does not work (Wayland, a pointer that
+//! This is done on the X server (`XWarpPointer`, the cursor hidden with `XFixes`). Where it does not work (Wayland, a pointer that
 //! does not follow, no X connection) `begin` says so and the drag stays absolute: the rectangle under the pointer.
 
 use crate::viewer::x11::OverlayServer;
@@ -39,7 +39,7 @@ pub fn begin(host_xid: u64) -> bool {
                         center: (0, 0),
                         restore: (0, 0),
                         active: false,
-                    })
+                    });
                 }
                 Err(_) => return false,
             }

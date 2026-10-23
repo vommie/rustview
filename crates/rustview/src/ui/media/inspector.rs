@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 pub struct BridgeInspector;
 
 impl BridgeInspector {
-    /// Updates inspector fields on MainWindow according to current selection or active viewer tab.
+    /// Updates inspector fields on `MainWindow` according to current selection or active viewer tab.
     pub fn update(window: &MainWindow, state: &RwLock<UiState>) {
         let is_tab_mode = window.get_active_view_mode() == 1;
         let st = state.read();
@@ -117,8 +117,7 @@ impl BridgeInspector {
             let parent = node
                 .path
                 .parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| "-".to_string());
+                .map_or_else(|| "-".to_string(), |p| p.to_string_lossy().to_string());
             window.set_info_path(parent.clone().into());
             window.set_info_path_tooltip(parent.into());
             window.set_info_size(
@@ -175,8 +174,7 @@ impl BridgeInspector {
         let here = st
             .current_folder_path
             .as_deref()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| "-".to_string());
+            .map_or_else(|| "-".to_string(), |p| p.to_string_lossy().to_string());
         window.set_info_path(here.clone().into());
         window.set_info_path_tooltip(here.into());
 
@@ -272,7 +270,7 @@ impl BridgeInspector {
 
         let (hash_str, tooltip_str) = if item.is_pending {
             let src_text = if let Some(ref src) = item.record.source {
-                format!("Pending [Source: {}]", src)
+                format!("Pending [Source: {src}]")
             } else {
                 "Pending (External API Queue)".to_string()
             };
@@ -281,7 +279,7 @@ impl BridgeInspector {
             let hash_hex = MediaHasher::to_hex(&item.record.file_hash);
             let mut tt = hash_hex.clone();
             if let Some(ref src) = item.record.source {
-                tt = format!("MD5: {}\nSource: {}", hash_hex, src);
+                tt = format!("MD5: {hash_hex}\nSource: {src}");
             }
             (hash_hex, tt)
         };
@@ -308,11 +306,11 @@ impl BridgeInspector {
         let mut folder_counts: HashMap<PathBuf, (String, usize, bool)> = HashMap::new();
         for item in selected_items {
             let parent = item.folder.path();
-            let is_root = root_folder_opt.map(|r| r == parent).unwrap_or(false);
-            let folder_name = parent
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| parent.to_string_lossy().to_string());
+            let is_root = root_folder_opt.is_some_and(|r| r == parent);
+            let folder_name = parent.file_name().map_or_else(
+                || parent.to_string_lossy().to_string(),
+                |n| n.to_string_lossy().to_string(),
+            );
 
             let entry = folder_counts
                 .entry(parent.to_path_buf())
@@ -332,15 +330,13 @@ impl BridgeInspector {
         } else {
             sorted_folders
                 .into_iter()
-                .map(|(name, count, _)| format!("{} ({})", name, count))
+                .map(|(name, count, _)| format!("{name} ({count})"))
                 .collect::<Vec<_>>()
                 .join(", ")
         };
 
         window.set_info_path(subfolders_str.into());
-        let bare_root_path = root_folder_opt
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| "-".to_string());
+        let bare_root_path = root_folder_opt.map_or_else(|| "-".to_string(), |p| p.to_string_lossy().to_string());
         window.set_info_path_tooltip(bare_root_path.into());
 
         window.set_info_size(format!("{} (total)", format_filesize(summary.total_size_bytes)).into());
@@ -348,7 +344,7 @@ impl BridgeInspector {
 
         let dim_str = if summary.is_uniform_dimensions {
             if let Some((w, h)) = summary.min_dimensions {
-                format!("{} x {} (Uniform)", w, h)
+                format!("{w} x {h} (Uniform)")
             } else {
                 "-".to_string()
             }

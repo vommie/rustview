@@ -56,7 +56,7 @@ pub struct MigratedTagTreeNode {
     pub children: Vec<MigratedTagTreeNode>,
 }
 
-/// Consolidated container holding raw extracted records from the XnViewMP database.
+/// Consolidated container holding raw extracted records from the `XnViewMP` database.
 #[derive(Debug, Default)]
 pub struct XnViewRawData {
     pub version: Option<String>,
