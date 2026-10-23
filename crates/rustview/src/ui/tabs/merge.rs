@@ -5,7 +5,7 @@ use crate::ui::context_menu::tab::TabActionContext;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tabs::merge_limit::{MergeLimitDialog, texts};
-use crate::viewer::{MergeError, MergeRefusal, TabId, ViewerTabManager};
+use crate::viewer::{MergeError, MergeRefusal, MergeSide, TabId, ViewerTabManager, tab_merge};
 
 impl BridgeViewerTabs {
     /// The selected tabs in tab order.
@@ -28,11 +28,29 @@ impl BridgeViewerTabs {
     /// shown unless the tab grid is open. When the media do not fit, nothing changes and a dialog says how many have to leave first.
     pub fn merge_selected_tabs(ctx: &TabActionContext<'_>) {
         let ids = Self::selected_tab_ids(ctx);
+        Self::merge_tab_ids(ctx, &ids);
+    }
+
+    /// "Merge With Left / Right / Left & Right" of a single tab: the tab and its adjacent neighbors become one Multiview tab.
+    pub fn merge_with_neighbors(ctx: &TabActionContext<'_>, tab: TabId, side: MergeSide) {
+        let order: Vec<TabId> = ctx.tab_manager.list_tabs().iter().map(|t| t.id).collect();
+        let ids = tab_merge::with_neighbors(&order, tab, side);
+        tracing::info!(
+            tab_id = tab,
+            ?side,
+            tabs = ids.len(),
+            "[BridgeViewerTabs: Merge] Merge with neighbors requested"
+        );
+        Self::merge_tab_ids(ctx, &ids);
+    }
+
+    /// Merges the tabs `ids` (in tab order) and answers the result: the new tab is shown (unless the tab grid is open) and the
+    /// status line says what happened; when the media do not fit, a dialog says how many have to leave first.
+    fn merge_tab_ids(ctx: &TabActionContext<'_>, ids: &[TabId]) {
         let in_grid = ctx.window.get_active_view_mode() == 2;
         let titles_before = ctx.tab_manager.list_tabs();
-        match ctx.tab_manager.merge_tabs(&ids, !in_grid) {
+        match ctx.tab_manager.merge_tabs(ids, !in_grid) {
             Ok(merged) => {
-                ctx.state.write().tab_selection.clear();
                 Self::sync_after_tab_change(ctx);
                 let all_tabs = ctx.tab_manager.list_tabs();
                 let title = ViewerTabManager::compute_tab_title(&all_tabs, merged.tab);

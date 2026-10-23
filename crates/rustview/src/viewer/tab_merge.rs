@@ -58,6 +58,58 @@ pub struct MergedTabs {
     pub tiles: usize,
 }
 
+/// Which neighbors of a tab a single-tab merge takes along (the entries "Merge With Left/Right/Left & Right" of its menu).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeSide {
+    Left,
+    Right,
+    Both,
+}
+
+/// What the menu of a tab offers for merging, from the tabs that exist next to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeMenu {
+    /// A single tab: nothing to merge with.
+    None,
+    /// Only one side has a neighbor: one entry "Merge With Left" or "Merge With Right".
+    Entry(MergeSide),
+    /// Tabs on both sides: an entry "Merge" with a submenu of all three.
+    Submenu,
+}
+
+/// The merge entries of the menu of the tab at `index` among `total` tabs.
+pub fn merge_menu(index: usize, total: usize) -> MergeMenu {
+    match (index > 0, index + 1 < total) {
+        (false, false) => MergeMenu::None,
+        (true, false) => MergeMenu::Entry(MergeSide::Left),
+        (false, true) => MergeMenu::Entry(MergeSide::Right),
+        (true, true) => MergeMenu::Submenu,
+    }
+}
+
+/// The tab `tab` and the neighbors `side` names, in tab order. Empty when `tab` is unknown or a neighbor that was asked for does
+/// not exist (the menu does not offer that then).
+pub fn with_neighbors(order: &[TabId], tab: TabId, side: MergeSide) -> Vec<TabId> {
+    let Some(index) = order.iter().position(|id| *id == tab) else {
+        return Vec::new();
+    };
+    let left = (index > 0).then(|| order[index - 1]);
+    let right = order.get(index + 1).copied();
+    let (take_left, take_right) = match side {
+        MergeSide::Left => (true, false),
+        MergeSide::Right => (false, true),
+        MergeSide::Both => (true, true),
+    };
+    if (take_left && left.is_none()) || (take_right && right.is_none()) {
+        return Vec::new();
+    }
+    let mut ids = Vec::with_capacity(3);
+    ids.extend(left.filter(|_| take_left));
+    ids.push(tab);
+    ids.extend(right.filter(|_| take_right));
+    ids
+}
+
 /// Decides whether `sources` (in tab order) can become one Multiview of at most `cap` tiles. Returns the number of tiles it
 /// will have.
 pub fn plan(sources: &[MergeSource], cap: usize) -> Result<usize, MergeRefusal> {
@@ -127,6 +179,36 @@ mod tests {
         assert_eq!(plan(&[src(1, 3)], 4), Err(MergeRefusal::TooFewTabs));
         assert_eq!(plan(&[src(1, 1), src(1, 1)], 4), Err(MergeRefusal::TooFewTabs));
         assert_eq!(MergeRefusal::TooFewTabs.excess(), 0);
+    }
+
+    #[test]
+    fn the_menu_offers_what_the_neighbors_allow() {
+        assert_eq!(merge_menu(0, 1), MergeMenu::None);
+        assert_eq!(merge_menu(0, 3), MergeMenu::Entry(MergeSide::Right));
+        assert_eq!(merge_menu(2, 3), MergeMenu::Entry(MergeSide::Left));
+        assert_eq!(merge_menu(1, 3), MergeMenu::Submenu);
+        assert_eq!(merge_menu(1, 2), MergeMenu::Entry(MergeSide::Left));
+        assert_eq!(merge_menu(0, 2), MergeMenu::Entry(MergeSide::Right));
+    }
+
+    #[test]
+    fn the_neighbors_are_the_adjacent_tabs_in_tab_order() {
+        let order = [10, 11, 12, 13];
+        assert_eq!(with_neighbors(&order, 12, MergeSide::Left), vec![11, 12]);
+        assert_eq!(with_neighbors(&order, 12, MergeSide::Right), vec![12, 13]);
+        assert_eq!(with_neighbors(&order, 12, MergeSide::Both), vec![11, 12, 13]);
+        assert_eq!(with_neighbors(&order, 10, MergeSide::Right), vec![10, 11]);
+        assert_eq!(with_neighbors(&order, 13, MergeSide::Left), vec![12, 13]);
+    }
+
+    #[test]
+    fn a_neighbor_that_does_not_exist_gives_nothing() {
+        let order = [10, 11, 12];
+        assert_eq!(with_neighbors(&order, 10, MergeSide::Left), Vec::<TabId>::new());
+        assert_eq!(with_neighbors(&order, 12, MergeSide::Right), Vec::<TabId>::new());
+        assert_eq!(with_neighbors(&order, 10, MergeSide::Both), Vec::<TabId>::new());
+        assert_eq!(with_neighbors(&order, 99, MergeSide::Left), Vec::<TabId>::new());
+        assert_eq!(with_neighbors(&[], 10, MergeSide::Right), Vec::<TabId>::new());
     }
 
     #[test]

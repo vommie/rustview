@@ -9,6 +9,24 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+- **Merge tabs.** Select several tabs with **Ctrl+click** (toggles one tab, the shown tab does not change) or **Shift+click** (the range from the last clicked tab; Ctrl+Shift
+  adds the range) in the tab bar and in the tab grid; selected tabs get an accent-colored border. A click on a tab without a modifier, a click on free space or Esc ends the
+  selection. Right-click a selected tab: **Merge Selected Tabs** puts the media of all selected tabs into **one new Multiview tab** (at the place of the first of them, named
+  "Multiview"), **Close Selected Tabs** closes them. The merged tabs are closed; the new tab is shown (the tab grid stays open). Nothing is restarted: running videos keep
+  playing in their mpv players and windows, decoded images keep their pixels, pause and mute choices of the user stay; the sound follows the Settings > Fullscreen > Sound
+  rules (one video audible, the leftmost that was). Widths dragged in a gutter and the zoom of an image start from the automatic arrangement again.
+- **Merge With Left / Merge With Right** in the menu of a single tab (**Merge** with a submenu of Left, Right and **Left & Right** when it has tabs on both sides): the tab and
+  its adjacent neighbor(s) become one Multiview tab. The entries share the group of "Move Tab...".
+- **Limit check.** A Multiview shows at most four media. When the tabs hold more (a medium that several tabs show counts once per tab), nothing is merged and a warning
+  dialog says how many media have to be removed from the tabs first, with the media of each tab.
+- Ctrl+click on a video in a tab-grid item selects the tab like a click on the rest of the item.
+
+### Changed
+- A Multiview that was never shown starts only the tiles that are not running (needed for merged tabs); a tab that was merged away never leaves a player behind.
+
+No migration: settings, library and thumbnail store are untouched (the selection of tabs is not persisted, tabs do not survive a restart either).
+
 ## [0.3.84] - 2026-10-23
 
 ### Added

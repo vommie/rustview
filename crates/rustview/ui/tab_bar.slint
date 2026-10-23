@@ -271,13 +271,6 @@ export component MediaTabBar inherits Rectangle {
         scroll-area.scroll-into-view-horizontal(tab-x, tab-width);
     }
 
-    // Behind the tabs: a click on the free space ends the multi-selection.
-    TouchArea {
-        width: 100%;
-        height: 100%;
-        clicked => { root.tab-selection-cleared(); }
-    }
-
     scroll-area := SmoothScrollArea {
         width: 100%;
         height: 100%;
@@ -285,6 +278,9 @@ export component MediaTabBar inherits Rectangle {
         enable-vertical: false;
         content-width: tab-layout.preferred-width;
         content-height: self.height;
+
+        // A click on the free space of the bar ends the multi-selection.
+        background-clicked => { root.tab-selection-cleared(); }
 
         tab-layout := HorizontalLayout {
             padding-left: 2px;

@@ -99,6 +99,9 @@ pub const CTX_TAB_CLOSE_OTHERS: CtxMenuActionId = 4009;
 pub const CTX_TAB_OPEN_MULTIVIEW: CtxMenuActionId = 4010;
 pub const CTX_TAB_MERGE_SELECTED: CtxMenuActionId = 4011;
 pub const CTX_TAB_CLOSE_SELECTED: CtxMenuActionId = 4012;
+pub const CTX_TAB_MERGE_LEFT: CtxMenuActionId = 4013;
+pub const CTX_TAB_MERGE_RIGHT: CtxMenuActionId = 4014;
+pub const CTX_TAB_MERGE_BOTH: CtxMenuActionId = 4015;
 
 // Favorites Context Menu Action IDs
 pub const CTX_FAVORITE_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 5001;

@@ -17,7 +17,8 @@ Slint user interface; videos play through the embedded mpv player and most forma
 - **Multiview:** up to four images or videos side by side in a fullscreen, or as a tab. Tiles follow your selection, can be pinned
   ("sticky"), swapped, duplicated and resized with gutters; every tile has a media action bar and **zoom** for images (slider, `Ctrl` + wheel,
   minimap).
-- **Tabs and tab grid:** open media in tabs and see them all in a masonry grid; a lone medium fills the whole tab.
+- **Tabs and tab grid:** open media in tabs and see them all in a masonry grid; a lone medium fills the whole tab. Select tabs with Ctrl/Shift+click
+  and **merge** them into one Multiview tab (videos keep playing), or merge a tab with its neighbors from its menu.
 - **Formats:** 47 image and video formats (JPEG, PNG, WebP, AVIF, HEIC, TIFF, GIF, SVG, EXR, MP4, MKV, WebM, raw H.264/HEVC, ... see
   [docs/file_formats.md](docs/file_formats.md)), each switchable in the settings; the content, not the extension, decides what is an image
   or a video.

@@ -160,6 +160,7 @@ pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: O
         (UiAction::CloseActiveTab, _) => handle.close_active_tab(),
         (UiAction::OpenTabFullscreen, Some(id)) => handle.open_tab_fullscreen(id),
         (UiAction::ActivateTab, Some(id)) => handle.activate_tab(id),
+        (UiAction::ToggleTabSelection, Some(id)) => handle.toggle_tab_selection(id),
         (UiAction::ScrollGrid { up }, _) => handle.scroll_grid(up),
         (UiAction::Navigate { forward }, _) => handle.navigate(forward),
         (UiAction::DeselectInBrowse(media_id), _) => handle.deselect_in_browse(media_id),

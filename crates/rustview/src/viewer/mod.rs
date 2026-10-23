@@ -16,7 +16,7 @@ pub use loader::HighResImageLoader;
 pub use manager::ViewerTabManager;
 pub use mpv_engine::{MpvEventCallback, MpvFullscreenCallback, MpvPlayer};
 pub use tab_item::{TabCollection, TabTitleFormatter};
-pub use tab_merge::{MergeError, MergeRefusal, MergeSource, MergedTabs};
+pub use tab_merge::{MergeError, MergeMenu, MergeRefusal, MergeSide, MergeSource, MergedTabs};
 pub use types::{MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, MpvPlaybackState, MultiviewTabPayload, TabId, ViewerAction};
 pub use x11::{
     OverlayServer, PointerProbe, SubwindowGeometry, ViewportBounds, X11VideoSubwindow, XRectangle,

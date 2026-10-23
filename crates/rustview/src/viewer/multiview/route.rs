@@ -41,6 +41,8 @@ pub enum UiAction {
     CloseActiveTab,
     RequestRename,
     ActivateTab,
+    /// Ctrl+click on a video in a tab-grid item: the tab joins or leaves the multi-selection of tabs.
+    ToggleTabSelection,
     ScrollGrid {
         up: bool,
     },
@@ -79,7 +81,57 @@ pub fn route(mode: HostMode, origin: OriginKind, event: RoutedEvent, click: Clic
         (HostMode::TabView, ToggleFullscreen) | (HostMode::TabGrid, GridMiddle) => UiAction::OpenTabFullscreen,
         (HostMode::TabView, CloseTab) => UiAction::CloseActiveTab,
         (HostMode::TabGrid, GridLeft) => UiAction::ActivateTab,
+        (HostMode::TabGrid, CtrlClick) => UiAction::ToggleTabSelection,
         (HostMode::TabGrid, GridWheel { up }) => UiAction::ScrollGrid { up },
         _ => UiAction::None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_click_on_a_video_in_the_tab_grid_activates_the_tab_and_a_ctrl_click_selects_it() {
+        let mode = HostMode::TabGrid;
+        assert_eq!(
+            route(mode, OriginKind::Tab, RoutedEvent::GridLeft, ClickKind::None),
+            UiAction::ActivateTab
+        );
+        assert_eq!(
+            route(mode, OriginKind::Tab, RoutedEvent::CtrlClick, ClickKind::None),
+            UiAction::ToggleTabSelection
+        );
+    }
+
+    #[test]
+    fn a_ctrl_click_means_something_else_outside_the_tab_grid() {
+        assert_eq!(
+            route(
+                HostMode::TabView,
+                OriginKind::Tab,
+                RoutedEvent::CtrlClick,
+                ClickKind::None
+            ),
+            UiAction::None
+        );
+        assert_eq!(
+            route(
+                HostMode::Hidden,
+                OriginKind::Tab,
+                RoutedEvent::CtrlClick,
+                ClickKind::None
+            ),
+            UiAction::None
+        );
+        assert_eq!(
+            route(
+                HostMode::Fullscreen,
+                OriginKind::Browse,
+                RoutedEvent::CtrlClick,
+                ClickKind::CtrlDouble
+            ),
+            UiAction::ConvertToTab
+        );
     }
 }

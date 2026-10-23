@@ -99,18 +99,14 @@ export component TabGridView inherits Rectangle {
                 content-width: self.width;
                 content-height: root.total-content-height;
 
+                background-clicked => { root.selection-cleared(); }
+
                 // Masonry Items Container
                 Rectangle {
                     x: 0px;
                     y: 0px;
                     width: parent.width;
                     height: root.total-content-height;
-
-                    TouchArea {
-                        width: 100%;
-                        height: 100%;
-                        clicked => { root.selection-cleared(); }
-                    }
 
                     for tab-item in root.items : TabGridItemView {
                         item: tab-item;

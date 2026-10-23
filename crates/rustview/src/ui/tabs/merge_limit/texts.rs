@@ -15,7 +15,7 @@ pub fn media(count: usize) -> String {
 /// The main text: what is too much and how many media have to leave the tabs before the merge fits.
 pub fn message(total: usize, cap: usize, excess: usize) -> String {
     format!(
-        "The selected tabs hold {} together, but a Multiview shows at most {cap}.\n\nRemove {} from these tabs first, then merge them again.",
+        "These tabs hold {} together, but a Multiview shows at most {cap}.\n\nRemove {} from them first, then merge them again.",
         media(total),
         media(excess),
     )
@@ -55,7 +55,7 @@ mod tests {
 
     #[test]
     fn one_medium_too_many_is_worded_in_the_singular() {
-        assert!(message(5, 4, 1).contains("Remove 1 medium from"));
+        assert!(message(5, 4, 1).contains("Remove 1 medium from them"));
     }
 
     #[test]

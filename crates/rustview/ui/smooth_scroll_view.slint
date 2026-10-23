@@ -58,6 +58,8 @@ export component SmoothScrollArea inherits Rectangle {
     clip: true;
 
     callback scrolled(length /* dx */, length /* dy */);
+    /// A click on the free space of the area (not on its content).
+    callback background-clicked();
 
     /// Public method to apply wheel / gesture delta to the viewport
     public function handle-scroll(dx: length, dy: length) {
@@ -146,6 +148,8 @@ export component SmoothScrollArea inherits Rectangle {
             root.handle-scroll(event.delta-x, event.delta-y);
             return accept;
         }
+
+        clicked => { root.background-clicked(); }
     }
 
     // Content container viewport with real-time 1:1 lockstep positioning

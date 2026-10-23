@@ -513,6 +513,14 @@ impl MultiviewHandle {
         });
     }
 
+    /// Ctrl+click on a video in a grid item: the tab joins or leaves the multi-selection of tabs (the same path as Ctrl+click on
+    /// the rest of the item).
+    pub(super) fn toggle_tab_selection(&self, instance_id: u64) {
+        self.on_tab_of_instance(instance_id, |w, tab_id| {
+            w.invoke_tab_grid_item_selection_clicked(tab_id.wrapping_as::<i32>(), true, false);
+        });
+    }
+
     fn on_tab_of_instance(&self, instance_id: u64, f: impl FnOnce(&MainWindow, TabId) + Send + 'static) {
         let (Some(tab_manager), Some(main_window)) = (self.tab_manager(), self.main_window()) else {
             return;

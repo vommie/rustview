@@ -6,13 +6,13 @@ use crate::ui::context_menu::media::MediaContextMenu;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::{
     CTX_TAB_CLOSE, CTX_TAB_CLOSE_OTHERS, CTX_TAB_CLOSE_SELECTED, CTX_TAB_CLOSE_TO_LEFT, CTX_TAB_CLOSE_TO_RIGHT,
-    CTX_TAB_DUPLICATE, CTX_TAB_MERGE_SELECTED, CTX_TAB_MOVE_LEFT, CTX_TAB_MOVE_RIGHT, CTX_TAB_MOVE_TO_END,
-    CTX_TAB_MOVE_TO_START, CTX_TAB_OPEN_MULTIVIEW, UiState,
+    CTX_TAB_DUPLICATE, CTX_TAB_MERGE_BOTH, CTX_TAB_MERGE_LEFT, CTX_TAB_MERGE_RIGHT, CTX_TAB_MERGE_SELECTED,
+    CTX_TAB_MOVE_LEFT, CTX_TAB_MOVE_RIGHT, CTX_TAB_MOVE_TO_END, CTX_TAB_MOVE_TO_START, CTX_TAB_OPEN_MULTIVIEW, UiState,
 };
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
-use crate::viewer::{MediaTabSession, TabId, ViewerTabManager};
+use crate::viewer::{MediaTabSession, MergeMenu, MergeSide, TabId, ViewerTabManager, tab_merge};
 use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::media::MediaType;
@@ -78,8 +78,8 @@ impl TabContextMenu {
                 Some(Icon::OpenMultiview),
                 true,
             );
-        let mut builder = builder
-            .separator()
+        // Merge and Move arrange tabs and share one group of the menu
+        let mut builder = Self::append_merge_entries(builder.separator(), tab_idx, total_tabs)
             .submenu("Move Tab...", Some(Icon::TabMove), has_multiple_tabs, move |sub| {
                 sub.action(
                     CTX_TAB_MOVE_TO_START,
@@ -169,6 +169,41 @@ impl TabContextMenu {
         builder.build()
     }
 
+    /// The merge entries of a single tab: "Merge With Left" or "Merge With Right" when only one side has a neighbor, a submenu
+    /// "Merge" with both and "Merge With Left & Right" when it has tabs on both sides; nothing for a single tab.
+    fn append_merge_entries(builder: CtxMenuBuilder, tab_idx: usize, total_tabs: usize) -> CtxMenuBuilder {
+        match tab_merge::merge_menu(tab_idx, total_tabs) {
+            MergeMenu::None => builder,
+            MergeMenu::Entry(MergeSide::Left) => {
+                builder.action(CTX_TAB_MERGE_LEFT, "Merge With Left", None, Some(Icon::TabMerge), true)
+            }
+            MergeMenu::Entry(_) => builder.action(
+                CTX_TAB_MERGE_RIGHT,
+                "Merge With Right",
+                None,
+                Some(Icon::TabMerge),
+                true,
+            ),
+            MergeMenu::Submenu => builder.submenu("Merge", Some(Icon::TabMerge), true, |sub| {
+                sub.action(CTX_TAB_MERGE_LEFT, "Merge With Left", None, Some(Icon::ArrowLeft), true)
+                    .action(
+                        CTX_TAB_MERGE_RIGHT,
+                        "Merge With Right",
+                        None,
+                        Some(Icon::ArrowRight),
+                        true,
+                    )
+                    .action(
+                        CTX_TAB_MERGE_BOTH,
+                        "Merge With Left & Right",
+                        None,
+                        Some(Icon::TabMerge),
+                        true,
+                    )
+            }),
+        }
+    }
+
     /// The menu of several selected tabs (the right-clicked tab is one of them): merge them into one Multiview tab, or close them.
     /// `titles` are the selected tabs in tab order (the header's tooltip).
     pub fn build_selection_menu(titles: &[String]) -> CtxMenu {
@@ -192,7 +227,7 @@ impl TabContextMenu {
             .build()
     }
 
-    /// Handles tab-management context menu action routing (IDs 4001..4012).
+    /// Handles tab-management context menu action routing (IDs 4001..4015).
     pub fn handle_action(action_id: CtxMenuActionId, ctx: &TabActionContext<'_>, target_tab_id: Option<TabId>) {
         let Some(tab_id) = target_tab_id else {
             tracing::warn!("[TabContextMenu] No target tab ID found for action");
@@ -395,6 +430,9 @@ impl TabContextMenu {
                 }
             }
             CTX_TAB_MERGE_SELECTED => BridgeViewerTabs::merge_selected_tabs(ctx),
+            CTX_TAB_MERGE_LEFT => BridgeViewerTabs::merge_with_neighbors(ctx, tab_id, MergeSide::Left),
+            CTX_TAB_MERGE_RIGHT => BridgeViewerTabs::merge_with_neighbors(ctx, tab_id, MergeSide::Right),
+            CTX_TAB_MERGE_BOTH => BridgeViewerTabs::merge_with_neighbors(ctx, tab_id, MergeSide::Both),
             CTX_TAB_CLOSE_SELECTED => BridgeViewerTabs::close_selected_tabs(ctx),
             CTX_TAB_CLOSE => {
                 tracing::info!(tab_id, "[TabContextMenu: Close] Close tab requested from context menu");
