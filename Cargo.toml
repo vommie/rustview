@@ -80,6 +80,19 @@ async-io = "2"
 base64 = "0.23"
 # Numeric conversions that say what happens on overflow (saturate, wrap) instead of the silent truncation of `as`.
 az = "1"
+# Image editing (crop and save): lossless JPEG crop (jpegtran in pure Rust) and re-encoding with the original quantization tables,
+# the containers and headers of the formats that are written, the AVIF encoder (rav1e, pure Rust; without the assembler, which needs
+# nasm), and replacing a file atomically (temporary file, fsync, rename, permissions kept).
+libjpeg-turbo-rs = "0.8"
+png = "0.18"
+gif = "0.14"
+tiff = "0.11"
+image-webp = "0.2"
+avif-parse = "2"
+img-parts = "0.4"
+bytes = "1"
+ravif = { version = "0.13", default-features = false, features = ["threading"] }
+atomic-write-file = "0.3"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

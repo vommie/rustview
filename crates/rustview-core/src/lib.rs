@@ -2,6 +2,7 @@
 //! the command line API and the `XnView` MP migration). The application crate `rustview` builds the Slint user interface on top.
 
 pub mod cli_api;
+pub mod image_edit;
 pub mod library;
 pub mod media;
 pub mod query;

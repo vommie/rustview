@@ -41,6 +41,16 @@ chrono.workspace = true
 shellexpand.workspace = true
 procfs.workspace = true
 proc-mounts.workspace = true
+libjpeg-turbo-rs.workspace = true
+png.workspace = true
+gif.workspace = true
+tiff.workspace = true
+image-webp.workspace = true
+avif-parse.workspace = true
+img-parts.workspace = true
+bytes.workspace = true
+ravif.workspace = true
+atomic-write-file.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
