@@ -230,6 +230,39 @@ mod tests {
     }
 
     #[test]
+    fn deleting_media_while_the_feedback_runs_drops_only_their_pulses() {
+        let shared = instance();
+        let mut mv = shared.lock();
+        let t0 = Instant::now();
+        mv.show_rating_feedback(&HashSet::from([1, 2, 3]), 3, t0);
+        let keys: Vec<TileKey> = (0..4).filter_map(|i| mv.tile_key_at(i)).collect();
+        // medium 2 is deleted: both of its tiles leave and the others are laid out again
+        mv.drop_deleted(&[2]);
+        assert_eq!(mv.tile_count(), 2);
+        let mut left: Vec<TileKey> = mv.rating_feedback.tiles().collect();
+        left.sort_unstable();
+        assert_eq!(left, vec![keys[0], keys[3]]);
+        assert_eq!(mv.rating_pulse(keys[0], t0).map(|p| p.rating), Some(3));
+        assert!(mv.rating_wakeup(t0).is_some());
+    }
+
+    #[test]
+    fn switching_the_only_medium_ends_the_old_feedback_and_starts_none_on_the_new_one() {
+        let shared = MultiviewInstance::create(Arc::new(NullSink), vec![seed(1, TileKind::Image)]);
+        let mut mv = shared.lock();
+        let t0 = Instant::now();
+        mv.show_rating_feedback(&HashSet::from([1]), 5, t0);
+        let old = mv.tile_key_at(0).unwrap();
+        assert!(mv.replace_solo(seed(2, TileKind::Image)));
+        let new = mv.tile_key_at(0).unwrap();
+        assert_ne!(old, new);
+        assert!(mv.rating_pulse(old, t0).is_none());
+        assert!(mv.rating_pulse(new, t0).is_none());
+        assert!(!mv.rating_feedback.is_active());
+        assert!(mv.rating_wakeup(t0).is_none());
+    }
+
+    #[test]
     fn a_gutter_drag_is_reported_so_that_a_rating_can_be_ignored() {
         let shared = instance();
         assert!(!shared.lock().is_dragging());
