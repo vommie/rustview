@@ -189,12 +189,24 @@ impl MediaContextMenu {
             }
             CTX_ACTION_SELECT_ALL => BridgeFileSelection::select_all(window, ctx.library, ctx.state),
             CTX_ACTION_CLEAR_SELECTION => BridgeFileSelection::clear_selection(window, ctx.library, ctx.state),
-            CTX_ACTION_RATE_5 => BridgeTags::apply_rating_to_ids(&target_id_set, 5, &tag_action_ctx),
-            CTX_ACTION_RATE_4 => BridgeTags::apply_rating_to_ids(&target_id_set, 4, &tag_action_ctx),
-            CTX_ACTION_RATE_3 => BridgeTags::apply_rating_to_ids(&target_id_set, 3, &tag_action_ctx),
-            CTX_ACTION_RATE_2 => BridgeTags::apply_rating_to_ids(&target_id_set, 2, &tag_action_ctx),
-            CTX_ACTION_RATE_1 => BridgeTags::apply_rating_to_ids(&target_id_set, 1, &tag_action_ctx),
-            CTX_ACTION_RATE_0 => BridgeTags::apply_rating_to_ids(&target_id_set, 0, &tag_action_ctx),
+            CTX_ACTION_RATE_5 => {
+                BridgeTags::apply_rating_to_ids(&target_id_set, 5, &tag_action_ctx);
+            }
+            CTX_ACTION_RATE_4 => {
+                BridgeTags::apply_rating_to_ids(&target_id_set, 4, &tag_action_ctx);
+            }
+            CTX_ACTION_RATE_3 => {
+                BridgeTags::apply_rating_to_ids(&target_id_set, 3, &tag_action_ctx);
+            }
+            CTX_ACTION_RATE_2 => {
+                BridgeTags::apply_rating_to_ids(&target_id_set, 2, &tag_action_ctx);
+            }
+            CTX_ACTION_RATE_1 => {
+                BridgeTags::apply_rating_to_ids(&target_id_set, 1, &tag_action_ctx);
+            }
+            CTX_ACTION_RATE_0 => {
+                BridgeTags::apply_rating_to_ids(&target_id_set, 0, &tag_action_ctx);
+            }
             _ => {
                 ctx.dispatcher.dispatch(action_id, &context);
             }

@@ -308,6 +308,7 @@ impl SettingsDialogController {
             _ => 0,
         });
         window.set_fullscreen_sound_hand_over(sound.hand_over);
+        window.set_fullscreen_rating_show_feedback(fullscreen.rating.show_feedback);
 
         window.set_fullscreen_background_source_idx(match fullscreen.background.source.as_str() {
             "viewer" => 1,
@@ -395,6 +396,7 @@ impl SettingsDialogController {
         }
         .to_string();
         sound.hand_over = window.get_fullscreen_sound_hand_over();
+        fullscreen.rating.show_feedback = window.get_fullscreen_rating_show_feedback();
 
         fullscreen.background.source = match window.get_fullscreen_background_source_idx() {
             1 => "viewer",

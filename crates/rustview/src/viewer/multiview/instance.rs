@@ -17,6 +17,7 @@ use super::follow::TileKey;
 use super::instance_host::HostState;
 use super::instance_layout::{DragState, layout_params};
 use super::layout::{Layout, LayoutParams, Rect};
+use super::rating_feedback::RatingFeedback;
 use super::route::{HostMode, OriginKind};
 use super::teardown::{teardown_videos, teardown_videos_now};
 use super::tile::{TileSeed, TileState, VideoTile};
@@ -83,6 +84,8 @@ pub struct MultiviewInstance {
     pub(super) zoom_minimap_bubble: Vec<TileKey>,
     /// Wheel movement over an image that has not made a whole step yet.
     pub(super) zoom_wheel_accum: f32,
+    /// The icons of ratings given with the keyboard that are on screen right now.
+    pub(super) rating_feedback: RatingFeedback,
 }
 
 impl MultiviewInstance {
@@ -119,6 +122,7 @@ impl MultiviewInstance {
                 zoom_slider: Vec::new(),
                 zoom_minimap_bubble: Vec::new(),
                 zoom_wheel_accum: 0.0,
+                rating_feedback: RatingFeedback::default(),
             })
         })
     }
@@ -251,6 +255,7 @@ impl MultiviewInstance {
     /// of on the worker thread that `Drop` uses (the end of the process would cut that short). The instance is empty
     /// afterwards.
     pub fn shutdown_now(&mut self) {
+        self.rating_feedback.clear();
         let videos = self.take_videos();
         tracing::info!(
             instance = self.id,

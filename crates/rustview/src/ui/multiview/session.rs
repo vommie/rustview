@@ -85,6 +85,8 @@ pub(super) struct Session {
     pub(super) tick: Timer,
     /// Redraws every frame while a zoom glides to its new value (the tick is too slow for that).
     pub(super) glide: Timer,
+    /// Wakes the session for the next change of a rating icon; armed only while one is shown.
+    pub(super) rating_timer: Timer,
     pub(super) populated: bool,
 }
 
@@ -109,6 +111,15 @@ pub(super) fn with_session(f: impl FnOnce(&mut Session)) {
         f(s);
         UiAction::None
     });
+}
+
+/// The instance the open fullscreen shows.
+pub(super) fn instance() -> Option<SharedInstance> {
+    SESSION.with(|cell| {
+        cell.try_borrow()
+            .ok()
+            .and_then(|g| g.as_ref().map(|s| s.instance.clone()))
+    })
 }
 
 fn session_generation() -> Option<u64> {
@@ -209,6 +220,14 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
         with_session(|s| s.zoom_minimap_slider(index.max(0).saturating_as::<usize>(), code));
     });
     win.on_zoom_key(|key| with_session(|s| s.zoom_key(key)));
+    win.on_rating_hotkey(|text, ctrl, alt, meta, repeat| {
+        let handle = SESSION.with(|cell| {
+            cell.try_borrow()
+                .ok()
+                .and_then(|g| g.as_ref().map(|s| s.handle.clone()))
+        });
+        handle.is_some_and(|handle| handle.fullscreen_key(text.as_str(), (ctrl, alt, meta), repeat))
+    });
     win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0).saturating_as::<usize>())));
     win.on_gutter_dragged(|_, distance| with_session(|s| s.dragged(distance)));
     win.on_gutter_drag_finished(|_| with_session(Session::drag_finished));
@@ -509,6 +528,7 @@ impl Session {
             debounce: Timer::default(),
             tick: Timer::default(),
             glide: Timer::default(),
+            rating_timer: Timer::default(),
             populated: false,
         }
     }
@@ -599,6 +619,8 @@ impl Session {
         self.debounce.stop();
         self.tick.stop();
         self.glide.stop();
+        self.rating_timer.stop();
+        self.instance.lock().clear_rating_feedback();
         bar_overlay::hide(BarOwner::Fullscreen);
         if let Some(win) = self.window.upgrade() {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);

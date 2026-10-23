@@ -56,6 +56,9 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <int> sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
     in-out property <bool> sound-hand-over: true;
 
+    // Rating
+    in-out property <bool> rating-show-feedback: true;
+
     // Background
     in-out property <int> background-source-idx: 0; // 0 = theme, 1 = same as viewer, 2 = custom color
     in-out property <color> background-color: Theme.fullscreen-background;
@@ -679,6 +682,17 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                     color: Theme.text-muted;
                 }
             }
+        }
+    }
+
+    SettingsCard {
+        title: "Rating";
+        description: "Rate the media you see with Ctrl+0 (no rating) to Ctrl+5, in the fullscreen and in tabs.";
+
+        SettingsSwitchRow {
+            label: "Show the rating animation";
+            tooltip: "The icon of the new rating appears in the middle of every tile and fades out after about a second. The rating itself is always saved, whatever this is set to.";
+            checked <=> root.rating-show-feedback;
         }
     }
 

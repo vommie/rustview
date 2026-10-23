@@ -19,7 +19,7 @@ use rustview_core::settings::schema::{
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB,
-    FullscreenSettings,
+    DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK, FullscreenSettings,
 };
 
 /// Which buttons the hover bar may show and how close the pointer has to come before it appears.
@@ -121,6 +121,8 @@ pub struct MultiviewPrefs {
     pub media_bar: MediaBarPrefs,
     pub primary: PrimaryBarPrefs,
     pub audio: AudioPolicy,
+    /// A rating given with the keyboard shows its icon on the tiles for a moment.
+    pub rating_feedback: bool,
 }
 
 impl MultiviewPrefs {
@@ -128,6 +130,7 @@ impl MultiviewPrefs {
         media_bar: MediaBarPrefs::DEFAULT,
         primary: PrimaryBarPrefs::DEFAULT,
         audio: AudioPolicy::DEFAULT,
+        rating_feedback: DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK,
     };
 
     pub fn from_settings(settings: &FullscreenSettings) -> Self {
@@ -165,6 +168,7 @@ impl MultiviewPrefs {
                 follows: SoundFollows::from_setting(&sound.follows),
                 hand_over: sound.hand_over,
             },
+            rating_feedback: settings.rating.show_feedback,
         }
     }
 }

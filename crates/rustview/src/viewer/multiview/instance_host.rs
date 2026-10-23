@@ -13,6 +13,7 @@ use super::view::{GutterView, HostedView, TileView};
 use crate::viewer::{SubwindowGeometry, ViewportBounds, XRectangle};
 use rustview_core::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
 use rustview_core::util::cast::{FloatToInt, SaturatingAs};
+use std::time::Instant;
 
 /// The rectangle a host gives to a Multiview, in physical pixels of the window `parent_xid`.
 #[derive(Debug, Clone, PartialEq)]
@@ -216,6 +217,7 @@ impl MultiviewInstance {
         self.sync_zoom_frames();
         self.place_windows();
         self.apply_all_cutouts();
+        self.sync_rating_overlays(Instant::now());
         self.bump();
     }
 
@@ -408,6 +410,7 @@ impl MultiviewInstance {
         if self.host.surface.mode == HostMode::Hidden {
             return;
         }
+        self.clear_rating_feedback();
         self.clear_hover();
         self.rename_pinned = false;
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
@@ -421,6 +424,7 @@ impl MultiviewInstance {
 
     /// Stops playback and hides the windows because the tab was closed. The instance is destroyed by its last owner.
     pub fn stop_and_hide(&mut self) {
+        self.clear_rating_feedback();
         self.clear_hover();
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
             video.player.stop();
@@ -436,6 +440,7 @@ impl MultiviewInstance {
         let (origin_x, origin_y) = (self.host.surface.rect.x, self.host.surface.rect.y);
         let relative = |r: Rect| Rect::new(r.x - origin_x, r.y - origin_y, r.w, r.h);
         let projection = &self.host.projection;
+        let now = Instant::now();
         let tiles = self
             .tiles
             .iter()
@@ -454,6 +459,7 @@ impl MultiviewInstance {
                     zoom,
                     minimap,
                     pannable,
+                    rating: self.rating_pulse(tile.key, now),
                 }
             })
             .collect();

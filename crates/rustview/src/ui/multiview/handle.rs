@@ -168,7 +168,7 @@ impl MultiviewHandle {
     }
 
     /// The application and its main window, for the actions that reach into the Browse view. UI thread only.
-    fn app_and_window(&self) -> Option<(AppContext, MainWindow)> {
+    pub(super) fn app_and_window(&self) -> Option<(AppContext, MainWindow)> {
         let window = self.main_window()?.upgrade()?;
         Some((self.app()?, window))
     }

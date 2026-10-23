@@ -103,6 +103,10 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             }
             return;
         }
+        PlayerEvent::RatingRequested(rating) => {
+            handle.rate_visible(&instance, rating);
+            return;
+        }
         PlayerEvent::CtrlClick => {
             let click = instance.lock().register_click(true);
             (RoutedEvent::CtrlClick, click)

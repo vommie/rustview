@@ -613,6 +613,10 @@ impl SettingsDiff {
                 sound.auto_control, sound.follows, sound.hand_over
             ));
             changes.push(format!(
+                "Fullscreen rating: show_feedback: {}",
+                new.fullscreen.rating.show_feedback
+            ));
+            changes.push(format!(
                 "Fullscreen background: source: '{}', color: '{}'",
                 new.fullscreen.background.source, new.fullscreen.background.color
             ));

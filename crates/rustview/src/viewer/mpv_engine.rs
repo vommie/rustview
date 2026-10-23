@@ -10,6 +10,7 @@ use std::time::Instant;
 
 mod events;
 mod playback;
+mod rating;
 
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
 pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;
@@ -18,6 +19,8 @@ pub type MpvGridClickCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvRenameCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvDeleteCallback = Arc<dyn Fn() + Send + Sync>;
+/// Called from the observer thread when a rating key (Ctrl+0..5) was pressed in the player's window.
+pub type MpvRatingCallback = Arc<dyn Fn(u8) + Send + Sync>;
 
 /// The message mpv sends to the application when DEL is pressed in its window (`script-message` reaches every client).
 const DELETE_KEY_MESSAGE: &str = "rustview-delete";
@@ -51,6 +54,7 @@ pub struct MpvPlayer {
     convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
     rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>>,
     delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>>,
+    rating_callbacks: Arc<RwLock<Vec<MpvRatingCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
     pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>>,
     observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -138,6 +142,7 @@ impl MpvPlayer {
 
         // DEL is reported to the application as a client message; the Multiview turns it into its delete flow
         bind_delete_key(&mpv_instance);
+        rating::bind_rating_keys(&mpv_instance);
 
         // Bind Ctrl+Click and Ctrl+DoubleClick in MPV to toggle window-maximized
         let convert_keys = [
@@ -209,6 +214,7 @@ impl MpvPlayer {
         let convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let rating_callbacks: Arc<RwLock<Vec<MpvRatingCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>> = Arc::new(RwLock::new(Vec::new()));
 
@@ -231,6 +237,7 @@ impl MpvPlayer {
             convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
             rename_callbacks: rename_callbacks.clone(),
             delete_callbacks: delete_callbacks.clone(),
+            rating_callbacks: rating_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
             pause_callbacks: pause_callbacks.clone(),
             observer_handle: Mutex::new(None),

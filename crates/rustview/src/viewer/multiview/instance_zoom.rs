@@ -282,7 +282,7 @@ impl MultiviewInstance {
         self.bump();
     }
 
-    /// Ctrl+0 (0), Ctrl++ (1) and Ctrl+- (2): the image under the pointer, else the only image of the Multiview.
+    /// Ctrl+Backspace (0, reset), Ctrl++ (1) and Ctrl+- (2): the image under the pointer, else the only image of the Multiview.
     pub fn zoom_key(&mut self, key: i32) {
         let index = self
             .hovered

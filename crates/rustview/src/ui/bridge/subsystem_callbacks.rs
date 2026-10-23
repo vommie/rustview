@@ -6,6 +6,7 @@ use crate::ui::favorites::BridgeFavorites;
 use crate::ui::file_dialogs::FileRenameDialogController;
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::media::BridgeMedia;
+use crate::ui::rating_hotkey::{RatingHotkeyParams, handle_key as handle_rating_key};
 use crate::ui::selection::BridgeFileSelection;
 use crate::ui::selection::keyboard::{KeyboardNavigateParams, handle_keyboard_navigate};
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
@@ -204,6 +205,7 @@ impl UiBridge {
         self.register_browse_folder_callbacks();
         self.register_keyboard_navigation_callbacks();
         self.register_type_ahead_callbacks();
+        self.register_rating_hotkey_callbacks();
         self.register_tab_grid_callbacks();
         self.register_dnd_callbacks();
         self.register_rubberband_callbacks();
@@ -314,6 +316,33 @@ impl UiBridge {
                 settings: &set,
                 state: &st,
             })
+        });
+    }
+
+    pub(super) fn register_rating_hotkey_callbacks(&self) {
+        let win = self.window.clone_strong();
+        let lib = self.library.clone();
+        let thumb = self.thumbnails.clone();
+        let tm = self.tab_manager.clone();
+        let set = self.settings.clone();
+        let st = self.state.clone();
+        let fullscreen = self.fullscreen.clone();
+
+        self.window.on_rating_hotkey(move |text, ctrl, alt, meta, repeat| {
+            handle_rating_key(
+                &RatingHotkeyParams {
+                    window: &win,
+                    library: &lib,
+                    thumbnails: &thumb,
+                    tab_manager: &tm,
+                    settings: &set,
+                    state: &st,
+                    fullscreen: &fullscreen,
+                },
+                text.as_str(),
+                (ctrl, alt, meta),
+                repeat,
+            )
         });
     }
 

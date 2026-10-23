@@ -42,6 +42,8 @@ struct TabHost {
     tick: Timer,
     /// Redraws every frame while a zoom glides to its new value (the tick is too slow for that).
     glide: Timer,
+    /// Wakes the host for the next change of a rating icon; armed only while one is shown.
+    rating: Timer,
     /// The mouse cursor is hidden over the main window right now.
     cursor_hidden: bool,
 }
@@ -64,6 +66,31 @@ fn with_host<R>(f: impl FnOnce(&mut TabHost) -> R) -> Option<R> {
 
 fn current_instance() -> Option<SharedInstance> {
     with_host(|h| h.instance.upgrade()).flatten()
+}
+
+/// The Multiview the viewer tab shows right now.
+pub fn shown_instance() -> Option<SharedInstance> {
+    current_instance()
+}
+
+/// The feedback of a rating changed (started, restarted): draw it and arm the timer. UI thread only.
+pub fn rating_changed() {
+    refresh();
+    arm_rating_timer();
+}
+
+fn arm_rating_timer() {
+    let Some(instance) = current_instance() else {
+        return;
+    };
+    with_host(|h| super::rating::arm(&h.rating, &instance, on_rating_frame));
+}
+
+fn on_rating_frame() {
+    if let Some(instance) = current_instance() {
+        instance.lock().poll_rating_feedback(std::time::Instant::now());
+    }
+    rating_changed();
 }
 
 /// Wires the canvas events once at startup.
@@ -279,6 +306,7 @@ pub fn suspend() {
     let released = with_host(|h| {
         h.tick.stop();
         h.glide.stop();
+        h.rating.stop();
         h.instance = WeakInstance::new();
         h.shown.take().is_some()
     })

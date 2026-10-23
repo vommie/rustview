@@ -68,6 +68,9 @@ export struct MultiviewTileView {
     mm-zoom-min: int,
     mm-zoom-max: int,
     mm-zoom-snaps: [int],
+    // The icon of a rating just given (0..5, -1 = none) and how strong it is (1 = full, fading to 0). Videos get theirs from mpv.
+    rating-icon: int,
+    rating-alpha: float,
 }
 
 /// A draggable separator between two tiles (or the two rows of a 2x2 grid) with a swap button in the middle.

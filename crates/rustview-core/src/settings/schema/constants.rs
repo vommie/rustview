@@ -444,6 +444,8 @@ pub const DEFAULT_FULLSCREEN_SOUND_FOLLOWS: &str = "first";
 
 /// The sound passes to another video when the video that had it leaves.
 pub const DEFAULT_FULLSCREEN_SOUND_HAND_OVER: bool = true;
+/// Whether a rating given with Ctrl+0..5 in a Multiview shows its icon on the tiles for a moment.
+pub const DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK: bool = true;
 
 // --- Fullscreen image zoom (images only; mpv zooms videos itself) ---
 /// A step of Ctrl + mouse wheel over an image, in percent of the fitted size (the wheel over the slider has its own steps: 5%, Shift 10%, Ctrl 25%).

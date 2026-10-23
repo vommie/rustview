@@ -388,6 +388,9 @@ export component MainWindow inherits Window {
     // Type-ahead find: every key press of the Browse view is offered to Rust first; true = the search took the key.
     callback type-ahead-key(string /* event.text */, bool /* Ctrl, Alt or Meta is held */) -> bool;
 
+    // Rating hotkeys Ctrl+0..5 (text, Ctrl, Alt, Meta, key repeat); true = it was a rating key and is consumed.
+    callback rating-hotkey(string, bool, bool, bool, bool) -> bool;
+
     callback media-drag-started(int /* id */, length /* x */, length /* y */);
     callback media-drag-moved(length /* x */, length /* y */);
     callback media-drag-ended();
@@ -560,6 +563,13 @@ export component MainWindow inherits Window {
                 return reject;
             }
 
+            // Rating hotkeys Ctrl+0..5 (and the plain digits in a viewer tab): the Browse selection or the media of the tab. Not while a text input has the focus.
+            if !root.is-text-input-focused && (root.active-view-mode == 0 || root.active-view-mode == 1) {
+                if root.rating-hotkey(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta, event.repeat) {
+                    return accept;
+                }
+            }
+
             // F2 Shortcut for file renaming across Browse, Tab, and Tab Grid modes
             if event.text == Key.F2 && !root.is-text-input-focused {
                 root.request-rename();
@@ -705,12 +715,6 @@ export component MainWindow inherits Window {
                     root.viewer-next();
                     return accept;
                 }
-                if event.text == "0" { root.rating-applied(0); return accept; }
-                if event.text == "1" { root.rating-applied(1); return accept; }
-                if event.text == "2" { root.rating-applied(2); return accept; }
-                if event.text == "3" { root.rating-applied(3); return accept; }
-                if event.text == "4" { root.rating-applied(4); return accept; }
-                if event.text == "5" { root.rating-applied(5); return accept; }
             }
             return reject;
         }

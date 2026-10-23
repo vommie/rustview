@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { AppIcon, IconId, IconSize } from "icons.slint";
+import { AppIcon, IconId, IconLookup, IconSize } from "icons.slint";
 import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "multiview_types.slint";
 import { MultiviewGutter } from "multiview_gutter.slint";
 import { MultiviewBarMenu } from "multiview_bar_menu.slint";
@@ -177,6 +177,23 @@ export component MultiviewCanvas inherits Rectangle {
                     horizontal-alignment: center;
                     wrap: word-wrap;
                 }
+            }
+        }
+
+        // The feedback of a rating given with Ctrl+0..5: the icon of the new rating in the middle of the tile, full strength first, then
+        // fading out. A video tile gets the same icon from mpv itself, because its native window covers this scene.
+        if root.interactive && tile.kind != 1 && tile.rating-icon >= 0 : Rectangle {
+            width: 50px;
+            height: 50px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            // The one place an icon is dimmed with opacity: it is a fade of a colored icon that cannot be tinted, and at full strength (the
+            // whole hold) Slint draws it without a layer.
+            opacity: tile.rating-alpha;
+
+            AppIcon {
+                icon: IconLookup.rating(tile.rating-icon);
+                size: 50px;
             }
         }
 

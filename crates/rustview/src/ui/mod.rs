@@ -18,6 +18,7 @@ pub mod media;
 pub mod models;
 pub mod multiview;
 pub mod open_confirmation;
+pub mod rating_hotkey;
 pub mod selection;
 pub mod settings_dialog;
 pub mod shutdown;

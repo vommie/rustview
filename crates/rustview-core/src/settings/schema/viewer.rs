@@ -13,11 +13,11 @@ use super::{
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB,
-    DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL, DEFAULT_FULLSCREEN_SOUND_FOLLOWS, DEFAULT_FULLSCREEN_SOUND_HAND_OVER,
-    DEFAULT_FULLSCREEN_SPECIFIC_MONITOR, DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT, DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS,
-    DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION, DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS,
-    DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT, DEFAULT_FULLSCREEN_ZOOM_RESAMPLE, DEFAULT_FULLSCREEN_ZOOM_SMOOTH,
-    DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT, DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS,
+    DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK, DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL, DEFAULT_FULLSCREEN_SOUND_FOLLOWS,
+    DEFAULT_FULLSCREEN_SOUND_HAND_OVER, DEFAULT_FULLSCREEN_SPECIFIC_MONITOR, DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT,
+    DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS, DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION,
+    DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS, DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT, DEFAULT_FULLSCREEN_ZOOM_RESAMPLE,
+    DEFAULT_FULLSCREEN_ZOOM_SMOOTH, DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT, DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS,
     DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS, DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB,
     DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB, DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE,
 };
@@ -175,6 +175,22 @@ impl Default for FullscreenSoundSettings {
     }
 }
 
+/// Rating with the keyboard in the Multiview (fullscreen and tab view).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FullscreenRatingSettings {
+    /// The icon of the new rating appears on every tile for a moment.
+    pub show_feedback: bool,
+}
+
+impl Default for FullscreenRatingSettings {
+    fn default() -> Self {
+        Self {
+            show_feedback: DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK,
+        }
+    }
+}
+
 /// Image zoom in the Multiview (fullscreen and tab view).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -232,6 +248,7 @@ pub struct FullscreenSettings {
     pub media_bar: FullscreenMediaBarSettings,
     pub primary_bar: FullscreenPrimaryBarSettings,
     pub sound: FullscreenSoundSettings,
+    pub rating: FullscreenRatingSettings,
     pub background: FullscreenBackgroundSettings,
     pub zoom: FullscreenZoomSettings,
 }
@@ -246,6 +263,7 @@ impl Default for FullscreenSettings {
             media_bar: FullscreenMediaBarSettings::default(),
             primary_bar: FullscreenPrimaryBarSettings::default(),
             sound: FullscreenSoundSettings::default(),
+            rating: FullscreenRatingSettings::default(),
             background: FullscreenBackgroundSettings::default(),
             zoom: FullscreenZoomSettings::default(),
         }

@@ -51,6 +51,16 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
+    /// A rating key (Ctrl+0..5) was pressed in the player's window; the callback gets the rating.
+    pub fn on_rating_requested<F>(&self, callback: F)
+    where
+        F: Fn(u8) + Send + Sync + 'static,
+    {
+        let mut cbs = self.rating_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
     pub fn on_grid_left_click<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
@@ -142,6 +152,7 @@ impl MpvPlayer {
         let convert_callbacks = self.convert_to_tab_callbacks.clone();
         let rename_callbacks = self.rename_callbacks.clone();
         let delete_callbacks = self.delete_callbacks.clone();
+        let rating_callbacks = self.rating_callbacks.clone();
         let mute_callbacks = self.mute_callbacks.clone();
         let pause_callbacks = self.pause_callbacks.clone();
 
@@ -165,11 +176,17 @@ impl MpvPlayer {
                     };
                     if let Some(Ok(libmpv2::events::Event::ClientMessage(args))) =
                         mpv.wait_event(poll_ms.az::<f64>() / 1000.0)
-                        && args.first() == Some(&DELETE_KEY_MESSAGE)
                     {
-                        let delete_cbs = delete_callbacks.read().clone();
-                        for cb in delete_cbs {
-                            cb();
+                        if args.first() == Some(&DELETE_KEY_MESSAGE) {
+                            let delete_cbs = delete_callbacks.read().clone();
+                            for cb in delete_cbs {
+                                cb();
+                            }
+                        } else if let Some(rating) = super::rating::rating_of_message(&args) {
+                            let rating_cbs = rating_callbacks.read().clone();
+                            for cb in rating_cbs {
+                                cb(rating);
+                            }
                         }
                     }
 

@@ -582,7 +582,11 @@ impl UiBridge {
         );
     }
 
-    pub fn apply_rating_to_ids(&self, ids: &std::collections::HashSet<MediaId>, rating: u8) {
+    pub fn apply_rating_to_ids(
+        &self,
+        ids: &std::collections::HashSet<MediaId>,
+        rating: u8,
+    ) -> std::collections::HashSet<MediaId> {
         BridgeTags::apply_rating_to_ids(
             ids,
             rating,
@@ -594,6 +598,6 @@ impl UiBridge {
                 settings: &self.settings,
                 state: &self.state,
             },
-        );
+        )
     }
 }

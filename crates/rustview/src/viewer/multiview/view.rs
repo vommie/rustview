@@ -8,6 +8,7 @@ use super::layout::Rect;
 use super::media_actions::MediaActionId;
 use super::model::TileKind;
 use super::primary_actions::PrimaryActionId;
+use super::rating_feedback::PulseView;
 use crate::icons::Icon;
 use crate::ui::button_feedback::ButtonFeedback;
 use rustview_core::library::models::MediaId;
@@ -27,6 +28,8 @@ pub struct TileView {
     pub minimap: Option<MinimapView>,
     /// Dragging the picture moves something (the image is larger than its tile).
     pub pannable: bool,
+    /// The icon of a rating just given, while it is shown.
+    pub rating: Option<PulseView>,
 }
 
 /// The picture of a zoomed image: where it goes in its room (physical pixels) and what it is.

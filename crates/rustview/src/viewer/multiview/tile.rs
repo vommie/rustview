@@ -10,6 +10,7 @@ use super::instance::WeakInstance;
 use super::layout::Rect;
 use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
+use super::rating_overlay::OverlayState;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
@@ -31,6 +32,8 @@ pub struct VideoTile {
     /// The tile the player currently serves (`TileKey`). A recycled player moves on to another tile, and the callbacks that
     /// were installed once at creation read this instead of the key they were created for.
     pub current_tile: Arc<AtomicU64>,
+    /// The rating icon that mpv draws over the picture right now, if any.
+    pub rating_overlay: Option<OverlayState>,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -164,6 +167,8 @@ pub(super) fn connect_callbacks(
         PlayerEvent::RenameRequested(tile.load(Ordering::SeqCst))
     }));
     player.on_delete_requested(forward(sink, me, || PlayerEvent::DeleteRequested));
+    let (rating_sink, rating_me) = (Arc::clone(sink), me.clone());
+    player.on_rating_requested(move |rating| rating_sink.post(rating_me.clone(), PlayerEvent::RatingRequested(rating)));
     let tile = current_tile.clone();
     let (mute_sink, mute_me) = (Arc::clone(sink), me.clone());
     player.on_mute_changed(move |muted| {
@@ -227,6 +232,7 @@ pub fn create_video(
         native_mute,
         last_mute: native_mute,
         current_tile,
+        rating_overlay: None,
     })
 }
 

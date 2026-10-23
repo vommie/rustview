@@ -273,8 +273,8 @@ impl BridgeTags {
     }
 
     #[inline]
-    pub fn apply_rating_to_ids(ids: &HashSet<MediaId>, rating: u8, ctx: &TagActionContext<'_>) {
-        TagActionHandler::apply_rating_to_ids(ids, rating, ctx);
+    pub fn apply_rating_to_ids(ids: &HashSet<MediaId>, rating: u8, ctx: &TagActionContext<'_>) -> HashSet<MediaId> {
+        TagActionHandler::apply_rating_to_ids(ids, rating, ctx)
     }
 
     #[inline]

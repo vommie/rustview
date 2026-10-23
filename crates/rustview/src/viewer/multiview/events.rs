@@ -21,6 +21,8 @@ pub enum PlayerEvent {
     RenameRequested(TileKey),
     /// DEL was pressed in a video's window.
     DeleteRequested,
+    /// A rating key (Ctrl+0..5) was pressed in a video's window.
+    RatingRequested(u8),
     /// The mute state of the player of this tile changed (a hotkey or the on-screen controller of mpv, or us).
     MuteChanged {
         tile: TileKey,

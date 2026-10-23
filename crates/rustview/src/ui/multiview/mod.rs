@@ -12,6 +12,7 @@ pub mod grid_host;
 pub mod handle;
 mod navigation;
 mod pointer_lock;
+mod rating;
 mod router;
 mod session;
 mod session_convert;

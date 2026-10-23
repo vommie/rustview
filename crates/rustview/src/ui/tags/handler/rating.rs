@@ -59,9 +59,17 @@ impl TagActionHandler {
         }
     }
 
-    pub fn apply_rating_to_ids(ids: &HashSet<MediaId>, rating: u8, ctx: &TagActionContext<'_>) {
+    /// Stores `rating` for `ids` and brings every place that shows it up to date. Returns the media that were rated (a medium
+    /// the library does not know is skipped).
+    pub fn apply_rating_to_ids(ids: &HashSet<MediaId>, rating: u8, ctx: &TagActionContext<'_>) -> HashSet<MediaId> {
+        let mut rated = HashSet::with_capacity(ids.len());
         for &id in ids {
-            let _ = ctx.library.media().set_rating(id, rating);
+            match ctx.library.media().set_rating(id, rating) {
+                Ok(()) => {
+                    rated.insert(id);
+                }
+                Err(e) => tracing::warn!(media_id = id, error = %e, "[Rating] The rating could not be stored"),
+            }
             if let Ok(Some(updated)) = ctx.library.media().get(id) {
                 ctx.tab_manager.notify_media_refreshed(id, &updated);
             }
@@ -69,12 +77,12 @@ impl TagActionHandler {
 
         {
             let mut st = ctx.state.write();
-            for &media_id in ids {
+            for &media_id in &rated {
                 if let Some(item) = st.all_folder_media.find_mut(media_id) {
                     item.record.rating = rating;
                 }
             }
-            for &media_id in ids {
+            for &media_id in &rated {
                 update_tile(ctx.window, &st, media_id, |view| {
                     view.rating = i32::from(rating);
                     view.rating_str = rating.to_string().into();
@@ -90,10 +98,11 @@ impl TagActionHandler {
         StatusBarBridge::success(
             ctx.window,
             if rating == 0 {
-                format!("Cleared rating for {} file(s)", ids.len())
+                format!("Cleared rating for {} file(s)", rated.len())
             } else {
-                format!("Set rating to {} for {} file(s)", rating, ids.len())
+                format!("Set rating to {} for {} file(s)", rating, rated.len())
             },
         );
+        rated
     }
 }

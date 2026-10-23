@@ -9,6 +9,20 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+- **Rating hotkeys Ctrl+0 (no rating) to Ctrl+5** in the Browse view (grid and table: the selected media, never folder rows), in every Multiview (fullscreen
+  from the Browse view or from a tab, a Multiview in a viewer tab, a tab shown fullscreen) and in image and video tabs. In a Multiview the rating applies to
+  **every medium that is shown**, also sticky or pinned tiles the Browse view has not selected; a medium shown by several tiles is rated once. The keys also work
+  while the focus is in a video's own window (mpv), and on the numpad. Key repeat does not rate again; nothing is rated while a dialog or the settings window is
+  open, while a text field has the focus, or during a drag.
+- **Rating animation:** the icon of the new rating (about 50x50 px) appears in the middle of every tile of a rated medium at once, stays for 0.75 s and fades out
+  in the next 0.25 s (1 s in all). A new rating cancels the running animation immediately and shows its icon at full strength, with no cross-fade. On a video
+  tile the icon is drawn by mpv itself, so it needs no compositor and works on Wayland too. Settings > Fullscreen > Rating switches the animation off
+  (the rating itself is always saved).
+
+### Changed
+- **Ctrl+0 no longer resets the image zoom** in a Multiview (it rates now); **Ctrl+Backspace** resets it. The plain digits 0-5 keep rating in a viewer tab.
+
 ## [0.3.83] - 2026-10-23
 
 ### Changed
