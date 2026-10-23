@@ -50,7 +50,7 @@ impl BridgeFileSelection {
         StatusBarBridge::update_metrics(window, state);
 
         fullscreen.dismiss();
-        if !fullscreen.open(settings, state, window.as_weak()) {
+        if !fullscreen.open(settings, state, &window.as_weak()) {
             StatusBarBridge::warn(
                 window,
                 "This file cannot be shown in fullscreen (deleted, pending or corrupted).",
@@ -59,7 +59,7 @@ impl BridgeFileSelection {
     }
 
     /// Handles media tile clicks with modifier keys, double-click timing, the live Multiview follow, and surgical UI updates.
-    pub fn handle_click(event: FileClickEvent, ctx: FileClickContext<'_>) {
+    pub fn handle_click(event: FileClickEvent, ctx: &FileClickContext<'_>) {
         let t_start = Instant::now();
 
         // 1. Double Click Detection (< 400ms delta on same ID)
@@ -366,7 +366,7 @@ impl BridgeFileSelection {
             missing_dlg.show(
                 window,
                 "Open Media",
-                vec![MissingFileItem {
+                &[MissingFileItem {
                     filename,
                     path: full_path,
                 }],

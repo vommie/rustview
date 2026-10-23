@@ -101,7 +101,7 @@ impl<'a> FolderManager<'a> {
             parent_id: None,
             base_depth: 0,
         };
-        let outcome = self.run_scan(root_path, anchor, options, progress_callback)?;
+        let outcome = self.run_scan(root_path, &anchor, options, progress_callback)?;
         tracing::debug!(
             scanned_folders = outcome.scanned_folders,
             "[FolderScan: FullRootSnapshot] Reloading SPoT snapshot after full scan"
@@ -155,7 +155,7 @@ impl<'a> FolderManager<'a> {
             parent_id: target_rec.parent_id,
             base_depth: target_rec.depth,
         };
-        let outcome = self.run_scan(&target_path, anchor, options, progress_callback)?;
+        let outcome = self.run_scan(&target_path, &anchor, options, progress_callback)?;
 
         let rtxn2 = self.db.env.read_txn()?;
         let updated_target = self
@@ -209,7 +209,7 @@ impl<'a> FolderManager<'a> {
     fn run_scan<F>(
         &self,
         root_path: &Path,
-        anchor: ScanAnchor,
+        anchor: &ScanAnchor,
         options: FolderScanOptions,
         progress_callback: Option<F>,
     ) -> Result<ScanOutcome, LibraryError>
@@ -312,7 +312,7 @@ impl<'a> FolderManager<'a> {
             }
         }
 
-        let parent_to_children = Self::link_parents(&scanned_items, &path_to_id, &anchor, &mut new_records);
+        let parent_to_children = Self::link_parents(&scanned_items, &path_to_id, anchor, &mut new_records);
         Self::aggregate_counts(&mut new_records, &parent_to_children);
 
         for r in &new_records {

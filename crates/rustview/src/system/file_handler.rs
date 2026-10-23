@@ -30,7 +30,7 @@ impl SystemFileHandler {
             Err(_) => p.to_path_buf(),
         };
 
-        Self::spawn_default_app(canonical_path)
+        Self::spawn_default_app(&canonical_path)
     }
 
     /// Opens a folder directly in the file manager (e.g. Dolphin).
@@ -50,7 +50,7 @@ impl SystemFileHandler {
             Err(_) => p.to_path_buf(),
         };
 
-        Self::spawn_folder_in_file_manager(canonical_dir)
+        Self::spawn_folder_in_file_manager(&canonical_dir)
     }
 
     /// Opens a directory directly in the file manager (alias for `open_folder`).
@@ -94,11 +94,11 @@ impl SystemFileHandler {
         Self::reveal_in_file_manager(&[path])
     }
 
-    fn spawn_default_app(target_path: PathBuf) -> Result<(), SystemHandlerError> {
+    fn spawn_default_app(target_path: &PathBuf) -> Result<(), SystemHandlerError> {
         let launcher = Self::find_available_launcher(Self::DEFAULT_LAUNCHERS).unwrap_or("xdg-open");
 
         tracing::info!(
-            target = %LogObscurer::path(&target_path),
+            target = %LogObscurer::path(target_path),
             launcher = launcher,
             "[SystemFileHandler] Spawning default application handler..."
         );
@@ -152,9 +152,9 @@ impl SystemFileHandler {
         Ok(())
     }
 
-    fn spawn_folder_in_file_manager(folder_path: PathBuf) -> Result<(), SystemHandlerError> {
+    fn spawn_folder_in_file_manager(folder_path: &PathBuf) -> Result<(), SystemHandlerError> {
         tracing::info!(
-            folder = %LogObscurer::path(&folder_path),
+            folder = %LogObscurer::path(folder_path),
             "[SystemFileHandler] Spawning folder in file manager (Dolphin)..."
         );
 

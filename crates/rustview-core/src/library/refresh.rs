@@ -109,7 +109,7 @@ impl<'a> FolderRefresher<'a> {
     pub fn refresh_folder_with_progress<F>(
         &self,
         folder_id: FolderId,
-        cancel_flag: Option<Arc<AtomicBool>>,
+        cancel_flag: Option<&AtomicBool>,
         progress_callback: Option<F>,
     ) -> Result<RefreshReport, LibraryError>
     where
@@ -123,7 +123,7 @@ impl<'a> FolderRefresher<'a> {
         &self,
         folder_id: FolderId,
         auto_detect_extensionless: bool,
-        cancel_flag: Option<Arc<AtomicBool>>,
+        cancel_flag: Option<&AtomicBool>,
         progress_callback: Option<F>,
     ) -> Result<RefreshReport, LibraryError>
     where
@@ -143,10 +143,10 @@ impl<'a> FolderRefresher<'a> {
 
         // Auto-detect MIME type & append extension for extensionless files if option is enabled
         if auto_detect_extensionless && folder_path.is_dir() {
-            Self::auto_detect_and_fix_extensionless(folder_path, FormatPolicy::mask(), cancel_flag.as_deref());
+            Self::auto_detect_and_fix_extensionless(folder_path, FormatPolicy::mask(), cancel_flag);
         }
 
-        if let Some(ref flag) = cancel_flag
+        if let Some(flag) = cancel_flag
             && flag.load(Ordering::Acquire)
         {
             tracing::debug!(
@@ -172,7 +172,7 @@ impl<'a> FolderRefresher<'a> {
             "Found supported media files in folder"
         );
 
-        if let Some(ref flag) = cancel_flag
+        if let Some(flag) = cancel_flag
             && flag.load(Ordering::Acquire)
         {
             tracing::debug!(
@@ -210,7 +210,7 @@ impl<'a> FolderRefresher<'a> {
         let mut candidates = Vec::with_capacity(scanned_files.len());
 
         for scanned in scanned_files {
-            if let Some(ref flag) = cancel_flag
+            if let Some(flag) = cancel_flag
                 && flag.load(Ordering::Relaxed)
             {
                 return Ok(report);
@@ -275,12 +275,12 @@ impl<'a> FolderRefresher<'a> {
         // 3. Parallelize Rayon computation across CPU cores
         let cb_arc = progress_callback.map(Arc::new);
         let counter_ref = processed_counter.clone();
-        let cancel_ref = cancel_flag.clone();
+        let cancel_ref = cancel_flag;
 
         let processed_results: Vec<ProcessedResult> = candidates
             .into_par_iter()
             .map(|candidate| {
-                if let Some(ref flag) = cancel_ref
+                if let Some(flag) = cancel_ref
                     && flag.load(Ordering::Relaxed)
                 {
                     return ProcessedResult::Cancelled;
@@ -317,7 +317,7 @@ impl<'a> FolderRefresher<'a> {
                             }
                         };
 
-                        if let Some(ref flag) = cancel_ref
+                        if let Some(flag) = cancel_ref
                             && flag.load(Ordering::Relaxed)
                         {
                             return ProcessedResult::Cancelled;
@@ -405,7 +405,7 @@ impl<'a> FolderRefresher<'a> {
                             }
                         };
 
-                        if let Some(ref flag) = cancel_ref
+                        if let Some(flag) = cancel_ref
                             && flag.load(Ordering::Relaxed)
                         {
                             return ProcessedResult::Cancelled;
@@ -468,7 +468,7 @@ impl<'a> FolderRefresher<'a> {
             })
             .collect();
 
-        if let Some(ref flag) = cancel_flag
+        if let Some(flag) = cancel_flag
             && flag.load(Ordering::Acquire)
         {
             tracing::debug!(

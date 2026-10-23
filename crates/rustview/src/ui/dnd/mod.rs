@@ -78,7 +78,7 @@ impl BridgeDnd {
         None
     }
 
-    pub fn handle_drag_started(params: DragStartParams<'_>) {
+    pub fn handle_drag_started(params: &DragStartParams<'_>) {
         let t0 = Instant::now();
         params.autoscroller.stop();
         params.browse_scroller.stop();
@@ -305,7 +305,10 @@ impl BridgeDnd {
         let browse_target = (browse_row != 0)
             .then(|| BrowseFolders::drop_target(&state.read(), browse_row))
             .flatten();
-        let target_folder_id = browse_target.map_or(tree_target_id, |id| id.wrapping_as::<i32>());
+        let target_folder_id = browse_target.map_or(
+            tree_target_id,
+            rustview_core::util::cast::WrappingAs::wrapping_as::<i32>,
+        );
 
         if target_folder_id > 0
             && let Ok(Some(target_folder_rec)) =
@@ -355,7 +358,7 @@ impl BridgeDnd {
         }
     }
 
-    pub fn start_batch_transfer(params: BatchTransferParams<'_>) {
+    pub fn start_batch_transfer(params: &BatchTransferParams<'_>) {
         let t_start = Instant::now();
 
         let Ok(Some(target_folder_rec)) = params.library.folders().get_folder(params.target_folder_id) else {

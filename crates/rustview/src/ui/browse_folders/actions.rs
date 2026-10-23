@@ -186,7 +186,7 @@ impl BrowseFolders {
             // The tree shows the folder below its parent: the parent must be expanded for the new selection to be visible.
             Self::expand_chain_to(state, folder_id);
         }
-        BridgeFolders::select_folder(folder_id, path, window, library, thumbnails, settings, state);
+        BridgeFolders::select_folder(folder_id, &path, window, library, thumbnails, settings, state);
     }
 
     /// Enter: opens the folder row that is selected alone ("..." included). `false` when something else is selected.
@@ -241,7 +241,7 @@ impl BrowseFolders {
             .map(|n| n.path.clone());
         if let Some(path) = path {
             state.write().pending_first_select = Some(parent);
-            BridgeFolders::select_folder(parent, path, window, library, thumbnails, settings, state);
+            BridgeFolders::select_folder(parent, &path, window, library, thumbnails, settings, state);
         }
     }
 
@@ -299,7 +299,7 @@ impl BrowseFolders {
         };
         Self::expand_chain_to(state, folder_id);
         state.write().last_active_panel = LastActivePanel::Media;
-        BridgeFolders::select_folder(folder_id, path, window, library, thumbnails, settings, state);
+        BridgeFolders::select_folder(folder_id, &path, window, library, thumbnails, settings, state);
     }
 
     /// Expands every ancestor of `folder_id` in the folder tree (not the folder itself).

@@ -28,12 +28,12 @@ pub fn finish(
     thumbnails: &ThumbnailManager,
     state: &RwLock<UiState>,
     total: usize,
-    batch: RegenerationBatchResult,
+    batch: &RegenerationBatchResult,
     elapsed: Duration,
 ) {
     release_busy(window, thumbnails, state);
     show_new_thumbnails(window, state, &batch.succeeded);
-    report(window, total, &batch, elapsed);
+    report(window, total, batch, elapsed);
     BridgeInspector::update(window, state);
 }
 

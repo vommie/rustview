@@ -306,7 +306,7 @@ pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> 
 
     println!("[3/4] Wiping existing RustView database and creating clean LMDB tables...");
     println!("[4/4] Writing and atomically committing re-indexed records to LMDB storage...");
-    XnViewDbWriter::wipe_and_write(data_dir, mapped_data, &mut stats)?;
+    XnViewDbWriter::wipe_and_write(data_dir, &mapped_data, &mut stats)?;
 
     stats.total_time_ms = t_total_start.elapsed().as_millis();
 

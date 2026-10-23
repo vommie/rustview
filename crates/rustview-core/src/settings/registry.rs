@@ -38,12 +38,12 @@ impl SettingsManager {
 
     /// Evaluates settings deltas, persists changes atomically, and selectively notifies subscribers.
     /// If no actual settings were changed, all costly view resets and background reloads are bypassed.
-    pub fn update(&self, new_settings: AppSettings) {
+    pub fn update(&self, new_settings: &AppSettings) {
         let t0 = Instant::now();
         let (old_settings, diff) = {
             let reader = self.current.read();
             let old = reader.clone();
-            let diff = SettingsDiff::compute(&old, &new_settings);
+            let diff = SettingsDiff::compute(&old, new_settings);
             (old, diff)
         };
 
@@ -58,7 +58,7 @@ impl SettingsManager {
         LogObscurer::set_obfuscate(new_settings.debug.obfuscate_logs);
         FormatPolicy::set(new_settings.formats.format_mask());
 
-        let summary = diff.detailed_summary(&old_settings, &new_settings);
+        let summary = diff.detailed_summary(&old_settings, new_settings);
         tracing::info!(
             changed_items_count = summary.len(),
             changes = ?summary,
@@ -81,7 +81,7 @@ impl SettingsManager {
 
         let hooks = self.hooks.read();
         for hook in hooks.iter() {
-            hook(&old_settings, &new_settings, &diff);
+            hook(&old_settings, new_settings, &diff);
         }
     }
 

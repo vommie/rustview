@@ -19,7 +19,7 @@ use rustview_core::thumbnails::ThumbnailManager;
 use std::sync::Arc;
 
 impl BridgeContextMenu {
-    pub fn show_media_menu(ctx: MediaMenuContext<'_>, media_id: MediaId, x: f32, y: f32) {
+    pub fn show_media_menu(ctx: &MediaMenuContext<'_>, media_id: MediaId, x: f32, y: f32) {
         ctx.state.write().active_tab_dialog_target = None;
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let show_hidden = ctx.settings.get().folders.show_hidden_folders;
@@ -41,7 +41,7 @@ impl BridgeContextMenu {
         Self::open_custom_menu(ctx.window, ctx.state, ctx.tab_manager, menu, x, y);
     }
 
-    pub fn show_folder_menu(ctx: FolderMenuContext<'_>, folder_id: FolderId, x: f32, y: f32) {
+    pub fn show_folder_menu(ctx: &FolderMenuContext<'_>, folder_id: FolderId, x: f32, y: f32) {
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let app_settings = ctx.settings.get();
         let root_setting = app_settings.general.root_folder;

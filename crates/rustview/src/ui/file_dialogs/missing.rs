@@ -33,7 +33,7 @@ impl MissingFileDialogController {
     }
 
     /// Displays the Missing File modal dialog for one or multiple missing files.
-    pub fn show(&self, window: &MainWindow, operation_context: &str, missing_files: Vec<MissingFileItem>) {
+    pub fn show(&self, window: &MainWindow, operation_context: &str, missing_files: &[MissingFileItem]) {
         if missing_files.is_empty() {
             return;
         }
@@ -58,7 +58,7 @@ impl MissingFileDialogController {
             win.set_missing_files_count(count.saturating_as::<i32>());
 
             if has_multiple {
-                let formatted_list = Self::format_missing_paths_list(&missing_files);
+                let formatted_list = Self::format_missing_paths_list(missing_files);
                 win.set_missing_files_text(formatted_list.into());
                 win.set_single_file_name("".into());
                 win.set_single_file_path("".into());

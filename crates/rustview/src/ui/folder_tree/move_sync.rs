@@ -56,7 +56,7 @@ impl BridgeFolderMoveSync {
             );
             BridgeFolders::select_folder(
                 current_id,
-                current_path,
+                &current_path,
                 window,
                 &ctx.library,
                 &ctx.thumbnails,

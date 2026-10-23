@@ -53,7 +53,7 @@ pub struct PickerRequest {
 /// at once; Cancel, Esc or closing the window reports the initial color again, OK keeps the last one. A picker that is
 /// already open is replaced. (Window managers that ignore requested positions, as Wayland compositors do, place it
 /// themselves.) UI thread only.
-pub fn open<P: ComponentHandle>(parent: &P, request: PickerRequest, on_change: impl Fn(Color) + 'static) {
+pub fn open<P: ComponentHandle>(parent: &P, request: &PickerRequest, on_change: impl Fn(Color) + 'static) {
     let on_change: Rc<dyn Fn(Color)> = Rc::new(on_change);
     let created = WINDOW.with(|slot| {
         let mut slot = slot.borrow_mut();

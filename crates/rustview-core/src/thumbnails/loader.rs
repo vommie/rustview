@@ -129,7 +129,7 @@ impl ThumbnailScheduler {
         let ready_drain_queue = Arc::new(ReadyQueue::default());
         let active_pipeline_id = Arc::new(AtomicUsize::new(0));
         let view_loader = Arc::new(ViewLoader::new(
-            ViewLoaderDeps {
+            &ViewLoaderDeps {
                 library: library.clone(),
                 cache: cache.clone(),
                 store: store.clone(),
@@ -293,7 +293,7 @@ impl ThumbnailScheduler {
         &self,
         media_id: MediaId,
         path: PathBuf,
-        config: ThumbnailConfig,
+        config: &ThumbnailConfig,
         on_loaded: F,
     ) where
         F: FnOnce(Result<Arc<AnimatedPreview>, ThumbnailError>) + Send + 'static,
@@ -304,8 +304,9 @@ impl ThumbnailScheduler {
         }
 
         let cache = self.animated_cache.clone();
+        let (max_bound, scaling_algorithm) = (config.max_bound, config.scaling_algorithm);
         self.pool.spawn(move || {
-            let res = GifThumbnailer::extract_frames(&path, config.max_bound, config.scaling_algorithm).map(Arc::new);
+            let res = GifThumbnailer::extract_frames(&path, max_bound, scaling_algorithm).map(Arc::new);
 
             if let Ok(ref preview) = res {
                 cache.insert(media_id, preview.clone());
@@ -344,7 +345,7 @@ impl ThumbnailScheduler {
         let scheduler = self.clone();
         let bench_clone = bench;
         self.pool.spawn(move || {
-            scheduler.execute_orchestration(pipeline_id, folder_id, items, config, bench_clone);
+            scheduler.execute_orchestration(pipeline_id, folder_id, items, &config, &bench_clone);
         });
     }
 
@@ -372,8 +373,8 @@ impl ThumbnailScheduler {
         pipeline_id: usize,
         folder_id: u64,
         items: Vec<PipelineItem>,
-        config: ThumbnailConfig,
-        benchmark: Arc<ThumbnailPipelineBenchmark>,
+        config: &ThumbnailConfig,
+        benchmark: &Arc<ThumbnailPipelineBenchmark>,
     ) {
         if self.is_pipeline_stale(pipeline_id) {
             return;
@@ -486,7 +487,7 @@ impl ThumbnailScheduler {
                 let t_p2 = t_phase2_start.clone();
 
                 self.pool.spawn(move || {
-                    scheduler.worker_generation_loop(pipeline_id, folder_id, cfg, bench_gen, t_p2);
+                    scheduler.worker_generation_loop(pipeline_id, folder_id, &cfg, &bench_gen, &t_p2);
                 });
             }
         }
@@ -496,9 +497,9 @@ impl ThumbnailScheduler {
         &self,
         pipeline_id: usize,
         folder_id: u64,
-        config: ThumbnailConfig,
-        benchmark: Arc<ThumbnailPipelineBenchmark>,
-        t_phase2_start: Arc<Instant>,
+        config: &ThumbnailConfig,
+        benchmark: &Arc<ThumbnailPipelineBenchmark>,
+        t_phase2_start: &Arc<Instant>,
     ) {
         let mut batched_db_writes: Vec<BatchedDbWriteItem> = Vec::with_capacity(config.batch_commit_size);
 
@@ -525,7 +526,7 @@ impl ThumbnailScheduler {
 
             if is_video {
                 let t_vid = Instant::now();
-                match self.generator.generate_video_thumbnails(&target.file_path, &config) {
+                match self.generator.generate_video_thumbnails(&target.file_path, config) {
                     Ok(video_res) => {
                         benchmark.record_video_extract(t_vid.elapsed().as_micros().saturating_as::<u64>());
 
@@ -674,7 +675,7 @@ impl ThumbnailScheduler {
                                     };
 
                                     let preview_record = if target.animatable && config.generate_video_previews {
-                                        self.animated_preview_record(&target, &config)
+                                        self.animated_preview_record(&target, config)
                                     } else {
                                         None
                                     };
@@ -744,7 +745,7 @@ impl ThumbnailScheduler {
             }
 
             if batched_db_writes.len() >= config.batch_commit_size {
-                self.flush_db_batch(&mut batched_db_writes, &benchmark);
+                self.flush_db_batch(&mut batched_db_writes, benchmark);
             }
 
             self.tracker.increment_generate_done();
@@ -752,7 +753,7 @@ impl ThumbnailScheduler {
         }
 
         if !batched_db_writes.is_empty() {
-            self.flush_db_batch(&mut batched_db_writes, &benchmark);
+            self.flush_db_batch(&mut batched_db_writes, benchmark);
         }
 
         benchmark.set_generate_duration(t_phase2_start.elapsed().as_micros().saturating_as::<u64>());
@@ -884,7 +885,7 @@ impl ThumbnailScheduler {
         &self,
         media_id: MediaId,
         file_path: &Path,
-        config: ThumbnailConfig,
+        config: &ThumbnailConfig,
     ) -> Result<CachedThumbnail, ThumbnailError> {
         if let Some(item) = self.cache.get_thumbnail(media_id) {
             return Ok(item);
@@ -906,7 +907,7 @@ impl ThumbnailScheduler {
         let is_video = self.is_video_media(media_id, file_path);
         let frame = if is_video {
             self.generator
-                .generate_video_thumbnails(file_path, &config)?
+                .generate_video_thumbnails(file_path, config)?
                 .primary_frame
         } else {
             self.generator

@@ -254,15 +254,15 @@ impl DeleteSelectionDialogController {
     pub fn show(
         &self,
         window: &MainWindow,
-        files: Vec<MediaId>,
-        folders: Vec<FolderId>,
-        ctx: FolderDialogContext,
+        files: &[MediaId],
+        folders: &[FolderId],
+        ctx: &FolderDialogContext,
         reborn_warn: &RebornFolderWarnDialogController,
     ) {
         window.set_is_context_menu_open(false);
 
-        let protected = Self::protected_folders(&ctx);
-        let mut plan = match SelectionDeletePlanner::build(&ctx.library, &files, &folders, &protected) {
+        let protected = Self::protected_folders(ctx);
+        let mut plan = match SelectionDeletePlanner::build(&ctx.library, files, folders, &protected) {
             Ok(plan) => plan,
             Err(e) => {
                 tracing::error!(error = %e, "[DeleteSelectionDialog: Plan] The selection could not be planned");
@@ -305,7 +305,7 @@ impl DeleteSelectionDialogController {
         self.ensure_dialog_instantiated();
         if let Some(ref win) = *self.dialog.borrow() {
             self.populate(win, &DialogTexts::of(&plan, reborn_restored));
-            self.bind_dialog_events(win, window, Rc::new(plan), ctx);
+            self.bind_dialog_events(win, window, &Rc::new(plan), ctx);
             window.set_is_modal_locked(true);
             let _ = win.show();
         }
@@ -461,8 +461,8 @@ impl DeleteSelectionDialogController {
         &self,
         win: &DeleteSelectionDialog,
         window: &MainWindow,
-        plan: Rc<SelectionDeletePlan>,
-        ctx: FolderDialogContext,
+        plan: &Rc<SelectionDeletePlan>,
+        ctx: &FolderDialogContext,
     ) {
         let confirm = |mode: DeleteMode| {
             let (ctrl, plan, ctx, window) = (self.clone(), plan.clone(), ctx.clone(), window.clone_strong());

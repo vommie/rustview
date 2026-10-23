@@ -59,7 +59,7 @@ pub struct FileRenameDialogController;
 impl FileRenameDialogController {
     /// Opens the modern smart rename dialog with real-time conflict checking, automatic suggestion filling, and conflict delegation.
     /// Supports pending stubs even if their physical file is not yet ready on disk.
-    pub fn open(params: RenameDialogParams<'_>) {
+    pub fn open(params: &RenameDialogParams<'_>) {
         let dialog_ref = params.dialog_ref;
         let window = params.window;
         let media_id = params.media_id;
@@ -205,7 +205,7 @@ impl FileRenameDialogController {
                     );
 
                     conflict_dlg_conf.show(
-                        ConflictDialogParams {
+                        &ConflictDialogParams {
                             window: &win_main_conf,
                             thumbnails: &ctx_conf.thumbnails,
                             settings: &ctx_conf.settings,

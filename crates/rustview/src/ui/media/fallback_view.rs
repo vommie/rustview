@@ -31,7 +31,7 @@ pub struct FallbackViewEvaluator;
 
 impl FallbackViewEvaluator {
     /// Evaluates the current state and returns a context-sensitive `FallbackViewState`.
-    pub fn evaluate(params: FallbackEvaluationParams<'_>) -> FallbackViewState {
+    pub fn evaluate(params: &FallbackEvaluationParams<'_>) -> FallbackViewState {
         // Fast Path: If media items are visible, empty state is inactive
         if params.matched_count > 0 {
             return FallbackViewState {
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn test_fallback_evaluator_inactive_when_items_present() {
         let filter = QueryFilter::default();
-        let state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
+        let state = FallbackViewEvaluator::evaluate(&FallbackEvaluationParams {
             total_in_dataset: 10,
             matched_count: 5,
             is_query_active: false,
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn test_fallback_evaluator_no_root_configured() {
         let filter = QueryFilter::default();
-        let state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
+        let state = FallbackViewEvaluator::evaluate(&FallbackEvaluationParams {
             total_in_dataset: 0,
             matched_count: 0,
             is_query_active: false,
@@ -234,7 +234,7 @@ mod tests {
             ..Default::default()
         };
 
-        let state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
+        let state = FallbackViewEvaluator::evaluate(&FallbackEvaluationParams {
             total_in_dataset: 20,
             matched_count: 0,
             is_query_active: false,
@@ -258,7 +258,7 @@ mod tests {
             ..Default::default()
         };
 
-        let state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
+        let state = FallbackViewEvaluator::evaluate(&FallbackEvaluationParams {
             total_in_dataset: 15,
             matched_count: 0,
             is_query_active: false,

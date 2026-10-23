@@ -410,7 +410,7 @@ impl UiBridge {
         );
     }
 
-    pub fn select_folder(&self, folder_id: FolderId, path: PathBuf) {
+    pub fn select_folder(&self, folder_id: FolderId, path: &PathBuf) {
         BridgeFolders::select_folder(
             folder_id,
             path,
@@ -422,7 +422,7 @@ impl UiBridge {
         );
     }
 
-    pub fn refresh_folder_explicit(&self, folder_id: FolderId, path: PathBuf) {
+    pub fn refresh_folder_explicit(&self, folder_id: FolderId, path: &PathBuf) {
         BridgeFolders::refresh_folder_explicit(
             folder_id,
             path,
@@ -499,7 +499,7 @@ impl UiBridge {
                 is_ctrl,
                 is_shift,
             },
-            FileClickContext {
+            &FileClickContext {
                 window: &self.window,
                 library: &self.library,
                 settings: &self.settings,
@@ -530,7 +530,7 @@ impl UiBridge {
 
     pub fn show_media_context_menu(&self, media_id: MediaId, x: f32, y: f32) {
         BridgeContextMenu::show_media_menu(
-            MediaMenuContext {
+            &MediaMenuContext {
                 window: &self.window,
                 library: &self.library,
                 thumbnails: &self.thumbnails,

@@ -160,7 +160,7 @@ impl BridgeViewerTabs {
     }
 
     /// Handles drop release: executes tab reordering in `ViewerTabManager` if target index changed and resyncs UI.
-    pub fn handle_tab_drag_ended(params: TabDragEndParams<'_>) {
+    pub fn handle_tab_drag_ended(params: &TabDragEndParams<'_>) {
         params.autoscroller.stop();
 
         let session_opt = params.state.write().active_tab_dnd_session.take();

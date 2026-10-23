@@ -22,10 +22,10 @@ impl BridgeViewerTabs {
     pub fn register_callbacks(
         window: &MainWindow,
         tab_manager: Arc<ViewerTabManager>,
-        library: Arc<Library>,
+        library: &Arc<Library>,
         thumbnails: Arc<ThumbnailManager>,
         settings: Arc<SettingsManager>,
-        state: Arc<RwLock<UiState>>,
+        state: &Arc<RwLock<UiState>>,
         fullscreen: MultiviewHandle,
     ) {
         let tab_autoscroller = TabDndAutoScroller::new();
@@ -129,7 +129,7 @@ impl BridgeViewerTabs {
         let fs_dend = fullscreen.clone();
         let scroller_dend = tab_autoscroller.clone();
         window.on_tab_drag_ended(move |tab_id, _target_idx| {
-            Self::handle_tab_drag_ended(TabDragEndParams {
+            Self::handle_tab_drag_ended(&TabDragEndParams {
                 tab_id: tab_id.wrapping_as::<TabId>(),
                 window: &win_dend,
                 tab_manager: &tm_dend,

@@ -28,19 +28,19 @@ impl UiBridge {
         BridgeViewerTabs::register_callbacks(
             &self.window,
             self.tab_manager.clone(),
-            self.library.clone(),
+            &self.library.clone(),
             self.thumbnails.clone(),
             self.settings.clone(),
-            self.state.clone(),
+            &self.state.clone(),
             self.fullscreen.clone(),
         );
 
         BridgeFolders::register_callbacks(
             &self.window,
             self.library.clone(),
-            self.thumbnails.clone(),
-            self.settings.clone(),
-            self.state.clone(),
+            &self.thumbnails.clone(),
+            &self.settings.clone(),
+            &self.state.clone(),
             self.settings_dialog.clone(),
         );
 
@@ -50,7 +50,7 @@ impl UiBridge {
             &self.window,
             self.library.clone(),
             self.settings.clone(),
-            self.tab_manager.clone(),
+            &self.tab_manager.clone(),
             self.state.clone(),
             self.last_click.clone(),
             self.fullscreen.clone(),
@@ -81,9 +81,9 @@ impl UiBridge {
         BridgeTags::register_callbacks(
             &self.window,
             self.library.clone(),
-            self.thumbnails.clone(),
-            self.tab_manager.clone(),
-            self.settings.clone(),
+            &self.thumbnails.clone(),
+            &self.tab_manager.clone(),
+            &self.settings.clone(),
             self.state.clone(),
         );
 
@@ -162,9 +162,9 @@ impl UiBridge {
 
         BridgeMedia::register_query_callbacks(
             &self.window,
-            self.library.clone(),
+            &self.library.clone(),
             self.thumbnails.clone(),
-            self.tab_manager.clone(),
+            &self.tab_manager.clone(),
             self.settings.clone(),
             self.state.clone(),
         );
@@ -281,7 +281,7 @@ impl UiBridge {
 
         self.window
             .on_media_navigate(move |direction_code, is_shift, page_rows| {
-                handle_keyboard_navigate(KeyboardNavigateParams {
+                handle_keyboard_navigate(&KeyboardNavigateParams {
                     direction_code,
                     is_shift,
                     page_rows,
@@ -304,7 +304,7 @@ impl UiBridge {
         let search: TypeAheadState = TypeAheadState::default();
 
         self.window.on_type_ahead_key(move |text, command| {
-            handle_type_ahead_key(TypeAheadParams {
+            handle_type_ahead_key(&TypeAheadParams {
                 text: text.as_str(),
                 command,
                 search: &search,

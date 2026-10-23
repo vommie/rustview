@@ -126,7 +126,7 @@ impl BridgeTags {
         let mut visual_nodes = Vec::new();
         TagTreeBuilder::flatten(&tree, 0, &ctx, &mut visual_nodes);
 
-        let (tag_columns, rows_per_col) = TagTreeBuilder::chunk_into_columns(visual_nodes, available_h);
+        let (tag_columns, rows_per_col) = TagTreeBuilder::chunk_into_columns(&visual_nodes, available_h);
         {
             let mut st = state.write();
             st.tag_tree_rows_per_column = rows_per_col;
@@ -257,7 +257,7 @@ impl BridgeTags {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        dialogs: TagActionDialogs,
+        dialogs: &TagActionDialogs,
     ) {
         TagContextMenu::handle_action(action_id, window, library, settings, state, dialogs);
     }

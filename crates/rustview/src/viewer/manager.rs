@@ -733,7 +733,7 @@ impl ViewerTabManager {
 
         let (pos, removed) = tabs.remove(tab_id)?;
         let removed_id = removed.id;
-        Self::cleanup_session_resources(removed);
+        Self::cleanup_session_resources(&removed);
 
         tracing::info!(
             tab_id = removed_id,
@@ -762,7 +762,7 @@ impl ViewerTabManager {
 
         let evicted_ids: HashSet<TabId> = evicted.iter().map(|t| t.id).collect();
         for session in evicted {
-            Self::cleanup_session_resources(session);
+            Self::cleanup_session_resources(&session);
         }
 
         tracing::info!(
@@ -798,7 +798,7 @@ impl ViewerTabManager {
 
         let evicted_ids: HashSet<TabId> = evicted.iter().map(|t| t.id).collect();
         for session in evicted {
-            Self::cleanup_session_resources(session);
+            Self::cleanup_session_resources(&session);
         }
 
         tracing::info!(
@@ -828,7 +828,7 @@ impl ViewerTabManager {
         let closed_count = evicted.len();
 
         for session in evicted {
-            Self::cleanup_session_resources(session);
+            Self::cleanup_session_resources(&session);
         }
 
         if tabs.is_empty() {
@@ -855,7 +855,7 @@ impl ViewerTabManager {
 
         let evicted = tabs.clear();
         for session in evicted {
-            Self::cleanup_session_resources(session);
+            Self::cleanup_session_resources(&session);
         }
 
         *active = None;
@@ -874,7 +874,7 @@ impl ViewerTabManager {
         self.observed_instances.lock().clear();
         let count = sessions.len();
         for session in sessions {
-            Self::shutdown_session(session);
+            Self::shutdown_session(&session);
         }
         let settled = teardown::wait_for_teardowns(Duration::from_millis(SHUTDOWN_TEARDOWN_WAIT_MS));
         tracing::info!(
@@ -884,7 +884,7 @@ impl ViewerTabManager {
         );
     }
 
-    fn shutdown_session(session: MediaTabSession) {
+    fn shutdown_session(session: &MediaTabSession) {
         session.multiview.instance.lock().shutdown_now();
     }
 
@@ -966,7 +966,7 @@ impl ViewerTabManager {
 
     /// The tab is closed: playback stops and the windows disappear. The Multiview shuts its players down before their windows are
     /// destroyed (see `teardown`; dropping the tab would destroy a window under a running player and end the application).
-    fn cleanup_session_resources(session: MediaTabSession) {
+    fn cleanup_session_resources(session: &MediaTabSession) {
         session.stop_native();
     }
 

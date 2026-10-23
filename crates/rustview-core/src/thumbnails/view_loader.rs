@@ -100,7 +100,7 @@ pub struct ViewLoader {
 }
 
 impl ViewLoader {
-    pub fn new(deps: ViewLoaderDeps, threads: usize) -> Self {
+    pub fn new(deps: &ViewLoaderDeps, threads: usize) -> Self {
         let queue = Arc::new(ViewLoadQueue::default());
         for index in 0..threads.max(1) {
             let queue = queue.clone();

@@ -444,7 +444,7 @@ impl BridgeMedia {
 
                     if missing_count > 0 && total_items == 1 {
                         let missing_dialog = MissingFileDialogController::new();
-                        missing_dialog.show(&w, "Refresh File", missing_files);
+                        missing_dialog.show(&w, "Refresh File", &missing_files);
                     } else if missing_count > 0 {
                         StatusBarBridge::warn(
                             &w,

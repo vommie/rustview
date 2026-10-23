@@ -233,7 +233,7 @@ impl BridgeMedia {
         let root_exists = total_in_dataset > 0 || app_settings.general.root_folder.as_ref().is_some_and(|p| p.is_dir());
         let current_folder_name = path_opt.as_ref().and_then(|p| p.file_name()).and_then(|n| n.to_str());
 
-        let fallback_state = FallbackViewEvaluator::evaluate(FallbackEvaluationParams {
+        let fallback_state = FallbackViewEvaluator::evaluate(&FallbackEvaluationParams {
             total_in_dataset,
             matched_count,
             is_query_active,

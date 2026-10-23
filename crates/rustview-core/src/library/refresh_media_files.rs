@@ -35,7 +35,7 @@ impl<'a> MediaItemRefresher<'a> {
         let (record, file_path) = self.resolve_media_path(&wtxn, media_id)?;
         let attributes = self.inspect_physical_file(&file_path)?;
 
-        let updated_record = self.commit_refreshed_record(&mut wtxn, media_id, record, attributes)?;
+        let updated_record = self.commit_refreshed_record(&mut wtxn, media_id, record, &attributes)?;
 
         wtxn.commit()?;
 
@@ -166,7 +166,7 @@ impl<'a> MediaItemRefresher<'a> {
         wtxn: &mut heed::RwTxn,
         media_id: MediaId,
         mut record: MediaRecord,
-        attributes: RefreshedFileAttributes,
+        attributes: &RefreshedFileAttributes,
     ) -> Result<MediaRecord, LibraryError> {
         if attributes.file_hash != record.file_hash {
             self.db

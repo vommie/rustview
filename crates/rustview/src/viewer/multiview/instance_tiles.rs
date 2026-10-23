@@ -186,7 +186,7 @@ impl MultiviewInstance {
 
     /// Shows `pixels` (a thumbnail the application already holds) in an image tile whose decode is still running, so
     /// browsing does not flash an empty tile. The decoded image replaces it.
-    pub fn set_placeholder(&mut self, media_id: MediaId, pixels: SharedPixelBuffer<Rgb8Pixel>) {
+    pub fn set_placeholder(&mut self, media_id: MediaId, pixels: &SharedPixelBuffer<Rgb8Pixel>) {
         let mut changed = false;
         for tile in self.tiles.iter_mut().filter(|t| t.media_id == media_id) {
             if tile.kind == TileKind::Image && tile.is_loading && tile.pixels.is_none() {

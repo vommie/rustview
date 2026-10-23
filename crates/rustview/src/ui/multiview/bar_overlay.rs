@@ -212,7 +212,7 @@ pub fn open_menu(kind: BarKind, opener_action: i32, items: &[CtxMenuItem]) {
         let opener = overlay.last_actions.iter().position(|a| a.id == opener_action);
         overlay
             .window
-            .set_menu_owner_index(opener.map_or(-1, |i| i.saturating_as::<i32>()));
+            .set_menu_owner_index(opener.map_or(-1, rustview_core::util::cast::SaturatingAs::saturating_as::<i32>));
         overlay
             .window
             .set_menu_items(CtxMenuDispatcher::items_to_slint_model(items, 0));
@@ -656,7 +656,7 @@ impl Overlay {
             .iter()
             .position(|a| a.id == MediaActionId::Zoom.code());
         self.window
-            .set_menu_owner_index(opener.map_or(-1, |i| i.saturating_as::<i32>()));
+            .set_menu_owner_index(opener.map_or(-1, rustview_core::util::cast::SaturatingAs::saturating_as::<i32>));
         self.window.set_tile(zoom.tile.saturating_as::<i32>());
         self.window.set_zoom_permille(zoom.permille);
         self.window.set_zoom_min_permille(zoom.min_permille);

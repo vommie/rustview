@@ -169,7 +169,7 @@ impl TabContextMenu {
     }
 
     /// Handles tab-management context menu action routing (IDs 4001..4009).
-    pub fn handle_action(action_id: CtxMenuActionId, ctx: TabActionContext<'_>, target_tab_id: Option<TabId>) {
+    pub fn handle_action(action_id: CtxMenuActionId, ctx: &TabActionContext<'_>, target_tab_id: Option<TabId>) {
         let Some(tab_id) = target_tab_id else {
             tracing::warn!("[TabContextMenu] No target tab ID found for action");
             return;
@@ -227,7 +227,7 @@ impl TabContextMenu {
                     "[TabContextMenu: OpenMultiview] Open the Multiview tab in fullscreen"
                 );
                 ctx.fullscreen
-                    .open_tab(tab_id, ctx.tab_manager, ctx.settings, ctx.window.as_weak());
+                    .open_tab(tab_id, ctx.tab_manager, ctx.settings, &ctx.window.as_weak());
             }
             CTX_TAB_MOVE_TO_START => {
                 tracing::info!(tab_id, "[TabContextMenu: Move] Move tab to start requested");

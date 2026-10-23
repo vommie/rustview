@@ -20,7 +20,7 @@ use rustview_core::query::{MediaStore, lay_out};
 use rustview_core::settings::SettingsManager;
 use rustview_core::telemetry::FolderLoadBenchmark;
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
-use rustview_core::util::cast::{SaturatingAs, WrappingAs};
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -31,7 +31,7 @@ use std::time::Instant;
 impl BridgeFolders {
     pub fn select_folder(
         folder_id: FolderId,
-        path: PathBuf,
+        path: &PathBuf,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
@@ -46,7 +46,7 @@ impl BridgeFolders {
         Self::select_folder_internal(
             folder_id,
             path,
-            FolderNavigationContext {
+            &FolderNavigationContext {
                 window,
                 library,
                 thumbnails,
@@ -59,11 +59,11 @@ impl BridgeFolders {
 
     pub(super) fn select_folder_internal(
         folder_id: FolderId,
-        path: PathBuf,
-        ctx: FolderNavigationContext<'_>,
+        path: &PathBuf,
+        ctx: &FolderNavigationContext<'_>,
         is_explicit_refresh: bool,
     ) {
-        let normalized_path = normalize_path(&path);
+        let normalized_path = normalize_path(path);
         let folder_name = normalized_path.file_name().map_or_else(
             || normalized_path.to_string_lossy().to_string(),
             |n| n.to_string_lossy().to_string(),
@@ -165,7 +165,7 @@ impl BridgeFolders {
 
         let media_ids = Self::fetch_media_ids(ctx.library, &selection);
         if media_ids.len() > list_loader::ASYNC_ABOVE_RECORDS {
-            Self::load_folder_deferred(&ctx, selection, media_ids);
+            Self::load_folder_deferred(ctx, selection, media_ids);
             return;
         }
 
@@ -185,7 +185,7 @@ impl BridgeFolders {
             false,
             false,
         );
-        Self::after_folder_list_ready(&ctx, selection, is_empty_in_db, stub_candidates);
+        Self::after_folder_list_ready(ctx, selection, is_empty_in_db, &stub_candidates);
     }
 
     /// The ids of the media of the selected folder(s); a cheap index read, it decides whether the list is built on the worker.
@@ -331,7 +331,7 @@ impl BridgeFolders {
                     settings: &settings,
                     state: &state,
                 };
-                Self::after_folder_list_ready(&ctx, selection, is_empty_in_db, stub_candidates);
+                Self::after_folder_list_ready(&ctx, selection, is_empty_in_db, &stub_candidates);
             });
         });
     }
@@ -342,7 +342,7 @@ impl BridgeFolders {
         ctx: &FolderNavigationContext<'_>,
         selection: FolderSelection,
         is_empty_in_db: bool,
-        stub_candidates: Vec<MediaRecord>,
+        stub_candidates: &[MediaRecord],
     ) {
         let FolderSelection {
             folder_id,
@@ -370,7 +370,7 @@ impl BridgeFolders {
                 let (ready_stubs, still_pending, sources) = ctx
                     .library
                     .external_media_completer()
-                    .find_pending_stubs_in_records(&stub_candidates);
+                    .find_pending_stubs_in_records(stub_candidates);
 
                 if !ready_stubs.is_empty() {
                     let stubs_count = ready_stubs.len();
@@ -524,7 +524,7 @@ impl BridgeFolders {
                     let rep_res = lib_scanner.refresher().refresh_folder_with_options(
                         *fid,
                         auto_detect,
-                        Some(cancel_ref.clone()),
+                        Some(cancel_ref.as_ref()),
                         Some(move |cur, tot| {
                             let mut last = last_rep.lock();
                             if last.elapsed().as_millis() >= 35 || cur == tot {

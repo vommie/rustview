@@ -4,7 +4,6 @@
 //! theme in Slint). `BadgeColor` is the escape hatch for a badge that must deviate from the theme,
 //! e.g. a user-defined tag color given as hex string.
 
-use rustview_core::util::cast::SaturatingAs;
 use slint::Color;
 
 /// Dark text color used on light badge backgrounds (matches `Theme.badge-text-on-light`).
@@ -36,7 +35,10 @@ impl BadgeColor {
         let digits = input.trim().trim_start_matches('#');
         let nibbles: Option<Vec<u8>> = digits
             .chars()
-            .map(|c| c.to_digit(16).map(|v| v.saturating_as::<u8>()))
+            .map(|c| {
+                c.to_digit(16)
+                    .map(rustview_core::util::cast::SaturatingAs::saturating_as::<u8>)
+            })
             .collect();
 
         match nibbles.as_deref() {

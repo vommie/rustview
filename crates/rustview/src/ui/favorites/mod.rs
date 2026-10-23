@@ -84,7 +84,7 @@ impl BridgeFavorites {
     pub fn add_favorite(
         window: &MainWindow,
         favorites: &Arc<RwLock<FavoriteManager>>,
-        path: PathBuf,
+        path: &PathBuf,
         alias: Option<String>,
     ) -> Result<(), String> {
         let t0 = Instant::now();
@@ -337,7 +337,7 @@ impl BridgeFavorites {
         // 4. Open the folder in Browse View without switching away from Favorites sidebar tab
         BridgeFolders::select_folder(
             folder_rec.id,
-            normalized_target.clone(),
+            &normalized_target.clone(),
             window,
             library,
             thumbnails,

@@ -21,7 +21,7 @@ impl XnViewDbWriter {
     /// then initializes fresh databases and commits the mapped records atomically.
     pub fn wipe_and_write(
         data_dir: &Path,
-        mapped: MappedData,
+        mapped: &MappedData,
         stats: &mut MigrationStats,
     ) -> Result<(), MigrationError> {
         let t0 = Instant::now();

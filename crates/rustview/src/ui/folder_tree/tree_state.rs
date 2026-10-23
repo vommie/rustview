@@ -221,7 +221,7 @@ impl BridgeFolders {
                     successor_path = %LogObscurer::path(&succ_path),
                     "[FolderNavigation: Successor] Navigating active view to resolved successor folder."
                 );
-                Self::select_folder(succ_id, succ_path, window, library, thumbnails, settings, state);
+                Self::select_folder(succ_id, &succ_path, window, library, thumbnails, settings, state);
             } else {
                 Self::fallback_to_root_if_affected(affected_folder_ids, window, library, thumbnails, settings, state);
             }
@@ -261,7 +261,7 @@ impl BridgeFolders {
             );
             Self::select_folder(
                 root_rec.id,
-                normalize_path(root_p),
+                &normalize_path(root_p),
                 window,
                 library,
                 thumbnails,

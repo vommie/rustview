@@ -45,7 +45,7 @@ impl BridgeContextMenu {
             };
             if in_mixed_selection {
                 BrowseContextMenus::show_selection_menu(
-                    BrowseMenuContext {
+                    &BrowseMenuContext {
                         window: &win_sel,
                         library: &lib_sel,
                         thumbnails: &th_sel,
@@ -58,7 +58,7 @@ impl BridgeContextMenu {
                 return;
             }
             Self::show_media_menu(
-                MediaMenuContext {
+                &MediaMenuContext {
                     window: &win,
                     library: &lib,
                     thumbnails: &th,
@@ -106,7 +106,7 @@ impl BridgeContextMenu {
             BrowseFolders::select_row_for_menu(FolderRowRef::Folder(folder_id), &win_row, &lib_row, &st_row);
             if BrowseContextMenus::is_mixed_selection(&st_row.read()) {
                 BrowseContextMenus::show_selection_menu(
-                    BrowseMenuContext {
+                    &BrowseMenuContext {
                         window: &win_ctx,
                         library: &lib_ctx,
                         thumbnails: &th_ctx,
@@ -119,7 +119,7 @@ impl BridgeContextMenu {
                 return;
             }
             Self::show_folder_menu(
-                FolderMenuContext {
+                &FolderMenuContext {
                     window: &win_row,
                     library: &lib_row,
                     thumbnails: &th_row,
@@ -143,7 +143,7 @@ impl BridgeContextMenu {
         );
         window.on_browse_background_context_menu(move |x, y| {
             BrowseContextMenus::show_background_menu(
-                BrowseMenuContext {
+                &BrowseMenuContext {
                     window: &win_bg,
                     library: &lib_bg,
                     thumbnails: &th_bg,
@@ -165,7 +165,7 @@ impl BridgeContextMenu {
         window.on_folder_context_menu(move |id, x, y| {
             st.write().last_active_panel = LastActivePanel::Folder;
             Self::show_folder_menu(
-                FolderMenuContext {
+                &FolderMenuContext {
                     window: &win,
                     library: &lib,
                     thumbnails: &th,

@@ -61,9 +61,9 @@ impl TagDialogController {
                 &win_add,
                 parent_id,
                 parent_info,
-                lib_add.clone(),
-                set_add.clone(),
-                st_add.clone(),
+                &lib_add.clone(),
+                &set_add.clone(),
+                &st_add.clone(),
             );
         });
 
@@ -73,7 +73,7 @@ impl TagDialogController {
         let st_ren = state.clone();
 
         let show_rename = Box::new(move |tag_id: TagId, current_name: &str| {
-            ctrl_ren.show_rename(&win_ren, tag_id, current_name, lib_ren.clone(), st_ren.clone());
+            ctrl_ren.show_rename(&win_ren, tag_id, current_name, &lib_ren.clone(), &st_ren.clone());
         });
 
         let ctrl_del = self.clone();
@@ -116,9 +116,9 @@ impl TagDialogController {
         window: &MainWindow,
         parent_id: Option<TagId>,
         parent_info: &str,
-        library: Arc<Library>,
-        settings: Arc<SettingsManager>,
-        state: Arc<RwLock<UiState>>,
+        library: &Arc<Library>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
     ) {
         let mut d_ref = self.add_dialog.borrow_mut();
         if d_ref.is_none() {
@@ -208,8 +208,8 @@ impl TagDialogController {
         window: &MainWindow,
         tag_id: TagId,
         current_name: &str,
-        library: Arc<Library>,
-        state: Arc<RwLock<UiState>>,
+        library: &Arc<Library>,
+        state: &Arc<RwLock<UiState>>,
     ) {
         let mut d_ref = self.rename_dialog.borrow_mut();
         if d_ref.is_none() {

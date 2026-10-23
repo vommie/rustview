@@ -228,7 +228,7 @@ impl BridgeTabGrid {
             "[TabGrid: MiddleClick] Launching fullscreen for media item directly from TabGrid (Requirement 3: auto-plays)"
         );
 
-        fullscreen.open_tab(tab_id, tab_manager, settings, window.as_weak());
+        fullscreen.open_tab(tab_id, tab_manager, settings, &window.as_weak());
     }
 
     /// Handles Close Button on a `TabGrid` item.

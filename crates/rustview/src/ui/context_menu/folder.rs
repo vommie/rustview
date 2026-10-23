@@ -318,7 +318,7 @@ impl FolderContextMenu {
             } else if action_id == CTX_FOLDER_REFRESH || action_id == CTX_FOLDER_REFRESH_FILES_FULL {
                 BridgeFolders::refresh_folder_explicit(
                     fid,
-                    PathBuf::from(&rec.path),
+                    &PathBuf::from(&rec.path),
                     window,
                     &ctx.library,
                     &ctx.thumbnails,
@@ -328,7 +328,7 @@ impl FolderContextMenu {
             } else if action_id == CTX_FOLDER_REFRESH_METADATA || action_id == CTX_FOLDER_REFRESH_FILES_META {
                 BridgeFolders::refresh_folder_metadata_only(
                     fid,
-                    PathBuf::from(&rec.path),
+                    &PathBuf::from(&rec.path),
                     window,
                     &ctx.library,
                     &ctx.thumbnails,
@@ -337,7 +337,7 @@ impl FolderContextMenu {
             } else if action_id == CTX_FOLDER_REFRESH_TREE_RELATIVE {
                 BridgeFolders::refresh_folder_subtree(
                     fid,
-                    PathBuf::from(&rec.path),
+                    &PathBuf::from(&rec.path),
                     window,
                     &ctx.library,
                     &ctx.thumbnails,

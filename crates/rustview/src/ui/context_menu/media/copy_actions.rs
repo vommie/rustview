@@ -111,7 +111,7 @@ impl MediaContextMenu {
             ctx.missing_file_dialog.show(
                 window,
                 "Copy Image Content",
-                vec![MissingFileItem {
+                &[MissingFileItem {
                     filename,
                     path: full_path,
                 }],

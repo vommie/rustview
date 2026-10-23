@@ -13,7 +13,7 @@ impl UiBridge {
         let st_start = self.state.clone();
         let scroller_start = self.rubberband_autoscroller.clone();
         self.window.on_rubberband_started(move |cx, cy, vx, vy, ctrl, shift| {
-            BridgeRubberband::handle_started(RubberbandDragStartParams {
+            BridgeRubberband::handle_started(&RubberbandDragStartParams {
                 start_content_x: cx,
                 start_content_y: cy,
                 view_x: vx,
@@ -31,7 +31,7 @@ impl UiBridge {
         let st_move = self.state.clone();
         let scroller_move = self.rubberband_autoscroller.clone();
         self.window.on_rubberband_moved(move |cx, cy, vx, vy| {
-            BridgeRubberband::handle_moved(RubberbandDragMoveParams {
+            BridgeRubberband::handle_moved(&RubberbandDragMoveParams {
                 content_x: cx,
                 content_y: cy,
                 view_x: vx,
@@ -61,7 +61,7 @@ impl UiBridge {
         let browse_scroll_start = self.dnd_browse_scroller.clone();
         let fs_start = self.fullscreen.clone();
         self.window.on_media_drag_started(move |id, x, y| {
-            BridgeDnd::handle_drag_started(DragStartParams {
+            BridgeDnd::handle_drag_started(&DragStartParams {
                 media_id: id.wrapping_as::<u64>(),
                 start_x: x,
                 start_y: y,
@@ -120,7 +120,7 @@ impl UiBridge {
         let conflict_copy = self.conflict_dialog.clone();
         self.window.on_choice_popup_copy(move |target_fid| {
             win_copy.set_is_choice_popup_open(false);
-            BridgeDnd::start_batch_transfer(BatchTransferParams {
+            BridgeDnd::start_batch_transfer(&BatchTransferParams {
                 window: &win_copy,
                 library: &lib_copy,
                 thumbnails: &thumb_copy,
@@ -140,7 +140,7 @@ impl UiBridge {
         let conflict_mv = self.conflict_dialog.clone();
         self.window.on_choice_popup_move(move |target_fid| {
             win_mv.set_is_choice_popup_open(false);
-            BridgeDnd::start_batch_transfer(BatchTransferParams {
+            BridgeDnd::start_batch_transfer(&BatchTransferParams {
                 window: &win_mv,
                 library: &lib_mv,
                 thumbnails: &thumb_mv,

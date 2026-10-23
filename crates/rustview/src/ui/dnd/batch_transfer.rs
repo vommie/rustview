@@ -89,7 +89,7 @@ impl BatchTransferRunner {
                     let current_idx = runner_rc.borrow().as_ref().unwrap().current_index;
 
                     dlg.show(
-                        ConflictDialogParams {
+                        &ConflictDialogParams {
                             window: &win,
                             thumbnails: &thumb,
                             settings: &set,
@@ -146,7 +146,7 @@ impl BatchTransferRunner {
                             } else {
                                 "Copy File"
                             },
-                            vec![MissingFileItem {
+                            &[MissingFileItem {
                                 filename: format!("Media #{media_id}"),
                                 path: missing_path,
                             }],

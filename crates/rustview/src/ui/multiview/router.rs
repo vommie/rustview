@@ -27,11 +27,11 @@ impl UiEventSink {
 impl MultiviewEventSink for UiEventSink {
     fn post(&self, instance: WeakInstance, event: PlayerEvent) {
         let handle = self.handle.clone();
-        let _ = slint::invoke_from_event_loop(move || route_event(&handle, instance, event));
+        let _ = slint::invoke_from_event_loop(move || route_event(&handle, &instance, event));
     }
 }
 
-fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent) {
+fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent) {
     let Some(instance) = weak.upgrade() else {
         return;
     };

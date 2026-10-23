@@ -19,9 +19,9 @@ impl BridgeTags {
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
-        thumbnails: Arc<ThumbnailManager>,
-        tab_manager: Arc<ViewerTabManager>,
-        settings: Arc<SettingsManager>,
+        thumbnails: &Arc<ThumbnailManager>,
+        tab_manager: &Arc<ViewerTabManager>,
+        settings: &Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
     ) {
         let win = window.clone_strong();

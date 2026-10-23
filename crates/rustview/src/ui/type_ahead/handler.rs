@@ -88,7 +88,7 @@ fn show_no_match(params: &TypeAheadParams<'_>, config: &TypeAheadConfig) {
 }
 
 /// A key press of the Browse view. Returns whether the search took the key (the caller then does not handle it any further).
-pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
+pub fn handle_type_ahead_key(params: &TypeAheadParams<'_>) -> bool {
     let started = Instant::now();
     let config = config::current();
     if !config.enabled {
@@ -127,7 +127,7 @@ pub fn handle_type_ahead_key(params: TypeAheadParams<'_>) -> bool {
     match reaction {
         Reaction::NotHandled => return false,
         Reaction::Consumed => notice::clear(params.window),
-        Reaction::NoMatch => show_no_match(&params, &config),
+        Reaction::NoMatch => show_no_match(params, &config),
         Reaction::Jump(_) if in_place => notice::clear(params.window),
         Reaction::Jump(position) => {
             notice::clear(params.window);

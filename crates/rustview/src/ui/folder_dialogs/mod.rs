@@ -89,9 +89,9 @@ impl FolderDialogController {
     pub fn show_delete_selection(
         &self,
         window: &MainWindow,
-        files: Vec<rustview_core::library::models::MediaId>,
-        folders: Vec<FolderId>,
-        ctx: FolderDialogContext,
+        files: &[rustview_core::library::models::MediaId],
+        folders: &[FolderId],
+        ctx: &FolderDialogContext,
     ) {
         self.delete_selection
             .show(window, files, folders, ctx, &self.reborn_warn);

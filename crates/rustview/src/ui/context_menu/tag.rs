@@ -117,7 +117,7 @@ impl TagContextMenu {
         library: &Arc<Library>,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        dialogs: TagActionDialogs,
+        dialogs: &TagActionDialogs,
     ) {
         let target_id = state.read().active_tag_dialog_target;
 

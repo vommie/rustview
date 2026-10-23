@@ -49,7 +49,7 @@ pub struct BridgeRubberband;
 
 impl BridgeRubberband {
     /// Handles the initiation of rubberband selection from background touch area.
-    pub fn handle_started(params: RubberbandDragStartParams<'_>) {
+    pub fn handle_started(params: &RubberbandDragStartParams<'_>) {
         let t0 = Instant::now();
         params.autoscroller.stop();
 
@@ -89,7 +89,7 @@ impl BridgeRubberband {
     }
 
     /// Handles pointer movement and updates the selection rectangle and intersecting items.
-    pub fn handle_moved(params: RubberbandDragMoveParams<'_>) {
+    pub fn handle_moved(params: &RubberbandDragMoveParams<'_>) {
         let is_active = params.state.read().rubberband_session.is_active;
         if !is_active {
             return;

@@ -23,9 +23,9 @@ use std::time::Instant;
 impl BridgeMedia {
     pub fn register_query_callbacks(
         window: &MainWindow,
-        library: Arc<Library>,
+        library: &Arc<Library>,
         thumbnails: Arc<ThumbnailManager>,
-        tab_manager: Arc<ViewerTabManager>,
+        tab_manager: &Arc<ViewerTabManager>,
         settings: Arc<SettingsManager>,
         state: Arc<RwLock<UiState>>,
     ) {
@@ -197,7 +197,7 @@ impl BridgeMedia {
                         let win_w_async = win_hover.as_weak();
                         let st_async = st.clone();
 
-                        thumb.get_or_load_animated_preview_async(media_id, file_path, config, move |res| {
+                        thumb.get_or_load_animated_preview_async(media_id, file_path, &config, move |res| {
                             if let Ok(preview) = res {
                                 let _ = win_w_async.upgrade_in_event_loop(move |w| {
                                     let is_still_hovered =

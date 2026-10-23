@@ -5,7 +5,7 @@ use crate::ui::{FavoriteRenameDialog, MainWindow};
 use parking_lot::RwLock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -25,7 +25,7 @@ impl FavoriteRenameDialogController {
         &self,
         window: &MainWindow,
         current_alias: &str,
-        target_path: PathBuf,
+        target_path: &Path,
         favorites: Arc<RwLock<FavoriteManager>>,
     ) {
         window.set_is_context_menu_open(false);
@@ -34,7 +34,7 @@ impl FavoriteRenameDialogController {
         if let Some(ref win) = *self.dialog.borrow() {
             let ctrl_confirm = self.clone();
             let win_confirm = window.clone_strong();
-            let path_confirm = target_path.clone();
+            let path_confirm = target_path.to_path_buf();
             let favs_confirm = favorites;
 
             win.on_confirmed(move |new_alias| {

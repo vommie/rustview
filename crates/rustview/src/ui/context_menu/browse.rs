@@ -113,7 +113,7 @@ impl BrowseContextMenus {
             .build()
     }
 
-    pub fn show_selection_menu(ctx: BrowseMenuContext<'_>, x: f32, y: f32) {
+    pub fn show_selection_menu(ctx: &BrowseMenuContext<'_>, x: f32, y: f32) {
         let is_busy = BridgeMedia::is_system_busy(ctx.window, ctx.thumbnails, ctx.state);
         let (folders, files) = {
             let mut st = ctx.state.write();
@@ -215,7 +215,7 @@ impl BrowseContextMenus {
     }
 
     /// The menu of the free space: the open folder's own actions (the ids of the folder menu), the selection and the folder rows.
-    pub fn show_background_menu(ctx: BrowseMenuContext<'_>, x: f32, y: f32) {
+    pub fn show_background_menu(ctx: &BrowseMenuContext<'_>, x: f32, y: f32) {
         // The menu is about the folder, not about the selection: a click on the free space deselects, as a left click does.
         BridgeFileSelection::clear_selection(ctx.window, ctx.library, ctx.state);
 
@@ -246,10 +246,10 @@ impl BrowseContextMenus {
     }
 
     /// The actions that only these menus have: the selection's Open in File Manager and Delete, and the Show Folders toggle.
-    pub fn handle_action(action_id: CtxMenuActionId, window: &MainWindow, ctx: BrowseActionContext<'_>) {
+    pub fn handle_action(action_id: CtxMenuActionId, window: &MainWindow, ctx: &BrowseActionContext<'_>) {
         match action_id {
-            CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER => Self::open_selection_in_file_manager(window, &ctx),
-            CTX_BROWSE_SELECTION_DELETE => UiBridge::trigger_delete_action(DeleteActionParams {
+            CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER => Self::open_selection_in_file_manager(window, ctx),
+            CTX_BROWSE_SELECTION_DELETE => UiBridge::trigger_delete_action(&DeleteActionParams {
                 window,
                 library: ctx.library,
                 thumbnails: ctx.thumbnails,

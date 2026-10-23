@@ -48,7 +48,7 @@ impl MediaContextMenu {
                 items_count = target_ids.len(),
                 "[MediaContextMenu: MoveTo] Context menu Move To triggered"
             );
-            crate::ui::dnd::BridgeDnd::start_batch_transfer(crate::ui::dnd::BatchTransferParams {
+            crate::ui::dnd::BridgeDnd::start_batch_transfer(&crate::ui::dnd::BatchTransferParams {
                 window,
                 library: ctx.library,
                 thumbnails: ctx.thumbnails,
@@ -69,7 +69,7 @@ impl MediaContextMenu {
                 items_count = target_ids.len(),
                 "[MediaContextMenu: CopyTo] Context menu Copy To triggered"
             );
-            crate::ui::dnd::BridgeDnd::start_batch_transfer(crate::ui::dnd::BatchTransferParams {
+            crate::ui::dnd::BridgeDnd::start_batch_transfer(&crate::ui::dnd::BatchTransferParams {
                 window,
                 library: ctx.library,
                 thumbnails: ctx.thumbnails,
@@ -211,7 +211,7 @@ impl MediaContextMenu {
             "[MediaContextMenu] 'Open in Fullscreen' action triggered"
         );
         ctx.fullscreen.dismiss();
-        ctx.fullscreen.open(ctx.settings, ctx.state, window.as_weak());
+        ctx.fullscreen.open(ctx.settings, ctx.state, &window.as_weak());
     }
 
     pub(super) fn handle_open_action(window: &MainWindow, ctx: &MediaActionContext<'_>, target_ids: &[MediaId]) {
@@ -392,7 +392,7 @@ impl MediaContextMenu {
                 state: ctx.state.clone(),
             };
 
-            FileRenameDialogController::open(RenameDialogParams {
+            FileRenameDialogController::open(&RenameDialogParams {
                 dialog_ref: ctx.rename_dialog,
                 window,
                 media_id: target_id,

@@ -151,7 +151,7 @@ impl ApiHandler {
         path: &Path,
         rating_opt: Option<u8>,
         tags_opt: Option<Vec<u32>>,
-        hash_opt: Option<String>,
+        hash_opt: Option<&str>,
         source_opt: Option<String>,
         json: bool,
     ) -> Result<i32, ApiError> {
@@ -197,7 +197,7 @@ impl ApiHandler {
                 rec.source = Some(s.clone());
             }
 
-            if let Some(ref h_str) = hash_opt
+            if let Some(h_str) = hash_opt
                 && let Ok(new_hash) = MediaHasher::from_hex(h_str)
                 && new_hash != old_hash
             {
@@ -279,7 +279,7 @@ impl ApiHandler {
                 }
             }
 
-            let file_hash = if let Some(ref h_str) = hash_opt
+            let file_hash = if let Some(h_str) = hash_opt
                 && let Ok(parsed) = MediaHasher::from_hex(h_str)
             {
                 parsed

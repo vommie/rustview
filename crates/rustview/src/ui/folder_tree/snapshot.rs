@@ -213,7 +213,7 @@ impl BridgeFolders {
 
         Self::select_folder(
             target_folder.0,
-            target_folder.1,
+            &target_folder.1,
             window,
             library,
             thumbnails,

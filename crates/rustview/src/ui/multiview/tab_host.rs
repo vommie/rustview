@@ -82,7 +82,7 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     bus.on_gutter_swap(|index| act(|mv| mv.swap(index.max(0).saturating_as::<usize>())));
     bus.on_tile_clicked(|_, is_ctrl| on_click(is_ctrl));
     bus.on_tile_zoom_wheel(|index, delta, x, y| {
-        act(|mv| mv.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y))
+        act(|mv| mv.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y));
     });
     bus.on_tile_pan(|index, dx, dy| act(|mv| mv.zoom_pan(index.max(0).saturating_as::<usize>(), dx, dy)));
     bus.on_minimap_pointer(|index, x, y, phase| {

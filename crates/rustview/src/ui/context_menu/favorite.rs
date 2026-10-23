@@ -96,7 +96,7 @@ impl FavoriteContextMenu {
                     path = %LogObscurer::path(&path),
                     "[FavoriteContextMenu] Opening Rename Favorite dialog"
                 );
-                rename_dialog.show(window, &alias, path, favorites.clone());
+                rename_dialog.show(window, &alias, &path, favorites.clone());
             }
             crate::ui::state::CTX_FAVORITE_REMOVE => {
                 tracing::info!(

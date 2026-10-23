@@ -21,9 +21,9 @@ impl BridgeFolders {
     pub fn register_callbacks(
         window: &MainWindow,
         library: Arc<Library>,
-        thumbnails: Arc<ThumbnailManager>,
-        settings: Arc<SettingsManager>,
-        state: Arc<RwLock<UiState>>,
+        thumbnails: &Arc<ThumbnailManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
         settings_dialog: Rc<RefCell<SettingsDialogController>>,
     ) {
         let lib = library.clone();
@@ -48,7 +48,7 @@ impl BridgeFolders {
                     path = %LogObscurer::path(&path),
                     "[FolderRefresh: Toolbar] Executing explicit full media refresh."
                 );
-                Self::refresh_folder_explicit(id, path, &win, &lib, &thumb, &set, &st);
+                Self::refresh_folder_explicit(id, &path, &win, &lib, &thumb, &set, &st);
             }
         });
 
@@ -66,7 +66,7 @@ impl BridgeFolders {
             st.write().last_active_panel = LastActivePanel::Folder;
             Self::select_folder(
                 id.wrapping_as::<u64>(),
-                PathBuf::from(path.as_str()),
+                &PathBuf::from(path.as_str()),
                 &win,
                 &lib,
                 &thumb,

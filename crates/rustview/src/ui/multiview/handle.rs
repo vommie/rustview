@@ -123,7 +123,7 @@ impl MultiviewHandle {
         &self,
         tab_manager: &Arc<ViewerTabManager>,
         settings: &Arc<SettingsManager>,
-        main_window: slint::Weak<MainWindow>,
+        main_window: &slint::Weak<MainWindow>,
     ) -> bool {
         if let Some(tab) = tab_manager.get_active_tab() {
             self.open_tab(tab.id, tab_manager, settings, main_window)
@@ -290,7 +290,7 @@ impl MultiviewHandle {
         &self,
         settings: &Arc<SettingsManager>,
         state: &Arc<RwLock<UiState>>,
-        main_window: slint::Weak<MainWindow>,
+        main_window: &slint::Weak<MainWindow>,
     ) -> bool {
         let plan = eligibility::plan_open(&state.read());
         if !plan.summary.is_actionable() {
@@ -307,7 +307,7 @@ impl MultiviewHandle {
             return true;
         }
         *self.shared.main_window.lock() = Some(main_window.clone());
-        session::open(self.clone(), plan, settings.clone(), state.clone(), main_window)
+        session::open(self.clone(), plan, &settings.clone(), state.clone(), main_window)
     }
 
     /// Shows tab `tab_id` in the fullscreen window (from the tab view or the tab grid): the Multiview the tab owns, as it is. UI thread only.
@@ -317,7 +317,7 @@ impl MultiviewHandle {
         tab_id: TabId,
         tab_manager: &Arc<ViewerTabManager>,
         settings: &Arc<SettingsManager>,
-        main_window: slint::Weak<MainWindow>,
+        main_window: &slint::Weak<MainWindow>,
     ) -> bool {
         let Some(tab) = tab_manager.get_tab(tab_id) else {
             return false;
@@ -329,7 +329,7 @@ impl MultiviewHandle {
             self.clone(),
             instance,
             TabReturn { tab_id, origin_mode },
-            settings.clone(),
+            &settings.clone(),
             main_window,
         )
     }
@@ -358,7 +358,7 @@ impl MultiviewHandle {
         };
         let mut settings = app.settings.get();
         settings.fullscreen.primary_bar.hide_idle_cursor = on;
-        app.settings.update(settings);
+        app.settings.update(&settings);
         tracing::info!(
             on,
             "[Multiview: Cursor] Hiding of the idle mouse cursor changed by the bar button"

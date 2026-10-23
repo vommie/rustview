@@ -57,7 +57,7 @@ impl BridgeContextMenu {
                     && let Ok(Some(rec)) = lib.folders().get_folder(fid)
                 {
                     let path = std::path::PathBuf::from(&rec.path);
-                    let _ = BridgeFavorites::add_favorite(&win, &favs, path, None);
+                    let _ = BridgeFavorites::add_favorite(&win, &favs, &path, None);
                 }
                 return;
             }
@@ -67,7 +67,7 @@ impl BridgeContextMenu {
                 BrowseContextMenus::handle_action(
                     action_u64,
                     &win,
-                    BrowseActionContext {
+                    &BrowseActionContext {
                         library: &lib,
                         thumbnails: &thumb,
                         tab_manager: &tab_mgr,
@@ -104,7 +104,7 @@ impl BridgeContextMenu {
                 || (CTX_TAG_MOVE_TARGET_BASE..CTX_FOLDER_MOVE_BASE).contains(&action_u64)
             {
                 let bundle = tag_dlg.create_action_bundle(&win, &lib, &thumb, &set, &st);
-                TagContextMenu::handle_action(action_u64, &win, &lib, &set, &st, bundle);
+                TagContextMenu::handle_action(action_u64, &win, &lib, &set, &st, &bundle);
                 return;
             }
 
@@ -114,7 +114,7 @@ impl BridgeContextMenu {
                 if (4000..5000).contains(&action_u64) {
                     TabContextMenu::handle_action(
                         action_u64,
-                        TabActionContext {
+                        &TabActionContext {
                             window: &win,
                             tab_manager: &tab_mgr,
                             library: &lib,

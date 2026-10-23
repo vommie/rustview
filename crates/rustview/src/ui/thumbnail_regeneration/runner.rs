@@ -43,7 +43,7 @@ pub fn start(
             let t_start = Instant::now();
             let batch = run_batch(&thumb, &config, targets);
             let elapsed = t_start.elapsed();
-            let _ = weak.upgrade_in_event_loop(move |w| apply::finish(&w, &thumb, &st, total, batch, elapsed));
+            let _ = weak.upgrade_in_event_loop(move |w| apply::finish(&w, &thumb, &st, total, &batch, elapsed));
         });
 
     if let Err(e) = spawned {

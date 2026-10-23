@@ -124,7 +124,7 @@ impl ThumbnailManager {
         &self,
         media_id: MediaId,
         path: PathBuf,
-        config: ThumbnailConfig,
+        config: &ThumbnailConfig,
         on_loaded: F,
     ) where
         F: FnOnce(Result<Arc<AnimatedPreview>, ThumbnailError>) + Send + 'static,
@@ -181,7 +181,7 @@ impl ThumbnailManager {
         &self,
         media_id: MediaId,
         file_path: &Path,
-        config: ThumbnailConfig,
+        config: &ThumbnailConfig,
     ) -> Result<CachedThumbnail, ThumbnailError> {
         self.scheduler.load_sync(media_id, file_path, config)
     }

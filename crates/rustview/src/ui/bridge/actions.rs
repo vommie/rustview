@@ -34,7 +34,7 @@ impl UiBridge {
         let fs_ctrl = self.fullscreen.clone();
 
         self.window.on_request_rename(move || {
-            Self::trigger_rename_action(RenameActionParams {
+            Self::trigger_rename_action(&RenameActionParams {
                 window: &win,
                 library: &lib,
                 thumbnails: &thumb,
@@ -111,7 +111,7 @@ impl UiBridge {
         let fs_ctrl = self.fullscreen.clone();
 
         self.window.on_request_delete(move || {
-            Self::trigger_delete_action(DeleteActionParams {
+            Self::trigger_delete_action(&DeleteActionParams {
                 window: &win,
                 library: &lib,
                 thumbnails: &thumb,
@@ -127,7 +127,7 @@ impl UiBridge {
         });
     }
 
-    pub fn trigger_delete_action(params: DeleteActionParams<'_>) {
+    pub fn trigger_delete_action(params: &DeleteActionParams<'_>) {
         let window = params.window;
         let active_mode = window.get_active_view_mode();
         // DEL or the delete button in the fullscreen window acts on the medium there; DEL in the main window always acts on
@@ -154,7 +154,7 @@ impl UiBridge {
             );
             let fullscreen = params.fullscreen.clone();
             let followup: DeleteFollowup = Rc::new(move |ids| fullscreen.drop_deleted(ids));
-            Self::open_media_delete_dialog(&params, vec![media_id], Some(followup));
+            Self::open_media_delete_dialog(params, vec![media_id], Some(followup));
             return;
         }
 
@@ -226,7 +226,7 @@ impl UiBridge {
                 );
                 params
                     .folder_dialogs
-                    .show_delete_selection(window, files, browse_folders, ctx);
+                    .show_delete_selection(window, &files, &browse_folders, &ctx);
                 return;
             }
 
@@ -238,7 +238,7 @@ impl UiBridge {
                 StatusBarBridge::info(window, "No folder selected to delete (Del).");
                 return;
             };
-            Self::open_folder_delete_dialog(&params, folder_id);
+            Self::open_folder_delete_dialog(params, folder_id);
             return;
         }
 
@@ -248,7 +248,7 @@ impl UiBridge {
             return;
         }
 
-        Self::open_media_delete_dialog(&params, selected_ids, None);
+        Self::open_media_delete_dialog(params, selected_ids, None);
     }
 
     /// Opens the dialog that deletes a folder (or, for a folder that is missing on disk, the one that removes it from the database).
@@ -345,7 +345,7 @@ impl UiBridge {
         }
     }
 
-    pub fn trigger_rename_action(params: RenameActionParams<'_>) {
+    pub fn trigger_rename_action(params: &RenameActionParams<'_>) {
         let window = params.window;
         let active_mode = window.get_active_view_mode();
         // F2 pressed in the fullscreen window acts on the medium there; F2 in the main window always acts on what the main
@@ -354,14 +354,14 @@ impl UiBridge {
 
         if from_fullscreen {
             if let Some(media_id) = params.fullscreen.rename_target() {
-                Self::open_media_rename(media_id, &params);
+                Self::open_media_rename(media_id, params);
             }
             return;
         }
 
         if active_mode == 1 {
             if let Some(media_id) = tab_host::rename_target(params.tab_manager) {
-                Self::open_media_rename(media_id, &params);
+                Self::open_media_rename(media_id, params);
             }
             return;
         }
@@ -410,7 +410,7 @@ impl UiBridge {
                 params.favorite_rename_dialog.show(
                     params.window,
                     &entry.alias,
-                    entry.path.clone(),
+                    &entry.path.clone(),
                     params.favorites.clone(),
                 );
                 return;
@@ -481,7 +481,7 @@ impl UiBridge {
         let sel_ids = params.state.read().file_selection.selected_ids().clone();
         if sel_ids.len() == 1 {
             let media_id = *sel_ids.iter().next().unwrap();
-            Self::open_media_rename(media_id, &params);
+            Self::open_media_rename(media_id, params);
         } else if sel_ids.is_empty() {
             StatusBarBridge::info(window, "Select a file to rename (F2).");
         } else {
@@ -503,7 +503,7 @@ impl UiBridge {
             state: params.state.clone(),
         };
 
-        FileRenameDialogController::open(RenameDialogParams {
+        FileRenameDialogController::open(&RenameDialogParams {
             dialog_ref: params.rename_dialog,
             window: params.window,
             media_id,

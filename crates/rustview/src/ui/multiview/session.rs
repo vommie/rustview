@@ -27,7 +27,7 @@ use rustview_core::settings::SettingsManager;
 use rustview_core::settings::schema::{
     MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS, MULTIVIEW_TICK_MS,
 };
-use rustview_core::util::cast::{SaturatingAs, WrappingAs};
+use rustview_core::util::cast::SaturatingAs;
 use rustview_core::util::hex_color;
 use slint::{CloseRequestResponse, Color, ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer, TimerMode};
 use std::cell::RefCell;
@@ -199,14 +199,14 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
         });
     });
     win.on_tile_zoom_wheel(|index, delta, x, y| {
-        with_session(|s| s.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y))
+        with_session(|s| s.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y));
     });
     win.on_tile_pan(|index, dx, dy| with_session(|s| s.zoom_pan(index.max(0).saturating_as::<usize>(), dx, dy)));
     win.on_minimap_pointer(|index, x, y, phase| {
-        with_session(|s| s.zoom_minimap(index.max(0).saturating_as::<usize>(), x, y, phase))
+        with_session(|s| s.zoom_minimap(index.max(0).saturating_as::<usize>(), x, y, phase));
     });
     win.on_minimap_slider(|index, code| {
-        with_session(|s| s.zoom_minimap_slider(index.max(0).saturating_as::<usize>(), code))
+        with_session(|s| s.zoom_minimap_slider(index.max(0).saturating_as::<usize>(), code));
     });
     win.on_zoom_key(|key| with_session(|s| s.zoom_key(key)));
     win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0).saturating_as::<usize>())));
@@ -273,11 +273,11 @@ fn prepare_window(
 pub(super) fn open(
     handle: MultiviewHandle,
     plan: OpenPlan,
-    settings: Arc<SettingsManager>,
+    settings: &Arc<SettingsManager>,
     state: Arc<RwLock<UiState>>,
-    main_window: slint::Weak<MainWindow>,
+    main_window: &slint::Weak<MainWindow>,
 ) -> bool {
-    launch(handle, Source::Plan { plan, state }, &settings, main_window)
+    launch(handle, Source::Plan { plan, state }, settings, main_window)
 }
 
 /// Shows the Multiview that a tab owns in the fullscreen window. The running players move over, nothing restarts; closing
@@ -286,19 +286,19 @@ pub(super) fn open_tab(
     handle: MultiviewHandle,
     instance: SharedInstance,
     tab: TabReturn,
-    settings: Arc<SettingsManager>,
-    main_window: slint::Weak<MainWindow>,
+    settings: &Arc<SettingsManager>,
+    main_window: &slint::Weak<MainWindow>,
 ) -> bool {
     tab_host::suspend();
     instance.lock().deactivate();
-    launch(handle, Source::Tab { instance, tab }, &settings, main_window)
+    launch(handle, Source::Tab { instance, tab }, settings, main_window)
 }
 
 fn launch(
     handle: MultiviewHandle,
     source: Source,
     settings: &SettingsManager,
-    main_window: slint::Weak<MainWindow>,
+    main_window: &slint::Weak<MainWindow>,
 ) -> bool {
     if session_generation().is_some() {
         close(false);
@@ -310,7 +310,7 @@ fn launch(
         return false;
     };
 
-    let monitor = resolve_monitor(settings, &main_window);
+    let monitor = resolve_monitor(settings, main_window);
     let isolated = matches!(source, Source::Tab { .. });
     let tab_in_fullscreen = match &source {
         Source::Tab { tab, .. } => Some(tab.tab_id),
@@ -333,7 +333,9 @@ fn launch(
         handle::set_isolated(true);
         mw.set_is_fullscreen_locked(true);
         // The tab grid shows a placeholder where this tab's videos were (their players are in the fullscreen now).
-        mw.set_fullscreen_tab_id(tab_in_fullscreen.map_or(-1, |id| id.wrapping_as::<i32>()));
+        mw.set_fullscreen_tab_id(
+            tab_in_fullscreen.map_or(-1, rustview_core::util::cast::WrappingAs::wrapping_as::<i32>),
+        );
     }
     if let Err(e) = win.show() {
         tracing::error!(error = %e, "[Multiview: Open] Failed to show the window");

@@ -155,7 +155,7 @@ impl BridgeFolders {
         };
 
         if let (Some(fid), Some(path)) = (current_id_opt, current_path_opt) {
-            Self::refresh_folder_subtree(fid, path, window, library, thumbnails, settings, state);
+            Self::refresh_folder_subtree(fid, &path, window, library, thumbnails, settings, state);
         } else {
             Self::refresh_folder_tree(window, library, thumbnails, settings, state);
         }
@@ -166,7 +166,7 @@ impl BridgeFolders {
     /// MANUAL ONLY: triggered by the toolbar refresh menu or folder context menu.
     pub fn refresh_folder_subtree(
         folder_id: FolderId,
-        path: PathBuf,
+        path: &PathBuf,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
@@ -202,7 +202,7 @@ impl BridgeFolders {
 
         tracing::info!(
             folder_id,
-            path = %LogObscurer::path(&path),
+            path = %LogObscurer::path(path),
             ignore_nested_mounts = scan_options.ignore_nested_mounts,
             "[FolderRefresh: TreeRelative] Starting manual subtree scan"
         );
@@ -275,7 +275,7 @@ impl BridgeFolders {
 
     pub fn refresh_folder_explicit(
         folder_id: FolderId,
-        path: PathBuf,
+        path: &PathBuf,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
@@ -290,7 +290,7 @@ impl BridgeFolders {
         Self::select_folder_internal(
             folder_id,
             path,
-            FolderNavigationContext {
+            &FolderNavigationContext {
                 window,
                 library,
                 thumbnails,
@@ -303,7 +303,7 @@ impl BridgeFolders {
 
     pub fn refresh_folder_metadata_only(
         folder_id: FolderId,
-        path: PathBuf,
+        path: &PathBuf,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,
@@ -314,7 +314,7 @@ impl BridgeFolders {
             return;
         }
 
-        let normalized_path = normalize_path(&path);
+        let normalized_path = normalize_path(path);
         let folder_name = normalized_path.file_name().map_or_else(
             || normalized_path.to_string_lossy().to_string(),
             |n| n.to_string_lossy().to_string(),

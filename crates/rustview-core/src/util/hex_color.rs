@@ -1,7 +1,5 @@
 //! `#rrggbb` color strings: the form colors are stored in settings and typed into the color picker.
 
-use crate::util::cast::SaturatingAs;
-
 /// Parses `rgb` or `rrggbb` (the leading `#` is optional, case does not matter). `None` for anything else.
 pub fn parse_rgb(text: &str) -> Option<[u8; 3]> {
     let digits = digits(text).filter(|d| matches!(d.len(), 3 | 6))?;
@@ -16,7 +14,7 @@ pub fn parse_rgba(text: &str) -> Option<[u8; 4]> {
 }
 
 fn parse_digits(digits: &[u8]) -> Option<[u8; 4]> {
-    let nibble = |c: u8| (c as char).to_digit(16).map(|d| d.saturating_as::<u8>());
+    let nibble = |c: u8| (c as char).to_digit(16).map(az::SaturatingAs::saturating_as::<u8>);
     let pair = |hi: u8, lo: u8| Some(nibble(hi)? * 16 + nibble(lo)?);
     match *digits {
         [r, g, b] => Some([pair(r, r)?, pair(g, g)?, pair(b, b)?, 255]),

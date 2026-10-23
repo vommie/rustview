@@ -659,7 +659,7 @@ impl SettingsDialogController {
                 // Save Debug Parameters
                 current.debug.obfuscate_logs = w.get_obfuscate_logs();
 
-                mgr_save.update(current);
+                mgr_save.update(&current);
 
                 if let Some(ref mw) = main_weak_save
                     && let Some(main) = mw.upgrade()
@@ -683,7 +683,7 @@ impl SettingsDialogController {
             let target = w.as_weak();
             color_picker::open(
                 &w,
-                PickerRequest {
+                &PickerRequest {
                     title: "Fullscreen background color",
                     initial: w.get_fullscreen_background_color(),
                     default: Some(Color::from_rgb_u8(r, g, b)),

@@ -238,7 +238,7 @@ pub fn move_browse_cursor(
 
 /// Central orchestrator handling keyboard navigation events from Slint UI. The keys move over the whole list of the view, folder rows
 /// ("..." included) and media alike; with Shift the selection grows from the anchor over everything in between.
-pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
+pub fn handle_keyboard_navigate(params: &KeyboardNavigateParams<'_>) {
     let t0 = Instant::now();
 
     let Some(direction) = NavigationDirection::from_i32(params.direction_code) else {

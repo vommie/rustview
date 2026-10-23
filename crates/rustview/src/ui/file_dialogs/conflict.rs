@@ -61,7 +61,7 @@ impl FileOpsConflictDialogController {
     }
 
     /// Displays the File Conflict modal dialog with rich visual comparison, animated GIF/video hover previews, and resolution buttons.
-    pub fn show<F>(&self, params: ConflictDialogParams<'_>, on_resolve: F)
+    pub fn show<F>(&self, params: &ConflictDialogParams<'_>, on_resolve: F)
     where
         F: Fn(FileConflictResolution, bool) + 'static,
     {
@@ -318,7 +318,7 @@ impl FileOpsConflictDialogController {
                             thumb_mgr.get_or_load_animated_preview_async(
                                 info.media_id.unwrap_or(0),
                                 info.full_path.clone(),
-                                config,
+                                &config,
                                 move |res| {
                                     if let Ok(preview) = res {
                                         let _ = win_w_async.upgrade_in_event_loop(move |w| {
@@ -420,7 +420,7 @@ impl FileOpsConflictDialogController {
                             thumb_mgr.get_or_load_animated_preview_async(
                                 info.media_id.unwrap_or(0),
                                 info.full_path.clone(),
-                                config,
+                                &config,
                                 move |res| {
                                     if let Ok(preview) = res {
                                         let _ = win_w_async.upgrade_in_event_loop(move |w| {
@@ -503,7 +503,7 @@ fn load_conflict_thumbnail(
     media_id: Option<rustview_core::library::models::MediaId>,
 ) -> Image {
     if let Some(id) = media_id {
-        match thumbnails.get_or_load_sync(id, path, config.clone()) {
+        match thumbnails.get_or_load_sync(id, path, &config.clone()) {
             Ok(cached) => return slint::Image::from_rgb8(cached.pixels),
             Err(e) => {
                 tracing::warn!(media_id = id, error = %e, "[ConflictDialog: Thumbnail] Stored/generated thumbnail unavailable, using transient fallback");

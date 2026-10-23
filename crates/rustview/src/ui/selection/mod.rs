@@ -65,7 +65,7 @@ impl BridgeFileSelection {
         window: &MainWindow,
         library: Arc<Library>,
         settings: Arc<SettingsManager>,
-        tab_manager: Arc<ViewerTabManager>,
+        tab_manager: &Arc<ViewerTabManager>,
         state: Arc<RwLock<UiState>>,
         last_click: Arc<Mutex<Option<LastClickRecord>>>,
         fullscreen: MultiviewHandle,
@@ -84,7 +84,7 @@ impl BridgeFileSelection {
                     is_ctrl,
                     is_shift,
                 },
-                FileClickContext {
+                &FileClickContext {
                     window: &win,
                     library: &lib,
                     settings: &set,

@@ -126,7 +126,7 @@ impl TagTreeBuilder {
         any_match_in_branch
     }
 
-    pub fn chunk_into_columns(nodes: Vec<TagNodeView>, available_height: f32) -> (Vec<TagColumnView>, usize) {
+    pub fn chunk_into_columns(nodes: &[TagNodeView], available_height: f32) -> (Vec<TagColumnView>, usize) {
         let total_items = nodes.len();
         if total_items == 0 {
             return (Vec::new(), 1);
