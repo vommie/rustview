@@ -1,0 +1,42 @@
+[package]
+name = "rustview-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "RustView core: library database, media decoding, thumbnails, queries and settings (no user interface)"
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Only the runtime types (pixel buffers, strings) are used here, never the generated user interface.
+slint.workspace = true
+heed.workspace = true
+md-5.workspace = true
+hex.workspace = true
+image.workspace = true
+fast_image_resize.workspace = true
+ffmpeg-next.workspace = true
+libmpv2.workspace = true
+rayon.workspace = true
+memchr.workspace = true
+walkdir.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+bincode.workspace = true
+parking_lot.workspace = true
+trash.workspace = true
+rusqlite.workspace = true
+webp.workspace = true
+resvg.workspace = true
+clap.workspace = true
+chrono.workspace = true
+shellexpand.workspace = true
+procfs.workspace = true
+proc-mounts.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

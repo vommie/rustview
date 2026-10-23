@@ -5,7 +5,7 @@
 #
 #   ./build-package.sh
 #
-# Builds the release binary (cargo build --release --locked), synchronizes pkgver in packaging/PKGBUILD with Cargo.toml, runs makepkg
+# Builds the release binary (cargo build --release --locked), synchronizes pkgver in packaging/PKGBUILD with the workspace version in Cargo.toml, runs makepkg
 # and namcap, and leaves dist/rustview-<version>-1-x86_64.pkg.tar.zst (install with `sudo pacman -U`).
 #
 #   rustview/
@@ -59,7 +59,7 @@ for size in 16 22 24 32 48 64 128 256 512; do
 done
 
 # ---------------------------------------------------------------------------
-# 2. Read version from [package] in Cargo.toml (the first version line of the file)
+# 2. Read version from [workspace.package] in Cargo.toml (the first version line of the file)
 # ---------------------------------------------------------------------------
 
 VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' "${CARGO_TOML}" | head -n 1)"

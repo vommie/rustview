@@ -5,9 +5,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 SVG=packaging/rustview.svg
 command -v rsvg-convert >/dev/null || { echo "rsvg-convert is missing: sudo pacman -S librsvg" >&2; exit 1; }
-mkdir -p packaging/icons assets/app
+mkdir -p packaging/icons crates/rustview/assets/app
 for s in 16 22 24 32 48 64 128 256 512; do
   rsvg-convert -w "$s" -h "$s" "$SVG" -o "packaging/icons/rustview-$s.png"
 done
-cp packaging/icons/rustview-256.png assets/app/window-icon.png
-echo "icons written to packaging/icons and assets/app/window-icon.png"
+cp packaging/icons/rustview-256.png crates/rustview/assets/app/window-icon.png
+echo "icons written to packaging/icons and crates/rustview/assets/app/window-icon.png"

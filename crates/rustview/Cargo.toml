@@ -1,0 +1,60 @@
+[package]
+name = "rustview"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Fast image and video browser with folders, tags and ratings (Rust, Slint, FFmpeg, mpv)"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[lib]
+name = "rustview"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rustview"
+path = "src/main.rs"
+
+[dependencies]
+rustview-core.workspace = true
+slint.workspace = true
+raw-window-handle.workspace = true
+libmpv2.workspace = true
+rfd.workspace = true
+arboard.workspace = true
+resvg.workspace = true
+num-format.workspace = true
+image.workspace = true
+fast_image_resize.workspace = true
+rayon.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+parking_lot.workspace = true
+trash.workspace = true
+clap.workspace = true
+chrono.workspace = true
+directories.workspace = true
+url.workspace = true
+procfs.workspace = true
+rustix.workspace = true
+signal-hook.workspace = true
+freedesktop-desktop-entry.workspace = true
+freedesktop-icons.workspace = true
+rust-ini.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

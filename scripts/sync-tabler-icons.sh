@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fetches the Tabler icons referenced by assets/icons/icons.toml into assets/icons/tabler/.
+# Fetches the Tabler icons referenced by crates/rustview/assets/icons/icons.toml into crates/rustview/assets/icons/tabler/.
 #
 #   scripts/sync-tabler-icons.sh            # download missing icons, prune unused ones
 #   scripts/sync-tabler-icons.sh --check    # only verify; exit 1 if anything is missing or unused
 #
 # The icons come from the official `@tabler/icons` npm package (MIT license). The package version and its
 # integrity hash are pinned in the manifest, the tarball is verified before anything is extracted, and the
-# original Tabler file names are preserved (assets/icons/tabler/<outline|filled>/<tabler-name>.svg).
+# original Tabler file names are preserved (crates/rustview/assets/icons/tabler/<outline|filled>/<tabler-name>.svg).
 # Requires: curl, tar, openssl, base64, awk.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST="${ROOT}/assets/icons/icons.toml"
-DEST="${ROOT}/assets/icons/tabler"
+APP_CRATE="${ROOT}/crates/rustview"
+MANIFEST="${APP_CRATE}/assets/icons/icons.toml"
+DEST="${APP_CRATE}/assets/icons/tabler"
 MODE="sync"
 [[ "${1:-}" == "--check" ]] && MODE="check"
 
@@ -93,4 +94,4 @@ for u in ${UNUSED[@]+"${UNUSED[@]}"}; do
 done
 find "${DEST}" -type d -empty -delete 2>/dev/null || true
 
-echo "[+] Tabler ${VERSION}: $(grep -c . <<< "${WANTED}") icons in assets/icons/tabler"
+echo "[+] Tabler ${VERSION}: $(grep -c . <<< "${WANTED}") icons in crates/rustview/assets/icons/tabler"

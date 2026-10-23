@@ -15,7 +15,7 @@ if [ -t 1 ]; then g=$'\e[32m'; r=$'\e[31m'; y=$'\e[33m'; n=$'\e[0m'; else g=""; 
 failed=()
 skipped=()
 
-version=$(sed -n '/^\[package\]/,/^\[/{s/^version *= *"\(.*\)"/\1/p}' Cargo.toml)
+version=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version *= *"\(.*\)"/\1/p}' Cargo.toml)
 
 # step NAME COMMAND...
 step() {

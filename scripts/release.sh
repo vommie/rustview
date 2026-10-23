@@ -3,7 +3,7 @@
 # that version (Keep a Changelog format). Assets: the package, the same package as rustview-x86_64.pkg.tar.zst (so that
 # releases/latest/download/rustview-x86_64.pkg.tar.zst is a permanent link to the newest one) and SHA256SUMS.
 #
-#   scripts/release.sh --check        the changelog documents the version in Cargo.toml (used by scripts/check-all.sh)
+#   scripts/release.sh --check        the changelog documents the version in the root Cargo.toml (used by scripts/check-all.sh)
 #   scripts/release.sh --notes-only   print the release notes of that version (for pasting into the GitHub web form)
 #   scripts/release.sh                prepare the release in dist/ (checksum, notes) and print the commands; changes nothing
 #   scripts/release.sh --publish      also create and push the tag v<version> and create the GitHub release
@@ -25,7 +25,7 @@ done
 
 fail() { echo "release: $*" >&2; exit 1; }
 
-version=$(sed -n '/^\[package\]/,/^\[/{s/^version *= *"\(.*\)"/\1/p}' Cargo.toml)
+version=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version *= *"\(.*\)"/\1/p}' Cargo.toml)
 [ -n "$version" ] || fail "cannot read the version from Cargo.toml"
 tag="v$version"
 pkg_name="rustview-${version}-1-x86_64.pkg.tar.zst"

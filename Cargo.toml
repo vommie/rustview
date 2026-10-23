@@ -1,22 +1,27 @@
-[package]
-name = "rustview"
+[workspace]
+resolver = "3"
+members = ["crates/rustview-core", "crates/rustview"]
+default-members = ["crates/rustview-core", "crates/rustview"]
+
+[workspace.package]
 version = "0.3.82"
 edition = "2024"
 # The lowest toolchain known to work: the code uses `AtomicUsize::try_update` (1.95). rust-toolchain.toml pins `stable`.
 rust-version = "1.95"
-description = "Fast image and video browser with folders, tags and ratings (Rust, Slint, FFmpeg, mpv)"
 license = "MIT"
 repository = "https://github.com/vommie/rustview"
 homepage = "https://github.com/vommie/rustview"
 readme = "README.md"
 keywords = ["media", "image-viewer", "video", "gallery", "slint"]
 categories = ["multimedia", "gui"]
-# An application, never published to crates.io.
+# Applications, never published to crates.io.
 publish = false
-build = "build.rs"
 
-[dependencies]
+[workspace.dependencies]
+rustview-core = { path = "crates/rustview-core" }
+
 slint = { version = "1.18", features = ["raw-window-handle-06", "unstable-winit-030"] }
+slint-build = "1.18"
 raw-window-handle = "0.6"
 heed = "0.22"
 md-5 = "0.11"
@@ -29,21 +34,6 @@ libmpv2 = "6"
 rayon = "1"
 memchr = "2"
 walkdir = "2"
-# XDG directories of the library and settings, and `~` expansion in paths typed on the command line or found in desktop files.
-chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-clap = { version = "4", features = ["derive"] }
-directories = "6"
-shellexpand = "3"
-# Installed applications (desktop entries, their Exec lines) and their icons from the icon themes.
-freedesktop-desktop-entry = { version = "0.8", default-features = false }
-freedesktop-icons = "0.4"
-rust-ini = "0.21"
-url = "2"
-# /proc readers (mount table, memory, cgroups, open files) and the kernel release; no hand-written parsers.
-procfs = { version = "0.18", default-features = false }
-proc-mounts = "0.3"
-signal-hook = "0.4"
-rustix = { version = "1", features = ["system", "fs", "process"] }
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
@@ -60,19 +50,29 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 webp = "0.3"
 arboard = "3"
 num-format = { version = "0.4", features = ["with-system-locale"] }
-# SVG rasterizer (already used by Slint); renders icons for native helper windows outside of Slint and the SVG files of the
-# library (text and system fonts for labels, raster-images for embedded pictures).
+# SVG rasterizer (also used by Slint); renders icons for native helper windows outside of Slint and the SVG files of the library (text and
+# system fonts for labels, raster-images for embedded pictures).
 resvg = { version = "0.48", default-features = false, features = ["text", "system-fonts", "raster-images"] }
-
-[build-dependencies]
-slint-build = "1.18"
 toml = "1"
-
-[dev-dependencies]
 tempfile = "3"
+clap = { version = "4", features = ["derive"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+# XDG directories of the library and settings, and `~` expansion in paths typed on the command line or found in desktop files.
+directories = "6"
+shellexpand = "3"
+url = "2"
+# /proc readers (mount table, memory, cgroups, open files) and the kernel release; no hand-written parsers.
+procfs = { version = "0.18", default-features = false }
+proc-mounts = "0.3"
+signal-hook = "0.4"
+rustix = { version = "1", features = ["system", "fs", "process"] }
+# Installed applications (desktop entries, their Exec lines) and their icons from the icon themes.
+freedesktop-desktop-entry = { version = "0.8", default-features = false }
+freedesktop-icons = "0.4"
+rust-ini = "0.21"
 
 # Development builds optimize everything (decoding and thumbnailing are unusably slow otherwise) but keep only line tables of
-# the own crate and no debug info of the dependencies, which keeps backtraces readable and `target/` small. For a debugger
+# the own crates and no debug info of the dependencies, which keeps backtraces readable and `target/` small. For a debugger
 # session build with `cargo build --profile debug-full` (full debug info, binary in target/debug-full/).
 [profile.dev]
 opt-level = 3
