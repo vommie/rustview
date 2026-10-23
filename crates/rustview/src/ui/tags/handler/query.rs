@@ -11,6 +11,7 @@ use crate::ui::status_bar::StatusBarBridge;
 use rustview_core::library::models::{FolderId, MediaId, MediaRecord, MediaSearchParams};
 use rustview_core::query::{MediaStore, ScopeMode, lay_out};
 use rustview_core::thumbnails::ThumbnailConfig;
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -156,7 +157,7 @@ impl TagActionHandler {
             .read_txn()
             .ok()
             .and_then(|rtxn| ctx.library.raw_db().media.len(&rtxn).ok())
-            .map_or(0, |len| len as usize);
+            .map_or(0, |len| len.saturating_as::<usize>());
         if total_records > list_loader::ASYNC_ABOVE_RECORDS {
             Self::query_deferred(ctx, params, t_flow_start);
             return;

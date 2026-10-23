@@ -15,6 +15,8 @@
 //!   leave the room;
 //! - zooming around a point keeps the source point under that point where the clamp allows it; at an edge the clamp wins.
 
+use rustview_core::util::cast::FloatToInt;
+
 /// Tolerance for comparing pixel sizes.
 const EPS: f64 = 1e-6;
 
@@ -377,10 +379,10 @@ impl Frame {
         }
         Some(Visible {
             dest: IRect {
-                x: x0 as i32,
-                y: y0 as i32,
-                w: (x1 - x0) as i32,
-                h: (y1 - y0) as i32,
+                x: x0.to_int::<i32>(),
+                y: y0.to_int::<i32>(),
+                w: (x1 - x0).to_int::<i32>(),
+                h: (y1 - y0).to_int::<i32>(),
             },
             src: RectF::new(sx0, sy0, sx1 - sx0, sy1 - sy0),
         })
@@ -391,9 +393,9 @@ impl Frame {
     /// rendered for it stays sharp and exact while the view is dragged around.
     pub fn placement(&self, view: ZoomView) -> Option<Placement> {
         let rect = self.image_rect(view);
-        let (x, y) = (snap(rect.x) as i32, snap(rect.y) as i32);
-        let (w, h) = ((snap(rect.w) as i32).max(1), (snap(rect.h) as i32).max(1));
-        let (room_w, room_h) = (self.tile_w.round() as i32, self.tile_h.round() as i32);
+        let (x, y) = (snap(rect.x).to_int::<i32>(), snap(rect.y).to_int::<i32>());
+        let (w, h) = (snap(rect.w).to_int::<i32>().max(1), snap(rect.h).to_int::<i32>().max(1));
+        let (room_w, room_h) = (self.tile_w.round().to_int::<i32>(), self.tile_h.round().to_int::<i32>());
         let (x0, y0) = ((-x).max(0), (-y).max(0));
         let (x1, y1) = (w.min(room_w - x), h.min(room_h - y));
         (x1 > x0 && y1 > y0).then(|| Placement {

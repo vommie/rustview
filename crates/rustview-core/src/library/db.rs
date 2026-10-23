@@ -10,6 +10,7 @@ use super::schema::{
     SEQ_REFRESH_GEN,
 };
 use crate::media::{FileHash, MediaHasher};
+use crate::util::cast::SaturatingAs;
 use heed::byteorder::BE;
 use heed::types::{Bytes, SerdeBincode, Str, U32, U64};
 use heed::{Database, Env, EnvOpenOptions};
@@ -99,7 +100,7 @@ impl LibraryDatabase {
                 database_uuid: MediaHasher::to_hex(&MediaHasher::hash_bytes(path.to_string_lossy().as_bytes())),
                 created_at: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .map_or(0, |d| d.as_secs() as i64),
+                    .map_or(0, |d| d.as_secs().saturating_as::<i64>()),
             };
             meta.put(&mut wtxn, "meta", &metadata)?;
         }

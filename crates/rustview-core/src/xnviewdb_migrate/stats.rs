@@ -1,4 +1,5 @@
 use crate::settings::LogObscurer;
+use crate::util::cast::Az;
 
 #[derive(Debug, Default, Clone)]
 pub struct MigrationStats {
@@ -69,7 +70,7 @@ impl MigrationStats {
         println!("Source Database    : {}", LogObscurer::path(&self.source_path));
         println!(
             "Source Size        : {:.2} MB",
-            self.source_size_bytes as f64 / (1024.0 * 1024.0)
+            self.source_size_bytes.az::<f64>() / (1024.0 * 1024.0)
         );
         println!(
             "XnView Schema Ver. : {}",

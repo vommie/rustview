@@ -1,5 +1,6 @@
 use super::error::ThumbnailError;
 use super::types::{ScalingAlgorithm, calculate_aspect_dimensions};
+use crate::util::cast::FloatToInt;
 use fast_image_resize::images::Image as FirImage;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
 use image::AnimationDecoder;
@@ -74,7 +75,7 @@ impl GifThumbnailer {
         for frame in raw_frames {
             let (num, denom) = frame.delay().numer_denom_ms();
             let raw_delay = if denom > 0 {
-                (f64::from(num) / f64::from(denom)).round() as u32
+                (f64::from(num) / f64::from(denom)).round().to_int::<u32>()
             } else {
                 num
             };
@@ -101,9 +102,9 @@ impl GifThumbnailer {
                     rgb_raw.push(0);
                 } else {
                     let alpha = f32::from(a) / 255.0;
-                    rgb_raw.push((f32::from(r) * alpha).round() as u8);
-                    rgb_raw.push((f32::from(g) * alpha).round() as u8);
-                    rgb_raw.push((f32::from(b) * alpha).round() as u8);
+                    rgb_raw.push((f32::from(r) * alpha).round().to_int::<u8>());
+                    rgb_raw.push((f32::from(g) * alpha).round().to_int::<u8>());
+                    rgb_raw.push((f32::from(b) * alpha).round().to_int::<u8>());
                 }
             }
 

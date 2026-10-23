@@ -3,6 +3,7 @@
 //! This module does the same: it decodes every tile, places it, crops to the picture and applies the stored rotation.
 
 use super::orientation;
+use crate::util::cast::SaturatingAs;
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::software::scaling::context::Context as SwsContext;
 use ffmpeg_next::software::scaling::flag::Flags as SwsFlags;
@@ -113,14 +114,14 @@ fn find_layout(ictx: &ffmpeg_next::format::context::Input) -> Option<GridLayout>
                     continue;
                 }
                 tiles.push(Placement {
-                    stream_index: (*stream).index as usize,
+                    stream_index: (*stream).index.saturating_as::<usize>(),
                     x: offset.horizontal,
                     y: offset.vertical,
                 });
             }
 
             let mut rotation = 0;
-            for d in 0..grid.nb_coded_side_data.max(0) as usize {
+            for d in 0..grid.nb_coded_side_data.max(0).saturating_as::<usize>() {
                 let side_data = &*grid.coded_side_data.add(d);
                 if side_data.type_ == AVPacketSideDataType::AV_PKT_DATA_DISPLAYMATRIX && !side_data.data.is_null() {
                     let bytes = std::slice::from_raw_parts(side_data.data, side_data.size);
@@ -129,12 +130,12 @@ fn find_layout(ictx: &ffmpeg_next::format::context::Input) -> Option<GridLayout>
             }
 
             let layout = GridLayout {
-                coded_width: grid.coded_width.max(0) as u32,
-                coded_height: grid.coded_height.max(0) as u32,
-                crop_x: grid.horizontal_offset.max(0) as u32,
-                crop_y: grid.vertical_offset.max(0) as u32,
-                width: grid.width.max(0) as u32,
-                height: grid.height.max(0) as u32,
+                coded_width: grid.coded_width.max(0).saturating_as::<u32>(),
+                coded_height: grid.coded_height.max(0).saturating_as::<u32>(),
+                crop_x: grid.horizontal_offset.max(0).saturating_as::<u32>(),
+                crop_y: grid.vertical_offset.max(0).saturating_as::<u32>(),
+                width: grid.width.max(0).saturating_as::<u32>(),
+                height: grid.height.max(0).saturating_as::<u32>(),
                 background: [grid.background[0], grid.background[1], grid.background[2]],
                 rotation,
                 tiles,
@@ -275,9 +276,10 @@ fn blit(canvas: &mut [u8], canvas_w: u32, canvas_h: u32, tile: &RgbTile<'_>, x: 
         if copy <= 0 {
             continue;
         }
-        let src = (ty as usize * tile_w as usize + skip as usize) * 3;
-        let dst = (cy as usize * canvas_w as usize + start_x as usize) * 3;
-        canvas[dst..dst + copy as usize * 3].copy_from_slice(&tile.data[src..src + copy as usize * 3]);
+        let src = (ty.saturating_as::<usize>() * tile_w as usize + skip.saturating_as::<usize>()) * 3;
+        let dst = (cy.saturating_as::<usize>() * canvas_w as usize + start_x.saturating_as::<usize>()) * 3;
+        canvas[dst..dst + copy.saturating_as::<usize>() * 3]
+            .copy_from_slice(&tile.data[src..src + copy.saturating_as::<usize>() * 3]);
     }
 }
 

@@ -20,6 +20,7 @@ use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::view::ZoomBubbleView;
 use crate::viewer::{OverlayServer, XRectangle, get_raw_window_xid};
+use rustview_core::util::cast::{FloatToInt, SaturatingAs};
 use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
 use slint::winit_030::winit::window::WindowAttributes;
 use slint::{ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer, TimerMode, VecModel};
@@ -209,7 +210,9 @@ pub fn open_menu(kind: BarKind, opener_action: i32, items: &[CtxMenuItem]) {
         && overlay.shown
     {
         let opener = overlay.last_actions.iter().position(|a| a.id == opener_action);
-        overlay.window.set_menu_owner_index(opener.map_or(-1, |i| i as i32));
+        overlay
+            .window
+            .set_menu_owner_index(opener.map_or(-1, |i| i.saturating_as::<i32>()));
         overlay
             .window
             .set_menu_items(CtxMenuDispatcher::items_to_slint_model(items, 0));
@@ -443,10 +446,10 @@ fn clear_menu(window: &MultiviewBarWindow, shared: &Shared) {
 
 fn xrectangle(rect: Rect) -> XRectangle {
     XRectangle {
-        x: rect.x.clamp(0, i32::from(i16::MAX)) as i16,
-        y: rect.y.clamp(0, i32::from(i16::MAX)) as i16,
-        width: rect.w.clamp(1, i32::from(u16::MAX)) as u16,
-        height: rect.h.clamp(1, i32::from(u16::MAX)) as u16,
+        x: rect.x.clamp(0, i32::from(i16::MAX)).saturating_as::<i16>(),
+        y: rect.y.clamp(0, i32::from(i16::MAX)).saturating_as::<i16>(),
+        width: rect.w.clamp(1, i32::from(u16::MAX)).saturating_as::<u16>(),
+        height: rect.h.clamp(1, i32::from(u16::MAX)).saturating_as::<u16>(),
     }
 }
 
@@ -504,7 +507,7 @@ impl Overlay {
                 return;
             };
             let scale = state.scale.max(0.5);
-            let px = |logical: f32| (logical * scale).round() as i32;
+            let px = |logical: f32| (logical * scale).round().to_int::<i32>();
             state.tooltip =
                 (visible && w > 2.0 && h > 2.0).then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
             state.apply_shape();
@@ -515,7 +518,7 @@ impl Overlay {
                 return;
             };
             let scale = state.scale.max(0.5);
-            let px = |logical: f32| (logical * scale).round() as i32;
+            let px = |logical: f32| (logical * scale).round().to_int::<i32>();
             state.pill = (visible && w > 2.0 && h > 2.0).then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
             state.apply_shape();
         });
@@ -525,7 +528,7 @@ impl Overlay {
                 return;
             };
             let scale = state.scale.max(0.5);
-            let px = |logical: f32| (logical * scale).round() as i32;
+            let px = |logical: f32| (logical * scale).round().to_int::<i32>();
             state.menu = (visible && w > 2.0 && h > 2.0).then(|| Rect::new(px(x), px(y), px(w).max(1), px(h).max(1)));
             state.menu_caret = (px(caret_x), px(caret_h));
             state.apply_shape();
@@ -652,8 +655,9 @@ impl Overlay {
             .last_actions
             .iter()
             .position(|a| a.id == MediaActionId::Zoom.code());
-        self.window.set_menu_owner_index(opener.map_or(-1, |i| i as i32));
-        self.window.set_tile(zoom.tile as i32);
+        self.window
+            .set_menu_owner_index(opener.map_or(-1, |i| i.saturating_as::<i32>()));
+        self.window.set_tile(zoom.tile.saturating_as::<i32>());
         self.window.set_zoom_permille(zoom.permille);
         self.window.set_zoom_min_permille(zoom.min_permille);
         self.window.set_zoom_max_permille(zoom.max_permille);
@@ -771,8 +775,8 @@ impl Overlay {
         if moved || appeared {
             let window = self.window.window();
             window.set_size(PhysicalSize::new(
-                placement.window.w.max(1) as u32,
-                placement.window.h.max(1) as u32,
+                placement.window.w.max(1).saturating_as::<u32>(),
+                placement.window.h.max(1).saturating_as::<u32>(),
             ));
             window.set_position(PhysicalPosition::new(placement.window.x, placement.window.y));
         }
@@ -786,9 +790,9 @@ impl Overlay {
         }
         let mut state = self.shared.x.borrow_mut();
         state.scale = scale;
-        state.bar_radius = (self.window.get_bar_radius() * scale).round() as i32;
-        state.tooltip_radius = (self.window.get_tooltip_radius() * scale).round() as i32;
-        state.menu_radius = (self.window.get_menu_radius() * scale).round() as i32;
+        state.bar_radius = (self.window.get_bar_radius() * scale).round().to_int::<i32>();
+        state.tooltip_radius = (self.window.get_tooltip_radius() * scale).round().to_int::<i32>();
+        state.menu_radius = (self.window.get_menu_radius() * scale).round().to_int::<i32>();
         state.placed = Some(placement);
         let first_xid = state.xid.is_none();
         if first_xid {

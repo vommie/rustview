@@ -1,6 +1,7 @@
 //! SVG files are rasterized by resvg: `FFmpeg`'s librsvg ignores the `viewBox` of a file without width and height (it shows
 //! 100x100), and resvg also draws text with the installed fonts. Files the SVG references are never loaded.
 
+use crate::util::cast::{Az, FloatToInt};
 use resvg::{tiny_skia, usvg};
 use std::fs::File;
 use std::io::Read;
@@ -66,7 +67,7 @@ fn intrinsic(tree: &usvg::Tree) -> Result<(u32, u32), SvgError> {
     if !(w >= 1.0 && h >= 1.0 && w <= 1.0e6 && h <= 1.0e6) {
         return Err(SvgError::EmptySize);
     }
-    Ok((w as u32, h as u32))
+    Ok((w.to_int::<u32>(), h.to_int::<u32>()))
 }
 
 /// The size the file declares (its `width` and `height`, else its `viewBox`).
@@ -78,14 +79,16 @@ pub fn intrinsic_size(path: &Path) -> Result<(u32, u32), SvgError> {
 pub fn rasterize(path: &Path, longest_edge: u32) -> Result<SvgRaster, SvgError> {
     let tree = load_tree(path)?;
     let (iw, ih) = intrinsic(&tree)?;
-    let scale = longest_edge.max(1) as f32 / iw.max(ih) as f32;
-    let width = ((iw as f32 * scale).round() as u32).max(1);
-    let height = ((ih as f32 * scale).round() as u32).max(1);
+    let scale = longest_edge.max(1).az::<f32>() / iw.max(ih).az::<f32>();
+    let width = (iw.az::<f32>() * scale).round().to_int::<u32>().max(1);
+    let height = (ih.az::<f32>() * scale).round().to_int::<u32>().max(1);
 
     let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or(SvgError::EmptySize)?;
     pixmap.fill(tiny_skia::Color::WHITE);
-    let transform =
-        tiny_skia::Transform::from_scale(width as f32 / tree.size().width(), height as f32 / tree.size().height());
+    let transform = tiny_skia::Transform::from_scale(
+        width.az::<f32>() / tree.size().width(),
+        height.az::<f32>() / tree.size().height(),
+    );
     resvg::render(&tree, transform, &mut pixmap.as_mut());
 
     // The background is opaque, so the premultiplied channels are the colors.

@@ -11,6 +11,7 @@ use super::types::{ScalingAlgorithm, calculate_aspect_dimensions};
 use super::video::{DynamicScaler, apply_rotation_if_needed, map_scaling_algorithm_to_sws_flags};
 use crate::media::metadata::ensure_ffmpeg_initialized;
 use crate::media::{MediaDetector, MediaFormat};
+use crate::util::cast::SaturatingAs;
 use fast_image_resize::images::Image as FirImage;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
 use image::codecs::gif::GifDecoder;
@@ -148,7 +149,7 @@ fn blend_on_black(rgba: &image::RgbaImage) -> Vec<u8> {
             rgb.extend_from_slice(&[r, g, b]);
         } else {
             let alpha = u16::from(a);
-            rgb.extend([r, g, b].map(|c| ((u16::from(c) * alpha + 127) / 255) as u8));
+            rgb.extend([r, g, b].map(|c| ((u16::from(c) * alpha + 127) / 255).saturating_as::<u8>()));
         }
     }
     rgb

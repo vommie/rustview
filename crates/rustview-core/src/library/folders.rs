@@ -6,6 +6,7 @@ use super::folder_walker::{ScanProgressCallback, ScannedDirItem, walk_directory_
 use super::models::{FolderHierarchySnapshot, FolderId, FolderRecord};
 use super::schema::SEQ_FOLDER_ID;
 use crate::settings::{DEFAULT_IGNORE_NESTED_MOUNTS, GeneralSettings, LogObscurer};
+use crate::util::cast::SaturatingAs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -173,7 +174,9 @@ impl<'a> FolderManager<'a> {
 
             while let Some(pid) = current_pid {
                 if let Some(mut ancestor) = self.db.folders.get(&wtxn, &pid)? {
-                    let adjusted = (i64::from(ancestor.recursive_media_count) + delta_media).max(0) as u32;
+                    let adjusted = (i64::from(ancestor.recursive_media_count) + delta_media)
+                        .max(0)
+                        .saturating_as::<u32>();
                     ancestor.recursive_media_count = adjusted;
                     self.db.folders.put(&mut wtxn, &pid, &ancestor)?;
                     current_pid = ancestor.parent_id;
@@ -237,7 +240,7 @@ impl<'a> FolderManager<'a> {
         tracing::info!(
             scanned_folders = scanned_items.len(),
             skipped_mounts,
-            walk_ms = walk_ms as u64,
+            walk_ms = walk_ms.saturating_as::<u64>(),
             "[FolderScan: WalkDone] Filesystem walk completed"
         );
 
@@ -260,7 +263,7 @@ impl<'a> FolderManager<'a> {
 
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs() as i64);
+            .map_or(0, |d| d.as_secs().saturating_as::<i64>());
 
         for (idx, item) in scanned_items.iter().enumerate() {
             let p_str = item.path.to_string_lossy().to_string();
@@ -337,9 +340,9 @@ impl<'a> FolderManager<'a> {
             skipped_mounts,
             mount_records_detached = mount_cleanup.detached_with_media,
             mount_records_removed = mount_cleanup.removed_empty,
-            walk_ms = walk_ms as u64,
-            db_ms = t_db.elapsed().as_millis() as u64,
-            elapsed_ms = t0.elapsed().as_millis() as u64,
+            walk_ms = walk_ms.saturating_as::<u64>(),
+            db_ms = t_db.elapsed().as_millis().saturating_as::<u64>(),
+            elapsed_ms = t0.elapsed().as_millis().saturating_as::<u64>(),
             "[FolderScan: FullRootDone] Directory scan committed to LMDB"
         );
 
@@ -427,7 +430,7 @@ impl<'a> FolderManager<'a> {
         for idx in depth_sorted_indices {
             let fid = new_records[idx].id;
             let children = parent_to_children.get(&fid).cloned().unwrap_or_default();
-            new_records[idx].subfolder_count = children.len() as u32;
+            new_records[idx].subfolder_count = children.len().saturating_as::<u32>();
 
             let mut rec_media = new_records[idx].media_count;
             for child_id in children {
@@ -472,14 +475,20 @@ impl<'a> FolderManager<'a> {
         }
 
         if let Some(mut folder_rec) = db.folders.get(wtxn, &folder_id)? {
-            folder_rec.media_count = (i64::from(folder_rec.media_count) + delta).max(0) as u32;
-            folder_rec.recursive_media_count = (i64::from(folder_rec.recursive_media_count) + delta).max(0) as u32;
+            folder_rec.media_count = (i64::from(folder_rec.media_count) + delta)
+                .max(0)
+                .saturating_as::<u32>();
+            folder_rec.recursive_media_count = (i64::from(folder_rec.recursive_media_count) + delta)
+                .max(0)
+                .saturating_as::<u32>();
             db.folders.put(wtxn, &folder_id, &folder_rec)?;
 
             let mut current_pid = folder_rec.parent_id;
             while let Some(pid) = current_pid {
                 if let Some(mut ancestor) = db.folders.get(wtxn, &pid)? {
-                    ancestor.recursive_media_count = (i64::from(ancestor.recursive_media_count) + delta).max(0) as u32;
+                    ancestor.recursive_media_count = (i64::from(ancestor.recursive_media_count) + delta)
+                        .max(0)
+                        .saturating_as::<u32>();
                     db.folders.put(wtxn, &pid, &ancestor)?;
                     current_pid = ancestor.parent_id;
                 } else {
@@ -548,7 +557,7 @@ impl<'a> FolderManager<'a> {
             recursive_media_count: 0,
             added_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_secs() as i64),
+                .map_or(0, |d| d.as_secs().saturating_as::<i64>()),
             last_scanned_at: 0,
         };
 
@@ -564,7 +573,7 @@ impl<'a> FolderManager<'a> {
             }
 
             if let Some(mut p_rec) = self.db.folders.get(&wtxn, &pid)? {
-                p_rec.subfolder_count = siblings.len() as u32;
+                p_rec.subfolder_count = siblings.len().saturating_as::<u32>();
                 self.db.folders.put(&mut wtxn, &pid, &p_rec)?;
             }
         }

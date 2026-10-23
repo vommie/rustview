@@ -14,6 +14,7 @@ use rustview_core::media::MediaFormat;
 use rustview_core::query::{MediaTypeFilter, SortColumn, SortOrder};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::{ComponentHandle, Image};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -149,7 +150,7 @@ impl BridgeMedia {
 
         let win_hover = win.clone_strong();
         window.on_media_hover_changed(move |id, is_hover| {
-            let media_id = id as u64;
+            let media_id = id.wrapping_as::<u64>();
             if !set.get().appearance.enable_hover_previews {
                 return;
             }
@@ -233,10 +234,10 @@ impl BridgeMedia {
         let win_stream = window.clone_strong();
         window.on_viewport_changed(move |first_row, visible_rows, columns, total| {
             Self::handle_viewport_changed(
-                first_row.max(0) as usize,
-                visible_rows.max(1) as usize,
-                columns.max(1) as usize,
-                total.max(0) as usize,
+                first_row.max(0).saturating_as::<usize>(),
+                visible_rows.max(1).saturating_as::<usize>(),
+                columns.max(1).saturating_as::<usize>(),
+                total.max(0).saturating_as::<usize>(),
                 &win_stream,
                 &st_stream,
                 &thumb_stream,
@@ -292,7 +293,7 @@ impl BridgeMedia {
             st_mode.write().last_active_panel = LastActivePanel::Media;
             Self::handle_view_mode_toggled(
                 is_table,
-                top_item_idx as usize,
+                top_item_idx.saturating_as::<usize>(),
                 &win_mode,
                 &thumb_mode,
                 &set_mode,

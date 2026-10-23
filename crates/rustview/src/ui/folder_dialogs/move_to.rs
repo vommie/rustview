@@ -2,6 +2,7 @@ use crate::ui::folder_dialogs::FolderDialogContext;
 use crate::ui::folder_tree::move_sync::BridgeFolderMoveSync;
 use crate::ui::{MainWindow, MoveFolderToDialog};
 use rustview_core::library::models::FolderId;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -47,8 +48,8 @@ impl MoveFolderDialogController {
 
             win.set_source_folder_name(src_name.into());
             win.set_target_folder_name(dst_name.into());
-            win.set_subfolders_count(metrics.subfolders_count as i32);
-            win.set_files_count(metrics.media_files_count as i32);
+            win.set_subfolders_count(metrics.subfolders_count.saturating_as::<i32>());
+            win.set_files_count(metrics.media_files_count.saturating_as::<i32>());
             win.set_error_message("".into());
 
             window.set_is_modal_locked(true);

@@ -4,13 +4,14 @@ use super::record_labels::RecordLabels;
 use crate::ui::MediaItemView;
 use rustview_core::media::MediaType;
 use rustview_core::query::IndexedMediaRecord;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::Image;
 
 /// A complete row for the item at list `position`.
 pub fn build_view(item: &IndexedMediaRecord, position: usize, is_selected: bool, thumbnail: Image) -> MediaItemView {
     let mut view = MediaItemView {
-        id: item.record.id as i32,
-        index: position as i32,
+        id: item.record.id.wrapping_as::<i32>(),
+        index: position.saturating_as::<i32>(),
         thumbnail,
         is_selected,
         is_video: matches!(item.record.media_type, MediaType::Video),
@@ -30,7 +31,7 @@ pub fn apply_record(view: &mut MediaItemView, item: &IndexedMediaRecord) {
     view.filesize_str = labels.filesize;
     view.rating = i32::from(item.record.rating);
     view.rating_str = labels.rating;
-    view.tags_count = item.tags_count as i32;
+    view.tags_count = item.tags_count.saturating_as::<i32>();
     view.tags_str = labels.tags;
     view.width_str = labels.width;
     view.height_str = labels.height;

@@ -9,12 +9,13 @@ use crate::viewer::multiview::model::TileKind;
 use crate::viewer::multiview::view::{
     GutterView, HostedView, MediaActionView, Navigation, PrimaryActionView, TileView, ZoomContentView,
 };
+use rustview_core::util::cast::{Az, FloatToInt};
 use slint::{Model, VecModel};
 use std::collections::HashMap;
 use std::rc::Rc;
 
 fn logical(px: i32, dpi: f32) -> f32 {
-    px as f32 / dpi.max(0.01)
+    px.az::<f32>() / dpi.max(0.01)
 }
 
 /// The Slint images of the tiles. A `slint::Image` is not `Send`, so the instance only holds the shared pixel buffer; the
@@ -143,10 +144,10 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         mm_y: logical(mm_rect.y, dpi),
         mm_width: logical(mm_rect.w, dpi),
         mm_height: logical(mm_rect.h, dpi),
-        mm_vx: mm_viewport.0 as f32,
-        mm_vy: mm_viewport.1 as f32,
-        mm_vw: mm_viewport.2 as f32,
-        mm_vh: mm_viewport.3 as f32,
+        mm_vx: mm_viewport.0.az::<f32>(),
+        mm_vy: mm_viewport.1.az::<f32>(),
+        mm_vw: mm_viewport.2.az::<f32>(),
+        mm_vh: mm_viewport.3.az::<f32>(),
         mm_bubble_open: bubble.is_some(),
         mm_zoom_permille: bubble.map_or(1000, |b| b.permille),
         mm_zoom_min: bubble.map_or(100, |b| b.min_permille),
@@ -215,7 +216,7 @@ pub fn action_views(actions: &[MediaActionView]) -> Vec<MultiviewBarButtonView> 
 /// A logical rectangle in window pixels -> physical window pixels. Edges are rounded, not sizes, so neighbors stay seamless
 /// and the result is never empty.
 pub fn physical_rect(x: f32, y: f32, width: f32, height: f32, scale: f32) -> Rect {
-    let edge = |logical: f32| (logical * scale).round() as i32;
+    let edge = |logical: f32| (logical * scale).round().to_int::<i32>();
     let (x0, y0) = (edge(x), edge(y));
     Rect::new(x0, y0, (edge(x + width) - x0).max(1), (edge(y + height) - y0).max(1))
 }

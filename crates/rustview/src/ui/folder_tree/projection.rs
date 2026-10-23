@@ -4,6 +4,7 @@
 use crate::ctx_menu::{CtxMenuItem, CtxMenuItemKind};
 use crate::icons::Icon;
 use rustview_core::library::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use std::collections::HashSet;
 use std::time::Instant;
 
@@ -70,7 +71,7 @@ impl FolderProjection for FolderHierarchySnapshot {
             rows = output.len(),
             snapshot_nodes = self.nodes.len(),
             expanded = expanded_ids.len(),
-            elapsed_us = t0.elapsed().as_micros() as u64,
+            elapsed_us = t0.elapsed().as_micros().saturating_as::<u64>(),
             "[FolderTree: Project] Projected folder tree rows from SPoT snapshot"
         );
 
@@ -154,7 +155,7 @@ impl FolderProjection for FolderHierarchySnapshot {
         tracing::debug!(
             items_count = menu_items.len(),
             snapshot_nodes = self.nodes.len(),
-            elapsed_us = t0.elapsed().as_micros() as u64,
+            elapsed_us = t0.elapsed().as_micros().saturating_as::<u64>(),
             "[FolderTree: TargetMenu] Projected target folder menu with Root divider and clean tooltips"
         );
 
@@ -193,7 +194,7 @@ fn flatten_into(
         };
 
         output.push(crate::ui::FolderNodeView {
-            id: node.id as i32,
+            id: node.id.wrapping_as::<i32>(),
             name: formatted_name.into(),
             depth,
             path: node.path.to_string_lossy().to_string().into(),
@@ -201,8 +202,8 @@ fn flatten_into(
             is_expanded,
             is_selected,
             is_deleted: node.is_deleted,
-            subfolder_count: node.subfolder_count as i32,
-            file_count: node.media_count as i32,
+            subfolder_count: node.subfolder_count.saturating_as::<i32>(),
+            file_count: node.media_count.saturating_as::<i32>(),
         });
 
         if has_children && is_expanded {

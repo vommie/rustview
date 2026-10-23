@@ -3,6 +3,7 @@ use super::error::LibraryError;
 use super::models::{MediaId, TagId, TagRecord};
 use super::schema::SEQ_TAG_ID;
 use crate::settings::LogObscurer;
+use crate::util::cast::WrappingAs;
 use std::collections::{HashMap, HashSet};
 
 /// Pure, decoupled database repository managing tag persistence and hierarchical relations.
@@ -40,7 +41,7 @@ impl<'a> TagManager<'a> {
             return Err(LibraryError::DuplicateTag(trimmed_name.to_string()));
         }
 
-        let tag_id = self.db.next_id(&mut wtxn, SEQ_TAG_ID)? as u32;
+        let tag_id = self.db.next_id(&mut wtxn, SEQ_TAG_ID)?.saturating_as::<u32>();
         let record = TagRecord {
             id: tag_id,
             parent_id,

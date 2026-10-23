@@ -18,6 +18,7 @@ use rustview_core::media::FormatPolicy;
 use rustview_core::query::{ListRequest, lay_out};
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -306,7 +307,7 @@ impl BridgeMedia {
                 ViewGeometry::new(DEFAULT_GRID_COLUMNS, DEFAULT_VISIBLE_ROWS, margin_rows_for(is_table))
             });
             let first_row = options.anchor_index.unwrap_or(0) / geometry.columns;
-            window.set_total_items_count(view_len as i32);
+            window.set_total_items_count(view_len.saturating_as::<i32>());
             let outcome = sync_window(window, &mut st_write, thumbnails, geometry, first_row, view_len, true);
             tracing::debug!(
                 items = matched_len,
@@ -320,9 +321,10 @@ impl BridgeMedia {
         Self::update_fallback_view(window, &app_settings, state);
 
         if let Some(ref bench) = bench_opt {
-            bench
-                .slint_commit_time_us
-                .store(t_slint_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+            bench.slint_commit_time_us.store(
+                t_slint_start.elapsed().as_micros().saturating_as::<u64>(),
+                Ordering::Relaxed,
+            );
         }
 
         // Folder rows the new list no longer shows (filter, hidden folders) took their highlight with them.

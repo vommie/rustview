@@ -10,6 +10,7 @@ use crate::ui::selection::rubberband::{MEDIA_HEADER_BAR_HEIGHT_PX, RubberbandAut
 use crate::ui::state::UiState;
 use parking_lot::RwLock;
 use rustview_core::library::models::FolderId;
+use rustview_core::util::cast::Az;
 use slint::ComponentHandle;
 use std::sync::Arc;
 
@@ -43,7 +44,7 @@ impl BrowseDragScroller {
     /// The pointer of a medium drag is at (`x`, `y`) in window coordinates.
     pub fn update(&self, window: &MainWindow, state: &Arc<RwLock<UiState>>, x: f32, y: f32) {
         let scale = window.window().scale_factor().max(0.1);
-        let window_h = window.window().size().height as f32 / scale;
+        let window_h = window.window().size().height.az::<f32>() / scale;
         let left = window.get_sidebar_left_width() + RESIZER_THICKNESS_PX;
         let right = left + window.get_media_view_width();
         if x < left || x > right {

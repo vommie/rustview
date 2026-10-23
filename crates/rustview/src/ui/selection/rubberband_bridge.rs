@@ -13,6 +13,7 @@ use crate::ui::tags::BridgeTags;
 use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::{FolderId, MediaId};
+use rustview_core::util::cast::{Az, SaturatingAs};
 use slint::ComponentHandle;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -193,12 +194,12 @@ impl BridgeRubberband {
             };
             RubberbandGeometry::table_hit_positions(rect, total_items, config)
         } else {
-            let thumb_size = window.get_thumb_size() as f32;
+            let thumb_size = window.get_thumb_size().az::<f32>();
             let aspect_idx = window.get_thumb_aspect_idx();
-            let padding_h = window.get_grid_item_padding_h() as f32;
-            let padding_v = window.get_grid_item_padding_v() as f32;
-            let spacing = window.get_grid_spacing() as f32;
-            let padding = window.get_grid_padding() as f32;
+            let padding_h = window.get_grid_item_padding_h().az::<f32>();
+            let padding_v = window.get_grid_item_padding_v().az::<f32>();
+            let spacing = window.get_grid_spacing().az::<f32>();
+            let padding = window.get_grid_padding().az::<f32>();
 
             let thumb_h = match aspect_idx {
                 0 => thumb_size,
@@ -214,7 +215,7 @@ impl BridgeRubberband {
             let tile_w = thumb_size + (padding_h * 2.0);
             let tile_h = thumb_h + (padding_v * 2.0) + 22.0;
 
-            let columns = window.get_grid_columns().max(1) as usize;
+            let columns = window.get_grid_columns().max(1).saturating_as::<usize>();
 
             let config = GridLayoutConfig {
                 columns,

@@ -1,5 +1,7 @@
 use crate::ui::MainWindow;
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::{FloatToInt, SaturatingAs, WrappingAs};
+
 use slint::{ComponentHandle, Model, Timer};
 use std::cell::RefCell;
 use std::path::Path;
@@ -182,23 +184,23 @@ impl DndFolderTreeAutoScroller {
 
         // Hit-test update while content scrolls underneath cursor
         let local_y = cursor_y - FOLDER_TREE_TOP_OFFSET_PX - new_scroll_y;
-        let row_idx = (local_y / FOLDER_TREE_ROW_HEIGHT_PX).floor() as i32;
+        let row_idx = (local_y / FOLDER_TREE_ROW_HEIGHT_PX).floor().to_int::<i32>();
         let folders = window.get_folders();
 
         if row_idx >= 0
-            && (row_idx as usize) < folders.row_count()
-            && let Some(row) = folders.row_data(row_idx as usize)
+            && row_idx.saturating_as::<usize>() < folders.row_count()
+            && let Some(row) = folders.row_data(row_idx.saturating_as::<usize>())
             && !row.is_deleted
         {
-            let target_id = row.id as u64;
-            if window.get_drop_target_folder_id() != target_id as i32 {
+            let target_id = row.id.wrapping_as::<u64>();
+            if window.get_drop_target_folder_id() != target_id.wrapping_as::<i32>() {
                 tracing::info!(
                     target_folder = %LogObscurer::folder(Some(target_id), Path::new(row.name.as_str())),
                     row_index = row_idx,
                     scroll_offset_y = new_scroll_y,
                     "[DndFolderTreeAutoScroll: TargetChange] Auto-scrolled to new drop target folder"
                 );
-                window.set_drop_target_folder_id(target_id as i32);
+                window.set_drop_target_folder_id(target_id.wrapping_as::<i32>());
             }
         }
 

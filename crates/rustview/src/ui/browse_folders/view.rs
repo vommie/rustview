@@ -5,6 +5,7 @@ use super::times::{FolderStamp, FolderTimes};
 use crate::ui::MediaItemView;
 use crate::ui::models::format_timestamp;
 use rustview_core::library::models::{CachedFolderNode, FolderHierarchySnapshot};
+use rustview_core::util::cast::SaturatingAs;
 use slint::SharedString;
 use std::sync::Arc;
 
@@ -77,7 +78,7 @@ pub fn folder_row_view(
 ) -> MediaItemView {
     let mut view = MediaItemView {
         id: row.view_id(),
-        index: position as i32,
+        index: position.saturating_as::<i32>(),
         is_selected,
         is_folder: true,
         is_folder_up: row == FolderRowRef::Up,
@@ -99,7 +100,7 @@ pub fn folder_row_view(
                 let flags = FolderFlags::of(node, snapshot);
                 view.folder_hidden = flags.hidden;
                 view.folder_empty = flags.empty;
-                view.folder_missing_children = flags.missing_children as i32;
+                view.folder_missing_children = flags.missing_children.saturating_as::<i32>();
                 view.flags_str = flags.label().into();
                 if !node.is_deleted {
                     (view.modified_date_str, view.created_date_str) = stamp_labels(times.get(id, &node.path));

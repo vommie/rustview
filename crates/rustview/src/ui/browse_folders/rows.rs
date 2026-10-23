@@ -5,6 +5,7 @@
 //! The media keep their own positions (`media_row_map`, `active_indices`); only the folder rows in front shift them by `front_len()`.
 
 use rustview_core::library::models::{FolderHierarchySnapshot, FolderId};
+use rustview_core::util::cast::WrappingAs;
 use std::collections::HashSet;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -22,7 +23,7 @@ impl FolderRowRef {
     pub fn view_id(self) -> i32 {
         match self {
             Self::Up => UP_ROW_ID,
-            Self::Folder(id) => -(id.min(i32::MAX as u64) as i32),
+            Self::Folder(id) => -id.min(i32::MAX as u64).wrapping_as::<i32>(),
         }
     }
 

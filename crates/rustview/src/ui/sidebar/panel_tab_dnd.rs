@@ -1,3 +1,4 @@
+use rustview_core::util::cast::Az;
 use std::time::Instant;
 
 /// Slot geometry descriptor for an individual dock panel tab in a sidebar tab bar.
@@ -16,7 +17,7 @@ pub struct SidebarPanelTabDndGeometry;
 impl SidebarPanelTabDndGeometry {
     /// Computes the content-based estimated tab width for sidebar dock tabs, clamped between 60px and 110px.
     pub fn estimate_tab_width(title: &str) -> f32 {
-        let text_w = title.chars().count() as f32 * 7.5;
+        let text_w = title.chars().count().az::<f32>() * 7.5;
         (33.0 + text_w).clamp(60.0, 110.0)
     }
 

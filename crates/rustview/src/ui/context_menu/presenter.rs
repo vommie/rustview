@@ -1,6 +1,7 @@
 use crate::ctx_menu::{CtxMenu, CtxMenuDispatcher, CtxMenuItem, CtxMenuItemKind};
 use crate::ui::{ContextMenuLevelModel, MainWindow};
 use parking_lot::Mutex;
+use rustview_core::util::cast::{Az, SaturatingAs};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::sync::{Arc, LazyLock};
 
@@ -36,8 +37,8 @@ impl CtxMenuPresenter {
 
         let scale = window.window().scale_factor();
         let win_size = window.window().size();
-        let win_w = (win_size.width as f32 / scale).max(200.0);
-        let win_h = (win_size.height as f32 / scale).max(200.0);
+        let win_w = (win_size.width.az::<f32>() / scale).max(200.0);
+        let win_h = (win_size.height.az::<f32>() / scale).max(200.0);
 
         // Max height capped at 70% of window height (desktop UX best practice)
         let max_h = (win_h * 0.70).max(180.0).min(win_h - (MENU_WINDOW_MARGIN * 2.0));
@@ -131,8 +132,8 @@ impl CtxMenuPresenter {
 
         let scale = window.window().scale_factor();
         let win_size = window.window().size();
-        let win_w = (win_size.width as f32 / scale).max(200.0);
-        let win_h = (win_size.height as f32 / scale).max(200.0);
+        let win_w = (win_size.width.az::<f32>() / scale).max(200.0);
+        let win_h = (win_size.height.az::<f32>() / scale).max(200.0);
 
         let max_h = (win_h * 0.70).max(180.0).min(win_h - (MENU_WINDOW_MARGIN * 2.0));
         let content_h = Self::calculate_items_content_height(&children);
@@ -175,13 +176,13 @@ impl CtxMenuPresenter {
 
         // Append exactly one new level row; existing level rows are never replaced.
         let new_level = ContextMenuLevelModel {
-            depth: new_depth as i32,
+            depth: new_depth.saturating_as::<i32>(),
             active_menu_index: 0,
             x: new_x,
             y: new_y,
             width: MENU_WIDTH,
             max_height: max_h,
-            items: CtxMenuDispatcher::items_to_slint_model(&children, new_depth as i32),
+            items: CtxMenuDispatcher::items_to_slint_model(&children, new_depth.saturating_as::<i32>()),
         };
 
         if let Some(vec_model) = levels.as_any().downcast_ref::<VecModel<ContextMenuLevelModel>>() {
@@ -227,7 +228,7 @@ impl CtxMenuPresenter {
         for row in 0..items.row_count() {
             if let Some(mut item) = items.row_data(row)
                 && item.has_submenu
-                && item.menu_index == menu_idx as i32
+                && item.menu_index == menu_idx.saturating_as::<i32>()
             {
                 if item.is_checked != active {
                     item.is_checked = active;

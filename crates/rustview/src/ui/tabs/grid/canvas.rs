@@ -7,6 +7,7 @@ use rustview_core::settings::schema::{
     TAB_GRID_CONTENT_TOP_LOGICAL_PX, TAB_GRID_ITEM_HEADER_LOGICAL_PX, TAB_GRID_MIN_CANVAS_LOGICAL_PX,
     TAB_GRID_STATUS_BAR_LOGICAL_PX,
 };
+use rustview_core::util::cast::{Az, FloatToInt};
 
 /// A rectangle in logical window pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -30,14 +31,15 @@ pub fn canvas_rect(item: &MasonryRect, padding_h: f32, padding_v: f32, scroll_y:
 
 /// The visible part of the grid in physical window pixels (both sidebars are hidden in the grid).
 pub fn viewport_bounds(window_width: u32, window_height: u32, scale: f32) -> ViewportBounds {
-    let viewport_w = (window_width as f32 / scale).max(100.0);
+    let viewport_w = (window_width.az::<f32>() / scale).max(100.0);
     let content_top = TAB_GRID_CONTENT_TOP_LOGICAL_PX;
     ViewportBounds {
         x: 0,
-        y: (content_top * scale).round() as i32,
-        width: (viewport_w * scale).round().max(16.0) as u32,
-        height: (((window_height as f32 / scale) - (content_top + TAB_GRID_STATUS_BAR_LOGICAL_PX)) * scale)
+        y: (content_top * scale).round().to_int::<i32>(),
+        width: (viewport_w * scale).round().max(16.0).to_int::<u32>(),
+        height: ((((window_height.az::<f32>() / scale) - (content_top + TAB_GRID_STATUS_BAR_LOGICAL_PX)) * scale)
             .round()
-            .max(16.0) as u32,
+            .max(16.0))
+        .to_int::<u32>(),
     }
 }

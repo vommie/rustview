@@ -73,6 +73,8 @@ rust-ini = "0.21"
 # The X11 protocol in pure Rust (video windows, overlay windows, window manager state); x11-dl only for libmpv's Xlib error handler.
 x11rb = { version = "0.13", features = ["shape", "xfixes"] }
 x11-dl = "2"
+# Numeric conversions that say what happens on overflow (saturate, wrap) instead of the silent truncation of `as`.
+az = "1"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

@@ -9,6 +9,7 @@ use rustview_core::settings::{
     LogObscurer, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, MemoryPlan, SettingsManager, SystemMemory,
 };
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use rustview_core::util::startup_clock;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::path::PathBuf;
@@ -135,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let thumbnails = Arc::new(ThumbnailManager::new(
         library.clone(),
         &cache_path,
-        memory_plan.thumbnail_cache_bytes as usize,
+        memory_plan.thumbnail_cache_bytes.saturating_as::<usize>(),
         settings.get().performance.worker_threads,
     )?);
     startup_clock::mark("Thumbnails");
@@ -220,7 +221,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let target_position = match (win_state.x, win_state.y) {
         (Some(x), Some(y)) => match rustview::viewer::x11_root_size() {
             Some((width, height))
-                if (0..width as i32).contains(&(x + 50)) && (0..height as i32).contains(&(y + 50)) =>
+                if (0..width.saturating_as::<i32>()).contains(&(x + 50))
+                    && (0..height.saturating_as::<i32>()).contains(&(y + 50)) =>
             {
                 Some((x, y))
             }

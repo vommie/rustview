@@ -7,6 +7,7 @@ use super::views;
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::instance::SharedInstance;
 use crate::viewer::multiview::view::{MediaBarTarget, PrimaryBarTarget, ZoomBubbleView};
+use rustview_core::util::cast::SaturatingAs;
 use std::rc::Rc;
 
 /// What a host is: where its window is and how its bars react to clicks.
@@ -68,7 +69,7 @@ pub(super) fn update(host: &BarHost, targets: BarTargets, active: bool) -> bool 
             kind: BarKind::Media,
             owner: host.owner,
             host_xid: host.host_xid,
-            tile: target.tile as i32,
+            tile: target.tile.saturating_as::<i32>(),
             key: target.key,
             area: target.rect,
             pointer: target.pointer,

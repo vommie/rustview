@@ -8,6 +8,7 @@ use rustview_core::library::models::{
 use rustview_core::media::{MediaFormat, MediaHasher, MediaType};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailGenerator, ThumbnailManager};
+use rustview_core::util::cast::SaturatingAs;
 use slint::{CloseRequestResponse, ComponentHandle, Image, Timer};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -107,8 +108,8 @@ impl FileOpsConflictDialogController {
 
             win.set_source_file(src_view);
             win.set_destination_file(dst_view);
-            win.set_conflict_index(params.conflict_index as i32);
-            win.set_total_conflicts(params.total_conflicts as i32);
+            win.set_conflict_index(params.conflict_index.saturating_as::<i32>());
+            win.set_total_conflicts(params.total_conflicts.saturating_as::<i32>());
             win.set_is_copy(params.transfer_kind == FileTransferKind::Copy);
             win.set_apply_to_all(false);
 

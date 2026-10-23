@@ -3,6 +3,7 @@ use arboard::{Clipboard, ImageData};
 use image::ImageEncoder;
 use parking_lot::Mutex;
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::Az;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::Write;
@@ -233,7 +234,7 @@ impl SystemClipboard {
                 file = %LogObscurer::path(path),
                 width = width,
                 height = height,
-                file_size_kb = format!("{:.2} KB", metrics.file_size_bytes as f64 / 1024.0),
+                file_size_kb = format!("{:.2} KB", metrics.file_size_bytes.az::<f64>() / 1024.0),
                 io_read_us = metrics.io_read_us,
                 png_prep_ms = metrics.png_prep_us / 1000,
                 cli_pipe_ms = metrics.cli_pipe_us / 1000,

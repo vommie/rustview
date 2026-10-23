@@ -12,6 +12,7 @@ use crate::ui::state::UiState;
 use crate::ui::{MainWindow, MediaItemView};
 use rustview_core::library::models::MediaId;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{Image, Model, ModelRc, VecModel};
 use std::rc::Rc;
 use std::time::Instant;
@@ -139,5 +140,5 @@ fn request_missing_thumbnails(
 pub fn timed<T>(work: impl FnOnce() -> T) -> (T, u64) {
     let started = Instant::now();
     let value = work();
-    (value, started.elapsed().as_micros() as u64)
+    (value, started.elapsed().as_micros().saturating_as::<u64>())
 }

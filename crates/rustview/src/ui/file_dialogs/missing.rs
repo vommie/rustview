@@ -1,5 +1,6 @@
 use crate::ui::{MainWindow, MissingFileDialog};
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -54,7 +55,7 @@ impl MissingFileDialogController {
 
             win.set_operation_context(operation_context.into());
             win.set_has_multiple(has_multiple);
-            win.set_missing_files_count(count as i32);
+            win.set_missing_files_count(count.saturating_as::<i32>());
 
             if has_multiple {
                 let formatted_list = Self::format_missing_paths_list(&missing_files);

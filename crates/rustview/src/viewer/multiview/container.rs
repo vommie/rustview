@@ -7,6 +7,7 @@
 
 use super::layout::{LayoutParams, Rect};
 use super::route::HostMode;
+use rustview_core::util::cast::{Az, FloatToInt};
 
 /// Pixel size and scale factor of the virtual display. Width and height are at least 1, the dpi at least 0.5.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32,7 +33,7 @@ impl Container {
     }
 
     pub fn aspect(&self) -> f32 {
-        self.width as f32 / self.height as f32
+        self.width.az::<f32>() / self.height.az::<f32>()
     }
 
     pub fn rect(&self) -> Rect {
@@ -47,12 +48,12 @@ impl Container {
         min_wide_aspect: f32,
         gutter_floor: i32,
     ) -> LayoutParams {
-        let base = (gutter_logical * self.dpi).round() as i32;
+        let base = (gutter_logical * self.dpi).round().to_int::<i32>();
         LayoutParams {
             width: self.width,
             height: self.height,
             gutter: base.max(gutter_floor),
-            min_column: (min_column_logical * self.dpi).round() as i32,
+            min_column: (min_column_logical * self.dpi).round().to_int::<i32>(),
             min_wide_aspect,
         }
     }
@@ -72,7 +73,7 @@ pub fn gutter_floor(host_gutter_px: i32, scale: f64) -> i32 {
     if scale >= 1.0 || scale <= 0.0 || host_gutter_px <= 0 {
         return 0;
     }
-    (f64::from(host_gutter_px) / scale).ceil() as i32
+    (f64::from(host_gutter_px) / scale).ceil().to_int::<i32>()
 }
 
 /// Uniform mapping from container pixels to host pixels: `host = origin + round(container * scale)`.
@@ -96,8 +97,14 @@ impl Projection {
         let (host_w, host_h) = (host.w.max(1), host.h.max(1));
         let scale =
             (f64::from(host_w) / f64::from(container.width)).min(f64::from(host_h) / f64::from(container.height));
-        let width = ((f64::from(container.width) * scale).round() as i32).clamp(1, host_w);
-        let height = ((f64::from(container.height) * scale).round() as i32).clamp(1, host_h);
+        let width = (f64::from(container.width) * scale)
+            .round()
+            .to_int::<i32>()
+            .clamp(1, host_w);
+        let height = (f64::from(container.height) * scale)
+            .round()
+            .to_int::<i32>()
+            .clamp(1, host_h);
         let screen = Rect::new(
             host.x + (host_w - width) / 2,
             host.y + (host_h - height) / 2,
@@ -119,21 +126,21 @@ impl Projection {
     /// Maps a container rectangle to host coordinates. Edges are rounded, not sizes, so neighbors that touch in the container
     /// keep touching in the host.
     pub fn rect(&self, r: Rect) -> Rect {
-        let x0 = self.screen.x + (f64::from(r.x) * self.scale).round() as i32;
-        let y0 = self.screen.y + (f64::from(r.y) * self.scale).round() as i32;
-        let x1 = self.screen.x + (f64::from(r.x + r.w) * self.scale).round() as i32;
-        let y1 = self.screen.y + (f64::from(r.y + r.h) * self.scale).round() as i32;
+        let x0 = self.screen.x + (f64::from(r.x) * self.scale).round().to_int::<i32>();
+        let y0 = self.screen.y + (f64::from(r.y) * self.scale).round().to_int::<i32>();
+        let x1 = self.screen.x + (f64::from(r.x + r.w) * self.scale).round().to_int::<i32>();
+        let y1 = self.screen.y + (f64::from(r.y + r.h) * self.scale).round().to_int::<i32>();
         Rect::new(x0, y0, (x1 - x0).max(0), (y1 - y0).max(0))
     }
 
     /// Maps a host point (for example the pointer) to container coordinates.
     pub fn point_to_container(&self, x: i32, y: i32) -> (i32, i32) {
-        let to_container = |v: i32, origin: i32| (f64::from(v - origin) / self.scale).round() as i32;
+        let to_container = |v: i32, origin: i32| (f64::from(v - origin) / self.scale).round().to_int::<i32>();
         (to_container(x, self.screen.x), to_container(y, self.screen.y))
     }
 
     /// Converts a distance in host pixels (drag delta, snap radius) to container pixels.
     pub fn length_to_container(&self, host_px: f32) -> f32 {
-        (f64::from(host_px) / self.scale) as f32
+        (f64::from(host_px) / self.scale).az::<f32>()
     }
 }

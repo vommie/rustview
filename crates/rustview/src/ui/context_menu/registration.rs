@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::ComponentHandle;
 use std::sync::Arc;
 
@@ -40,7 +41,7 @@ impl BridgeContextMenu {
             // A medium that is part of a selection with folders in it: the menu of the whole selection.
             let in_mixed_selection = {
                 let st = st.read();
-                st.file_selection.is_selected(id as u64) && BrowseContextMenus::is_mixed_selection(&st)
+                st.file_selection.is_selected(id.wrapping_as::<u64>()) && BrowseContextMenus::is_mixed_selection(&st)
             };
             if in_mixed_selection {
                 BrowseContextMenus::show_selection_menu(
@@ -65,7 +66,7 @@ impl BridgeContextMenu {
                     settings: &set,
                     state: &st,
                 },
-                id as u64,
+                id.wrapping_as::<u64>(),
                 x,
                 y,
             );
@@ -173,7 +174,7 @@ impl BridgeContextMenu {
                     tab_manager: &tm,
                     state: &st,
                 },
-                id as u64,
+                id.wrapping_as::<u64>(),
                 x,
                 y,
             );
@@ -191,7 +192,7 @@ impl BridgeContextMenu {
         let th = thumbnails.clone();
         let st = state.clone();
         window.on_tab_context_menu(move |id, x, y| {
-            Self::show_tab_menu(&win, &tm, &th, &st, id as u64, x, y);
+            Self::show_tab_menu(&win, &tm, &th, &st, id.wrapping_as::<u64>(), x, y);
         });
     }
 
@@ -217,7 +218,13 @@ impl BridgeContextMenu {
         let tm_sub = tab_manager.clone();
 
         window.on_context_menu_request_submenu(move |depth, visible_row_y, m_idx| {
-            CtxMenuPresenter::handle_submenu_request(&win, None, depth as usize, visible_row_y, m_idx as usize);
+            CtxMenuPresenter::handle_submenu_request(
+                &win,
+                None,
+                depth.saturating_as::<usize>(),
+                visible_row_y,
+                m_idx.saturating_as::<usize>(),
+            );
 
             let all_cutouts = calculate_all_active_menu_cutouts(&win);
             tm_sub.set_menu_cutouts(all_cutouts);

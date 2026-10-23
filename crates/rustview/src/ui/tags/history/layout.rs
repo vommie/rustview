@@ -1,4 +1,5 @@
 use super::models::{TagHistoryItem, TagHistoryRow};
+use rustview_core::util::cast::Az;
 
 /// High-performance flow layout engine packing variable-width tag history items into rows
 /// with realistic character metric calculation.
@@ -21,7 +22,7 @@ impl TagHistoryLayoutEngine {
     #[inline]
     pub fn estimate_stable_pill_width(text: &str, has_icon: bool) -> f32 {
         let clean_text = text.trim();
-        let char_count = clean_text.chars().count() as f32;
+        let char_count = clean_text.chars().count().az::<f32>();
         let icon_width = if has_icon { 14.0 } else { 0.0 };
         let content_w = (char_count * Self::CHAR_WIDTH_METRIC_BOLD) + icon_width;
         (content_w + Self::PILL_HORIZONTAL_PADDING).max(24.0)
@@ -63,8 +64,8 @@ impl TagHistoryLayoutEngine {
 
         let total_rows = rows.len();
         let total_height = if total_rows > 0 {
-            (total_rows as f32 * Self::PILL_HEIGHT)
-                + (total_rows.saturating_sub(1) as f32 * Self::ROW_VERTICAL_SPACING)
+            (total_rows.az::<f32>() * Self::PILL_HEIGHT)
+                + (total_rows.saturating_sub(1).az::<f32>() * Self::ROW_VERTICAL_SPACING)
                 + 4.0
         } else {
             0.0

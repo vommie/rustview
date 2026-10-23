@@ -21,6 +21,7 @@ use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiActio
 use crate::viewer::{PointerProbe, ViewerTabManager, get_slint_window_xid};
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::schema::MULTIVIEW_TICK_MS;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -74,24 +75,26 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
         bus.set_tiles(ModelRc::from(h.models.tiles.clone()));
         bus.set_gutters(ModelRc::from(h.models.gutters.clone()));
     });
-    bus.on_gutter_drag_started(|index| act(|mv| mv.drag_started(index.max(0) as usize)));
+    bus.on_gutter_drag_started(|index| act(|mv| mv.drag_started(index.max(0).saturating_as::<usize>())));
     bus.on_gutter_dragged(|_, distance| act(|mv| mv.dragged(distance)));
     bus.on_gutter_drag_finished(|_| act(MultiviewInstance::drag_finished));
     bus.on_gutter_reset(|| act(MultiviewInstance::reset_split));
-    bus.on_gutter_swap(|index| act(|mv| mv.swap(index.max(0) as usize)));
+    bus.on_gutter_swap(|index| act(|mv| mv.swap(index.max(0).saturating_as::<usize>())));
     bus.on_tile_clicked(|_, is_ctrl| on_click(is_ctrl));
-    bus.on_tile_zoom_wheel(|index, delta, x, y| act(|mv| mv.zoom_wheel(index.max(0) as usize, delta, x, y)));
-    bus.on_tile_pan(|index, dx, dy| act(|mv| mv.zoom_pan(index.max(0) as usize, dx, dy)));
+    bus.on_tile_zoom_wheel(|index, delta, x, y| {
+        act(|mv| mv.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y))
+    });
+    bus.on_tile_pan(|index, dx, dy| act(|mv| mv.zoom_pan(index.max(0).saturating_as::<usize>(), dx, dy)));
     bus.on_minimap_pointer(|index, x, y, phase| {
         let xid = with_host(|h| h.main_xid).unwrap_or(0);
         act(|mv| {
             super::pointer_lock::drag_phase(xid, phase, &mut |locked_move| match locked_move {
-                Some((dx, dy)) => mv.zoom_minimap_delta(index.max(0) as usize, dx, dy),
-                None => mv.zoom_minimap(index.max(0) as usize, x, y, phase),
+                Some((dx, dy)) => mv.zoom_minimap_delta(index.max(0).saturating_as::<usize>(), dx, dy),
+                None => mv.zoom_minimap(index.max(0).saturating_as::<usize>(), x, y, phase),
             });
         });
     });
-    bus.on_minimap_slider(|index, code| act(|mv| mv.zoom_minimap_slider(index.max(0) as usize, code)));
+    bus.on_minimap_slider(|index, code| act(|mv| mv.zoom_minimap_slider(index.max(0).saturating_as::<usize>(), code)));
     bus.on_background_clicked(on_click);
     bus.on_middle_clicked(|| run(route_for(RoutedEvent::ToggleFullscreen, ClickKind::None)));
 }

@@ -8,6 +8,8 @@
 use super::geometry::Visible;
 use fast_image_resize::images::{Image, ImageRef};
 use fast_image_resize::{CropBoxError, FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
+use rustview_core::util::cast::{FloatToInt, SaturatingAs};
+
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// The filter a zoomed picture is resampled with.
@@ -89,7 +91,10 @@ pub fn render_view(
     visible: &Visible,
     algorithm: Resample,
 ) -> Result<SharedPixelBuffer<Rgb8Pixel>, String> {
-    let (dest_w, dest_h) = (visible.dest.w.max(1) as u32, visible.dest.h.max(1) as u32);
+    let (dest_w, dest_h) = (
+        visible.dest.w.max(1).saturating_as::<u32>(),
+        visible.dest.h.max(1).saturating_as::<u32>(),
+    );
     let view = ImageRef::new(source.width, source.height, source.pixels.as_bytes(), PixelType::U8x3)
         .map_err(|e| e.to_string())?;
     let mut out = SharedPixelBuffer::<Rgb8Pixel>::new(dest_w, dest_h);
@@ -125,8 +130,8 @@ pub fn thumbnail(
         .min(f64::from(max_h) / f64::from(h))
         .min(1.0);
     let (tw, th) = (
-        ((f64::from(w) * scale).round() as u32).max(1),
-        ((f64::from(h) * scale).round() as u32).max(1),
+        (f64::from(w) * scale).round().to_int::<u32>().max(1),
+        (f64::from(h) * scale).round().to_int::<u32>().max(1),
     );
     if (tw, th) == (w, h) {
         return Ok(picture.clone());

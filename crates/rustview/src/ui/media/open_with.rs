@@ -12,6 +12,7 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::SaturatingAs;
 use std::path::{Path, PathBuf};
 
 /// What a chosen item of the "Open With" menu stands for.
@@ -85,7 +86,7 @@ impl MediaOpenWith {
         let offset = action_id.checked_sub(CTX_ACTION_OPEN_WITH_APP_BASE)?;
         (0..MAX_APPS)
             .contains(&offset)
-            .then_some(OpenWithChoice::App(offset as usize))
+            .then_some(OpenWithChoice::App(offset.saturating_as::<usize>()))
     }
 
     /// Opens `paths` with application `app_idx` of the list `discover_apps` (or the context menu) stored last.

@@ -20,6 +20,8 @@ use rustview_core::library::models::{BatchMoveSummary, FileTransferKind, FolderI
 use rustview_core::media::MediaType;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::{FloatToInt, SaturatingAs, WrappingAs};
+
 use slint::{ComponentHandle, Image, Model};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -163,7 +165,7 @@ impl BridgeDnd {
         );
 
         params.window.set_is_dragging_media(true);
-        params.window.set_drag_count(drag_count as i32);
+        params.window.set_drag_count(drag_count.saturating_as::<i32>());
         params.window.set_drag_title(title.clone().into());
         params.window.set_drag_thumbnail(thumbnail_img);
         params.window.set_drag_x(params.start_x);
@@ -222,17 +224,17 @@ impl BridgeDnd {
                 && current_y <= tree_bottom_y
             {
                 let local_y = current_y - FOLDER_TREE_TOP_OFFSET_PX - scroll_y;
-                let row_idx = (local_y / FOLDER_TREE_ROW_HEIGHT_PX).floor() as i32;
+                let row_idx = (local_y / FOLDER_TREE_ROW_HEIGHT_PX).floor().to_int::<i32>();
                 let folders = window.get_folders();
 
                 if row_idx >= 0
-                    && (row_idx as usize) < folders.row_count()
-                    && let Some(row) = folders.row_data(row_idx as usize)
+                    && row_idx.saturating_as::<usize>() < folders.row_count()
+                    && let Some(row) = folders.row_data(row_idx.saturating_as::<usize>())
                     && !row.is_deleted
                 {
-                    let target_id = row.id as u64;
-                    if window.get_drop_target_folder_id() != target_id as i32 {
-                        window.set_drop_target_folder_id(target_id as i32);
+                    let target_id = row.id.wrapping_as::<u64>();
+                    if window.get_drop_target_folder_id() != target_id.wrapping_as::<i32>() {
+                        window.set_drop_target_folder_id(target_id.wrapping_as::<i32>());
                     }
                     return;
                 }
@@ -263,13 +265,13 @@ impl BridgeDnd {
                 .is_none_or(|n| !n.is_deleted)
         };
 
-        if is_valid && window.get_drop_target_folder_id() != folder_id as i32 {
-            window.set_drop_target_folder_id(folder_id as i32);
+        if is_valid && window.get_drop_target_folder_id() != folder_id.wrapping_as::<i32>() {
+            window.set_drop_target_folder_id(folder_id.wrapping_as::<i32>());
         }
     }
 
     pub fn handle_folder_unhovered(folder_id: FolderId, window: &MainWindow) {
-        if window.get_drop_target_folder_id() == folder_id as i32 {
+        if window.get_drop_target_folder_id() == folder_id.wrapping_as::<i32>() {
             window.set_drop_target_folder_id(-1);
         }
     }
@@ -303,16 +305,17 @@ impl BridgeDnd {
         let browse_target = (browse_row != 0)
             .then(|| BrowseFolders::drop_target(&state.read(), browse_row))
             .flatten();
-        let target_folder_id = browse_target.map_or(tree_target_id, |id| id as i32);
+        let target_folder_id = browse_target.map_or(tree_target_id, |id| id.wrapping_as::<i32>());
 
         if target_folder_id > 0
-            && let Ok(Some(target_folder_rec)) = library.folders().get_folder(target_folder_id as FolderId)
+            && let Ok(Some(target_folder_rec)) =
+                library.folders().get_folder(target_folder_id.wrapping_as::<FolderId>())
         {
             let target_name = target_folder_rec.name.clone();
             if let Some(reason) =
                 Self::transfer_block_reason(window, state, Some((&target_name, Path::new(&target_folder_rec.path))))
             {
-                tracing::info!(target = %LogObscurer::folder(Some(target_folder_id as FolderId), Path::new(&target_folder_rec.path)), %reason, "[MediaDrag: Blocked] Drop refused");
+                tracing::info!(target = %LogObscurer::folder(Some(target_folder_id.wrapping_as::<FolderId>()), Path::new(&target_folder_rec.path)), %reason, "[MediaDrag: Blocked] Drop refused");
                 StatusBarBridge::warn(window, reason);
                 return;
             }
@@ -327,7 +330,7 @@ impl BridgeDnd {
 
             window.set_choice_target_folder_id(target_folder_id);
             window.set_choice_target_folder_name(target_name.into());
-            window.set_choice_item_count(selected_count as i32);
+            window.set_choice_item_count(selected_count.saturating_as::<i32>());
             window.set_choice_popup_x(popup_x);
             window.set_choice_popup_y(popup_y);
             window.set_is_choice_popup_open(true);

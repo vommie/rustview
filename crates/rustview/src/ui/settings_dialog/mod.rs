@@ -19,6 +19,8 @@ use rustview_core::settings::schema::{
     MIN_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_MAX_HISTORY_TAGS, MIN_MEMORY_BUDGET_MB, MIN_TYPE_AHEAD_TIMEOUT_MS,
     ThumbnailBadgeOverflow,
 };
+use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
+
 use rustview_core::util::hex_color;
 use slint::{CloseRequestResponse, Color, ComponentHandle, ModelRc, VecModel};
 use std::cell::RefCell;
@@ -108,7 +110,7 @@ impl SettingsDialogController {
         window.set_ignore_nested_mounts(settings.general.ignore_nested_mounts);
         window.set_remember_last_folder(settings.general.remember_last_folder);
         window.set_confirm_delete(settings.general.confirm_on_file_delete);
-        window.set_confirm_open_file_count(settings.general.confirm_open_file_count as i32);
+        window.set_confirm_open_file_count(settings.general.confirm_open_file_count.saturating_as::<i32>());
 
         window.set_auto_reveal_remembered_folder(settings.folders.auto_reveal_remembered_folder);
         window.set_persist_folder_tree_state(settings.folders.persist_folder_tree_state);
@@ -118,7 +120,7 @@ impl SettingsDialogController {
         window.set_support_dot_hidden_files(settings.folders.support_dot_hidden_files);
 
         // Appearance properties
-        window.set_default_thumb_size(settings.appearance.default_thumbnail_size as i32);
+        window.set_default_thumb_size(settings.appearance.default_thumbnail_size.saturating_as::<i32>());
         let ratio = GridAspectRatio::from_str_name(&settings.appearance.thumbnail_aspect_ratio);
         window.set_thumb_aspect_idx(ratio.to_index());
         window.set_show_filenames(settings.appearance.show_filenames);
@@ -132,41 +134,51 @@ impl SettingsDialogController {
         );
         window.set_enable_hover_previews(settings.appearance.enable_hover_previews);
         window.set_enable_tooltips(settings.appearance.enable_tooltips);
-        window.set_tooltip_delay_ms(settings.appearance.tooltip_delay_ms as i32);
+        window.set_tooltip_delay_ms(settings.appearance.tooltip_delay_ms.saturating_as::<i32>());
         // The window reacts to later changes of these two; the values it opens with are set here.
         let tooltips = window.global::<TooltipSettings>();
         tooltips.set_enabled(settings.appearance.enable_tooltips);
         tooltips.set_default_delay(i64::from(settings.appearance.tooltip_delay_ms));
         window.set_type_ahead_enabled(settings.appearance.type_ahead_enabled);
-        window.set_type_ahead_timeout_ms(settings.appearance.type_ahead_timeout_ms as i32);
-        window.set_type_ahead_new_search_gap_ms(settings.appearance.type_ahead_new_search_gap_ms as i32);
+        window.set_type_ahead_timeout_ms(settings.appearance.type_ahead_timeout_ms.saturating_as::<i32>());
+        window
+            .set_type_ahead_new_search_gap_ms(settings.appearance.type_ahead_new_search_gap_ms.saturating_as::<i32>());
         window.set_type_ahead_include_folders(settings.appearance.type_ahead_include_folders);
         window.set_type_ahead_cycle_repeated_keys(settings.appearance.type_ahead_cycle_repeated_keys);
         window.set_type_ahead_center_target(settings.appearance.type_ahead_center_target);
         window.set_type_ahead_show_no_match(settings.appearance.type_ahead_show_no_match);
-        window.set_type_ahead_multiview_delay_ms(settings.appearance.type_ahead_multiview_delay_ms as i32);
+        window.set_type_ahead_multiview_delay_ms(
+            settings.appearance.type_ahead_multiview_delay_ms.saturating_as::<i32>(),
+        );
 
         // Grid Items Layout properties
-        window.set_grid_item_padding_h(settings.appearance.grid_item_padding_horizontal as i32);
-        window.set_grid_item_padding_v(settings.appearance.grid_item_padding_vertical as i32);
-        window.set_grid_spacing(settings.appearance.grid_spacing as i32);
-        window.set_grid_padding(settings.appearance.grid_padding as i32);
-        window.set_grid_item_border_width(settings.appearance.grid_item_border_width as i32);
-        window.set_grid_item_corner_radius(settings.appearance.grid_item_corner_radius as i32);
+        window.set_grid_item_padding_h(settings.appearance.grid_item_padding_horizontal.saturating_as::<i32>());
+        window.set_grid_item_padding_v(settings.appearance.grid_item_padding_vertical.saturating_as::<i32>());
+        window.set_grid_spacing(settings.appearance.grid_spacing.saturating_as::<i32>());
+        window.set_grid_padding(settings.appearance.grid_padding.saturating_as::<i32>());
+        window.set_grid_item_border_width(settings.appearance.grid_item_border_width.saturating_as::<i32>());
+        window.set_grid_item_corner_radius(settings.appearance.grid_item_corner_radius.saturating_as::<i32>());
 
         // Performance properties
-        window.set_worker_threads(settings.performance.worker_threads as i32);
-        window.set_batch_commit_size(settings.performance.batch_commit_size as i32);
+        window.set_worker_threads(settings.performance.worker_threads.saturating_as::<i32>());
+        window.set_batch_commit_size(settings.performance.batch_commit_size.saturating_as::<i32>());
         let system = SystemMemory::read();
         window.set_memory_budget_auto(settings.performance.memory_budget_mb == 0);
-        window.set_memory_budget_mb(if settings.performance.memory_budget_mb == 0 {
-            MemoryPlan::resolve(0, system).budget_bytes / BYTES_PER_MB
-        } else {
-            u64::from(settings.performance.memory_budget_mb)
-        } as i32);
-        window.set_memory_budget_max_mb((system.usable_total_bytes() / BYTES_PER_MB).max(1024) as i32);
+        window.set_memory_budget_mb(
+            (if settings.performance.memory_budget_mb == 0 {
+                MemoryPlan::resolve(0, system).budget_bytes / BYTES_PER_MB
+            } else {
+                u64::from(settings.performance.memory_budget_mb)
+            })
+            .saturating_as::<i32>(),
+        );
+        window.set_memory_budget_max_mb(
+            (system.usable_total_bytes() / BYTES_PER_MB)
+                .max(1024)
+                .saturating_as::<i32>(),
+        );
         Self::show_memory_plan(window, system);
-        window.set_thumb_db_size(settings.performance.thumbnail_db_size as i32);
+        window.set_thumb_db_size(settings.performance.thumbnail_db_size.saturating_as::<i32>());
         window.set_thumb_format_idx(i32::from(
             settings.performance.thumbnail_format.eq_ignore_ascii_case("jpeg"),
         ));
@@ -179,9 +191,9 @@ impl SettingsDialogController {
         });
         window.set_video_engine_idx(i32::from(settings.performance.video_engine.eq_ignore_ascii_case("mpv")));
         window.set_video_offset_percent(i32::from(settings.performance.video_offset_percent));
-        window.set_short_video_threshold_secs(settings.performance.short_video_threshold_secs as i32);
+        window.set_short_video_threshold_secs(settings.performance.short_video_threshold_secs.saturating_as::<i32>());
         window.set_generate_video_previews(settings.performance.generate_video_previews);
-        window.set_preview_frame_count(settings.performance.preview_frame_count as i32);
+        window.set_preview_frame_count(settings.performance.preview_frame_count.saturating_as::<i32>());
         window.set_custom_preview_settings(settings.performance.custom_preview_settings);
         window.set_preview_format_idx(i32::from(
             settings.performance.preview_format.eq_ignore_ascii_case("jpeg"),
@@ -228,7 +240,7 @@ impl SettingsDialogController {
 
         *self.detected_monitors.borrow_mut() = monitors;
         window.set_display_options(ModelRc::new(VecModel::from(options)));
-        window.set_selected_display_idx(selected_idx as i32);
+        window.set_selected_display_idx(selected_idx.saturating_as::<i32>());
 
         window.set_fullscreen_enable_specific(settings.fullscreen.enable_specific_monitor);
         window.set_fullscreen_enable_fallback(settings.fullscreen.enable_fallback_rule);
@@ -237,7 +249,7 @@ impl SettingsDialogController {
         Self::populate_fullscreen_extras(window, &settings.fullscreen);
 
         // Tags & Ratings properties
-        window.set_max_history_tags(settings.tags.max_history_tags as i32);
+        window.set_max_history_tags(settings.tags.max_history_tags.saturating_as::<i32>());
 
         // API settings
         window.set_auto_complete_external_stubs(settings.api.auto_complete_external_stubs);
@@ -258,7 +270,7 @@ impl SettingsDialogController {
         window.set_fullscreen_media_bar_show_zoom(bar.show_zoom);
         window.set_fullscreen_media_bar_show_delete(bar.show_delete);
         window.set_fullscreen_media_bar_show_remove(bar.show_remove);
-        window.set_fullscreen_media_bar_reveal_distance_px(bar.reveal_distance_px as i32);
+        window.set_fullscreen_media_bar_reveal_distance_px(bar.reveal_distance_px.saturating_as::<i32>());
 
         let primary = &fullscreen.primary_bar;
         window.set_fullscreen_primary_bar_enabled(primary.enabled);
@@ -269,15 +281,15 @@ impl SettingsDialogController {
         window.set_fullscreen_primary_bar_show_reset_layout(primary.show_reset_layout);
         window.set_fullscreen_primary_bar_show_hide_cursor(primary.show_hide_cursor);
         window.set_fullscreen_primary_bar_show_pin(primary.show_pin);
-        window.set_fullscreen_primary_bar_reveal_distance_px(primary.reveal_distance_px as i32);
+        window.set_fullscreen_primary_bar_reveal_distance_px(primary.reveal_distance_px.saturating_as::<i32>());
         window.set_fullscreen_hide_idle_cursor(primary.hide_idle_cursor);
-        window.set_fullscreen_idle_cursor_secs((primary.idle_cursor_ms as f32 / 1000.0).round() as i32);
+        window.set_fullscreen_idle_cursor_secs((primary.idle_cursor_ms.az::<f32>() / 1000.0).round().to_int::<i32>());
 
         let zoom = &fullscreen.zoom;
-        window.set_fullscreen_zoom_step_percent(zoom.step_percent as i32);
-        window.set_fullscreen_zoom_max_percent(zoom.max_percent as i32);
-        window.set_fullscreen_zoom_out_percent(zoom.out_percent as i32);
-        window.set_fullscreen_zoom_minimap_secs(zoom.minimap_secs as i32);
+        window.set_fullscreen_zoom_step_percent(zoom.step_percent.saturating_as::<i32>());
+        window.set_fullscreen_zoom_max_percent(zoom.max_percent.saturating_as::<i32>());
+        window.set_fullscreen_zoom_out_percent(zoom.out_percent.saturating_as::<i32>());
+        window.set_fullscreen_zoom_minimap_secs(zoom.minimap_secs.saturating_as::<i32>());
         window.set_fullscreen_zoom_smooth(zoom.smooth);
         window.set_fullscreen_zoom_minimap_idx(i32::from(zoom.minimap_position == "bottom_right"));
         window.set_fullscreen_zoom_minimap_always(zoom.minimap_always);
@@ -399,7 +411,7 @@ impl SettingsDialogController {
         let setting_mb = if window.get_memory_budget_auto() {
             0
         } else {
-            window.get_memory_budget_mb().max(0) as u32
+            window.get_memory_budget_mb().max(0).saturating_as::<u32>()
         };
         let plan = MemoryPlan::resolve(setting_mb, system);
         window.set_memory_summary(plan.summary().into());
@@ -449,7 +461,7 @@ impl SettingsDialogController {
             }
 
             if let Some(w) = w_weak_refresh.upgrade() {
-                let cur_idx = w.get_selected_display_idx() as usize;
+                let cur_idx = w.get_selected_display_idx().saturating_as::<usize>();
                 let prev_monitors = detected_monitors_refresh.borrow();
                 let cur_connector = prev_monitors.get(cur_idx).map(|m| m.connector.clone());
                 drop(prev_monitors);
@@ -466,7 +478,7 @@ impl SettingsDialogController {
 
                 *detected_monitors_refresh.borrow_mut() = monitors;
                 w.set_display_options(ModelRc::new(VecModel::from(options)));
-                w.set_selected_display_idx(new_idx as i32);
+                w.set_selected_display_idx(new_idx.saturating_as::<i32>());
             }
         });
 
@@ -490,8 +502,11 @@ impl SettingsDialogController {
                 current.general.confirm_on_file_delete = w.get_confirm_delete();
                 current.general.confirm_open_file_count = w
                     .get_confirm_open_file_count()
-                    .clamp(MIN_CONFIRM_OPEN_FILE_COUNT as i32, MAX_CONFIRM_OPEN_FILE_COUNT as i32)
-                    as u32;
+                    .clamp(
+                        MIN_CONFIRM_OPEN_FILE_COUNT.saturating_as::<i32>(),
+                        MAX_CONFIRM_OPEN_FILE_COUNT.saturating_as::<i32>(),
+                    )
+                    .saturating_as::<u32>();
                 current.general.ignore_nested_mounts = w.get_ignore_nested_mounts();
 
                 current.folders.auto_reveal_remembered_folder = w.get_auto_reveal_remembered_folder();
@@ -501,7 +516,7 @@ impl SettingsDialogController {
                 current.folders.show_hidden_folders = w.get_show_hidden_folders();
                 current.folders.support_dot_hidden_files = w.get_support_dot_hidden_files();
 
-                current.appearance.default_thumbnail_size = w.get_default_thumb_size() as u32;
+                current.appearance.default_thumbnail_size = w.get_default_thumb_size().saturating_as::<u32>();
                 let ratio = GridAspectRatio::from_index(w.get_thumb_aspect_idx());
                 current.appearance.thumbnail_aspect_ratio = ratio.as_str().to_string();
                 current.appearance.show_filenames = w.get_show_filenames();
@@ -516,47 +531,61 @@ impl SettingsDialogController {
                         .to_string();
                 current.appearance.enable_hover_previews = w.get_enable_hover_previews();
                 current.appearance.enable_tooltips = w.get_enable_tooltips();
-                current.appearance.tooltip_delay_ms = w.get_tooltip_delay_ms().clamp(50, 2000) as u32;
+                current.appearance.tooltip_delay_ms = w.get_tooltip_delay_ms().clamp(50, 2000).saturating_as::<u32>();
                 current.appearance.type_ahead_enabled = w.get_type_ahead_enabled();
                 current.appearance.type_ahead_timeout_ms = w
                     .get_type_ahead_timeout_ms()
-                    .clamp(MIN_TYPE_AHEAD_TIMEOUT_MS as i32, MAX_TYPE_AHEAD_TIMEOUT_MS as i32)
-                    as u32;
-                current.appearance.type_ahead_new_search_gap_ms =
-                    w.get_type_ahead_new_search_gap_ms()
-                        .clamp(0, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS as i32) as u32;
+                    .clamp(
+                        MIN_TYPE_AHEAD_TIMEOUT_MS.saturating_as::<i32>(),
+                        MAX_TYPE_AHEAD_TIMEOUT_MS.saturating_as::<i32>(),
+                    )
+                    .saturating_as::<u32>();
+                current.appearance.type_ahead_new_search_gap_ms = (w
+                    .get_type_ahead_new_search_gap_ms()
+                    .clamp(0, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS.saturating_as::<i32>()))
+                .saturating_as::<u32>();
                 current.appearance.type_ahead_include_folders = w.get_type_ahead_include_folders();
                 current.appearance.type_ahead_cycle_repeated_keys = w.get_type_ahead_cycle_repeated_keys();
                 current.appearance.type_ahead_center_target = w.get_type_ahead_center_target();
                 current.appearance.type_ahead_show_no_match = w.get_type_ahead_show_no_match();
-                current.appearance.type_ahead_multiview_delay_ms =
-                    w.get_type_ahead_multiview_delay_ms()
-                        .clamp(0, MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS as i32) as u32;
+                current.appearance.type_ahead_multiview_delay_ms = (w
+                    .get_type_ahead_multiview_delay_ms()
+                    .clamp(0, MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS.saturating_as::<i32>()))
+                .saturating_as::<u32>();
 
                 // Save Grid Items Layout Properties
-                current.appearance.grid_item_padding_horizontal = w.get_grid_item_padding_h().clamp(0, 32) as u32;
-                current.appearance.grid_item_padding_vertical = w.get_grid_item_padding_v().clamp(0, 32) as u32;
-                current.appearance.grid_spacing = w.get_grid_spacing().clamp(0, 48) as u32;
-                current.appearance.grid_padding = w.get_grid_padding().clamp(0, 48) as u32;
-                current.appearance.grid_item_border_width = w.get_grid_item_border_width().clamp(0, 6) as u32;
-                current.appearance.grid_item_corner_radius = w.get_grid_item_corner_radius().clamp(0, 24) as u32;
+                current.appearance.grid_item_padding_horizontal =
+                    w.get_grid_item_padding_h().clamp(0, 32).saturating_as::<u32>();
+                current.appearance.grid_item_padding_vertical =
+                    w.get_grid_item_padding_v().clamp(0, 32).saturating_as::<u32>();
+                current.appearance.grid_spacing = w.get_grid_spacing().clamp(0, 48).saturating_as::<u32>();
+                current.appearance.grid_padding = w.get_grid_padding().clamp(0, 48).saturating_as::<u32>();
+                current.appearance.grid_item_border_width =
+                    w.get_grid_item_border_width().clamp(0, 6).saturating_as::<u32>();
+                current.appearance.grid_item_corner_radius =
+                    w.get_grid_item_corner_radius().clamp(0, 24).saturating_as::<u32>();
 
                 // Save Performance Parameters
-                current.performance.worker_threads = w.get_worker_threads().clamp(1, 32) as usize;
-                current.performance.batch_commit_size = w.get_batch_commit_size().clamp(4, 256) as usize;
+                current.performance.worker_threads = w.get_worker_threads().clamp(1, 32).saturating_as::<usize>();
+                current.performance.batch_commit_size =
+                    w.get_batch_commit_size().clamp(4, 256).saturating_as::<usize>();
                 current.performance.memory_budget_mb = if w.get_memory_budget_auto() {
                     0
                 } else {
                     w.get_memory_budget_mb()
-                        .clamp(MIN_MEMORY_BUDGET_MB as i32, MAX_MEMORY_BUDGET_MB as i32) as u32
+                        .clamp(
+                            MIN_MEMORY_BUDGET_MB.saturating_as::<i32>(),
+                            MAX_MEMORY_BUDGET_MB.saturating_as::<i32>(),
+                        )
+                        .saturating_as::<u32>()
                 };
-                current.performance.thumbnail_db_size = w.get_thumb_db_size().clamp(64, 1024) as u32;
+                current.performance.thumbnail_db_size = w.get_thumb_db_size().clamp(64, 1024).saturating_as::<u32>();
                 current.performance.thumbnail_format = if w.get_thumb_format_idx() == 1 {
                     "JPEG".to_string()
                 } else {
                     "WebP".to_string()
                 };
-                current.performance.thumbnail_quality = w.get_thumb_quality().clamp(10, 100) as u8;
+                current.performance.thumbnail_quality = w.get_thumb_quality().clamp(10, 100).saturating_as::<u8>();
                 current.performance.scaling_algorithm = match w.get_scaling_algo_idx() {
                     1 => "Bilinear".to_string(),
                     2 => "Lanczos3".to_string(),
@@ -568,17 +597,20 @@ impl SettingsDialogController {
                 } else {
                     "FFmpeg".to_string()
                 };
-                current.performance.video_offset_percent = w.get_video_offset_percent().clamp(1, 90) as u8;
-                current.performance.short_video_threshold_secs = w.get_short_video_threshold_secs().clamp(1, 60) as u32;
+                current.performance.video_offset_percent =
+                    w.get_video_offset_percent().clamp(1, 90).saturating_as::<u8>();
+                current.performance.short_video_threshold_secs =
+                    w.get_short_video_threshold_secs().clamp(1, 60).saturating_as::<u32>();
                 current.performance.generate_video_previews = w.get_generate_video_previews();
-                current.performance.preview_frame_count = w.get_preview_frame_count().clamp(2, 100) as u32;
+                current.performance.preview_frame_count =
+                    w.get_preview_frame_count().clamp(2, 100).saturating_as::<u32>();
                 current.performance.custom_preview_settings = w.get_custom_preview_settings();
                 current.performance.preview_format = if w.get_preview_format_idx() == 1 {
                     "JPEG".to_string()
                 } else {
                     "WebP".to_string()
                 };
-                current.performance.preview_quality = w.get_preview_quality().clamp(10, 100) as u8;
+                current.performance.preview_quality = w.get_preview_quality().clamp(10, 100).saturating_as::<u8>();
 
                 // Save Formats Parameters
                 current.formats.auto_detect_extensionless_media = w.get_auto_detect_extensionless();
@@ -598,7 +630,7 @@ impl SettingsDialogController {
 
                 // Save Fullscreen & Target Display Parameters
                 current.fullscreen.enable_specific_monitor = w.get_fullscreen_enable_specific();
-                let sel_disp_idx = w.get_selected_display_idx() as usize;
+                let sel_disp_idx = w.get_selected_display_idx().saturating_as::<usize>();
                 let monitors_guard = detected_monitors_save.borrow();
                 if let Some(m) = monitors_guard.get(sel_disp_idx) {
                     current.fullscreen.specific_monitor = m.connector.clone();
@@ -614,8 +646,10 @@ impl SettingsDialogController {
                 Self::save_fullscreen_extras(&w, &mut current.fullscreen);
 
                 // Save Tag History Configuration
-                let new_max_history =
-                    (w.get_max_history_tags() as usize).clamp(MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS);
+                let new_max_history = w
+                    .get_max_history_tags()
+                    .saturating_as::<usize>()
+                    .clamp(MIN_MAX_HISTORY_TAGS, MAX_MAX_HISTORY_TAGS);
                 current.tags.max_history_tags = new_max_history;
                 current.tags.history_tag_ids.truncate(new_max_history);
 

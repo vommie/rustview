@@ -27,6 +27,7 @@ use rustview_core::settings::SettingsManager;
 use rustview_core::settings::schema::{
     MULTIVIEW_OPEN_POLL_MS, MULTIVIEW_OPEN_XID_ATTEMPTS, MULTIVIEW_SELECTION_DEBOUNCE_MS, MULTIVIEW_TICK_MS,
 };
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use rustview_core::util::hex_color;
 use slint::{CloseRequestResponse, Color, ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, Timer, TimerMode};
 use std::cell::RefCell;
@@ -197,16 +198,22 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
             _ => UiAction::None,
         });
     });
-    win.on_tile_zoom_wheel(|index, delta, x, y| with_session(|s| s.zoom_wheel(index.max(0) as usize, delta, x, y)));
-    win.on_tile_pan(|index, dx, dy| with_session(|s| s.zoom_pan(index.max(0) as usize, dx, dy)));
-    win.on_minimap_pointer(|index, x, y, phase| with_session(|s| s.zoom_minimap(index.max(0) as usize, x, y, phase)));
-    win.on_minimap_slider(|index, code| with_session(|s| s.zoom_minimap_slider(index.max(0) as usize, code)));
+    win.on_tile_zoom_wheel(|index, delta, x, y| {
+        with_session(|s| s.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y))
+    });
+    win.on_tile_pan(|index, dx, dy| with_session(|s| s.zoom_pan(index.max(0).saturating_as::<usize>(), dx, dy)));
+    win.on_minimap_pointer(|index, x, y, phase| {
+        with_session(|s| s.zoom_minimap(index.max(0).saturating_as::<usize>(), x, y, phase))
+    });
+    win.on_minimap_slider(|index, code| {
+        with_session(|s| s.zoom_minimap_slider(index.max(0).saturating_as::<usize>(), code))
+    });
     win.on_zoom_key(|key| with_session(|s| s.zoom_key(key)));
-    win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0) as usize)));
+    win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0).saturating_as::<usize>())));
     win.on_gutter_dragged(|_, distance| with_session(|s| s.dragged(distance)));
     win.on_gutter_drag_finished(|_| with_session(Session::drag_finished));
     win.on_gutter_reset(|| with_session(Session::reset_split));
-    win.on_gutter_swap(|index| with_session(|s| s.swap(index.max(0) as usize)));
+    win.on_gutter_swap(|index| with_session(|s| s.swap(index.max(0).saturating_as::<usize>())));
     win.on_size_changed(|| with_session(Session::on_size_changed));
     win.window().on_close_requested(|| {
         if close_by_user() {
@@ -253,7 +260,10 @@ fn prepare_window(
     win.set_gutters(ModelRc::from(models.gutters.clone()));
     win.set_navigation(0);
     let appearance = &settings.get().appearance;
-    bar_overlay::set_tooltip_settings(appearance.enable_tooltips, appearance.tooltip_delay_ms as i32);
+    bar_overlay::set_tooltip_settings(
+        appearance.enable_tooltips,
+        appearance.tooltip_delay_ms.saturating_as::<i32>(),
+    );
     bar_overlay::prepare();
     win.window().set_position(PhysicalPosition::new(monitor.x, monitor.y));
     win.window().set_size(PhysicalSize::new(monitor.width, monitor.height));
@@ -323,7 +333,7 @@ fn launch(
         handle::set_isolated(true);
         mw.set_is_fullscreen_locked(true);
         // The tab grid shows a placeholder where this tab's videos were (their players are in the fullscreen now).
-        mw.set_fullscreen_tab_id(tab_in_fullscreen.map_or(-1, |id| id as i32));
+        mw.set_fullscreen_tab_id(tab_in_fullscreen.map_or(-1, |id| id.wrapping_as::<i32>()));
     }
     if let Err(e) = win.show() {
         tracing::error!(error = %e, "[Multiview: Open] Failed to show the window");

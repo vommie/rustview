@@ -10,6 +10,7 @@ use crate::ui::status_bar::StatusBarBridge;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::route::OriginKind;
 use crate::viewer::{TabId, get_slint_window_xid};
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 
 pub(super) fn convert_to_tab() {
@@ -55,10 +56,10 @@ pub(super) fn park_below_main_window(session: &Session) -> Result<(), String> {
         .ok_or("the main window is gone")?;
     let main_xid = get_slint_window_xid(main_window.window()).ok_or("the main window has no native handle")?;
     let (x, y, width, height) = tab_manager.get_viewport_rect();
-    session
-        .instance
-        .lock()
-        .park(main_xid, Rect::new(x, y, width as i32, height as i32))
+    session.instance.lock().park(
+        main_xid,
+        Rect::new(x, y, width.saturating_as::<i32>(), height.saturating_as::<i32>()),
+    )
 }
 
 /// The instance lives in the tab now: the fullscreen window goes away and the application returns to the Browse view with

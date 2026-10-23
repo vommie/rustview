@@ -6,6 +6,7 @@ use crate::ui::state::UiState;
 use parking_lot::RwLock;
 use rustview_core::media::MediaHasher;
 use rustview_core::query::filters::IndexedMediaRecord;
+use rustview_core::util::cast::SaturatingAs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -166,7 +167,7 @@ impl BridgeInspector {
             "Details:",
             &title.replace(" selected", ""),
         );
-        window.set_info_selection_count((folder_count + file_count) as i32);
+        window.set_info_selection_count((folder_count + file_count).saturating_as::<i32>());
         window.set_info_filename(title.clone().into());
         window.set_info_filename_tooltip(title.into());
 
@@ -296,7 +297,7 @@ impl BridgeInspector {
         root_folder_opt: Option<&Path>,
     ) {
         Self::set_labels(window, "Size:", "Dimensions:", "Format:", "", "");
-        window.set_info_selection_count(summary.count as i32);
+        window.set_info_selection_count(summary.count.saturating_as::<i32>());
         let multi_title = format!("{} multiple files selected", summary.count);
         window.set_info_filename(multi_title.clone().into());
         window.set_info_filename_tooltip(multi_title.into());

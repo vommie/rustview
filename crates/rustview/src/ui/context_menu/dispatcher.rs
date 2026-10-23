@@ -15,6 +15,7 @@ use crate::ui::state::{
     CTX_ACTION_COPY_TO_BASE, CTX_BROWSE_SELECTION_OPEN_IN_FILE_MANAGER, CTX_BROWSE_TOGGLE_FOLDERS,
     CTX_FOLDER_ADD_TO_FAVORITES, CTX_FOLDER_MOVE_BASE, CTX_TAG_MOVE_TARGET_BASE,
 };
+use rustview_core::util::cast::WrappingAs;
 use slint::ComponentHandle;
 
 impl BridgeContextMenu {
@@ -40,7 +41,7 @@ impl BridgeContextMenu {
         window.on_context_menu_item_clicked(move |action_id| {
             CtxMenuPresenter::dismiss(&win);
             tab_mgr.clear_menu_cutouts();
-            let action_u64 = action_id as u64;
+            let action_u64 = action_id.wrapping_as::<u64>();
 
             // 1. Favorites Action Handling (5000..6000)
             if (5000..6000).contains(&action_u64) {

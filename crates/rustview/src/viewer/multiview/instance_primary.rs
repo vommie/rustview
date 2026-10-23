@@ -10,6 +10,7 @@ use super::primary_actions::{PrimaryActionId, PrimaryActionSpec, PrimaryBarConte
 use super::route::{HostMode, UiAction};
 use super::view::{PrimaryActionView, PrimaryBarTarget};
 use rustview_core::settings::schema::{MULTIVIEW_PIN_BLINK_MS, MULTIVIEW_PIN_PULSE_MS};
+use rustview_core::util::cast::SaturatingAs;
 use std::time::{Duration, Instant};
 
 impl MultiviewInstance {
@@ -61,9 +62,9 @@ impl MultiviewInstance {
     /// The pin button is in its highlighted phase of the blinking.
     fn pin_blink_on(&self, now: Instant) -> bool {
         self.pin_pulse_until.is_some_and(|until| {
-            until
-                .checked_duration_since(now)
-                .is_some_and(|left| (left.as_millis() as u64 / MULTIVIEW_PIN_BLINK_MS).is_multiple_of(2))
+            until.checked_duration_since(now).is_some_and(|left| {
+                (left.as_millis().saturating_as::<u64>() / MULTIVIEW_PIN_BLINK_MS).is_multiple_of(2)
+            })
         })
     }
 

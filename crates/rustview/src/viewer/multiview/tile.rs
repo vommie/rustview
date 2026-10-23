@@ -14,6 +14,7 @@ use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
 use rustview_core::library::models::MediaId;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -191,8 +192,14 @@ pub fn create_video(
     tile: TileKey,
     path: &Path,
 ) -> Result<VideoTile, String> {
-    let mut window = X11VideoSubwindow::new(parent_xid, rect.x, rect.y, rect.w.max(16) as u32, rect.h.max(16) as u32)
-        .map_err(|e| e.to_string())?;
+    let mut window = X11VideoSubwindow::new(
+        parent_xid,
+        rect.x,
+        rect.y,
+        rect.w.max(16).saturating_as::<u32>(),
+        rect.h.max(16).saturating_as::<u32>(),
+    )
+    .map_err(|e| e.to_string())?;
     let wid = window.xid();
     window.show();
 

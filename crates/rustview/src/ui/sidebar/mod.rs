@@ -6,6 +6,7 @@ use crate::ui::state::{LastActivePanel, UiState};
 use crate::ui::{MainWindow, SidebarPanelTabModel};
 use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::sync::Arc;
 
@@ -109,7 +110,7 @@ impl BridgeSidebarPanelTabs {
                 .iter()
                 .enumerate()
                 .map(|(i, id)| {
-                    if i == source_idx as usize && tab_width > 20.0 {
+                    if i == source_idx.saturating_as::<usize>() && tab_width > 20.0 {
                         tab_width.clamp(60.0, 110.0)
                     } else {
                         let title = match id.as_str() {
@@ -124,14 +125,19 @@ impl BridgeSidebarPanelTabs {
 
             let slots = SidebarPanelTabDndGeometry::compute_tab_slots(&tab_ids, &widths, 4.0, 0.0);
 
-            let grab_offset = if let Some(s) = slots.get(source_idx as usize) {
+            let grab_offset = if let Some(s) = slots.get(source_idx.saturating_as::<usize>()) {
                 (mouse_x - s.start_x).clamp(0.0, s.width)
             } else {
                 tab_width / 2.0
             };
 
-            let session =
-                SidebarPanelTabDndSession::new(id_str.clone(), source_idx as usize, grab_offset, mouse_x, slots);
+            let session = SidebarPanelTabDndSession::new(
+                id_str.clone(),
+                source_idx.saturating_as::<usize>(),
+                grab_offset,
+                mouse_x,
+                slots,
+            );
 
             let ghost_x = session.ghost_left_x();
             let ghost_w = session.current_slot_width();

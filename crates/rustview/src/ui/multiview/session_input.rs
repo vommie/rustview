@@ -15,6 +15,7 @@ use crate::viewer::multiview::primary_actions::PrimaryActionId;
 use crate::viewer::multiview::route::{HostMode, OriginKind, RoutedEvent, UiAction, route};
 use crate::viewer::multiview::tile::TileSeed;
 use rustview_core::library::models::MediaId;
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 
 /// The pointer in the coordinates of the fullscreen window, which covers its monitor.
@@ -31,8 +32,8 @@ impl Session {
         let scale = win.window().scale_factor().max(0.5);
         Some(HostSurface::fullscreen(
             self.fs_xid,
-            size.width.max(1) as i32,
-            size.height.max(1) as i32,
+            size.width.max(1).saturating_as::<i32>(),
+            size.height.max(1).saturating_as::<i32>(),
             scale,
         ))
     }

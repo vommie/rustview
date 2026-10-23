@@ -8,6 +8,7 @@ use crate::library::folders::normalize_path;
 use crate::library::models::{ExternalHashRecord, MediaRecord, TagId};
 use crate::library::schema::{SEQ_EXTERNAL_HASH_ID, SEQ_MEDIA_ID};
 use crate::media::{MediaFormat, MediaHasher, MetadataExtractor};
+use crate::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Instant;
@@ -182,7 +183,7 @@ impl ApiHandler {
 
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs() as i64);
+            .map_or(0, |d| d.as_secs().saturating_as::<i64>());
 
         let (action, final_record, target_media_id) = if let Some(mut rec) = existing_record {
             let mid = rec.id;
@@ -214,13 +215,13 @@ impl ApiHandler {
                         .modified()
                         .ok()
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map_or(rec.modification_time, |d| d.as_secs() as i64);
+                        .map_or(rec.modification_time, |d| d.as_secs().saturating_as::<i64>());
 
                     rec.creation_time = meta
                         .created()
                         .ok()
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map_or(rec.modification_time, |d| d.as_secs() as i64);
+                        .map_or(rec.modification_time, |d| d.as_secs().saturating_as::<i64>());
                 }
                 if rec.file_size > 0
                     && let Ok(raw_meta) = MetadataExtractor::extract(path)
@@ -261,12 +262,12 @@ impl ApiHandler {
                         .modified()
                         .ok()
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map_or(now_secs, |d| d.as_secs() as i64);
+                        .map_or(now_secs, |d| d.as_secs().saturating_as::<i64>());
                     ctime = meta
                         .created()
                         .ok()
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map_or(mtime, |d| d.as_secs() as i64);
+                        .map_or(mtime, |d| d.as_secs().saturating_as::<i64>());
                 }
                 if file_size > 0
                     && let Ok(raw_meta) = MetadataExtractor::extract(path)

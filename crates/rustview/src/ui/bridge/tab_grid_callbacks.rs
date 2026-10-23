@@ -4,6 +4,8 @@ use super::UiBridge;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
 use crate::ui::tabs::grid_bridge::BridgeTabGrid;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
+
 use slint::ComponentHandle;
 
 impl UiBridge {
@@ -35,7 +37,7 @@ impl UiBridge {
         let fs_left = self.fullscreen.clone();
         self.window.on_tab_grid_item_left_clicked(move |tab_id| {
             BridgeTabGrid::handle_item_left_clicked(
-                tab_id as u64,
+                tab_id.wrapping_as::<u64>(),
                 &win_left,
                 &tm_left,
                 &lib_left,
@@ -50,7 +52,13 @@ impl UiBridge {
         let set_mid = self.settings.clone();
         let fs_mid = self.fullscreen.clone();
         self.window.on_tab_grid_item_middle_clicked(move |tab_id| {
-            BridgeTabGrid::handle_item_middle_clicked(tab_id as u64, &win_mid, &tm_mid, &set_mid, &fs_mid);
+            BridgeTabGrid::handle_item_middle_clicked(
+                tab_id.wrapping_as::<u64>(),
+                &win_mid,
+                &tm_mid,
+                &set_mid,
+                &fs_mid,
+            );
         });
 
         let win_close = self.window.clone_strong();
@@ -60,7 +68,7 @@ impl UiBridge {
         let st_close = self.state.clone();
         self.window.on_tab_grid_item_close_clicked(move |tab_id| {
             BridgeTabGrid::handle_item_close_clicked(
-                tab_id as u64,
+                tab_id.wrapping_as::<u64>(),
                 &win_close,
                 &tm_close,
                 &lib_close,
@@ -75,7 +83,7 @@ impl UiBridge {
         let set_cols = self.settings.clone();
         let st_cols = self.state.clone();
         self.window.on_tab_grid_columns_changed(move |new_cols| {
-            let cols = (new_cols as usize).clamp(1, 10);
+            let cols = new_cols.saturating_as::<usize>().clamp(1, 10);
             {
                 let mut st = st_cols.write();
                 st.tab_grid_columns = cols;

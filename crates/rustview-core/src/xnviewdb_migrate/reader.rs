@@ -1,6 +1,7 @@
 use super::error::MigrationError;
 use super::types::{XnViewFolder, XnViewHash, XnViewImage, XnViewImageInfo, XnViewRawData, XnViewTag, XnViewTagLink};
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use rusqlite::{Connection, OpenFlags};
 use std::collections::HashMap;
 use std::path::Path;
@@ -206,10 +207,10 @@ impl XnViewDbReader {
                 image_id,
                 XnViewImageInfo {
                     image_id,
-                    width: width.max(0) as u32,
-                    height: height.max(0) as u32,
+                    width: width.max(0).saturating_as::<u32>(),
+                    height: height.max(0).saturating_as::<u32>(),
                     format,
-                    duration: duration.max(0) as u64,
+                    duration: duration.max(0).saturating_as::<u64>(),
                 },
             ))
         })?;

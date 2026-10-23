@@ -6,6 +6,7 @@
 //! the shutdown runs ends the process at once, so a stuck shutdown can always be interrupted from the terminal.
 
 use procfs::process::Process;
+use rustview_core::util::cast::SaturatingAs;
 use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
 use signal_hook::iterator::Signals;
 use std::ffi::c_int;
@@ -101,7 +102,7 @@ pub fn arm_watchdog(limit: Duration) {
         .spawn(move || {
             std::thread::sleep(limit);
             tracing::error!(
-                limit_ms = limit.as_millis() as u64,
+                limit_ms = limit.as_millis().saturating_as::<u64>(),
                 "[Shutdown: Watchdog] The shutdown did not finish in time; ending the process"
             );
             exit_now(EXIT_SHUTDOWN_TIMEOUT)

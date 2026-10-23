@@ -3,6 +3,7 @@
 
 use super::session::{Session, x11_error};
 use crate::viewer::ViewerError;
+use rustview_core::util::cast::SaturatingAs;
 use std::time::Instant;
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::shape::{self, ConnectionExt as _};
@@ -105,7 +106,7 @@ impl X11VideoSubwindow {
         let attributes = CreateWindowAux::new().background_pixel(0).border_pixel(0);
         let create = |id: Window, window_parent: Window, wx: i32, wy: i32| {
             session.conn.create_window(
-                x11rb::COPY_FROM_PARENT as u8,
+                x11rb::COPY_FROM_PARENT.saturating_as::<u8>(),
                 id,
                 window_parent,
                 coord(wx),

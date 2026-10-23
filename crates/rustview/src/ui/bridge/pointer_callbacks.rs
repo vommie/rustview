@@ -4,6 +4,7 @@ use super::UiBridge;
 use crate::ui::dnd::{BatchTransferParams, BridgeDnd, DragStartParams};
 use crate::ui::selection::rubberband_bridge::{BridgeRubberband, RubberbandDragMoveParams, RubberbandDragStartParams};
 use rustview_core::library::models::FileTransferKind;
+use rustview_core::util::cast::WrappingAs;
 use slint::ComponentHandle;
 
 impl UiBridge {
@@ -61,7 +62,7 @@ impl UiBridge {
         let fs_start = self.fullscreen.clone();
         self.window.on_media_drag_started(move |id, x, y| {
             BridgeDnd::handle_drag_started(DragStartParams {
-                media_id: id as u64,
+                media_id: id.wrapping_as::<u64>(),
                 start_x: x,
                 start_y: y,
                 window: &win_start,
@@ -94,12 +95,12 @@ impl UiBridge {
         let win_hover = self.window.clone_strong();
         let st_hover = self.state.clone();
         self.window.on_folder_row_hovered(move |folder_id| {
-            BridgeDnd::handle_folder_hovered(folder_id as u64, &win_hover, &st_hover);
+            BridgeDnd::handle_folder_hovered(folder_id.wrapping_as::<u64>(), &win_hover, &st_hover);
         });
 
         let win_unhover = self.window.clone_strong();
         self.window.on_folder_row_unhovered(move |folder_id| {
-            BridgeDnd::handle_folder_unhovered(folder_id as u64, &win_unhover);
+            BridgeDnd::handle_folder_unhovered(folder_id.wrapping_as::<u64>(), &win_unhover);
         });
 
         let win_end = self.window.clone_strong();
@@ -126,7 +127,7 @@ impl UiBridge {
                 settings: &set_copy,
                 state: &st_copy,
                 conflict_dialog: &conflict_copy,
-                target_folder_id: target_fid as u64,
+                target_folder_id: target_fid.wrapping_as::<u64>(),
                 transfer_kind: FileTransferKind::Copy,
             });
         });
@@ -146,7 +147,7 @@ impl UiBridge {
                 settings: &set_mv,
                 state: &st_mv,
                 conflict_dialog: &conflict_mv,
-                target_folder_id: target_fid as u64,
+                target_folder_id: target_fid.wrapping_as::<u64>(),
                 transfer_kind: FileTransferKind::Move,
             });
         });

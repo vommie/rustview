@@ -1,4 +1,5 @@
 use rustview_core::settings::{MAX_TAB_GRID_COLUMNS, MIN_TAB_GRID_COLUMNS};
+use rustview_core::util::cast::Az;
 
 /// Responsive width breakpoints for automatic column determination in the `TabGrid` Masonry view.
 pub struct ResponsiveBreakpoints;
@@ -60,8 +61,8 @@ impl TabGridMasonryEngine {
 
         let num_cols = columns_count.clamp(MIN_TAB_GRID_COLUMNS, MAX_TAB_GRID_COLUMNS);
         let usable_width =
-            (viewport_width - (grid_padding * 2.0) - (grid_spacing * (num_cols.saturating_sub(1) as f32))).max(80.0);
-        let column_width = (usable_width / num_cols as f32).max(60.0);
+            (viewport_width - (grid_padding * 2.0) - (grid_spacing * num_cols.saturating_sub(1).az::<f32>())).max(80.0);
+        let column_width = (usable_width / num_cols.az::<f32>()).max(60.0);
 
         let mut column_heights = vec![0.0f32; num_cols];
         let mut results = Vec::with_capacity(total_items);
@@ -81,7 +82,7 @@ impl TabGridMasonryEngine {
                 }
             }
 
-            let item_x = grid_padding + (min_col as f32 * (column_width + grid_spacing));
+            let item_x = grid_padding + (min_col.az::<f32>() * (column_width + grid_spacing));
             let item_y = grid_padding + min_h;
 
             results.push(MasonryRect {

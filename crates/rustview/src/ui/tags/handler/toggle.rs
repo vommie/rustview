@@ -15,6 +15,7 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::{MediaId, TagId};
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::SaturatingAs;
 use std::collections::HashSet;
 
 impl TagActionHandler {
@@ -144,7 +145,7 @@ impl TagActionHandler {
         for (media_id, count) in counts {
             update_tile(window, &st, media_id, |view| {
                 view.has_tags = count > 0;
-                view.tags_count = count as i32;
+                view.tags_count = count.saturating_as::<i32>();
                 view.tags_str = count.to_string().into();
             });
         }

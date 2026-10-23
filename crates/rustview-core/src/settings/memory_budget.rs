@@ -6,6 +6,7 @@
 //! setting changes. The budget is split between the pieces that grow with use: the decoded thumbnails (an LRU that is trimmed
 //! at once when the budget shrinks) and the records of the open folder.
 
+use crate::util::cast::Az;
 use procfs::process::Process;
 use procfs::{Current, Meminfo};
 use std::fs;
@@ -193,8 +194,8 @@ fn percent_of(value: u64, percent: u64) -> u64 {
 
 fn format_bytes(bytes: u64) -> String {
     const GB: f64 = 1024.0 * 1024.0 * 1024.0;
-    if bytes as f64 >= GB {
-        format!("{:.1} GB", bytes as f64 / GB)
+    if bytes.az::<f64>() >= GB {
+        format!("{:.1} GB", bytes.az::<f64>() / GB)
     } else {
         format!("{} MB", bytes / BYTES_PER_MB)
     }

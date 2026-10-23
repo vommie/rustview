@@ -11,6 +11,7 @@ use super::model::TileKind;
 use rustview_core::settings::schema::{
     MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_COLUMN_LOGICAL_PX, MULTIVIEW_SNAP_LOGICAL_PX, MULTIVIEW_WRAP_MIN_ASPECT,
 };
+use rustview_core::util::cast::{Az, FloatToInt};
 
 /// A gutter drag in progress: distances are always applied to the arrangement at drag start, never accumulated.
 pub(super) struct DragState {
@@ -43,7 +44,7 @@ impl MultiviewInstance {
         {
             let container = self.solving_container();
             let height = container.height.max(1);
-            return vec![container.width.max(1) as f32 / height as f32];
+            return vec![container.width.max(1).az::<f32>() / height.az::<f32>()];
         }
         self.tiles.iter().map(|t| t.aspect).collect()
     }
@@ -96,8 +97,11 @@ impl MultiviewInstance {
         };
         let projection = self.host.projection;
         let dpi = self.host.surface.dpi;
-        let delta = projection.length_to_container(distance * dpi).round() as i32;
-        let snap = projection.length_to_container(MULTIVIEW_SNAP_LOGICAL_PX * dpi).round() as i32;
+        let delta = projection.length_to_container(distance * dpi).round().to_int::<i32>();
+        let snap = projection
+            .length_to_container(MULTIVIEW_SNAP_LOGICAL_PX * dpi)
+            .round()
+            .to_int::<i32>();
         let next = layout_pins::drag_pins(
             &drag.start_pins,
             &drag.start_layout,

@@ -19,6 +19,7 @@ use rustview_core::library::models::{MediaId, MediaRecord};
 use rustview_core::media::{MediaFormat, MediaHasher, MediaType};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailGenerator, ThumbnailManager, VideoPreviewRecord};
+use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, Image};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -174,13 +175,13 @@ impl BridgeMedia {
                             .modified()
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map_or(old_record.modification_time, |d| d.as_secs() as i64);
+                            .map_or(old_record.modification_time, |d| d.as_secs().saturating_as::<i64>());
 
                         let ctime = fs_meta
                             .created()
                             .ok()
                             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map_or(old_record.creation_time, |d| d.as_secs() as i64);
+                            .map_or(old_record.creation_time, |d| d.as_secs().saturating_as::<i64>());
 
                         let is_zero_byte = file_size == 0;
 
@@ -228,7 +229,7 @@ impl BridgeMedia {
                                         }
                                         if !locations.is_empty() {
                                             preview_rec = Some(VideoPreviewRecord {
-                                                frame_count: locations.len() as u32,
+                                                frame_count: locations.len().saturating_as::<u32>(),
                                                 frame_locations: locations,
                                             });
                                         }

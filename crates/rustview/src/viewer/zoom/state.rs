@@ -12,6 +12,8 @@ use super::minimap::Grab;
 use super::prefs::ZoomPrefs;
 use super::render::{Resample, SourceImage, render_view};
 use super::scale;
+use rustview_core::util::cast::FloatToInt;
+
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -52,7 +54,10 @@ const OVERSCAN_MAX_PX: i32 = 512;
 const OVERSCAN_REFRESH_AT: f64 = 0.4;
 
 fn overscan_px(room: f64) -> i32 {
-    ((room * OVERSCAN_SHARE).round() as i32).clamp(OVERSCAN_MIN_PX, OVERSCAN_MAX_PX)
+    (room * OVERSCAN_SHARE)
+        .round()
+        .to_int::<i32>()
+        .clamp(OVERSCAN_MIN_PX, OVERSCAN_MAX_PX)
 }
 
 /// The part of the virtual image (`w` x `h`) a render covers around `window`.
@@ -541,7 +546,7 @@ impl ZoomState {
             return false;
         }
         let (mx, my) = (overscan_px(room.0), overscan_px(room.1));
-        let need = |margin: i32| (f64::from(margin) * OVERSCAN_REFRESH_AT).round() as i32;
+        let need = |margin: i32| (f64::from(margin) * OVERSCAN_REFRESH_AT).round().to_int::<i32>();
         let w = placement.window;
         (region.x == 0 || w.x - region.x >= need(mx))
             && (region.y == 0 || w.y - region.y >= need(my))
@@ -656,10 +661,10 @@ impl ZoomState {
             dest: visible.dest,
             content: PictureContent::Preview {
                 clip: IRect {
-                    x: x as i32,
-                    y: y as i32,
-                    w: w as i32,
-                    h: h as i32,
+                    x: x.to_int::<i32>(),
+                    y: y.to_int::<i32>(),
+                    w: w.to_int::<i32>(),
+                    h: h.to_int::<i32>(),
                 },
             },
         })

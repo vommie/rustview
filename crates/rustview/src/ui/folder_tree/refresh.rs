@@ -11,6 +11,7 @@ use rustview_core::library::folders::{FolderScanOptions, normalize_path};
 use rustview_core::library::models::{FolderId, MediaId, MediaRecord};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -111,7 +112,7 @@ impl BridgeFolders {
 
                             tracing::info!(
                                 total_dirs,
-                                elapsed_ms = elapsed_ms as u64,
+                                elapsed_ms = elapsed_ms.saturating_as::<u64>(),
                                 "[FolderRefresh: TreeApplied] Applied rebuilt SPoT snapshot to UI state"
                             );
 
@@ -247,7 +248,7 @@ impl BridgeFolders {
                             tracing::info!(
                                 folder_id,
                                 total_nodes = snapshot.nodes.len(),
-                                elapsed_ms = elapsed_ms as u64,
+                                elapsed_ms = elapsed_ms.saturating_as::<u64>(),
                                 "[FolderRefresh: SubtreeApplied] Applied rebuilt SPoT snapshot to UI state"
                             );
                             st.write().set_folder_hierarchy(snapshot);

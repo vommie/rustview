@@ -9,6 +9,7 @@ use crate::ui::tags::BridgeTags;
 use crate::ui::{DeleteFileDialog, MainWindow};
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -86,7 +87,7 @@ impl DeleteFileDialogController {
             self.bind_dialog_events(win, window, media_ids, ctx, followup);
 
             win.set_file_name(first_name.into());
-            win.set_files_count(count as i32);
+            win.set_files_count(count.saturating_as::<i32>());
             win.set_missing_note(missing_files_hint(missing, count).unwrap_or_default().into());
             win.set_error_message("".into());
 

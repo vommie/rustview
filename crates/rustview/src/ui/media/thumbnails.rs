@@ -7,6 +7,7 @@ use crate::ui::thumbnail_regeneration::ThumbnailRegeneration;
 use parking_lot::RwLock;
 use rustview_core::telemetry::BenchmarkReportFormatter;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{Image, Timer};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -148,7 +149,7 @@ impl BridgeThumbnails {
                         apply_record(row, record);
                     }
                 });
-                row_set_us += t_row.elapsed().as_micros() as u64;
+                row_set_us += t_row.elapsed().as_micros().saturating_as::<u64>();
             }
         }
 
@@ -156,7 +157,7 @@ impl BridgeThumbnails {
             ThumbnailRegeneration::sync_toolbar_state(window, st_ref);
         }
 
-        let total_drain_us = t_drain_start.elapsed().as_micros() as u64;
+        let total_drain_us = t_drain_start.elapsed().as_micros().saturating_as::<u64>();
 
         if items_drained > 0
             && let Some(bench) = thumb_ref.active_benchmark()

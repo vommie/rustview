@@ -7,6 +7,7 @@
 
 use parking_lot::Mutex;
 use rustview_core::library::models::FolderId;
+use rustview_core::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -30,7 +31,7 @@ impl FolderStamp {
         let secs = |time: std::io::Result<SystemTime>| {
             time.ok()
                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
+                .map(|d| d.as_secs().saturating_as::<i64>())
         };
         Self {
             created: secs(metadata.created()),

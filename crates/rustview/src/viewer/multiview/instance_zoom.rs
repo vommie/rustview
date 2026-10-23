@@ -20,6 +20,7 @@ use crate::viewer::zoom::prefs as zoom_prefs;
 use crate::viewer::zoom::render::SourceImage;
 use crate::viewer::zoom::scale;
 use crate::viewer::zoom::state::{PictureContent, RenderDone, Request};
+use rustview_core::util::cast::{Az, FloatToInt};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -167,12 +168,12 @@ impl MultiviewInstance {
             self.zoom_wheel_accum = 0.0;
         }
         self.zoom_wheel_accum += delta_y;
-        let steps = (self.zoom_wheel_accum.abs() / WHEEL_STEP_DELTA).floor() as u32;
+        let steps = (self.zoom_wheel_accum.abs() / WHEEL_STEP_DELTA).floor().to_int::<u32>();
         if steps == 0 {
             return;
         }
         let up = self.zoom_wheel_accum > 0.0;
-        self.zoom_wheel_accum -= self.zoom_wheel_accum.signum() * WHEEL_STEP_DELTA * steps as f32;
+        self.zoom_wheel_accum -= self.zoom_wheel_accum.signum() * WHEEL_STEP_DELTA * steps.az::<f32>();
         let mut anchor = (self.logical_to_physical(at.0), self.logical_to_physical(at.1));
         let prefs = zoom_prefs::current();
         let Some(zoom) = self.tiles[index].zoom.as_mut() else {

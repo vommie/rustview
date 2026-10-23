@@ -2,6 +2,7 @@ use super::error::SystemHandlerError;
 use crate::icons::Icon;
 use parking_lot::Mutex;
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::Az;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::LazyLock;
@@ -414,7 +415,7 @@ except Exception:
         tracing::info!(
             session_type = session_type,
             files_count = files_count,
-            total_kb = format!("{:.2} KB", total_bytes as f64 / 1024.0),
+            total_kb = format!("{:.2} KB", total_bytes.az::<f64>() / 1024.0),
             first_file = %LogObscurer::path(&canonical_paths[0]),
             "[SystemDndHandler: Drop] Executing external XDND drop transaction on window under cursor..."
         );
@@ -436,7 +437,7 @@ except Exception:
             target_window_id = metrics.target_window_id,
             target_app = %metrics.target_app_class,
             success = metrics.success,
-            elapsed_ms = metrics.elapsed_us as f64 / 1000.0,
+            elapsed_ms = metrics.elapsed_us.az::<f64>() / 1000.0,
             "[Benchmark: ExternalDrop] XDND Drop transaction completed"
         );
 

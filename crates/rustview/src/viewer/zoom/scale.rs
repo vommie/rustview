@@ -15,6 +15,7 @@
 //! never jumps over it.
 
 use super::geometry::Limits;
+use rustview_core::util::cast::FloatToInt;
 
 /// How far (in slider pixels) the handle is pulled to a snap point.
 const SNAP_RESET_PX: f64 = 9.0;
@@ -192,7 +193,7 @@ pub fn slider_wheel_step(shift: bool, ctrl: bool) -> f64 {
 
 /// How the zoom is told to the outside (the slider and the status): tenths of a percent as a whole number.
 pub fn to_permille(zoom: f64) -> i32 {
-    (zoom * 1000.0).round().clamp(0.0, 1_000_000.0) as i32
+    (zoom * 1000.0).round().clamp(0.0, 1_000_000.0).to_int::<i32>()
 }
 
 pub fn from_permille(permille: i32) -> f64 {
@@ -201,5 +202,5 @@ pub fn from_permille(permille: i32) -> f64 {
 
 /// "150%" - what the tooltip of the slider and the status show.
 pub fn percent_text(zoom: f64) -> String {
-    format!("{}%", (zoom * 100.0).round() as i64)
+    format!("{}%", (zoom * 100.0).round().to_int::<i64>())
 }

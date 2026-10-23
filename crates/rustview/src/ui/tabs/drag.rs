@@ -10,6 +10,7 @@ use crate::ui::tabs::icon::tab_icon;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::WrappingAs;
 use slint::{ComponentHandle, Model};
 use std::sync::Arc;
 
@@ -69,7 +70,7 @@ impl BridgeViewerTabs {
 
         for i in 0..tab_models.row_count() {
             if let Some(mut m) = tab_models.row_data(i) {
-                let is_ph = m.id == tab_id as i32;
+                let is_ph = m.id == tab_id.wrapping_as::<i32>();
                 if m.is_placeholder != is_ph {
                     m.is_placeholder = is_ph;
                     tab_models.set_row_data(i, m);
@@ -132,7 +133,7 @@ impl BridgeViewerTabs {
         for i in 0..total_rows {
             if let Some(mut item) = tab_models.row_data(i) {
                 let target_shift = shifts.get(i).copied().unwrap_or(0.0);
-                let is_ph = item.id == drag_tab_id as i32;
+                let is_ph = item.id == drag_tab_id.wrapping_as::<i32>();
 
                 if (item.shift_x - target_shift).abs() > 0.1 || item.is_placeholder != is_ph {
                     item.shift_x = target_shift;

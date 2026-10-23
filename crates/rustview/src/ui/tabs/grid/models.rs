@@ -1,5 +1,6 @@
 use crate::viewer::{MediaTabSession, TabId};
 use rustview_core::library::models::MediaId;
+use rustview_core::util::cast::Az;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// High-level layout item for an individual tab inside the `TabGridView`.
@@ -40,7 +41,7 @@ impl TabGridTile {
     /// Computes safe aspect ratio (width / height) clamped to prevent extreme geometric distortion.
     pub fn compute_aspect_ratio(orig_w: u32, orig_h: u32, is_video: bool) -> f32 {
         if orig_w > 0 && orig_h > 0 {
-            let ar = orig_w as f32 / orig_h as f32;
+            let ar = orig_w.az::<f32>() / orig_h.az::<f32>();
             ar.clamp(0.28, 3.5)
         } else if is_video {
             16.0 / 9.0

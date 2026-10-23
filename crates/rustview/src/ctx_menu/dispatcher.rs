@@ -1,6 +1,7 @@
 use super::types::{CtxMenu, CtxMenuActionId, CtxMenuContext, CtxMenuItem};
 use crate::ui::ContextMenuItemModel;
 use parking_lot::RwLock;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::{Image, ModelRc, VecModel};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -59,7 +60,7 @@ impl CtxMenuDispatcher {
             .unwrap_or_default();
 
         ContextMenuItemModel {
-            id: item.id as i32,
+            id: item.id.wrapping_as::<i32>(),
             text: item.text.clone().into(),
             shortcut: item.shortcut.clone().unwrap_or_default().into(),
             icon: crate::icons::to_slint(item.icon),
@@ -69,7 +70,7 @@ impl CtxMenuDispatcher {
             is_enabled: item.is_enabled,
             has_submenu: !item.children.is_empty(),
             submenu_depth: depth,
-            menu_index: item.menu_index as i32,
+            menu_index: item.menu_index.saturating_as::<i32>(),
             tooltip: item.tooltip.clone().unwrap_or_default().into(),
         }
     }

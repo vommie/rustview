@@ -2,6 +2,7 @@
 //! the stream (older files in a `rotate` tag), HEIF and AVIF images in the `irot` property, which `FFmpeg` also exposes as a
 //! display matrix. Mirroring is not handled (it is rare and never produced by a camera that was not mirrored on purpose).
 
+use crate::util::cast::FloatToInt;
 use ffmpeg_next::DictionaryRef;
 use ffmpeg_next::codec::packet::side_data::Type as SideDataType;
 use ffmpeg_next::format::stream::Stream;
@@ -28,7 +29,7 @@ fn clockwise_quarter_turn(counter_clockwise_degrees: f64) -> Option<i32> {
     }
     let clockwise = (-counter_clockwise_degrees).rem_euclid(360.0);
     let nearest = (clockwise / 90.0).round() * 90.0;
-    ((clockwise - nearest).abs() < 1.0).then(|| (nearest as i32).rem_euclid(360))
+    ((clockwise - nearest).abs() < 1.0).then(|| nearest.to_int::<i32>().rem_euclid(360))
 }
 
 /// The rotation a stream asks for: its display matrix, else the `rotate` tag of the stream or the container.

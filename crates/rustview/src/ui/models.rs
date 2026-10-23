@@ -1,5 +1,7 @@
 use num_format::{Locale, SystemLocale, ToFormattedString};
 pub use rustview_core::media::formats::{approximate_aspect_ratio, format_duration_hms_ms, format_filesize_mb};
+use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
+
 use slint::{Image, Rgb8Pixel, SharedPixelBuffer};
 use std::sync::LazyLock;
 
@@ -10,9 +12,9 @@ pub fn format_filesize(size_bytes: u64) -> String {
         return "0 B".to_string();
     }
     let units = ["B", "KB", "MB", "GB", "TB"];
-    let i = (size_bytes as f64).log(1024.0).floor() as usize;
-    let p = 1024_f64.powi(i as i32);
-    let s = (size_bytes as f64) / p;
+    let i = (size_bytes.az::<f64>().log(1024.0).floor()).to_int::<usize>();
+    let p = 1024_f64.powi(i.saturating_as::<i32>());
+    let s = size_bytes.az::<f64>() / p;
     format!("{:.2} {}", s, units[i.min(units.len() - 1)])
 }
 

@@ -12,6 +12,7 @@ use super::tile;
 use crate::viewer::zoom::state::ZoomState;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 /// Error texts can embed file paths; with log obfuscation active they are not written to the log.
@@ -134,8 +135,8 @@ impl MultiviewInstance {
         // Large enough for the display and for the area of the tab view (a lone image fills all of it).
         let area = self.host.surface.rect;
         let (max_w, max_h) = (
-            self.container.width.max(area.w).max(1) as u32,
-            self.container.height.max(area.h).max(1) as u32,
+            self.container.width.max(area.w).max(1).saturating_as::<u32>(),
+            self.container.height.max(area.h).max(1).saturating_as::<u32>(),
         );
         let (sink, me) = (self.sink.clone(), self.me.clone());
         let spawned = std::thread::Builder::new()

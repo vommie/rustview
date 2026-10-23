@@ -1,5 +1,7 @@
 use super::detector::MediaDetector;
 use super::formats::{MediaFormat, MediaType};
+use crate::util::cast::{Az, FloatToInt, SaturatingAs};
+
 use std::fs;
 use std::path::Path;
 use std::sync::Once;
@@ -55,13 +57,13 @@ impl MetadataExtractor {
         let modification_time = fs_meta
             .modified()?
             .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs() as i64);
+            .map_or(0, |d| d.as_secs().saturating_as::<i64>());
 
         let creation_time = fs_meta
             .created()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(modification_time, |d| d.as_secs() as i64);
+            .map_or(modification_time, |d| d.as_secs().saturating_as::<i64>());
 
         let (width, height, duration_ms) = match media_type {
             MediaType::Image => {
@@ -143,9 +145,13 @@ impl MetadataExtractor {
         }
 
         let duration_ms = if ictx.duration() > 0 {
-            ((ictx.duration() as f64 / f64::from(ffmpeg_next::ffi::AV_TIME_BASE)) * 1000.0).round() as u64
+            ((ictx.duration().az::<f64>() / f64::from(ffmpeg_next::ffi::AV_TIME_BASE)) * 1000.0)
+                .round()
+                .to_int::<u64>()
         } else if stream.duration() > 0 {
-            ((stream.duration() as f64 * f64::from(stream.time_base())) * 1000.0).round() as u64
+            ((stream.duration().az::<f64>() * f64::from(stream.time_base())) * 1000.0)
+                .round()
+                .to_int::<u64>()
         } else {
             0
         };

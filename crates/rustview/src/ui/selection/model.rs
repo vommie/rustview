@@ -1,5 +1,6 @@
 use rustview_core::library::models::{MediaId, MediaRecord};
 use rustview_core::media::MediaFormat;
+use rustview_core::util::cast::Az;
 use std::collections::{HashMap, HashSet};
 
 /// Thread-safe file selection coordinator implementing standard OS file manager selection behaviors.
@@ -277,7 +278,7 @@ impl FileSelectionSummary {
         });
 
         let avg_rating = if rated_count > 0 {
-            total_rating as f32 / rated_count as f32
+            total_rating.az::<f32>() / rated_count.az::<f32>()
         } else {
             0.0
         };
@@ -370,7 +371,7 @@ impl FileSelectionSummary {
         });
 
         let avg_rating = if rated_count > 0 {
-            total_rating as f32 / rated_count as f32
+            total_rating.az::<f32>() / rated_count.az::<f32>()
         } else {
             0.0
         };

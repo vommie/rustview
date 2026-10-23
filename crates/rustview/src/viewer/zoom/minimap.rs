@@ -6,6 +6,7 @@
 
 use super::geometry::{IRect, RectF};
 use super::prefs::MinimapCorner;
+use rustview_core::util::cast::FloatToInt;
 
 /// The largest the minimap gets, in logical pixels, and the largest share of the tile it may take.
 const MAX_W_LOGICAL: f64 = 200.0;
@@ -54,10 +55,10 @@ impl MinimapLayout {
         let y = tile_h - margin - h;
         Some(Self {
             rect: IRect {
-                x: x as i32,
-                y: y as i32,
-                w: w as i32,
-                h: h as i32,
+                x: x.to_int::<i32>(),
+                y: y.to_int::<i32>(),
+                w: w.to_int::<i32>(),
+                h: h.to_int::<i32>(),
             },
             dpi,
         })

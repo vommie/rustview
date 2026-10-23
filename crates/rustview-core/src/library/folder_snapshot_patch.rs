@@ -6,6 +6,7 @@
 
 use super::folder_move::FolderMovePatch;
 use super::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId, FolderRecord};
+use crate::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::path::PathBuf;
@@ -104,7 +105,7 @@ impl FolderHierarchySnapshot {
             );
             self.insert_child_sorted(parent_id, rec.id);
             if let Some(parent) = self.nodes.get_mut(&parent_id) {
-                parent.subfolder_count = parent.children.len() as u32;
+                parent.subfolder_count = parent.children.len().saturating_as::<u32>();
             }
             inserted += 1;
         }

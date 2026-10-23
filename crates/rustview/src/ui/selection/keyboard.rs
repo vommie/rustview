@@ -12,6 +12,8 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
+
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -217,8 +219,12 @@ pub fn move_browse_cursor(
     }
 
     match reveal {
-        Reveal::IntoView => ctx.window.invoke_scroll_media_item_into_view(target_idx as i32),
-        Reveal::Centered => ctx.window.invoke_scroll_media_item_centered(target_idx as i32),
+        Reveal::IntoView => ctx
+            .window
+            .invoke_scroll_media_item_into_view(target_idx.saturating_as::<i32>()),
+        Reveal::Centered => ctx
+            .window
+            .invoke_scroll_media_item_centered(target_idx.saturating_as::<i32>()),
     }
 
     BridgeInspector::update(ctx.window, ctx.state);
@@ -252,12 +258,18 @@ pub fn handle_keyboard_navigate(params: KeyboardNavigateParams<'_>) {
     let columns = if is_table {
         1
     } else {
-        (params.window.get_grid_columns() as usize).max(1)
+        params.window.get_grid_columns().saturating_as::<usize>().max(1)
     };
 
     let target_idx = match current_position {
         Some(current) => {
-            match calculate_target_index(current, direction, view_len, columns, params.page_rows.max(1) as usize) {
+            match calculate_target_index(
+                current,
+                direction,
+                view_len,
+                columns,
+                params.page_rows.max(1).saturating_as::<usize>(),
+            ) {
                 Some(target) => target.min(view_len - 1),
                 None => return,
             }

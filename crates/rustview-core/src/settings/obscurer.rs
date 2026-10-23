@@ -1,4 +1,5 @@
 use crate::media::MediaHasher;
+use crate::util::cast::Az;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -135,7 +136,7 @@ impl LogObscurer {
             .map_or_else(|| ".unknown".to_string(), |e| format!(".{}", e.to_ascii_lowercase()));
 
         let size_hint = std::fs::metadata(path)
-            .map(|m| format!(", {:.2} KB", m.len() as f64 / 1024.0))
+            .map(|m| format!(", {:.2} KB", m.len().az::<f64>() / 1024.0))
             .unwrap_or_default();
 
         if Self::is_active() {

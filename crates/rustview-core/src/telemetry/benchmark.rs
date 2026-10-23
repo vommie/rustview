@@ -1,5 +1,7 @@
 use crate::settings::LogObscurer;
 use crate::thumbnails::ThumbnailStorageStats;
+use crate::util::cast::{Az, FloatToInt, SaturatingAs};
+
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 
@@ -19,14 +21,14 @@ pub fn get_system_memory_metrics() -> SystemMemoryMetrics {
     let mut metrics = SystemMemoryMetrics::default();
 
     if let Ok(statm) = Process::myself().and_then(|process| process.statm()) {
-        let page_size = procfs::page_size() as f64;
-        metrics.process_vms_mb = statm.size as f64 * page_size / MB;
-        metrics.process_rss_mb = statm.resident as f64 * page_size / MB;
+        let page_size = procfs::page_size().az::<f64>();
+        metrics.process_vms_mb = statm.size.az::<f64>() * page_size / MB;
+        metrics.process_rss_mb = statm.resident.az::<f64>() * page_size / MB;
     }
 
     if let Ok(meminfo) = Meminfo::current() {
-        metrics.system_total_mb = meminfo.mem_total as f64 / MB;
-        metrics.system_available_mb = meminfo.mem_available.unwrap_or(0) as f64 / MB;
+        metrics.system_total_mb = meminfo.mem_total.az::<f64>() / MB;
+        metrics.system_available_mb = meminfo.mem_available.unwrap_or(0).az::<f64>() / MB;
     }
 
     metrics
@@ -94,9 +96,9 @@ impl ViewScrollBenchmark {
             let total_reqs = hits + reloads;
 
             if total_reqs > 0 {
-                let hit_pct = (hits as f64 / total_reqs as f64) * 100.0;
+                let hit_pct = (hits.az::<f64>() / total_reqs.az::<f64>()) * 100.0;
                 let avg_slice_us = if reloads > 0 {
-                    self.total_slice_time_us.load(Ordering::Relaxed) as f64 / reloads as f64
+                    self.total_slice_time_us.load(Ordering::Relaxed).az::<f64>() / reloads.az::<f64>()
                 } else {
                     0.0
                 };
@@ -443,9 +445,9 @@ pub fn format_duration_us(us: u64) -> String {
     if us < 1_000 {
         format!("{us} µs")
     } else if us < 1_000_000 {
-        format!("{:.2} ms", us as f64 / 1_000.0)
+        format!("{:.2} ms", us.az::<f64>() / 1_000.0)
     } else {
-        format!("{:.2} s", us as f64 / 1_000_000.0)
+        format!("{:.2} s", us.az::<f64>() / 1_000_000.0)
     }
 }
 
@@ -454,11 +456,11 @@ pub fn format_bytes_metric(bytes: u64) -> String {
     if bytes < 1024 {
         format!("{bytes} B")
     } else if bytes < 1024 * 1024 {
-        format!("{:.2} KB", bytes as f64 / 1024.0)
+        format!("{:.2} KB", bytes.az::<f64>() / 1024.0)
     } else if bytes < 1024 * 1024 * 1024 {
-        format!("{:.2} MB", bytes as f64 / (1024.0 * 1024.0))
+        format!("{:.2} MB", bytes.az::<f64>() / (1024.0 * 1024.0))
     } else {
-        format!("{:.2} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+        format!("{:.2} GB", bytes.az::<f64>() / (1024.0 * 1024.0 * 1024.0))
     }
 }
 
@@ -472,15 +474,15 @@ impl BenchmarkReportFormatter {
         storage_stats: &ThumbnailStorageStats,
     ) -> String {
         let mut out = String::with_capacity(4096);
-        let total_wall_us = thumb_bench.start_time.elapsed().as_micros() as u64;
+        let total_wall_us = thumb_bench.start_time.elapsed().as_micros().saturating_as::<u64>();
 
         let total_items = folder_bench.map_or(0, |f| f.total_records_fetched.load(Ordering::Relaxed));
 
         let p0_targets = thumb_bench.total_targets.load(Ordering::Relaxed);
 
         let overall_throughput = if total_wall_us > 0 && p0_targets > 0 {
-            let items_per_sec = (p0_targets as f64) / (total_wall_us as f64 / 1_000_000.0);
-            format!("{} items/sec", format_count(items_per_sec.round() as usize))
+            let items_per_sec = p0_targets.az::<f64>() / (total_wall_us.az::<f64>() / 1_000_000.0);
+            format!("{} items/sec", format_count(items_per_sec.round().to_int::<usize>()))
         } else {
             "-".to_string()
         };
@@ -525,12 +527,12 @@ impl BenchmarkReportFormatter {
             let preindex_us = fb.preindex_time_us.load(Ordering::Relaxed);
             let stage1_us = id_fetch_us + rec_fetch_us + preindex_us;
             let preindex_per_item = if total_items > 0 {
-                format!("{:.2} µs / item", preindex_us as f64 / total_items as f64)
+                format!("{:.2} µs / item", preindex_us.az::<f64>() / total_items.az::<f64>())
             } else {
                 "-".to_string()
             };
             let fetch_per_item = if total_items > 0 {
-                format!("{:.2} µs / item", rec_fetch_us as f64 / total_items as f64)
+                format!("{:.2} µs / item", rec_fetch_us.az::<f64>() / total_items.az::<f64>())
             } else {
                 "-".to_string()
             };
@@ -620,7 +622,7 @@ impl BenchmarkReportFormatter {
         let l1_misses = thumb_bench.l1_misses.load(Ordering::Relaxed);
         let l1_total = l1_hits + l1_misses;
         let l1_ratio = if l1_total > 0 {
-            format!("{:.1}%", (l1_hits as f64 / l1_total as f64) * 100.0)
+            format!("{:.1}%", (l1_hits.az::<f64>() / l1_total.az::<f64>()) * 100.0)
         } else {
             "0.0%".to_string()
         };
@@ -639,7 +641,7 @@ impl BenchmarkReportFormatter {
         let decompress_raw_bytes = thumb_bench.decompress_raw_bytes.load(Ordering::Relaxed);
         let decompress_cpu_us = thumb_bench.decompress_time_us.load(Ordering::Relaxed);
         let decompress_avg_us = if decompress_count > 0 {
-            decompress_cpu_us as f64 / decompress_count as f64
+            decompress_cpu_us.az::<f64>() / decompress_count.az::<f64>()
         } else {
             0.0
         };
@@ -647,15 +649,15 @@ impl BenchmarkReportFormatter {
         let video_count = thumb_bench.video_extract_count.load(Ordering::Relaxed);
         let video_cpu_us = thumb_bench.video_extract_time_us.load(Ordering::Relaxed);
         let avg_video_extract_ms = if video_count > 0 {
-            (video_cpu_us as f64 / video_count as f64) / 1000.0
+            (video_cpu_us.az::<f64>() / video_count.az::<f64>()) / 1000.0
         } else {
             0.0
         };
 
         let preload_duration_us = thumb_bench.preload_duration_us.load(Ordering::Relaxed);
         let preload_throughput = if preload_duration_us > 0 && decompress_count > 0 {
-            let thumbs_per_sec = (decompress_count as f64) / (preload_duration_us as f64 / 1_000_000.0);
-            format!("{} thumbs/sec", format_count(thumbs_per_sec.round() as usize))
+            let thumbs_per_sec = decompress_count.az::<f64>() / (preload_duration_us.az::<f64>() / 1_000_000.0);
+            format!("{} thumbs/sec", format_count(thumbs_per_sec.round().to_int::<usize>()))
         } else {
             "-".to_string()
         };
@@ -663,8 +665,8 @@ impl BenchmarkReportFormatter {
         let generate_duration_us = thumb_bench.generate_duration_us.load(Ordering::Relaxed);
         let gen_count = thumb_bench.compress_count.load(Ordering::Relaxed);
         let gen_throughput = if generate_duration_us > 0 && gen_count > 0 {
-            let items_per_sec = (gen_count as f64) / (generate_duration_us as f64 / 1_000_000.0);
-            format!("{} items/sec", format_count(items_per_sec.round() as usize))
+            let items_per_sec = gen_count.az::<f64>() / (generate_duration_us.az::<f64>() / 1_000_000.0);
+            format!("{} items/sec", format_count(items_per_sec.round().to_int::<usize>()))
         } else {
             "-".to_string()
         };
@@ -750,7 +752,7 @@ impl BenchmarkReportFormatter {
 
         // STORAGE & CAPACITY STATS
         let l1_slots_cap = 2048;
-        let l1_occupancy_pct = (drained_items.min(l1_slots_cap) as f64 / l1_slots_cap as f64) * 100.0;
+        let l1_occupancy_pct = (drained_items.min(l1_slots_cap).az::<f64>() / l1_slots_cap.az::<f64>()) * 100.0;
         out.push_str("STORAGE FOOTPRINT & CACHE CAPACITY:\n");
         out.push_str(&format!(
             "  • L1 In-Memory Cache      : {} / {} slots utilized ({:.1}% capacity)\n",

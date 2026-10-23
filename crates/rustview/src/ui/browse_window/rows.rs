@@ -3,6 +3,7 @@
 use crate::ui::state::UiState;
 use crate::ui::{MainWindow, MediaItemView};
 use rustview_core::library::models::MediaId;
+use rustview_core::util::cast::WrappingAs;
 use slint::Model;
 
 /// The model row that shows `media_id`, if a tile holds it right now.
@@ -26,7 +27,7 @@ pub fn update_tile(
     let Some(mut row) = model.row_data(slot) else {
         return false;
     };
-    if row.id != media_id as i32 {
+    if row.id != media_id.wrapping_as::<i32>() {
         return false;
     }
     update(&mut row);

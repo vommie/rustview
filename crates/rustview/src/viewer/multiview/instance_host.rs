@@ -12,6 +12,7 @@ use super::route::HostMode;
 use super::view::{GutterView, HostedView, TileView};
 use crate::viewer::{SubwindowGeometry, ViewportBounds, XRectangle};
 use rustview_core::settings::schema::{MULTIVIEW_GUTTER_LOGICAL_PX, MULTIVIEW_MIN_VIDEO_WINDOW_PX};
+use rustview_core::util::cast::{FloatToInt, SaturatingAs};
 
 /// The rectangle a host gives to a Multiview, in physical pixels of the window `parent_xid`.
 #[derive(Debug, Clone, PartialEq)]
@@ -184,7 +185,7 @@ impl MultiviewInstance {
         if mode != HostMode::TabView {
             return 0;
         }
-        let host_gutter = (MULTIVIEW_GUTTER_LOGICAL_PX * dpi).round() as i32;
+        let host_gutter = (MULTIVIEW_GUTTER_LOGICAL_PX * dpi).round().to_int::<i32>();
         gutter_floor(host_gutter, projection.scale())
     }
 
@@ -232,8 +233,8 @@ impl MultiviewInstance {
                 parent,
                 r.x,
                 r.y,
-                r.w.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX) as u32,
-                r.h.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX) as u32,
+                r.w.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
+                r.h.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
             );
             match moved {
                 Ok(()) => tracing::debug!(
@@ -269,19 +270,21 @@ impl MultiviewInstance {
                     SubwindowGeometry {
                         x: r.x,
                         y: r.y,
-                        width: r.w as u32,
-                        height: r.h as u32,
+                        width: r.w.saturating_as::<u32>(),
+                        height: r.h.saturating_as::<u32>(),
                     },
                     ViewportBounds {
                         x: clip.x,
                         y: clip.y,
-                        width: clip.w.max(1) as u32,
-                        height: clip.h.max(1) as u32,
+                        width: clip.w.max(1).saturating_as::<u32>(),
+                        height: clip.h.max(1).saturating_as::<u32>(),
                     },
                 );
             } else {
                 video.window.show();
-                video.window.move_resize(r.x, r.y, r.w as u32, r.h as u32);
+                video
+                    .window
+                    .move_resize(r.x, r.y, r.w.saturating_as::<u32>(), r.h.saturating_as::<u32>());
             }
         }
     }
@@ -360,8 +363,8 @@ impl MultiviewInstance {
         self.clear_hover();
         self.rename_pinned = false;
         let (width, height) = (
-            rect.w.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX) as u32,
-            rect.h.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX) as u32,
+            rect.w.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
+            rect.h.max(MULTIVIEW_MIN_VIDEO_WINDOW_PX).saturating_as::<u32>(),
         );
         let mut failed = None;
         for tile in &mut self.tiles {

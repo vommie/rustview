@@ -8,6 +8,7 @@ use super::refresh_media_files::MediaItemRefresher;
 use super::schema::SEQ_MEDIA_ID;
 use crate::media::{FormatPolicy, MediaFormat, MediaHasher, MetadataExtractor};
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -226,13 +227,13 @@ impl<'a> FileOperations<'a> {
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(record.modification_time, |d| d.as_secs() as i64);
+                    .map_or(record.modification_time, |d| d.as_secs().saturating_as::<i64>());
 
                 record.creation_time = fs_meta
                     .created()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(record.creation_time, |d| d.as_secs() as i64);
+                    .map_or(record.creation_time, |d| d.as_secs().saturating_as::<i64>());
 
                 record.file_size = fs_meta.len();
             }
@@ -381,12 +382,12 @@ impl<'a> FileOperations<'a> {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map_or(0, |d| d.as_secs() as i64);
+                .map_or(0, |d| d.as_secs().saturating_as::<i64>());
             let ctime = fs_meta
                 .created()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map_or(mtime, |d| d.as_secs() as i64);
+                .map_or(mtime, |d| d.as_secs().saturating_as::<i64>());
             (size, mtime, ctime)
         } else if let Some(ref rec) = db_record_opt {
             (rec.file_size, rec.modification_time, rec.creation_time)
@@ -551,13 +552,13 @@ impl<'a> FileOperations<'a> {
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(source_record.modification_time, |d| d.as_secs() as i64);
+                    .map_or(source_record.modification_time, |d| d.as_secs().saturating_as::<i64>());
 
                 source_record.creation_time = fs_meta
                     .created()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(source_record.creation_time, |d| d.as_secs() as i64);
+                    .map_or(source_record.creation_time, |d| d.as_secs().saturating_as::<i64>());
 
                 source_record.file_size = fs_meta.len();
             }
@@ -701,13 +702,13 @@ impl<'a> FileOperations<'a> {
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(source_record.modification_time, |d| d.as_secs() as i64);
+                    .map_or(source_record.modification_time, |d| d.as_secs().saturating_as::<i64>());
 
                 ctime = fs_meta
                     .created()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(source_record.creation_time, |d| d.as_secs() as i64);
+                    .map_or(source_record.creation_time, |d| d.as_secs().saturating_as::<i64>());
             }
         }
 

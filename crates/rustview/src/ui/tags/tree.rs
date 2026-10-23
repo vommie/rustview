@@ -10,6 +10,7 @@ use regex::Regex;
 use rustview_core::library::Library;
 use rustview_core::library::models::{TagId, TagRecord};
 use rustview_core::query::MatchMode;
+use rustview_core::util::cast::{FloatToInt, WrappingAs};
 use slint::{Model, ModelRc, VecModel};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
@@ -97,7 +98,7 @@ impl TagTreeBuilder {
             let start_idx = output.len();
 
             output.push(TagNodeView {
-                id: node.record.id as i32,
+                id: node.record.id.wrapping_as::<i32>(),
                 name: formatted_name.into(),
                 depth,
                 has_children,
@@ -133,7 +134,10 @@ impl TagTreeBuilder {
 
         let usable_h = (available_height - (TAG_PADDING_V * 2.0)).max(TAG_ITEM_HEIGHT);
         let stride_y = TAG_ITEM_HEIGHT + TAG_ROW_SPACING;
-        let rows_per_col = ((usable_h + TAG_ROW_SPACING) / stride_y).floor().max(1.0) as usize;
+        let rows_per_col = ((usable_h + TAG_ROW_SPACING) / stride_y)
+            .floor()
+            .max(1.0)
+            .to_int::<usize>();
 
         let mut columns = Vec::new();
         for chunk in nodes.chunks(rows_per_col) {
@@ -240,7 +244,7 @@ impl TagTreeSync {
 
                     for row_idx in 0..rows_in_col {
                         if let Some(mut row) = col_model.row_data(row_idx) {
-                            let tag_id = row.id as TagId;
+                            let tag_id = row.id.wrapping_as::<TagId>();
                             let is_assigned = is_assign && stats.is_fully_assigned(tag_id);
                             let is_partial = is_assign && stats.is_partially_assigned(tag_id);
                             let is_selected = !is_assign && selected_query_tags.contains(&tag_id);

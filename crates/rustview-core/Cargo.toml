@@ -12,6 +12,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+az.workspace = true
 # Only the runtime types (pixel buffers, strings) are used here, never the generated user interface.
 slint.workspace = true
 heed.workspace = true

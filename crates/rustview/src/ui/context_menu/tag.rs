@@ -10,6 +10,7 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::{TagId, TagRecord};
 use rustview_core::settings::{LogObscurer, SettingsManager};
+use rustview_core::util::cast::WrappingAs;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -176,7 +177,7 @@ impl TagContextMenu {
             CTX_TAG_COLLAPSE_ALL => BridgeTags::collapse_all(window, library, settings, state),
             CTX_TAG_REFRESH => BridgeTags::reload_tags(window, library, state),
             id if id >= CTX_TAG_MOVE_TARGET_BASE => {
-                let dest_parent = (id - CTX_TAG_MOVE_TARGET_BASE) as TagId;
+                let dest_parent = (id - CTX_TAG_MOVE_TARGET_BASE).wrapping_as::<TagId>();
                 if let Some(tid) = target_id {
                     tracing::info!(
                         tag = %LogObscurer::tag_id(tid),

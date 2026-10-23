@@ -11,6 +11,7 @@ use crate::viewer::XRectangle;
 use rustview_core::settings::schema::{
     MULTIVIEW_BAR_MARGIN_LOGICAL_PX, MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX, MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX,
 };
+use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BarPlacement {
@@ -36,7 +37,7 @@ pub fn place_bar(tile: Rect, bar_logical: (f32, f32), scale: f32) -> Option<BarP
 /// Places a bar in `corner` of `area` (the hovered tile for the media bar, the whole Multiview for the primary bar).
 pub fn place_bar_in(corner: BarCorner, area: Rect, bar_logical: (f32, f32), scale: f32) -> Option<BarPlacement> {
     let scale = scale.max(0.5);
-    let px = |logical: f32| (logical * scale).round() as i32;
+    let px = |logical: f32| (logical * scale).round().to_int::<i32>();
     let margin = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX);
     let (bar_w, bar_h) = (px(bar_logical.0), px(bar_logical.1));
     if bar_w <= 0 || bar_h <= 0 || area.w < bar_w + 2 * margin || area.h < bar_h + 2 * margin {
@@ -73,8 +74,8 @@ impl BarPlacement {
 /// plus margin plus reveal distance) covers every position from which the bar can be revealed.
 pub fn near_bar_corner(corner: BarCorner, area: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32) -> bool {
     let scale = scale.max(0.5);
-    let px = |logical: f32| (logical * scale).round() as i32;
-    let reveal = px(reveal_px as f32);
+    let px = |logical: f32| (logical * scale).round().to_int::<i32>();
+    let reveal = px(reveal_px.az::<f32>());
     let reach_x = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX + MULTIVIEW_OVERLAY_WIDTH_LOGICAL_PX) + reveal;
     let reach_y = px(MULTIVIEW_BAR_MARGIN_LOGICAL_PX + MULTIVIEW_OVERLAY_HEIGHT_LOGICAL_PX) + reveal;
     let in_x = match corner {
@@ -86,7 +87,7 @@ pub fn near_bar_corner(corner: BarCorner, area: Rect, pointer: (i32, i32), scale
 
 /// The pointer is on the bar or within `reveal_px` (logical pixels) of its edge.
 pub fn in_reveal_zone(bar: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32) -> bool {
-    let reveal = (reveal_px as f32 * scale.max(0.5)).round() as i32;
+    let reveal = (reveal_px.az::<f32>() * scale.max(0.5)).round().to_int::<i32>();
     Rect::new(bar.x - reveal, bar.y - reveal, bar.w + 2 * reveal, bar.h + 2 * reveal).contains(pointer.0, pointer.1)
 }
 
@@ -94,14 +95,14 @@ pub fn in_reveal_zone(bar: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32
 /// plus the straight middle). Used when no compositing manager blends the window: the corners must not show as black.
 pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {
     let r = radius.clamp(0, rect.w.min(rect.h) / 2);
-    let mut rects = Vec::with_capacity(2 * r as usize + 1);
+    let mut rects = Vec::with_capacity(2 * r.saturating_as::<usize>() + 1);
     let mut push = |x: i32, y: i32, w: i32, h: i32| {
         if w > 0 && h > 0 {
             rects.push(XRectangle {
-                x: x.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
-                y: y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
-                width: w.min(i32::from(u16::MAX)) as u16,
-                height: h.min(i32::from(u16::MAX)) as u16,
+                x: x.clamp(i32::from(i16::MIN), i32::from(i16::MAX)).saturating_as::<i16>(),
+                y: y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)).saturating_as::<i16>(),
+                width: w.min(i32::from(u16::MAX)).saturating_as::<u16>(),
+                height: h.min(i32::from(u16::MAX)).saturating_as::<u16>(),
             });
         }
     };
@@ -109,7 +110,7 @@ pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {
         // Distance of the row's center from the center line of the corner circle, in pixels.
         let dy = f64::from(r - row) - 0.5;
         let reach = (f64::from(r * r) - dy * dy).max(0.0).sqrt();
-        let inset = r - reach.round() as i32;
+        let inset = r - reach.round().to_int::<i32>();
         push(rect.x + inset, rect.y + row, rect.w - 2 * inset, 1);
         push(rect.x + inset, rect.y + rect.h - 1 - row, rect.w - 2 * inset, 1);
     }

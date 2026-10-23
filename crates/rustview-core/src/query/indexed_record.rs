@@ -7,6 +7,7 @@
 
 use super::folder_dir::FolderDir;
 use crate::library::models::MediaRecord;
+use crate::util::cast::Az;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -52,7 +53,7 @@ impl IndexedMediaRecord {
     pub fn refresh_derived(&mut self) {
         let r = &self.record;
         self.ar_value = if r.height > 0 {
-            r.width as f32 / r.height as f32
+            r.width.az::<f32>() / r.height.az::<f32>()
         } else {
             0.0
         };

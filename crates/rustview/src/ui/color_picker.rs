@@ -5,6 +5,7 @@
 //! picker in a window of its own.
 
 use crate::ui::{ColorCodec, ColorPickerWindow};
+use rustview_core::util::cast::SaturatingAs;
 use rustview_core::util::hex_color;
 use slint::{Color, ComponentHandle, Global, SharedString};
 use std::cell::RefCell;
@@ -131,7 +132,7 @@ pub fn shutdown() {
 fn center_over<P: ComponentHandle>(window: &ColorPickerWindow, parent: &P) {
     let (parent_pos, parent_size) = (parent.window().position(), parent.window().size());
     let size = window.window().size();
-    let x = parent_pos.x + (parent_size.width as i32 - size.width as i32) / 2;
-    let y = parent_pos.y + (parent_size.height as i32 - size.height as i32) / 2;
+    let x = parent_pos.x + (parent_size.width.saturating_as::<i32>() - size.width.saturating_as::<i32>()) / 2;
+    let y = parent_pos.y + (parent_size.height.saturating_as::<i32>() - size.height.saturating_as::<i32>()) / 2;
     window.window().set_position(slint::PhysicalPosition::new(x, y));
 }

@@ -1,6 +1,7 @@
 use super::multiview::instance::SharedInstance;
 use rustview_core::library::models::{MediaId, MediaRecord};
 use rustview_core::media::{MediaFormat, MediaType};
+use rustview_core::util::cast::SaturatingAs;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -163,7 +164,10 @@ impl MediaTabSession {
     /// Pixel size the tab content is laid out in: the virtual display of the Multiview.
     pub fn display_size(&self) -> (u32, u32) {
         let container = self.multiview.instance.lock().container();
-        (container.width as u32, container.height as u32)
+        (
+            container.width.saturating_as::<u32>(),
+            container.height.saturating_as::<u32>(),
+        )
     }
 }
 

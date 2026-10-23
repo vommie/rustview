@@ -3,6 +3,7 @@ use super::models::{FolderId, MediaId, MediaRecord};
 use crate::media::{MediaFormat, MediaHasher, MediaType, MetadataExtractor};
 use crate::settings::LogObscurer;
 use crate::thumbnails::{PackStore, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, VideoPreviewRecord};
+use crate::util::cast::SaturatingAs;
 use procfs::process::{FDPermissions, FDTarget};
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -308,13 +309,13 @@ impl<'a> ExternalMediaCompleter<'a> {
                     .modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(old_record.modification_time, |d| d.as_secs() as i64);
+                    .map_or(old_record.modification_time, |d| d.as_secs().saturating_as::<i64>());
 
                 let ctime = fs_meta
                     .created()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map_or(old_record.creation_time, |d| d.as_secs() as i64);
+                    .map_or(old_record.creation_time, |d| d.as_secs().saturating_as::<i64>());
 
                 // Compute real MD5 checksum of file
                 let new_hash = match MediaHasher::hash_file(&file_path) {
@@ -371,7 +372,7 @@ impl<'a> ExternalMediaCompleter<'a> {
                                 }
                                 if !locations.is_empty() {
                                     prev_rec = Some(VideoPreviewRecord {
-                                        frame_count: locations.len() as u32,
+                                        frame_count: locations.len().saturating_as::<u32>(),
                                         frame_locations: locations,
                                     });
                                 }

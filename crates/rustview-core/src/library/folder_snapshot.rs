@@ -11,6 +11,7 @@ use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::models::{CachedFolderNode, FolderHierarchySnapshot, FolderId};
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -212,10 +213,10 @@ impl<'a> FolderSnapshotBuilder<'a> {
             unreachable_nodes = stats.unreachable_nodes,
             duplicate_paths = stats.duplicate_paths,
             undecodable_records = stats.undecodable_records,
-            read_us = read_us as u64,
-            link_us = link_us as u64,
-            sort_us = sort_us as u64,
-            elapsed_us = elapsed_us as u64,
+            read_us = read_us.saturating_as::<u64>(),
+            link_us = link_us.saturating_as::<u64>(),
+            sort_us = sort_us.saturating_as::<u64>(),
+            elapsed_us = elapsed_us.saturating_as::<u64>(),
             "[FolderSnapshot: Built] Folder hierarchy snapshot built from database"
         );
 

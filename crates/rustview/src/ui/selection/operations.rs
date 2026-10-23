@@ -15,6 +15,7 @@ use rustview_core::library::Library;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::Model;
 use std::sync::Arc;
 use std::time::Instant;
@@ -64,7 +65,7 @@ impl BridgeFileSelection {
                 Self::sync_selection_diff(window, state, &changed_ids);
             }
 
-            window.invoke_scroll_media_item_into_view(target_idx as i32);
+            window.invoke_scroll_media_item_into_view(target_idx.saturating_as::<i32>());
         } else if !changed_ids.is_empty() {
             Self::sync_selection_diff(window, state, &changed_ids);
         }
@@ -116,7 +117,7 @@ impl BridgeFileSelection {
         if changed_ids.len() > visible_count * 2 {
             for slot in 0..visible_count {
                 if let Some(mut item) = media_model.row_data(slot) {
-                    let is_selected = st.file_selection.is_selected(item.id as u64);
+                    let is_selected = st.file_selection.is_selected(item.id.wrapping_as::<u64>());
                     if item.is_selected != is_selected {
                         item.is_selected = is_selected;
                         media_model.set_row_data(slot, item);

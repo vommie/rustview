@@ -15,6 +15,7 @@ use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
+use rustview_core::util::cast::WrappingAs;
 use slint::{ModelRc, VecModel};
 use std::sync::Arc;
 
@@ -60,8 +61,8 @@ impl BridgeViewerTabs {
         let tab_models: Vec<TabItemModel> = tabs
             .iter()
             .map(|t| TabItemModel {
-                id: t.id as i32,
-                media_id: t.media_id as i32,
+                id: t.id.wrapping_as::<i32>(),
+                media_id: t.media_id.wrapping_as::<i32>(),
                 title: t.title.clone().into(),
                 format_str: t.format.default_extension().into(),
                 is_active: !is_tab_grid && Some(t.id) == active_id_opt,
@@ -91,7 +92,7 @@ impl BridgeViewerTabs {
         if target_mode == 1
             && let Some(active_tab) = tab_manager.get_active_tab()
         {
-            window.set_viewer_tab_id(active_tab.id as i32);
+            window.set_viewer_tab_id(active_tab.id.wrapping_as::<i32>());
             window.set_viewer_filename(active_tab.title.clone().into());
 
             let solo = active_tab.single_media_id();

@@ -1,5 +1,6 @@
 use super::filters::IndexedMediaRecord;
 use crate::library::models::MediaRecord;
+use crate::util::cast::Az;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -161,12 +162,12 @@ impl MediaSorter {
                     .then_with(|| a.filename.to_lowercase().cmp(&b.filename.to_lowercase())),
                 SortColumn::AspectRatio => {
                     let ar_a = if a.height > 0 {
-                        a.width as f32 / a.height as f32
+                        a.width.az::<f32>() / a.height.az::<f32>()
                     } else {
                         0.0
                     };
                     let ar_b = if b.height > 0 {
-                        b.width as f32 / b.height as f32
+                        b.width.az::<f32>() / b.height.az::<f32>()
                     } else {
                         0.0
                     };

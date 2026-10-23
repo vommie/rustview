@@ -19,6 +19,7 @@ use super::error::LibraryError;
 use super::folder_diagnostics::FolderDiagnostics;
 use super::models::{FolderId, FolderRecord};
 use crate::settings::SettingsManager;
+use crate::util::cast::SaturatingAs;
 use std::collections::HashSet;
 use std::time::Instant;
 
@@ -161,7 +162,7 @@ pub fn run_if_requested(requested: bool, library: &Library, settings: &SettingsM
                 total_media = report.total_media,
                 unresolvable_media_before = report.unresolvable_media_before,
                 unresolvable_media_after = report.unresolvable_media_after,
-                elapsed_ms = report.elapsed_ms as u64,
+                elapsed_ms = report.elapsed_ms.saturating_as::<u64>(),
                 "[FolderReset: Done] Folder tree reset completed. Trigger 'Refresh Tree (Full)' manually to rebuild the tree."
             );
 

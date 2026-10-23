@@ -4,6 +4,7 @@ use libmpv2::Mpv;
 use parking_lot::{Mutex, RwLock};
 use rustview_core::settings::LogObscurer;
 use rustview_core::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
+use rustview_core::util::cast::{Az, SaturatingAs};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -248,7 +249,7 @@ impl MpvPlayer {
     pub fn attach_to_window(&self, wid: u64) -> Result<(), ViewerError> {
         let t0 = Instant::now();
         self.mpv
-            .set_property("wid", wid as i64)
+            .set_property("wid", wid.saturating_as::<i64>())
             .map_err(|e| ViewerError::Mpv(format!("Failed to set MPV 'wid' property: {e:?}")))?;
 
         if let Err(e) = self.mpv.set_property("vo", "gpu") {
@@ -735,7 +736,7 @@ impl MpvPlayer {
                         MPV_OBSERVER_ACTIVE_POLL_MS
                     };
                     if let Some(Ok(libmpv2::events::Event::ClientMessage(args))) =
-                        mpv.wait_event(poll_ms as f64 / 1000.0)
+                        mpv.wait_event(poll_ms.az::<f64>() / 1000.0)
                         && args.first() == Some(&DELETE_KEY_MESSAGE)
                     {
                         let delete_cbs = delete_callbacks.read().clone();

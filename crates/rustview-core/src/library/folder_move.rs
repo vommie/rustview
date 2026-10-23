@@ -13,6 +13,7 @@ use super::error::LibraryError;
 use super::folder_walker::read_dot_hidden_entries;
 use super::models::{FolderId, FolderRecord};
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -109,7 +110,7 @@ impl<'a> FolderMoveExecutor<'a> {
             new_path = %LogObscurer::path(&mv.dst_path),
             subtree_folders = subtree_count,
             affected_media_count,
-            elapsed_ms = t0.elapsed().as_millis() as u64,
+            elapsed_ms = t0.elapsed().as_millis().saturating_as::<u64>(),
             "[FolderMove: Committed] Folder move committed to LMDB"
         );
 
@@ -254,7 +255,7 @@ impl<'a> FolderMoveExecutor<'a> {
 
             let new_path = Self::rebase_path(Path::new(&rec.path), &mv.src_path, &mv.dst_path);
             rec.path = new_path.to_string_lossy().to_string();
-            rec.depth = (i64::from(rec.depth) + depth_delta).max(0) as u32;
+            rec.depth = (i64::from(rec.depth) + depth_delta).max(0).saturating_as::<u32>();
             rec.is_hidden = hidden;
             if is_root {
                 rec.parent_id = Some(mv.new_parent_id);
@@ -334,7 +335,7 @@ impl<'a> FolderMoveExecutor<'a> {
         delta: i64,
     ) -> Result<(), LibraryError> {
         if let Some(mut rec) = self.db.folders.get(wtxn, &folder_id)? {
-            rec.subfolder_count = (i64::from(rec.subfolder_count) + delta).max(0) as u32;
+            rec.subfolder_count = (i64::from(rec.subfolder_count) + delta).max(0).saturating_as::<u32>();
             self.db.folders.put(wtxn, &folder_id, &rec)?;
         }
         Ok(())
@@ -376,7 +377,9 @@ impl<'a> FolderMoveExecutor<'a> {
         }
         for id in chain {
             if let Some(mut rec) = self.db.folders.get(wtxn, id)? {
-                rec.recursive_media_count = (i64::from(rec.recursive_media_count) + delta).max(0) as u32;
+                rec.recursive_media_count = (i64::from(rec.recursive_media_count) + delta)
+                    .max(0)
+                    .saturating_as::<u32>();
                 self.db.folders.put(wtxn, id, &rec)?;
             }
         }

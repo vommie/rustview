@@ -10,6 +10,7 @@ use rustview_core::library::folders::normalize_path;
 use rustview_core::library::models::{FolderHierarchySnapshot, FolderId};
 use rustview_core::settings::{GridAspectRatio, LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, Model, Timer};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -24,7 +25,7 @@ impl BridgeFolders {
             if let Some(row) = model.row_data(idx)
                 && row.is_selected
             {
-                window.invoke_scroll_folder_to_row(idx as i32);
+                window.invoke_scroll_folder_to_row(idx.saturating_as::<i32>());
                 break;
             }
         }
@@ -46,7 +47,7 @@ impl BridgeFolders {
                 tracing::debug!(
                     nodes = arc_snap.nodes.len(),
                     roots = arc_snap.root_ids.len(),
-                    elapsed_us = t0.elapsed().as_micros() as u64,
+                    elapsed_us = t0.elapsed().as_micros().saturating_as::<u64>(),
                     "[FolderTree: SnapshotLazyLoad] Loaded SPoT snapshot into UI state"
                 );
                 arc_snap
@@ -138,7 +139,7 @@ impl BridgeFolders {
         state: &Arc<RwLock<UiState>>,
     ) {
         let s = settings.get();
-        window.set_thumb_size(s.appearance.default_thumbnail_size as i32);
+        window.set_thumb_size(s.appearance.default_thumbnail_size.saturating_as::<i32>());
         let ratio = GridAspectRatio::from_str_name(&s.appearance.thumbnail_aspect_ratio);
         window.set_thumb_aspect_idx(ratio.to_index());
         window.set_show_hidden_folders(s.folders.show_hidden_folders);

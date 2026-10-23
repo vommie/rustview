@@ -11,6 +11,7 @@ use rustview_core::library::Library;
 use rustview_core::library::models::TagId;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::{Model, ModelRc, VecModel};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -162,7 +163,7 @@ impl BridgeTagHistory {
                     .items
                     .into_iter()
                     .map(|it| TagHistoryItemModel {
-                        id: it.id as i32,
+                        id: it.id.wrapping_as::<i32>(),
                         name: it.name.into(),
                         display_text: it.display_text.into(),
                         is_assigned: it.is_assigned,
@@ -181,7 +182,7 @@ impl BridgeTagHistory {
             .collect();
 
         window.set_tag_history_rows(ModelRc::new(VecModel::from(slint_rows)));
-        window.set_tag_history_count(total_valid_count as i32);
+        window.set_tag_history_count(total_valid_count.saturating_as::<i32>());
         window.set_tag_history_is_collapsed(is_collapsed);
         window.set_tag_history_height(history_height);
 

@@ -1,5 +1,6 @@
 use crate::ui::MainWindow;
 use rustview_core::library::models::{FolderId, MediaId};
+use rustview_core::util::cast::{Az, FloatToInt};
 use slint::{ComponentHandle, Timer};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -92,17 +93,25 @@ impl RubberbandGeometry {
         let rect_bottom = rect.y + rect.height;
 
         // O(1) Mathematical row and column index boundaries bounding the box
-        let min_r = ((rect.y - config.grid_padding).max(0.0) / row_stride.max(1.0)).floor() as usize;
-        let max_r = ((rect_bottom - config.grid_padding).max(0.0) / row_stride.max(1.0)).floor() as usize;
+        let min_r = ((rect.y - config.grid_padding).max(0.0) / row_stride.max(1.0))
+            .floor()
+            .to_int::<usize>();
+        let max_r = ((rect_bottom - config.grid_padding).max(0.0) / row_stride.max(1.0))
+            .floor()
+            .to_int::<usize>();
 
-        let min_c = ((rect.x - config.grid_padding).max(0.0) / col_stride.max(1.0)).floor() as usize;
-        let max_c = ((rect_right - config.grid_padding).max(0.0) / col_stride.max(1.0)).floor() as usize;
+        let min_c = ((rect.x - config.grid_padding).max(0.0) / col_stride.max(1.0))
+            .floor()
+            .to_int::<usize>();
+        let max_c = ((rect_right - config.grid_padding).max(0.0) / col_stride.max(1.0))
+            .floor()
+            .to_int::<usize>();
 
         let max_c_clamped = max_c.min(config.columns.saturating_sub(1));
         let mut hits = Vec::new();
 
         for r in min_r..=max_r {
-            let row_y = config.grid_padding + (r as f32 * row_stride);
+            let row_y = config.grid_padding + (r.az::<f32>() * row_stride);
             let item_h = config.item_tile_height;
 
             if row_y >= rect_bottom || (row_y + item_h) <= rect.y {
@@ -115,7 +124,7 @@ impl RubberbandGeometry {
                     break;
                 }
 
-                let item_x = config.grid_padding + (c as f32 * col_stride);
+                let item_x = config.grid_padding + (c.az::<f32>() * col_stride);
                 let item_rect = RectF32::new(item_x, row_y, config.item_tile_width, item_h);
                 if rect.intersects(&item_rect) {
                     hits.push(item_idx);
@@ -137,15 +146,17 @@ impl RubberbandGeometry {
             return Vec::new();
         }
 
-        let min_r = (rect.y.max(0.0) / config.row_height).floor() as usize;
-        let max_r = ((rect.y + rect.height).max(0.0) / config.row_height).floor() as usize;
+        let min_r = (rect.y.max(0.0) / config.row_height).floor().to_int::<usize>();
+        let max_r = ((rect.y + rect.height).max(0.0) / config.row_height)
+            .floor()
+            .to_int::<usize>();
         let max_r_clamped = max_r.min(total_items.saturating_sub(1));
 
         (min_r..=max_r_clamped)
             .filter(|&r| {
                 rect.intersects(&RectF32::new(
                     0.0,
-                    r as f32 * config.row_height,
+                    r.az::<f32>() * config.row_height,
                     config.content_width,
                     config.row_height,
                 ))
@@ -300,7 +311,7 @@ impl RubberbandAutoScroller {
     where
         F: Fn(f32) + 'static,
     {
-        let window_h = window.window().size().height as f32;
+        let window_h = window.window().size().height.az::<f32>();
         let viewport_top = MEDIA_HEADER_BAR_HEIGHT_PX; // ~28px header
         let viewport_bottom = window_h - 28.0; // ~28px status bar
         self.update_cursor_in(view_y, viewport_top, viewport_bottom, on_tick);

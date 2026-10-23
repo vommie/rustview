@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::ComponentHandle;
 use std::sync::Arc;
 
@@ -57,7 +58,7 @@ impl BridgeViewerTabs {
         let fs_select = fullscreen.clone();
         window.on_tab_selected(move |tab_id| {
             tracing::info!(tab_id, "[BridgeViewerTabs: Select] Tab selected by user");
-            tm_select.set_active_tab_internal(tab_id as TabId, true);
+            tm_select.set_active_tab_internal(tab_id.wrapping_as::<TabId>(), true);
             win_select.set_is_tab_grid_active(false);
             win_select.set_is_browse_active(false);
             win_select.set_active_view_mode(1);
@@ -74,7 +75,7 @@ impl BridgeViewerTabs {
         let fs_close = fullscreen.clone();
         window.on_tab_closed(move |tab_id| {
             tracing::info!(tab_id, "[BridgeViewerTabs: Close] Tab closed by user");
-            tm_close.close_tab(tab_id as TabId);
+            tm_close.close_tab(tab_id.wrapping_as::<TabId>());
             Self::sync_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
             Self::sync_video_embedding(&win_close, &tm_close, &fs_close, &set_close);
             fs_close.sync_tab(&tm_close);
@@ -103,8 +104,8 @@ impl BridgeViewerTabs {
         let st_dstart = state.clone();
         window.on_tab_drag_started(move |tab_id, s_idx, mouse_x, tab_w| {
             Self::handle_tab_drag_started(
-                tab_id as TabId,
-                s_idx as usize,
+                tab_id.wrapping_as::<TabId>(),
+                s_idx.saturating_as::<usize>(),
                 mouse_x,
                 tab_w,
                 &win_dstart,
@@ -129,7 +130,7 @@ impl BridgeViewerTabs {
         let scroller_dend = tab_autoscroller.clone();
         window.on_tab_drag_ended(move |tab_id, _target_idx| {
             Self::handle_tab_drag_ended(TabDragEndParams {
-                tab_id: tab_id as TabId,
+                tab_id: tab_id.wrapping_as::<TabId>(),
                 window: &win_dend,
                 tab_manager: &tm_dend,
                 library: &lib_dend,

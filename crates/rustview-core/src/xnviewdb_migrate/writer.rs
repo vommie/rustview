@@ -9,6 +9,7 @@ use crate::library::schema::{
 };
 use crate::media::MediaHasher;
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use std::fs;
 use std::path::Path;
 use std::time::Instant;
@@ -57,7 +58,7 @@ impl XnViewDbWriter {
             database_uuid: MediaHasher::to_hex(&MediaHasher::hash_bytes(db_path.to_string_lossy().as_bytes())),
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_secs() as i64),
+                .map_or(0, |d| d.as_secs().saturating_as::<i64>()),
         };
         db.meta.put(&mut wtxn, "meta", &meta_record)?;
 

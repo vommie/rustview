@@ -9,6 +9,7 @@
 //! the same share as everybody else instead of a sliver.
 
 use super::layout::{Gutter, GutterKind, Layout, LayoutParams, fair_share, fit_cap, proportional};
+use rustview_core::util::cast::{FloatToInt, SaturatingAs};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Pins {
@@ -67,14 +68,14 @@ pub fn split_columns(usable: i32, caps: &[i32], pins: &[Option<f64>], floor: i32
     if n == 0 {
         return Vec::new();
     }
-    let usable = usable.max(n as i32);
+    let usable = usable.max(n.saturating_as::<i32>());
     let wants: Vec<Option<f64>> = (0..n)
         .map(|i| pins.get(i).copied().flatten().filter(valid_share))
         .collect();
     if n == 1 || wants.iter().all(Option::is_none) {
         return fair_share(usable, caps);
     }
-    let floor = floor.clamp(1, (usable / n as i32).max(1));
+    let floor = floor.clamp(1, (usable / n.saturating_as::<i32>()).max(1));
 
     if wants.iter().all(Option::is_some) {
         let total: f64 = wants.iter().flatten().sum();
@@ -82,10 +83,10 @@ pub fn split_columns(usable: i32, caps: &[i32], pins: &[Option<f64>], floor: i32
         return settle(proportional(usable, &shares), usable, floor);
     }
 
-    let free = wants.iter().filter(|w| w.is_none()).count() as i32;
+    let free = wants.iter().filter(|w| w.is_none()).count().saturating_as::<i32>();
     let pinned_share: f64 = wants.iter().flatten().sum();
     let reserve = if pinned_share >= FULL_ROW_SHARE {
-        let equal = usable / n as i32;
+        let equal = usable / n.saturating_as::<i32>();
         (0..n)
             .filter(|&i| wants[i].is_none())
             .map(|i| caps[i].min(equal))
@@ -98,12 +99,14 @@ pub fn split_columns(usable: i32, caps: &[i32], pins: &[Option<f64>], floor: i32
     let mut pinned: Vec<i32> = wants
         .iter()
         .flatten()
-        .map(|share| (share * f64::from(usable)).round() as i32)
+        .map(|share| (share * f64::from(usable)).round().to_int::<i32>())
         .collect();
     let wanted: i32 = pinned.iter().sum();
     if wanted > budget {
         for w in &mut pinned {
-            *w = (f64::from(*w) * f64::from(budget) / f64::from(wanted)).round() as i32;
+            *w = (f64::from(*w) * f64::from(budget) / f64::from(wanted))
+                .round()
+                .to_int::<i32>();
         }
     }
     let taken: i32 = pinned.iter().sum();

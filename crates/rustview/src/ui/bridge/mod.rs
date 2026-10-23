@@ -41,6 +41,7 @@ use rustview_core::library::models::{FolderId, MediaId, TagId};
 use rustview_core::query::{MediaTypeFilter, ScopeMode, SortColumn, SortOrder};
 use rustview_core::settings::{GridAspectRatio, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, ModelRc, Timer, VecModel};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -180,7 +181,7 @@ impl UiBridge {
 
         initial_state.tab_grid_columns = v_settings.tab_grid_columns;
         initial_state.tab_grid_auto_columns = v_settings.tab_grid_auto_columns;
-        window.set_tab_grid_columns(v_settings.tab_grid_columns as i32);
+        window.set_tab_grid_columns(v_settings.tab_grid_columns.saturating_as::<i32>());
         window.set_tab_grid_auto_columns(v_settings.tab_grid_auto_columns);
 
         initial_state.is_inspector_collapsed = v_settings.is_inspector_collapsed;
@@ -201,22 +202,32 @@ impl UiBridge {
         window.set_col_flags_width(v_settings.col_flags_width);
 
         let app_settings = settings.get();
-        window.set_thumb_size(app_settings.appearance.default_thumbnail_size as i32);
+        window.set_thumb_size(app_settings.appearance.default_thumbnail_size.saturating_as::<i32>());
         let ratio = GridAspectRatio::from_str_name(&app_settings.appearance.thumbnail_aspect_ratio);
         window.set_thumb_aspect_idx(ratio.to_index());
         ThumbnailBadgeBridge::register(&window);
         ThumbnailBadgeBridge::apply_config(&window, &app_settings.appearance);
-        window.set_grid_item_padding_h(app_settings.appearance.grid_item_padding_horizontal as i32);
-        window.set_grid_item_padding_v(app_settings.appearance.grid_item_padding_vertical as i32);
-        window.set_grid_spacing(app_settings.appearance.grid_spacing as i32);
-        window.set_grid_padding(app_settings.appearance.grid_padding as i32);
-        window.set_grid_item_border_width(app_settings.appearance.grid_item_border_width as i32);
-        window.set_grid_item_corner_radius(app_settings.appearance.grid_item_corner_radius as i32);
+        window.set_grid_item_padding_h(
+            app_settings
+                .appearance
+                .grid_item_padding_horizontal
+                .saturating_as::<i32>(),
+        );
+        window.set_grid_item_padding_v(
+            app_settings
+                .appearance
+                .grid_item_padding_vertical
+                .saturating_as::<i32>(),
+        );
+        window.set_grid_spacing(app_settings.appearance.grid_spacing.saturating_as::<i32>());
+        window.set_grid_padding(app_settings.appearance.grid_padding.saturating_as::<i32>());
+        window.set_grid_item_border_width(app_settings.appearance.grid_item_border_width.saturating_as::<i32>());
+        window.set_grid_item_corner_radius(app_settings.appearance.grid_item_corner_radius.saturating_as::<i32>());
         window.set_enable_tooltips(app_settings.appearance.enable_tooltips);
-        window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms as i32);
+        window.set_tooltip_delay_ms(app_settings.appearance.tooltip_delay_ms.saturating_as::<i32>());
         bar_overlay::set_tooltip_settings(
             app_settings.appearance.enable_tooltips,
-            app_settings.appearance.tooltip_delay_ms as i32,
+            app_settings.appearance.tooltip_delay_ms.saturating_as::<i32>(),
         );
         type_ahead::config::apply(&app_settings.appearance);
         prefs::apply(&app_settings.fullscreen);

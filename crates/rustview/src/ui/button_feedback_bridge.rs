@@ -2,6 +2,7 @@
 
 use crate::ui::button_feedback::{ButtonFeedback, FeedbackKind};
 use crate::ui::{ButtonFeedback as SlintFeedback, FeedbackKind as SlintKind};
+use rustview_core::util::cast::SaturatingAs;
 
 pub fn to_slint(feedback: ButtonFeedback) -> SlintFeedback {
     SlintFeedback {
@@ -10,6 +11,6 @@ pub fn to_slint(feedback: ButtonFeedback) -> SlintFeedback {
             FeedbackKind::Success => SlintKind::Success,
             FeedbackKind::Error => SlintKind::Error,
         },
-        seq: feedback.seq as i32,
+        seq: feedback.seq.saturating_as::<i32>(),
     }
 }

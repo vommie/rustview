@@ -6,6 +6,7 @@
 //! pinned by dragging a gutter come from `layout_pins`.
 
 use super::layout_pins::{Pins, split_columns};
+use rustview_core::util::cast::{FloatToInt, SaturatingAs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Rect {
@@ -81,7 +82,7 @@ pub fn fair_share(total: i32, caps: &[i32]) -> Vec<i32> {
     let sum: i64 = caps.iter().map(|&c| i64::from(c)).sum();
     if sum <= i64::from(total) {
         let mut out = caps.to_vec();
-        let rest = total - sum as i32;
+        let rest = total - sum.saturating_as::<i32>();
         out[0] += rest / 2;
         out[n - 1] += rest - rest / 2;
         return out;
@@ -92,7 +93,7 @@ pub fn fair_share(total: i32, caps: &[i32]) -> Vec<i32> {
     let mut out = vec![0; n];
     let mut done = vec![false; n];
     let mut rest = total;
-    let mut open = n as i32;
+    let mut open = n.saturating_as::<i32>();
     for &i in &order {
         let share = rest / open;
         if caps[i] > share {
@@ -107,10 +108,10 @@ pub fn fair_share(total: i32, caps: &[i32]) -> Vec<i32> {
     if remaining.is_empty() {
         return out;
     }
-    let count = remaining.len() as i32;
+    let count = remaining.len().saturating_as::<i32>();
     let (base, extra) = (rest / count, rest % count);
     for (rank, &i) in remaining.iter().enumerate() {
-        out[i] = base + i32::from((rank as i32) < extra);
+        out[i] = base + i32::from(rank.saturating_as::<i32>() < extra);
     }
     out
 }
@@ -125,7 +126,7 @@ pub fn fit(aspect: f32, box_w: i32, box_h: i32) -> (i32, i32) {
     let (bw, bh) = (box_w.max(1), box_h.max(1));
     let w = (f64::from(bh) * a).round().min(f64::from(bw));
     let h = (w / a).round().min(f64::from(bh));
-    ((w as i32).max(1), (h as i32).max(1))
+    (w.to_int::<i32>().max(1), h.to_int::<i32>().max(1))
 }
 
 pub(super) fn fit_cap(row_h: i32, aspect: f32) -> i32 {
@@ -134,7 +135,7 @@ pub(super) fn fit_cap(row_h: i32, aspect: f32) -> i32 {
     } else {
         16.0 / 9.0
     };
-    (f64::from(row_h.max(1)) * a).round() as i32
+    (f64::from(row_h.max(1)) * a).round().to_int::<i32>()
 }
 
 /// Splits `total` by proportions; the last element absorbs the rounding remainder.
@@ -142,7 +143,7 @@ pub(super) fn proportional(total: i32, fractions: &[f64]) -> Vec<i32> {
     let n = fractions.len();
     let mut out: Vec<i32> = fractions
         .iter()
-        .map(|f| (f64::from(total) * f).round() as i32)
+        .map(|f| (f64::from(total) * f).round().to_int::<i32>())
         .collect();
     if n > 0 {
         let head: i32 = out[..n - 1].iter().sum();
@@ -164,7 +165,7 @@ fn solve_row(
     pins: &[Option<f64>],
 ) -> Vec<TileLayout> {
     let n = aspects.len();
-    let usable = (total_w - (n as i32 - 1) * gutter).max(n as i32);
+    let usable = (total_w - (n.saturating_as::<i32>() - 1) * gutter).max(n.saturating_as::<i32>());
     let caps: Vec<i32> = aspects.iter().map(|&a| fit_cap(row_h, a)).collect();
     let columns = split_columns(usable, &caps, pins, min_column);
 
@@ -241,7 +242,7 @@ pub fn solve(p: &LayoutParams, aspects: &[f32], pins: &Pins) -> Layout {
             .iter()
             .map(|r| {
                 let sum: f64 = r.iter().map(|&i| f64::from(aspects[i])).sum();
-                (f64::from(p.width - p.gutter) / sum.max(0.01)).round() as i32
+                (f64::from(p.width - p.gutter) / sum.max(0.01)).round().to_int::<i32>()
             })
             .collect();
         fair_share(available, &natural)

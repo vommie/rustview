@@ -22,6 +22,7 @@ use rustview_core::library::Library;
 use rustview_core::settings::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
 use rustview_core::settings::{AppSettings, GridAspectRatio, LogObscurer, SettingsDiff, SettingsManager};
 use rustview_core::thumbnails::ThumbnailConfig;
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::sync::Arc;
 
@@ -51,7 +52,7 @@ impl UiBridge {
             let _ = w_weak.upgrade_in_event_loop(move |window| {
                 if diff_clone.performance_cache_changed {
                     let plan = MemoryPlan::resolve(new_clone.performance.memory_budget_mb, SystemMemory::read());
-                    thumbnails.cache().set_budget(plan.thumbnail_cache_bytes as usize);
+                    thumbnails.cache().set_budget(plan.thumbnail_cache_bytes.saturating_as::<usize>());
                     tracing::info!(
                         automatic = plan.automatic,
                         budget_mb = plan.budget_bytes / BYTES_PER_MB,
@@ -87,10 +88,10 @@ impl UiBridge {
 
                 if diff_clone.tooltip_settings_changed {
                     window.set_enable_tooltips(new_clone.appearance.enable_tooltips);
-                    window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms as i32);
+                    window.set_tooltip_delay_ms(new_clone.appearance.tooltip_delay_ms.saturating_as::<i32>());
                     bar_overlay::set_tooltip_settings(
                         new_clone.appearance.enable_tooltips,
-                        new_clone.appearance.tooltip_delay_ms as i32,
+                        new_clone.appearance.tooltip_delay_ms.saturating_as::<i32>(),
                     );
                 }
 
@@ -109,14 +110,14 @@ impl UiBridge {
                 }
 
                 if diff_clone.appearance_grid_changed {
-                    window.set_thumb_size(new_clone.appearance.default_thumbnail_size as i32);
+                    window.set_thumb_size(new_clone.appearance.default_thumbnail_size.saturating_as::<i32>());
                     let ratio = GridAspectRatio::from_str_name(&new_clone.appearance.thumbnail_aspect_ratio);
                     window.set_thumb_aspect_idx(ratio.to_index());
                     ThumbnailBadgeBridge::apply_config(&window, &new_clone.appearance);
-                    window.set_grid_item_padding_h(new_clone.appearance.grid_item_padding_horizontal as i32);
-                    window.set_grid_item_padding_v(new_clone.appearance.grid_item_padding_vertical as i32);
-                    window.set_grid_item_border_width(new_clone.appearance.grid_item_border_width as i32);
-                    window.set_grid_item_corner_radius(new_clone.appearance.grid_item_corner_radius as i32);
+                    window.set_grid_item_padding_h(new_clone.appearance.grid_item_padding_horizontal.saturating_as::<i32>());
+                    window.set_grid_item_padding_v(new_clone.appearance.grid_item_padding_vertical.saturating_as::<i32>());
+                    window.set_grid_item_border_width(new_clone.appearance.grid_item_border_width.saturating_as::<i32>());
+                    window.set_grid_item_corner_radius(new_clone.appearance.grid_item_corner_radius.saturating_as::<i32>());
 
                     if window.get_active_view_mode() == 2 {
                         BridgeTabGrid::sync_tab_grid_ui(&window, &tab_manager, &library, &settings, &state);

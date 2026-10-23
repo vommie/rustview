@@ -3,6 +3,8 @@ use super::image::DecodedThumbnailFrame;
 use super::types::{ScalingAlgorithm, ThumbnailConfig, VideoThumbnailEngine, calculate_aspect_dimensions};
 use crate::media::metadata::ensure_ffmpeg_initialized;
 use crate::settings::LogObscurer;
+use crate::util::cast::{Az, FloatToInt};
+
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::software::scaling::context::Context as SwsContext;
 use ffmpeg_next::software::scaling::flag::Flags as SwsFlags;
@@ -224,7 +226,7 @@ impl FfmpegVideoThumbnailer {
         let num_previews = params.target_preview_count.clamp(2, 100);
         let primary_offset_pct = params.primary_offset_pct;
 
-        let calc_seek_ts = |sec: f64| -> i64 { (sec * f64::from(ffmpeg_next::ffi::AV_TIME_BASE)) as i64 };
+        let calc_seek_ts = |sec: f64| -> i64 { (sec * f64::from(ffmpeg_next::ffi::AV_TIME_BASE)).to_int::<i64>() };
 
         // 1. Extract Primary Thumbnail Frame
         let prim_sec = (duration_secs * primary_offset_pct).clamp(0.0, duration_secs);
@@ -246,7 +248,7 @@ impl FfmpegVideoThumbnailer {
 
             for k in 0..num_previews {
                 let pct = if num_previews > 1 {
-                    start_pct + (end_pct - start_pct) * (k as f64 / (num_previews - 1) as f64)
+                    start_pct + (end_pct - start_pct) * (k.az::<f64>() / (num_previews - 1).az::<f64>())
                 } else {
                     prim_sec
                 };
@@ -273,7 +275,7 @@ impl FfmpegVideoThumbnailer {
             }
         }
 
-        let duration_ms = (duration_secs * 1000.0).round() as u64;
+        let duration_ms = (duration_secs * 1000.0).round().to_int::<u64>();
 
         Ok(VideoExtractionResult {
             primary_frame,
@@ -313,9 +315,11 @@ impl FfmpegVideoThumbnailer {
                 while decoder.receive_frame(&mut decoded_frame).is_ok() {
                     if decoded_frame.width() > 0 && decoded_frame.height() > 0 {
                         frame_idx += 1;
-                        let pts_sec = decoded_frame.pts().map_or(frame_idx as f64 / stream_ctx.fps, |pts| {
-                            pts as f64 * f64::from(stream_ctx.time_base)
-                        });
+                        let pts_sec = decoded_frame
+                            .pts()
+                            .map_or(frame_idx.az::<f64>() / stream_ctx.fps, |pts| {
+                                pts.az::<f64>() * f64::from(stream_ctx.time_base)
+                            });
 
                         if pts_sec >= target_pts_sec - 0.02 {
                             let raw_rgb = scaler.scale_frame(&decoded_frame)?;
@@ -398,7 +402,7 @@ impl FfmpegVideoThumbnailer {
             let mut prev_secs = Vec::with_capacity(num_previews);
             for k in 0..num_previews {
                 let pct = if num_previews > 1 {
-                    start_pct + (end_pct - start_pct) * (k as f64 / (num_previews - 1) as f64)
+                    start_pct + (end_pct - start_pct) * (k.az::<f64>() / (num_previews - 1).az::<f64>())
                 } else {
                     prim_sec
                 };
@@ -431,8 +435,8 @@ impl FfmpegVideoThumbnailer {
 
                 let pts_sec = decoded_video_frame
                     .pts()
-                    .map_or(frame_idx as f64 / stream_ctx.fps, |pts| {
-                        pts as f64 * f64::from(stream_ctx.time_base)
+                    .map_or(frame_idx.az::<f64>() / stream_ctx.fps, |pts| {
+                        pts.az::<f64>() * f64::from(stream_ctx.time_base)
                     });
                 frame_idx += 1;
 
@@ -568,7 +572,9 @@ impl FfmpegVideoThumbnailer {
                     let start_idx = 0;
                     let end_idx = total.saturating_sub(1);
                     start_idx
-                        + (((end_idx - start_idx) as f64) * (k as f64 / (num_previews - 1) as f64)).round() as usize
+                        + ((end_idx - start_idx).az::<f64>() * (k.az::<f64>() / (num_previews - 1).az::<f64>()))
+                            .round()
+                            .to_int::<usize>()
                 } else {
                     0
                 };
@@ -581,7 +587,7 @@ impl FfmpegVideoThumbnailer {
             }
         }
 
-        let dur_ms = duration_secs.map_or(0, |d| (d * 1000.0).round() as u64);
+        let dur_ms = duration_secs.map_or(0, |d| (d * 1000.0).round().to_int::<u64>());
 
         Ok(VideoExtractionResult {
             primary_frame: final_primary,
@@ -651,14 +657,14 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let mut duration_secs: Option<f64> = None;
 
         if ictx.duration() > 0 {
-            let secs = ictx.duration() as f64 / f64::from(ffmpeg_next::ffi::AV_TIME_BASE);
+            let secs = ictx.duration().az::<f64>() / f64::from(ffmpeg_next::ffi::AV_TIME_BASE);
             if secs > 0.05 {
                 duration_secs = Some(secs);
             }
         }
 
         if duration_secs.is_none() && stream_duration > 0 {
-            let secs = stream_duration as f64 * f64::from(time_base);
+            let secs = stream_duration.az::<f64>() * f64::from(time_base);
             if secs > 0.05 {
                 duration_secs = Some(secs);
             }
@@ -677,7 +683,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         };
 
         if duration_secs.is_none() && stream.frames() > 0 {
-            let secs = stream.frames() as f64 / fps;
+            let secs = stream.frames().az::<f64>() / fps;
             if secs > 0.05 {
                 duration_secs = Some(secs);
             }
@@ -779,7 +785,7 @@ impl VideoFrameDecoder for FfmpegVideoThumbnailer {
         let config = ThumbnailConfig {
             max_bound,
             scaling_algorithm: scaling_algo,
-            video_offset_percent: (time_percent * 100.0).clamp(1.0, 99.0) as u8,
+            video_offset_percent: (time_percent * 100.0).clamp(1.0, 99.0).to_int::<u8>(),
             generate_video_previews: false,
             ..Default::default()
         };
@@ -828,7 +834,7 @@ impl VideoFrameDecoder for MpvVideoThumbnailer {
         let config = ThumbnailConfig {
             max_bound,
             scaling_algorithm: scaling_algo,
-            video_offset_percent: (time_percent * 100.0).clamp(1.0, 99.0) as u8,
+            video_offset_percent: (time_percent * 100.0).clamp(1.0, 99.0).to_int::<u8>(),
             generate_video_previews: false,
             video_engine: VideoThumbnailEngine::Mpv,
             ..Default::default()

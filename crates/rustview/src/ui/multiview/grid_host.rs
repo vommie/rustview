@@ -11,6 +11,7 @@ use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::instance::SharedInstance;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::{ViewerTabManager, ViewportBounds, XRectangle, get_slint_window_xid};
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::cell::RefCell;
 
@@ -55,8 +56,8 @@ impl GridHost {
         let clip = Rect::new(
             self.viewport.x,
             self.viewport.y,
-            self.viewport.width as i32,
-            self.viewport.height as i32,
+            self.viewport.width.saturating_as::<i32>(),
+            self.viewport.height.saturating_as::<i32>(),
         );
         let surface = HostSurface::tab_grid(self.main_xid, rect, self.scale, clip, self.cutouts.clone());
         let view = {

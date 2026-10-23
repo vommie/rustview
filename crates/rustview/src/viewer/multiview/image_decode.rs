@@ -4,6 +4,7 @@
 use crate::viewer::HighResImageLoader;
 use fast_image_resize::images::Image;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
+use rustview_core::util::cast::FloatToInt;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::Path;
 
@@ -14,8 +15,8 @@ pub fn downscaled_size(width: u32, height: u32, max_w: u32, max_h: u32) -> (u32,
     }
     let scale = (f64::from(max_w) / f64::from(width)).min(f64::from(max_h) / f64::from(height));
     (
-        ((f64::from(width) * scale).round() as u32).max(1),
-        ((f64::from(height) * scale).round() as u32).max(1),
+        (f64::from(width) * scale).round().to_int::<u32>().max(1),
+        (f64::from(height) * scale).round().to_int::<u32>().max(1),
     )
 }
 

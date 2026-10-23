@@ -20,6 +20,7 @@ use rustview_core::query::{MediaStore, lay_out};
 use rustview_core::settings::SettingsManager;
 use rustview_core::telemetry::FolderLoadBenchmark;
 use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::ComponentHandle;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -198,10 +199,10 @@ impl BridgeFolders {
                 }
             }
         }
-        selection
-            .bench
-            .lmdb_id_fetch_time_us
-            .store(t_id_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+        selection.bench.lmdb_id_fetch_time_us.store(
+            t_id_start.elapsed().as_micros().saturating_as::<u64>(),
+            Ordering::Relaxed,
+        );
         media_ids
     }
 
@@ -225,9 +226,10 @@ impl BridgeFolders {
                 }
             }
         }
-        bench
-            .lmdb_record_fetch_time_us
-            .store(t_rec_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+        bench.lmdb_record_fetch_time_us.store(
+            t_rec_start.elapsed().as_micros().saturating_as::<u64>(),
+            Ordering::Relaxed,
+        );
         bench.total_records_fetched.store(known_media.len(), Ordering::Relaxed);
 
         let is_empty_in_db = known_media.is_empty();
@@ -240,7 +242,7 @@ impl BridgeFolders {
         };
         bench
             .preindex_time_us
-            .store(t_pre.elapsed().as_micros() as u64, Ordering::Relaxed);
+            .store(t_pre.elapsed().as_micros().saturating_as::<u64>(), Ordering::Relaxed);
         LoadedFolder {
             indexed,
             is_empty_in_db,
@@ -547,7 +549,7 @@ impl BridgeFolders {
                     }
                 }
 
-                let scan_elapsed = t_scan.elapsed().as_micros() as u64;
+                let scan_elapsed = t_scan.elapsed().as_micros().saturating_as::<u64>();
                 bench_scanner.scan_executed.store(true, Ordering::Relaxed);
                 bench_scanner.fs_scan_time_us.store(scan_elapsed, Ordering::Relaxed);
 

@@ -16,6 +16,8 @@ use crate::ui::tags::BridgeTags;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::type_ahead::{TypeAheadParams, TypeAheadState, handle_type_ahead_key};
 use parking_lot::Mutex;
+use rustview_core::util::cast::{Az, WrappingAs};
+
 use slint::ComponentHandle;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -99,7 +101,7 @@ impl UiBridge {
         let st_th_click = self.state.clone();
         self.window.on_tag_history_tag_clicked(move |tag_id| {
             BridgeTagHistory::handle_tag_history_clicked(
-                tag_id as u32,
+                tag_id.wrapping_as::<u32>(),
                 &win_th_click,
                 &lib_th_click,
                 &thumb_th_click,
@@ -130,7 +132,7 @@ impl UiBridge {
             let elapsed = last_log.elapsed();
             if elapsed.as_millis() >= 100 {
                 let hz = if elapsed.as_secs_f64() > 0.0 {
-                    (count as f64) / elapsed.as_secs_f64()
+                    count.az::<f64>() / elapsed.as_secs_f64()
                 } else {
                     0.0
                 };
@@ -330,7 +332,7 @@ impl UiBridge {
             let elapsed = last_log.elapsed();
             if elapsed.as_millis() >= 100 {
                 let hz = if elapsed.as_secs_f64() > 0.0 {
-                    (count as f64) / elapsed.as_secs_f64()
+                    count.az::<f64>() / elapsed.as_secs_f64()
                 } else {
                     0.0
                 };
@@ -383,7 +385,7 @@ impl UiBridge {
             let elapsed = last_log.elapsed();
             if elapsed.as_millis() >= 100 {
                 let hz = if elapsed.as_secs_f64() > 0.0 {
-                    (count as f64) / elapsed.as_secs_f64()
+                    count.az::<f64>() / elapsed.as_secs_f64()
                 } else {
                     0.0
                 };

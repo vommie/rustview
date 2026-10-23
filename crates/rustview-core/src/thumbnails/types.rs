@@ -5,6 +5,8 @@ use crate::settings::{
     DEFAULT_VIDEO_ENGINE, DEFAULT_VIDEO_OFFSET_PERCENT, LogObscurer, MAX_SHORT_VIDEO_THRESHOLD_SECS,
     MIN_SHORT_VIDEO_THRESHOLD_SECS, PerformanceSettings,
 };
+use crate::util::cast::{Az, FloatToInt, SaturatingAs};
+
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -203,7 +205,7 @@ pub fn generate_random_video_offset_percent() -> u8 {
 
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(42, |d| d.as_nanos() as u64);
+        .map_or(42, |d| d.as_nanos().saturating_as::<u64>());
 
     let prev = SEED.fetch_add(0x9E37_79B9_7F4A_7C15 ^ nanos, Ordering::Relaxed);
     let mut x = prev ^ nanos;
@@ -212,7 +214,7 @@ pub fn generate_random_video_offset_percent() -> u8 {
     x ^= x >> 31;
 
     // Uniformly maps to range 1..=99
-    ((x % 99) + 1) as u8
+    ((x % 99) + 1).saturating_as::<u8>()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -249,7 +251,7 @@ impl ThumbnailStorageStats {
     pub fn avg_thumbnail_kb(&self) -> f64 {
         let total_frames = self.lmdb_thumbnails_count + self.lmdb_preview_frames_count;
         if total_frames > 0 {
-            (self.pack_total_bytes as f64 / total_frames as f64) / 1024.0
+            (self.pack_total_bytes.az::<f64>() / total_frames.az::<f64>()) / 1024.0
         } else {
             0.0
         }
@@ -267,13 +269,13 @@ pub fn calculate_aspect_dimensions(orig_w: u32, orig_h: u32, max_bound: u32) -> 
     if orig_w == 0 || orig_h == 0 {
         return (max_bound.max(16), max_bound.max(16));
     }
-    let max_b = max_bound.max(16) as f32;
-    let w = orig_w as f32;
-    let h = orig_h as f32;
+    let max_b = max_bound.max(16).az::<f32>();
+    let w = orig_w.az::<f32>();
+    let h = orig_h.az::<f32>();
 
     let scale = (max_b / w).min(max_b / h);
-    let target_w = ((w * scale).round() as u32).clamp(1, max_bound);
-    let target_h = ((h * scale).round() as u32).clamp(1, max_bound);
+    let target_w = (w * scale).round().to_int::<u32>().clamp(1, max_bound);
+    let target_h = (h * scale).round().to_int::<u32>().clamp(1, max_bound);
     (target_w, target_h)
 }
 

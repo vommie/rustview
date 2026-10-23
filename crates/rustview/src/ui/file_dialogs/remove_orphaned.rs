@@ -7,6 +7,7 @@ use crate::ui::tabs::grid_bridge::BridgeTabGrid;
 use crate::ui::tags::BridgeTags;
 use crate::ui::{MainWindow, RemoveOrphanedFileDialog};
 use rustview_core::library::models::MediaId;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -55,7 +56,7 @@ impl RemoveOrphanedFileDialogController {
             self.bind_dialog_events(win, window, media_ids, ctx);
 
             win.set_file_name(first_name.into());
-            win.set_files_count(count as i32);
+            win.set_files_count(count.saturating_as::<i32>());
             win.set_error_message("".into());
 
             window.set_is_modal_locked(true);

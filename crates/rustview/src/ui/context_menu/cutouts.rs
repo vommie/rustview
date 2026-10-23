@@ -13,6 +13,8 @@ pub use crate::ui::file_dialogs::missing::{MissingFileDialogController, MissingF
 pub use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
 pub use crate::ui::file_dialogs::{FileDialogContext, FileRenameContext, FileRenameDialogController};
 use crate::viewer::XRectangle;
+use rustview_core::util::cast::{FloatToInt, SaturatingAs};
+
 use slint::{ComponentHandle, Model};
 
 /// Computes MPV cutouts for all currently mapped menu level rectangles.
@@ -39,18 +41,22 @@ pub fn calculate_all_active_menu_cutouts(window: &MainWindow) -> Vec<XRectangle>
 }
 
 pub fn make_rounded_cutout_rectangles(x: f32, y: f32, w: f32, h: f32, scale: f32) -> Vec<XRectangle> {
-    let px = (x * scale).round() as i16;
-    let py = (y * scale).round() as i16;
-    let pw = (w * scale).round() as u16;
-    let ph = (h * scale).round() as u16;
-    let pr = ((6.0 * scale).round() as i16).max(2).min(ph as i16 / 3);
+    let px = (x * scale).round().to_int::<i16>();
+    let py = (y * scale).round().to_int::<i16>();
+    let pw = (w * scale).round().to_int::<u16>();
+    let ph = (h * scale).round().to_int::<u16>();
+    let pr = (6.0 * scale)
+        .round()
+        .to_int::<i16>()
+        .max(2)
+        .min(ph.saturating_as::<i16>() / 3);
 
     vec![
         XRectangle {
             x: px,
             y: py + pr,
             width: pw,
-            height: ph.saturating_sub((pr * 2) as u16).max(1),
+            height: ph.saturating_sub((pr * 2).saturating_as::<u16>()).max(1),
         },
         XRectangle {
             x: px + 1,
@@ -67,7 +73,7 @@ pub fn make_rounded_cutout_rectangles(x: f32, y: f32, w: f32, h: f32, scale: f32
         XRectangle {
             x: px + pr,
             y: py,
-            width: pw.saturating_sub((pr * 2) as u16).max(1),
+            width: pw.saturating_sub((pr * 2).saturating_as::<u16>()).max(1),
             height: ph,
         },
     ]

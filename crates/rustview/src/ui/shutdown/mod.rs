@@ -32,6 +32,7 @@ use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
 use rustview_core::settings::schema::SHUTDOWN_WATCHDOG_MS;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -87,7 +88,7 @@ pub fn run(targets: &ShutdownTargets<'_>) {
     }
     release_resources(targets);
     tracing::info!(
-        elapsed_ms = started.elapsed().as_millis() as u64,
+        elapsed_ms = started.elapsed().as_millis().saturating_as::<u64>(),
         "[Shutdown: Done] Windows closed, native resources released, settings written"
     );
 }

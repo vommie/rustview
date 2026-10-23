@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::SettingsManager;
 use rustview_core::settings::schema::TAB_GRID_ITEM_HEADER_LOGICAL_PX;
+use rustview_core::util::cast::{Az, SaturatingAs, WrappingAs};
 use slint::{ComponentHandle, Image, ModelRc, VecModel};
 use std::sync::Arc;
 use std::time::Instant;
@@ -42,7 +43,7 @@ impl BridgeTabGrid {
 
         // In Tab-Grid mode (mode 2), both sidebars and resizers are hidden.
         // The available viewport width is therefore the full window width in logical pixels.
-        let viewport_w = (win_size.width as f32 / scale).max(100.0);
+        let viewport_w = (win_size.width.az::<f32>() / scale).max(100.0);
 
         let effective_cols = if is_auto_cols {
             ResponsiveBreakpoints::compute_auto_columns(viewport_w)
@@ -50,7 +51,7 @@ impl BridgeTabGrid {
             manual_cols
         };
 
-        window.set_tab_grid_columns(effective_cols as i32);
+        window.set_tab_grid_columns(effective_cols.saturating_as::<i32>());
         window.set_tab_grid_auto_columns(is_auto_cols);
 
         if total_tabs == 0 || window.get_active_view_mode() != 2 {
@@ -73,10 +74,10 @@ impl BridgeTabGrid {
 
         // 2. Compute Masonry Coordinates
         let (p_h, p_v, spacing, padding) = (
-            app_settings.appearance.grid_item_padding_horizontal as f32,
-            app_settings.appearance.grid_item_padding_vertical as f32,
-            app_settings.appearance.grid_spacing as f32,
-            app_settings.appearance.grid_padding as f32,
+            app_settings.appearance.grid_item_padding_horizontal.az::<f32>(),
+            app_settings.appearance.grid_item_padding_vertical.az::<f32>(),
+            app_settings.appearance.grid_spacing.az::<f32>(),
+            app_settings.appearance.grid_padding.az::<f32>(),
         );
 
         let (rects, total_h) = TabGridMasonryEngine::compute_layout(
@@ -116,8 +117,8 @@ impl BridgeTabGrid {
                 );
 
                 TabGridItemModel {
-                    id: s.id as i32,
-                    media_id: s.media_id as i32,
+                    id: s.id.wrapping_as::<i32>(),
+                    media_id: s.media_id.wrapping_as::<i32>(),
                     title: s.title.clone().into(),
                     format_str: s.format.default_extension().into(),
                     is_video: solo_kind == Some(TileKind::Video),
@@ -128,8 +129,8 @@ impl BridgeTabGrid {
                     image: Image::default(),
                     is_loading: false,
                     error_message: String::new().into(),
-                    orig_width: width as i32,
-                    orig_height: height as i32,
+                    orig_width: width.saturating_as::<i32>(),
+                    orig_height: height.saturating_as::<i32>(),
                     mv_tiles: ModelRc::new(VecModel::from(multiview_item.tiles)),
                     mv_gutters: ModelRc::new(VecModel::from(multiview_item.gutters)),
                     mv_screen: multiview_item.screen,
@@ -260,8 +261,8 @@ impl BridgeTabGrid {
 
         let app_settings = settings.get();
         let (p_h, p_v) = (
-            app_settings.appearance.grid_item_padding_horizontal as f32,
-            app_settings.appearance.grid_item_padding_vertical as f32,
+            app_settings.appearance.grid_item_padding_horizontal.az::<f32>(),
+            app_settings.appearance.grid_item_padding_vertical.az::<f32>(),
         );
 
         let cached_rects = state.read().cached_tab_grid_rects.clone();
@@ -280,7 +281,7 @@ impl BridgeTabGrid {
             let scale = window.window().scale_factor();
 
             // In Tab-Grid mode (mode 2), both sidebars are hidden -> full viewport width is available
-            let viewport_w = (win_size.width as f32 / scale).max(100.0);
+            let viewport_w = (win_size.width.az::<f32>() / scale).max(100.0);
 
             let effective_cols = if is_auto_cols {
                 ResponsiveBreakpoints::compute_auto_columns(viewport_w)
@@ -291,8 +292,8 @@ impl BridgeTabGrid {
             let aspect_ratios: Vec<f32> = sessions.iter().map(TabGridTile::aspect_of).collect();
 
             let (spacing, padding) = (
-                app_settings.appearance.grid_spacing as f32,
-                app_settings.appearance.grid_padding as f32,
+                app_settings.appearance.grid_spacing.az::<f32>(),
+                app_settings.appearance.grid_padding.az::<f32>(),
             );
 
             let (rects, total_h) = TabGridMasonryEngine::compute_layout(

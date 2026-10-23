@@ -1,5 +1,7 @@
 use parking_lot::RwLock;
 use rustview_core::settings::FullscreenSettings;
+use rustview_core::util::cast::{FloatToInt, SaturatingAs};
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -49,18 +51,21 @@ impl MonitorInfo {
     /// Checks if a 2D coordinate point (e.g. window center) falls inside this monitor's boundary.
     #[inline]
     pub fn contains_point(&self, px: i32, py: i32) -> bool {
-        px >= self.x && px < self.x + (self.width as i32) && py >= self.y && py < self.y + (self.height as i32)
+        px >= self.x
+            && px < self.x + self.width.saturating_as::<i32>()
+            && py >= self.y
+            && py < self.y + self.height.saturating_as::<i32>()
     }
 
     /// Calculates the overlapping area in square pixels between this monitor and a window rectangle.
     pub fn overlap_area(&self, wx: i32, wy: i32, ww: u32, wh: u32) -> u64 {
         let x1 = self.x.max(wx);
         let y1 = self.y.max(wy);
-        let x2 = (self.x + self.width as i32).min(wx + ww as i32);
-        let y2 = (self.y + self.height as i32).min(wy + wh as i32);
+        let x2 = (self.x + self.width.saturating_as::<i32>()).min(wx + ww.saturating_as::<i32>());
+        let y2 = (self.y + self.height.saturating_as::<i32>()).min(wy + wh.saturating_as::<i32>());
 
         if x2 > x1 && y2 > y1 {
-            (x2 - x1) as u64 * (y2 - y1) as u64
+            (x2 - x1).saturating_as::<u64>() * (y2 - y1).saturating_as::<u64>()
         } else {
             0
         }
@@ -312,8 +317,8 @@ impl SystemDisplayService {
 
     fn find_main_ui_monitor(monitors: &[MonitorInfo], window_geom: Option<(i32, i32, u32, u32)>) -> MonitorInfo {
         if let Some((wx, wy, ww, wh)) = window_geom {
-            let center_x = wx + (ww as i32 / 2);
-            let center_y = wy + (wh as i32 / 2);
+            let center_x = wx + (ww.saturating_as::<i32>() / 2);
+            let center_y = wy + (wh.saturating_as::<i32>() / 2);
 
             if let Some(containing) = monitors.iter().find(|m| m.contains_point(center_x, center_y)) {
                 return containing.clone();
@@ -383,16 +388,18 @@ impl SystemDisplayService {
                 .to_string();
             let is_primary = out.get("primary").and_then(serde_json::Value::as_bool).unwrap_or(false);
 
-            let x = out
+            let x = (out
                 .get("pos")
                 .and_then(|p| p.get("x"))
                 .and_then(serde_json::Value::as_i64)
-                .unwrap_or(0) as i32;
-            let y = out
+                .unwrap_or(0))
+            .saturating_as::<i32>();
+            let y = (out
                 .get("pos")
                 .and_then(|p| p.get("y"))
                 .and_then(serde_json::Value::as_i64)
-                .unwrap_or(0) as i32;
+                .unwrap_or(0))
+            .saturating_as::<i32>();
 
             let (width, height, refresh_rate) = if let Some(modes) = out.get("modes").and_then(|m| m.as_array()) {
                 let current_mode_id = out.get("currentModeId").and_then(|v| v.as_str()).unwrap_or("");
@@ -404,27 +411,37 @@ impl SystemDisplayService {
                     let m_id = mode.get("id").and_then(|v| v.as_str()).unwrap_or("");
                     if m_id == current_mode_id || current_mode_id.is_empty() {
                         if let Some(size) = mode.get("size") {
-                            found_w = size.get("width").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
-                            found_h = size.get("height").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+                            found_w = size
+                                .get("width")
+                                .and_then(serde_json::Value::as_u64)
+                                .unwrap_or(0)
+                                .saturating_as::<u32>();
+                            found_h = size
+                                .get("height")
+                                .and_then(serde_json::Value::as_u64)
+                                .unwrap_or(0)
+                                .saturating_as::<u32>();
                         }
                         if let Some(rate) = mode.get("refreshRate").and_then(serde_json::Value::as_f64) {
-                            found_rate = rate.round() as u32;
+                            found_rate = rate.round().to_int::<u32>();
                         }
                         break;
                     }
                 }
                 (found_w, found_h, found_rate)
             } else {
-                let w = out
+                let w = (out
                     .get("size")
                     .and_then(|s| s.get("width"))
                     .and_then(serde_json::Value::as_u64)
-                    .unwrap_or(1920) as u32;
-                let h = out
+                    .unwrap_or(1920))
+                .saturating_as::<u32>();
+                let h = (out
                     .get("size")
                     .and_then(|s| s.get("height"))
                     .and_then(serde_json::Value::as_u64)
-                    .unwrap_or(1080) as u32;
+                    .unwrap_or(1080))
+                .saturating_as::<u32>();
                 (w, h, 60)
             };
 
@@ -533,7 +550,7 @@ impl SystemDisplayService {
                         && let Ok(rate_f) = part.trim_end_matches(['*', '+']).parse::<f32>()
                         && let Some(ref conn) = current_conn
                     {
-                        rates.insert(conn.clone(), rate_f.round() as u32);
+                        rates.insert(conn.clone(), rate_f.round().to_int::<u32>());
                         break;
                     }
                 }
@@ -605,7 +622,7 @@ impl SystemDisplayService {
                     if part.contains('*')
                         && let Ok(rate_f) = part.trim_end_matches(['*', '+']).parse::<f32>()
                     {
-                        current_rate = rate_f.round() as u32;
+                        current_rate = rate_f.round().to_int::<u32>();
                     }
                 }
             }
@@ -656,8 +673,16 @@ impl SystemDisplayService {
                 .to_string();
             let model = out.get("model").and_then(|v| v.as_str()).unwrap_or(&name).to_string();
 
-            let x = out.get("x").and_then(serde_json::Value::as_i64).unwrap_or(0) as i32;
-            let y = out.get("y").and_then(serde_json::Value::as_i64).unwrap_or(0) as i32;
+            let x = out
+                .get("x")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0)
+                .saturating_as::<i32>();
+            let y = out
+                .get("y")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0)
+                .saturating_as::<i32>();
 
             let mut width = 0u32;
             let mut height = 0u32;
@@ -667,12 +692,20 @@ impl SystemDisplayService {
                 for m in modes {
                     let is_current = m.get("current").and_then(serde_json::Value::as_bool).unwrap_or(false);
                     if is_current {
-                        width = m.get("width").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
-                        height = m.get("height").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+                        width = m
+                            .get("width")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0)
+                            .saturating_as::<u32>();
+                        height = m
+                            .get("height")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0)
+                            .saturating_as::<u32>();
                         refresh_rate = m
                             .get("refresh")
                             .and_then(serde_json::Value::as_f64)
-                            .map_or(60, |r| r.round() as u32);
+                            .map_or(60, |r| r.round().to_int::<u32>());
                         break;
                     }
                 }

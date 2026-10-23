@@ -10,6 +10,7 @@ use rustview_core::library::Library;
 use rustview_core::query::{MatchMode, ScopeMode};
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::ComponentHandle;
 use std::sync::Arc;
 use std::time::Instant;
@@ -31,7 +32,11 @@ impl BridgeTags {
         let st = state.clone();
         window.on_rating_applied(move |rating| {
             Self::apply_rating(
-                if rating < 0 { None } else { Some(rating as u8) },
+                if rating < 0 {
+                    None
+                } else {
+                    Some(rating.saturating_as::<u8>())
+                },
                 &TagActionContext {
                     window: &win,
                     library: &lib,
@@ -51,7 +56,7 @@ impl BridgeTags {
         let st = state.clone();
         window.on_tag_toggled(move |tag_id| {
             Self::toggle_tag(
-                tag_id as u32,
+                tag_id.wrapping_as::<u32>(),
                 &TagActionContext {
                     window: &win,
                     library: &lib,
@@ -68,7 +73,7 @@ impl BridgeTags {
         let set = settings.clone();
         let st = state.clone();
         window.on_tag_toggle_expand(move |tag_id| {
-            Self::toggle_expand(tag_id as u32, &win, &lib, &set, &st);
+            Self::toggle_expand(tag_id.wrapping_as::<u32>(), &win, &lib, &set, &st);
         });
 
         let win = window.clone_strong();
@@ -76,7 +81,7 @@ impl BridgeTags {
         let tm = tab_manager.clone();
         let st = state.clone();
         window.on_tag_context_menu(move |tag_id, x, y| {
-            Self::show_tag_context_menu(tag_id as u32, &win, &lib, &st, &tm, x, y);
+            Self::show_tag_context_menu(tag_id.wrapping_as::<u32>(), &win, &lib, &st, &tm, x, y);
         });
 
         let win = window.clone_strong();

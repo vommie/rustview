@@ -7,6 +7,7 @@ use crate::ui::state::UiState;
 use parking_lot::RwLock;
 use rustview_core::settings::SettingsManager;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -61,7 +62,7 @@ impl BridgeMedia {
         }
 
         window.set_is_table_view(is_table);
-        window.invoke_scroll_media_to_index(anchor_item_idx as i32, is_table);
+        window.invoke_scroll_media_to_index(anchor_item_idx.saturating_as::<i32>(), is_table);
 
         Self::refill_view(window, thumbnails, state, anchor_item_idx);
 

@@ -1,6 +1,7 @@
 use super::error::ThumbnailError;
 use super::types::{ThumbnailFormat, ThumbnailLocation, ThumbnailStorageStats};
 use crate::library::Library;
+use crate::util::cast::{Az, SaturatingAs};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -87,7 +88,7 @@ impl PackStore {
 
     /// Thread-safe high-throughput append without per-item disk flush lock contention.
     pub fn append(&self, compressed_bytes: &[u8]) -> Result<ThumbnailLocation, ThumbnailError> {
-        let len = compressed_bytes.len() as u32;
+        let len = compressed_bytes.len().saturating_as::<u32>();
 
         let mut writer = self.writer.lock();
 
@@ -184,12 +185,22 @@ impl PackStore {
     pub fn storage_stats(&self, library: &Library) -> ThumbnailStorageStats {
         let pack_total_bytes = self.total_storage_bytes();
         let pack_files_count = self.pack_file_count();
-        let pack_total_mb = pack_total_bytes as f64 / (1024.0 * 1024.0);
+        let pack_total_mb = pack_total_bytes.az::<f64>() / (1024.0 * 1024.0);
 
         let (lmdb_thumbnails_count, lmdb_previews_count, lmdb_preview_frames_count) = {
             if let Ok(rtxn) = library.raw_db().env.read_txn() {
-                let thumb_count = library.raw_db().thumbnails.len(&rtxn).unwrap_or(0) as usize;
-                let prev_count = library.raw_db().video_previews.len(&rtxn).unwrap_or(0) as usize;
+                let thumb_count = library
+                    .raw_db()
+                    .thumbnails
+                    .len(&rtxn)
+                    .unwrap_or(0)
+                    .saturating_as::<usize>();
+                let prev_count = library
+                    .raw_db()
+                    .video_previews
+                    .len(&rtxn)
+                    .unwrap_or(0)
+                    .saturating_as::<usize>();
                 let mut preview_frames = 0usize;
                 if let Ok(iter) = library.raw_db().video_previews.iter(&rtxn) {
                     for entry in iter.flatten() {
@@ -216,9 +227,9 @@ impl PackStore {
             }
         };
 
-        let lmdb_data_mb = lmdb_data_bytes as f64 / (1024.0 * 1024.0);
+        let lmdb_data_mb = lmdb_data_bytes.az::<f64>() / (1024.0 * 1024.0);
         let total_cache_bytes = pack_total_bytes + lmdb_data_bytes;
-        let total_cache_mb = total_cache_bytes as f64 / (1024.0 * 1024.0);
+        let total_cache_mb = total_cache_bytes.az::<f64>() / (1024.0 * 1024.0);
 
         ThumbnailStorageStats {
             pack_files_count,

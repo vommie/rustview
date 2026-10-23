@@ -1,4 +1,5 @@
 use crate::viewer::{MediaTabSession, TabId};
+use rustview_core::util::cast::Az;
 use slint::Timer;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -27,7 +28,7 @@ pub struct TabDndGeometry;
 impl TabDndGeometry {
     /// Calculates the estimated rendered width in pixels of a tab item given its title, format, and rating badge state.
     pub fn estimate_tab_width(title: &str, has_rating_badge: bool) -> f32 {
-        let char_count = title.chars().count() as f32;
+        let char_count = title.chars().count().az::<f32>();
         let text_w = (char_count * 7.5).min(180.0);
         let base_w = if has_rating_badge { 77.0 } else { 57.0 };
         (base_w + text_w).clamp(70.0, 240.0)

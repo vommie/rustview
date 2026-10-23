@@ -8,6 +8,7 @@ use crate::media::{
     MetadataExtractor, RawMetadata, ScanResult, ScannedFile,
 };
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -227,13 +228,13 @@ impl<'a> FolderRefresher<'a> {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map_or(0, |d| d.as_secs() as i64);
+                .map_or(0, |d| d.as_secs().saturating_as::<i64>());
 
             let ctime = fs_meta
                 .created()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map_or(mtime, |d| d.as_secs() as i64);
+                .map_or(mtime, |d| d.as_secs().saturating_as::<i64>());
 
             if let Some((existing_id, existing_record)) = existing_map.remove(&scanned.filename) {
                 if !existing_record.is_deleted
@@ -657,7 +658,7 @@ impl<'a> FolderRefresher<'a> {
 
         // The tree shows the number of files the folder lists: bring the stored count in step with the folder that was just read
         // (switched-off formats are not part of it, see FolderFormatCounts).
-        let shown_now = active_media_ids.len() as i64;
+        let shown_now = active_media_ids.len().saturating_as::<i64>();
         let count_delta = match self.db.folders.get(&wtxn, &folder_id)? {
             Some(folder) => shown_now - i64::from(folder.media_count),
             None => 0,

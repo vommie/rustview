@@ -12,6 +12,7 @@
 use super::filters::IndexedMediaRecord;
 use crate::library::models::MediaId;
 use crate::thumbnails::ram_cache::IdBuildHasher;
+use crate::util::cast::SaturatingAs;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -45,7 +46,7 @@ impl Default for MediaStore {
 fn index_of(records: &[IndexedMediaRecord]) -> IdIndex {
     let mut by_id = IdIndex::with_capacity_and_hasher(records.len(), IdBuildHasher::default());
     for (position, record) in records.iter().enumerate() {
-        by_id.insert(record.record.id, position as u32);
+        by_id.insert(record.record.id, position.saturating_as::<u32>());
     }
     by_id
 }

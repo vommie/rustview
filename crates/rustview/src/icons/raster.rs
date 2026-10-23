@@ -5,6 +5,7 @@
 
 use super::Icon;
 use resvg::{tiny_skia, usvg};
+use rustview_core::util::cast::Az;
 use std::fmt;
 use std::path::Path;
 
@@ -46,7 +47,7 @@ pub fn render_rgba(icon: Icon, size_px: u32, color: &str) -> Result<Vec<u8>, Ras
     let svg = recolor_svg(icon, color);
     let tree = usvg::Tree::from_str(&svg, &usvg::Options::default()).map_err(|e| RasterError::Parse(e.to_string()))?;
 
-    let scale = size_px as f32 / tree.size().width().max(1.0);
+    let scale = size_px.az::<f32>() / tree.size().width().max(1.0);
     resvg::render(
         &tree,
         tiny_skia::Transform::from_scale(scale, scale),

@@ -10,6 +10,7 @@ use crate::ui::status_bar::StatusBarBridge;
 use parking_lot::RwLock;
 use rustview_core::thumbnails::ThumbnailManager;
 use rustview_core::thumbnails::regeneration::{RegeneratedThumbnail, RegenerationBatchResult};
+use rustview_core::util::cast::SaturatingAs;
 use slint::Image;
 use std::time::Duration;
 
@@ -69,7 +70,7 @@ fn report(window: &MainWindow, total: usize, batch: &RegenerationBatchResult, el
         total,
         succeeded = summary.succeeded,
         failed = summary.failed(),
-        elapsed_ms = summary.elapsed_ms as u64,
+        elapsed_ms = summary.elapsed_ms.saturating_as::<u64>(),
         "[ThumbnailRegeneration: Done] {}",
         message
     );

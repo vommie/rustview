@@ -10,6 +10,7 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::WrappingAs;
 use slint::ComponentHandle;
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -63,7 +64,15 @@ impl BridgeFolders {
         let win = window.clone_strong();
         window.on_folder_selected(move |id, path| {
             st.write().last_active_panel = LastActivePanel::Folder;
-            Self::select_folder(id as u64, PathBuf::from(path.as_str()), &win, &lib, &thumb, &set, &st);
+            Self::select_folder(
+                id.wrapping_as::<u64>(),
+                PathBuf::from(path.as_str()),
+                &win,
+                &lib,
+                &thumb,
+                &set,
+                &st,
+            );
         });
 
         let lib = library.clone();
@@ -72,7 +81,7 @@ impl BridgeFolders {
         let win = window.clone_strong();
         window.on_folder_toggle_expand(move |id| {
             st.write().last_active_panel = LastActivePanel::Folder;
-            Self::toggle_expand(id as u64, &win, &lib, &set, &st);
+            Self::toggle_expand(id.wrapping_as::<u64>(), &win, &lib, &set, &st);
         });
 
         let lib_all = library.clone();

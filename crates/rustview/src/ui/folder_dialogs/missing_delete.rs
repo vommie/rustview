@@ -8,6 +8,7 @@ use crate::ui::tags::BridgeTags;
 use crate::ui::{MainWindow, MissingFolderDeleteDialog};
 use rustview_core::library::folder_operations::FolderSubtreeMetrics;
 use rustview_core::library::models::FolderId;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::path::Path;
@@ -200,8 +201,8 @@ impl MissingFolderDeleteDialogController {
     ) {
         win.set_folder_name(folder_name.into());
         win.set_folder_path(folder_path.into());
-        win.set_subfolders_count(metrics.subfolders_count as i32);
-        win.set_files_count(metrics.media_files_count as i32);
+        win.set_subfolders_count(metrics.subfolders_count.saturating_as::<i32>());
+        win.set_files_count(metrics.media_files_count.saturating_as::<i32>());
         win.set_error_message("".into());
     }
 }

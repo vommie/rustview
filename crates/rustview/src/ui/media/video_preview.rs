@@ -1,6 +1,7 @@
 use crate::ui::models::rgb8_to_slint_image;
 use rustview_core::library::models::MediaId;
 use rustview_core::thumbnails::{AnimatedPreview, ThumbnailManager};
+use rustview_core::util::cast::SaturatingAs;
 use slint::{Image, Timer};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -54,7 +55,7 @@ impl VideoPreviewAnimator {
 
         let num_frames = images.len();
         // Dynamically compute interval: target ~1.5 - 2.0 second full loop, clamped between 120ms and 250ms per frame
-        let interval_ms = ((1800 / num_frames.max(1)) as u32).clamp(120, 250);
+        let interval_ms = (1800 / num_frames.max(1)).saturating_as::<u32>().clamp(120, 250);
 
         let timed_frames: Vec<TimedFrame> = images
             .into_iter()
@@ -115,7 +116,7 @@ impl VideoPreviewAnimator {
         let last_idx_c = last_emitted_index;
 
         timer.start(slint::TimerMode::Repeated, timer_interval, move || {
-            let elapsed_ms = (start_time.elapsed().as_millis() as u64) % total_duration_ms;
+            let elapsed_ms = start_time.elapsed().as_millis().saturating_as::<u64>() % total_duration_ms;
 
             // Search for the frame that contains the current timeline timestamp
             let mut current_frame_idx = 0;

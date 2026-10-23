@@ -25,6 +25,7 @@ use rustview_core::library::folder_create::FolderCreateReport;
 use rustview_core::library::models::{FolderHierarchySnapshot, FolderId};
 use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{ComponentHandle, Model};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -448,7 +449,7 @@ impl BrowseFolders {
         // The pool starts `margin_rows` above the first visible row; the viewport callback of the view corrects any difference.
         let first_row = st.ring.range().start / geometry.columns + geometry.margin_rows;
         let view_len = st.view_len();
-        window.set_total_items_count(view_len as i32);
+        window.set_total_items_count(view_len.saturating_as::<i32>());
         st.invalidate_view_window();
         sync_window(window, &mut st, thumbnails, geometry, first_row, view_len, true);
     }

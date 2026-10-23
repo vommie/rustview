@@ -6,6 +6,7 @@ use super::error::LibraryError;
 use super::folder_snapshot::{is_in_scope, scope_prefix};
 use super::models::FolderId;
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
@@ -219,7 +220,7 @@ impl FolderDiagnostics {
             root_registered = ?r.root_registered,
             total_media = r.media.total_media,
             unresolvable_media = r.media.unresolvable_media,
-            elapsed_ms = r.elapsed_ms as u64,
+            elapsed_ms = r.elapsed_ms.saturating_as::<u64>(),
             "[FolderAudit: Summary] Folder schema audit completed"
         );
 

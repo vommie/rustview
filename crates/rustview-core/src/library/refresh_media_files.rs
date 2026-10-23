@@ -3,6 +3,7 @@ use super::error::LibraryError;
 use super::models::{MediaId, MediaRecord};
 use crate::media::{FileHash, MediaFormat, MediaHasher, MediaType, MetadataExtractor, RawMetadata};
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use std::path::{Path, PathBuf};
 
 /// Extracted file inspection metrics from disk.
@@ -92,13 +93,13 @@ impl<'a> MediaItemRefresher<'a> {
             .modified()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(0, |d| d.as_secs() as i64);
+            .map_or(0, |d| d.as_secs().saturating_as::<i64>());
 
         let creation_time = fs_meta
             .created()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(modification_time, |d| d.as_secs() as i64);
+            .map_or(modification_time, |d| d.as_secs().saturating_as::<i64>());
 
         let is_zero_byte = file_size == 0;
         let format = MediaFormat::from_path(file_path);

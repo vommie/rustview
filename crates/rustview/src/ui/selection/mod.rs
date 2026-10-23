@@ -13,6 +13,7 @@ use parking_lot::{Mutex, RwLock};
 use rustview_core::library::Library;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::SettingsManager;
+use rustview_core::util::cast::WrappingAs;
 use slint::ComponentHandle;
 use std::sync::Arc;
 use std::time::Instant;
@@ -79,7 +80,7 @@ impl BridgeFileSelection {
         window.on_media_clicked(move |id, is_ctrl, is_shift| {
             Self::handle_click(
                 FileClickEvent {
-                    media_id: id as u64,
+                    media_id: id.wrapping_as::<u64>(),
                     is_ctrl,
                     is_shift,
                 },
@@ -126,7 +127,7 @@ impl BridgeFileSelection {
         let st_mid = state.clone();
         let fs_mid = fullscreen;
         window.on_media_middle_clicked(move |id| {
-            Self::handle_middle_click(id as u64, &win_mid, &lib_mid, &set_mid, &st_mid, &fs_mid);
+            Self::handle_middle_click(id.wrapping_as::<u64>(), &win_mid, &lib_mid, &set_mid, &st_mid, &fs_mid);
         });
 
         let win_bg = window.clone_strong();

@@ -24,6 +24,7 @@ use rustview_core::library::models::MediaId;
 use rustview_core::settings::SettingsManager;
 use rustview_core::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
 use rustview_core::thumbnails::ThumbnailManager;
+use rustview_core::util::cast::WrappingAs;
 use slint::ComponentHandle;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -501,14 +502,14 @@ impl MultiviewHandle {
     /// callback as a middle click on its grid item.
     pub(super) fn open_tab_fullscreen(&self, instance_id: u64) {
         self.on_tab_of_instance(instance_id, |w, tab_id| {
-            w.invoke_tab_grid_item_middle_clicked(tab_id as i32);
+            w.invoke_tab_grid_item_middle_clicked(tab_id.wrapping_as::<i32>());
         });
     }
 
     /// Makes the tab that owns the Multiview instance `instance_id` the shown tab (left click on its grid item).
     pub(super) fn activate_tab(&self, instance_id: u64) {
         self.on_tab_of_instance(instance_id, |w, tab_id| {
-            w.invoke_tab_grid_item_left_clicked(tab_id as i32);
+            w.invoke_tab_grid_item_left_clicked(tab_id.wrapping_as::<i32>());
         });
     }
 

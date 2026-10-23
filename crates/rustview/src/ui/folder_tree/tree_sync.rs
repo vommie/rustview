@@ -14,6 +14,7 @@ use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::FolderId;
 use rustview_core::settings::SettingsManager;
+use rustview_core::util::cast::{SaturatingAs, WrappingAs};
 use slint::{Model, ModelRc, VecModel};
 use std::collections::HashSet;
 use std::time::Instant;
@@ -65,7 +66,7 @@ impl FolderTreeSync {
             updated = stats.updated,
             unchanged = stats.unchanged,
             full_replace = stats.full_replace,
-            elapsed_us = t0.elapsed().as_micros() as u64,
+            elapsed_us = t0.elapsed().as_micros().saturating_as::<u64>(),
             "[FolderTree: Reload] Folder tree model refreshed from SPoT snapshot"
         );
     }
@@ -101,9 +102,9 @@ impl FolderTreeSync {
         let model = window.get_folders();
         for idx in 0..model.row_count() {
             if let Some(row) = model.row_data(idx)
-                && i64::from(row.id) == folder_id as i64
+                && i64::from(row.id) == folder_id.wrapping_as::<i64>()
             {
-                window.invoke_scroll_folder_to_row(idx as i32);
+                window.invoke_scroll_folder_to_row(idx.saturating_as::<i32>());
                 return true;
             }
         }

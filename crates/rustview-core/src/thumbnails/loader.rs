@@ -13,6 +13,7 @@ use crate::library::Library;
 use crate::library::models::MediaId;
 use crate::media::{MediaFormat, MediaType};
 use crate::telemetry::benchmark::ThumbnailPipelineBenchmark;
+use crate::util::cast::SaturatingAs;
 use parking_lot::{Mutex, RwLock};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
@@ -442,13 +443,13 @@ impl ThumbnailScheduler {
             }
         }
 
-        benchmark.set_preload_duration(t_scan.elapsed().as_micros() as u64);
+        benchmark.set_preload_duration(t_scan.elapsed().as_micros().saturating_as::<u64>());
         tracing::info!(
             folder_id = folder_id,
             pipeline_id = pipeline_id,
             existing_cached = existing_count,
             missing_to_generate = missing_targets.len(),
-            scan_us = t_scan.elapsed().as_micros() as u64,
+            scan_us = t_scan.elapsed().as_micros().saturating_as::<u64>(),
             "[ThumbnailPipeline: Scan] Existing thumbnails stay in the pack store (loaded on demand); generating the missing ones"
         );
 
@@ -526,7 +527,7 @@ impl ThumbnailScheduler {
                 let t_vid = Instant::now();
                 match self.generator.generate_video_thumbnails(&target.file_path, &config) {
                     Ok(video_res) => {
-                        benchmark.record_video_extract(t_vid.elapsed().as_micros() as u64);
+                        benchmark.record_video_extract(t_vid.elapsed().as_micros().saturating_as::<u64>());
 
                         if self.is_pipeline_stale(pipeline_id) {
                             self.tracker.decrement_active_workers();
@@ -543,14 +544,16 @@ impl ThumbnailScheduler {
                             config.format,
                             config.quality,
                         ) {
-                            benchmark
-                                .record_compress(compressed_primary.len() as u64, t_comp.elapsed().as_micros() as u64);
+                            benchmark.record_compress(
+                                compressed_primary.len() as u64,
+                                t_comp.elapsed().as_micros().saturating_as::<u64>(),
+                            );
 
                             let t_app = Instant::now();
                             if let Ok(primary_loc) = self.store.append(&compressed_primary) {
                                 benchmark.record_pack_append(
                                     compressed_primary.len() as u64,
-                                    t_app.elapsed().as_micros() as u64,
+                                    t_app.elapsed().as_micros().saturating_as::<u64>(),
                                 );
 
                                 let mut preview_rec = None;
@@ -576,7 +579,7 @@ impl ThumbnailScheduler {
                                     }
                                     if !locations.is_empty() {
                                         preview_rec = Some(VideoPreviewRecord {
-                                            frame_count: locations.len() as u32,
+                                            frame_count: locations.len().saturating_as::<u32>(),
                                             frame_locations: locations,
                                         });
                                     }
@@ -637,7 +640,7 @@ impl ThumbnailScheduler {
                     config.scaling_algorithm,
                 ) {
                     Ok(frame) => {
-                        benchmark.record_image_decode_resize(t_img.elapsed().as_micros() as u64);
+                        benchmark.record_image_decode_resize(t_img.elapsed().as_micros().saturating_as::<u64>());
 
                         let t_comp = Instant::now();
                         if let Ok(compressed_bytes) = self.generator.compress(
@@ -647,14 +650,16 @@ impl ThumbnailScheduler {
                             config.format,
                             config.quality,
                         ) {
-                            benchmark
-                                .record_compress(compressed_bytes.len() as u64, t_comp.elapsed().as_micros() as u64);
+                            benchmark.record_compress(
+                                compressed_bytes.len() as u64,
+                                t_comp.elapsed().as_micros().saturating_as::<u64>(),
+                            );
 
                             let t_app = Instant::now();
                             if let Ok(location) = self.store.append(&compressed_bytes) {
                                 benchmark.record_pack_append(
                                     compressed_bytes.len() as u64,
-                                    t_app.elapsed().as_micros() as u64,
+                                    t_app.elapsed().as_micros().saturating_as::<u64>(),
                                 );
 
                                 if !self.is_pipeline_stale(pipeline_id) {
@@ -750,7 +755,7 @@ impl ThumbnailScheduler {
             self.flush_db_batch(&mut batched_db_writes, &benchmark);
         }
 
-        benchmark.set_generate_duration(t_phase2_start.elapsed().as_micros() as u64);
+        benchmark.set_generate_duration(t_phase2_start.elapsed().as_micros().saturating_as::<u64>());
     }
 
     /// The hover preview of an animated picture, stored like the preview of a video. `Some` with no frames marks a picture that was
@@ -773,7 +778,7 @@ impl ThumbnailScheduler {
                     })
                     .filter_map(|bytes| self.store.append(&bytes).ok())
                     .collect();
-                let frame_count = locations.len() as u32;
+                let frame_count = locations.len().saturating_as::<u32>();
                 (frame_count > 1).then_some(VideoPreviewRecord {
                     frame_count,
                     frame_locations: locations,
@@ -836,7 +841,7 @@ impl ThumbnailScheduler {
                 }
             }
             let _ = wtxn.commit();
-            benchmark.record_lmdb_commit(count, t_db.elapsed().as_micros() as u64);
+            benchmark.record_lmdb_commit(count, t_db.elapsed().as_micros().saturating_as::<u64>());
         }
     }
 
@@ -960,7 +965,7 @@ impl ThumbnailScheduler {
                 }
                 if !locations.is_empty() {
                     preview_rec = Some(VideoPreviewRecord {
-                        frame_count: locations.len() as u32,
+                        frame_count: locations.len().saturating_as::<u32>(),
                         frame_locations: locations,
                     });
                 }

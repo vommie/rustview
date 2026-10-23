@@ -1,5 +1,6 @@
 use super::format_policy::FormatPolicy;
 use super::format_table::{FORMAT_SPECS, FormatSpec};
+use crate::util::cast::Az;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -174,7 +175,7 @@ fn extension_map() -> &'static HashMap<&'static str, MediaFormat> {
 /// Formats a byte size in Megabytes with 2 decimal places and no suffix (e.g. "310.01").
 #[inline]
 pub fn format_filesize_mb(bytes: u64) -> String {
-    let mb = bytes as f64 / (1024.0 * 1024.0);
+    let mb = bytes.az::<f64>() / (1024.0 * 1024.0);
     format!("{mb:.2}")
 }
 

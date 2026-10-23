@@ -8,6 +8,7 @@ use super::sorting::{MediaSorter, SortColumn, SortOrder};
 use crate::library::Library;
 use crate::library::models::MediaId;
 use crate::thumbnails::ram_cache::IdBuildHasher;
+use crate::util::cast::SaturatingAs;
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -40,11 +41,11 @@ pub fn lay_out(library: &Library, records: &[IndexedMediaRecord], request: &List
     let mut matched = request
         .filter
         .execute_indexed_refs(library, records, request.refine_from.as_deref());
-    let filter_us = started.elapsed().as_micros() as u64;
+    let filter_us = started.elapsed().as_micros().saturating_as::<u64>();
 
     let started = Instant::now();
     MediaSorter::sort_indexed_refs(&mut matched, request.sort_column, request.sort_order);
-    let sort_us = started.elapsed().as_micros() as u64;
+    let sort_us = started.elapsed().as_micros().saturating_as::<u64>();
 
     let started = Instant::now();
     let mut indices = Vec::with_capacity(matched.len());
@@ -55,7 +56,7 @@ pub fn lay_out(library: &Library, records: &[IndexedMediaRecord], request: &List
         row_map.insert(item.record.id, row);
         total_bytes = total_bytes.saturating_add(item.record.file_size);
     }
-    let map_us = started.elapsed().as_micros() as u64;
+    let map_us = started.elapsed().as_micros().saturating_as::<u64>();
 
     ListLayout {
         indices,

@@ -10,6 +10,7 @@ use crate::ui::{DeleteFolderDialog, MainWindow};
 use rustview_core::library::folder_operations::FolderSubtreeMetrics;
 use rustview_core::library::models::{FolderId, MediaId};
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::SaturatingAs;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -216,8 +217,8 @@ impl DeleteFolderDialogController {
 
     fn populate_dialog_fields(&self, win: &DeleteFolderDialog, folder_name: &str, metrics: &FolderSubtreeMetrics) {
         win.set_folder_name(folder_name.into());
-        win.set_subfolders_count(metrics.subfolders_count as i32);
-        win.set_files_count(metrics.media_files_count as i32);
+        win.set_subfolders_count(metrics.subfolders_count.saturating_as::<i32>());
+        win.set_files_count(metrics.media_files_count.saturating_as::<i32>());
         win.set_missing_note(
             missing_in_subtree_hint(metrics.missing_subfolders, metrics.missing_media)
                 .unwrap_or_default()

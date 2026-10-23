@@ -13,6 +13,7 @@ use rustview_core::library::folder_move::{FolderMovePatch, FolderMoveReport};
 use rustview_core::library::models::FolderId;
 use rustview_core::query::FolderDir;
 use rustview_core::settings::LogObscurer;
+use rustview_core::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -82,7 +83,7 @@ impl BridgeFolderMoveSync {
             folder_id = patch.moved_folder_id,
             snapshot_patched,
             rebased_media,
-            elapsed_us = t0.elapsed().as_micros() as u64,
+            elapsed_us = t0.elapsed().as_micros().saturating_as::<u64>(),
             "[FolderMoveSync: Done] Folder move applied to views"
         );
     }

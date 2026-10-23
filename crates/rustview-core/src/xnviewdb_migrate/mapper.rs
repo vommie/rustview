@@ -5,6 +5,7 @@ use crate::library::folders::normalize_path;
 use crate::library::models::{ExternalHashRecord, FolderId, FolderRecord, MediaId, MediaRecord, TagId, TagRecord};
 use crate::media::{FileHash, MediaFormat, MediaHasher, MediaType, MetadataExtractor};
 use crate::settings::LogObscurer;
+use crate::util::cast::SaturatingAs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -103,7 +104,7 @@ impl XnViewMapper {
         let mut next_folder_id = 1u64;
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs() as i64);
+            .map_or(0, |d| d.as_secs().saturating_as::<i64>());
 
         for f in raw.folders {
             let normalized_path_buf = normalize_path(Path::new(f.pathname.trim()));
@@ -156,12 +157,12 @@ impl XnViewMapper {
                                         .modified()
                                         .ok()
                                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                                        .map_or(0, |d| d.as_secs() as i64);
+                                        .map_or(0, |d| d.as_secs().saturating_as::<i64>());
                                     let ct = m
                                         .created()
                                         .ok()
                                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                                        .map_or(mt, |d| d.as_secs() as i64);
+                                        .map_or(mt, |d| d.as_secs().saturating_as::<i64>());
                                     (s, mt, ct)
                                 })
                             } else {
@@ -308,7 +309,7 @@ impl XnViewMapper {
                 (0, 0, 0)
             };
 
-            let mut file_size = img.size.max(0) as u64;
+            let mut file_size = img.size.max(0).saturating_as::<u64>();
             let mut mtime = img.modified_date.max(0);
             let mut ctime = mtime;
 
@@ -357,7 +358,7 @@ impl XnViewMapper {
                 new_media_id,
                 mapped_folder_id,
                 &img.filename,
-                img.rating.clamp(0, 5) as u8,
+                img.rating.clamp(0, 5).saturating_as::<u8>(),
                 &hash_hex,
             );
 
@@ -376,7 +377,7 @@ impl XnViewMapper {
                 format,
                 width,
                 height,
-                rating: (img.rating.clamp(0, 5)) as u8,
+                rating: (img.rating.clamp(0, 5)).saturating_as::<u8>(),
                 last_seen: 1,
                 is_deleted: false,
                 is_corrupted,
@@ -405,8 +406,12 @@ impl XnViewMapper {
 
         // Direct media counts
         for folder in &mut folders {
-            folder.media_count = media_by_folder.get(&folder.id).map_or(0, |v| v.len() as u32);
-            folder.subfolder_count = folders_by_parent.get(&folder.id).map_or(0, |v| v.len() as u32);
+            folder.media_count = media_by_folder
+                .get(&folder.id)
+                .map_or(0, |v| v.len().saturating_as::<u32>());
+            folder.subfolder_count = folders_by_parent
+                .get(&folder.id)
+                .map_or(0, |v| v.len().saturating_as::<u32>());
         }
 
         // Recursive roll-up from deepest to shallowest
@@ -466,7 +471,7 @@ impl XnViewMapper {
         stats.total_tag_assignments = mapped_link_count;
 
         let max_folder_id = folders.len() as u64;
-        let max_tag_id = tags.len() as u32;
+        let max_tag_id = tags.len().saturating_as::<u32>();
         let max_media_id = media.len() as u64;
         let max_external_hash_id = external_hashes.len() as u64;
 
