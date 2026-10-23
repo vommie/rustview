@@ -77,6 +77,7 @@ check optional cmd:gh            github-cli   "publishes the GitHub release (scr
 section "Quality checks"
 check optional cmd:cargo-audit   cargo-audit  "checks dependencies for known vulnerabilities (.cargo/audit.toml)"
 check optional cmd:cargo-deny    cargo-deny   "checks licenses, bans and advisories (deny.toml)"
+check optional cmd:cargo-machete cargo-machete "finds unused dependencies (cargo machete)"
 
 section "Visual tests (only needed to take screenshots of the running app: rv-testenv session)"
 check optional cmd:xdotool       xdotool      "clicks, typing and window lookup"

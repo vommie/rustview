@@ -56,6 +56,9 @@ fi
 if needs cargo-audit cargo-audit "Vulnerability scan (cargo audit)"; then
   step "Vulnerability scan (cargo audit)" cargo audit
 fi
+if needs cargo-machete cargo-machete "Unused dependencies (cargo machete)"; then
+  step "Unused dependencies (cargo machete)" cargo machete
+fi
 if needs cargo-deny cargo-deny "Licenses, bans and sources (cargo deny)"; then
   step "Licenses, bans and sources (cargo deny)" cargo deny --all-features check
 fi
