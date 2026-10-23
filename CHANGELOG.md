@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.3.84] - 2026-10-23
+
 ### Added
 - **Rating hotkeys Ctrl+0 (no rating) to Ctrl+5** in the Browse view (grid and table: the selected media, never folder rows), in every Multiview (fullscreen
   from the Browse view or from a tab, a Multiview in a viewer tab, a tab shown fullscreen) and in image and video tabs. In a Multiview the rating applies to
@@ -615,7 +617,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.3.83...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.3.84...HEAD
+[0.3.84]: https://github.com/vommie/rustview/compare/v0.3.83...v0.3.84
 [0.3.83]: https://github.com/vommie/rustview/compare/v0.3.82...v0.3.83
 [0.3.82]: https://github.com/vommie/rustview/compare/v0.3.81...v0.3.82
 [0.3.81]: https://github.com/vommie/rustview/compare/v0.3.80...v0.3.81
