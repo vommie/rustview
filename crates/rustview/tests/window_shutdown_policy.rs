@@ -23,6 +23,16 @@ fn window_components(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Names of the windows in the `WINDOWS` table of `manifest`: every string literal that opens a tuple, whatever way rustfmt wraps it.
+fn listed_windows(manifest: &str) -> Vec<&str> {
+    let parts: Vec<&str> = manifest.split('"').collect();
+    (1..parts.len().saturating_sub(1))
+        .step_by(2)
+        .filter(|&i| parts[i - 1].trim_end().ends_with('(') && parts[i + 1].trim_start().starts_with(','))
+        .map(|i| parts[i])
+        .collect()
+}
+
 fn slint_files(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
@@ -52,10 +62,8 @@ fn every_slint_window_is_handled_by_the_shutdown() {
         windows.len()
     );
 
-    let missing: Vec<&String> = windows
-        .iter()
-        .filter(|name| !manifest.contains(&format!("(\"{name}\",")))
-        .collect();
+    let listed = listed_windows(&manifest);
+    let missing: Vec<&String> = windows.iter().filter(|name| !listed.contains(&name.as_str())).collect();
     assert!(
         missing.is_empty(),
         "windows missing in src/ui/shutdown/windows.rs (add them there and close them in `close_windows`): {missing:?}"
@@ -69,11 +77,7 @@ fn the_manifest_lists_no_window_that_does_not_exist() {
     for file in slint_files(&project_root().join("ui")) {
         windows.extend(window_components(&fs::read_to_string(&file).unwrap_or_default()));
     }
-    let listed: Vec<&str> = manifest
-        .lines()
-        .filter_map(|line| line.trim_start().strip_prefix("(\""))
-        .filter_map(|rest| rest.split_once('"').map(|(name, _)| name))
-        .collect();
+    let listed = listed_windows(&manifest);
     let stale: Vec<&&str> = listed
         .iter()
         .filter(|name| !windows.iter().any(|w| w == **name))
