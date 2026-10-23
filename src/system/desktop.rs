@@ -1,8 +1,7 @@
 use super::error::SystemHandlerError;
 use crate::settings::LogObscurer;
+use freedesktop_desktop_entry::{DesktopEntry, Iter, default_paths, get_languages_from_env};
 use std::collections::HashSet;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
@@ -23,28 +22,6 @@ pub struct DesktopApp {
 pub struct DesktopIntegration;
 
 impl DesktopIntegration {
-    /// Standard Freedesktop application search directories.
-    const APP_DIRS: &[&'static str] = &[
-        "~/.local/share/applications",
-        "/usr/share/applications",
-        "/usr/local/share/applications",
-        "/var/lib/flatpak/exports/share/applications",
-        "~/.local/share/flatpak/exports/share/applications",
-    ];
-
-    /// Standard Freedesktop icon search directories.
-    const ICON_DIRS: &[&'static str] = &[
-        "/usr/share/icons/hicolor",
-        "/usr/share/icons/breeze",
-        "/usr/share/icons/breeze-dark",
-        "/usr/share/icons/Papirus",
-        "/usr/share/icons/Adwaita",
-        "/usr/share/pixmaps",
-        "~/.local/share/icons",
-        "~/.icons",
-        "/var/lib/flatpak/exports/share/icons/hicolor",
-    ];
-
     /// Queries all associated applications for a given media file path and resolves their icons.
     pub fn get_associated_apps(file_path: &Path) -> Vec<DesktopApp> {
         let t0 = Instant::now();
@@ -273,67 +250,51 @@ except Exception:
         Ok(())
     }
 
-    /// Resolves the absolute filesystem path for a Freedesktop application icon name.
+    /// Resolves the image file of an `Icon=` value: a file as it is, or a name looked up in the icon theme of the desktop, the
+    /// fallback themes and `/usr/share/pixmaps` (Slint reads PNG and SVG, not the XPM files some themes still carry).
     pub fn resolve_icon_path(icon_name: &str) -> Option<PathBuf> {
-        let trimmed = icon_name.trim();
-        if trimmed.is_empty() {
+        let icon = icon_name.trim();
+        if icon.is_empty() {
             return None;
         }
-
-        // Direct absolute path check
-        let as_path = Path::new(trimmed);
-        if as_path.is_absolute() && as_path.is_file() {
-            return Some(as_path.to_path_buf());
+        let as_path = Path::new(icon);
+        if as_path.is_absolute() {
+            return (as_path.is_file() && Self::is_usable_icon(as_path)).then(|| as_path.to_path_buf());
         }
 
-        let clean_name = trimmed
-            .strip_suffix(".png")
-            .or_else(|| trimmed.strip_suffix(".svg"))
-            .or_else(|| trimmed.strip_suffix(".xpm"))
-            .unwrap_or(trimmed);
-
-        let sub_sizes = &[
-            "48x48/apps",
-            "32x32/apps",
-            "64x64/apps",
-            "scalable/apps",
-            "128x128/apps",
-            "24x24/apps",
-            "16x16/apps",
-            "apps/48",
-            "apps/32",
-            "apps/64",
-            "apps/scalable",
-        ];
-
-        let extensions = &["png", "svg"];
-
-        for &base in Self::ICON_DIRS {
-            let expanded_base = Self::expand_home(base);
-            if !expanded_base.exists() {
-                continue;
-            }
-
-            // Direct check in pixmaps or flat base
-            for ext in extensions {
-                let candidate = expanded_base.join(format!("{}.{}", clean_name, ext));
-                if candidate.is_file() {
-                    return Some(candidate);
-                }
-            }
-
-            // Subdirectories (theme sizes)
-            for sub in sub_sizes {
-                for ext in extensions {
-                    let candidate = expanded_base.join(sub).join(format!("{}.{}", clean_name, ext));
-                    if candidate.is_file() {
-                        return Some(candidate);
-                    }
-                }
+        let desktop_theme = Self::desktop_icon_theme();
+        for theme in desktop_theme.as_deref().into_iter().chain(["breeze", "hicolor"]) {
+            if let Some(found) = freedesktop_icons::lookup(icon)
+                .with_size(ICON_SIZE_PX)
+                .with_scale(1)
+                .with_theme(theme)
+                .with_cache()
+                .find()
+                && Self::is_usable_icon(&found)
+            {
+                return Some(found);
             }
         }
+        ["png", "svg"]
+            .iter()
+            .map(|extension| Path::new("/usr/share/pixmaps").join(format!("{icon}.{extension}")))
+            .find(|candidate| candidate.is_file())
+    }
 
-        None
+    fn is_usable_icon(path: &Path) -> bool {
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| matches!(extension.to_ascii_lowercase().as_str(), "png" | "svg"))
+    }
+
+    /// The icon theme of the desktop: `[Icons] Theme=` of the KDE settings, else the GTK setting.
+    fn desktop_icon_theme() -> Option<String> {
+        let kdeglobals = directories::BaseDirs::new()?.config_dir().join("kdeglobals");
+        ini::Ini::load_from_file(kdeglobals)
+            .ok()
+            .and_then(|settings| settings.get_from(Some("Icons"), "Theme").map(str::to_owned))
+            .filter(|theme| !theme.is_empty())
+            .or_else(freedesktop_icons::default_theme_gtk)
     }
 
     fn query_desktop_ids_for_mime(mime_type: &str) -> Vec<String> {
@@ -361,194 +322,101 @@ except Exception:
         results
     }
 
+    /// Finds the desktop entry `desktop_id` (`org.kde.gwenview.desktop`) in the application folders of the user and the system.
     fn resolve_desktop_file(desktop_id: &str) -> Option<DesktopApp> {
-        for &base in Self::APP_DIRS {
-            let expanded_base = Self::expand_home(base);
-            if !expanded_base.exists() {
-                continue;
-            }
-
-            let direct_path = expanded_base.join(desktop_id);
-            if direct_path.is_file()
-                && let Some(app) = Self::parse_desktop_file(&direct_path, desktop_id)
-            {
-                return Some(app);
-            }
-
-            // Recursive scan if not direct
-            if let Ok(entries) = std::fs::read_dir(&expanded_base) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.is_file()
-                        && p.file_name().and_then(|n| n.to_str()) == Some(desktop_id)
-                        && let Some(app) = Self::parse_desktop_file(&p, desktop_id)
-                    {
-                        return Some(app);
-                    }
-                }
-            }
-        }
-
-        None
+        let locales = get_languages_from_env();
+        let direct = default_paths().map(|dir| dir.join(desktop_id)).find(|path| path.is_file());
+        let path = direct.or_else(|| {
+            Iter::new(default_paths()).find(|path| path.file_name().is_some_and(|name| name == desktop_id))
+        })?;
+        let entry = DesktopEntry::from_path(path, Some(&locales)).ok()?;
+        Self::app_from_entry(&entry, desktop_id, &locales)
     }
 
-    fn parse_desktop_file(path: &Path, desktop_id: &str) -> Option<DesktopApp> {
-        let file = File::open(path).ok()?;
-        let reader = BufReader::new(file);
-
-        let mut in_desktop_entry = false;
-        let mut name: Option<String> = None;
-        let mut icon: Option<String> = None;
-        let mut exec: Option<String> = None;
-        let mut no_display = false;
-
-        for line_res in reader.lines() {
-            let line = match line_res {
-                Ok(l) => l.trim().to_string(),
-                Err(_) => continue,
-            };
-
-            if line == "[Desktop Entry]" {
-                in_desktop_entry = true;
-                continue;
-            } else if line.starts_with('[') && in_desktop_entry {
-                break;
-            }
-
-            if !in_desktop_entry {
-                continue;
-            }
-
-            if let Some(val) = line.strip_prefix("Name=") {
-                if name.is_none() {
-                    name = Some(val.trim().to_string());
-                }
-            } else if let Some(val) = line.strip_prefix("Icon=") {
-                if icon.is_none() {
-                    icon = Some(val.trim().to_string());
-                }
-            } else if let Some(val) = line.strip_prefix("Exec=") {
-                if exec.is_none() {
-                    exec = Some(val.trim().to_string());
-                }
-            } else if let Some(val) = line.strip_prefix("NoDisplay=") {
-                no_display = val.trim().eq_ignore_ascii_case("true");
-            }
-        }
-
-        if no_display {
+    fn app_from_entry(entry: &DesktopEntry, desktop_id: &str, locales: &[String]) -> Option<DesktopApp> {
+        if entry.no_display() || entry.hidden() {
             return None;
         }
-
-        let app_name = name.unwrap_or_else(|| {
-            desktop_id
-                .strip_suffix(".desktop")
-                .unwrap_or(desktop_id)
-                .to_string()
-        });
-
-        let app_exec = exec?;
-        let app_icon = icon.unwrap_or_default();
-        let icon_path = if !app_icon.is_empty() {
-            Self::resolve_icon_path(&app_icon)
-        } else {
-            None
-        };
-
-        Some(DesktopApp {
-            id: desktop_id.to_string(),
-            name: app_name,
-            icon_name: app_icon,
-            icon_path,
-            exec: app_exec,
-        })
+        let exec = entry.exec()?.to_owned();
+        let icon_name = entry.icon().unwrap_or_default().to_owned();
+        let name = entry.name(locales).map_or_else(
+            || desktop_id.strip_suffix(".desktop").unwrap_or(desktop_id).to_owned(),
+            std::borrow::Cow::into_owned,
+        );
+        let icon_path = Self::resolve_icon_path(&icon_name);
+        Some(DesktopApp { id: desktop_id.to_owned(), name, icon_name, icon_path, exec })
     }
 
+    /// The command line of an application for `paths`. The field codes of the `Exec=` line are expanded by the desktop entry
+    /// crate: `%f`/`%F` get paths, `%u`/`%U` get percent-encoded `file://` URIs; a line without a file field code gets the paths appended.
     fn build_argv(exec_template: &str, paths: &[PathBuf]) -> Vec<String> {
-        let mut tokens = Vec::new();
-        let mut current = String::new();
-        let mut in_single_quote = false;
-        let mut in_double_quote = false;
-        let mut escaped = false;
-
-        for c in exec_template.chars() {
-            if escaped {
-                current.push(c);
-                escaped = false;
-                continue;
-            }
-
-            if c == '\\' && !in_single_quote {
-                escaped = true;
-                continue;
-            }
-
-            if c == '\'' && !in_double_quote {
-                in_single_quote = !in_single_quote;
-                continue;
-            }
-
-            if c == '"' && !in_single_quote {
-                in_double_quote = !in_double_quote;
-                continue;
-            }
-
-            if c.is_whitespace() && !in_single_quote && !in_double_quote {
-                if !current.is_empty() {
-                    tokens.push(current);
-                    current = String::new();
+        let wants_uris = exec_template.contains("%u") || exec_template.contains("%U");
+        let arguments: Vec<String> = paths
+            .iter()
+            .map(|path| {
+                if wants_uris {
+                    super::dnd::SystemDndHandler::path_to_file_uri(path)
+                } else {
+                    path.to_string_lossy().into_owned()
                 }
-            } else {
-                current.push(c);
-            }
+            })
+            .collect();
+        let argument_refs: Vec<&str> = arguments.iter().map(String::as_str).collect();
+
+        let mut entry = DesktopEntry::from_appid(String::new());
+        entry.add_desktop_entry("Exec".to_owned(), exec_template.to_owned());
+        let mut argv = entry.parse_exec_with_uris(&argument_refs, &[] as &[&str]).unwrap_or_default();
+
+        let has_file_code = ["%f", "%F", "%u", "%U"].iter().any(|code| exec_template.contains(code));
+        if !argv.is_empty() && !has_file_code {
+            argv.extend(arguments);
         }
+        argv
+    }
+}
 
-        if !current.is_empty() {
-            tokens.push(current);
-        }
+/// Icons of applications are shown at this size (pixels).
+const ICON_SIZE_PX: u16 = 48;
 
-        let mut final_argv = Vec::new();
-        let mut paths_inserted = false;
+#[cfg(test)]
+mod tests {
+    use super::DesktopIntegration;
+    use std::path::PathBuf;
 
-        for token in tokens {
-            if token.contains("%f") || token.contains("%u") {
-                if let Some(first_path) = paths.first() {
-                    let replacement = if token.contains("%u") {
-                        super::dnd::SystemDndHandler::path_to_file_uri(first_path)
-                    } else {
-                        first_path.to_string_lossy().to_string()
-                    };
-                    let replaced = token.replace("%f", &replacement).replace("%u", &replacement);
-                    final_argv.push(replaced);
-                    paths_inserted = true;
-                }
-            } else if token.contains("%F") || token.contains("%U") {
-                for p in paths {
-                    let formatted = if token.contains("%U") {
-                        super::dnd::SystemDndHandler::path_to_file_uri(p)
-                    } else {
-                        p.to_string_lossy().to_string()
-                    };
-                    final_argv.push(formatted);
-                }
-                paths_inserted = true;
-            } else if token.starts_with('%') {
-                continue;
-            } else {
-                final_argv.push(token);
-            }
-        }
-
-        if !paths_inserted {
-            for p in paths {
-                final_argv.push(p.to_string_lossy().to_string());
-            }
-        }
-
-        final_argv
+    #[test]
+    fn a_path_field_code_gets_the_first_path() {
+        let argv = DesktopIntegration::build_argv("gwenview %f", &[PathBuf::from("/a b/c.jpg"), PathBuf::from("/d.png")]);
+        assert_eq!(argv, ["gwenview", "/a b/c.jpg"]);
     }
 
-    fn expand_home(path_str: &str) -> PathBuf {
-        PathBuf::from(shellexpand::tilde(path_str).as_ref())
+    #[test]
+    fn a_url_list_field_code_gets_percent_encoded_uris() {
+        let argv = DesktopIntegration::build_argv("mpv --player-operation-mode=pseudo-gui -- %U", &[PathBuf::from("/a b/c.mp4"), PathBuf::from("/d.mkv")]);
+        assert_eq!(argv, ["mpv", "--player-operation-mode=pseudo-gui", "--", "file:///a%20b/c.mp4", "file:///d.mkv"]);
+    }
+
+    #[test]
+    fn quoted_arguments_and_other_field_codes_are_handled() {
+        let argv = DesktopIntegration::build_argv("\"/opt/My App/run\" --name %c %F", &[PathBuf::from("/x.jpg")]);
+        assert_eq!(argv.first().map(String::as_str), Some("/opt/My App/run"));
+        assert_eq!(argv.last().map(String::as_str), Some("/x.jpg"));
+    }
+
+    #[test]
+    fn a_line_without_a_file_field_code_gets_the_paths_appended() {
+        let argv = DesktopIntegration::build_argv("viewer --fullscreen", &[PathBuf::from("/x.jpg")]);
+        assert_eq!(argv, ["viewer", "--fullscreen", "/x.jpg"]);
+    }
+
+    #[test]
+    fn an_unusable_icon_is_not_resolved() {
+        assert_eq!(DesktopIntegration::resolve_icon_path(""), None);
+        let dir = tempfile::tempdir().expect("temp dir");
+        let xpm = dir.path().join("a.xpm");
+        std::fs::write(&xpm, b"x").expect("write");
+        assert_eq!(DesktopIntegration::resolve_icon_path(xpm.to_str().expect("utf-8")), None);
+        let png = dir.path().join("a.png");
+        std::fs::write(&png, b"x").expect("write");
+        assert_eq!(DesktopIntegration::resolve_icon_path(png.to_str().expect("utf-8")), Some(png));
     }
 }

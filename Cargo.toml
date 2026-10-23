@@ -34,6 +34,10 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 clap = { version = "4", features = ["derive"] }
 directories = "6"
 shellexpand = "3"
+# Installed applications (desktop entries, their Exec lines) and their icons from the icon themes.
+freedesktop-desktop-entry = { version = "0.8", default-features = false }
+freedesktop-icons = "0.4"
+rust-ini = "0.21"
 url = "2"
 # /proc readers (mount table, memory, cgroups, open files) and the kernel release; no hand-written parsers.
 procfs = { version = "0.18", default-features = false }
