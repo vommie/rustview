@@ -18,7 +18,7 @@ pub struct DesktopApp {
 
 /// Centralized Freedesktop desktop integration and application discovery subsystem.
 /// Identifies MIME-associated desktop applications, resolves real theme icons,
-/// and executes native application chooser dialogs via `DBus` Desktop Portals or KDE kdialog.
+/// and shows the application chooser through the `DBus` desktop portal.
 pub struct DesktopIntegration;
 
 impl DesktopIntegration {
@@ -138,7 +138,7 @@ impl DesktopIntegration {
         Ok(())
     }
 
-    /// Triggers the native desktop application chooser dialog ("Other Application...") using KDE kdialog or Desktop Portal.
+    /// Triggers the native desktop application chooser dialog ("Other Application...") through the desktop portal.
     pub fn open_with_dialog(file_path: &Path) -> Result<(), SystemHandlerError> {
         if !file_path.exists() {
             return Err(SystemHandlerError::FileNotFound(file_path.to_path_buf()));
@@ -160,68 +160,24 @@ impl DesktopIntegration {
             .name("sys-portal-open-with".into())
             .spawn(move || {
                 let t_start = Instant::now();
-                let path_str = path_clone.to_string_lossy().to_string();
 
-                // 1. Primary: Native KDE Plasma kdialog --open-with
-                if let Ok(mut child) = Command::new("kdialog")
-                    .args(["--open-with", &path_str])
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    && child.wait().is_ok_and(|s| s.success())
-                {
-                    tracing::info!(
-                        elapsed_ms = t_start.elapsed().as_millis(),
-                        target = %LogObscurer::path(&path_clone),
-                        "[DesktopIntegration] Successfully opened native KDE application chooser via kdialog"
-                    );
-                    return;
+                // The desktop portal shows the application chooser of the desktop (KDE's own dialog on Plasma).
+                match Self::open_with_portal(&path_clone) {
+                    Ok(()) => {
+                        tracing::info!(
+                            elapsed_ms = t_start.elapsed().as_millis(),
+                            target = %LogObscurer::path(&path_clone),
+                            "[DesktopIntegration] Application chooser portal finished"
+                        );
+                        return;
+                    }
+                    Err(error) => tracing::warn!(
+                        %error,
+                        "[DesktopIntegration] Application chooser portal unavailable, falling back to xdg-open"
+                    ),
                 }
 
-                // 2. Secondary: Portal OpenFile via Python 3 (matching img_picker.py QDBus implementation)
-                let python_script = r"
-import sys, os, time
-try:
-    from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtDBus import QDBusConnection, QDBusMessage, QDBusUnixFileDescriptor
-    app = QApplication(['rustview'])
-    bus = QDBusConnection.sessionBus()
-    if not bus.isConnected():
-        sys.exit(1)
-    fd = os.open(sys.argv[1], os.O_RDONLY)
-    dbus_fd = QDBusUnixFileDescriptor(fd)
-    os.close(fd)
-    msg = QDBusMessage.createMethodCall(
-        'org.freedesktop.portal.Desktop',
-        '/org/freedesktop/portal/desktop',
-        'org.freedesktop.portal.OpenURI',
-        'OpenFile'
-    )
-    msg.setArguments(['', dbus_fd, {'ask': True, 'handle_token': f'rustview_{int(time.time())}'}])
-    res = bus.call(msg)
-    sys.exit(0 if res.type() != QDBusMessage.MessageType.ErrorMessage else 1)
-except Exception:
-    sys.exit(1)
-";
-
-                if let Ok(mut child) = Command::new("python3")
-                    .args(["-c", python_script, &path_str])
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    && child.wait().is_ok_and(|s| s.success())
-                {
-                    tracing::info!(
-                        elapsed_ms = t_start.elapsed().as_millis(),
-                        target = %LogObscurer::path(&path_clone),
-                        "[DesktopIntegration] Opened desktop application chooser portal via Python QDBus"
-                    );
-                    return;
-                }
-
-                // 3. Fallback: xdg-open
+                // Last resort without a chooser: the default application opens the file
                 let mut fallback_cmd = Command::new("xdg-open");
                 fallback_cmd.arg(&path_clone);
                 fallback_cmd
@@ -241,6 +197,19 @@ except Exception:
             .map_err(SystemHandlerError::Io)?;
 
         Ok(())
+    }
+
+    /// Shows the desktop's application chooser for `path` through `org.freedesktop.portal.OpenURI.OpenFile` with `ask`. Returns after the
+    /// user decided; cancelling the dialog is a success. An error means the file or the portal could not be reached.
+    fn open_with_portal(path: &Path) -> Result<(), String> {
+        let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+        let request = ashpd::desktop::open_uri::OpenFileRequest::default()
+            .ask(true)
+            .send_file(&file);
+        match async_io::block_on(request) {
+            Ok(_) | Err(ashpd::Error::Response(ashpd::desktop::ResponseError::Cancelled)) => Ok(()),
+            Err(error) => Err(error.to_string()),
+        }
     }
 
     /// Resolves the image file of an `Icon=` value: a file as it is, or a name looked up in the icon theme of the desktop, the

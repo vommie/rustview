@@ -13,6 +13,9 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **Dates are shown in local time:** the modified and created dates in the tables, the folder tree and the conflict dialog were UTC and now match what the
   file manager shows. The time stamps stored in the library and returned by the API stay UTC.
 
+- **"Open With > Other Application..." asks the desktop portal directly** (the application chooser of your desktop, KDE's own dialog on Plasma). It no longer starts
+  a Python script (PyQt6) or `kdialog`, so it works on every system that has `xdg-desktop-portal`; cancelling the dialog does nothing, as it should.
+
 ### Removed
 - The hidden `--reset-folder-tree` option, a temporary debugging aid for the folder tree.
 
