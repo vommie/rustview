@@ -413,7 +413,7 @@ fn save(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
             ButtonLook::Emphasized,
         ),
         SaveLook::Busy => (Icon::Loader, "Saving...", ButtonLook::Busy),
-        SaveLook::Done { fading } => (Icon::Check, "Saved", ButtonLook::Done { fading }),
+        SaveLook::Done { fading } => (Icon::Save, "Saved", ButtonLook::Done { fading }),
     };
     Some(MediaActionSpec {
         look,

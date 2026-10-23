@@ -154,6 +154,17 @@ impl CropTool {
         }
     }
 
+    /// Starts with `rect` selected instead of the whole picture (the part a zoomed picture shows); it is the reference of the
+    /// ratio button too.
+    pub fn select(&mut self, rect: PixelRect, ratios: &RatioSet) {
+        let rect = self.aligned(rect.clamped_into(self.image));
+        self.rect = rect;
+        self.reference = rect;
+        self.follows_choice = ratios
+            .resolve(self.choice, self.original)
+            .is_some_and(|r| follows(rect, r));
+    }
+
     pub fn rect(&self) -> PixelRect {
         self.rect
     }

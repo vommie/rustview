@@ -197,6 +197,20 @@ fn the_grid_keeps_the_top_left_corner_on_block_lines() {
 }
 
 #[test]
+fn a_selection_can_start_with_a_part_of_the_picture() {
+    let set = ratios(&["16:9"]);
+    let mut tool = CropTool::new((1000, 800), (1000, 800), Some((16, 16)));
+    tool.select(PixelRect::new(105, 99, 400, 300), &set);
+    assert_eq!(tool.rect(), PixelRect::new(112, 96, 393, 303));
+    assert_eq!(tool.ratio_label(&set), "Free");
+    tool.cycle_ratio(&set, true);
+    assert!(tool.rect().x >= 112 && tool.rect().right() <= 505);
+    let mut whole = self::tool((100, 100));
+    whole.select(PixelRect::new(0, 0, 500, 500), &set);
+    assert_eq!(whole.rect(), PixelRect::full((100, 100)));
+}
+
+#[test]
 fn a_picture_smaller_than_the_minimum_can_still_be_cropped() {
     let set = ratios(&["1:1"]);
     let mut tool = tool((5, 3));

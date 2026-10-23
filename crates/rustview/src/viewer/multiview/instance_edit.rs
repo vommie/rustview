@@ -95,6 +95,13 @@ impl MultiviewInstance {
         let mut tool = CropTool::new(edit.stack.current_size(), edit.stack.original_size(), grid);
         tool.apply_choice(&prefs.ratios);
         edit.tool = Some(tool);
+        // A zoomed picture starts with the part that is shown (the handles of the whole picture would be out of sight).
+        if let Some(visible) = self.visible_part(index)
+            && let Some(tool) = self.tiles[index].edit.as_mut().and_then(|e| e.tool.as_mut())
+        {
+            tool.select(visible, &prefs.ratios);
+        }
+        let tile = &self.tiles[index];
         self.crop_order.opened(tile.key);
         tracing::info!(
             media_id = tile.media_id,
@@ -104,6 +111,26 @@ impl MultiviewInstance {
         );
         self.bump();
         true
+    }
+
+    /// The part of the picture of tile `index` that its room shows, in its pixels, when that is not all of it (a zoomed picture).
+    fn visible_part(&self, index: usize) -> Option<rustview_core::image_edit::geometry::PixelRect> {
+        use rustview_core::image_edit::geometry::{PixelRect, snap_coordinate};
+        let tile = self.tiles.get(index)?;
+        let zoom = tile.zoom.as_ref().filter(|z| z.is_active() && z.can_pan())?;
+        let (home, (room_w, room_h)) = (zoom.home()?, zoom.room()?);
+        let picture = self.picture_rect(index)?;
+        let (w, h) = tile.edit.as_ref()?.stack.current_size();
+        let (sx, sy) = (picture.w / f64::from(w.max(1)), picture.h / f64::from(h.max(1)));
+        // The room relative to the tile, then into pixels of the picture.
+        let (rx0, ry0) = (-f64::from(home.x), -f64::from(home.y));
+        let (rx1, ry1) = (rx0 + f64::from(room_w), ry0 + f64::from(room_h));
+        let x0 = snap_coordinate((rx0 - picture.x) / sx, w);
+        let y0 = snap_coordinate((ry0 - picture.y) / sy, h);
+        let x1 = snap_coordinate((rx1 - picture.x) / sx, w);
+        let y1 = snap_coordinate((ry1 - picture.y) / sy, h);
+        let rect = PixelRect::new(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0));
+        (!rect.is_empty() && !rect.is_full((w, h))).then_some(rect)
     }
 
     /// Closes the crop tool of tile `key` without applying it.
@@ -130,6 +157,12 @@ impl MultiviewInstance {
     /// Esc: cancels the crop tool that was opened first. Returns whether there was one (then Esc means nothing else).
     pub fn cancel_oldest_crop(&mut self) -> bool {
         self.prune_crop_order();
+        if !self.crop_order.is_empty() {
+            tracing::info!(
+                open = self.crop_order.keys().len(),
+                "[ImageEdit: Crop] Esc cancels the crop tool opened first"
+            );
+        }
         match self.crop_order.oldest() {
             Some(key) => {
                 if !self.cancel_crop(key) {
@@ -463,6 +496,7 @@ impl MultiviewInstance {
         if !self.edit_host_is_interactive() {
             return (false, UiAction::None);
         }
+        tracing::info!(code, "[ImageEdit: Keys] Editor key");
         match code {
             0 => (self.cancel_oldest_crop(), UiAction::None),
             1 => (self.apply_crop_target(), UiAction::None),

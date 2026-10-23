@@ -5,9 +5,9 @@
 use std::time::{Duration, Instant};
 
 /// How long the saved state stays at full strength.
-pub const SAVED_HOLD: Duration = Duration::from_millis(900);
+pub const SAVED_HOLD: Duration = Duration::from_millis(1200);
 /// How long it takes to fade out (the Slint animation of the button).
-pub const SAVED_FADE: Duration = Duration::from_millis(500);
+pub const SAVED_FADE: Duration = Duration::from_millis(600);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SaveBadge {

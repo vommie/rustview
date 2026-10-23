@@ -27,7 +27,7 @@ component MultiviewBarButton inherits Rectangle {
     // The one place a bar button fades with opacity: the Save button going away after a save (an icon cannot be faded by its
     // color without Slint drawing the raw black SVG at the end).
     opacity: root.action.fading ? 0.0 : 1.0;
-    animate opacity { duration: 500ms; easing: ease-out; }
+    animate opacity { duration: 600ms; easing: ease-out; }
 
     area := TooltipArea {
         x: 0px;
@@ -46,7 +46,7 @@ component MultiviewBarButton inherits Rectangle {
             icon: root.action.icon;
             size: IconSize.lg;
             color: root.action.attention || root.emphasized ? Theme.background
-                : root.action.emphasis == 3 ? Theme.status-ok
+                : root.action.emphasis == 3 ? Theme.text-muted.with-alpha(0.6)
                 : root.action.emphasis == 2 ? Theme.text-muted
                 : (!root.action.enabled ? Theme.text-muted.with-alpha(0.5) : ((root.action.toggle && root.action.active) || root.open || area.has-hover ? Theme.primary : Theme.text));
         }
