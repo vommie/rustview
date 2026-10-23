@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.3.86] - 2026-10-23
+
 ### Fixed
 - **Selecting a second tab with Ctrl+click now selects two tabs:** a selection that starts with a Ctrl or Shift click in the tab view includes the tab you are looking at, so the
   menu of the clicked tab is the one for several tabs (Merge/Close Selected Tabs) and not the single-tab menu. In the Browse view and the tab grid nothing is added implicitly.
@@ -647,7 +649,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.3.85...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.3.86...HEAD
+[0.3.86]: https://github.com/vommie/rustview/compare/v0.3.85...v0.3.86
 [0.3.85]: https://github.com/vommie/rustview/compare/v0.3.84...v0.3.85
 [0.3.84]: https://github.com/vommie/rustview/compare/v0.3.83...v0.3.84
 [0.3.83]: https://github.com/vommie/rustview/compare/v0.3.82...v0.3.83
