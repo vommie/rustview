@@ -6,95 +6,85 @@ use super::stats::MigrationStats;
 use super::writer::XnViewDbWriter;
 use crate::library::folders::normalize_path;
 use crate::settings::{LogObscurer, SettingsManager};
+use clap::Args;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-/// Checks whether migration arguments or help options were supplied on the command line.
-pub fn is_migration_requested(args: &[String]) -> bool {
-    args.iter().any(|arg| {
-        arg == "--migrate-xnview"
-            || arg == "--migrate-xnview-db"
-            || arg == "--migrate"
-            || arg == "-m"
-            || arg == "--help"
-            || arg == "-h"
-    })
+/// Options of the XnView MP database migration (`rustview --migrate-xnview <XnView.db> [options]`).
+#[derive(Debug, Clone, Default, Args)]
+pub struct MigrateOptions {
+    /// Migrate an existing XnView MP SQLite database (XnView.db) into RustView (destructive: wipes the current RustView database)
+    #[arg(short = 'm', long = "migrate-xnview", aliases = ["migrate-xnview-db", "migrate"], value_name = "PATH")]
+    pub xnview_db: Option<PathBuf>,
+
+    /// Set and enforce a base/root directory filter (only paths under this folder are migrated); also saves the path to the settings
+    #[arg(long, alias = "root-path", value_name = "PATH", requires = "xnview_db")]
+    pub root: Option<PathBuf>,
+
+    /// Enforce the base/root path filter from the settings (default)
+    #[arg(long, alias = "only-root", overrides_with = "no_root_filter", requires = "xnview_db")]
+    pub root_filter: bool,
+
+    /// Disable base/root path filtering (import all folders)
+    #[arg(long, alias = "all-folders", overrides_with = "root_filter", requires = "xnview_db")]
+    pub no_root_filter: bool,
+
+    /// Skip folders and files that do not physically exist on disk (default)
+    #[arg(long, overrides_with = "include_missing", requires = "xnview_db")]
+    pub skip_missing: bool,
+
+    /// Include non-existent folders and files (disables the missing check)
+    #[arg(long, alias = "no-skip-missing", overrides_with = "skip_missing", requires = "xnview_db")]
+    pub include_missing: bool,
+
+    /// Force log and audit trail obfuscation (mask names and paths)
+    #[arg(long, alias = "obfuscate", overrides_with = "no_obfuscate_logs", requires = "xnview_db")]
+    pub obfuscate_logs: bool,
+
+    /// Disable log obfuscation (clear text paths and names)
+    #[arg(long, aliases = ["plain-logs", "clear-logs"], overrides_with = "obfuscate_logs", requires = "xnview_db")]
+    pub no_obfuscate_logs: bool,
+
+    /// Write the audit log file in the home directory (default)
+    #[arg(long, overrides_with = "no_log", requires = "xnview_db")]
+    pub log: bool,
+
+    /// Do not write an audit log file
+    #[arg(long, overrides_with = "log", requires = "xnview_db")]
+    pub no_log: bool,
+
+    /// Custom output path of the migration audit log file
+    #[arg(long, value_name = "PATH", requires = "xnview_db")]
+    pub log_file: Option<PathBuf>,
+
+    /// Bypass the interactive confirmation prompts
+    #[arg(short = 'y', long, alias = "force", requires = "xnview_db")]
+    pub yes: bool,
 }
 
-/// Executes the CLI migration workflow if requested.
+/// Executes the CLI migration workflow.
 pub fn run_cli(
-    args: &[String],
+    options: &MigrateOptions,
     data_dir: &Path,
     config_dir: &Path,
 ) -> Result<(), MigrationError> {
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        print_help();
-        return Ok(());
-    }
-
-    let mut xnview_path_opt: Option<PathBuf> = None;
-    let mut auto_confirm = false;
-    let mut skip_missing = true; // Default: true (skip non-existing folders and files)
-    let mut root_filter_enabled = true; // Default: true (only import paths under configured base/root)
-    let mut explicit_root_path: Option<PathBuf> = None;
-    let mut enable_log = true; // Default: true (write audit log in home dir)
-    let mut custom_log_path: Option<PathBuf> = None;
-    let mut explicit_obfuscate: Option<bool> = None;
-
-    let mut iter = args.iter().skip(1);
-    while let Some(arg) = iter.next() {
-        if arg == "--migrate-xnview"
-            || arg == "--migrate-xnview-db"
-            || arg == "--migrate"
-            || arg == "-m"
-        {
-            if let Some(val) = iter.next() {
-                xnview_path_opt = Some(PathBuf::from(val));
-            }
-        } else if let Some(path_str) = arg.strip_prefix("--migrate-xnview=") {
-            xnview_path_opt = Some(PathBuf::from(path_str));
-        } else if let Some(path_str) = arg.strip_prefix("--migrate=") {
-            xnview_path_opt = Some(PathBuf::from(path_str));
-        } else if arg == "--include-missing" || arg == "--no-skip-missing" {
-            skip_missing = false;
-        } else if arg == "--skip-missing" {
-            skip_missing = true;
-        } else if arg == "--no-root-filter" || arg == "--all-folders" {
-            root_filter_enabled = false;
-        } else if arg == "--root-filter" || arg == "--only-root" {
-            root_filter_enabled = true;
-        } else if arg == "--root" || arg == "--root-path" {
-            if let Some(val) = iter.next() {
-                explicit_root_path = Some(PathBuf::from(val));
-                root_filter_enabled = true;
-            }
-        } else if let Some(path_str) = arg.strip_prefix("--root=") {
-            explicit_root_path = Some(PathBuf::from(path_str));
-            root_filter_enabled = true;
-        } else if let Some(path_str) = arg.strip_prefix("--root-path=") {
-            explicit_root_path = Some(PathBuf::from(path_str));
-            root_filter_enabled = true;
-        } else if arg == "--no-log" {
-            enable_log = false;
-        } else if arg == "--log" {
-            enable_log = true;
-        } else if arg == "--log-file" {
-            if let Some(val) = iter.next() {
-                custom_log_path = Some(PathBuf::from(val));
-                enable_log = true;
-            }
-        } else if let Some(path_str) = arg.strip_prefix("--log-file=") {
-            custom_log_path = Some(PathBuf::from(path_str));
-            enable_log = true;
-        } else if arg == "--obfuscate-logs" || arg == "--obfuscate" {
-            explicit_obfuscate = Some(true);
-        } else if arg == "--no-obfuscate-logs" || arg == "--plain-logs" || arg == "--clear-logs" {
-            explicit_obfuscate = Some(false);
-        } else if arg == "--yes" || arg == "-y" || arg == "--force" {
-            auto_confirm = true;
-        }
-    }
+    let xnview_path_opt = options.xnview_db.clone();
+    let auto_confirm = options.yes;
+    let skip_missing = !options.include_missing; // Default: true (skip non-existing folders and files)
+    let explicit_root_path = options.root.clone();
+    // Default: true (only import paths under the configured base/root); an explicit --root always enables it.
+    let root_filter_enabled = !options.no_root_filter || explicit_root_path.is_some();
+    let custom_log_path = options.log_file.clone();
+    // Default: true (write an audit log in the home dir); a log file path asks for one.
+    let enable_log = !options.no_log || custom_log_path.is_some();
+    let explicit_obfuscate = if options.no_obfuscate_logs {
+        Some(false)
+    } else if options.obfuscate_logs {
+        Some(true)
+    } else {
+        None
+    };
 
     let Some(xnview_db_path) = xnview_path_opt else {
         eprintln!("Error: Missing required path to XnViewMP database file (XnView.db).");
@@ -350,56 +340,6 @@ pub fn run_cli(
 
 /// Expands leading `~` to `$HOME` and normalizes path.
 fn normalize_input_path(input: &Path) -> PathBuf {
-    let s = input.to_string_lossy();
-    let path = if let Some(stripped) = s.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(stripped)
-        } else {
-            input.to_path_buf()
-        }
-    } else if s == "~" {
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home)
-        } else {
-            input.to_path_buf()
-        }
-    } else {
-        input.to_path_buf()
-    };
-
-    normalize_path(&path)
-}
-
-fn print_help() {
-    println!();
-    println!("RustView - High-Performance Media Manager & Viewer");
-    println!();
-    println!("Usage:");
-    println!("  rustview [OPTIONS]");
-    println!();
-    println!("Options:");
-    println!("  --migrate-xnview <PATH>    Migrate an existing XnViewMP SQLite database (XnView.db)");
-    println!("                             into RustView. (Destructive: wipes current RustView database)");
-    println!("  -m <PATH>                  Alias for --migrate-xnview");
-    println!("  --root <PATH>              Set and enforce a base/root directory filter (only paths");
-    println!("                             under this folder are migrated). Also saves path to settings.");
-    println!("  --root-filter              Enforce base/root path filter from settings (Default: enabled)");
-    println!("  --no-root-filter           Disable base/root path filtering (import all folders)");
-    println!("  --all-folders              Alias for --no-root-filter");
-    println!("  --skip-missing             Skip folders and files that do not physically exist on disk (Default: enabled)");
-    println!("  --include-missing          Include non-existent folders and files (disables missing check)");
-    println!("  --obfuscate-logs           Force log and audit trail obfuscation (mask names and paths)");
-    println!("  --no-obfuscate-logs        Disable log obfuscation (output clear text paths and names)");
-    println!("  --plain-logs               Alias for --no-obfuscate-logs");
-    println!("  --no-log                   Disable writing audit log file in user home directory");
-    println!("  --log                      Enable writing audit log file (Default: enabled in ~/rustview_migration_*.log)");
-    println!("  --log-file <PATH>          Specify custom output path for the migration audit log file");
-    println!("  -y, --yes, --force         Bypass interactive confirmation prompt during migration");
-    println!("  -h, --help                 Print this help message and exit");
-    println!();
-    println!("Examples:");
-    println!("  rustview --migrate-xnview ~/.config/xnviewmp/XnView.db");
-    println!("  rustview -m /path/to/XnView.db --root ~/images --yes");
-    println!("  rustview -m /path/to/XnView.db --no-root-filter --plain-logs --yes");
-    println!();
+    let expanded = shellexpand::tilde(&input.to_string_lossy()).into_owned();
+    normalize_path(Path::new(&expanded))
 }

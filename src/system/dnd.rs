@@ -56,23 +56,7 @@ impl SystemDndHandler {
                 .unwrap_or_else(|_| path.to_path_buf())
         };
 
-        let path_str = abs_path.to_string_lossy();
-        let mut uri = String::with_capacity(path_str.len() + 8);
-        uri.push_str("file://");
-
-        for b in path_str.bytes() {
-            match b {
-                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
-                    uri.push(b as char);
-                }
-                b' ' => uri.push_str("%20"),
-                _ => {
-                    uri.push_str(&format!("%{:02X}", b));
-                }
-            }
-        }
-
-        uri
+        url::Url::from_file_path(&abs_path).map_or_else(|()| format!("file://{}", abs_path.to_string_lossy()), String::from)
     }
 
     /// Formats a slice of filesystem paths into a standard CRLF-delimited `text/uri-list` payload.
@@ -846,5 +830,25 @@ print(f"RESULT:{'SUCCESS' if drop_accepted else 'SENT'}:{target_win}:{app_class}
         }
 
         (false, 0, "unknown".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SystemDndHandler;
+    use std::path::Path;
+
+    #[test]
+    fn file_uri_escapes_spaces_hashes_and_unicode() {
+        assert_eq!(
+            SystemDndHandler::path_to_file_uri(Path::new("/home/u/My Photos/a #1 \u{fc}.jpg")),
+            "file:///home/u/My%20Photos/a%20%231%20%C3%BC.jpg"
+        );
+    }
+
+    #[test]
+    fn uri_list_is_crlf_terminated() {
+        let list = SystemDndHandler::format_uri_list(&["/a/b.jpg", "/c d.png"]);
+        assert_eq!(list, "file:///a/b.jpg\r\nfile:///c%20d.png\r\n");
     }
 }

@@ -40,29 +40,13 @@ pub fn format_bytes_with_locale(bytes: u64) -> String {
     }
 }
 
-/// Formats a UNIX epoch timestamp into human-readable `YYYY-MM-DD HH:MM:SS` string.
+/// Formats a UNIX epoch timestamp (UTC) into a human-readable `YYYY-MM-DD HH:MM:SS` string; `-` for unset or invalid timestamps.
 pub fn format_timestamp(timestamp_secs: i64) -> String {
     if timestamp_secs <= 0 {
         return "-".to_string();
     }
-    let secs = timestamp_secs as u64;
-    let sec = secs % 60;
-    let mins = (secs / 60) % 60;
-    let hours = (secs / 3600) % 24;
-    let days = (secs / 86400) as i64;
-
-    let z = days + 719468;
-    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
-    let doe = (z - era * 146097) as u32;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = (yoe as i64) + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-
-    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", y, m, d, hours, mins, sec)
+    chrono::DateTime::from_timestamp(timestamp_secs, 0)
+        .map_or_else(|| "-".to_string(), |time| time.format("%Y-%m-%d %H:%M:%S").to_string())
 }
 
 /// Creates a thread-safe `SharedPixelBuffer` that implements `Send` + `Sync`.
@@ -80,4 +64,23 @@ pub fn rgb8_to_shared_buffer(
 pub fn rgb8_to_slint_image(raw_rgb: &[u8], width: u32, height: u32) -> Image {
     let pixel_buffer = rgb8_to_shared_buffer(raw_rgb, width, height);
     Image::from_rgb8(pixel_buffer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_timestamp;
+
+    #[test]
+    fn unset_timestamps_show_a_dash() {
+        assert_eq!(format_timestamp(0), "-");
+        assert_eq!(format_timestamp(-5), "-");
+    }
+
+    #[test]
+    fn timestamps_are_formatted_in_utc() {
+        assert_eq!(format_timestamp(86_400 * 365), "1971-01-01 00:00:00");
+        assert_eq!(format_timestamp(1_700_000_000), "2023-11-14 22:13:20");
+        // A leap day and the end of a month.
+        assert_eq!(format_timestamp(1_709_164_800), "2024-02-29 00:00:00");
+    }
 }

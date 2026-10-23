@@ -1,3 +1,4 @@
+use rustview::app::cli::{Cli, Command};
 use rustview::library::Library;
 use rustview::settings::memory_budget::BYTES_PER_MB;
 use rustview::settings::{LogObscurer, MemoryPlan, SettingsManager, SystemMemory, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
@@ -6,6 +7,7 @@ use rustview::system::termination;
 use rustview::thumbnails::ThumbnailManager;
 use rustview::ui::{MainWindow, UiBridge, shutdown};
 use rustview::util::startup_clock;
+use directories::ProjectDirs;
 use slint::{CloseRequestResponse, ComponentHandle};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -28,13 +30,13 @@ struct WindowGeometryTracker {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     startup_clock::begin();
-    let args: Vec<String> = std::env::args().collect();
+    let cli = Cli::parse_process_args();
     let data_dir = dirs_data_dir();
     let config_dir = dirs_config_dir();
 
     // 1. Standalone Headless CLI API for external tools (e.g. PyCut)
-    if rustview::cli_api::is_api_requested(&args) {
-        match rustview::cli_api::run_cli_api(&args, &data_dir) {
+    if let Some(Command::Api { command } | Command::Direct(command)) = cli.command {
+        match rustview::cli_api::run_cli_api(command, &data_dir) {
             Ok(exit_code) => std::process::exit(exit_code),
             Err(e) => {
                 eprintln!("API Error: {}", e);
@@ -44,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 2. Standalone CLI Migration Tool (XnViewMP)
-    if rustview::xnviewdb_migrate::is_migration_requested(&args) {
+    if cli.migrate.xnview_db.is_some() {
         tracing_subscriber::fmt()
             .with_target(false)
             .with_thread_names(false)
@@ -54,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .init();
 
-        match rustview::xnviewdb_migrate::run_cli(&args, &data_dir, &config_dir) {
+        match rustview::xnviewdb_migrate::run_cli(&cli.migrate, &data_dir, &config_dir) {
             Ok(()) => std::process::exit(0),
             Err(e) => {
                 eprintln!("Migration Error: {}", e);
@@ -100,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // TEMPORARY DEBUG FEATURE (remove together with src/library/folder_reset.rs):
     // `--reset-folder-tree` resets the folder tree (SPoT) once. Media records and their folder paths are preserved.
-    rustview::library::folder_reset::run_if_requested(&args, &library, &settings);
+    rustview::library::folder_reset::run_if_requested(cli.reset_folder_tree, &library, &settings);
 
     // Scope the in-memory folder tree snapshot to the configured root (None = empty tree, e.g. first start).
     let configured_root = settings
@@ -474,21 +476,9 @@ fn persist_window_geometry(
 }
 
 fn dirs_data_dir() -> PathBuf {
-    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-        PathBuf::from(xdg).join("rustview")
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".local/share/rustview")
-    } else {
-        PathBuf::from("./data")
-    }
+    ProjectDirs::from("", "", "rustview").map_or_else(|| PathBuf::from("./data"), |dirs| dirs.data_dir().to_path_buf())
 }
 
 fn dirs_config_dir() -> PathBuf {
-    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        PathBuf::from(xdg).join("rustview")
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".config/rustview")
-    } else {
-        PathBuf::from("./config")
-    }
+    ProjectDirs::from("", "", "rustview").map_or_else(|| PathBuf::from("./config"), |dirs| dirs.config_dir().to_path_buf())
 }

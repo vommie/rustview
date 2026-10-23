@@ -22,9 +22,6 @@ use crate::settings::SettingsManager;
 use std::collections::HashSet;
 use std::time::Instant;
 
-/// CLI argument that triggers the reset.
-pub const RESET_FOLDER_TREE_ARG: &str = "--reset-folder-tree";
-
 /// Summary of one reset run.
 #[derive(Debug, Default, Clone)]
 pub struct FolderTreeResetReport {
@@ -144,8 +141,8 @@ impl FolderTreeReset {
 
 /// Executes the reset if `--reset-folder-tree` was passed. Never aborts startup on failure.
 /// Must run right after the library was opened and before the UI is created.
-pub fn run_if_requested(args: &[String], library: &Library, settings: &SettingsManager) {
-    if !args.iter().any(|a| a == RESET_FOLDER_TREE_ARG) {
+pub fn run_if_requested(requested: bool, library: &Library, settings: &SettingsManager) {
+    if !requested {
         return;
     }
 

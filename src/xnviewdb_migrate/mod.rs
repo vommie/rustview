@@ -7,7 +7,7 @@ pub mod stats;
 pub mod types;
 pub mod writer;
 
-pub use cli::{is_migration_requested, run_cli};
+pub use cli::{MigrateOptions, run_cli};
 pub use error::MigrationError;
 pub use logger::MigrationLogger;
 pub use mapper::{MappedData, XnViewMapper};

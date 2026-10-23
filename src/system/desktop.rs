@@ -514,7 +514,7 @@ except Exception:
             if token.contains("%f") || token.contains("%u") {
                 if let Some(first_path) = paths.first() {
                     let replacement = if token.contains("%u") {
-                        format!("file://{}", first_path.to_string_lossy())
+                        super::dnd::SystemDndHandler::path_to_file_uri(first_path)
                     } else {
                         first_path.to_string_lossy().to_string()
                     };
@@ -525,7 +525,7 @@ except Exception:
             } else if token.contains("%F") || token.contains("%U") {
                 for p in paths {
                     let formatted = if token.contains("%U") {
-                        format!("file://{}", p.to_string_lossy())
+                        super::dnd::SystemDndHandler::path_to_file_uri(p)
                     } else {
                         p.to_string_lossy().to_string()
                     };
@@ -549,11 +549,6 @@ except Exception:
     }
 
     fn expand_home(path_str: &str) -> PathBuf {
-        if let Some(stripped) = path_str.strip_prefix("~/")
-            && let Ok(home) = std::env::var("HOME")
-        {
-            return PathBuf::from(home).join(stripped);
-        }
-        PathBuf::from(path_str)
+        PathBuf::from(shellexpand::tilde(path_str).as_ref())
     }
 }

@@ -18,8 +18,17 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 ### Changed
 - Updated to **Slint 1.18** and the current compatible versions of all dependencies (no behavior change; the thumbnail badges were adapted to the new
   flexbox layout API).
+- **The command line is parsed by `clap`:** `rustview --help` lists everything, `rustview api --help` (and `rustview <command> --help`) documents the API commands.
+  Every spelling that PyCutRv and other tools used keeps working (`api <command>` and `<command>`, the aliases, `--option=value`, `--api-<command>`).
+  Options of the XnView MP migration are refused when `--migrate-xnview` is missing, and the last of two opposing flags wins.
+- The data and settings folders, the `~` in typed paths, the mount table, memory and process information, signal handling and file URIs now come from
+  established libraries instead of hand-written code (no change in behavior, except the fixes below).
 - **The application id is now `io.github.vommie.rustview`** (it was `org.rustview.app`) and matches the desktop file, so the desktop shows the
   launcher icon for the window. If you pinned RustView to the taskbar, pin it again once after updating. Settings and library are untouched, no migration.
+
+### Fixed
+- "Open With" passed unencoded `file://` URIs to applications whose command line uses `%u`/`%U`, so files with spaces or `#` in their names failed to open.
+- The name of the migration audit log file used UTC although it is documented as local time.
 
 ## [0.3.81] - 2026-10-23
 

@@ -6,6 +6,8 @@
 //! setting changes. The budget is split between the pieces that grow with use: the decoded thumbnails (an LRU that is trimmed
 //! at once when the budget shrinks) and the records of the open folder.
 
+use procfs::process::Process;
+use procfs::{Current, Meminfo};
 use std::fs;
 
 pub const BYTES_PER_MB: u64 = 1024 * 1024;
@@ -30,15 +32,16 @@ pub struct SystemMemory {
 }
 
 impl SystemMemory {
-    /// Reads `/proc/meminfo` and the cgroup limits. Missing files yield zeros/`None` (the budget then falls back to a default).
+    /// Reads `/proc/meminfo` and the cgroup limits (through procfs). Unreadable files yield zeros/`None` (the budget then falls back to a default).
     pub fn read() -> Self {
-        let (total_bytes, available_bytes) = fs::read_to_string("/proc/meminfo")
-            .map(|text| parse_meminfo(&text))
+        let (total_bytes, available_bytes) = Meminfo::current()
+            .map(|info| (info.mem_total, info.mem_available.unwrap_or(0)))
             .unwrap_or((0, 0));
-        let cgroup_limit_bytes = fs::read_to_string("/proc/self/cgroup")
+        let cgroup_limit_bytes = Process::myself()
+            .and_then(|process| process.cgroups())
             .ok()
-            .and_then(|text| cgroup_path(&text))
-            .and_then(|path| smallest_cgroup_limit(&path));
+            .and_then(|groups| groups.0.into_iter().find(|group| group.hierarchy == 0))
+            .and_then(|group| smallest_cgroup_limit(&group.pathname));
         Self { total_bytes, available_bytes, cgroup_limit_bytes }
     }
 
@@ -50,23 +53,6 @@ impl SystemMemory {
             None => self.total_bytes,
         }
     }
-}
-
-/// `(MemTotal, MemAvailable)` in bytes from the text of `/proc/meminfo`.
-pub fn parse_meminfo(text: &str) -> (u64, u64) {
-    let field = |name: &str| {
-        text.lines()
-            .find_map(|line| line.strip_prefix(name))
-            .and_then(|rest| rest.split_whitespace().next())
-            .and_then(|kb| kb.parse::<u64>().ok())
-            .map_or(0, |kb| kb.saturating_mul(1024))
-    };
-    (field("MemTotal:"), field("MemAvailable:"))
-}
-
-/// The cgroup v2 path from the text of `/proc/self/cgroup` (`0::/user.slice/...`).
-pub fn cgroup_path(text: &str) -> Option<String> {
-    text.lines().find_map(|line| line.strip_prefix("0::")).map(str::to_string)
 }
 
 /// The value of a `memory.max` file: a number of bytes, or `max` for no limit.
@@ -188,5 +174,30 @@ fn format_bytes(bytes: u64) -> String {
         format!("{:.1} GB", bytes as f64 / GB)
     } else {
         format!("{} MB", bytes / BYTES_PER_MB)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn this_machine_reports_its_memory() {
+        let memory = SystemMemory::read();
+        assert!(memory.total_bytes > 0);
+        assert!(memory.available_bytes > 0);
+        assert!(memory.usable_total_bytes() > 0);
+    }
+
+    #[test]
+    fn a_cgroup_limit_caps_the_installed_ram() {
+        let memory = SystemMemory { total_bytes: 16 * 1024 * BYTES_PER_MB, available_bytes: 8 * 1024 * BYTES_PER_MB, cgroup_limit_bytes: Some(2 * 1024 * BYTES_PER_MB) };
+        assert_eq!(memory.usable_total_bytes(), 2 * 1024 * BYTES_PER_MB);
+    }
+
+    #[test]
+    fn cgroup_limit_text_is_a_number_or_max() {
+        assert_eq!(parse_cgroup_limit("1073741824\n"), Some(1_073_741_824));
+        assert_eq!(parse_cgroup_limit("max\n"), None);
     }
 }

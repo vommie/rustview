@@ -3,7 +3,7 @@ pub mod error;
 pub mod handlers;
 pub mod models;
 
-pub use commands::{is_api_requested, parse_api_args, ApiCommand};
+pub use commands::{ApiCommand, ApiSubcommand};
 pub use error::ApiError;
 pub use handlers::ApiHandler;
 pub use models::*;
@@ -13,13 +13,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// Standalone CLI API runner executing commands against RustView's LMDB storage without initializing any GUI.
-pub fn run_cli_api(args: &[String], data_dir: &Path) -> Result<i32, ApiError> {
-    let cmd = parse_api_args(args)?;
-
-    if cmd == ApiCommand::Help {
-        print_api_help();
-        return Ok(0);
-    }
+pub fn run_cli_api(command: ApiSubcommand, data_dir: &Path) -> Result<i32, ApiError> {
+    let cmd = command.into_command()?;
 
     let db_path = data_dir.join("library.lmdb");
     if !db_path.exists() {
@@ -51,49 +46,5 @@ pub fn run_api_with_library(cmd: ApiCommand, library: &Library) -> Result<i32, A
             ApiHandler::check_hashes(library, &hashes, json)
         }
         ApiCommand::InsertHash { hash, json } => ApiHandler::insert_hash(library, &hash, json),
-        ApiCommand::Help => {
-            print_api_help();
-            Ok(0)
-        }
     }
-}
-
-pub fn print_api_help() {
-    println!();
-    println!("RustView Headless CLI-API Suite");
-    println!("High-performance headless command-line interface for external tool integration (e.g. PyCutRv, remove_dups)");
-    println!();
-    println!("Usage:");
-    println!("  rustview api <COMMAND> [OPTIONS]");
-    println!();
-    println!("Commands:");
-    println!("  tag-tree                   Export hierarchical tag tree (IDs, parents, labels)");
-    println!("  get-media                  Inspect and get database details for a media file");
-    println!("  set-media                  Upsert media record, assign tags, ratings & ensure folder");
-    println!("  delete-media               Remove media record and unassign associated tags");
-    println!("  check-hash                 Query duplicate tracking database by single MD5 checksum");
-    println!("  check-hashes               Batch-query duplicate database for multiple MD5 checksums");
-    println!("  insert-hash                Register a new checksum in the external hashes table");
-    println!();
-    println!("Options:");
-    println!("  -p, --path <PATH>          Absolute path to the target media file");
-    println!("  -r, --rating <0-5>         Star rating (0 = unrated, 1..=5 stars)");
-    println!("  -t, --tags <ID,ID,...>     Comma-separated list of Tag IDs");
-    println!("  -s, --source <APP_NAME>    Application identifier creating this entry (e.g. PyCutRv; Default: 'CLI-API')");
-    println!("      --hash <MD5_HEX>       32-character hexadecimal MD5 hash string");
-    println!("  -H, --hashes <MD5,MD5...>  Comma- or space-separated list of MD5 hash strings");
-    println!("  -f, --hashes-file <FILE>   Path to file containing MD5 hashes (one per line)");
-    println!("      --stdin, -             Read MD5 hashes directly from standard input");
-    println!("      --json                 Output machine-readable JSON to stdout");
-    println!("  -h, --help                 Print this help message");
-    println!();
-    println!("Examples:");
-    println!("  rustview api tag-tree --json");
-    println!("  rustview api get-media --path /media/clip.mp4 --json");
-    println!("  rustview api set-media --path /media/clip.mp4 --rating 5 --tags 1,4,7 --source PyCutRv --json");
-    println!("  rustview api check-hash --hash d5dd11d265f453dee9d51a40ba717efb --json");
-    println!("  rustview api check-hashes --hashes d5dd11d265f453dee9d51a40ba717efb,e4d909c290d0fb1ca068ffaddf22cbd0 --json");
-    println!("  rustview api check-hashes --hashes-file /tmp/hashes_list.txt --json");
-    println!("  cat hashes.txt | rustview api check-hashes --stdin --json");
-    println!();
 }

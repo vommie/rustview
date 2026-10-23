@@ -5,6 +5,7 @@ use crate::settings::LogObscurer;
 use crate::thumbnails::{
     PackStore, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, VideoPreviewRecord,
 };
+use procfs::process::{FDPermissions, FDTarget};
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -241,70 +242,36 @@ impl<'a> ExternalMediaCompleter<'a> {
         (true, "File is complete and ready")
     }
 
-    /// On Linux systems, inspects `/proc` to verify whether any external process
-    /// holds an open file descriptor with write access (`O_WRONLY`, `O_RDWR`, or `O_APPEND`) to the target file.
+    /// Inspects `/proc` (through procfs) to verify whether any other process holds an open file descriptor to the target file
+    /// that was opened for writing (the permission bits of the descriptor's link show `O_WRONLY`, `O_RDWR` or `O_APPEND`).
     pub fn is_file_open_for_writing(file_path: &Path) -> bool {
-        #[cfg(target_os = "linux")]
-        {
-            let canonical_target = match file_path.canonicalize() {
-                Ok(p) => p,
-                Err(_) => return false,
+        let Ok(canonical_target) = file_path.canonicalize() else {
+            return false;
+        };
+        let Ok(processes) = procfs::process::all_processes() else {
+            return false;
+        };
+        let current_pid = i32::try_from(std::process::id()).unwrap_or(-1);
+
+        for process in processes.flatten() {
+            if process.pid() == current_pid {
+                continue;
+            }
+            // Processes of other users and exited processes cannot be inspected: skipped.
+            let Ok(descriptors) = process.fd() else {
+                continue;
             };
-
-            let proc_dir = Path::new("/proc");
-            let entries = match std::fs::read_dir(proc_dir) {
-                Ok(e) => e,
-                Err(_) => return false,
-            };
-
-            let current_pid = std::process::id();
-
-            for entry in entries.flatten() {
-                let file_name = entry.file_name();
-                let name_str = file_name.to_string_lossy();
-
-                // Only inspect numeric process directories
-                let Ok(pid) = name_str.parse::<u32>() else {
-                    continue;
-                };
-
-                if pid == current_pid {
-                    continue;
-                }
-
-                let fd_dir = entry.path().join("fd");
-                let fd_entries = match std::fs::read_dir(&fd_dir) {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
-
-                for fd_entry in fd_entries.flatten() {
-                    if let Ok(link_target) = std::fs::read_link(fd_entry.path())
-                        && link_target == canonical_target
-                    {
-                        let fd_name = fd_entry.file_name();
-                        let fdinfo_path = entry.path().join("fdinfo").join(&fd_name);
-                        if let Ok(info_content) = std::fs::read_to_string(&fdinfo_path) {
-                            for line in info_content.lines() {
-                                if let Some(flags_str) = line.strip_prefix("flags:") {
-                                    let trimmed = flags_str.trim();
-                                    if let Ok(flags) = u32::from_str_radix(trimmed, 8) {
-                                        let acc_mode = flags & 0o3;
-                                        if acc_mode == 0o1 || acc_mode == 0o2 || (flags & 0o2000) != 0 {
-                                            tracing::debug!(
-                                                pid,
-                                                file = %LogObscurer::path(file_path),
-                                                "[ExternalMediaCompleter: ActiveWriter] File is held open for writing by PID in /proc"
-                                            );
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            return true;
-                        }
-                    }
+            for descriptor in descriptors.flatten() {
+                if let FDTarget::Path(path) = &descriptor.target
+                    && *path == canonical_target
+                    && descriptor.mode().contains(FDPermissions::WRITE)
+                {
+                    tracing::debug!(
+                        pid = process.pid(),
+                        file = %LogObscurer::path(file_path),
+                        "[ExternalMediaCompleter: ActiveWriter] File is held open for writing by PID in /proc"
+                    );
+                    return true;
                 }
             }
         }
@@ -575,5 +542,40 @@ impl<'a> ExternalMediaCompleter<'a> {
         };
 
         (report, successful_items)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ExternalMediaCompleter;
+    use std::process::{Command, Stdio};
+
+    #[test]
+    fn a_file_held_open_for_writing_by_another_process_is_detected() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let held = dir.path().join("held.mp4");
+        let free = dir.path().join("free.mp4");
+        std::fs::write(&held, b"x").expect("create held file");
+        std::fs::write(&free, b"x").expect("create free file");
+
+        // The shell keeps `held.mp4` open for writing (descriptor 3) while it sleeps.
+        let mut writer = Command::new("sh")
+            .arg("-c")
+            .arg("exec 3>>\"$1\"; sleep 30")
+            .arg("sh")
+            .arg(&held)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sh");
+        std::thread::sleep(std::time::Duration::from_millis(400));
+
+        let detected = ExternalMediaCompleter::is_file_open_for_writing(&held);
+        let other = ExternalMediaCompleter::is_file_open_for_writing(&free);
+        let _ = writer.kill();
+        let _ = writer.wait();
+
+        assert!(detected, "the writer's descriptor must be found");
+        assert!(!other, "an unopened file must not be reported");
     }
 }

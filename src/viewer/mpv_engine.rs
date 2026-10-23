@@ -93,13 +93,8 @@ impl MpvPlayer {
             let _ = init.set_property("ytdl", "yes");
 
             // 8. Resolve and set MPV configuration directory
-            let config_dir = std::env::var("XDG_CONFIG_HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| {
-                    std::env::var("HOME")
-                        .map(|h| PathBuf::from(h).join(".config"))
-                        .unwrap_or_else(|_| PathBuf::from("."))
-                })
+            let config_dir = directories::BaseDirs::new()
+                .map_or_else(|| PathBuf::from("."), |dirs| dirs.config_dir().to_path_buf())
                 .join("mpv");
 
             if config_dir.exists() {

@@ -267,10 +267,7 @@ impl SystemDisplayService {
             })
             .unwrap_or_else(|| "Unknown Linux".to_string());
 
-        let kernel = std::fs::read_to_string("/proc/version")
-            .ok()
-            .and_then(|v| v.split_whitespace().nth(2).map(|s| s.to_string()))
-            .unwrap_or_else(|| "Unknown Kernel".to_string());
+        let kernel = rustix::system::uname().release().to_string_lossy().into_owned();
 
         let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".into());
         let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "unknown".into());

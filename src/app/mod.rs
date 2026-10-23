@@ -1,1 +1,1 @@
-pub struct Application;
+pub mod cli;

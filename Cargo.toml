@@ -29,6 +29,17 @@ libmpv2 = "6"
 rayon = "1"
 memchr = "2"
 walkdir = "2"
+# XDG directories of the library and settings, and `~` expansion in paths typed on the command line or found in desktop files.
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+shellexpand = "3"
+url = "2"
+# /proc readers (mount table, memory, cgroups, open files) and the kernel release; no hand-written parsers.
+procfs = { version = "0.18", default-features = false }
+proc-mounts = "0.3"
+signal-hook = "0.4"
+rustix = { version = "1", features = ["system", "fs", "process"] }
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

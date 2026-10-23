@@ -13,33 +13,20 @@ pub struct SystemMemoryMetrics {
 }
 
 pub fn get_system_memory_metrics() -> SystemMemoryMetrics {
+    use procfs::{Current, Meminfo, process::Process};
+    const MB: f64 = 1024.0 * 1024.0;
+
     let mut metrics = SystemMemoryMetrics::default();
 
-    if let Ok(statm) = std::fs::read_to_string("/proc/self/statm") {
-        let parts: Vec<&str> = statm.split_whitespace().collect();
-        if parts.len() >= 2 {
-            let page_size_kb = 4.0;
-            if let Ok(vms_pages) = parts[0].parse::<f64>() {
-                metrics.process_vms_mb = (vms_pages * page_size_kb) / 1024.0;
-            }
-            if let Ok(rss_pages) = parts[1].parse::<f64>() {
-                metrics.process_rss_mb = (rss_pages * page_size_kb) / 1024.0;
-            }
-        }
+    if let Ok(statm) = Process::myself().and_then(|process| process.statm()) {
+        let page_size = procfs::page_size() as f64;
+        metrics.process_vms_mb = statm.size as f64 * page_size / MB;
+        metrics.process_rss_mb = statm.resident as f64 * page_size / MB;
     }
 
-    if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
-        for line in meminfo.lines() {
-            if let Some(rest) = line.strip_prefix("MemTotal:")
-                && let Some(val) = rest.split_whitespace().next().and_then(|v| v.parse::<f64>().ok())
-            {
-                metrics.system_total_mb = val / 1024.0;
-            } else if let Some(rest) = line.strip_prefix("MemAvailable:")
-                && let Some(val) = rest.split_whitespace().next().and_then(|v| v.parse::<f64>().ok())
-            {
-                metrics.system_available_mb = val / 1024.0;
-            }
-        }
+    if let Ok(meminfo) = Meminfo::current() {
+        metrics.system_total_mb = meminfo.mem_total as f64 / MB;
+        metrics.system_available_mb = meminfo.mem_available.unwrap_or(0) as f64 / MB;
     }
 
     metrics
@@ -833,5 +820,19 @@ impl BenchmarkReportFormatter {
         out.push_str("================================================================================\n");
 
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::get_system_memory_metrics;
+
+    #[test]
+    fn process_and_system_memory_are_read_from_procfs() {
+        let metrics = get_system_memory_metrics();
+        assert!(metrics.process_rss_mb > 0.0);
+        assert!(metrics.process_vms_mb >= metrics.process_rss_mb);
+        assert!(metrics.system_total_mb >= metrics.system_available_mb);
+        assert!(metrics.system_total_mb > 0.0);
     }
 }
