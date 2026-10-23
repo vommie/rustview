@@ -258,7 +258,7 @@ pub fn sync(window: &MainWindow, tab_manager: &ViewerTabManager, instance: &Shar
 
 /// The Multiview is no longer the shown content (another tab, the Browse view, the grid or a fullscreen took over).
 pub fn suspend() {
-    // Called on every embedding sync, also while a normal tab owns the bars: only a host that was active lets go of them.
+    // Called on every embedding sync, also while another host owns the bars: only a host that was active lets go of them.
     let active = with_host(|h| h.tick.running() || h.shown.is_some() || h.instance.upgrade().is_some()).unwrap_or(true);
     if !active {
         return;
@@ -354,13 +354,9 @@ fn on_tick() {
     update_bar_overlay();
 }
 
-/// The medium an F2 rename acts on in the active tab: its only medium, or for a Multiview the tile a player named, else
-/// the tile under the pointer.
+/// The medium an F2 rename acts on in the active tab: the tile a player named, else the tile under the pointer, else the first.
 pub fn rename_target(tab_manager: &ViewerTabManager) -> Option<MediaId> {
     let tab = tab_manager.get_active_tab()?;
-    let Some(multiview) = tab.multiview() else {
-        return Some(tab.media_id);
-    };
     let pointer = with_host(|h| h.probe.as_ref().and_then(|p| p.position_in(h.main_xid))).flatten();
-    multiview.instance.lock().resolve_rename_target(pointer)
+    tab.multiview.instance.lock().resolve_rename_target(pointer)
 }

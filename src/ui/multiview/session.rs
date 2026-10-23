@@ -73,8 +73,6 @@ pub(super) struct Session {
     pub(super) monitor: MonitorInfo,
     pub(super) fs_xid: u64,
     pub(super) instance: SharedInstance,
-    /// The tiles of the instance still have to be started (a Multiview that comes from a tab is already running).
-    fresh: bool,
     pub(super) tab_return: Option<TabReturn>,
     pub(super) probe: Option<PointerProbe>,
     pub(super) models: ViewModels,
@@ -294,7 +292,6 @@ pub(super) fn open_tab(
     main_window: slint::Weak<MainWindow>,
 ) -> bool {
     tab_host::suspend();
-    super::tab_plain::suspend();
     instance.lock().deactivate();
     launch(
         handle,
@@ -489,12 +486,6 @@ pub(super) fn finish_close(session: Session, notify: bool) {
     {
         main_window.set_fullscreen_tab_id(-1);
     }
-    if let Some(tab) = tab_return {
-        let alive = handle
-            .tab_manager()
-            .is_some_and(|tab_manager| tab_manager.get_tab(tab.tab_id).is_some());
-        session.instance.lock().return_loans(alive);
-    }
     session.shutdown();
     tracing::info!(notify, "[Multiview: Close] Multiview closed");
     if notify {
@@ -530,7 +521,6 @@ impl Session {
             monitor,
             fs_xid: 0,
             instance,
-            fresh: tab_return.is_none(),
             tab_return,
             probe: None,
             models: ViewModels::default(),
@@ -561,9 +551,8 @@ impl Session {
         {
             let mut instance = self.instance.lock();
             instance.set_host(&surface);
-            if self.fresh {
-                instance.start_all();
-            } else {
+            // A Multiview that comes from a tab is usually running already; one that was never shown starts now.
+            if !instance.start_all() {
                 instance.start_pending_images();
             }
         }

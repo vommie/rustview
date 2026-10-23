@@ -1,15 +1,6 @@
-use super::error::ViewerError;
-use super::mpv_engine::MpvPlayer;
-use super::types::{ImageTabPayload, MediaTabSession, TabId, TabPayload, VideoTabPayload};
-use super::x11_embed::X11VideoSubwindow;
+use super::types::{MediaTabSession, TabId};
 use crate::library::models::{MediaId, MediaRecord};
-use crate::media::MediaType;
-use crate::settings::LogObscurer;
-use parking_lot::Mutex;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Instant;
 
 /// Centralized, single point of truth (SPoT) formatter for tab titles and duplicate iteration suffixes.
 pub struct TabTitleFormatter;
@@ -263,33 +254,19 @@ impl TabCollection {
 
     pub fn update_filename(&mut self, media_id: MediaId, new_filename: &str) {
         for tab in self.sessions.iter_mut() {
+            let mut guard = tab.multiview.instance.lock();
+            guard.member_renamed(media_id, new_filename);
+            drop(guard);
+            // A tab of one medium is described by that medium and follows the file's new name (its title keeps the suffix of
+            // a numbered duplicate).
             if tab.media_id == media_id {
-                let old_base = &tab.filename;
-                let new_title = if let Some(suffix) = tab.title.strip_prefix(old_base) {
-                    format!("{}{}", new_filename, suffix)
-                } else {
-                    new_filename.to_string()
-                };
-
+                let suffix = tab.title.strip_prefix(&tab.filename).unwrap_or("").to_string();
+                tab.title = format!("{new_filename}{suffix}");
                 tab.filename = new_filename.to_string();
-                tab.title = new_title;
                 if let Some(parent) = tab.file_path.parent() {
                     tab.file_path = parent.join(new_filename);
                 }
                 tab.record.filename = new_filename.to_string();
-            }
-        }
-        for tab in self.sessions.iter_mut() {
-            let Some(instance) = tab.payload.multiview().map(|mv| mv.instance.clone()) else {
-                continue;
-            };
-            let mut guard = instance.lock();
-            guard.member_renamed(media_id, new_filename);
-            // A Multiview tab of one medium is named after its file and follows the file's new name.
-            if guard.solo_tile().map(|(id, _, _)| id) == Some(media_id) {
-                let suffix = tab.title.strip_prefix(&tab.filename).unwrap_or("").to_string();
-                tab.title = format!("{new_filename}{suffix}");
-                tab.filename = new_filename.to_string();
             }
         }
     }
@@ -298,31 +275,8 @@ impl TabCollection {
         for tab in self.sessions.iter_mut() {
             if tab.media_id == media_id {
                 tab.record.is_deleted = true;
-                let missing_msg = format!(
-                    "Media file not found on disk:\n{}",
-                    tab.file_path.display()
-                );
-                match tab.payload {
-                    TabPayload::Image(ref mut img) => {
-                        img.is_loading = false;
-                        img.high_res_pixels = None;
-                        img.error_message = missing_msg;
-                    }
-                    TabPayload::Video(ref mut vid) => {
-                        vid.is_loading = false;
-                        vid.error_message = missing_msg;
-                        vid.player.stop();
-                        let mut sub = vid.subwindow.lock();
-                        if let Some(ref mut s) = *sub {
-                            s.hide();
-                        }
-                    }
-                    TabPayload::Multiview(_) => {}
-                }
             }
-        }
-        for mv in self.sessions.iter().filter_map(|t| t.payload.multiview()) {
-            mv.instance.lock().member_deleted(media_id);
+            tab.multiview.instance.lock().member_deleted(media_id);
         }
     }
 
@@ -330,208 +284,12 @@ impl TabCollection {
         for tab in self.sessions.iter_mut() {
             if tab.media_id == media_id {
                 tab.record = updated_record.clone();
-                let file_exists = tab.file_path.is_file();
-                match tab.payload {
-                    TabPayload::Image(ref mut img) => {
-                        img.orig_width = updated_record.width;
-                        img.orig_height = updated_record.height;
-                        if file_exists && !updated_record.is_deleted {
-                            img.error_message.clear();
-                        } else if !file_exists {
-                            img.error_message = format!(
-                                "Media file not found on disk:\n{}",
-                                tab.file_path.display()
-                            );
-                        }
-                    }
-                    TabPayload::Video(ref mut vid) => {
-                        vid.duration_ms = updated_record.duration_ms;
-                        if file_exists && !updated_record.is_deleted {
-                            vid.error_message.clear();
-                        } else if !file_exists {
-                            vid.error_message = format!(
-                                "Media file not found on disk:\n{}",
-                                tab.file_path.display()
-                            );
-                        }
-                    }
-                    TabPayload::Multiview(_) => {}
-                }
             }
-        }
-        for mv in self.sessions.iter().filter_map(|t| t.payload.multiview()) {
-            mv.instance.lock().member_refreshed(media_id, updated_record);
+            tab.multiview.instance.lock().member_refreshed(media_id, updated_record);
         }
     }
 
     pub fn get_by_instance_id(&self, instance_id: u64) -> Option<&MediaTabSession> {
-        self.sessions
-            .iter()
-            .find(|t| t.multiview().is_some_and(|mv| mv.instance_id == instance_id))
-    }
-}
-
-/// Factory responsible for instantiating concrete `MediaTabSession` entities and underlying media payloads (OCP).
-pub struct TabSessionFactory;
-
-impl TabSessionFactory {
-    /// Constructs a fully initialized `MediaTabSession` with its permanent display title.
-    /// Performs a non-blocking physical existence check before initializing video rendering or player instances.
-    pub fn create_session(
-        id: TabId,
-        record: MediaRecord,
-        file_path: PathBuf,
-        title: String,
-        main_xid_opt: Option<u64>,
-        viewport_rect: (i32, i32, u32, u32),
-    ) -> Result<MediaTabSession, ViewerError> {
-        let filename = record.filename.clone();
-        let format = record.format;
-        let is_video = matches!(record.media_type, MediaType::Video);
-        let now = Instant::now();
-        let file_exists = file_path.is_file();
-
-        let payload = if is_video {
-            if !file_exists {
-                tracing::warn!(
-                    tab_id = id,
-                    media_id = record.id,
-                    file_path = %LogObscurer::path(&file_path),
-                    "[TabSessionFactory: Video] Target file does not exist on disk, initializing tab in missing-file fallback state"
-                );
-                TabPayload::Video(VideoTabPayload {
-                    player: Arc::new(MpvPlayer::new()?),
-                    subwindow: Arc::new(Mutex::new(None)),
-                    position_ms: 0,
-                    is_playing: false,
-                    volume: 1.0,
-                    duration_ms: record.duration_ms,
-                    is_loading: false,
-                    error_message: format!(
-                        "Media file not found on disk:\n{}",
-                        file_path.display()
-                    ),
-                })
-            } else {
-                Self::create_video_payload(&file_path, record.duration_ms, main_xid_opt, viewport_rect)?
-            }
-        } else if !file_exists {
-            tracing::warn!(
-                tab_id = id,
-                media_id = record.id,
-                file_path = %LogObscurer::path(&file_path),
-                "[TabSessionFactory: Image] Target file does not exist on disk, initializing tab in missing-file fallback state"
-            );
-            TabPayload::Image(ImageTabPayload {
-                high_res_pixels: None,
-                is_loading: false,
-                error_message: format!(
-                    "Media file not found on disk:\n{}",
-                    file_path.display()
-                ),
-                orig_width: record.width,
-                orig_height: record.height,
-            })
-        } else {
-            Self::create_image_payload(record.width, record.height)
-        };
-
-        Ok(MediaTabSession {
-            id,
-            media_id: record.id,
-            filename,
-            title,
-            format,
-            file_path,
-            record,
-            payload,
-            created_at: now,
-            last_accessed: now,
-        })
-    }
-
-    fn create_video_payload(
-        file_path: &Path,
-        duration_ms: u64,
-        main_xid_opt: Option<u64>,
-        (x, y, w, h): (i32, i32, u32, u32),
-    ) -> Result<TabPayload, ViewerError> {
-        let player = Arc::new(MpvPlayer::new()?);
-        let subwindow_slot = Arc::new(Mutex::new(None));
-
-        if let Some(main_xid) = main_xid_opt
-            && main_xid > 0
-            && let Ok(mut sub) = X11VideoSubwindow::new(main_xid, x, y, w, h)
-        {
-            let wid = sub.xid();
-            let _ = player.attach_to_window(wid);
-            sub.hide(); // Keep initially hidden to eliminate visual flicker on background creation
-            *subwindow_slot.lock() = Some(sub);
-        }
-
-        let _ = player.load_file(file_path);
-
-        Ok(TabPayload::Video(VideoTabPayload {
-            player,
-            subwindow: subwindow_slot,
-            position_ms: 0,
-            is_playing: true,
-            volume: 1.0,
-            duration_ms,
-            is_loading: false,
-            error_message: String::new(),
-        }))
-    }
-
-    fn create_image_payload(width: u32, height: u32) -> TabPayload {
-        TabPayload::Image(ImageTabPayload {
-            high_res_pixels: None,
-            is_loading: true,
-            error_message: String::new(),
-            orig_width: width,
-            orig_height: height,
-        })
-    }
-}
-
-/// Eviction policy coordinator managing uncompressed high-resolution full-image buffers in RAM.
-pub struct ImageBufferEvictor;
-
-impl ImageBufferEvictor {
-    /// Evicts full-resolution image buffers of oldest inactive tabs when exceeding the memory capacity limit.
-    pub fn evict_excess(tabs: &mut [MediaTabSession], active_id: Option<TabId>, max_buffers: usize) {
-        let cached_count = tabs
-            .iter()
-            .filter(|t| matches!(&t.payload, TabPayload::Image(img) if img.high_res_pixels.is_some()))
-            .count();
-
-        if cached_count <= max_buffers {
-            return;
-        }
-
-        let mut inactive_indices: Vec<(usize, Instant)> = tabs
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| {
-                Some(t.id) != active_id
-                    && matches!(&t.payload, TabPayload::Image(img) if img.high_res_pixels.is_some())
-            })
-            .map(|(idx, t)| (idx, t.last_accessed))
-            .collect();
-
-        inactive_indices.sort_by_key(|&(_, last)| last);
-
-        let to_evict_count = cached_count.saturating_sub(max_buffers);
-        for &(idx, _) in inactive_indices.iter().take(to_evict_count) {
-            if let TabPayload::Image(ref mut img) = tabs[idx].payload {
-                img.high_res_pixels = None;
-                img.is_loading = false;
-                tracing::debug!(
-                    tab_id = tabs[idx].id,
-                    media_id = tabs[idx].media_id,
-                    "[ImageBufferEvictor: Evict] Evicted inactive high-resolution pixel buffer from RAM"
-                );
-            }
-        }
+        self.sessions.iter().find(|t| t.multiview.instance_id == instance_id)
     }
 }

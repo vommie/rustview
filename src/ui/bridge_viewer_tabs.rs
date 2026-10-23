@@ -5,7 +5,7 @@ use super::bridge_state::UiState;
 use super::bridge_status_bar::StatusBarBridge;
 use super::bridge_tab_grid::BridgeTabGrid;
 use super::bridge_tags::BridgeTags;
-use super::multiview::{tab_host, tab_plain};
+use super::multiview::tab_host;
 use super::tab_dnd::{TabDndAutoScroller, TabDndGeometry, TabDndSession};
 use super::tab_icon::tab_icon;
 use super::{MainWindow, TabItemModel};
@@ -14,12 +14,9 @@ use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::ThumbnailManager;
-use crate::viewer::{
-    get_slint_window_xid, HighResImageLoader, TabId, TabPayload, ViewerTabManager,
-    X11VideoSubwindow,
-};
+use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
-use slint::{ComponentHandle, Image, Model, ModelRc, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -289,103 +286,13 @@ impl BridgeViewerTabs {
             Self::sync_video_embedding(&win_next, &tm_next, &fs_next, &set_next);
         });
 
-        // 9a. Double-click on Tab Media Viewer -> Toggle Fullscreen
-        let win_fs = window.clone_strong();
-        let tm_fs = tab_manager.clone();
-        let set_fs = settings.clone();
-        let fs_ctrl = fullscreen.clone();
-        window.on_viewer_image_clicked(move || {
-            if fs_ctrl.canvas_double_click() {
-                tracing::info!(
-                    "[BridgeViewerTabs: DoubleClick] Double-click detected on viewer canvas. Launching fullscreen viewer window (auto-play)..."
-                );
-                fs_ctrl.open_active_tab(&tm_fs, &set_fs, win_fs.as_weak());
-            }
-        });
-
-        // 9b. Middle-click on Tab Media Viewer -> Toggle Fullscreen directly
-        let win_fs_mid = window.clone_strong();
-        let tm_fs_mid = tab_manager.clone();
-        let set_fs_mid = settings.clone();
-        let fs_ctrl_mid = fullscreen.clone();
-        window.on_viewer_image_middle_clicked(move || {
-            tracing::info!(
-                "[BridgeViewerTabs: MiddleClick] Middle-click detected on viewer canvas. Launching fullscreen viewer window directly (auto-play)..."
-            );
-            fs_ctrl_mid.open_active_tab(&tm_fs_mid, &set_fs_mid, win_fs_mid.as_weak());
-        });
-
-        // 10a. The area of a Multiview tab changed (window or sidebar resize): place its native video windows
-        let win_mv_geom = window.clone_strong();
-        let tm_mv_geom = tab_manager.clone();
-        let set_mv_geom = settings.clone();
-        let fs_mv_geom = fullscreen.clone();
-        window.on_multiview_viewport_changed(move || {
-            if win_mv_geom.get_viewer_is_multiview() {
-                Self::sync_video_embedding(&win_mv_geom, &tm_mv_geom, &fs_mv_geom, &set_mv_geom);
-            }
-        });
-
-        // 10. Viewport Geometry Changed Callback
+        // 10. The area of the tab view changed (window or sidebar resize): the Multiview of the active tab places its native video
+        // windows again.
         let win_geom = window.clone_strong();
-        let tm_geom = tab_manager;
-        let set_geom = settings;
-        let fs_geom = fullscreen;
-        window.on_viewer_viewport_geometry_changed(move |_vx, _vy, _vw, _vh| {
-            Self::sync_video_embedding(&win_geom, &tm_geom, &fs_geom, &set_geom);
-        });
-    }
-
-    /// Helper wiring interactive fullscreen, close, and F2 rename callbacks onto an MpvPlayer instance.
-    pub fn wire_player_callbacks(
-        player: &Arc<crate::viewer::MpvPlayer>,
-        window: &MainWindow,
-        tab_manager: &Arc<ViewerTabManager>,
-        fullscreen: &MultiviewHandle,
-        settings: &Arc<SettingsManager>,
-    ) {
-        let fs_toggle = fullscreen.clone();
-        let tm_toggle = tab_manager.clone();
-        let set_toggle = settings.clone();
-        let win_toggle = window.as_weak();
-
-        player.on_toggle_fullscreen(move || {
-            let fs = fs_toggle.clone();
-            let tm = tm_toggle.clone();
-            let set = set_toggle.clone();
-            let _ = win_toggle.upgrade_in_event_loop(move |w| {
-                if fs.is_isolated_open() {
-                    tracing::info!(
-                        "[BridgeViewerTabs: MpvDblClick] Fullscreen exit requested via MPV event"
-                    );
-                    fs.request_close();
-                } else if w.get_active_view_mode() == 1 {
-                    tracing::info!(
-                        "[BridgeViewerTabs: MpvDblClick] Fullscreen enter requested via MPV event (auto-play)"
-                    );
-                    fs.open_active_tab(&tm, &set, w.as_weak());
-                }
-            });
-        });
-
-        let win_close = window.as_weak();
-        player.on_close_tab(move || {
-            let _ = win_close.upgrade_in_event_loop(move |w| {
-                tracing::info!(
-                    "[BridgeViewerTabs: MpvCloseTab] Ctrl+W intercepted from MPV video player. Invoking viewer_close_tab..."
-                );
-                w.invoke_viewer_close_tab();
-            });
-        });
-
-        let win_ren = window.as_weak();
-        player.on_rename_requested(move || {
-            let _ = win_ren.upgrade_in_event_loop(move |w| {
-                tracing::info!(
-                    "[BridgeViewerTabs: MpvRename] F2 intercepted from MPV video player. Invoking request_rename..."
-                );
-                w.invoke_request_rename();
-            });
+        window.on_multiview_viewport_changed(move || {
+            if win_geom.get_active_view_mode() == 1 {
+                Self::sync_video_embedding(&win_geom, &tab_manager, &fullscreen, &settings);
+            }
         });
     }
 
@@ -676,16 +583,15 @@ impl BridgeViewerTabs {
         }
     }
 
-    /// Synchronizes native video subwindow visibility, exact X/Y positioning, DPI scaling, and MPV input hooks.
+    /// Puts the active tab's Multiview in the viewer area (or lets go of it in the Browse view and the tab grid) and hides the
+    /// native video windows of every other tab.
     pub fn sync_video_embedding(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
         fullscreen: &MultiviewHandle,
-        settings: &Arc<SettingsManager>,
+        _settings: &Arc<SettingsManager>,
     ) {
-        tab_plain::refresh(window, tab_manager);
-
-        // Only a fullscreen that is isolated from the Browse view (it shows a tab's own player) owns the video windows; a
+        // Only a fullscreen that is isolated from the Browse view (it shows a tab's own Multiview) owns the video windows; a
         // Multiview that follows the Browse selection leaves the embedding of tab videos alone.
         if fullscreen.is_isolated_open() {
             return;
@@ -704,101 +610,12 @@ impl BridgeViewerTabs {
             return;
         }
 
+        // Tab view: every tab is a Multiview (one tile for a tab of one medium); the active one is placed in the viewer area.
         let active_tab = tab_manager.get_active_tab();
-        let active_tab_id = active_tab.as_ref().map(|t| t.id);
-
-        tab_manager.hide_video_subwindows_except(active_tab_id);
-
-        if let Some(multiview) = active_tab.as_ref().and_then(|t| t.multiview()) {
-            tab_host::sync(window, tab_manager, &multiview.instance);
-            return;
-        }
-        tab_host::suspend();
-
-        let is_video = active_tab
-            .as_ref()
-            .map(|t| matches!(t.payload, TabPayload::Video(_)))
-            .unwrap_or(false);
-
-        let file_exists = active_tab
-            .as_ref()
-            .map(|t| t.file_path.is_file())
-            .unwrap_or(false);
-
-        let has_error = active_tab
-            .as_ref()
-            .map(|t| match t.payload {
-                TabPayload::Video(ref vid) => !vid.error_message.is_empty(),
-                TabPayload::Image(ref img) => !img.error_message.is_empty(),
-                TabPayload::Multiview(_) => false,
-            })
-            .unwrap_or(false);
-
-        if !is_video || !file_exists || has_error {
-            tab_manager.hide_all_video_subwindows();
-            return;
-        }
-
-        let Some(main_xid) = get_slint_window_xid(window.window()) else {
-            return;
-        };
-
-        let scale = window.window().scale_factor();
-        let win_size = window.window().size();
-
-        let logical_win_w = win_size.width as f32 / scale;
-        let logical_win_h = win_size.height as f32 / scale;
-
-        let sidebar_r = window.get_sidebar_right_width();
-        let resizer_r = 6.0f32;
-        let toolbar_top = 38.0f32;
-        let toolbar_tab = 26.0f32;
-        let status_bar_h = 28.0f32;
-
-        let logical_x = 0.0f32;
-        let logical_y = toolbar_top + toolbar_tab;
-        let logical_w = (logical_win_w - (sidebar_r + resizer_r)).max(16.0);
-        let logical_h = (logical_win_h - (logical_y + status_bar_h)).max(16.0);
-
-        let phys_x = (logical_x * scale).round() as i32;
-        let phys_y = (logical_y * scale).round() as i32;
-        let phys_w = (logical_w * scale).round() as u32;
-        let phys_h = (logical_h * scale).round() as u32;
-
-        tab_manager.set_main_viewport_info(main_xid, phys_x, phys_y, phys_w, phys_h);
-
-        if let Some(active_session) = active_tab
-            && let TabPayload::Video(ref vid) = active_session.payload
-        {
-            Self::wire_player_callbacks(
-                &vid.player,
-                window,
-                tab_manager,
-                fullscreen,
-                settings,
-            );
-
-            let mut sub_guard = vid.subwindow.lock();
-            if let Some(ref mut sub) = *sub_guard {
-                if sub.parent_xid() == main_xid {
-                    sub.move_resize(phys_x, phys_y, phys_w, phys_h);
-                } else {
-                    let _ = sub.reparent(main_xid, phys_x, phys_y, phys_w, phys_h);
-                }
-                sub.show();
-                tab_manager.reapply_active_cutouts_to_subwindow(sub);
-            } else if let Ok(mut sub) =
-                X11VideoSubwindow::new(main_xid, phys_x, phys_y, phys_w, phys_h)
-            {
-                let wid = sub.xid();
-                let _ = vid.player.attach_to_window(wid);
-                sub.show();
-                tab_manager.reapply_active_cutouts_to_subwindow(&mut sub);
-                *sub_guard = Some(sub);
-            }
-
-            vid.player.set_tab_grid_mode(false);
-            vid.player.set_view_active(true);
+        tab_manager.hide_video_subwindows_except(active_tab.as_ref().map(|t| t.id));
+        match active_tab {
+            Some(tab) => tab_host::sync(window, tab_manager, &tab.multiview.instance),
+            None => tab_host::suspend(),
         }
     }
 
@@ -840,6 +657,7 @@ impl BridgeViewerTabs {
     }
 
     /// Navigates to the adjacent (previous or next) media item in the current active list while keeping the same tab open in-place.
+    /// Only a tab of exactly one medium pages (the toolbar buttons and the arrow keys); the title of the tab stays as it was.
     pub fn navigate_adjacent(
         window: &MainWindow,
         tab_manager: &Arc<ViewerTabManager>,
@@ -849,9 +667,9 @@ impl BridgeViewerTabs {
         fullscreen: &MultiviewHandle,
         is_next: bool,
     ) {
-        let active_media_id = match tab_manager.get_active_media_id() {
-            Some(id) => id,
-            None => return,
+        tab_manager.sync_tab_identities();
+        let Some(active_media_id) = tab_manager.get_active_media_id() else {
+            return;
         };
 
         let target_media_id_opt = {
@@ -859,11 +677,7 @@ impl BridgeViewerTabs {
             let current_pos = st.row_of(active_media_id);
 
             if let Some(pos) = current_pos {
-                let target_pos = if is_next {
-                    pos.checked_add(1)
-                } else {
-                    pos.checked_sub(1)
-                };
+                let target_pos = if is_next { pos.checked_add(1) } else { pos.checked_sub(1) };
 
                 target_pos.and_then(|t_idx| {
                     if !st.active_indices.is_empty() {
@@ -880,98 +694,50 @@ impl BridgeViewerTabs {
             }
         };
 
-        if let Some(target_id) = target_media_id_opt {
-            tracing::info!(
-                active_media_id,
-                target_media_id = target_id,
-                is_next,
-                "[BridgeViewerTabs: Navigate] Navigating in-place within current active tab session"
-            );
+        let Some(target_id) = target_media_id_opt else {
+            return;
+        };
+        tracing::info!(
+            active_media_id,
+            target_media_id = target_id,
+            is_next,
+            "[BridgeViewerTabs: Navigate] Navigating in-place within current active tab session"
+        );
 
-            match tab_manager.navigate_active_tab_to_media(target_id) {
-                Ok(tab_id) => {
-                    Self::sync_ui(window, tab_manager, library, settings, state);
-                    fullscreen.sync_tab(tab_manager);
-
-                    let target_session = tab_manager.get_tab(tab_id);
-                    let is_image = target_session
-                        .as_ref()
-                        .map(|t| matches!(t.payload, TabPayload::Image(_)))
-                        .unwrap_or(false);
-                    let file_exists = target_session
-                        .as_ref()
-                        .map(|t| t.file_path.is_file())
-                        .unwrap_or(false);
-
-                    if let Some(session) = target_session
-                        && let TabPayload::Video(ref vid) = session.payload
-                        && file_exists
-                    {
-                        Self::wire_player_callbacks(
-                            &vid.player,
-                            window,
-                            tab_manager,
-                            fullscreen,
-                            settings,
-                        );
-                    }
-
-                    if is_image && file_exists && let Ok(file_path) = library.resolve_media_path(target_id) {
-                        let tm_async = tab_manager.clone();
-                        let w_weak = window.as_weak();
-                        let lib_async = library.clone();
-                        let st_async = state.clone();
-                        let set_async = settings.clone();
-                        let fs_async = fullscreen.clone();
-
-                        rayon::spawn(move || {
-                            let load_res = HighResImageLoader::load_full_resolution(&file_path);
-
-                            let _ = w_weak.upgrade_in_event_loop(move |w| {
-                                if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(target_id) {
-                                    tracing::debug!(
-                                        target_id,
-                                        tab_id,
-                                        "[BridgeViewerTabs: DiscardStale] Discarding stale decoded image buffer because tab navigated away"
-                                    );
-                                    return;
-                                }
-
-                                match load_res {
-                                    Ok((w_px, h_px, pixel_buffer)) => {
-                                        tracing::info!(
-                                            media_id = target_id,
-                                            tab_id = tab_id,
-                                            dimensions = format!("{}x{}", w_px, h_px),
-                                            "[BridgeViewerTabs: Navigate] High-res buffer loaded for adjacent image"
-                                        );
-                                        tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
-                                    }
-                                    Err(err) => {
-                                        tracing::warn!(
-                                            media_id = target_id,
-                                            tab_id = tab_id,
-                                            error = %err,
-                                            "[BridgeViewerTabs: Navigate] Failed to load buffer for adjacent image"
-                                        );
-                                        tm_async.set_tab_error(tab_id, err.to_string());
-                                    }
-                                }
-                                Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                                fs_async.sync_tab(&tm_async);
-                            });
-                        });
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        target_id,
-                        error = %e,
-                        "[BridgeViewerTabs: NavigateError] Failed to navigate tab to media"
-                    );
-                }
+        match tab_manager.navigate_active_tab_to_media(target_id) {
+            Ok(_) => {
+                Self::sync_ui(window, tab_manager, library, settings, state);
+                fullscreen.sync_tab(tab_manager);
+            }
+            Err(e) => {
+                tracing::error!(
+                    target_id,
+                    error = %e,
+                    "[BridgeViewerTabs: NavigateError] Failed to navigate tab to media"
+                );
             }
         }
+    }
+
+    /// Whether more than one tab may show `media_id` (the settings of the viewer for images and videos).
+    fn allow_multiple_tabs(
+        media_id: MediaId,
+        library: &Library,
+        settings: &SettingsManager,
+        state: &RwLock<UiState>,
+    ) -> bool {
+        let is_video = {
+            let st = state.read();
+            if let Some(item) = st.all_folder_media.find(media_id) {
+                matches!(item.record.media_type, MediaType::Video)
+            } else if let Ok(Some(record)) = library.media().get(media_id) {
+                matches!(record.media_type, MediaType::Video)
+            } else {
+                false
+            }
+        };
+        let viewer = settings.get().viewer;
+        if is_video { viewer.videos.allow_multiple_tabs } else { viewer.images.allow_multiple_tabs }
     }
 
     /// Opens multiple media items in foreground viewer tabs.
@@ -989,15 +755,7 @@ impl BridgeViewerTabs {
         }
 
         if media_ids.len() == 1 {
-            Self::open_media_tab(
-                media_ids[0],
-                window,
-                tab_manager,
-                library,
-                settings,
-                state,
-                fullscreen,
-            );
+            Self::open_media_tab(media_ids[0], window, tab_manager, library, settings, state, fullscreen);
             return;
         }
 
@@ -1010,128 +768,26 @@ impl BridgeViewerTabs {
             total
         );
 
-        let app_settings = settings.get();
-
         // 1. Open items 0..(total - 1) in background
         for &media_id in &media_ids[..total - 1] {
-            let is_video = {
-                let st = state.read();
-                if let Some(item) = st.all_folder_media.find(media_id) {
-                    matches!(item.record.media_type, MediaType::Video)
-                } else if let Ok(Some(record)) = library.media().get(media_id) {
-                    matches!(record.media_type, MediaType::Video)
-                } else {
-                    false
-                }
-            };
-
-            let allow_multiple = if is_video {
-                app_settings.viewer.videos.allow_multiple_tabs
-            } else {
-                app_settings.viewer.images.allow_multiple_tabs
-            };
-
-            if let Ok((tab_id, is_new)) =
-                tab_manager.open_media_in_background(media_id, allow_multiple)
-                && !is_video
-                && is_new
-                && let Ok(file_path) = library.resolve_media_path(media_id)
-                && file_path.is_file()
-            {
-                let tm_async = tab_manager.clone();
-                let w_weak = window.as_weak();
-                let lib_async = library.clone();
-                let st_async = state.clone();
-                let set_async = settings.clone();
-
-                rayon::spawn(move || {
-                    let load_res = HighResImageLoader::load_full_resolution(&file_path);
-                    let _ = w_weak.upgrade_in_event_loop(move |w| {
-                        if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
-                            return;
-                        }
-                        match load_res {
-                            Ok((w_px, h_px, pixel_buffer)) => {
-                                tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
-                            }
-                            Err(err) => {
-                                tm_async.set_tab_error(tab_id, err.to_string());
-                            }
-                        }
-                        Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                    });
-                });
+            let allow_multiple = Self::allow_multiple_tabs(media_id, library, settings, state);
+            if let Err(e) = tab_manager.open_media_in_background(media_id, allow_multiple) {
+                tracing::error!(media_id, error = %e, "[BridgeViewerTabs: OpenMultipleError] Failed to open a background media tab");
             }
         }
 
         // 2. Open the last item in foreground
         let last_id = media_ids[total - 1];
-        let is_last_video = {
-            let st = state.read();
-            if let Some(item) = st.all_folder_media.find(last_id) {
-                matches!(item.record.media_type, MediaType::Video)
-            } else if let Ok(Some(record)) = library.media().get(last_id) {
-                matches!(record.media_type, MediaType::Video)
-            } else {
-                false
-            }
-        };
-
-        let last_allow_multiple = if is_last_video {
-            app_settings.viewer.videos.allow_multiple_tabs
-        } else {
-            app_settings.viewer.images.allow_multiple_tabs
-        };
+        let last_allow_multiple = Self::allow_multiple_tabs(last_id, library, settings, state);
 
         match tab_manager.open_or_focus_media(last_id, last_allow_multiple) {
-            Ok((last_tab_id, is_new)) => {
+            Ok(_) => {
                 window.set_is_tab_grid_active(false);
                 window.set_is_browse_active(false);
                 window.set_active_view_mode(1);
 
                 Self::sync_ui(window, tab_manager, library, settings, state);
-
-                let file_exists = tab_manager
-                    .get_tab(last_tab_id)
-                    .map(|t| t.file_path.is_file())
-                    .unwrap_or(false);
-
-                if is_last_video {
-                    if file_exists {
-                        Self::sync_video_embedding(
-                            window,
-                            tab_manager,
-                            fullscreen,
-                            settings,
-                        );
-                    } else {
-                        tab_manager.hide_all_video_subwindows();
-                    }
-                } else if is_new && file_exists && let Ok(file_path) = library.resolve_media_path(last_id) {
-                    let tm_async = tab_manager.clone();
-                    let w_weak = window.as_weak();
-                    let lib_async = library.clone();
-                    let st_async = state.clone();
-                    let set_async = settings.clone();
-
-                    rayon::spawn(move || {
-                        let load_res = HighResImageLoader::load_full_resolution(&file_path);
-                        let _ = w_weak.upgrade_in_event_loop(move |w| {
-                            if tm_async.get_tab(last_tab_id).map(|t| t.media_id) != Some(last_id) {
-                                return;
-                            }
-                            match load_res {
-                                Ok((w_px, h_px, pixel_buffer)) => {
-                                    tm_async.update_tab_image_buffer(last_tab_id, w_px, h_px, pixel_buffer);
-                                }
-                                Err(err) => {
-                                    tm_async.set_tab_error(last_tab_id, err.to_string());
-                                }
-                            }
-                            Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                        });
-                    });
-                }
+                Self::sync_video_embedding(window, tab_manager, fullscreen, settings);
             }
             Err(e) => {
                 tracing::error!(
@@ -1175,7 +831,6 @@ impl BridgeViewerTabs {
 
         let t0 = Instant::now();
         let total = media_ids.len();
-        let app_settings = settings.get();
 
         tracing::info!(
             total_items = total,
@@ -1186,70 +841,9 @@ impl BridgeViewerTabs {
         let mut opened_count = 0usize;
 
         for &media_id in media_ids {
-            let is_video = {
-                let st = state.read();
-                if let Some(item) = st.all_folder_media.find(media_id) {
-                    matches!(item.record.media_type, MediaType::Video)
-                } else if let Ok(Some(record)) = library.media().get(media_id) {
-                    matches!(record.media_type, MediaType::Video)
-                } else {
-                    false
-                }
-            };
-
-            let allow_multiple = if is_video {
-                app_settings.viewer.videos.allow_multiple_tabs
-            } else {
-                app_settings.viewer.images.allow_multiple_tabs
-            };
-
-            if let Ok((tab_id, is_new)) =
-                tab_manager.open_media_in_background(media_id, allow_multiple)
-            {
+            let allow_multiple = Self::allow_multiple_tabs(media_id, library, settings, state);
+            if tab_manager.open_media_in_background(media_id, allow_multiple).is_ok() {
                 opened_count += 1;
-                if !is_video
-                    && is_new
-                    && let Ok(file_path) = library.resolve_media_path(media_id)
-                    && file_path.is_file()
-                {
-                    let tm_async = tab_manager.clone();
-                    let w_weak = window.as_weak();
-                    let lib_async = library.clone();
-                    let st_async = state.clone();
-                    let set_async = settings.clone();
-
-                    rayon::spawn(move || {
-                        let load_res = HighResImageLoader::load_full_resolution(&file_path);
-                        let _ = w_weak.upgrade_in_event_loop(move |w| {
-                            if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
-                                return;
-                            }
-                            match load_res {
-                                Ok((w_px, h_px, pixel_buffer)) => {
-                                    tm_async.update_tab_image_buffer(
-                                        tab_id,
-                                        w_px,
-                                        h_px,
-                                        pixel_buffer,
-                                    );
-                                }
-                                Err(err) => {
-                                    tm_async.set_tab_error(tab_id, err.to_string());
-                                }
-                            }
-                            Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                            if w.get_active_view_mode() == 2 {
-                                BridgeTabGrid::sync_tab_grid_ui(
-                                    &w,
-                                    &tm_async,
-                                    &lib_async,
-                                    &set_async,
-                                    &st_async,
-                                );
-                            }
-                        });
-                    });
-                }
             }
         }
 
@@ -1272,7 +866,7 @@ impl BridgeViewerTabs {
         );
     }
 
-    /// Opens a media file (Image or Video) in a viewer tab and initiates background loading or playback.
+    /// Opens a medium in a viewer tab (a Multiview of one tile, started when the tab is shown) and shows the tab.
     pub fn open_media_tab(
         media_id: MediaId,
         window: &MainWindow,
@@ -1283,106 +877,20 @@ impl BridgeViewerTabs {
         fullscreen: &MultiviewHandle,
     ) {
         let t0 = Instant::now();
-
-        let is_video = {
-            let st = state.read();
-            if let Some(item) = st.all_folder_media.find(media_id) {
-                matches!(item.record.media_type, MediaType::Video)
-            } else if let Ok(Some(record)) = library.media().get(media_id) {
-                matches!(record.media_type, MediaType::Video)
-            } else {
-                false
-            }
-        };
-
-        let app_settings = settings.get();
-        let allow_multiple = if is_video {
-            app_settings.viewer.videos.allow_multiple_tabs
-        } else {
-            app_settings.viewer.images.allow_multiple_tabs
-        };
+        let allow_multiple = Self::allow_multiple_tabs(media_id, library, settings, state);
 
         match tab_manager.open_or_focus_media(media_id, allow_multiple) {
             Ok((tab_id, is_new)) => {
                 window.set_is_tab_grid_active(false);
+                window.set_is_browse_active(false);
+                window.set_active_view_mode(1);
                 Self::sync_ui(window, tab_manager, library, settings, state);
-
-                let is_video_session = tab_manager
-                    .get_tab(tab_id)
-                    .map(|t| matches!(t.payload, TabPayload::Video(_)))
-                    .unwrap_or(false);
-
-                let file_exists = tab_manager
-                    .get_tab(tab_id)
-                    .map(|t| t.file_path.is_file())
-                    .unwrap_or(false);
-
-                if is_video_session {
-                    if file_exists {
-                        Self::sync_video_embedding(window, tab_manager, fullscreen, settings);
-                    } else {
-                        tab_manager.hide_all_video_subwindows();
-                    }
-                } else if is_new && file_exists && let Ok(file_path) = library.resolve_media_path(media_id) {
-                    let tm_async = tab_manager.clone();
-                    let w_weak = window.as_weak();
-                    let lib_async = library.clone();
-                    let st_async = state.clone();
-                    let set_async = settings.clone();
-
-                    tracing::info!(
-                        media_id,
-                        tab_id,
-                        path = %LogObscurer::path(&file_path),
-                        "[BridgeViewerTabs: AsyncLoad] Spawning high-resolution background decode task..."
-                    );
-
-                    rayon::spawn(move || {
-                        let t_decode = Instant::now();
-                        let load_res = HighResImageLoader::load_full_resolution(&file_path);
-
-                        let _ = w_weak.upgrade_in_event_loop(move |w| {
-                            if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
-                                tracing::debug!(
-                                    media_id,
-                                    tab_id,
-                                    "[BridgeViewerTabs: DiscardStale] Discarding stale decoded image buffer because tab navigated away"
-                                );
-                                return;
-                            }
-
-                            match load_res {
-                                Ok((w_px, h_px, pixel_buffer)) => {
-                                    tracing::info!(
-                                        media_id,
-                                        tab_id,
-                                        dimensions = format!("{}x{}", w_px, h_px),
-                                        decode_time_ms = t_decode.elapsed().as_millis(),
-                                        "[BridgeViewerTabs: AsyncLoad] High-res image decoded successfully, updating tab buffer"
-                                    );
-                                    tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
-                                }
-                                Err(err) => {
-                                    tracing::error!(
-                                        media_id,
-                                        tab_id,
-                                        error = %err,
-                                        "[BridgeViewerTabs: AsyncLoad] Failed to decode full-resolution image"
-                                    );
-                                    tm_async.set_tab_error(tab_id, err.to_string());
-                                }
-                            }
-                            Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                        });
-                    });
-                }
+                Self::sync_video_embedding(window, tab_manager, fullscreen, settings);
 
                 tracing::info!(
                     media_id,
                     tab_id,
                     is_new,
-                    is_video = is_video_session,
-                    file_exists,
                     allow_multiple,
                     open_time_us = t0.elapsed().as_micros(),
                     "[BridgeViewerTabs: Open] Tab opened and UI synchronized"
@@ -1413,30 +921,7 @@ impl BridgeViewerTabs {
         state: &Arc<RwLock<UiState>>,
     ) -> Option<TabId> {
         let t0 = Instant::now();
-
-        let (is_video, filename_hint) = {
-            let st = state.read();
-            if let Some(item) = st.all_folder_media.find(media_id) {
-                (
-                    matches!(item.record.media_type, MediaType::Video),
-                    item.record.filename.clone(),
-                )
-            } else if let Ok(Some(record)) = library.media().get(media_id) {
-                (
-                    matches!(record.media_type, MediaType::Video),
-                    record.filename,
-                )
-            } else {
-                (false, format!("Media #{}", media_id))
-            }
-        };
-
-        let app_settings = settings.get();
-        let allow_multiple = if is_video {
-            app_settings.viewer.videos.allow_multiple_tabs
-        } else {
-            app_settings.viewer.images.allow_multiple_tabs
-        };
+        let allow_multiple = Self::allow_multiple_tabs(media_id, library, settings, state);
 
         match tab_manager.open_media_in_background(media_id, allow_multiple) {
             Ok((tab_id, is_new)) => {
@@ -1446,104 +931,14 @@ impl BridgeViewerTabs {
                     BridgeTabGrid::sync_tab_grid_ui(window, tab_manager, library, settings, state);
                 }
 
-                let is_video_session = tab_manager
-                    .get_tab(tab_id)
-                    .map(|t| matches!(t.payload, TabPayload::Video(_)))
-                    .unwrap_or(false);
-
-                let file_exists = tab_manager
-                    .get_tab(tab_id)
-                    .map(|t| t.file_path.is_file())
-                    .unwrap_or(false);
-
-                if !is_video_session && is_new && file_exists && let Ok(file_path) = library.resolve_media_path(media_id) {
-                    let tm_async = tab_manager.clone();
-                    let w_weak = window.as_weak();
-                    let lib_async = library.clone();
-                    let st_async = state.clone();
-                    let set_async = settings.clone();
-
-                    tracing::info!(
-                        media_id,
-                        tab_id,
-                        path = %LogObscurer::path(&file_path),
-                        "[BridgeViewerTabs: AsyncLoadBackground] Spawning high-resolution background decode task for background tab..."
-                    );
-
-                    rayon::spawn(move || {
-                        let t_decode = Instant::now();
-                        let load_res = HighResImageLoader::load_full_resolution(&file_path);
-
-                        let _ = w_weak.upgrade_in_event_loop(move |w| {
-                            if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
-                                tracing::debug!(
-                                    media_id,
-                                    tab_id,
-                                    "[BridgeViewerTabs: DiscardStale] Discarding stale decoded image buffer because tab changed"
-                                );
-                                return;
-                            }
-
-                            match load_res {
-                                Ok((w_px, h_px, pixel_buffer)) => {
-                                    tracing::info!(
-                                        media_id,
-                                        tab_id,
-                                        dimensions = format!("{}x{}", w_px, h_px),
-                                        decode_time_ms = t_decode.elapsed().as_millis(),
-                                        "[BridgeViewerTabs: AsyncLoadBackground] High-res image decoded successfully for background tab"
-                                    );
-                                    tm_async.update_tab_image_buffer(
-                                        tab_id,
-                                        w_px,
-                                        h_px,
-                                        pixel_buffer,
-                                    );
-                                }
-                                Err(err) => {
-                                    tracing::error!(
-                                        media_id,
-                                        tab_id,
-                                        error = %err,
-                                        "[BridgeViewerTabs: AsyncLoadBackground] Failed to decode full-resolution image for background tab"
-                                    );
-                                    tm_async.set_tab_error(tab_id, err.to_string());
-                                }
-                            }
-                            Self::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                            if w.get_active_view_mode() == 2 {
-                                BridgeTabGrid::sync_tab_grid_ui(
-                                    &w,
-                                    &tm_async,
-                                    &lib_async,
-                                    &set_async,
-                                    &st_async,
-                                );
-                            }
-                        });
-                    });
-                }
-
                 let all_tabs = tab_manager.list_tabs();
                 let tab_title = ViewerTabManager::compute_tab_title(&all_tabs, tab_id);
-                StatusBarBridge::success(
-                    window,
-                    format!(
-                        "Opened '{}' in background tab",
-                        if tab_title.is_empty() {
-                            filename_hint
-                        } else {
-                            tab_title
-                        }
-                    ),
-                );
+                StatusBarBridge::success(window, format!("Opened '{}' in background tab", tab_title));
 
                 tracing::info!(
                     media_id,
                     tab_id,
                     is_new,
-                    is_video = is_video_session,
-                    file_exists,
                     allow_multiple,
                     open_time_us = t0.elapsed().as_micros(),
                     "[BridgeViewerTabs: OpenBackground] Tab opened in background and UI synchronized"
@@ -1575,6 +970,8 @@ impl BridgeViewerTabs {
     ) {
         // Every tab that exists from here on is rendered below, so this render counts for the revision read now.
         tab_manager.mark_tab_ui_synced(tab_manager.tab_ui_revision());
+        // Tiles come and go inside a tab: its description follows what it shows now.
+        tab_manager.sync_tab_identities();
         let tabs = tab_manager.list_tabs();
         let active_id_opt = tab_manager.active_tab_id();
         let is_tab_grid = window.get_is_tab_grid_active();
@@ -1617,18 +1014,16 @@ impl BridgeViewerTabs {
         };
         window.set_viewer_background_mode(bg_mode_idx);
 
-        // 2. Synchronize Tab View Content when in single tab viewer mode
+        // 2. Synchronize the toolbar of the tab view: title, size, previous/next of a tab of one medium
         if target_mode == 1 && let Some(active_tab) = tab_manager.get_active_tab() {
-            let is_video = active_tab.is_video();
-            window.set_viewer_is_video(is_video);
-            window.set_viewer_is_multiview(active_tab.is_multiview());
             window.set_viewer_tab_id(active_tab.id as i32);
             window.set_viewer_filename(active_tab.title.clone().into());
 
-            let (display_w, display_h) = if active_tab.is_multiview() {
-                active_tab.display_size()
-            } else {
+            let solo = active_tab.single_media_id();
+            let (display_w, display_h) = if solo.is_some() {
                 (active_tab.record.width, active_tab.record.height)
+            } else {
+                active_tab.display_size()
             };
             let res_str = if display_w > 0 && display_h > 0 {
                 format!("{} x {}", display_w, display_h)
@@ -1637,50 +1032,24 @@ impl BridgeViewerTabs {
             };
             window.set_viewer_resolution(res_str.into());
 
-            let (has_prev, has_next) = if active_tab.is_multiview() {
-                (false, false)
-            } else {
-                let st = state.read();
-                let current_pos = st.row_of(active_tab.media_id);
-
-                let total_available = if !st.active_indices.is_empty() {
-                    st.active_indices.len()
-                } else {
-                    st.all_folder_media.len()
-                };
-
-                if let Some(pos) = current_pos {
-                    (pos > 0, pos + 1 < total_available)
-                } else {
-                    (false, false)
+            let (has_prev, has_next) = match solo {
+                None => (false, false),
+                Some(media_id) => {
+                    let st = state.read();
+                    let total_available = if !st.active_indices.is_empty() {
+                        st.active_indices.len()
+                    } else {
+                        st.all_folder_media.len()
+                    };
+                    match st.row_of(media_id) {
+                        Some(pos) => (pos > 0, pos + 1 < total_available),
+                        None => (false, false),
+                    }
                 }
             };
 
             window.set_viewer_has_previous(has_prev);
             window.set_viewer_has_next(has_next);
-
-            match active_tab.payload {
-                TabPayload::Image(ref img) => {
-                    window.set_viewer_is_loading(img.is_loading);
-                    window.set_viewer_error(img.error_message.clone().into());
-
-                    if let Some(ref buf) = img.high_res_pixels {
-                        window.set_viewer_image(Image::from_rgb8(buf.clone()));
-                    } else {
-                        window.set_viewer_image(Image::default());
-                    }
-                }
-                TabPayload::Video(ref vid) => {
-                    window.set_viewer_is_loading(vid.is_loading);
-                    window.set_viewer_error(vid.error_message.clone().into());
-                    window.set_viewer_image(Image::default());
-                }
-                TabPayload::Multiview(_) => {
-                    window.set_viewer_is_loading(false);
-                    window.set_viewer_error("".into());
-                    window.set_viewer_image(Image::default());
-                }
-            }
 
             {
                 let mut st = state.write();
@@ -1692,8 +1061,6 @@ impl BridgeViewerTabs {
 
             Self::scroll_active_tab_into_view(window, tab_manager, settings);
         } else {
-            window.set_viewer_is_video(false);
-            window.set_viewer_is_multiview(false);
             window.set_viewer_tab_id(-1);
             {
                 let mut st = state.write();
@@ -1703,6 +1070,5 @@ impl BridgeViewerTabs {
             BridgeTags::sync_tag_selection(window, library, state);
             StatusBarBridge::update_metrics(window, state);
         }
-        tab_plain::refresh(window, tab_manager);
     }
 }

@@ -14,7 +14,6 @@ use crate::ui::button_feedback::ButtonFeedback;
 use crate::library::models::MediaId;
 use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
-use parking_lot::Mutex;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -31,9 +30,6 @@ pub struct VideoTile {
     /// The tile the player currently serves (`TileKey`). A recycled player moves on to another tile, and the callbacks that
     /// were installed once at creation read this instead of the key they were created for.
     pub current_tile: Arc<AtomicU64>,
-    /// Set while the player and window belong to a viewer tab that lent them to the fullscreen: they go back to the tab
-    /// (not into a teardown) when the fullscreen closes.
-    pub loan: Option<Arc<Mutex<Option<X11VideoSubwindow>>>>,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -226,7 +222,6 @@ pub fn create_video(
         native_mute,
         last_mute: native_mute,
         current_tile,
-        loan: None,
     })
 }
 

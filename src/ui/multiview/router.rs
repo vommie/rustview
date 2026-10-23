@@ -43,7 +43,7 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
                 guard.host_mode()
             };
             drop(instance);
-            refresh_host(mode);
+            refresh_host(handle, mode);
             return;
         }
         PlayerEvent::ZoomSource { tile, result } => {
@@ -53,7 +53,7 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
                 guard.host_mode()
             };
             drop(instance);
-            refresh_host(mode);
+            refresh_host(handle, mode);
             return;
         }
         PlayerEvent::ZoomRendered { tile, done } => {
@@ -63,7 +63,7 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
                 guard.host_mode()
             };
             drop(instance);
-            refresh_host(mode);
+            refresh_host(handle, mode);
             return;
         }
         PlayerEvent::MuteChanged { tile, muted } => {
@@ -73,7 +73,7 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
                 guard.host_mode()
             };
             drop(instance);
-            refresh_host(mode);
+            refresh_host(handle, mode);
             return;
         }
         PlayerEvent::PauseChanged { tile, paused } => {
@@ -83,7 +83,7 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
                 guard.host_mode()
             };
             drop(instance);
-            refresh_host(mode);
+            refresh_host(handle, mode);
             return;
         }
         PlayerEvent::ToggleFullscreen => (RoutedEvent::ToggleFullscreen, ClickKind::None),
@@ -124,11 +124,13 @@ fn route_event(handle: &MultiviewHandle, weak: WeakInstance, event: PlayerEvent)
 }
 
 /// Shows the changed state of an instance in the host that presents it.
-fn refresh_host(mode: HostMode) {
+fn refresh_host(handle: &MultiviewHandle, mode: HostMode) {
     match mode {
         HostMode::Fullscreen => session::with_session(Session::refresh),
         HostMode::TabView => tab_host::refresh(),
-        HostMode::Hidden | HostMode::TabGrid => {}
+        // A tab that was never shown starts in its grid item and its picture arrives later: the grid draws it again.
+        HostMode::TabGrid => handle.refresh_tab_grid(),
+        HostMode::Hidden => {}
     }
 }
 
@@ -157,7 +159,7 @@ pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: O
         (UiAction::ScrollGrid { up }, _) => handle.scroll_grid(up),
         (UiAction::Navigate { forward }, _) => handle.navigate(forward),
         (UiAction::DeselectInBrowse(media_id), _) => handle.deselect_in_browse(media_id),
-        (UiAction::TabMemberRemoved, _) => handle.tab_members_changed(),
+        (UiAction::TabMembersChanged, _) => handle.tab_members_changed(),
         (UiAction::OpenTileAsTab(media_id), _) => {
             let opened = handle.open_tile_as_tab(media_id);
             session::with_session(|s| s.action_finished(media_id, MediaActionId::OpenAsTab, opened));

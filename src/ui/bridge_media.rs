@@ -27,7 +27,7 @@ use crate::settings::{LogObscurer, SettingsManager};
 use crate::thumbnails::{
     PipelineItem, ThumbnailConfig, ThumbnailGenerator, ThumbnailLocation, ThumbnailManager, VideoPreviewRecord,
 };
-use crate::viewer::{HighResImageLoader, ViewerTabManager};
+use crate::viewer::ViewerTabManager;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use slint::{ComponentHandle, Image, Timer};
@@ -1369,32 +1369,6 @@ impl BridgeMedia {
                 let refreshed_count = successful_items.len();
                 let missing_count = missing_files.len();
 
-                let mut image_tabs_to_reload: Vec<(MediaId, u64, PathBuf)> = Vec::new();
-                for item in &successful_items {
-                    if matches!(item.updated_record.media_type, MediaType::Video) {
-                        continue;
-                    }
-                    let open_tabs = tab_mgr_arc.get_tabs_by_media_id(item.media_id);
-                    for tab in open_tabs {
-                        let full_file_path = lib_arc
-                            .resolve_media_path(item.media_id)
-                            .unwrap_or_else(|_| PathBuf::from(&item.updated_record.filename));
-                        image_tabs_to_reload.push((item.media_id, tab.id, full_file_path));
-                    }
-                }
-
-                let active_video_reload_path = successful_items
-                    .iter()
-                    .find_map(|item| {
-                        if matches!(item.updated_record.media_type, MediaType::Video)
-                            && tab_mgr_arc.get_active_media_id() == Some(item.media_id)
-                        {
-                            lib_arc.resolve_media_path(item.media_id).ok()
-                        } else {
-                            None
-                        }
-                    });
-
                 let _ = w_weak.upgrade_in_event_loop(move |w| {
                     {
                         let mut st = st_arc.write();
@@ -1419,6 +1393,7 @@ impl BridgeMedia {
                             }
 
                             tab_mgr_arc.notify_media_refreshed(item.media_id, &item.updated_record);
+                            tab_mgr_arc.reload_media(item.media_id);
                         }
 
                         for missing in &missing_files {
@@ -1428,43 +1403,6 @@ impl BridgeMedia {
                                 target_indexed.mark_deleted();
                             }
                         }
-                    }
-
-                    if let Some(ref v_path) = active_video_reload_path
-                        && let Some(player) = tab_mgr_arc.get_active_player()
-                    {
-                        tracing::info!(
-                            path = %LogObscurer::path(v_path),
-                            "[BridgeMedia: VideoReload] Re-loading modified video file in MPV"
-                        );
-                        let _ = player.load_file(v_path);
-                    }
-
-                    for (media_id, tab_id, full_file_path) in image_tabs_to_reload {
-                        let tm_async = tab_mgr_arc.clone();
-                        let w_weak_tab = w.as_weak();
-                        let lib_tab = lib_arc.clone();
-                        let set_tab = set_arc.clone();
-                        let st_tab = st_arc.clone();
-
-                        rayon::spawn(move || {
-                            let load_res = HighResImageLoader::load_full_resolution(&full_file_path);
-                            let _ = w_weak_tab.upgrade_in_event_loop(move |w_ui| {
-                                if tm_async.get_tab(tab_id).map(|t| t.media_id) != Some(media_id) {
-                                    return;
-                                }
-
-                                match load_res {
-                                    Ok((w_px, h_px, pixel_buffer)) => {
-                                        tm_async.update_tab_image_buffer(tab_id, w_px, h_px, pixel_buffer);
-                                    }
-                                    Err(err) => {
-                                        tm_async.set_tab_error(tab_id, err.to_string());
-                                    }
-                                }
-                                BridgeViewerTabs::sync_ui(&w_ui, &tm_async, &lib_tab, &set_tab, &st_tab);
-                            });
-                        });
                     }
 
                     let is_table = w.get_is_table_view();

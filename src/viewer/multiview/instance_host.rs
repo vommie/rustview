@@ -149,6 +149,11 @@ impl MultiviewInstance {
             self.reproject();
         }
         self.apply_player_flags();
+        // A Multiview that was never shown (a tab opened in the background) starts with the first host that shows it. The
+        // fullscreen starts its tiles itself, once its native window exists.
+        if surface.mode != HostMode::Fullscreen {
+            self.start_all();
+        }
         true
     }
 

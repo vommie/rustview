@@ -24,8 +24,13 @@ fn loggable(error: &str) -> &str {
 }
 
 impl MultiviewInstance {
-    /// Starts every tile once the host exists: the leftmost video gets the sound, the others are muted by policy.
-    pub fn start_all(&mut self) {
+    /// Starts every tile once the host exists: the leftmost video gets the sound, the others are muted by policy. Does nothing
+    /// (and returns `false`) when the tiles were started before.
+    pub fn start_all(&mut self) -> bool {
+        if self.started {
+            return false;
+        }
+        self.started = true;
         self.assign_audio_on_open();
         for index in 0..self.tiles.len() {
             self.start_tile(index);
@@ -40,6 +45,7 @@ impl MultiviewInstance {
             scale = self.container.dpi,
             "[Multiview: Open] Tiles created"
         );
+        true
     }
 
     fn assign_audio_on_open(&mut self) {
@@ -149,6 +155,39 @@ impl MultiviewInstance {
             tracing::error!(media_id, error = %e, "[Multiview: Tile] Could not start the image decoder thread");
             self.on_image_loaded(key, Err("This image could not be loaded".to_string()));
         }
+    }
+
+    /// Starts the decoder of every image tile that has neither pixels nor an error yet (a tab that was shown in the fullscreen
+    /// while its image was still loading).
+    pub fn start_pending_images(&mut self) {
+        for index in 0..self.tiles.len() {
+            let tile = &self.tiles[index];
+            if tile.kind == TileKind::Image && tile.is_loading && tile.pixels.is_none() {
+                self.start_tile(index);
+            }
+        }
+    }
+
+    /// The file of a member was refreshed and may have changed: an image is decoded again (the old picture stays until the new one
+    /// arrives), a running video loads its file again. A tile that was never started stays as it is.
+    pub fn reload_member(&mut self, id: MediaId) {
+        if !self.started {
+            return;
+        }
+        for index in 0..self.tiles.len() {
+            if self.tiles[index].media_id != id {
+                continue;
+            }
+            match self.tiles[index].kind {
+                TileKind::Image => {
+                    self.tiles[index].error = None;
+                    self.start_image(index);
+                }
+                TileKind::Video if self.tiles[index].video.is_some() => self.reload_video(index),
+                TileKind::Video => {}
+            }
+        }
+        self.bump();
     }
 
     /// Shows `pixels` (a thumbnail the application already holds) in an image tile whose decode is still running, so

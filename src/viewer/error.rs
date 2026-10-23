@@ -30,6 +30,6 @@ pub enum ViewerError {
     #[error("X11 subwindow error: {0}")]
     X11(String),
 
-    #[error("This action is not available for a Multiview tab")]
+    #[error("This action needs a tab that shows exactly one medium")]
     MultiviewTab,
 }

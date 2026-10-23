@@ -28,7 +28,8 @@ impl TabGridTile {
     /// Aspect ratio of the content area of a tab: its medium, or the virtual display of a Multiview.
     pub fn aspect_of(tab: &MediaTabSession) -> f32 {
         let (width, height) = tab.display_size();
-        Self::compute_aspect_ratio(width, height, tab.is_video())
+        let is_video = tab.multiview.instance.lock().solo_tile().is_some_and(|(_, kind, _)| kind == crate::viewer::multiview::model::TileKind::Video);
+        Self::compute_aspect_ratio(width, height, is_video)
     }
 
     /// Computes safe aspect ratio (width / height) clamped to prevent extreme geometric distortion.

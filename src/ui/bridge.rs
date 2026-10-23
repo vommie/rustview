@@ -242,9 +242,7 @@ impl UiBridge {
         window.set_viewer_show_tab_rating_badge(app_settings.viewer.tabs.show_rating_badge);
 
         let initial_win_sz = window.window().size();
-        if let Some(main_xid) = crate::viewer::get_slint_window_xid(window.window()) {
-            tab_manager.set_main_viewport_info(main_xid, 0, 64, initial_win_sz.width.max(800), initial_win_sz.height.max(600));
-        }
+        tab_manager.set_main_viewport_info(0, 64, initial_win_sz.width.max(800), initial_win_sz.height.max(600));
 
         window.set_is_virtual_folder(false);
         window.set_is_virtual_folder_btn_enabled(false);
@@ -276,7 +274,7 @@ impl UiBridge {
             window.as_weak(),
         );
         tab_host::bind(&window, fullscreen.clone());
-        super::multiview::tab_plain::bind(fullscreen.clone());
+        tab_manager.set_event_sink(super::multiview::event_sink(fullscreen.clone()));
 
         let win_fs_close = window.as_weak();
         let tm_fs_close = tab_manager.clone();
@@ -392,10 +390,8 @@ impl UiBridge {
 
         Timer::single_shot(std::time::Duration::from_millis(50), move || {
             if let Some(win) = w_weak.upgrade() {
-                if let Some(main_xid) = crate::viewer::get_slint_window_xid(win.window()) {
-                    let sz = win.window().size();
-                    tm_post.set_main_viewport_info(main_xid, 0, 64, sz.width.max(800), sz.height.max(600));
-                }
+                let sz = win.window().size();
+                tm_post.set_main_viewport_info(0, 64, sz.width.max(800), sz.height.max(600));
                 BridgeFolders::sync_root(&win, &lib, &thumb, &set, &st);
                 BridgeMedia::update_virtual_folder_button_state(&win, &lib, &st);
                 StatusBarBridge::update_metrics(&win, &st);

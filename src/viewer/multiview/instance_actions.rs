@@ -29,7 +29,6 @@ impl MultiviewInstance {
                 .filter(|_| tile.audio.is_some())
                 .map(|video| video.last_mute),
             sticky: tile.sticky,
-            single_tab: self.single_tab,
             broken: tile.error.is_some(),
             zoom: self.zoom_button_state(index),
         })
@@ -98,7 +97,8 @@ impl MultiviewInstance {
             }
             MediaActionId::Duplicate => {
                 self.duplicate_tile(key);
-                UiAction::None
+                // A tab of one medium is a tab of several now: the application catches up (title bar, inspector, tab description).
+                if self.origin == OriginKind::Tab { UiAction::TabMembersChanged } else { UiAction::None }
             }
             MediaActionId::Zoom => {
                 self.toggle_zoom_slider(index);
@@ -165,7 +165,7 @@ impl MultiviewInstance {
                     remaining = self.tiles.len(),
                     "[Multiview: Actions] A medium was removed from the tab"
                 );
-                UiAction::TabMemberRemoved
+                UiAction::TabMembersChanged
             }
         }
     }
@@ -210,7 +210,7 @@ impl MultiviewInstance {
         );
         match self.origin {
             OriginKind::Browse => UiAction::None,
-            OriginKind::Tab => UiAction::TabMemberRemoved,
+            OriginKind::Tab => UiAction::TabMembersChanged,
         }
     }
 

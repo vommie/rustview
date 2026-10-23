@@ -126,9 +126,6 @@ pub struct MediaBarContext {
     /// `Some(muted)` while the tile has sound control (a playing video), else `None`.
     pub muted: Option<bool>,
     pub sticky: bool,
-    /// The Multiview is only the fullscreen view of a normal image or video tab: that tab already exists, so there is
-    /// nothing to open as a tab.
-    pub single_tab: bool,
     /// The tile shows an error instead of its medium (the file is gone, the video could not be played).
     pub broken: bool,
     /// `Some(open)` for a picture that can be zoomed (an image that is shown), with the state of its slider; else `None`.
@@ -197,12 +194,11 @@ fn sticky(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     })
 }
 
-/// Shows the medium a second time, as a tile of its own next to this one. A view that shows a normal tab's medium
-/// (`single_tab`) has no arrangement to extend. The button is there whenever it could ever work and is disabled, with the
-/// reason as tooltip, while it cannot: the view is full, or the tile has nothing to show. The rule itself lives in
-/// `follow::duplicate_refusal`, which the click goes through as well.
+/// Shows the medium a second time, as a tile of its own next to this one. The button is there whenever it could ever work and
+/// is disabled, with the reason as tooltip, while it cannot: the view is full, or the tile has nothing to show. The rule
+/// itself lives in `follow::duplicate_refusal`, which the click goes through as well.
 fn duplicate(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
-    if !interactive(ctx) || ctx.single_tab {
+    if !interactive(ctx) {
         return None;
     }
     let refusal = duplicate_refusal(ctx.tile_count, ctx.broken, MULTIVIEW_MAX_TILES);
@@ -221,8 +217,10 @@ fn duplicate(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     })
 }
 
+/// Only a view that is not a tab already (the fullscreen that follows the Browse view) can send a medium to a tab: the tab view and
+/// the fullscreen of a tab are tabs themselves.
 fn open_as_tab(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
-    (interactive(ctx) && !ctx.single_tab).then(|| {
+    (interactive(ctx) && ctx.origin == OriginKind::Browse).then(|| {
         MediaActionSpec::on(MediaActionId::OpenAsTab, Icon::OpenInBackgroundTab, "Open in a background tab")
     })
 }

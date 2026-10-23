@@ -1,27 +1,24 @@
 use super::error::ViewerError;
-use super::mpv_engine::MpvPlayer;
+use super::multiview::events::MultiviewEventSink;
 use super::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
+use super::multiview::model::{TileKind, aspect_from_size};
+use super::multiview::route::OriginKind;
+use super::multiview::tile::TileSeed;
 use super::multiview::teardown;
-use super::tab_item::{ImageBufferEvictor, TabCollection, TabSessionFactory, TabTitleFormatter};
+use super::tab_item::{TabCollection, TabTitleFormatter};
 use super::tab_ui_gate::TabUiGate;
-use super::types::{
-    ImageTabPayload, MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, TabId, TabPayload, VideoTabPayload,
-};
-use super::x11_embed::{X11VideoSubwindow, XRectangle, install_nonfatal_error_handler};
+use super::types::{MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, TabId};
+use super::x11_embed::{X11VideoSubwindow, XRectangle};
 use crate::library::models::{MediaId, MediaRecord};
 use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::LogObscurer;
-use crate::settings::schema::{MULTIVIEW_TAB_TITLE, SHUTDOWN_TEARDOWN_WAIT_MS};
+use crate::settings::schema::{MULTIVIEW_FALLBACK_ASPECT, MULTIVIEW_TAB_TITLE, SHUTDOWN_TEARDOWN_WAIT_MS};
 use parking_lot::{Mutex, RwLock};
-use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-/// Maximum number of uncompressed high-resolution full-image buffers retained in RAM simultaneously.
-pub const MAX_CACHED_HIGH_RES_BUFFERS: usize = 6;
 
 /// High-level workspace coordinator managing open tabs, player lifecycles, and window embedding (SRP/OCP).
 pub struct ViewerTabManager {
@@ -29,7 +26,6 @@ pub struct ViewerTabManager {
     active_tab_id: RwLock<Option<TabId>>,
     tab_counter: AtomicU64,
     library: Arc<Library>,
-    main_window_xid: RwLock<Option<u64>>,
     cached_viewport_rect: RwLock<(i32, i32, u32, u32)>,
     active_menu_cutouts: RwLock<Vec<XRectangle>>,
     active_tooltip_cutouts: RwLock<Vec<XRectangle>>,
@@ -39,6 +35,9 @@ pub struct ViewerTabManager {
     /// Whether the UI shows the tabs that exist, and who to tell when a tab is created (see `TabUiGate`).
     tab_ui_gate: TabUiGate,
     tabs_changed_hook: Mutex<Option<TabsChangedHook>>,
+    /// Where the Multiviews of the tabs this manager creates report their events (decoded images, player events); set by the
+    /// application when the Multiview UI exists.
+    event_sink: Mutex<Option<Arc<dyn MultiviewEventSink>>>,
 }
 
 /// Called (from any thread, with no manager lock held) after a tab was created.
@@ -51,13 +50,13 @@ impl ViewerTabManager {
             active_tab_id: RwLock::new(None),
             tab_counter: AtomicU64::new(1),
             library,
-            main_window_xid: RwLock::new(None),
             cached_viewport_rect: RwLock::new((0, 64, 800, 600)),
             active_menu_cutouts: RwLock::new(Vec::new()),
             active_tooltip_cutouts: RwLock::new(Vec::new()),
             observed_instances: Mutex::new(Vec::new()),
             tab_ui_gate: TabUiGate::default(),
             tabs_changed_hook: Mutex::new(None),
+            event_sink: Mutex::new(None),
         }
     }
 
@@ -68,6 +67,11 @@ impl ViewerTabManager {
     /// Sets what happens after a tab was created: the application renders the tab list if it has not done so already.
     pub fn set_tabs_changed_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
         *self.tabs_changed_hook.lock() = Some(Arc::new(hook));
+    }
+
+    /// Sets where the Multiviews of the tabs created from now on report their events. Tabs cannot be created before this.
+    pub fn set_event_sink(&self, sink: Arc<dyn MultiviewEventSink>) {
+        *self.event_sink.lock() = Some(sink);
     }
 
     /// The revision of the tab list; the UI passes it to `mark_tab_ui_synced` once it has rendered the tabs.
@@ -98,9 +102,8 @@ impl ViewerTabManager {
     // Viewport & Window Handle Configuration
     // =========================================================================
 
-    /// Stores the main window XID and latest viewport geometry for initializing video tabs.
-    pub fn set_main_viewport_info(&self, main_xid: u64, x: i32, y: i32, w: u32, h: u32) {
-        *self.main_window_xid.write() = Some(main_xid);
+    /// Stores the latest geometry of the viewer area (where a tab that moves back from the fullscreen parks its windows).
+    pub fn set_main_viewport_info(&self, x: i32, y: i32, w: u32, h: u32) {
         *self.cached_viewport_rect.write() = (x, y, w, h);
     }
 
@@ -108,59 +111,15 @@ impl ViewerTabManager {
         *self.cached_viewport_rect.read()
     }
 
-    pub fn get_main_window_xid(&self) -> Option<u64> {
-        *self.main_window_xid.read()
-    }
-
     // =========================================================================
     // Active Player & Subwindow Queries & Centralized Overlay Clipping
     // =========================================================================
-
-    /// Returns the MPV player associated with the currently active tab if it is a video tab.
-    pub fn get_active_player(&self) -> Option<Arc<MpvPlayer>> {
-        let active = (*self.active_tab_id.read())?;
-        let tabs = self.tabs.read();
-        let tab = tabs.get(active)?;
-        if let TabPayload::Video(ref vid) = tab.payload {
-            Some(vid.player.clone())
-        } else {
-            None
-        }
-    }
-
-    #[inline]
-    pub fn player(&self) -> Option<Arc<MpvPlayer>> {
-        self.get_active_player()
-    }
-
-    /// Returns the X11 subwindow container associated with the currently active tab if it is a video tab.
-    pub fn get_active_subwindow(&self) -> Option<Arc<Mutex<Option<X11VideoSubwindow>>>> {
-        let active = (*self.active_tab_id.read())?;
-        let tabs = self.tabs.read();
-        let tab = tabs.get(active)?;
-        if let TabPayload::Video(ref vid) = tab.payload {
-            Some(vid.subwindow.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Returns the subwindow container for any specific `tab_id`.
-    pub fn get_subwindow_for_tab(&self, tab_id: TabId) -> Option<Arc<Mutex<Option<X11VideoSubwindow>>>> {
-        let tabs = self.tabs.read();
-        let tab = tabs.get(tab_id)?;
-        if let TabPayload::Video(ref vid) = tab.payload {
-            Some(vid.subwindow.clone())
-        } else {
-            None
-        }
-    }
 
     /// Hides native X11 video subwindows across all video tabs and auto-pauses playback without modifying user pause state.
     pub fn hide_all_video_subwindows(&self) {
         let tabs = self.tabs.read();
         for tab in tabs.all() {
-            tab.payload.deactivate_native();
+            tab.deactivate_native();
         }
     }
 
@@ -169,7 +128,7 @@ impl ViewerTabManager {
         let tabs = self.tabs.read();
         for tab in tabs.all() {
             if Some(tab.id) != except_tab_id {
-                tab.payload.deactivate_native();
+                tab.deactivate_native();
             }
         }
     }
@@ -178,7 +137,7 @@ impl ViewerTabManager {
     pub fn set_all_videos_view_active(&self, active: bool) {
         let tabs = self.tabs.read();
         for tab in tabs.all() {
-            tab.payload.set_grid_view_active(active);
+            tab.set_grid_view_active(active);
         }
     }
 
@@ -258,7 +217,7 @@ impl ViewerTabManager {
         let tabs = self.tabs.read();
 
         for tab in tabs.all() {
-            tab.payload.apply_overlay_cutouts(&combined);
+            tab.apply_overlay_cutouts(&combined);
         }
     }
 
@@ -414,16 +373,15 @@ impl ViewerTabManager {
     // Tab Duplication, Opening, Background Opening & In-Place Navigation
     // =========================================================================
 
-    /// Duplicates an existing tab, placing the clone immediately adjacent to the source tab.
+    /// Duplicates an existing tab of one medium, placing the clone immediately adjacent to the source tab. A tab that shows
+    /// several media cannot be duplicated.
     pub fn duplicate_tab(&self, source_tab_id: TabId) -> Result<TabId, ViewerError> {
         let source_session = self
             .get_tab(source_tab_id)
             .ok_or(ViewerError::MediaNotFound(source_tab_id))?;
-        if source_session.is_multiview() {
-            return Err(ViewerError::MultiviewTab);
-        }
+        let media_id = source_session.single_media_id().ok_or(ViewerError::MultiviewTab)?;
 
-        let (new_tab_id, _) = self.open_or_focus_media(source_session.media_id, true)?;
+        let (new_tab_id, _) = self.open_or_focus_media(media_id, true)?;
 
         if let Some(source_index) = self.get_tab_index(source_tab_id) {
             self.move_tab(new_tab_id, source_index + 1);
@@ -433,7 +391,7 @@ impl ViewerTabManager {
         tracing::info!(
             source_tab_id,
             new_tab_id,
-            media_id = source_session.media_id,
+            media_id,
             "[ViewerTabManager: Duplicate] Duplicated tab session placed adjacent to source"
         );
 
@@ -479,6 +437,43 @@ impl ViewerTabManager {
         }
     }
 
+    /// The Multiview of one tile that a new tab of `record` shows: isolated from the Browse view (origin `Tab`), started by the first
+    /// host that shows it.
+    fn solo_instance(&self, record: &MediaRecord, file_path: &std::path::Path) -> Result<SharedInstance, ViewerError> {
+        let sink = self
+            .event_sink
+            .lock()
+            .clone()
+            .ok_or_else(|| ViewerError::DecodeFailed("the Multiview is not ready yet".to_string()))?;
+        let instance = MultiviewInstance::create(sink, vec![Self::solo_seed(record, file_path)]);
+        instance.lock().set_origin(OriginKind::Tab);
+        Ok(instance)
+    }
+
+    fn solo_seed(record: &MediaRecord, file_path: &std::path::Path) -> TileSeed {
+        TileSeed::new(
+            record.id,
+            if matches!(record.media_type, MediaType::Video) { TileKind::Video } else { TileKind::Image },
+            aspect_from_size(record.width, record.height, MULTIVIEW_FALLBACK_ASPECT),
+            file_path.to_path_buf(),
+            record.filename.clone(),
+        )
+    }
+
+    /// A new tab that shows `record` alone. Its title is the file name (numbered when a tab of the same medium has it already)
+    /// and never changes afterwards.
+    fn create_solo_session(
+        &self,
+        tabs: &TabCollection,
+        id: TabId,
+        record: MediaRecord,
+        file_path: std::path::PathBuf,
+    ) -> Result<MediaTabSession, ViewerError> {
+        let instance = self.solo_instance(&record, &file_path)?;
+        let title = TabTitleFormatter::allocate_tab_title(tabs.all(), record.id, &record.filename);
+        Ok(MediaTabSession::for_solo(id, title, record, file_path, instance))
+    }
+
     /// Opens a media item in a viewer tab and activates it in the foreground. Reuses existing tab if `allow_multiple` is false.
     pub fn open_or_focus_media(
         &self,
@@ -511,8 +506,6 @@ impl ViewerTabManager {
 
         let file_path = self.library.resolve_media_path(media_id)?;
         let new_id = self.tab_counter.fetch_add(1, Ordering::Relaxed);
-        let main_xid_opt = *self.main_window_xid.read();
-        let viewport_rect = *self.cached_viewport_rect.read();
 
         if let Some(current_id) = *self.active_tab_id.read()
             && let Some(current_tab) = tabs.get_mut(current_id)
@@ -520,20 +513,7 @@ impl ViewerTabManager {
             Self::pause_session_playback(current_tab);
         }
 
-        let title = TabTitleFormatter::allocate_tab_title(
-            tabs.all(),
-            media_id,
-            &record.filename,
-        );
-
-        let session = TabSessionFactory::create_session(
-            new_id,
-            record,
-            file_path.clone(),
-            title,
-            main_xid_opt,
-            viewport_rect,
-        )?;
+        let session = self.create_solo_session(&tabs, new_id, record, file_path.clone())?;
 
         tabs.push(session);
         *self.active_tab_id.write() = Some(new_id);
@@ -579,32 +559,8 @@ impl ViewerTabManager {
 
         let file_path = self.library.resolve_media_path(media_id)?;
         let new_id = self.tab_counter.fetch_add(1, Ordering::Relaxed);
-        let main_xid_opt = *self.main_window_xid.read();
-        let viewport_rect = *self.cached_viewport_rect.read();
 
-        let title = TabTitleFormatter::allocate_tab_title(
-            tabs.all(),
-            media_id,
-            &record.filename,
-        );
-
-        let session = TabSessionFactory::create_session(
-            new_id,
-            record,
-            file_path.clone(),
-            title,
-            main_xid_opt,
-            viewport_rect,
-        )?;
-
-        if let TabPayload::Video(ref vid) = session.payload {
-            vid.player.set_tab_grid_mode(false);
-            vid.player.set_view_active(false);
-            let mut sub_guard = vid.subwindow.lock();
-            if let Some(ref mut sub) = *sub_guard {
-                sub.hide();
-            }
-        }
+        let session = self.create_solo_session(&tabs, new_id, record, file_path.clone())?;
 
         tabs.push(session);
 
@@ -633,10 +589,10 @@ impl ViewerTabManager {
 
         let new_id = self.tab_counter.fetch_add(1, Ordering::Relaxed);
         // A Multiview of one medium is named after its file, one of several media "Multiview".
+        let single = instance.lock().solo_tile().map(|(id, _, _)| id);
         let single_filename = instance.lock().solo_filename();
         let base_title = single_filename.as_deref().unwrap_or(MULTIVIEW_TAB_TITLE);
-        let title =
-            TabTitleFormatter::allocate_tab_title(tabs.all(), MULTIVIEW_TAB_MEDIA_ID, base_title);
+        let title = TabTitleFormatter::allocate_tab_title(tabs.all(), single.unwrap_or(MULTIVIEW_TAB_MEDIA_ID), base_title);
         let mut session = MediaTabSession::for_multiview(new_id, title, instance);
         if let Some(filename) = single_filename {
             session.filename = filename;
@@ -650,11 +606,49 @@ impl ViewerTabManager {
             "[ViewerTabManager: AdoptMultiview] Adopted the running Multiview into a background tab"
         );
         drop(tabs);
+        self.sync_tab_identities();
         self.tab_created();
         new_id
     }
 
-    /// Replaces the media content of the active tab in-place (used for Prev/Next navigation).
+    /// Makes every tab's description (medium, path, file name, record) agree with what its Multiview shows now: the one medium of
+    /// a tab with exactly one tile, placeholders for a tab of several media. Tiles come and go inside a tab (duplicate, remove,
+    /// previous/next), so this runs whenever the tab list is rendered. The title never changes.
+    pub fn sync_tab_identities(&self) {
+        let snapshot: Vec<(TabId, MediaId, Option<MediaId>)> = self
+            .tabs
+            .read()
+            .all()
+            .iter()
+            .map(|t| {
+                let solo = t.multiview.instance.lock().solo_tile().map(|(id, _, _)| id);
+                (t.id, t.media_id, solo)
+            })
+            .collect();
+        for (tab_id, current, solo) in snapshot {
+            match solo {
+                Some(media_id) if media_id == current => {}
+                Some(media_id) => {
+                    let record = self.library.media().get(media_id).ok().flatten();
+                    let path = self.library.resolve_media_path(media_id).ok();
+                    if let (Some(record), Some(path)) = (record, path)
+                        && let Some(tab) = self.tabs.write().get_mut(tab_id)
+                    {
+                        tab.set_solo_identity(record, path);
+                    }
+                }
+                None if current != MULTIVIEW_TAB_MEDIA_ID => {
+                    if let Some(tab) = self.tabs.write().get_mut(tab_id) {
+                        tab.clear_solo_identity();
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+
+    /// Shows `media_id` in the one tile of the active tab (previous/next of the tab toolbar). The tab keeps its title. Fails for a
+    /// tab of several media.
     pub fn navigate_active_tab_to_media(&self, media_id: MediaId) -> Result<TabId, ViewerError> {
         let active_id = match *self.active_tab_id.read() {
             Some(id) => id,
@@ -663,37 +657,27 @@ impl ViewerTabManager {
                 return Ok(id);
             }
         };
-        if self.tabs.read().get(active_id).is_some_and(MediaTabSession::is_multiview) {
-            return Err(ViewerError::MultiviewTab);
-        }
+        let instance: SharedInstance = self
+            .tabs
+            .read()
+            .get(active_id)
+            .map(|t| t.multiview.instance.clone())
+            .ok_or(ViewerError::MediaNotFound(active_id))?;
 
         let record = self
             .library
             .media()
             .get(media_id)?
             .ok_or(ViewerError::MediaNotFound(media_id))?;
-
         let file_path = self.library.resolve_media_path(media_id)?;
-        let main_xid_opt = *self.main_window_xid.read();
-        let viewport_rect = *self.cached_viewport_rect.read();
 
-        let mut tabs = self.tabs.write();
-
-        let remaining_tabs: Vec<MediaTabSession> = tabs
-            .all()
-            .iter()
-            .filter(|t| t.id != active_id)
-            .cloned()
-            .collect();
-
-        let new_title = TabTitleFormatter::allocate_tab_title(
-            &remaining_tabs,
-            media_id,
-            &record.filename,
-        );
-
-        if let Some(tab) = tabs.get_mut(active_id) {
-            Self::update_session_media(tab, record, file_path, new_title, main_xid_opt, viewport_rect)?;
+        let replaced = instance.lock().replace_solo(Self::solo_seed(&record, &file_path));
+        if !replaced {
+            return Err(ViewerError::MultiviewTab);
+        }
+        if let Some(tab) = self.tabs.write().get_mut(active_id) {
+            tab.set_solo_identity(record, file_path);
+            tab.last_accessed = Instant::now();
         }
 
         tracing::info!(
@@ -706,54 +690,6 @@ impl ViewerTabManager {
     }
 
     // =========================================================================
-    // Image Buffer & Error Management
-    // =========================================================================
-
-    pub fn update_tab_image_buffer(
-        &self,
-        tab_id: TabId,
-        width: u32,
-        height: u32,
-        pixel_buffer: SharedPixelBuffer<Rgb8Pixel>,
-    ) {
-        let active_id = *self.active_tab_id.read();
-        let mut tabs = self.tabs.write();
-        if let Some(tab) = tabs.get_mut(tab_id)
-            && let TabPayload::Image(ref mut img) = tab.payload
-        {
-            img.high_res_pixels = Some(pixel_buffer);
-            img.is_loading = false;
-            img.error_message.clear();
-            img.orig_width = width;
-            img.orig_height = height;
-            tab.last_accessed = Instant::now();
-        }
-
-        ImageBufferEvictor::evict_excess(
-            &mut tabs.to_vec(),
-            active_id,
-            MAX_CACHED_HIGH_RES_BUFFERS,
-        );
-    }
-
-    pub fn set_tab_error(&self, tab_id: TabId, error_msg: String) {
-        let mut tabs = self.tabs.write();
-        if let Some(tab) = tabs.get_mut(tab_id) {
-            match tab.payload {
-                TabPayload::Image(ref mut img) => {
-                    img.is_loading = false;
-                    img.error_message = error_msg;
-                }
-                TabPayload::Video(ref mut vid) => {
-                    vid.is_loading = false;
-                    vid.error_message = error_msg;
-                }
-                TabPayload::Multiview(_) => {}
-            }
-        }
-    }
-
-    // =========================================================================
     // Tab Activation, Browsing & Closing
     // =========================================================================
 
@@ -763,15 +699,10 @@ impl ViewerTabManager {
 
     pub fn set_active_tab_internal(&self, tab_id: TabId, force_resume: bool) -> bool {
         let current_active = *self.active_tab_id.read();
-        let main_xid_opt = *self.main_window_xid.read();
-        let viewport_rect = *self.cached_viewport_rect.read();
 
         let mut tabs = self.tabs.write();
 
         if current_active == Some(tab_id) && !force_resume {
-            if let Some(current_tab) = tabs.get_mut(tab_id) {
-                Self::resume_session_playback(current_tab, main_xid_opt, viewport_rect);
-            }
             return true;
         }
 
@@ -785,7 +716,6 @@ impl ViewerTabManager {
         if let Some(new_tab) = tabs.get_mut(tab_id) {
             new_tab.last_accessed = Instant::now();
             *self.active_tab_id.write() = Some(tab_id);
-            Self::resume_session_playback(new_tab, main_xid_opt, viewport_rect);
             tracing::info!(tab_id, "[ViewerTabManager: Switch] Activated viewer tab");
             true
         } else {
@@ -819,7 +749,7 @@ impl ViewerTabManager {
         );
 
         if *active == Some(tab_id) {
-            *active = Self::resolve_next_active_tab(&mut tabs, pos, *self.main_window_xid.read(), *self.cached_viewport_rect.read());
+            *active = Self::resolve_next_active_tab(&mut tabs, pos);
         }
 
         *active
@@ -855,11 +785,6 @@ impl ViewerTabManager {
             *active = Some(tab_id);
             if let Some(target_tab) = tabs.get_mut(tab_id) {
                 target_tab.last_accessed = Instant::now();
-                Self::resume_session_playback(
-                    target_tab,
-                    *self.main_window_xid.read(),
-                    *self.cached_viewport_rect.read(),
-                );
             }
         }
 
@@ -896,11 +821,6 @@ impl ViewerTabManager {
             *active = Some(tab_id);
             if let Some(target_tab) = tabs.get_mut(tab_id) {
                 target_tab.last_accessed = Instant::now();
-                Self::resume_session_playback(
-                    target_tab,
-                    *self.main_window_xid.read(),
-                    *self.cached_viewport_rect.read(),
-                );
             }
         }
 
@@ -924,11 +844,6 @@ impl ViewerTabManager {
             *active = Some(keep_tab_id);
             if let Some(target_tab) = tabs.get_mut(keep_tab_id) {
                 target_tab.last_accessed = Instant::now();
-                Self::resume_session_playback(
-                    target_tab,
-                    *self.main_window_xid.read(),
-                    *self.cached_viewport_rect.read(),
-                );
             }
         }
 
@@ -973,15 +888,7 @@ impl ViewerTabManager {
     }
 
     fn shutdown_session(session: MediaTabSession) {
-        match session.payload {
-            TabPayload::Video(vid) => {
-                let window = vid.subwindow.lock().take();
-                teardown::teardown_video(vid.player, window);
-                install_nonfatal_error_handler();
-            }
-            TabPayload::Multiview(mv) => mv.instance.lock().shutdown_now(),
-            TabPayload::Image(_) => {}
-        }
+        session.multiview.instance.lock().shutdown_now();
     }
 
     // =========================================================================
@@ -1037,222 +944,42 @@ impl ViewerTabManager {
         self.for_each_observed(|mv| mv.member_refreshed(media_id, updated_record));
     }
 
+    /// The file of `media_id` was refreshed (it may have changed on disk): every tab and observed Multiview that shows it decodes the
+    /// picture or loads the video again.
+    pub fn reload_media(&self, media_id: MediaId) {
+        let instances: Vec<SharedInstance> = self
+            .tabs
+            .read()
+            .all()
+            .iter()
+            .map(|t| t.multiview.instance.clone())
+            .collect();
+        for instance in instances {
+            instance.lock().reload_member(media_id);
+        }
+        self.for_each_observed(|mv| mv.reload_member(media_id));
+    }
+
     // =========================================================================
     // Internal Helper Methods
     // =========================================================================
 
     fn pause_session_playback(tab: &mut MediaTabSession) {
-        tab.payload.deactivate_native();
+        tab.deactivate_native();
     }
 
-    fn resume_session_playback(
-        tab: &mut MediaTabSession,
-        main_xid_opt: Option<u64>,
-        (x, y, w, h): (i32, i32, u32, u32),
-    ) {
-        if let TabPayload::Video(ref mut vid) = tab.payload {
-            if !tab.file_path.is_file() {
-                vid.error_message = format!("Media file not found on disk:\n{}", tab.file_path.display());
-                vid.player.set_view_active(false);
-                let mut sub_guard = vid.subwindow.lock();
-                if let Some(ref mut sub) = *sub_guard {
-                    sub.hide();
-                }
-                return;
-            }
-
-            vid.error_message.clear();
-
-            let mut sub_guard = vid.subwindow.lock();
-            if let Some(ref mut sub) = *sub_guard {
-                sub.move_resize(x, y, w, h);
-                sub.reset_clip_shape();
-                sub.show();
-            } else if let Some(main_xid) = main_xid_opt
-                && let Ok(mut sub) = X11VideoSubwindow::new(main_xid, x, y, w, h)
-            {
-                let wid = sub.xid();
-                let _ = vid.player.attach_to_window(wid);
-                sub.reset_clip_shape();
-                sub.show();
-                *sub_guard = Some(sub);
-            }
-
-            if vid.player.get_playback_state().is_idle {
-                let _ = vid.player.load_file(&tab.file_path);
-            }
-
-            vid.player.set_tab_grid_mode(false);
-            vid.player.set_view_active(true);
-        }
-    }
-
-    /// The tab is closed: playback stops, the windows disappear, and a video tab's player is shut down before its window is
-    /// destroyed (on a worker thread, see `teardown_video_deferred`; dropping the tab would destroy the window under the
-    /// running player and end the application).
+    /// The tab is closed: playback stops and the windows disappear. The Multiview shuts its players down before their windows are
+    /// destroyed (see `teardown`; dropping the tab would destroy a window under a running player and end the application).
     fn cleanup_session_resources(session: MediaTabSession) {
-        session.payload.stop_native();
-        if let TabPayload::Video(vid) = session.payload {
-            let window = vid.subwindow.lock().take();
-            teardown::teardown_video_deferred(vid.player, window);
-        }
+        session.stop_native();
     }
 
-    fn resolve_next_active_tab(
-        tabs: &mut TabCollection,
-        closed_index: usize,
-        main_xid_opt: Option<u64>,
-        viewport_rect: (i32, i32, u32, u32),
-    ) -> Option<TabId> {
+    /// The tab that is shown after the tab at `closed_index` was closed: the one that took its place, else the one before.
+    fn resolve_next_active_tab(tabs: &mut TabCollection, closed_index: usize) -> Option<TabId> {
         if tabs.is_empty() {
             return None;
         }
-
-        let next_idx = if closed_index < tabs.len() {
-            closed_index
-        } else {
-            closed_index.saturating_sub(1)
-        };
-
-        let next_tab = tabs.get_at(next_idx)?;
-        let next_id = next_tab.id;
-
-        if let Some(tab_mut) = tabs.get_mut(next_id) {
-            Self::resume_session_playback(tab_mut, main_xid_opt, viewport_rect);
-        }
-
-        Some(next_id)
-    }
-
-    fn update_session_media(
-        tab: &mut MediaTabSession,
-        record: MediaRecord,
-        file_path: std::path::PathBuf,
-        title: String,
-        main_xid_opt: Option<u64>,
-        (x, y, w, h): (i32, i32, u32, u32),
-    ) -> Result<(), ViewerError> {
-        let is_video = matches!(record.media_type, MediaType::Video);
-        let filename = record.filename.clone();
-        let format = record.format;
-        let file_exists = file_path.is_file();
-
-        tab.media_id = record.id;
-        tab.filename = filename;
-        tab.title = title;
-        tab.format = format;
-        tab.file_path = file_path.clone();
-        tab.record = record.clone();
-        tab.last_accessed = Instant::now();
-
-        if is_video {
-            if !file_exists {
-                tracing::warn!(
-                    tab_id = tab.id,
-                    media_id = record.id,
-                    file_path = %LogObscurer::path(&file_path),
-                    "[ViewerTabManager: UpdateMedia] Video file does not exist on disk, setting error state"
-                );
-                if let TabPayload::Video(ref mut vid) = tab.payload {
-                    vid.player.stop();
-                    let mut sub_guard = vid.subwindow.lock();
-                    if let Some(ref mut sub) = *sub_guard {
-                        sub.hide();
-                    }
-                    vid.is_loading = false;
-                    vid.error_message = format!("Media file not found on disk:\n{}", file_path.display());
-                } else {
-                    tab.payload = TabPayload::Video(VideoTabPayload {
-                        player: Arc::new(MpvPlayer::new()?),
-                        subwindow: Arc::new(Mutex::new(None)),
-                        position_ms: 0,
-                        is_playing: false,
-                        volume: 1.0,
-                        duration_ms: record.duration_ms,
-                        is_loading: false,
-                        error_message: format!("Media file not found on disk:\n{}", file_path.display()),
-                    });
-                }
-            } else if let TabPayload::Video(ref mut vid) = tab.payload {
-                vid.error_message.clear();
-                let _ = vid.player.load_file(&file_path);
-                vid.player.set_tab_grid_mode(false);
-                vid.player.set_view_active(true);
-                let mut sub_guard = vid.subwindow.lock();
-                if let Some(ref mut sub) = *sub_guard {
-                    sub.move_resize(x, y, w, h);
-                    sub.reset_clip_shape();
-                    sub.show();
-                } else if let Some(main_xid) = main_xid_opt
-                    && let Ok(mut sub) = X11VideoSubwindow::new(main_xid, x, y, w, h)
-                {
-                    let wid = sub.xid();
-                    let _ = vid.player.attach_to_window(wid);
-                    sub.reset_clip_shape();
-                    sub.show();
-                    *sub_guard = Some(sub);
-                }
-            } else {
-                let player = Arc::new(MpvPlayer::new()?);
-                let subwindow_slot = Arc::new(Mutex::new(None));
-
-                if let Some(main_xid) = main_xid_opt
-                    && let Ok(mut sub) = X11VideoSubwindow::new(main_xid, x, y, w, h)
-                {
-                    let wid = sub.xid();
-                    let _ = player.attach_to_window(wid);
-                    sub.reset_clip_shape();
-                    sub.show();
-                    *subwindow_slot.lock() = Some(sub);
-                }
-
-                let _ = player.load_file(&file_path);
-
-                tab.payload = TabPayload::Video(VideoTabPayload {
-                    player,
-                    subwindow: subwindow_slot,
-                    position_ms: 0,
-                    is_playing: true,
-                    volume: 1.0,
-                    duration_ms: record.duration_ms,
-                    is_loading: false,
-                    error_message: String::new(),
-                });
-            }
-        } else {
-            if let TabPayload::Video(ref vid) = tab.payload {
-                vid.player.stop();
-                let mut sub_guard = vid.subwindow.lock();
-                if let Some(ref mut sub) = *sub_guard {
-                    sub.hide();
-                }
-            }
-
-            if !file_exists {
-                tracing::warn!(
-                    tab_id = tab.id,
-                    media_id = record.id,
-                    file_path = %LogObscurer::path(&file_path),
-                    "[ViewerTabManager: UpdateMedia] Image file does not exist on disk, setting error state"
-                );
-                tab.payload = TabPayload::Image(ImageTabPayload {
-                    high_res_pixels: None,
-                    is_loading: false,
-                    error_message: format!("Media file not found on disk:\n{}", file_path.display()),
-                    orig_width: record.width,
-                    orig_height: record.height,
-                });
-            } else {
-                tab.payload = TabPayload::Image(ImageTabPayload {
-                    high_res_pixels: None,
-                    is_loading: true,
-                    error_message: String::new(),
-                    orig_width: record.width,
-                    orig_height: record.height,
-                });
-            }
-        }
-
-        Ok(())
+        let next_idx = if closed_index < tabs.len() { closed_index } else { closed_index.saturating_sub(1) };
+        tabs.get_at(next_idx).map(|tab| tab.id)
     }
 }

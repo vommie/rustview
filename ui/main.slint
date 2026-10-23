@@ -16,7 +16,6 @@ import { FloatingChoicePopup } from "floating_choice_popup.slint";
 import { MediaPanelToolbar } from "media_panel_toolbar.slint";
 import { ImageTabPanelToolbar } from "image_tab_panel_toolbar.slint";
 import { AwayPanel } from "fullscreen_away.slint";
-import { ImageViewer } from "image_viewer.slint";
 import { MultiviewCanvas } from "multiview_canvas.slint";
 import { MultiviewTabBus } from "multiview_tab_bus.slint";
 import { MultiviewScreenView } from "multiview_types.slint";
@@ -144,13 +143,8 @@ export component MainWindow inherits Window {
     in-out property <IconId> empty-state-icon: IconId.none;
 
     // Image / Video Viewer properties
-    in-out property <bool> viewer-is-video: false;
-    in-out property <bool> viewer-is-multiview: false;
     in-out property <string> viewer-filename: "";
     in-out property <string> viewer-resolution: "";
-    in-out property <bool> viewer-is-loading: false;
-    in-out property <string> viewer-error: "";
-    in-out property <image> viewer-image;
     in-out property <int> viewer-background-mode: 0;
     in-out property <bool> viewer-show-tab-rating-badge: false;
     in-out property <bool> viewer-has-previous: false;
@@ -349,9 +343,6 @@ export component MainWindow inherits Window {
     callback viewer-refresh();
     callback viewer-previous();
     callback viewer-next();
-    callback viewer-image-clicked();
-    callback viewer-image-middle-clicked();
-    callback viewer-viewport-geometry-changed(length /* x */, length /* y */, length /* width */, length /* height */);
     // The area of the viewer tab that a Multiview fills changed (size or position); Rust places the native video windows.
     callback multiview-viewport-changed();
 
@@ -704,11 +695,11 @@ export component MainWindow inherits Window {
                     root.viewer-refresh();
                     return accept;
                 }
-                if event.text == Key.LeftArrow && !root.viewer-is-multiview {
+                if event.text == Key.LeftArrow {
                     root.viewer-previous();
                     return accept;
                 }
-                if event.text == Key.RightArrow && !root.viewer-is-multiview {
+                if event.text == Key.RightArrow {
                     root.viewer-next();
                     return accept;
                 }
@@ -1062,24 +1053,8 @@ export component MainWindow inherits Window {
                         icon: root.empty-state-icon;
                     }
 
-                    image-viewer := ImageViewer {
-                        visible: root.active-view-mode == 1 && !root.viewer-is-multiview;
-                        is-video: root.viewer-is-video;
-                        source-image: root.viewer-image;
-                        is-loading: root.viewer-is-loading;
-                        error-message: root.viewer-error;
-                        background-mode: root.viewer-background-mode;
-                        next-image => { root.viewer-next(); }
-                        previous-image => { root.viewer-previous(); }
-                        image-clicked => { root.viewer-image-clicked(); }
-                        image-middle-clicked => { root.viewer-image-middle-clicked(); }
-                        viewport-geometry-changed(vx, vy, vw, vh) => {
-                            root.viewer-viewport-geometry-changed(vx, vy, vw, vh);
-                        }
-                    }
-
                     multiview-viewer := MultiviewCanvas {
-                        visible: root.active-view-mode == 1 && root.viewer-is-multiview;
+                        visible: root.active-view-mode == 1;
                         tiles: MultiviewTabBus.tiles;
                         gutters: MultiviewTabBus.gutters;
                         screen: MultiviewTabBus.screen;

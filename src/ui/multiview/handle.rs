@@ -6,7 +6,6 @@ use super::bar_overlay::{self, BarKind};
 use super::eligibility;
 use super::navigation;
 use super::tab_host;
-use super::tab_single;
 use super::session::{self, Session, TabReturn};
 use crate::library::Library;
 use crate::library::models::MediaId;
@@ -190,6 +189,16 @@ impl MultiviewHandle {
         .is_some()
     }
 
+    /// A Multiview shown in the tab grid has a new picture (a decoded image): the grid is drawn again. UI thread only.
+    pub(super) fn refresh_tab_grid(&self) {
+        let Some((app, window)) = self.app_and_window() else {
+            return;
+        };
+        if window.get_active_view_mode() == 2 {
+            BridgeTabGrid::sync_tab_grid_ui(&window, &app.tab_manager, &app.library, &app.settings, &app.state);
+        }
+    }
+
     /// A medium left the Multiview of a tab through its remove button: the tab bar, the inspector, the status bar and the
     /// targets of tag and rating assignment (the tab's remaining media) catch up. UI thread only.
     pub(super) fn tab_members_changed(&self) {
@@ -302,8 +311,7 @@ impl MultiviewHandle {
         )
     }
 
-    /// Shows tab `tab_id` in the fullscreen window (from the tab view or the tab grid): the Multiview a tab owns as it is, a
-    /// normal image or video tab as a Multiview of one tile that stays isolated from the Browse view. UI thread only.
+    /// Shows tab `tab_id` in the fullscreen window (from the tab view or the tab grid): the Multiview the tab owns, as it is. UI thread only.
     /// Returns `false` if the tab does not exist or cannot be shown.
     pub fn open_tab(
         &self,
@@ -315,13 +323,7 @@ impl MultiviewHandle {
         let Some(tab) = tab_manager.get_tab(tab_id) else {
             return false;
         };
-        let instance = match tab.multiview() {
-            Some(multiview) => multiview.instance.clone(),
-            None => match tab_single::instance_for_tab(self, &tab) {
-                Some(instance) => instance,
-                None => return false,
-            },
-        };
+        let instance = tab.multiview.instance.clone();
         let origin_mode = main_window
             .upgrade()
             .map_or(1, |w| w.get_active_view_mode());
@@ -370,7 +372,6 @@ impl MultiviewHandle {
     pub fn shutdown(&self) {
         session::shutdown();
         super::tab_host::shutdown();
-        super::tab_plain::shutdown();
         super::bar_overlay::shutdown();
     }
 
@@ -414,19 +415,6 @@ impl MultiviewHandle {
             session::run(|s| s.drop_deleted(ids));
         } else {
             tab_host::drop_deleted(ids);
-            self.close_plain_tab_of(ids);
-        }
-    }
-
-    /// A normal image or video tab whose medium was deleted through its action bar closes, like the last medium of a Multiview
-    /// does. Only the active tab can have asked: the bar belongs to the tab that is shown.
-    fn close_plain_tab_of(&self, ids: &[MediaId]) {
-        let Some(tab) = self.tab_manager().and_then(|tm| tm.get_active_tab()) else {
-            return;
-        };
-        if !tab.is_multiview() && ids.contains(&tab.media_id) {
-            tracing::info!(media_id = tab.media_id, "[Multiview: PlainTab] The medium of the tab was deleted: closing the tab");
-            self.close_active_tab();
         }
     }
 

@@ -11,7 +11,7 @@ use crate::library::Library;
 use crate::media::MediaType;
 use crate::settings::{LogObscurer, SettingsManager};
 use crate::system::DesktopApp;
-use crate::viewer::{HighResImageLoader, MediaTabSession, TabId, TabPayload, ViewerTabManager};
+use crate::viewer::{MediaTabSession, TabId, ViewerTabManager};
 use parking_lot::RwLock;
 use slint::ComponentHandle;
 use std::sync::Arc;
@@ -58,25 +58,24 @@ impl TabContextMenu {
         let has_tabs_to_right = tab_idx + 1 < total_tabs;
         let has_other_tabs = total_tabs > 1;
 
-        let is_multiview = tab.is_multiview();
-        let mut builder = CtxMenuBuilder::new()
+        // A tab of one medium has a file (the file sections apply, it can be duplicated); a tab of several media has none.
+        let is_solo = tab.single_media_id().is_some();
+        let builder = CtxMenuBuilder::new()
             .header_with_tooltip(header_title, header_tooltip)
             .action(
                 CTX_TAB_DUPLICATE,
                 "Duplicate Tab",
                 None,
                 Some(Icon::Copy),
-                !is_multiview,
-            );
-        if is_multiview {
-            builder = builder.action(
+                is_solo,
+            )
+            .action(
                 CTX_TAB_OPEN_MULTIVIEW,
-                "Open in Fullscreen (Multiview)",
+                if is_solo { "Open in Fullscreen" } else { "Open in Fullscreen (Multiview)" },
                 None,
                 Some(Icon::OpenMultiview),
                 true,
             );
-        }
         let mut builder = builder
             .separator()
             .submenu("Move Tab...", Some(Icon::TabMove), has_multiple_tabs, move |sub| {
@@ -141,8 +140,8 @@ impl TabContextMenu {
                 true,
             );
 
-        // A Multiview tab has no single file: the file sections do not apply (and the drive is not probed for it)
-        if is_multiview {
+        // A tab of several media has no single file: the file sections do not apply (and the drive is not probed for it)
+        if !is_solo {
             return builder.build();
         }
 
@@ -159,8 +158,7 @@ impl TabContextMenu {
         );
 
         // Section 3: Shared File Management Actions (Rename, Copy, Delete File / Remove from DB)
-        let is_image = matches!(tab.payload, TabPayload::Image(_))
-            || matches!(tab.record.media_type, MediaType::Image);
+        let is_image = matches!(tab.record.media_type, MediaType::Image);
         let is_deleted = tab.record.is_deleted || !tab.file_path.exists();
 
         builder = builder.separator();
@@ -206,50 +204,7 @@ impl TabContextMenu {
                     Ok(new_tab_id) => {
                         BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
 
-                        let is_video_session = ctx.tab_manager
-                            .get_tab(new_tab_id)
-                            .map(|t| matches!(t.payload, TabPayload::Video(_)))
-                            .unwrap_or(false);
-
-                        if is_video_session {
-                            BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
-                        } else if let Ok(file_path) = ctx.library.resolve_media_path(session.media_id) {
-                            let tm_async = ctx.tab_manager.clone();
-                            let w_weak = ctx.window.as_weak();
-                            let lib_async = ctx.library.clone();
-                            let st_async = ctx.state.clone();
-                            let set_async = ctx.settings.clone();
-
-                            rayon::spawn(move || {
-                                let load_res = HighResImageLoader::load_full_resolution(&file_path);
-                                let _ = w_weak.upgrade_in_event_loop(move |w| {
-                                    match load_res {
-                                        Ok((w_px, h_px, pixel_buffer)) => {
-                                            tracing::info!(
-                                                media_id = session.media_id,
-                                                tab_id = new_tab_id,
-                                                dimensions = format!("{}x{}", w_px, h_px),
-                                                "[TabContextMenu: AsyncLoad] Duplicate image tab buffer loaded"
-                                            );
-                                            tm_async.update_tab_image_buffer(new_tab_id, w_px, h_px, pixel_buffer);
-                                        }
-                                        Err(err) => {
-                                            tracing::error!(
-                                                media_id = session.media_id,
-                                                tab_id = new_tab_id,
-                                                error = %err,
-                                                "[TabContextMenu: AsyncLoad] Failed to load duplicate image tab buffer"
-                                            );
-                                            tm_async.set_tab_error(new_tab_id, err.to_string());
-                                        }
-                                    }
-                                    BridgeViewerTabs::sync_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                                    if w.get_active_view_mode() == 2 {
-                                        BridgeTabGrid::sync_tab_grid_ui(&w, &tm_async, &lib_async, &set_async, &st_async);
-                                    }
-                                });
-                            });
-                        }
+                        BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);
 
                         if ctx.window.get_active_view_mode() == 2 {
                             BridgeTabGrid::sync_tab_grid_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
