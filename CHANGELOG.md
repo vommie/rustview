@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.3.85] - 2026-10-23
+
 ### Added
 - **Merge tabs.** Select several tabs with **Ctrl+click** (toggles one tab, the shown tab does not change) or **Shift+click** (the range from the last clicked tab; Ctrl+Shift
   adds the range) in the tab bar and in the tab grid; selected tabs get an accent-colored border. A click on a tab without a modifier, a click on free space or Esc ends the
@@ -635,7 +637,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.3.84...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.3.85...HEAD
+[0.3.85]: https://github.com/vommie/rustview/compare/v0.3.84...v0.3.85
 [0.3.84]: https://github.com/vommie/rustview/compare/v0.3.83...v0.3.84
 [0.3.83]: https://github.com/vommie/rustview/compare/v0.3.82...v0.3.83
 [0.3.82]: https://github.com/vommie/rustview/compare/v0.3.81...v0.3.82
