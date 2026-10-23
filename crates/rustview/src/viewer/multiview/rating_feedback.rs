@@ -39,7 +39,7 @@ impl Pulse {
         if age < HOLD {
             return Some(1.0);
         }
-        let faded = age - HOLD;
+        let faded = age.saturating_sub(HOLD);
         if faded >= FADE {
             return None;
         }
@@ -101,15 +101,15 @@ impl RatingFeedback {
     pub fn wakeup(&self, now: Instant) -> Option<Duration> {
         self.pulses
             .values()
-            .filter_map(|pulse| {
+            .map(|pulse| {
                 let age = now.saturating_duration_since(pulse.started);
                 if age < HOLD {
-                    Some(HOLD - age)
+                    HOLD.saturating_sub(age)
                 } else if age < HOLD + FADE {
-                    Some(FRAME)
+                    FRAME
                 } else {
                     // Over: dropped by the next `expire`, which has to run now.
-                    Some(Duration::ZERO)
+                    Duration::ZERO
                 }
             })
             .min()

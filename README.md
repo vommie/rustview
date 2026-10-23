@@ -13,7 +13,7 @@ Slint user interface; videos play through the embedded mpv player and most forma
   navigation and type-ahead find (just start typing a name) work in both views.
 - **Folder tree and favorites** with hidden-folder handling, drag and drop of files onto folders, New Folder, rename, move and delete
   dialogs that explain exactly what happens on disk and in the library, and a history (`Alt+Left/Right`).
-- **Tags and ratings:** a hierarchical tag tree, a tag history, ratings from 1 to 5 and queries by tag and rating.
+- **Tags and ratings:** a hierarchical tag tree, a tag history, ratings from 1 to 5 and queries by tag and rating. **Ctrl+0** (no rating) to **Ctrl+5** rate the selection, and in a Multiview every medium that is shown, with a short animation of the new rating.
 - **Multiview:** up to four images or videos side by side in a fullscreen, or as a tab. Tiles follow your selection, can be pinned
   ("sticky"), swapped, duplicated and resized with gutters; every tile has a media action bar and **zoom** for images (slider, `Ctrl` + wheel,
   minimap).

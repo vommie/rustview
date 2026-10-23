@@ -11,7 +11,7 @@ Typing in the grid or the table jumps to the first item whose name starts with t
 - A key that continues no name: typed fast (< the new-search pause, default 500 ms, 0 = never) it is a typo and moves nothing; after a pause it starts a new search.
 - Space never starts a search, only continues one. Shift is a capital letter (no backward search). Modifier keys alone do not interrupt a search.
 - Backspace removes the last character and Escape cancels the search, both only while a search runs; otherwise they keep their meaning
-  (parent folder, clear selection). Every other key (arrows, Enter, Tab, F-keys, Ctrl/Alt/Meta shortcuts) ends the search.
+  (parent folder, clear selection). Every other key (arrows, Enter, Tab, F-keys, Ctrl/Alt/Meta shortcuts) ends the search. The rating hotkeys Ctrl+0..5 are taken before the search sees them: they rate and leave a running search as it is.
 - The search also ends when the cursor is not where the last key left it (click, arrows, rubber band, other folder) or on the timeout. No timer runs.
 - Not active: while the filter or tag filter field has focus, a dialog, menu or drag is open, in viewer tabs and the tab grid.
 - The jump selects the item at once (tile, thumbnail, inspector) like an arrow key does and centers it when it is not completely visible. Only the

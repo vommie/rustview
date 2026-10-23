@@ -47,14 +47,15 @@ pub fn centered_origin(window: (u32, u32), edge: u32) -> (i64, i64) {
 
 /// Straight RGBA pixels of the icon of `rating`, rasterized once per size.
 fn icon_pixels(rating: u8, edge: u32) -> Option<Arc<Vec<u8>>> {
-    static CACHE: OnceLock<Mutex<HashMap<(u8, u32), Arc<Vec<u8>>>>> = OnceLock::new();
+    type Cache = Mutex<HashMap<(u8, u32), Arc<Vec<u8>>>>;
+    static CACHE: OnceLock<Cache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(found) = cache.lock().get(&(rating, edge)) {
         return Some(Arc::clone(found));
     }
     match raster::render_rgba(Icon::rating(rating), edge, "#ffffff") {
         Ok(pixels) => {
-            let pixels = Arc::new(pixels);
+            let pixels = Arc::new(over_white_disc(&pixels, edge));
             cache.lock().insert((rating, edge), Arc::clone(&pixels));
             Some(pixels)
         }
@@ -65,10 +66,42 @@ fn icon_pixels(rating: u8, edge: u32) -> Option<Arc<Vec<u8>>> {
     }
 }
 
+/// The icon over a white disc of the icon's size (one pixel smaller than the icon, so no white rim shows around the colored
+/// disc). The digit is cut out of the icon; the disc behind it makes the digit white instead of see-through. Straight RGBA in
+/// and out.
+pub fn over_white_disc(icon: &[u8], edge: u32) -> Vec<u8> {
+    let center = f64::from(edge) / 2.0;
+    let radius = center - 1.0;
+    let mut out = Vec::with_capacity(icon.len());
+    for (index, px) in icon.as_chunks::<4>().0.iter().enumerate() {
+        let index = u32::try_from(index).unwrap_or(0);
+        let (x, y) = (f64::from(index % edge) + 0.5, f64::from(index / edge) + 0.5);
+        let disc = (radius + 0.5 - (x - center).hypot(y - center)).clamp(0.0, 1.0);
+        let icon_alpha = f64::from(px[3]) / 255.0;
+        let alpha = icon_alpha + disc * (1.0 - icon_alpha);
+        if alpha <= 0.0 {
+            out.extend_from_slice(&[0, 0, 0, 0]);
+            continue;
+        }
+        let mix = |c: u8| {
+            ((f64::from(c) * icon_alpha + 255.0 * disc * (1.0 - icon_alpha)) / alpha)
+                .round()
+                .to_int::<u8>()
+        };
+        out.extend_from_slice(&[
+            mix(px[0]),
+            mix(px[1]),
+            mix(px[2]),
+            (alpha * 255.0).round().to_int::<u8>(),
+        ]);
+    }
+    out
+}
+
 /// Straight RGBA -> the premultiplied BGRA mpv wants, everything scaled by `alpha`.
 pub fn premultiplied_bgra(rgba: &[u8], alpha: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(rgba.len());
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         let a = u32::from(px[3]) * u32::from(alpha) / 255;
         let scale = |c: u8| u8::try_from(u32::from(c) * a / 255).unwrap_or(u8::MAX);
         out.extend_from_slice(&[
@@ -107,6 +140,22 @@ mod tests {
         // odd leftovers round down, so the icon is at most half a pixel off center
         assert_eq!(centered_origin((101, 100), 50), (25, 25));
         assert_eq!(centered_origin((30, 40), 50), (-10, -5));
+    }
+
+    #[test]
+    fn a_hole_in_the_icon_becomes_white_and_the_outside_stays_empty() {
+        let edge = 10u32;
+        // a fully transparent icon: only the disc is left, white
+        let blank = vec![0u8; (edge * edge * 4) as usize];
+        let out = over_white_disc(&blank, edge);
+        let at = |x: u32, y: u32| &out[((y * edge + x) * 4) as usize..][..4];
+        assert_eq!(at(5, 5), &[255, 255, 255, 255]);
+        assert_eq!(at(0, 0), &[0, 0, 0, 0]);
+        // an opaque colored pixel keeps its color
+        let mut icon = blank;
+        icon[((5 * edge + 5) * 4) as usize..][..4].copy_from_slice(&[10, 200, 30, 255]);
+        let out = over_white_disc(&icon, edge);
+        assert_eq!(&out[((5 * edge + 5) * 4) as usize..][..4], &[10, 200, 30, 255]);
     }
 
     #[test]

@@ -191,6 +191,16 @@ export component MultiviewCanvas inherits Rectangle {
             // whole hold) Slint draws it without a layer.
             opacity: tile.rating-alpha;
 
+            // The digit is cut out of the colored disc; a white disc behind it fills the digit white instead of letting the picture shine through.
+            Rectangle {
+                x: 1px;
+                y: 1px;
+                width: parent.width - 2px;
+                height: parent.height - 2px;
+                border-radius: self.width / 2;
+                background: #ffffff;
+            }
+
             AppIcon {
                 icon: IconLookup.rating(tile.rating-icon);
                 size: 50px;

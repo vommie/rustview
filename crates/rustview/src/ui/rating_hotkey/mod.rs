@@ -70,10 +70,13 @@ pub fn handle_key(params: &RatingHotkeyParams<'_>, text: &str, modifiers: (bool,
     }
     match params.window.get_active_view_mode() {
         0 => rate_browse_selection(params, rating),
-        1 => match tab_host::shown_instance() {
-            Some(instance) => params.fullscreen.rate_visible(&instance, rating),
-            None => tracing::debug!(rating, "[RatingHotkey] No Multiview is shown in the tab"),
-        },
+        1 => {
+            if let Some(instance) = tab_host::shown_instance() {
+                params.fullscreen.rate_visible(&instance, rating);
+            } else {
+                tracing::debug!(rating, "[RatingHotkey] No Multiview is shown in the tab");
+            }
+        }
         mode => tracing::debug!(rating, mode, "[RatingHotkey] Ignored: this view has nothing to rate"),
     }
     true

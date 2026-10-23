@@ -121,20 +121,117 @@ impl MultiviewInstance {
             if video.rating_overlay == wanted {
                 continue;
             }
-            match wanted {
-                Some(state) => {
-                    if rating_overlay::show(&video.player, &state) {
-                        video.rating_overlay = Some(state);
-                    } else {
-                        // Not shown (no picture yet): retried by the next frame.
-                        video.rating_overlay = None;
-                    }
-                }
-                None => {
-                    rating_overlay::hide(&video.player);
-                    video.rating_overlay = None;
-                }
+            if let Some(state) = wanted {
+                // When mpv does not take it (no picture yet) the next frame tries again.
+                video.rating_overlay = rating_overlay::show(&video.player, &state).then_some(state);
+            } else {
+                rating_overlay::hide(&video.player);
+                video.rating_overlay = None;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
+    use crate::viewer::multiview::instance::WeakInstance;
+    use crate::viewer::multiview::rating_feedback::{FADE, HOLD};
+    use crate::viewer::multiview::tile::TileSeed;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    struct NullSink;
+
+    impl MultiviewEventSink for NullSink {
+        fn post(&self, _instance: WeakInstance, _event: PlayerEvent) {}
+    }
+
+    fn seed(media: MediaId, kind: TileKind) -> TileSeed {
+        TileSeed::new(
+            media,
+            kind,
+            1.5,
+            PathBuf::from(format!("/nowhere/{media}")),
+            format!("m{media}"),
+        )
+    }
+
+    /// Tiles for media 1, 2, 2 (a duplicate of 2), 3 (a video); sticky/selection state is irrelevant to a rating.
+    fn instance() -> crate::viewer::multiview::instance::SharedInstance {
+        MultiviewInstance::create(
+            Arc::new(NullSink),
+            vec![
+                seed(1, TileKind::Image),
+                seed(2, TileKind::Image),
+                seed(2, TileKind::Image),
+                seed(3, TileKind::Video),
+            ],
+        )
+    }
+
+    #[test]
+    fn every_shown_medium_is_a_target_once_whatever_the_browse_selection_is() {
+        let shared = instance();
+        assert_eq!(shared.lock().rating_targets(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn a_duplicated_medium_is_rated_once_but_both_tiles_show_the_feedback() {
+        let shared = instance();
+        let mut mv = shared.lock();
+        let keys: Vec<TileKey> = (0..4).filter_map(|i| mv.tile_key_at(i)).collect();
+        let now = Instant::now();
+        assert!(mv.show_rating_feedback(&HashSet::from([2]), 4, now));
+        assert!(mv.rating_pulse(keys[0], now).is_none());
+        assert_eq!(mv.rating_pulse(keys[1], now).map(|p| p.rating), Some(4));
+        assert_eq!(mv.rating_pulse(keys[2], now).map(|p| p.rating), Some(4));
+        assert!(mv.rating_pulse(keys[3], now).is_none());
+    }
+
+    #[test]
+    fn media_that_were_not_rated_start_nothing() {
+        let shared = instance();
+        let mut mv = shared.lock();
+        assert!(!mv.show_rating_feedback(&HashSet::from([99]), 3, Instant::now()));
+        assert!(mv.rating_wakeup(Instant::now()).is_none());
+    }
+
+    #[test]
+    fn a_new_rating_replaces_the_running_one_on_every_tile() {
+        let shared = instance();
+        let mut mv = shared.lock();
+        let t0 = Instant::now();
+        let all = HashSet::from([1, 2, 3]);
+        mv.show_rating_feedback(&all, 1, t0);
+        let later = t0 + HOLD + FADE / 2;
+        assert!(mv.rating_pulse(mv.tile_key_at(0).unwrap(), later).unwrap().alpha < 1.0);
+        mv.show_rating_feedback(&all, 5, later);
+        for i in 0..4 {
+            let pulse = mv.rating_pulse(mv.tile_key_at(i).unwrap(), later).unwrap();
+            assert_eq!((pulse.rating, pulse.alpha), (5, 1.0));
+        }
+    }
+
+    #[test]
+    fn the_feedback_ends_by_itself_and_clearing_ends_it_at_once() {
+        let shared = instance();
+        let mut mv = shared.lock();
+        let t0 = Instant::now();
+        mv.show_rating_feedback(&HashSet::from([1]), 2, t0);
+        assert!(mv.rating_wakeup(t0).is_some());
+        assert!(mv.poll_rating_feedback(t0 + HOLD + FADE));
+        assert!(mv.rating_wakeup(t0 + HOLD + FADE).is_none());
+        assert!(!mv.poll_rating_feedback(t0 + HOLD + FADE));
+        mv.show_rating_feedback(&HashSet::from([1, 2, 3]), 0, t0);
+        mv.clear_rating_feedback();
+        assert!(mv.rating_wakeup(t0).is_none());
+    }
+
+    #[test]
+    fn a_gutter_drag_is_reported_so_that_a_rating_can_be_ignored() {
+        let shared = instance();
+        assert!(!shared.lock().is_dragging());
     }
 }
