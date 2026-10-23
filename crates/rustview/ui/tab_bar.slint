@@ -11,6 +11,8 @@ export component TabItemView inherits Rectangle {
     in property <bool> is-placeholder: false;
 
     callback clicked();
+    /// A click with Ctrl or Shift: selects the tab (together with others) instead of showing it.
+    callback multi-clicked(bool /* ctrl */, bool /* shift */);
     callback close-clicked();
     callback middle-clicked();
     callback context-menu-requested(length /* x */, length /* y */);
@@ -37,19 +39,22 @@ export component TabItemView inherits Rectangle {
         opacity: root.is-placeholder ? 0.22 : 1.0;
         animate opacity { duration: 120ms; }
 
-        // Theme-adaptive background supporting both inactive and active hover states
-        background: root.tab.is-active
+        // Theme-adaptive background supporting both inactive and active hover states; a selected tab (Ctrl/Shift+click) is drawn
+        // like an active one with the accent color as its border.
+        background: (root.tab.is-active || root.tab.is-selected)
             ? (tab-touch.has-hover ? Theme.surface-selected-hover : Theme.surface-selected)
             : (tab-touch.has-hover ? Theme.surface-hover : Theme.surface-variant);
 
-        border-width: 1px;
-        border-color: root.tab.is-active
-            ? (tab-touch.has-hover ? Theme.accent : Theme.primary)
-            : (tab-touch.has-hover ? Theme.primary : Theme.border);
+        border-width: root.tab.is-selected ? 2px : 1px;
+        border-color: root.tab.is-selected
+            ? Theme.accent
+            : (root.tab.is-active
+                ? (tab-touch.has-hover ? Theme.accent : Theme.primary)
+                : (tab-touch.has-hover ? Theme.primary : Theme.border));
 
         tooltip-host := TooltipHost {
             text: root.tab.title;
-            shortcut: root.tab.is-active ? "Active Tab (Scroll to cycle, Drag to reorder, Right-click for menu)" : "Click to view (Scroll to cycle, Drag to reorder, Middle-click to close)";
+            shortcut: root.tab.is-active ? "Active Tab (Ctrl+click to select several, Scroll to cycle, Drag to reorder, Right-click for menu)" : "Click to view (Ctrl/Shift+click to select several, Scroll to cycle, Drag to reorder, Middle-click to close)";
             is-enabled: !root.is-placeholder;
         }
 
@@ -82,7 +87,11 @@ export component TabItemView inherits Rectangle {
                         self.is-drag-active = false;
                         root.drag-ended();
                     } else if !self.close-clicked-recently {
-                        root.clicked();
+                        if event.modifiers.control || event.modifiers.shift {
+                            root.multi-clicked(event.modifiers.control, event.modifiers.shift);
+                        } else {
+                            root.clicked();
+                        }
                     }
                     self.close-clicked-recently = false;
                 }
@@ -239,6 +248,9 @@ export component MediaTabBar inherits Rectangle {
     in property <bool> drag-ghost-is-active: false;
 
     callback tab-selected(int /* tab_id */);
+    callback tab-multi-selected(int /* tab_id */, bool /* ctrl */, bool /* shift */);
+    /// A click on the free space of the bar: the multi-selection of tabs ends.
+    callback tab-selection-cleared();
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
     callback tab-wheel-scrolled(bool /* is_next */);
@@ -257,6 +269,13 @@ export component MediaTabBar inherits Rectangle {
 
     public function scroll-tab-into-view(tab-x: length, tab-width: length) {
         scroll-area.scroll-into-view-horizontal(tab-x, tab-width);
+    }
+
+    // Behind the tabs: a click on the free space ends the multi-selection.
+    TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked => { root.tab-selection-cleared(); }
     }
 
     scroll-area := SmoothScrollArea {
@@ -294,6 +313,7 @@ export component MediaTabBar inherits Rectangle {
                 }
 
                 clicked => { root.tab-selected(tab.id); }
+                multi-clicked(ctrl, shift) => { root.tab-multi-selected(tab.id, ctrl, shift); }
                 middle-clicked => { root.tab-closed(tab.id); }
                 close-clicked => { root.tab-closed(tab.id); }
                 context-menu-requested(mx, my) => {

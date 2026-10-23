@@ -14,6 +14,7 @@ use super::rating_overlay::OverlayState;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
+use parking_lot::RwLock;
 use rustview_core::library::models::MediaId;
 use rustview_core::util::cast::SaturatingAs;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
@@ -21,6 +22,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+/// The Multiview that the events of a player go to. The callbacks are installed once when the player is created and read this at
+/// every call, so a tile that moves to another Multiview (a merge of tabs) takes its running player along and only points the
+/// cell at its new owner.
+pub type EventOwner = Arc<RwLock<WeakInstance>>;
 
 pub struct VideoTile {
     pub player: Arc<MpvPlayer>,
@@ -32,6 +38,8 @@ pub struct VideoTile {
     /// The tile the player currently serves (`TileKey`). A recycled player moves on to another tile, and the callbacks that
     /// were installed once at creation read this instead of the key they were created for.
     pub current_tile: Arc<AtomicU64>,
+    /// The Multiview whose tile this is; the events of the player are posted to it.
+    pub owner: EventOwner,
     /// The rating icon that mpv draws over the picture right now, if any.
     pub rating_overlay: Option<OverlayState>,
 }
@@ -145,11 +153,14 @@ impl TileState {
 /// A player callback that posts an event for its instance; the event is built per call so it never has to be `Clone`.
 fn forward(
     sink: &Arc<dyn MultiviewEventSink>,
-    me: &WeakInstance,
+    owner: &EventOwner,
     make: impl Fn() -> PlayerEvent + Send + Sync + 'static,
 ) -> impl Fn() + Send + Sync + 'static {
-    let (sink, me) = (Arc::clone(sink), me.clone());
-    move || sink.post(me.clone(), make())
+    let (sink, owner) = (Arc::clone(sink), Arc::clone(owner));
+    move || {
+        let me = owner.read().clone();
+        sink.post(me, make());
+    }
 }
 
 /// Installs every player callback once, when the tile is created. What an event means is decided when it arrives (by the
@@ -157,35 +168,40 @@ fn forward(
 pub(super) fn connect_callbacks(
     player: &MpvPlayer,
     sink: &Arc<dyn MultiviewEventSink>,
-    me: &WeakInstance,
+    owner: &EventOwner,
     current_tile: &Arc<AtomicU64>,
 ) {
-    player.on_toggle_fullscreen(forward(sink, me, || PlayerEvent::ToggleFullscreen));
-    player.on_close_tab(forward(sink, me, || PlayerEvent::CloseTab));
+    player.on_toggle_fullscreen(forward(sink, owner, || PlayerEvent::ToggleFullscreen));
+    player.on_close_tab(forward(sink, owner, || PlayerEvent::CloseTab));
     let tile = Arc::clone(current_tile);
-    player.on_rename_requested(forward(sink, me, move || {
+    player.on_rename_requested(forward(sink, owner, move || {
         PlayerEvent::RenameRequested(tile.load(Ordering::SeqCst))
     }));
-    player.on_delete_requested(forward(sink, me, || PlayerEvent::DeleteRequested));
-    let (rating_sink, rating_me) = (Arc::clone(sink), me.clone());
-    player.on_rating_requested(move |rating| rating_sink.post(rating_me.clone(), PlayerEvent::RatingRequested(rating)));
+    player.on_delete_requested(forward(sink, owner, || PlayerEvent::DeleteRequested));
+    let (rating_sink, rating_owner) = (Arc::clone(sink), Arc::clone(owner));
+    player.on_rating_requested(move |rating| {
+        let me = rating_owner.read().clone();
+        rating_sink.post(me, PlayerEvent::RatingRequested(rating));
+    });
     let tile = current_tile.clone();
-    let (mute_sink, mute_me) = (Arc::clone(sink), me.clone());
+    let (mute_sink, mute_owner) = (Arc::clone(sink), Arc::clone(owner));
     player.on_mute_changed(move |muted| {
         let tile = tile.load(Ordering::SeqCst);
-        mute_sink.post(mute_me.clone(), PlayerEvent::MuteChanged { tile, muted });
+        let me = mute_owner.read().clone();
+        mute_sink.post(me, PlayerEvent::MuteChanged { tile, muted });
     });
     let tile = current_tile.clone();
-    let (pause_sink, pause_me) = (Arc::clone(sink), me.clone());
+    let (pause_sink, pause_owner) = (Arc::clone(sink), Arc::clone(owner));
     player.on_user_pause_changed(move |paused| {
         let tile = tile.load(Ordering::SeqCst);
-        pause_sink.post(pause_me.clone(), PlayerEvent::PauseChanged { tile, paused });
+        let me = pause_owner.read().clone();
+        pause_sink.post(me, PlayerEvent::PauseChanged { tile, paused });
     });
-    player.on_convert_to_background_tab(forward(sink, me, || PlayerEvent::CtrlClick));
-    player.on_grid_left_click(forward(sink, me, || PlayerEvent::GridLeftClick));
-    player.on_grid_middle_click(forward(sink, me, || PlayerEvent::GridMiddleClick));
-    player.on_grid_wheel_up(forward(sink, me, || PlayerEvent::GridWheel { up: true }));
-    player.on_grid_wheel_down(forward(sink, me, || PlayerEvent::GridWheel { up: false }));
+    player.on_convert_to_background_tab(forward(sink, owner, || PlayerEvent::CtrlClick));
+    player.on_grid_left_click(forward(sink, owner, || PlayerEvent::GridLeftClick));
+    player.on_grid_middle_click(forward(sink, owner, || PlayerEvent::GridMiddleClick));
+    player.on_grid_wheel_up(forward(sink, owner, || PlayerEvent::GridWheel { up: true }));
+    player.on_grid_wheel_down(forward(sink, owner, || PlayerEvent::GridWheel { up: false }));
 }
 
 /// Creates the video window inside `rect` (coordinates of the parent window) and starts playback.
@@ -210,7 +226,8 @@ pub fn create_video(
 
     let player = Arc::new(MpvPlayer::new().map_err(|e| e.to_string())?);
     let current_tile = Arc::new(AtomicU64::new(tile));
-    connect_callbacks(&player, sink, me, &current_tile);
+    let owner: EventOwner = Arc::new(RwLock::new(me.clone()));
+    connect_callbacks(&player, sink, &owner, &current_tile);
 
     let started = player.attach_to_window(wid).and_then(|()| {
         player.set_tab_grid_mode(false);
@@ -232,6 +249,7 @@ pub fn create_video(
         native_mute,
         last_mute: native_mute,
         current_tile,
+        owner,
         rating_overlay: None,
     })
 }
@@ -241,4 +259,43 @@ pub fn create_video(
 pub fn reload_video(video: &VideoTile, tile: TileKey, path: &Path) -> Result<(), String> {
     video.current_tile.store(tile, Ordering::SeqCst);
     video.player.load_file(path).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::multiview::instance::MultiviewInstance;
+    use parking_lot::Mutex;
+
+    /// Remembers the id of the instance each event was posted for.
+    struct Recorder(Mutex<Vec<Option<u64>>>);
+
+    impl MultiviewEventSink for Recorder {
+        fn post(&self, instance: WeakInstance, _event: PlayerEvent) {
+            self.0.lock().push(instance.upgrade().map(|i| i.lock().id()));
+        }
+    }
+
+    #[test]
+    fn a_callback_follows_the_owner_cell_when_the_tile_moves_to_another_multiview() {
+        let recorder = Arc::new(Recorder(Mutex::new(Vec::new())));
+        let sink: Arc<dyn MultiviewEventSink> = recorder.clone();
+        let first = MultiviewInstance::create(sink.clone(), Vec::new());
+        let second = MultiviewInstance::create(sink.clone(), Vec::new());
+        let (first_id, second_id) = (first.lock().id(), second.lock().id());
+
+        let owner: EventOwner = Arc::new(RwLock::new(Arc::downgrade(&first)));
+        let callback = forward(&sink, &owner, || PlayerEvent::CloseTab);
+        callback();
+        *owner.write() = Arc::downgrade(&second);
+        callback();
+        drop(first);
+        *owner.write() = Arc::downgrade(&second);
+        callback();
+
+        assert_eq!(
+            *recorder.0.lock(),
+            vec![Some(first_id), Some(second_id), Some(second_id)]
+        );
+    }
 }

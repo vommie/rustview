@@ -22,6 +22,7 @@ use crate::system::SystemDndHandler;
 use crate::system::termination;
 use crate::ui::SettingsDialogController;
 use crate::ui::open_confirmation::OpenConfirmation;
+use crate::ui::tabs::merge_limit::MergeLimitDialog;
 use crate::ui::{
     DeleteFileDialogController, FavoriteRenameDialogController, FileOpsConflictDialogController, FileRenameDialog,
     FolderDialogController, MainWindow, MissingFileDialogController, MultiviewHandle,
@@ -122,6 +123,7 @@ fn close_windows(t: &ShutdownTargets<'_>) {
     t.missing_file_dialog.close(window);
     t.delete_file_dialog.close(window);
     OpenConfirmation::close(window);
+    MergeLimitDialog::close(window);
     t.remove_orphaned_dialog.close(window);
     t.conflict_dialog.close(window);
     t.tag_dialogs.close_add(window);

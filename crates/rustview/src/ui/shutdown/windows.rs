@@ -20,6 +20,7 @@ pub const WINDOWS: &[(&str, &str)] = &[
     ("FavoriteRenameDialog", "FavoriteRenameDialogController::close"),
     ("MissingFileDialog", "MissingFileDialogController::close"),
     ("OpenManyFilesDialog", "OpenConfirmation::close"),
+    ("TabMergeLimitDialog", "MergeLimitDialog::close"),
     ("DeleteFileDialog", "DeleteFileDialogController::close"),
     ("RemoveOrphanedFileDialog", "RemoveOrphanedFileDialogController::close"),
     ("FileOpsConflictDialog", "FileOpsConflictDialogController::close"),

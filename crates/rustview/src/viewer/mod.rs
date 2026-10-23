@@ -4,6 +4,7 @@ pub mod manager;
 pub mod mpv_engine;
 pub mod multiview;
 pub mod tab_item;
+pub mod tab_merge;
 mod tab_native;
 pub mod tab_ui_gate;
 pub mod types;
@@ -15,6 +16,7 @@ pub use loader::HighResImageLoader;
 pub use manager::ViewerTabManager;
 pub use mpv_engine::{MpvEventCallback, MpvFullscreenCallback, MpvPlayer};
 pub use tab_item::{TabCollection, TabTitleFormatter};
+pub use tab_merge::{MergeError, MergeRefusal, MergeSource, MergedTabs};
 pub use types::{MULTIVIEW_TAB_MEDIA_ID, MediaTabSession, MpvPlaybackState, MultiviewTabPayload, TabId, ViewerAction};
 pub use x11::{
     OverlayServer, PointerProbe, SubwindowGeometry, ViewportBounds, X11VideoSubwindow, XRectangle,

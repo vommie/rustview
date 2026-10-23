@@ -119,6 +119,7 @@ tab_move_end = { tabler = "arrow-bar-to-right", doc = "Move a tab to the end" }
 tab_close_left = { tabler = "chevrons-left", doc = "Close all tabs to the left" }
 tab_close_right = { tabler = "chevrons-right", doc = "Close all tabs to the right" }
 tab_close_others = { tabler = "circle-x", doc = "Close all other tabs" }
+tab_merge = { tabler = "arrows-join-2", doc = "Merge the selected tabs into one Multiview tab" }
 expand_all = { tabler = "chevrons-down", doc = "Expand all tree nodes" }
 collapse_all = { tabler = "chevrons-up", doc = "Collapse all tree nodes" }
 favorite_add = { tabler = "star", doc = "Add to favorites" }

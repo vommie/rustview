@@ -58,6 +58,10 @@ impl BridgeViewerTabs {
         let fs_select = fullscreen.clone();
         window.on_tab_selected(move |tab_id| {
             tracing::info!(tab_id, "[BridgeViewerTabs: Select] Tab selected by user");
+            st_select
+                .write()
+                .tab_selection
+                .click_plain(tab_id.wrapping_as::<TabId>());
             tm_select.set_active_tab_internal(tab_id.wrapping_as::<TabId>(), true);
             win_select.set_is_tab_grid_active(false);
             win_select.set_is_browse_active(false);
@@ -83,6 +87,8 @@ impl BridgeViewerTabs {
                 BridgeTabGrid::sync_tab_grid_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
             }
         });
+
+        Self::register_selection_callbacks(window, &tab_manager, state);
 
         // 4. Tab Mouse Wheel Scrolling & Cycling Callback
         let win_wheel = window.clone_strong();

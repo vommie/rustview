@@ -176,3 +176,182 @@ pub fn after_reconcile(slots: &mut AudioSlots, added: &[usize], policy: &AudioPo
         *slot = TileAudio::native();
     }
 }
+
+/// After the tiles of several Multiviews were put together (a merge of tabs): at most one policy-controlled video keeps the
+/// sound, the leftmost one that had it. A mute or unmute the user chose stays as it is; if the user made a video audible, that
+/// video carries the sound and every policy video is muted. When nobody is audible any more the sound passes to the leftmost
+/// policy video (if `hand_over` is on) like it does when the video that had it leaves.
+pub fn after_merge(slots: &mut AudioSlots, policy: &AudioPolicy) {
+    if !policy.auto_control {
+        return;
+    }
+    let user_carries = slots
+        .iter()
+        .flatten()
+        .any(|s| s.origin == AudioOrigin::User && s.is_audible());
+    let mut controlled: Vec<&mut TileAudio> = slots
+        .iter_mut()
+        .flatten()
+        .filter(|s| s.origin == AudioOrigin::Policy)
+        .collect();
+    let keeper = if policy.follows == SoundFollows::Nobody || user_carries {
+        None
+    } else {
+        controlled
+            .iter()
+            .position(|s| s.is_audible())
+            .or_else(|| (policy.hand_over && !controlled.is_empty()).then_some(0))
+    };
+    for (index, slot) in controlled.iter_mut().enumerate() {
+        **slot = if Some(index) == keeper {
+            TileAudio::native()
+        } else {
+            TileAudio::muted_by_policy()
+        };
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+
+    fn user(mode: AudioMode) -> TileAudio {
+        TileAudio {
+            mode,
+            origin: AudioOrigin::User,
+        }
+    }
+
+    fn merged(mut slots: Vec<Option<TileAudio>>, policy: AudioPolicy) -> Vec<Option<TileAudio>> {
+        after_merge(&mut slots, &policy);
+        slots
+    }
+
+    #[test]
+    fn only_the_leftmost_policy_video_keeps_the_sound() {
+        let out = merged(
+            vec![
+                Some(TileAudio::native()),
+                None,
+                Some(TileAudio::native()),
+                Some(TileAudio::native()),
+            ],
+            AudioPolicy::DEFAULT,
+        );
+        assert_eq!(
+            out,
+            vec![
+                Some(TileAudio::native()),
+                None,
+                Some(TileAudio::muted_by_policy()),
+                Some(TileAudio::muted_by_policy())
+            ]
+        );
+    }
+
+    #[test]
+    fn a_video_the_user_made_audible_takes_the_sound_from_every_policy_video() {
+        let out = merged(
+            vec![
+                Some(TileAudio::native()),
+                Some(user(AudioMode::Unmuted)),
+                Some(TileAudio::native()),
+            ],
+            AudioPolicy::DEFAULT,
+        );
+        assert_eq!(
+            out,
+            vec![
+                Some(TileAudio::muted_by_policy()),
+                Some(user(AudioMode::Unmuted)),
+                Some(TileAudio::muted_by_policy())
+            ]
+        );
+    }
+
+    #[test]
+    fn a_mute_of_the_user_is_kept_and_the_next_policy_video_keeps_the_sound() {
+        let out = merged(
+            vec![
+                Some(user(AudioMode::Muted)),
+                Some(TileAudio::native()),
+                Some(TileAudio::native()),
+            ],
+            AudioPolicy::DEFAULT,
+        );
+        assert_eq!(
+            out,
+            vec![
+                Some(user(AudioMode::Muted)),
+                Some(TileAudio::native()),
+                Some(TileAudio::muted_by_policy())
+            ]
+        );
+    }
+
+    #[test]
+    fn nobody_follows_mutes_every_policy_video() {
+        let policy = AudioPolicy {
+            follows: SoundFollows::Nobody,
+            ..AudioPolicy::DEFAULT
+        };
+        let out = merged(
+            vec![
+                Some(TileAudio::native()),
+                Some(TileAudio::native()),
+                Some(user(AudioMode::Unmuted)),
+            ],
+            policy,
+        );
+        assert_eq!(
+            out,
+            vec![
+                Some(TileAudio::muted_by_policy()),
+                Some(TileAudio::muted_by_policy()),
+                Some(user(AudioMode::Unmuted))
+            ]
+        );
+    }
+
+    #[test]
+    fn without_automatic_control_every_video_keeps_its_own_state() {
+        let policy = AudioPolicy {
+            auto_control: false,
+            ..AudioPolicy::DEFAULT
+        };
+        let slots = vec![
+            Some(TileAudio::native()),
+            Some(TileAudio::native()),
+            Some(TileAudio::muted_by_policy()),
+        ];
+        assert_eq!(merged(slots.clone(), policy), slots);
+    }
+
+    #[test]
+    fn when_nobody_is_audible_the_leftmost_policy_video_gets_the_sound_if_it_is_handed_over() {
+        let slots = vec![
+            Some(user(AudioMode::Muted)),
+            Some(TileAudio::muted_by_policy()),
+            Some(TileAudio::muted_by_policy()),
+        ];
+        assert_eq!(
+            merged(slots.clone(), AudioPolicy::DEFAULT),
+            vec![
+                Some(user(AudioMode::Muted)),
+                Some(TileAudio::native()),
+                Some(TileAudio::muted_by_policy())
+            ]
+        );
+        let policy = AudioPolicy {
+            hand_over: false,
+            ..AudioPolicy::DEFAULT
+        };
+        assert_eq!(merged(slots.clone(), policy), slots);
+    }
+
+    #[test]
+    fn images_and_an_empty_set_are_left_alone() {
+        assert_eq!(merged(vec![None, None], AudioPolicy::DEFAULT), vec![None, None]);
+        assert_eq!(merged(Vec::new(), AudioPolicy::DEFAULT), Vec::new());
+    }
+}

@@ -17,6 +17,8 @@ export component TabGridItemView inherits Rectangle {
     in property <bool> away: false;
 
     callback left-clicked(int /* tab_id */);
+    /// A click with Ctrl or Shift: selects the tab together with others instead of showing it.
+    callback selection-clicked(int /* tab_id */, bool /* ctrl */, bool /* shift */);
     callback middle-clicked(int /* tab_id */);
     callback close-clicked(int /* tab_id */);
     callback context-menu-requested(int /* tab_id */, length /* x */, length /* y */);
@@ -26,9 +28,9 @@ export component TabGridItemView inherits Rectangle {
     width: root.item.width;
     height: root.item.height;
 
-    background: tile-touch.has-hover ? Theme.surface-hover : Theme.surface;
-    border-width: tile-touch.has-hover ? Math.max(1.5px, root.border-width-val) : root.border-width-val;
-    border-color: tile-touch.has-hover ? Theme.primary : Theme.border;
+    background: (tile-touch.has-hover || root.item.is-selected) ? Theme.surface-hover : Theme.surface;
+    border-width: root.item.is-selected ? Math.max(2px, root.border-width-val) : (tile-touch.has-hover ? Math.max(1.5px, root.border-width-val) : root.border-width-val);
+    border-color: root.item.is-selected ? Theme.accent : (tile-touch.has-hover ? Theme.primary : Theme.border);
     border-radius: root.corner-radius-val;
     clip: true;
 
@@ -40,7 +42,11 @@ export component TabGridItemView inherits Rectangle {
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 if event.button == PointerEventButton.left {
-                    root.left-clicked(root.item.id);
+                    if event.modifiers.control || event.modifiers.shift {
+                        root.selection-clicked(root.item.id, event.modifiers.control, event.modifiers.shift);
+                    } else {
+                        root.left-clicked(root.item.id);
+                    }
                 } else if event.button == PointerEventButton.middle {
                     root.middle-clicked(root.item.id);
                 } else if event.button == PointerEventButton.right {

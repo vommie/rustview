@@ -5,8 +5,9 @@ use crate::ui::MainWindow;
 use crate::ui::context_menu::media::MediaContextMenu;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::{
-    CTX_TAB_CLOSE, CTX_TAB_CLOSE_OTHERS, CTX_TAB_CLOSE_TO_LEFT, CTX_TAB_CLOSE_TO_RIGHT, CTX_TAB_DUPLICATE,
-    CTX_TAB_MOVE_LEFT, CTX_TAB_MOVE_RIGHT, CTX_TAB_MOVE_TO_END, CTX_TAB_MOVE_TO_START, CTX_TAB_OPEN_MULTIVIEW, UiState,
+    CTX_TAB_CLOSE, CTX_TAB_CLOSE_OTHERS, CTX_TAB_CLOSE_SELECTED, CTX_TAB_CLOSE_TO_LEFT, CTX_TAB_CLOSE_TO_RIGHT,
+    CTX_TAB_DUPLICATE, CTX_TAB_MERGE_SELECTED, CTX_TAB_MOVE_LEFT, CTX_TAB_MOVE_RIGHT, CTX_TAB_MOVE_TO_END,
+    CTX_TAB_MOVE_TO_START, CTX_TAB_OPEN_MULTIVIEW, UiState,
 };
 use crate::ui::status_bar::StatusBarBridge;
 use crate::ui::tabs::BridgeViewerTabs;
@@ -168,7 +169,30 @@ impl TabContextMenu {
         builder.build()
     }
 
-    /// Handles tab-management context menu action routing (IDs 4001..4009).
+    /// The menu of several selected tabs (the right-clicked tab is one of them): merge them into one Multiview tab, or close them.
+    /// `titles` are the selected tabs in tab order (the header's tooltip).
+    pub fn build_selection_menu(titles: &[String]) -> CtxMenu {
+        CtxMenuBuilder::new()
+            .header_with_tooltip(format!("Tabs: {} selected", titles.len()), titles.join("\n"))
+            .action(
+                CTX_TAB_MERGE_SELECTED,
+                "Merge Selected Tabs",
+                None,
+                Some(Icon::TabMerge),
+                titles.len() >= 2,
+            )
+            .separator()
+            .action(
+                CTX_TAB_CLOSE_SELECTED,
+                "Close Selected Tabs",
+                None,
+                Some(Icon::Close),
+                true,
+            )
+            .build()
+    }
+
+    /// Handles tab-management context menu action routing (IDs 4001..4012).
     pub fn handle_action(action_id: CtxMenuActionId, ctx: &TabActionContext<'_>, target_tab_id: Option<TabId>) {
         let Some(tab_id) = target_tab_id else {
             tracing::warn!("[TabContextMenu] No target tab ID found for action");
@@ -370,6 +394,8 @@ impl TabContextMenu {
                     );
                 }
             }
+            CTX_TAB_MERGE_SELECTED => BridgeViewerTabs::merge_selected_tabs(ctx),
+            CTX_TAB_CLOSE_SELECTED => BridgeViewerTabs::close_selected_tabs(ctx),
             CTX_TAB_CLOSE => {
                 tracing::info!(tab_id, "[TabContextMenu: Close] Close tab requested from context menu");
                 ctx.tab_manager.close_tab(tab_id);

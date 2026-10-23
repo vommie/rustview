@@ -136,6 +136,8 @@ export struct TabItemModel {
     title: string,
     format_str: string,
     is_active: bool,
+    /// Part of the multi-selection of tabs (Ctrl/Shift+click); the menu entries "Merge/Close Selected Tabs" act on these.
+    is_selected: bool,
     icon: IconId,
     rating: int,
     has_tags: bool,
@@ -151,6 +153,8 @@ export struct TabGridItemModel {
     format_str: string,
     is_video: bool,
     is_multiview: bool,
+    /// Part of the multi-selection of tabs (Ctrl/Shift+click).
+    is_selected: bool,
     icon: IconId,
     rating: int,
     has_tags: bool,

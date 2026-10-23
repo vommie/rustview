@@ -2,6 +2,8 @@ pub mod dnd;
 pub mod grid;
 pub mod grid_bridge;
 pub mod icon;
+pub mod merge_limit;
+pub mod tab_selection;
 
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::multiview::MultiviewHandle;
@@ -21,8 +23,10 @@ use std::sync::Arc;
 
 mod callbacks;
 mod drag;
+mod merge;
 mod navigation;
 mod open;
+mod selection_ui;
 
 /// Parameter bundle for concluding a tab drag & drop session.
 pub struct TabDragEndParams<'a> {
@@ -53,6 +57,12 @@ impl BridgeViewerTabs {
         // Tiles come and go inside a tab: its description follows what it shows now.
         tab_manager.sync_tab_identities();
         let tabs = tab_manager.list_tabs();
+        let selection = {
+            let ids: Vec<TabId> = tabs.iter().map(|t| t.id).collect();
+            let mut st = state.write();
+            st.tab_selection.retain_existing(&ids);
+            st.tab_selection.clone()
+        };
         let active_id_opt = tab_manager.active_tab_id();
         let is_tab_grid = window.get_is_tab_grid_active();
         let is_browse = !is_tab_grid && active_id_opt.is_none();
@@ -66,6 +76,7 @@ impl BridgeViewerTabs {
                 title: t.title.clone().into(),
                 format_str: t.format.default_extension().into(),
                 is_active: !is_tab_grid && Some(t.id) == active_id_opt,
+                is_selected: selection.contains(t.id),
                 icon: tab_icon(t),
                 rating: i32::from(t.record.rating),
                 has_tags: false,
@@ -75,6 +86,7 @@ impl BridgeViewerTabs {
             .collect();
 
         window.set_tabs(ModelRc::new(VecModel::from(tab_models)));
+        window.set_has_tab_selection(!selection.is_empty());
         window.set_is_browse_active(is_browse);
         window.set_is_tab_grid_active(is_tab_grid);
 

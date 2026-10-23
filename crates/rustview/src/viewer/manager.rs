@@ -12,6 +12,7 @@ use std::sync::atomic::AtomicU64;
 
 mod close;
 mod cutouts;
+mod merge;
 mod open;
 mod ordering;
 mod query;

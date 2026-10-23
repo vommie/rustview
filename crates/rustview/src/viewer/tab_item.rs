@@ -124,6 +124,13 @@ impl TabCollection {
         clamped_idx
     }
 
+    /// Inserts a new session at `index` (clamped to the end of the list).
+    pub fn insert_at(&mut self, index: usize, session: MediaTabSession) -> usize {
+        let clamped_idx = index.min(self.sessions.len());
+        self.sessions.insert(clamped_idx, session);
+        clamped_idx
+    }
+
     /// Removes a tab session by its `TabId` and returns the removed session and its original 0-based index.
     pub fn remove(&mut self, tab_id: TabId) -> Option<(usize, MediaTabSession)> {
         let pos = self.index_of(tab_id)?;

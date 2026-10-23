@@ -12,6 +12,8 @@ pub use crate::ui::context_menu::presenter::CtxMenuPresenter;
 pub use crate::ui::context_menu::tab::TabContextMenu;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::UiState;
+use crate::ui::tabs::BridgeViewerTabs;
+use crate::ui::tabs::tab_selection::MenuTarget;
 use crate::viewer::{TabId, ViewerTabManager};
 use parking_lot::RwLock;
 use rustview_core::library::models::{FolderId, MediaId};
@@ -100,6 +102,26 @@ impl BridgeContextMenu {
         let Some(tab_idx) = tabs.iter().position(|t| t.id == tab_id) else {
             return;
         };
+
+        // Several selected tabs have a menu of their own; a right click outside the selection drops it
+        let (target, selection_changed) = state.write().tab_selection.context_menu(tab_id);
+        if selection_changed {
+            BridgeViewerTabs::apply_tab_selection(window, state);
+        }
+        if target == MenuTarget::Selection {
+            let order: Vec<TabId> = tabs.iter().map(|t| t.id).collect();
+            let titles: Vec<String> = state
+                .read()
+                .tab_selection
+                .in_order(&order)
+                .iter()
+                .map(|id| ViewerTabManager::compute_tab_title(&tabs, *id))
+                .collect();
+            state.write().active_tab_dialog_target = Some(tab_id);
+            let menu = TabContextMenu::build_selection_menu(&titles);
+            Self::open_custom_menu(window, state, tab_manager, menu, x, y + 10.0);
+            return;
+        }
 
         let tab = &tabs[tab_idx];
         let is_busy = BridgeMedia::is_system_busy(window, thumbnails, state);

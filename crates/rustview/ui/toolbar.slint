@@ -27,6 +27,8 @@ export component TopToolbar inherits Rectangle {
     callback tab-grid-clicked();
     callback settings-clicked();
     callback tab-selected(int /* tab_id */);
+    callback tab-multi-selected(int /* tab_id */, bool /* ctrl */, bool /* shift */);
+    callback tab-selection-cleared();
     callback tab-closed(int /* tab_id */);
     callback tab-context-menu(int /* tab_id */, length /* x */, length /* y */);
     callback tab-wheel-scrolled(bool /* is_next */);
@@ -99,6 +101,8 @@ export component TopToolbar inherits Rectangle {
             drag-ghost-is-active: root.drag-ghost-is-active;
 
             tab-selected(id) => { root.tab-selected(id); }
+            tab-multi-selected(id, ctrl, shift) => { root.tab-multi-selected(id, ctrl, shift); }
+            tab-selection-cleared => { root.tab-selection-cleared(); }
             tab-closed(id) => { root.tab-closed(id); }
             tab-context-menu(id, x, y) => { root.tab-context-menu(id, self.x + x, self.y + y); }
             tab-wheel-scrolled(is-next) => { root.tab-wheel-scrolled(is-next); }

@@ -8,7 +8,7 @@
 //!
 //! The behavior is split over `instance_host` (placement and projection), `instance_layout` (arrangement, gutters),
 //! `instance_tiles` (tile lifecycle), `instance_follow` (every change of the tile set: following the Browse selection,
-//! duplicating a tile, `instance_clone`), `instance_actions` (the action buttons), `instance_sound` (mute state) and `instance_hover` (pointer, mute badge, aspect probing).
+//! duplicating a tile, `instance_clone`, giving all tiles to another Multiview and taking them over, `instance_merge`), `instance_actions` (the action buttons), `instance_sound` (mute state) and `instance_hover` (pointer, mute badge, aspect probing).
 
 use super::click::{ClickDetector, ClickKind};
 use super::container::Container;
@@ -48,6 +48,9 @@ pub struct MultiviewInstance {
     /// The tiles have been started (their players and decoders exist). A Multiview that was never shown is started by the first
     /// host that shows it.
     pub(super) started: bool,
+    /// The sound rules were applied to the tiles already (a merge of tabs did it), so opening must not apply them again over
+    /// the choices the tiles came with.
+    pub(super) sound_assigned: bool,
     pub(super) tiles: Vec<TileState>,
     /// Heights of the two rows of a 2x2 grid after the user dragged the horizontal gutter; `None` = automatic. The widths
     /// the user set belong to the tiles (`TileState::pin`).
@@ -99,6 +102,7 @@ impl MultiviewInstance {
                 sink,
                 origin: OriginKind::Browse,
                 started: false,
+                sound_assigned: false,
                 tiles: seeds.into_iter().map(TileState::from_seed).collect(),
                 row_pins: None,
                 container: PLACEHOLDER_CONTAINER,

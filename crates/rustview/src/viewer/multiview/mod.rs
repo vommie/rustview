@@ -21,6 +21,7 @@ mod instance_host;
 mod instance_hover;
 mod instance_layout;
 mod instance_members;
+mod instance_merge;
 mod instance_primary;
 mod instance_rating;
 mod instance_sound;
@@ -43,3 +44,4 @@ pub mod tile;
 pub mod view;
 
 pub use instance_host::HostSurface;
+pub use instance_merge::ReleasedTiles;

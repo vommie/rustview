@@ -34,6 +34,9 @@ export component TabGridView inherits Rectangle {
     in property <int> background-mode: 0;
 
     callback item-left-clicked(int /* tab_id */);
+    callback item-selection-clicked(int /* tab_id */, bool /* ctrl */, bool /* shift */);
+    /// A click on the free space of the grid: the multi-selection of tabs ends.
+    callback selection-cleared();
     callback item-middle-clicked(int /* tab_id */);
     callback item-close-clicked(int /* tab_id */);
     callback item-context-menu(int /* tab_id */, length /* x */, length /* y */);
@@ -103,6 +106,12 @@ export component TabGridView inherits Rectangle {
                     width: parent.width;
                     height: root.total-content-height;
 
+                    TouchArea {
+                        width: 100%;
+                        height: 100%;
+                        clicked => { root.selection-cleared(); }
+                    }
+
                     for tab-item in root.items : TabGridItemView {
                         item: tab-item;
                         away: root.away-tab-id == tab-item.id;
@@ -113,6 +122,7 @@ export component TabGridView inherits Rectangle {
                         background-mode: root.background-mode;
 
                         left-clicked(id) => { root.item-left-clicked(id); }
+                        selection-clicked(id, ctrl, shift) => { root.item-selection-clicked(id, ctrl, shift); }
                         middle-clicked(id) => { root.item-middle-clicked(id); }
                         close-clicked(id) => { root.item-close-clicked(id); }
                         context-menu-requested(id, mx, my) => {

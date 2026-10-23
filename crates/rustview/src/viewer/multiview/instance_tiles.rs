@@ -25,16 +25,33 @@ fn loggable(error: &str) -> &str {
 }
 
 impl MultiviewInstance {
-    /// Starts every tile once the host exists: the leftmost video gets the sound, the others are muted by policy. Does nothing
-    /// (and returns `false`) when the tiles were started before.
+    /// Whether tile `index` still has to be started: a video without a player, an image whose decoder has not delivered. A tile
+    /// that came running from another Multiview (a merge of tabs) needs nothing.
+    pub(super) fn needs_start(&self, index: usize) -> bool {
+        self.tiles.get(index).is_some_and(|t| {
+            t.error.is_none()
+                && match t.kind {
+                    TileKind::Video => t.video.is_none(),
+                    TileKind::Image => t.is_loading,
+                }
+        })
+    }
+
+    /// Starts every tile that is not running once the host exists: the leftmost video gets the sound, the others are muted by
+    /// policy (unless a merge of tabs applied the rules to the tiles already). Does nothing (and returns `false`) when the tiles
+    /// were started before.
     pub fn start_all(&mut self) -> bool {
         if self.started {
             return false;
         }
         self.started = true;
-        self.assign_audio_on_open();
+        if !self.sound_assigned {
+            self.assign_audio_on_open();
+        }
         for index in 0..self.tiles.len() {
-            self.start_tile(index);
+            if self.needs_start(index) {
+                self.start_tile(index);
+            }
         }
         self.apply_audio();
         self.bump();

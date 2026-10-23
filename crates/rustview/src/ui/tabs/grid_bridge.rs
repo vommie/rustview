@@ -100,6 +100,7 @@ impl BridgeTabGrid {
         // 3. Assemble the Slint models: every tab is a Multiview, drawn as a miniature of its arrangement
         let scroll_y = window.get_tab_grid_scroll_y();
         let grid_host = GridHost::new(window, tab_manager);
+        let selection = state.read().tab_selection.clone();
 
         let slint_items: Vec<TabGridItemModel> = sessions
             .iter()
@@ -124,6 +125,7 @@ impl BridgeTabGrid {
                     format_str: s.format.default_extension().into(),
                     is_video: solo_kind == Some(TileKind::Video),
                     is_multiview: true,
+                    is_selected: selection.contains(s.id),
                     icon: tab_icon(s),
                     rating: i32::from(s.record.rating),
                     has_tags: false,
@@ -207,6 +209,7 @@ impl BridgeTabGrid {
         // Hide all other video subwindows that were mapped on TabGrid tiles
         tab_manager.hide_video_subwindows_except(Some(tab_id));
 
+        state.write().tab_selection.click_plain(tab_id);
         tab_manager.set_active_tab_internal(tab_id, true);
         window.set_active_view_mode(1);
         window.set_is_browse_active(false);

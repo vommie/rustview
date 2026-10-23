@@ -7,6 +7,7 @@ use crate::ui::selection::rubberband::RubberbandSession;
 use crate::ui::sidebar::panel_tab_dnd::SidebarPanelTabDndSession;
 use crate::ui::tabs::dnd::TabDndSession;
 use crate::ui::tabs::grid::MasonryRect;
+use crate::ui::tabs::tab_selection::TabSelection;
 use crate::viewer::TabId;
 use rustview_core::library::models::{FolderHierarchySnapshot, FolderId, MediaId, TagId};
 use rustview_core::query::MediaStore;
@@ -96,6 +97,8 @@ pub const CTX_TAB_CLOSE_TO_LEFT: CtxMenuActionId = 4007;
 pub const CTX_TAB_CLOSE_TO_RIGHT: CtxMenuActionId = 4008;
 pub const CTX_TAB_CLOSE_OTHERS: CtxMenuActionId = 4009;
 pub const CTX_TAB_OPEN_MULTIVIEW: CtxMenuActionId = 4010;
+pub const CTX_TAB_MERGE_SELECTED: CtxMenuActionId = 4011;
+pub const CTX_TAB_CLOSE_SELECTED: CtxMenuActionId = 4012;
 
 // Favorites Context Menu Action IDs
 pub const CTX_FAVORITE_OPEN_IN_FILE_MANAGER: CtxMenuActionId = 5001;
@@ -160,6 +163,8 @@ pub struct UiState {
     pub active_file_rename_target: Option<MediaId>,
     pub active_associated_apps: Vec<DesktopApp>,
     pub active_tab_dialog_target: Option<TabId>,
+    /// The tabs picked with Ctrl/Shift+click in the tab bar and the tab grid (menu entries act on them).
+    pub tab_selection: TabSelection,
     pub active_favorite_target: Option<(String, PathBuf)>,
     pub selected_favorite_path: Option<PathBuf>,
 
@@ -237,6 +242,7 @@ impl Default for UiState {
             active_file_rename_target: None,
             active_associated_apps: Vec::new(),
             active_tab_dialog_target: None,
+            tab_selection: TabSelection::default(),
             active_favorite_target: None,
             selected_favorite_path: None,
             tab_grid_columns: DEFAULT_TAB_GRID_COLUMNS,
