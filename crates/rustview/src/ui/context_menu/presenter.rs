@@ -64,6 +64,7 @@ impl CtxMenuPresenter {
             y: clamped_y,
             width: MENU_WIDTH,
             max_height: max_h,
+            height: effective_h,
             items: CtxMenuDispatcher::items_to_slint_model(&menu.items, 0),
         };
 
@@ -182,6 +183,7 @@ impl CtxMenuPresenter {
             y: new_y,
             width: MENU_WIDTH,
             max_height: max_h,
+            height: effective_h,
             items: CtxMenuDispatcher::items_to_slint_model(&children, new_depth.saturating_as::<i32>()),
         };
 
@@ -262,5 +264,24 @@ impl CtxMenuPresenter {
             };
         }
         height
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ctx_menu::CtxMenuBuilder;
+
+    #[test]
+    fn the_content_height_adds_rows_separators_header_spacing_and_padding() {
+        let menu = CtxMenuBuilder::new()
+            .header_with_tooltip("Header".to_string(), "tip".to_string())
+            .action(1, "One", None, None, true)
+            .separator()
+            .action(2, "Two", None, None, true)
+            .build();
+        // 8 padding + 22 header + 28 + 7 + 28 + 3 gaps
+        assert!((CtxMenuPresenter::calculate_items_content_height(&menu.items) - 96.0).abs() < f32::EPSILON);
+        assert!((CtxMenuPresenter::calculate_items_content_height(&[]) - 8.0).abs() < f32::EPSILON);
     }
 }

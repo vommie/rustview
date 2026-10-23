@@ -86,6 +86,8 @@ pub struct X11VideoSubwindow {
     is_visible: bool,
     is_clipped: bool,
     last_applied_local_rects: Vec<XRectangle>,
+    /// The window takes no pointer input right now (a menu is open, see `set_input_passthrough`).
+    input_passthrough: bool,
     /// An invisible cursor, created when the cursor is hidden for the first time.
     blank_cursor: Option<Cursor>,
 }
@@ -166,6 +168,7 @@ impl X11VideoSubwindow {
             is_visible: false,
             is_clipped: false,
             last_applied_local_rects: Vec::new(),
+            input_passthrough: false,
             blank_cursor: None,
         })
     }
@@ -404,6 +407,40 @@ impl X11VideoSubwindow {
             .session
             .conn
             .shape_mask(shape::SO::SET, shape::SK::BOUNDING, self.container, 0, 0, x11rb::NONE);
+    }
+
+    /// While a menu of the application is open, a click on the video must close that menu like a click anywhere else: the
+    /// window (container, subwindow and the window mpv draws in) gets an empty input shape, so the pointer events fall through to
+    /// the main window below, whose backdrop dismisses the menu. Without the shape extension nothing changes. `false` gives the
+    /// windows their normal input back.
+    pub fn set_input_passthrough(&mut self, on: bool) {
+        if !self.shape_available || self.input_passthrough == on {
+            return;
+        }
+        self.input_passthrough = on;
+        let mut windows = vec![self.container, self.subwindow];
+        windows.extend(self.descendants_of(self.subwindow));
+        let conn = &self.session.conn;
+        for window in windows {
+            if on {
+                let _ = conn.shape_rectangles(
+                    shape::SO::SET,
+                    shape::SK::INPUT,
+                    ClipOrdering::UNSORTED,
+                    window,
+                    0,
+                    0,
+                    &[],
+                );
+            } else {
+                let _ = conn.shape_mask(shape::SO::SET, shape::SK::INPUT, window, 0, 0, x11rb::NONE);
+            }
+        }
+        self.session.flush();
+        tracing::debug!(
+            on,
+            "[X11VideoSubwindow: Input] Pointer input of the video window changed"
+        );
     }
 
     /// Hides or shows the mouse cursor over this video window, whatever mpv does with its own cursor. The invisible cursor is

@@ -35,8 +35,10 @@ impl ViewerTabManager {
                 return;
             }
         }
+        let open = !cutouts.is_empty();
         *self.active_menu_cutouts.write() = cutouts;
         self.apply_combined_cutouts_to_all_subwindows();
+        self.apply_menu_open_to_all_subwindows(open);
     }
 
     /// Clears active context menu cutouts with deduplication.
@@ -49,6 +51,15 @@ impl ViewerTabManager {
             writer.clear();
         }
         self.apply_combined_cutouts_to_all_subwindows();
+        self.apply_menu_open_to_all_subwindows(false);
+    }
+
+    /// Whether the video windows let the pointer through (a menu is open) in every tab.
+    fn apply_menu_open_to_all_subwindows(&self, open: bool) {
+        let tabs = self.tabs.read();
+        for tab in tabs.all() {
+            tab.set_menu_open(open);
+        }
     }
 
     /// Updates active tooltip cutouts (Z: 200) with deduplication.

@@ -21,6 +21,11 @@ impl MediaTabSession {
         self.multiview.instance.lock().set_overlay_cutouts(cutouts);
     }
 
+    /// A menu of the application opens or closes: the video windows of the tab take no pointer input while it is open.
+    pub fn set_menu_open(&self, open: bool) {
+        self.multiview.instance.lock().set_menu_open(open);
+    }
+
     /// The tab is closed: playback stops and the windows disappear. Memory is released by the last owner of the instance.
     pub fn stop_native(&self) {
         self.multiview.instance.lock().stop_and_hide();

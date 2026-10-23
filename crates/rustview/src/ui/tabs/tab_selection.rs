@@ -1,8 +1,9 @@
 //! The multi-selection of tabs in the tab bar and the tab grid (pure, no Slint).
 //!
 //! Ctrl+click toggles a tab, Shift+click selects the range from the anchor to the clicked tab (with Ctrl it is added to the
-//! selection), a plain click activates the tab and drops the selection. The anchor is the tab the last click went to. The active
-//! tab is selected only when the user selects it, so what is highlighted is exactly what the menu entries act on.
+//! selection), a plain click activates the tab and drops the selection. The anchor is the tab the last click went to. A
+//! selection that starts with a Ctrl or Shift click in the tab view contains the tab on screen as its first member (`click_from_shown`);
+//! in the Browse view and the tab grid no tab counts as shown. What is highlighted is exactly what the menu entries act on.
 
 use crate::viewer::TabId;
 
@@ -37,6 +38,28 @@ impl TabSelection {
     /// The selected tabs in the order of `order` (the tab bar); tabs that are not in `order` are left out.
     pub fn in_order(&self, order: &[TabId]) -> Vec<TabId> {
         order.iter().copied().filter(|id| self.contains(*id)).collect()
+    }
+
+    /// A Ctrl/Shift click on `tab` while the tab `shown` is the one on screen: starting a selection, the shown tab is its first
+    /// member (the user selects "a second tab" to go with the one they are looking at). With a selection already, or without a
+    /// shown tab (Browse view, tab grid), it is `click` as it is.
+    pub fn click_from_shown(
+        &mut self,
+        order: &[TabId],
+        shown: Option<TabId>,
+        tab: TabId,
+        ctrl: bool,
+        shift: bool,
+    ) -> bool {
+        if let Some(shown) = shown.filter(|id| (ctrl || shift) && self.selected.is_empty() && order.contains(id)) {
+            self.selected.push(shown);
+            self.anchor = Some(shown);
+            if tab == shown {
+                // Ctrl+click on the shown tab itself: it is the selection (toggling it off again would select nothing)
+                return true;
+            }
+        }
+        self.click(order, tab, ctrl, shift)
     }
 
     /// A click on `tab`. Returns whether the set of selected tabs changed.
@@ -228,6 +251,42 @@ mod tests {
         assert_eq!(selection.context_menu(15), (MenuTarget::Tab, true));
         assert!(selection.is_empty());
         assert_eq!(selection.context_menu(15), (MenuTarget::Tab, false));
+    }
+
+    #[test]
+    fn the_shown_tab_is_the_first_member_of_a_selection_that_starts_with_a_ctrl_click() {
+        let mut selection = TabSelection::default();
+        assert!(selection.click_from_shown(&ORDER, Some(11), 14, true, false));
+        assert_eq!(selected(&selection), vec![11, 14]);
+        // the selection exists now: further clicks do not add the shown tab again, and it can be toggled off
+        selection.click_from_shown(&ORDER, Some(11), 12, true, false);
+        assert_eq!(selected(&selection), vec![11, 12, 14]);
+        selection.click_from_shown(&ORDER, Some(11), 11, true, false);
+        assert_eq!(selected(&selection), vec![12, 14]);
+    }
+
+    #[test]
+    fn ctrl_clicking_the_shown_tab_alone_selects_just_that_tab() {
+        let mut selection = TabSelection::default();
+        selection.click_from_shown(&ORDER, Some(12), 12, true, false);
+        assert_eq!(selected(&selection), vec![12]);
+    }
+
+    #[test]
+    fn a_shift_click_selects_the_range_from_the_shown_tab() {
+        let mut selection = TabSelection::default();
+        selection.click_from_shown(&ORDER, Some(11), 14, false, true);
+        assert_eq!(selected(&selection), vec![11, 12, 13, 14]);
+    }
+
+    #[test]
+    fn without_a_shown_tab_nothing_is_added() {
+        let mut selection = TabSelection::default();
+        selection.click_from_shown(&ORDER, None, 13, true, false);
+        assert_eq!(selected(&selection), vec![13]);
+        let mut selection = TabSelection::default();
+        selection.click_from_shown(&ORDER, Some(99), 13, true, false);
+        assert_eq!(selected(&selection), vec![13], "a tab that does not exist is ignored");
     }
 
     #[test]

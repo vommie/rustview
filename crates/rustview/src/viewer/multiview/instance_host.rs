@@ -203,6 +203,14 @@ impl MultiviewInstance {
         self.apply_all_cutouts();
     }
 
+    /// A menu of the application is open (or closed again): the video windows let the pointer through to the main window while
+    /// it is, so that a click anywhere closes the menu (see `X11VideoSubwindow::set_input_passthrough`).
+    pub fn set_menu_open(&mut self, open: bool) {
+        for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
+            video.window.set_input_passthrough(open);
+        }
+    }
+
     /// The host rectangle of the video window of tile `index`.
     pub(super) fn host_content(&self, index: usize) -> Option<Rect> {
         self.layout

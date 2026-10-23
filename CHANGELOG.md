@@ -9,6 +9,16 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Fixed
+- **Selecting a second tab with Ctrl+click now selects two tabs:** a selection that starts with a Ctrl or Shift click in the tab view includes the tab you are looking at, so the
+  menu of the clicked tab is the one for several tabs (Merge/Close Selected Tabs) and not the single-tab menu. In the Browse view and the tab grid nothing is added implicitly.
+- **Menus over a video no longer leave a black hole:** the video was cut out in the full maximum height of a menu (70 % of the window) instead of its real height, so a short menu
+  showed a black area below it (also in 0.3.84 and 0.3.85).
+- **A menu over a video closes with a click on the video** (and anywhere else): while a menu is open the native video windows let the pointer through to the main window, where
+  the click closes the menu. Before, the video swallowed the click and only a click outside the video closed it.
+
+No migration.
+
 ## [0.3.85] - 2026-10-23
 
 ### Added

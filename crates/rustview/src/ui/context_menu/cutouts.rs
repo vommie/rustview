@@ -31,7 +31,8 @@ pub fn calculate_all_active_menu_cutouts(window: &MainWindow) -> Vec<XRectangle>
 
     for i in 0..count {
         if let Some(lvl) = levels.row_data(i) {
-            let h = lvl.max_height;
+            // The menu is only as high as its content: cutting out the maximum height would leave a black hole below it.
+            let h = lvl.height.min(lvl.max_height);
             let cutouts = make_rounded_cutout_rectangles(lvl.x, lvl.y, lvl.width, h, scale);
             all_cutouts.extend(cutouts);
         }

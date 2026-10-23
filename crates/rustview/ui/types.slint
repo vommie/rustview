@@ -117,6 +117,8 @@ export struct ContextMenuLevelModel {
     y: length,
     width: length,
     max_height: length,
+    /// The height the level really has (its content, at most `max_height`): the video windows are cut out exactly there.
+    height: length,
     items: [ContextMenuItemModel],
 }
 

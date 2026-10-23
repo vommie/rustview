@@ -54,9 +54,15 @@ impl BridgeViewerTabs {
         shift: bool,
     ) {
         let order: Vec<TabId> = tab_manager.list_tabs().iter().map(|t| t.id).collect();
+        // Only the tab view shows a tab (Browse and the tab grid have none that counts)
+        let shown = if window.get_active_view_mode() == 1 {
+            tab_manager.active_tab_id()
+        } else {
+            None
+        };
         let selected = {
             let mut st = state.write();
-            st.tab_selection.click(&order, tab_id, ctrl, shift);
+            st.tab_selection.click_from_shown(&order, shown, tab_id, ctrl, shift);
             st.tab_selection.len()
         };
         tracing::debug!(
