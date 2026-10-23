@@ -55,6 +55,9 @@ pub fn after_export(context: &EditContext, window: &MainWindow, source_id: Media
                 .current_folder_path
                 .as_deref()
                 .is_some_and(|current| rustview_core::library::file_operations::is_same_file_path(current, folder));
+            // The folder counts of the tree come from the folder snapshot: it is read again with the new count.
+            app.state.write().invalidate_folder_hierarchy();
+            crate::ui::folder_tree::BridgeFolders::reload_tree(window, &app.library, &app.settings, &app.state);
             if shown {
                 // The folder is listed: a reload shows the new medium and its thumbnail is made by the folder pipeline.
                 BridgeMedia::reload(

@@ -1,7 +1,7 @@
 # Maintainer: vommie
 # Packs the release binary that build-package.sh has just built (target/release/rustview); the version is synchronized from Cargo.toml.
 pkgname=rustview
-pkgver=0.3.86
+pkgver=0.3.87
 pkgrel=1
 pkgdesc='Fast image and video browser with folders, tags and ratings (Rust, Slint, FFmpeg, mpv)'
 arch=('x86_64')

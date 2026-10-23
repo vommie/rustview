@@ -17,6 +17,10 @@ Slint user interface; videos play through the embedded mpv player and most forma
 - **Multiview:** up to four images or videos side by side in a fullscreen, or as a tab. Tiles follow your selection, can be pinned
   ("sticky"), swapped, duplicated and resized with gutters; every tile has a media action bar and **zoom** for images (slider, `Ctrl` + wheel,
   minimap).
+- **Crop pictures** in the Multiview: a modern crop tool with live pixel size, aspect-ratio presets (left click landscape, right click portrait, O = original,
+  Shift keeps the ratio) that works at every zoom; Undo/Redo, and Save that keeps quality (lossless JPEG crops on the block grid, the file's own quality
+  otherwise, lossless formats stay lossless, EXIF/ICC/XMP kept) and never damages the original (written completely and checked first, conflicts are asked
+  about). Save As exports to JPEG, PNG, WebP, AVIF, TIFF or BMP with their options; formats RustView only reads are saved that way.
 - **Tabs and tab grid:** open media in tabs and see them all in a masonry grid; a lone medium fills the whole tab. Select tabs with Ctrl/Shift+click
   and **merge** them into one Multiview tab (videos keep playing), or merge a tab with its neighbors from its menu.
 - **Formats:** 47 image and video formats (JPEG, PNG, WebP, AVIF, HEIC, TIFF, GIF, SVG, EXR, MP4, MKV, WebM, raw H.264/HEVC, ... see

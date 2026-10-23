@@ -188,6 +188,10 @@ impl MultiviewInstance {
             .map(|t| t.key)
             .collect();
         self.crop_order.retain(|key| open.contains(&key));
+        // Tiles that came with an open tool (a merge of tabs moves tiles with their edits) join the order at its end.
+        for key in open {
+            self.crop_order.opened(key);
+        }
     }
 
     /// An edit with nothing left to do (no tool, no unsaved changes, no save running) goes away and frees the medium.

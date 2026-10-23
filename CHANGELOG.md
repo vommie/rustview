@@ -9,6 +9,35 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+- **Crop pictures** in every Multiview (fullscreen and tab): the media bar of an image has a **Crop** button. The crop tool draws a rectangle over the picture with
+  corner and edge handles, the picture outside it dimmed and rule-of-thirds lines while you drag. Top left it shows the size of the crop in pixels of the picture
+  (e.g. "893 x 1116 px"), top right a small **ratio button**: a left click goes through the landscape ratios, a right click through the portrait ones, **O** is the
+  picture's own ratio, "Free" means no ratio. **Shift** while resizing keeps the ratio; drag inside to move, drag outside to draw a new rectangle. It works at every
+  zoom (a zoomed picture starts with the part you see; the middle button pans, Ctrl + wheel and the minimap keep working). **Double click or Enter** applies the crop;
+  nothing is written yet. **Esc** cancels the crop tool that was opened first (with several open, one after the other) before it does anything else, also from a
+  video's window. Animated and multi-page pictures cannot be cropped (the button says why); a picture can only be edited in one view at a time.
+- **Undo, Redo and Save** appear in the media bar while a picture has unsaved changes (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, Ctrl+S), and a dot marks its tab. The
+  **Save** button is emphasized; its arrow offers **Save As...** (Ctrl+Shift+S) and **Discard Changes**. After saving it turns grey and fades away.
+- **Saving keeps quality and data safe.** Save overwrites the original in its own format: a JPEG crop that starts on the 8/16 pixel blocks is cut out without
+  any loss (like jpegtran), any other is encoded with the file's own quantization tables; PNG keeps its palette and bit depth, WebP stays lossless or lossy,
+  a still GIF keeps its colors, TIFF its 16 bits. EXIF, ICC profile and XMP are kept (EXIF gets the new size, its stale preview is dropped). The file is written
+  completely to a temporary file, read back and only then put in place; if it changed on disk since it was opened you are asked (Overwrite Anyway, Save As
+  Copy, Discard & Reload, Cancel). Read-only files are never overwritten. Afterwards the library record, the hash and the thumbnail are refreshed and every view
+  of the picture shows the new file.
+- **Save As / export dialog:** name, folder, format (JPEG, PNG, WebP, AVIF, TIFF, BMP) and its few options (quality, chroma subsampling, progressive, compression,
+  lossless, AVIF speed), with a warning when a format loses something (transparency, 16 bits, metadata). Formats RustView reads but cannot write (HEIC, SVG,
+  PSD, JPEG XL, JPEG 2000, EXR, ...) are saved through it. A copy in a library folder joins the library at once with the rating and tags of the original; the
+  dialog remembers the last format and options.
+- **No unsaved picture is lost unasked:** closing the fullscreen, closing tabs (also left/right/others/all/selected and from the tab grid), removing a tile, paging
+  to another picture or following another selection first lists the pictures with unsaved changes, one checkbox each (save or discard), then Apply or Cancel.
+  Quitting the application does not ask (the files are never touched by unsaved edits).
+- **Settings > Image Edit:** the crop ratios (chips with their orientation, add, remove, defaults), the rule-of-thirds lines, "Keep JPEG crops lossless" (the
+  rectangle snaps to the JPEG blocks), how the original is replaced (**safe**: a backup until the new file is in place, default; **to the trash**; **directly**)
+  and the presets of JPEG, PNG, WebP, AVIF and TIFF. Settings > Fullscreen has a switch for the Crop button.
+
+No migration: the new settings are additive and older settings files keep working.
+
 ## [0.3.86] - 2026-10-23
 
 ### Fixed

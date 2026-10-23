@@ -189,3 +189,23 @@ Policy checks (unit tests, removed at finalization): a refresh keeps
 records of a switched-off format and does not mark them missing, counts move with the switches and return exactly, rename
 into a switched-off format moves the count, repository reads and searches skip hidden formats, the format table never
 disagrees with the stored enum order, `.ts` sources are not taken.
+
+
+## Editing (crop and save)
+
+Which pictures the editor can crop and how they are saved (decided by `rustview_core::image_edit::formats::save_support` from the content of the file, not
+its extension; checked against every sample of the test environment by `crates/rustview-core/tests/image_edit_formats.rs`):
+
+| Saved over the original | How |
+|---|---|
+| JPEG (`.jpg .jpeg .jpe .jfif .jif`, also CMYK and grayscale) | lossless when the crop starts on the 8/16 px block grid (CMYK always), else re-encoded with the file's own quantization tables and sampling; EXIF/ICC/XMP kept |
+| PNG (8/16 bit, palette, alpha) | lossless; a palette PNG keeps palette, transparency table and bit depth; ancillary chunks kept |
+| WebP (still) | lossless stays lossless; lossy uses the WebP preset quality; ICC/EXIF/XMP kept |
+| AVIF (opaque, 8 bit) | re-encoded with the AVIF presets (rav1e) |
+| TIFF (single page, 8/16 bit) | lossless with the TIFF preset compression; ICC and XMP kept |
+| BMP/DIB, still GIF (palette kept), QOI, TGA, Farbfeld | lossless |
+
+| Not overwritten | |
+|---|---|
+| HEIC/HEIF, SVG, PSD, JPEG XL, JPEG 2000, EXR, HDR, DDS, ICO, PNM family, DPX, PCX, SGI, Sun Raster, XBM, XPM, XWD, WBMP, AVIF with alpha or more than 8 bits | Save opens the export dialog (a new file) |
+| Animated GIF/APNG/WebP, AVIF sequences, multi-page TIFF | cannot be cropped (the editor shows only the first frame) |

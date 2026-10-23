@@ -280,7 +280,7 @@ export component SettingsPageImageEdit inherits VerticalLayout {
             tooltip: "What happens to the original file when an edited picture is saved over it.";
 
             ComboBox {
-                width: 190px;
+                width: 230px;
                 model: ["Safe (temporary backup)", "Original to the trash", "Replace directly"];
                 current-index <=> root.overwrite-mode-idx;
             }
