@@ -13,7 +13,7 @@ use rustview_core::settings::{LogObscurer, SettingsManager};
 use rustview_core::thumbnails::ThumbnailManager;
 use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -303,7 +303,7 @@ impl BridgeFolders {
 
     pub fn refresh_folder_metadata_only(
         folder_id: FolderId,
-        path: &PathBuf,
+        path: &Path,
         window: &MainWindow,
         library: &Arc<Library>,
         thumbnails: &Arc<ThumbnailManager>,

@@ -153,7 +153,7 @@ impl UiBridge {
                         let mut st = state.write();
                         st.max_history_tags = new_clone.tags.max_history_tags;
                         st.is_tag_history_collapsed = new_clone.tags.is_history_collapsed;
-                        st.tag_history_ids = new_clone.tags.history_tag_ids.clone();
+                        st.tag_history_ids.clone_from(&new_clone.tags.history_tag_ids);
                         st.tag_history_height = new_clone.tags.history_height;
                     }
                     window.set_tag_history_height(new_clone.tags.history_height);

@@ -69,7 +69,7 @@ impl MultiviewInstance {
         }
         let mut relayout = false;
         for tile in self.tiles.iter_mut().filter(|t| t.media_id == id) {
-            tile.filename = record.filename.clone();
+            tile.filename.clone_from(&record.filename);
             if tile.aspect_source == AspectSource::Library {
                 let aspect = aspect_from_size(record.width, record.height, tile.aspect);
                 if aspect_differs(aspect, tile.aspect) {

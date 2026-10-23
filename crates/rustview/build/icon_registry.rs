@@ -277,8 +277,14 @@ fn render_rust_impl(entries: &[IconEntry]) -> String {
             lookup.insert(alias.replace('-', "_"), variant.clone());
         }
     }
+    // One arm per icon, with the id and all aliases as alternatives.
+    let mut by_variant: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for (name, variant) in &lookup {
-        let _ = writeln!(out, "            {name:?} => Some({variant}),");
+        by_variant.entry(variant.as_str()).or_default().push(name.as_str());
+    }
+    for (variant, names) in &by_variant {
+        let patterns: Vec<String> = names.iter().map(|name| format!("{name:?}")).collect();
+        let _ = writeln!(out, "            {} => Some({variant}),", patterns.join(" | "));
     }
     out.push_str("            _ => None,\n        }\n    }\n\n");
     out.push_str("    /// Converts to the Slint enum used by `AppIcon`.\n");

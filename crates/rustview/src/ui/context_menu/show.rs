@@ -113,7 +113,7 @@ impl BridgeContextMenu {
         {
             let mut st = state.write();
             st.active_tab_dialog_target = Some(tab_id);
-            st.active_associated_apps = associated_apps.clone();
+            st.active_associated_apps.clone_from(&associated_apps);
         }
 
         let menu = TabContextMenu::build_menu(tab, tab_idx, total_tabs, &tabs, &associated_apps, is_busy);

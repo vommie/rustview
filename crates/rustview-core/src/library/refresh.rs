@@ -216,11 +216,8 @@ impl<'a> FolderRefresher<'a> {
                 return Ok(report);
             }
 
-            let fs_meta = match std::fs::metadata(&scanned.path) {
-                Ok(m) => m,
-                Err(_) => {
-                    continue;
-                }
+            let Ok(fs_meta) = std::fs::metadata(&scanned.path) else {
+                continue;
             };
 
             let file_size = fs_meta.len();
@@ -684,9 +681,8 @@ impl<'a> FolderRefresher<'a> {
     /// Appends the detected extension to extensionless media files. Files of a switched-off format are left alone: a
     /// disabled format is not handled in any way.
     fn auto_detect_and_fix_extensionless(folder_path: &Path, mask: FormatMask, cancel_flag: Option<&AtomicBool>) {
-        let entries = match std::fs::read_dir(folder_path) {
-            Ok(e) => e,
-            Err(_) => return,
+        let Ok(entries) = std::fs::read_dir(folder_path) else {
+            return;
         };
 
         for entry in entries.flatten() {
@@ -696,10 +692,7 @@ impl<'a> FolderRefresher<'a> {
                 break;
             }
 
-            let file_type = match entry.file_type() {
-                Ok(ft) => ft,
-                Err(_) => continue,
-            };
+            let Ok(file_type) = entry.file_type() else { continue };
 
             if !file_type.is_file() {
                 continue;

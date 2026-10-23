@@ -88,9 +88,7 @@ impl FolderDiagnostics {
         let mut seen_path_hashes: HashSet<u64> = HashSet::new();
 
         for entry in db.folders.iter(&rtxn)? {
-            let (id, rec) = if let Ok(v) = entry {
-                v
-            } else {
+            let Ok((id, rec)) = entry else {
                 report.undecodable_folders += 1;
                 continue;
             };

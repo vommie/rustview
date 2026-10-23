@@ -250,7 +250,7 @@ impl<'a> FileOperations<'a> {
             FolderManager::adjust_folder_media_count_txn(self.db, &mut wtxn, record.folder_id, step)?;
         }
 
-        record.filename = paths.validated_name.clone();
+        record.filename.clone_from(&paths.validated_name);
         record.format = format;
         record.is_deleted = false;
 
@@ -601,7 +601,7 @@ impl<'a> FileOperations<'a> {
         }
 
         source_record.folder_id = target_folder_id;
-        source_record.filename = validated_name.clone();
+        source_record.filename.clone_from(&validated_name);
         source_record.is_deleted = false;
         self.db.media.put(&mut wtxn, &media_id, &source_record)?;
 

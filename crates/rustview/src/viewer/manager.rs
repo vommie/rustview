@@ -317,9 +317,8 @@ impl ViewerTabManager {
     }
 
     pub fn move_tab_left(&self, tab_id: TabId) -> bool {
-        let pos = match self.get_tab_index(tab_id) {
-            Some(p) => p,
-            None => return false,
+        let Some(pos) = self.get_tab_index(tab_id) else {
+            return false;
         };
         if pos > 0 { self.move_tab(tab_id, pos - 1) } else { false }
     }
@@ -330,9 +329,8 @@ impl ViewerTabManager {
     }
 
     pub fn move_tab_right(&self, tab_id: TabId) -> bool {
-        let pos = match self.get_tab_index(tab_id) {
-            Some(p) => p,
-            None => return false,
+        let Some(pos) = self.get_tab_index(tab_id) else {
+            return false;
         };
         let count = self.tab_count();
         if pos + 1 < count {
@@ -644,9 +642,7 @@ impl ViewerTabManager {
     /// Shows `media_id` in the one tile of the active tab (previous/next of the tab toolbar). The tab keeps its title. Fails for a
     /// tab of several media.
     pub fn navigate_active_tab_to_media(&self, media_id: MediaId) -> Result<TabId, ViewerError> {
-        let active_id = if let Some(id) = *self.active_tab_id.read() {
-            id
-        } else {
+        let Some(active_id) = *self.active_tab_id.read() else {
             let (id, _) = self.open_or_focus_media(media_id, false)?;
             return Ok(id);
         };

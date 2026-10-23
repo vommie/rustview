@@ -154,7 +154,9 @@ impl UiBridge {
         };
         initial_state.expanded_folder_ids = restored_expanded_folders.into_iter().collect();
 
-        initial_state.tag_history_ids = settings.get().tags.history_tag_ids.clone();
+        initial_state
+            .tag_history_ids
+            .clone_from(&settings.get().tags.history_tag_ids);
         initial_state.max_history_tags = settings.get().tags.max_history_tags;
         initial_state.is_tag_history_collapsed = settings.get().tags.is_history_collapsed;
         initial_state.tag_history_height = settings.get().tags.history_height;

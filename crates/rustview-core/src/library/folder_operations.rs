@@ -185,9 +185,8 @@ impl<'a> FolderOperations<'a> {
             .ok_or(LibraryError::FolderNotFound(folder_id))?;
 
         let old_path = PathBuf::from(&record.path);
-        let parent_path = match old_path.parent() {
-            Some(p) => p,
-            None => return Ok(None),
+        let Some(parent_path) = old_path.parent() else {
+            return Ok(None);
         };
 
         let new_path = parent_path.join(&valid_name);
@@ -289,7 +288,7 @@ impl<'a> FolderOperations<'a> {
 
             rec.path = updated_p_str;
             if id == folder_id {
-                rec.name = valid_name.clone();
+                rec.name.clone_from(&valid_name);
                 record = rec.clone();
             }
             self.db.folders.put(&mut wtxn, &id, &rec)?;

@@ -58,7 +58,7 @@ impl DeleteFileDialogController {
             for (idx, &id) in media_ids.iter().enumerate() {
                 if let Some(item) = st.all_folder_media.find(id) {
                     if idx == 0 {
-                        name = item.record.filename.clone();
+                        name.clone_from(&item.record.filename);
                     }
                     // Flagged by a refresh, or gone from the drive since (the same test the combined dialog makes).
                     if item.record.is_deleted || !item.full_path().exists() {
@@ -66,14 +66,14 @@ impl DeleteFileDialogController {
                     }
                 } else if let Ok(Some(rec)) = ctx.library.media().get(id) {
                     if idx == 0 {
-                        name = rec.filename.clone();
+                        name.clone_from(&rec.filename);
                     }
                     if rec.is_deleted || ctx.library.resolve_media_path(id).is_ok_and(|p| !p.exists()) {
                         missing += 1;
                     }
                 } else if let Some(tab) = ctx.tab_manager.get_tab_by_media_id(id) {
                     if idx == 0 {
-                        name = tab.filename.clone();
+                        name.clone_from(&tab.filename);
                     }
                     if !tab.file_path.exists() {
                         missing += 1;

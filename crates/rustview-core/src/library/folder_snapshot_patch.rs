@@ -330,7 +330,7 @@ mod tests {
                 parent_node.children.push(r.id);
             }
         }
-        for (id, node) in snap.nodes.iter() {
+        for (id, node) in &snap.nodes {
             if !node.children.is_empty() {
                 snap.children_map.insert(Some(*id), node.children.clone());
             }
@@ -371,7 +371,7 @@ mod tests {
 
         assert_eq!(stats.removed_nodes, 2);
         assert_eq!(stats.inserted_nodes, 2);
-        assert!(snap.get_children(Some(2)).is_empty());
+        assert_eq!(snap.get_children(Some(2)), [] as [u64; 0]);
         assert_eq!(snap.nodes[&4].parent_id, Some(3));
         assert!(snap.path_index.contains_key(&PathBuf::from("/r/b/mm/y")));
         assert!(!snap.path_index.contains_key(&PathBuf::from("/r/a/mm")));

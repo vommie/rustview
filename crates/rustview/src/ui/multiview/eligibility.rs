@@ -13,6 +13,7 @@ use rustview_core::library::models::MediaId;
 use rustview_core::media::MediaType;
 use rustview_core::query::filters::IndexedMediaRecord;
 use rustview_core::settings::schema::{MULTIVIEW_FALLBACK_ASPECT, MULTIVIEW_MAX_TILES};
+use std::fmt::Write as _;
 
 /// What the context menu needs without resolving any tile (cheap, `Copy`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -51,13 +52,15 @@ impl OpenSummary {
             format!("Show {} media side by side in one fullscreen window", self.shown())
         };
         if self.playable > MULTIVIEW_MAX_TILES {
-            text.push_str(&format!(" (only the first {MULTIVIEW_MAX_TILES} in view order)"));
+            let _ = write!(text, " (only the first {MULTIVIEW_MAX_TILES} in view order)");
         }
         let skipped = self.selected - self.playable;
         match skipped {
             0 => {}
             1 => text.push_str(" (1 selected file is skipped)"),
-            n => text.push_str(&format!(" ({n} selected files are skipped)")),
+            n => {
+                let _ = write!(text, " ({n} selected files are skipped)");
+            }
         }
         text
     }

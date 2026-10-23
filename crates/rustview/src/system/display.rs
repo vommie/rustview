@@ -1,6 +1,7 @@
 use parking_lot::RwLock;
 use rustview_core::settings::FullscreenSettings;
 use rustview_core::util::cast::{FloatToInt, SaturatingAs};
+use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -34,12 +35,12 @@ impl MonitorInfo {
     pub fn display_name(&self) -> String {
         let mut name = format!("{}: {}", self.index + 1, self.connector);
         if !self.model.is_empty() && self.model != self.connector {
-            name.push_str(&format!(" ({})", self.model));
+            let _ = write!(name, " ({})", self.model);
         }
         if self.width > 0 && self.height > 0 {
-            name.push_str(&format!(" - {}x{}", self.width, self.height));
+            let _ = write!(name, " - {}x{}", self.width, self.height);
             if self.refresh_rate > 0 {
-                name.push_str(&format!(" @ {}Hz", self.refresh_rate));
+                let _ = write!(name, " @ {}Hz", self.refresh_rate);
             }
         }
         if self.is_primary {

@@ -48,7 +48,7 @@ impl MediaOpenWith {
     /// list is what `launch` takes afterwards.
     pub fn discover_apps(state: &RwLock<UiState>, path: &Path) -> Vec<DesktopApp> {
         let apps = DesktopIntegration::get_associated_apps(path);
-        state.write().active_associated_apps = apps.clone();
+        state.write().active_associated_apps.clone_from(&apps);
         apps
     }
 

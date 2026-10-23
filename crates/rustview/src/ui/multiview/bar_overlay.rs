@@ -608,7 +608,7 @@ impl Overlay {
             return false;
         };
         // A bar that gives feedback shows without the pointer, but never while the user works in another window.
-        if !in_front && !(request.forced && self.host_active(request.host_xid)) {
+        if !(in_front || request.forced && self.host_active(request.host_xid)) {
             self.hide();
             return false;
         }

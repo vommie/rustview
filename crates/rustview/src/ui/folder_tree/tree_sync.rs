@@ -211,9 +211,9 @@ mod tests {
     fn row(id: i32, depth: i32) -> FolderNodeView {
         FolderNodeView {
             id,
-            name: format!("folder{}", id).into(),
+            name: format!("folder{id}").into(),
             depth,
-            path: format!("/r/{}", id).into(),
+            path: format!("/r/{id}").into(),
             has_children: false,
             is_expanded: false,
             is_selected: false,

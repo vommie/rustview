@@ -461,7 +461,7 @@ mod tests {
             id,
             parent_id: parent,
             name: name.to_string(),
-            path: format!("/r/{}", name),
+            path: format!("/r/{name}"),
             depth: 0,
             is_hidden: hidden,
             is_deleted: false,

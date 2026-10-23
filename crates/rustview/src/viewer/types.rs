@@ -110,7 +110,7 @@ impl MediaTabSession {
     /// Makes the scalar fields describe the one medium of the tab.
     pub fn set_solo_identity(&mut self, record: MediaRecord, file_path: PathBuf) {
         self.media_id = record.id;
-        self.filename = record.filename.clone();
+        self.filename.clone_from(&record.filename);
         self.format = record.format;
         self.file_path = file_path;
         self.record = record;

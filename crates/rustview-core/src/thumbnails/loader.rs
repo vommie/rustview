@@ -509,10 +509,7 @@ impl ThumbnailScheduler {
                 q.pop_front()
             };
 
-            let target = match target {
-                Some(t) => t,
-                None => break,
-            };
+            let Some(target) = target else { break };
 
             if self.is_pipeline_stale(pipeline_id) {
                 break;

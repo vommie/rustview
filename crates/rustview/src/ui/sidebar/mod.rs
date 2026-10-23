@@ -82,7 +82,7 @@ impl BridgeSidebarPanelTabs {
             );
             {
                 let mut st = st_sel.write();
-                st.active_sidebar_panel_tab = id_str.clone();
+                st.active_sidebar_panel_tab.clone_from(&id_str);
                 if id_str == "favorites" {
                     st.last_active_panel = LastActivePanel::Favorite;
                 } else if id_str == "folders" {

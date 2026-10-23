@@ -1,5 +1,6 @@
 use rustview_core::library::models::{TagId, TagRecord};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 
 /// Dedicated manager for operations on the Tag History collection.
 pub struct TagHistoryManager;
@@ -56,7 +57,7 @@ impl TagHistoryManager {
                     tree_repr.push_str(name);
                 } else {
                     let indent = "   ".repeat(idx.saturating_sub(1));
-                    tree_repr.push_str(&format!("\n{indent}`-- {name}"));
+                    let _ = write!(tree_repr, "\n{indent}`-- {name}");
                 }
             }
 

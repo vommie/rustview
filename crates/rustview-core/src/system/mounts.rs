@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn skips_malformed_lines() {
-        assert!(parse("too short\n\n").is_empty());
+        assert_eq!(parse("too short\n\n"), [] as [std::path::PathBuf; 0]);
     }
 
     #[test]

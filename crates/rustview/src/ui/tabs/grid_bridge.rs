@@ -1,3 +1,4 @@
+use crate::ui::MultiviewScreenView;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::multiview::grid_host::{GridHost, GridItemView};
 use crate::ui::state::UiState;
@@ -92,7 +93,7 @@ impl BridgeTabGrid {
 
         {
             let mut st = state.write();
-            st.cached_tab_grid_rects = rects.clone();
+            st.cached_tab_grid_rects.clone_from(&rects);
             st.cached_tab_grid_total_h = total_h;
         }
 
@@ -111,7 +112,7 @@ impl BridgeTabGrid {
                     || GridItemView {
                         tiles: Vec::new(),
                         gutters: Vec::new(),
-                        screen: Default::default(),
+                        screen: MultiviewScreenView::default(),
                     },
                     |host| host.place(&s.multiview.instance, canvas_rect(r, p_h, p_v, scroll_y)),
                 );
@@ -308,7 +309,7 @@ impl BridgeTabGrid {
 
             {
                 let mut st = state.write();
-                st.cached_tab_grid_rects = rects.clone();
+                st.cached_tab_grid_rects.clone_from(&rects);
                 st.cached_tab_grid_total_h = total_h;
             }
 

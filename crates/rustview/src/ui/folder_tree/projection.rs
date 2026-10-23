@@ -19,7 +19,7 @@ pub struct FolderTreeFlattenFilter<'a> {
 
 #[inline]
 fn is_node_visible(node: &CachedFolderNode, show_deleted: bool, show_hidden: bool) -> bool {
-    !(node.is_deleted && !show_deleted) && !(node.is_hidden && !show_hidden)
+    !node.is_deleted || show_deleted && !node.is_hidden || show_hidden
 }
 
 /// UI projections of the folder hierarchy snapshot (extension of the library type, which knows nothing about the UI).

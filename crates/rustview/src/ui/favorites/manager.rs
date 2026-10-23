@@ -113,7 +113,7 @@ impl FavoriteManager {
     }
 
     /// Adds a directory path to favorites with an optional custom alias.
-    pub fn add(&mut self, path: &PathBuf, alias: Option<String>) -> Result<FavoriteEntry, String> {
+    pub fn add(&mut self, path: &Path, alias: Option<String>) -> Result<FavoriteEntry, String> {
         let normalized = normalize_path(path);
         if self.has_path(&normalized) {
             return Err(format!("Folder '{}' is already in your favorites", path.display()));

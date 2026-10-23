@@ -39,7 +39,7 @@ impl BridgeTagHistory {
 
         {
             let mut st = state.write();
-            st.tag_history_ids = history_ids.clone();
+            st.tag_history_ids.clone_from(&history_ids);
             st.max_history_tags = max_items;
             st.is_tag_history_collapsed = is_collapsed;
             st.tag_history_height = history_height;
@@ -276,7 +276,7 @@ impl BridgeTagHistory {
             let mut st = state.write();
             TagHistoryManager::record_tag_used(&mut st.tag_history_ids, tag_id, max_items);
             let mut app_settings = settings.get();
-            app_settings.tags.history_tag_ids = st.tag_history_ids.clone();
+            app_settings.tags.history_tag_ids.clone_from(&st.tag_history_ids);
             settings.save_quiet_async(&app_settings);
         }
 
@@ -312,7 +312,7 @@ impl BridgeTagHistory {
         TagHistoryManager::record_tag_used(&mut st.tag_history_ids, tag_id, max_items);
 
         let mut app_settings = settings.get();
-        app_settings.tags.history_tag_ids = st.tag_history_ids.clone();
+        app_settings.tags.history_tag_ids.clone_from(&st.tag_history_ids);
         settings.save_quiet_async(&app_settings);
     }
 
@@ -322,7 +322,7 @@ impl BridgeTagHistory {
         TagHistoryManager::prune_tags(&mut st.tag_history_ids, deleted_ids);
 
         let mut app_settings = settings.get();
-        app_settings.tags.history_tag_ids = st.tag_history_ids.clone();
+        app_settings.tags.history_tag_ids.clone_from(&st.tag_history_ids);
         settings.save_quiet_async(&app_settings);
     }
 

@@ -98,7 +98,10 @@ mod tests {
 
     #[test]
     fn handles_empty_and_single_badge_input() {
-        assert!(order_badges(vec![]).is_empty());
+        assert_eq!(
+            order_badges(vec![]),
+            [] as [crate::ui::thumbnail_badges::badge::ThumbnailBadge; 0]
+        );
         assert_eq!(ids(order_badges(vec![b("a").slot(3)])), ["a"]);
     }
 }

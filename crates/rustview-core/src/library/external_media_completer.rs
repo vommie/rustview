@@ -161,9 +161,8 @@ impl<'a> ExternalMediaCompleter<'a> {
     /// detecting active writers in /proc, size fluctuations, and video container completeness.
     pub fn evaluate_file_readiness(path: &Path, is_video: bool) -> (bool, &'static str) {
         // 1. Existence and File Attributes Check
-        let meta1 = match std::fs::metadata(path) {
-            Ok(m) => m,
-            Err(_) => return (false, "File does not exist on physical disk yet"),
+        let Ok(meta1) = std::fs::metadata(path) else {
+            return (false, "File does not exist on physical disk yet");
         };
 
         if !meta1.is_file() {

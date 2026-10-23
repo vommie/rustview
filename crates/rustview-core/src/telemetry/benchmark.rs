@@ -1,6 +1,7 @@
 use crate::settings::LogObscurer;
 use crate::thumbnails::ThumbnailStorageStats;
 use crate::util::cast::{Az, FloatToInt, SaturatingAs};
+use std::fmt::Write as _;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
@@ -494,30 +495,34 @@ impl BenchmarkReportFormatter {
         out.push_str("================================================================================\n");
 
         if let Some(fb) = folder_bench {
-            out.push_str(&format!(
-                "Folder Target        : {} (Folder #{})\n",
+            let _ = writeln!(
+                out,
+                "Folder Target        : {} (Folder #{})",
                 LogObscurer::path(&fb.folder_path),
                 fb.folder_id
-            ));
-            out.push_str(&format!(
-                "Total Media Items    : {total_items:>7} active records in database\n"
-            ));
+            );
+            let _ = writeln!(
+                out,
+                "Total Media Items    : {total_items:>7} active records in database"
+            );
         } else {
-            out.push_str(&format!("Folder ID Target     : Folder #{}\n", thumb_bench.folder_id));
+            let _ = writeln!(out, "Folder ID Target     : Folder #{}", thumb_bench.folder_id);
         }
 
-        out.push_str(&format!(
-            "Total Wall-Clock Time: {} (Initial Viewport Ready)\n",
+        let _ = writeln!(
+            out,
+            "Total Wall-Clock Time: {} (Initial Viewport Ready)",
             format_duration_us(total_wall_us)
-        ));
-        out.push_str(&format!("Initial Throughput   : {overall_throughput}\n"));
-        out.push_str(&format!(
-            "Process Memory (RSS) : {:.2} MB (Virtual: {:.2} MB | System Avail: {:.1} GB / {:.1} GB)\n",
+        );
+        let _ = writeln!(out, "Initial Throughput   : {overall_throughput}");
+        let _ = writeln!(
+            out,
+            "Process Memory (RSS) : {:.2} MB (Virtual: {:.2} MB | System Avail: {:.1} GB / {:.1} GB)",
             mem.process_rss_mb,
             mem.process_vms_mb,
             mem.system_available_mb / 1024.0,
             mem.system_total_mb / 1024.0
-        ));
+        );
         out.push_str("--------------------------------------------------------------------------------\n");
 
         // STAGE 1: Database & Pre-indexing
@@ -538,24 +543,20 @@ impl BenchmarkReportFormatter {
             };
 
             out.push_str("STAGE 1: LMDB DATABASE RETRIEVAL & IN-MEMORY PRE-INDEXING\n");
-            out.push_str(&format!(
-                "  • ID List Fetch           : {}\n",
-                format_duration_us(id_fetch_us)
-            ));
-            out.push_str(&format!(
-                "  • Record Stream Iteration : {} ({})\n",
+            let _ = writeln!(out, "  • ID List Fetch           : {}", format_duration_us(id_fetch_us));
+            let _ = writeln!(
+                out,
+                "  • Record Stream Iteration : {} ({})",
                 format_duration_us(rec_fetch_us),
                 fetch_per_item
-            ));
-            out.push_str(&format!(
-                "  • String & Dimension Prep : {} ({})\n",
+            );
+            let _ = writeln!(
+                out,
+                "  • String & Dimension Prep : {} ({})",
                 format_duration_us(preindex_us),
                 preindex_per_item
-            ));
-            out.push_str(&format!(
-                "  • Stage 1 Subtotal        : {}\n",
-                format_duration_us(stage1_us)
-            ));
+            );
+            let _ = writeln!(out, "  • Stage 1 Subtotal        : {}", format_duration_us(stage1_us));
             out.push_str("--------------------------------------------------------------------------------\n");
 
             // STAGE 2: View Filtering & Projection
@@ -567,28 +568,17 @@ impl BenchmarkReportFormatter {
             let stage2_us = filter_us + sort_us + map_us + commit_us;
 
             out.push_str("STAGE 2: VIEW FILTERING, SORTING & SLINT PROJECTION\n");
-            out.push_str(&format!(
-                "  • Search / Tag Filtering  : {} (Matched: {} / {})\n",
+            let _ = writeln!(
+                out,
+                "  • Search / Tag Filtering  : {} (Matched: {} / {})",
                 format_duration_us(filter_us),
                 matched,
                 total_items
-            ));
-            out.push_str(&format!(
-                "  • Sorter Execution        : {}\n",
-                format_duration_us(sort_us)
-            ));
-            out.push_str(&format!(
-                "  • Slint View Model Map    : {}\n",
-                format_duration_us(map_us)
-            ));
-            out.push_str(&format!(
-                "  • Slint UI Commit (Paint) : {}\n",
-                format_duration_us(commit_us)
-            ));
-            out.push_str(&format!(
-                "  • Stage 2 Subtotal        : {}\n",
-                format_duration_us(stage2_us)
-            ));
+            );
+            let _ = writeln!(out, "  • Sorter Execution        : {}", format_duration_us(sort_us));
+            let _ = writeln!(out, "  • Slint View Model Map    : {}", format_duration_us(map_us));
+            let _ = writeln!(out, "  • Slint UI Commit (Paint) : {}", format_duration_us(commit_us));
+            let _ = writeln!(out, "  • Stage 2 Subtotal        : {}", format_duration_us(stage2_us));
             out.push_str("--------------------------------------------------------------------------------\n");
 
             // Optional Scanner Stage
@@ -596,23 +586,22 @@ impl BenchmarkReportFormatter {
                 let scan_us = fb.fs_scan_time_us.load(Ordering::Relaxed);
                 let scan_commit_us = fb.scan_commit_time_us.load(Ordering::Relaxed);
                 out.push_str("STAGE 2b: BACKGROUND INCREMENTAL FILESYSTEM SCANNER\n");
-                out.push_str(&format!(
-                    "  • FS Directory Scan Time  : {}\n",
-                    format_duration_us(scan_us)
-                ));
-                out.push_str(&format!(
-                    "  • Files Inspected         : {:>7} (New: {}, Upd: {}, Unch: {}, Del: {}, Rest: {})\n",
+                let _ = writeln!(out, "  • FS Directory Scan Time  : {}", format_duration_us(scan_us));
+                let _ = writeln!(
+                    out,
+                    "  • Files Inspected         : {:>7} (New: {}, Upd: {}, Unch: {}, Del: {}, Rest: {})",
                     fb.files_scanned.load(Ordering::Relaxed),
                     fb.new_files.load(Ordering::Relaxed),
                     fb.updated_files.load(Ordering::Relaxed),
                     fb.unchanged_files.load(Ordering::Relaxed),
                     fb.deleted_files.load(Ordering::Relaxed),
                     fb.restored_files.load(Ordering::Relaxed),
-                ));
-                out.push_str(&format!(
-                    "  • LMDB Write Txn Commit   : {}\n",
+                );
+                let _ = writeln!(
+                    out,
+                    "  • LMDB Write Txn Commit   : {}",
                     format_duration_us(scan_commit_us)
-                ));
+                );
                 out.push_str("--------------------------------------------------------------------------------\n");
             }
         }
@@ -678,106 +667,121 @@ impl BenchmarkReportFormatter {
         let peak_queue = thumb_bench.peak_drain_queue_depth.load(Ordering::Relaxed);
 
         out.push_str("STAGE 3: THUMBNAIL CACHE & GENERATION PIPELINE\n");
-        out.push_str(&format!(
-            "  • L1 RAM Cache Status     : {l1_hits} hits / {l1_total} requests ({l1_ratio} hit ratio, {l1_misses} misses)\n"
-        ));
+        let _ = writeln!(
+            out,
+            "  • L1 RAM Cache Status     : {l1_hits} hits / {l1_total} requests ({l1_ratio} hit ratio, {l1_misses} misses)"
+        );
         if decompress_count > 0 {
-            out.push_str(&format!(
-                "  • P0 Viewport Preload     : {} cached items in {} ({})\n",
+            let _ = writeln!(
+                out,
+                "  • P0 Viewport Preload     : {} cached items in {} ({})",
                 decompress_count,
                 format_duration_us(preload_duration_us),
                 preload_throughput
-            ));
-            out.push_str(&format!(
-                "    ├─ Binary Pack Reads    : {} reads | {} read (Avg: {} / read)\n",
+            );
+            let _ = writeln!(
+                out,
+                "    ├─ Binary Pack Reads    : {} reads | {} read (Avg: {} / read)",
                 pack_reads,
                 format_bytes_metric(pack_bytes_read),
                 format_bytes_metric(avg_pack_read_bytes)
-            ));
-            out.push_str(&format!(
-                "    └─ Decompress Latency   : Avg: {:.2} ms ({} WebP / {} JPEG | {} raw RGB8)\n",
+            );
+            let _ = writeln!(
+                out,
+                "    └─ Decompress Latency   : Avg: {:.2} ms ({} WebP / {} JPEG | {} raw RGB8)",
                 decompress_avg_us / 1000.0,
                 decompress_webp,
                 decompress_jpeg,
                 format_bytes_metric(decompress_raw_bytes)
-            ));
+            );
         }
         if video_count > 0 || gen_count > 0 {
-            out.push_str(&format!(
-                "  • Phase 2 Generation      : {} items in {} ({})\n",
+            let _ = writeln!(
+                out,
+                "  • Phase 2 Generation      : {} items in {} ({})",
                 gen_count,
                 format_duration_us(generate_duration_us),
                 gen_throughput
-            ));
+            );
             if video_count > 0 {
-                out.push_str(&format!(
-                    "    ├─ Video Extractions    : {video_count} videos | Avg: {avg_video_extract_ms:.2} ms / video\n"
-                ));
+                let _ = writeln!(
+                    out,
+                    "    ├─ Video Extractions    : {video_count} videos | Avg: {avg_video_extract_ms:.2} ms / video"
+                );
             }
-            out.push_str(&format!(
-                "    ├─ Compressed Encodes   : {} items | {}\n",
+            let _ = writeln!(
+                out,
+                "    ├─ Compressed Encodes   : {} items | {}",
                 thumb_bench.compress_count.load(Ordering::Relaxed),
                 format_bytes_metric(thumb_bench.compress_bytes.load(Ordering::Relaxed))
-            ));
-            out.push_str(&format!(
-                "    └─ LMDB Batched Commits : {} batches ({} records in {})\n",
+            );
+            let _ = writeln!(
+                out,
+                "    └─ LMDB Batched Commits : {} batches ({} records in {})",
                 thumb_bench.lmdb_commit_batches.load(Ordering::Relaxed),
                 thumb_bench.lmdb_committed_records.load(Ordering::Relaxed),
                 format_duration_us(thumb_bench.lmdb_commit_time_us.load(Ordering::Relaxed))
-            ));
+            );
         }
 
         out.push_str("--------------------------------------------------------------------------------\n");
 
         // STAGE 4: UI Drain & Slint Image Buffer Feed
         out.push_str("STAGE 4: SLINT UI DRAIN & IMAGE BUFFER FEED\n");
-        out.push_str(&format!(
-            "  • Drain Timer Ticks       : {drain_ticks} cycles (capped batch: 64 items/tick)\n"
-        ));
-        out.push_str(&format!(
-            "  • P0 Items Delivered to UI: {drained_items} / {p0_targets} thumbnails displayed (100% viewport ready)\n"
-        ));
-        out.push_str(&format!(
-            "  • Slint Row Model Updates : {} (set_row_data)\n",
+        let _ = writeln!(
+            out,
+            "  • Drain Timer Ticks       : {drain_ticks} cycles (capped batch: 64 items/tick)"
+        );
+        let _ = writeln!(
+            out,
+            "  • P0 Items Delivered to UI: {drained_items} / {p0_targets} thumbnails displayed (100% viewport ready)"
+        );
+        let _ = writeln!(
+            out,
+            "  • Slint Row Model Updates : {} (set_row_data)",
             format_duration_us(row_set_us)
-        ));
-        out.push_str(&format!(
-            "  • Peak Drain Queue Depth  : {peak_queue} items buffered in RAM\n"
-        ));
-        out.push_str(&format!(
-            "  • Stage 4 Subtotal Time   : {}\n",
+        );
+        let _ = writeln!(out, "  • Peak Drain Queue Depth  : {peak_queue} items buffered in RAM");
+        let _ = writeln!(
+            out,
+            "  • Stage 4 Subtotal Time   : {}",
             format_duration_us(drain_time_us)
-        ));
+        );
         out.push_str("--------------------------------------------------------------------------------\n");
 
         // STORAGE & CAPACITY STATS
         let l1_slots_cap = 2048;
         let l1_occupancy_pct = (drained_items.min(l1_slots_cap).az::<f64>() / l1_slots_cap.az::<f64>()) * 100.0;
         out.push_str("STORAGE FOOTPRINT & CACHE CAPACITY:\n");
-        out.push_str(&format!(
-            "  • L1 In-Memory Cache      : {} / {} slots utilized ({:.1}% capacity)\n",
+        let _ = writeln!(
+            out,
+            "  • L1 In-Memory Cache      : {} / {} slots utilized ({:.1}% capacity)",
             drained_items.min(l1_slots_cap),
             l1_slots_cap,
             l1_occupancy_pct
-        ));
-        out.push_str(&format!(
-            "  • L2 Binary Pack Files    : {} packfiles | {:.2} MB on disk\n",
+        );
+        let _ = writeln!(
+            out,
+            "  • L2 Binary Pack Files    : {} packfiles | {:.2} MB on disk",
             storage_stats.pack_files_count, storage_stats.pack_total_mb
-        ));
-        out.push_str(&format!(
-            "  • LMDB Database Size      : {:.2} MB ({} thumbnails, {} video previews)\n",
+        );
+        let _ = writeln!(
+            out,
+            "  • LMDB Database Size      : {:.2} MB ({} thumbnails, {} video previews)",
             storage_stats.lmdb_data_mb,
             format_count(storage_stats.lmdb_thumbnails_count),
             format_count(storage_stats.lmdb_previews_count)
-        ));
-        out.push_str(&format!(
-            "  • Average Stored Size     : {:.2} KB / thumbnail frame\n",
+        );
+        let _ = writeln!(
+            out,
+            "  • Average Stored Size     : {:.2} KB / thumbnail frame",
             storage_stats.avg_thumbnail_kb()
-        ));
-        out.push_str(&format!(
-            "  • Total Cache Footprint   : {:.2} MB\n",
+        );
+        let _ = writeln!(
+            out,
+            "  • Total Cache Footprint   : {:.2} MB",
             storage_stats.total_cache_mb
-        ));
+        );
         out.push_str("================================================================================\n");
 
         out

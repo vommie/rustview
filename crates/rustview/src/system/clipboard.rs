@@ -318,10 +318,7 @@ impl SystemClipboard {
     }
 
     fn set_image_via_wl_copy(png_path: &Path) -> bool {
-        let file = match File::open(png_path) {
-            Ok(f) => f,
-            Err(_) => return false,
-        };
+        let Ok(file) = File::open(png_path) else { return false };
 
         if let Ok(mut child) = Command::new("wl-copy")
             .args(["--type", "image/png"])

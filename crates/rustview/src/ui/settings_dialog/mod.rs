@@ -633,7 +633,7 @@ impl SettingsDialogController {
                 let sel_disp_idx = w.get_selected_display_idx().saturating_as::<usize>();
                 let monitors_guard = detected_monitors_save.borrow();
                 if let Some(m) = monitors_guard.get(sel_disp_idx) {
-                    current.fullscreen.specific_monitor = m.connector.clone();
+                    current.fullscreen.specific_monitor.clone_from(&m.connector);
                 }
                 drop(monitors_guard);
 

@@ -140,9 +140,8 @@ pub fn apply_rotation_if_needed(pixels: Vec<u8>, width: u32, height: u32, rotati
         return (width, height, pixels);
     }
 
-    let img = match image::RgbImage::from_raw(width, height, pixels) {
-        Some(i) => i,
-        None => return (width, height, Vec::new()),
+    let Some(img) = image::RgbImage::from_raw(width, height, pixels) else {
+        return (width, height, Vec::new());
     };
 
     let rotated = match norm_rot {

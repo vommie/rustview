@@ -214,7 +214,7 @@ mod tests {
             show_animated: false,
             ..all_enabled()
         };
-        assert!(ids(&item, &none).is_empty());
+        assert_eq!(ids(&item, &none), [] as [&str; 0]);
         let only_duration = ThumbnailBadgeConfig {
             show_duration: true,
             ..none

@@ -290,7 +290,7 @@ pub fn run_cli(options: &MigrateOptions, data_dir: &Path, config_dir: &Path) -> 
     let raw_data = XnViewDbReader::read_database(&xnview_db_path)?;
     stats.read_time_ms = t_read.elapsed().as_millis();
     if let Some(ref v) = raw_data.version {
-        stats.source_version = v.clone();
+        stats.source_version.clone_from(v);
     }
 
     println!("[2/4] Verifying filesystem, filtering entries, re-indexing IDs, and building relations...");

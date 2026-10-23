@@ -23,7 +23,7 @@ use rustview_core::thumbnails::{ThumbnailConfig, ThumbnailManager};
 use rustview_core::util::cast::SaturatingAs;
 use slint::ComponentHandle;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -59,7 +59,7 @@ impl BridgeFolders {
 
     pub(super) fn select_folder_internal(
         folder_id: FolderId,
-        path: &PathBuf,
+        path: &Path,
         ctx: &FolderNavigationContext<'_>,
         is_explicit_refresh: bool,
     ) {

@@ -155,9 +155,8 @@ impl TabCollection {
 
     /// Removes all tabs positioned to the left of `tab_id` and returns the evicted sessions.
     pub fn remove_to_left(&mut self, tab_id: TabId) -> Vec<MediaTabSession> {
-        let pos = match self.index_of(tab_id) {
-            Some(p) => p,
-            None => return Vec::new(),
+        let Some(pos) = self.index_of(tab_id) else {
+            return Vec::new();
         };
 
         if pos == 0 {
@@ -169,9 +168,8 @@ impl TabCollection {
 
     /// Removes all tabs positioned to the right of `tab_id` and returns the evicted sessions.
     pub fn remove_to_right(&mut self, tab_id: TabId) -> Vec<MediaTabSession> {
-        let pos = match self.index_of(tab_id) {
-            Some(p) => p,
-            None => return Vec::new(),
+        let Some(pos) = self.index_of(tab_id) else {
+            return Vec::new();
         };
 
         if pos + 1 >= self.sessions.len() {
@@ -187,9 +185,8 @@ impl TabCollection {
 
     /// Relocates a tab to a target index position in the list without mutating its permanent title.
     pub fn move_tab(&mut self, tab_id: TabId, target_index: usize) -> bool {
-        let current_pos = match self.index_of(tab_id) {
-            Some(pos) => pos,
-            None => return false,
+        let Some(current_pos) = self.index_of(tab_id) else {
+            return false;
         };
 
         let clamped_target = target_index.min(self.sessions.len().saturating_sub(1));
@@ -207,18 +204,12 @@ impl TabCollection {
     }
 
     pub fn move_left(&mut self, tab_id: TabId) -> bool {
-        let pos = match self.index_of(tab_id) {
-            Some(p) => p,
-            None => return false,
-        };
+        let Some(pos) = self.index_of(tab_id) else { return false };
         if pos > 0 { self.move_tab(tab_id, pos - 1) } else { false }
     }
 
     pub fn move_right(&mut self, tab_id: TabId) -> bool {
-        let pos = match self.index_of(tab_id) {
-            Some(p) => p,
-            None => return false,
-        };
+        let Some(pos) = self.index_of(tab_id) else { return false };
         if pos + 1 < self.sessions.len() {
             self.move_tab(tab_id, pos + 1)
         } else {
