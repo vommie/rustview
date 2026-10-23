@@ -3,7 +3,7 @@ use super::error::LibraryError;
 use super::models::{MediaId, TagId, TagRecord};
 use super::schema::SEQ_TAG_ID;
 use crate::settings::LogObscurer;
-use crate::util::cast::WrappingAs;
+use crate::util::cast::SaturatingAs;
 use std::collections::{HashMap, HashSet};
 
 /// Pure, decoupled database repository managing tag persistence and hierarchical relations.
