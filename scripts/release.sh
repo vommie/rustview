@@ -49,6 +49,8 @@ has_text() { [ -n "$(printf '%s' "$1" | tr -d '[:space:]')" ]; }
 
 if [ "$mode" = check ]; then
   [ -f CHANGELOG.md ] || fail "CHANGELOG.md is missing"
+  pkgver=$(sed -n 's/^pkgver=//p' packaging/PKGBUILD)
+  [ "$pkgver" = "$version" ] || fail "packaging/PKGBUILD has pkgver=$pkgver but Cargo.toml says $version (bump both in the release commit)"
   if grep -q "^## \[$version\]" CHANGELOG.md; then
     has_text "$(section "$version")" || fail "the changelog section of $version is empty"
   elif has_text "$(section Unreleased)"; then
