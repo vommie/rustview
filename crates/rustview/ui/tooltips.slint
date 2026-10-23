@@ -224,6 +224,8 @@ export component TooltipArea inherits Rectangle {
     in property <MouseCursor> cursor: MouseCursor.default;
 
     callback clicked();
+    // A press of the right mouse button (a control with a second meaning on the right click).
+    callback right-clicked();
 
     out property <bool> has-hover: touch.has-hover;
 
@@ -245,6 +247,9 @@ export component TooltipArea inherits Rectangle {
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 tooltip-host.on-hover-leave();
+                if event.button == PointerEventButton.right {
+                    root.right-clicked();
+                }
             }
         }
         clicked => {

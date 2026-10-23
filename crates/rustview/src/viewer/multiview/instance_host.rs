@@ -468,6 +468,8 @@ impl MultiviewInstance {
                     minimap,
                     pannable,
                     rating: self.rating_pulse(tile.key, now),
+                    crop: self.crop_view(index),
+                    dirty: self.tile_is_dirty(index),
                 }
             })
             .collect();

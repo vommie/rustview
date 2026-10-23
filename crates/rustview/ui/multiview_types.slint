@@ -13,6 +13,12 @@ export struct MultiviewBarButtonView {
     // The button blinks to draw the user's attention (a refused close of a pinned fullscreen).
     attention: bool,
     feedback: ButtonFeedback,
+    // 0 = plain, 1 = emphasized (unsaved changes), 2 = busy (saving), 3 = done (saved)
+    emphasis: int,
+    // A done button fades away.
+    fading: bool,
+    // The button has an arrow of its own on its right that opens a drop-down (it reports the id + 1).
+    split: bool,
 }
 
 /// One tile of the Multiview window. All geometry is computed in Rust (physical pixels converted to logical pixels), so
@@ -71,6 +77,25 @@ export struct MultiviewTileView {
     // The icon of a rating just given (0..5, -1 = none) and how strong it is (1 = full, fading to 0). Videos get theirs from mpv.
     rating-icon: int,
     rating-alpha: float,
+    // The crop tool: the room it covers (relative to the tile), the picture and the crop rectangle (relative to that room), the
+    // labels and whether the rule-of-thirds lines show.
+    crop-open: bool,
+    crop-room-x: length,
+    crop-room-y: length,
+    crop-room-width: length,
+    crop-room-height: length,
+    crop-pic-x: length,
+    crop-pic-y: length,
+    crop-pic-width: length,
+    crop-pic-height: length,
+    crop-x: length,
+    crop-y: length,
+    crop-width: length,
+    crop-height: length,
+    crop-size-label: string,
+    crop-ratio-label: string,
+    crop-grid: bool,
+    crop-dragging: bool,
 }
 
 /// A draggable separator between two tiles (or the two rows of a 2x2 grid) with a swap button in the middle.

@@ -21,6 +21,7 @@ use super::rating_feedback::RatingFeedback;
 use super::route::{HostMode, OriginKind};
 use super::teardown::{teardown_videos, teardown_videos_now};
 use super::tile::{TileSeed, TileState, VideoTile};
+use crate::viewer::edit::tool_order::ToolOrder;
 use parking_lot::Mutex;
 use rustview_core::library::models::MediaId;
 use rustview_core::settings::schema::MULTIVIEW_DOUBLE_CLICK_MS;
@@ -89,6 +90,8 @@ pub struct MultiviewInstance {
     pub(super) zoom_wheel_accum: f32,
     /// The icons of ratings given with the keyboard that are on screen right now.
     pub(super) rating_feedback: RatingFeedback,
+    /// The open crop tools in the order they were opened (Esc cancels the oldest first).
+    pub(super) crop_order: ToolOrder,
 }
 
 impl MultiviewInstance {
@@ -127,6 +130,7 @@ impl MultiviewInstance {
                 zoom_minimap_bubble: Vec::new(),
                 zoom_wheel_accum: 0.0,
                 rating_feedback: RatingFeedback::default(),
+                crop_order: ToolOrder::default(),
             })
         })
     }
@@ -166,6 +170,10 @@ impl MultiviewInstance {
 
     /// The key of the tile in slot `index` (the bar and the layout address tiles by slot, which changes whenever tiles come
     /// and go; the key does not).
+    pub fn has_tile(&self, key: TileKey) -> bool {
+        self.tiles.iter().any(|t| t.key == key)
+    }
+
     pub fn tile_key_at(&self, index: usize) -> Option<TileKey> {
         self.tiles.get(index).map(|t| t.key)
     }

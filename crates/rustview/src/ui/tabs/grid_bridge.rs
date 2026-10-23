@@ -126,6 +126,7 @@ impl BridgeTabGrid {
                     is_video: solo_kind == Some(TileKind::Video),
                     is_multiview: true,
                     is_selected: selection.contains(s.id),
+                    has_unsaved: s.multiview.instance.lock().has_unsaved_edits(),
                     icon: tab_icon(s),
                     rating: i32::from(s.record.rating),
                     has_tags: false,

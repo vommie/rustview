@@ -4,12 +4,14 @@ use std::path::PathBuf;
 
 mod appearance;
 mod constants;
+mod image_edit;
 mod viewer;
 pub use appearance::AppearanceSettings;
 pub use appearance::GridAspectRatio;
 pub use appearance::ThumbnailBadgeOverflow;
 pub use appearance::ViewSettings;
 pub use constants::*;
+pub use image_edit::{CropSettings, FormatPresets, ImageEditSettings, LastExport, SaveSettings};
 pub use viewer::FullscreenBackgroundSettings;
 pub use viewer::FullscreenMediaBarSettings;
 pub use viewer::FullscreenPrimaryBarSettings;
@@ -262,4 +264,7 @@ pub struct AppSettings {
     pub debug: DebugSettings,
     #[serde(default)]
     pub window: WindowState,
+    /// Added in 0.3.87 (cropping and saving pictures); older files get the defaults.
+    #[serde(default)]
+    pub image_edit: ImageEditSettings,
 }

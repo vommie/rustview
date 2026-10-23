@@ -145,6 +145,8 @@ export struct TabItemModel {
     has_tags: bool,
     shift_x: length,
     is_placeholder: bool,
+    /// A picture of the tab has unsaved edits (a dot next to the title).
+    has_unsaved: bool,
 }
 
 /// Dynamic Model for a single tile item positioned within the TabGridView Masonry layout.
@@ -157,6 +159,8 @@ export struct TabGridItemModel {
     is_multiview: bool,
     /// Part of the multi-selection of tabs (Ctrl/Shift+click).
     is_selected: bool,
+    /// A picture of the tab has unsaved edits (a dot next to the title).
+    has_unsaved: bool,
     icon: IconId,
     rating: int,
     has_tags: bool,

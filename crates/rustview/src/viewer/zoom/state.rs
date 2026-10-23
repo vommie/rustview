@@ -232,6 +232,12 @@ impl ZoomState {
         Frame::in_area(self.image, self.tile?)
     }
 
+    /// Where the whole picture is in its room as it is shown now (physical pixels, relative to the room; it may reach out of the
+    /// room when zoomed in). The crop tool maps the pointer through it, so cropping works the same at every zoom.
+    pub fn image_rect(&self) -> Option<super::geometry::RectF> {
+        Some(self.frame()?.image_rect(self.shown))
+    }
+
     /// The zoom the user chose, as a factor of the fitted size (the animation may still be on its way).
     pub fn zoom(&self) -> f64 {
         self.target.zoom

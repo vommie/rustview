@@ -20,6 +20,8 @@ export component MultiviewBarWindow inherits Window {
     background: transparent;
 
     in property <[MultiviewBarButtonView]> actions;
+    // Position of the button that has an arrow of its own (-1 = none); it is wider by the arrow.
+    in property <int> split-index: -1;
     // The tile the bar belongs to; it is handed back with every click.
     in property <int> tile: -1;
     // False without a compositing manager: the bar is solid then.
@@ -72,6 +74,7 @@ export component MultiviewBarWindow inherits Window {
         x: root.align-left ? 0px : root.width - self.width;
         y: 0px;
         actions: root.actions;
+        split-index: root.split-index;
         translucent: root.translucent;
         menu-owner-index: (root.menu-open || root.zoom-open) ? root.menu-owner-index : -1;
 

@@ -26,6 +26,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
+/// Who asked for a refresh of files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefreshOrigin {
+    /// The user (Refresh File (Full) on the selection or the tab): progress and result are shown.
+    Selection,
+    /// The image editor wrote the files: quiet, and never refused because another refresh runs.
+    Saved,
+}
+
 impl BridgeMedia {
     pub fn refresh_selected_media(
         window: &MainWindow,
@@ -68,12 +77,42 @@ impl BridgeMedia {
             return;
         }
 
+        Self::refresh_media_ids(
+            window,
+            library,
+            thumbnails,
+            tab_manager,
+            settings,
+            state,
+            &selected_ids.into_iter().collect::<Vec<_>>(),
+            RefreshOrigin::Selection,
+        );
+    }
+
+    /// Refreshes the files of `selected_ids` from disk (record, hash, thumbnail) and lets every view of them catch up. A refresh
+    /// the user asked for (`Selection`) shows its progress and result; a refresh after the editor saved a file (`Saved`) runs
+    /// quietly, alongside anything else (the editor reports the save itself).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the bridge state every refresh needs, as the other bridge functions take it"
+    )]
+    pub fn refresh_media_ids(
+        window: &MainWindow,
+        library: &Arc<Library>,
+        thumbnails: &Arc<ThumbnailManager>,
+        tab_manager: &Arc<ViewerTabManager>,
+        settings: &Arc<SettingsManager>,
+        state: &Arc<RwLock<UiState>>,
+        selected_ids: &[MediaId],
+        origin: RefreshOrigin,
+    ) {
+        let quiet = origin == RefreshOrigin::Saved;
         let mut targets: Vec<(MediaId, PathBuf, MediaRecord)> = Vec::with_capacity(selected_ids.len());
         {
             let st = state.read();
             let folder_path_opt = st.current_folder_path.clone();
 
-            for &id in &selected_ids {
+            for &id in selected_ids {
                 if let Some(item) = st.all_folder_media.find(id) {
                     targets.push((id, item.full_path(), item.record.clone()));
                 } else if let Some(ref folder_path) = folder_path_opt
@@ -89,13 +128,14 @@ impl BridgeMedia {
             return;
         }
 
-        {
-            let mut st = state.write();
-            st.is_refreshing_media = true;
+        if !quiet {
+            {
+                let mut st = state.write();
+                st.is_refreshing_media = true;
+            }
+            window.set_is_system_busy(true);
+            StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
         }
-        window.set_is_system_busy(true);
-
-        StatusBarBridge::update_media_index_progress(window, true, 0, total_items);
 
         let is_tab_mode_initial = window.get_active_view_mode() == 1;
         let start_msg = if total_items == 1 {
@@ -107,7 +147,9 @@ impl BridgeMedia {
         } else {
             format!("Refreshing {total_items} selected files (Full)...")
         };
-        StatusBarBridge::info(window, start_msg);
+        if !quiet {
+            StatusBarBridge::info(window, start_msg);
+        }
 
         let config = ThumbnailConfig::from_performance_settings(&settings.get().performance);
 
@@ -130,6 +172,9 @@ impl BridgeMedia {
                 let w_weak_progress = w_weak.clone();
 
                 let progress_cb = Arc::new(move |cur: usize, tot: usize| {
+                    if quiet {
+                        return;
+                    }
                     let mut last = last_progress_report.lock();
                     if last.elapsed().as_millis() >= 35 || cur == tot {
                         *last = Instant::now();
@@ -389,7 +434,9 @@ impl BridgeMedia {
                 let _ = w_weak.upgrade_in_event_loop(move |w| {
                     {
                         let mut st = st_arc.write();
-                        st.is_refreshing_media = false;
+                        if !quiet {
+                            st.is_refreshing_media = false;
+                        }
 
                         for item in &successful_items {
                             if item.primary_width > 0 && item.primary_height > 0 && !item.primary_pixels.is_empty() {
@@ -440,9 +487,15 @@ impl BridgeMedia {
                         }
                     }
 
-                    StatusBarBridge::update_media_index_progress(&w, false, 0, 0);
+                    if !quiet {
+                        StatusBarBridge::update_media_index_progress(&w, false, 0, 0);
+                    }
 
-                    if missing_count > 0 && total_items == 1 {
+                    if quiet {
+                        if missing_count > 0 {
+                            tracing::warn!(missing_count, "[BridgeMedia: Refresh] A saved file could not be read back for the library");
+                        }
+                    } else if missing_count > 0 && total_items == 1 {
                         let missing_dialog = MissingFileDialogController::new();
                         missing_dialog.show(&w, "Refresh File", &missing_files);
                     } else if missing_count > 0 {

@@ -93,6 +93,17 @@ export component TabGridItemView inherits Rectangle {
                         vertical-alignment: center;
                         overflow: elide;
                     }
+
+                    // Unsaved picture edits in this tab.
+                    if root.item.has-unsaved : VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            background: Theme.accent;
+                        }
+                    }
                 }
 
                 // Right: Rating & Close Button

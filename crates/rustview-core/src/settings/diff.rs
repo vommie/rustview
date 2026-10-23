@@ -49,6 +49,9 @@ pub struct SettingsDiff {
     // Debug & Logging Subsystem
     pub debug_settings_changed: bool,
 
+    // Image Edit Subsystem (crop tool, saving, format presets)
+    pub image_edit_changed: bool,
+
     // Window Geometry
     pub window_geometry_changed: bool,
 }
@@ -137,6 +140,7 @@ impl SettingsDiff {
         let tag_expansion_changed = old.tags.expanded_tag_ids != new.tags.expanded_tag_ids;
         let api_settings_changed = old.api != new.api;
         let debug_settings_changed = old.debug != new.debug;
+        let image_edit_changed = old.image_edit != new.image_edit;
         let window_geometry_changed = old.window != new.window;
 
         let has_changes = root_folder_changed
@@ -158,6 +162,7 @@ impl SettingsDiff {
             || tag_expansion_changed
             || api_settings_changed
             || debug_settings_changed
+            || image_edit_changed
             || window_geometry_changed;
 
         Self {
@@ -182,6 +187,7 @@ impl SettingsDiff {
             tag_expansion_changed,
             api_settings_changed,
             debug_settings_changed,
+            image_edit_changed,
             window_geometry_changed,
         }
     }
@@ -655,6 +661,10 @@ impl SettingsDiff {
                 "Debug: obfuscate_logs ({} -> {})",
                 old.debug.obfuscate_logs, new.debug.obfuscate_logs
             ));
+        }
+
+        if self.image_edit_changed {
+            changes.extend(new.image_edit.describe_changes(&old.image_edit));
         }
 
         if self.window_geometry_changed {

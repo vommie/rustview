@@ -234,6 +234,7 @@ impl UiBridge {
         type_ahead::config::apply(&app_settings.appearance);
         prefs::apply(&app_settings.fullscreen);
         zoom_prefs::apply(&app_settings.fullscreen);
+        crate::viewer::edit::prefs::apply(&app_settings.image_edit);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 
         window.set_tag_history_height(initial_state.tag_history_height);

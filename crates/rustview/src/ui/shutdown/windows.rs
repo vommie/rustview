@@ -21,6 +21,18 @@ pub const WINDOWS: &[(&str, &str)] = &[
     ("MissingFileDialog", "MissingFileDialogController::close"),
     ("OpenManyFilesDialog", "OpenConfirmation::close"),
     ("TabMergeLimitDialog", "MergeLimitDialog::close"),
+    (
+        "ImageSaveConflictDialog",
+        "image_edit::close_windows (ChoiceDialog::close; an open question is answered with cancel)",
+    ),
+    (
+        "ImageUnsavedDialog",
+        "image_edit::close_windows (UnsavedDialog::close; nothing is saved)",
+    ),
+    (
+        "ImageExportDialog",
+        "image_edit::close_windows (ExportDialog::close; nothing is written)",
+    ),
     ("DeleteFileDialog", "DeleteFileDialogController::close"),
     ("RemoveOrphanedFileDialog", "RemoveOrphanedFileDialogController::close"),
     ("FileOpsConflictDialog", "FileOpsConflictDialogController::close"),

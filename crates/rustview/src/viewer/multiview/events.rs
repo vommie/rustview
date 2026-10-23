@@ -6,6 +6,7 @@
 
 use super::follow::TileKey;
 use super::instance::WeakInstance;
+use crate::viewer::edit::tile_edit::EditSource;
 use crate::viewer::zoom::render::SourceImage;
 use crate::viewer::zoom::state::RenderDone;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
@@ -41,6 +42,14 @@ pub enum PlayerEvent {
     },
     ImageDecoded {
         tile: TileKey,
+        result: DecodedImage,
+        /// What the decoder learned about the file (for editing); `None` when the decode failed before it.
+        source: Option<EditSource>,
+    },
+    /// The sharp picture of the edited state of an image (`revision` of its edits), decoded from the original.
+    EditPreview {
+        tile: TileKey,
+        revision: u64,
         result: DecodedImage,
     },
     /// The original of an image tile that is zoomed in was decoded (or could not be).

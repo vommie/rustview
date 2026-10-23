@@ -3,7 +3,7 @@
 
 use super::follow::{FollowPlan, Slot, TileKey};
 use super::instance::MultiviewInstance;
-use super::media_actions::{BarClick, MediaActionId, MediaBarContext, media_actions_for};
+use super::media_actions::{BarClick, MediaActionId, MediaBarContext, SaveMenuItem, media_actions_for};
 use super::model::TileKind;
 use super::prefs;
 use super::route::{HostMode, OriginKind, UiAction};
@@ -31,6 +31,7 @@ impl MultiviewInstance {
             sticky: tile.sticky,
             broken: tile.error.is_some(),
             zoom: self.zoom_button_state(index),
+            edit: self.edit_bar_state(index),
         })
     }
 
@@ -51,6 +52,8 @@ impl MultiviewInstance {
                 active: spec.active,
                 enabled: spec.enabled,
                 feedback: tile.feedback.get(&spec.id).copied().unwrap_or_default(),
+                look: spec.look,
+                split: spec.split,
             })
             .collect()
     }
@@ -67,6 +70,14 @@ impl MultiviewInstance {
                 self.zoom_slider_click(key, click);
                 UiAction::None
             }
+            BarClick::SaveMenuItem(item) => match item {
+                SaveMenuItem::Save => UiAction::SaveTile(key),
+                SaveMenuItem::SaveAs => UiAction::SaveTileAs(key),
+                SaveMenuItem::Discard => {
+                    self.discard_edits(key);
+                    UiAction::None
+                }
+            },
         }
     }
 
@@ -77,7 +88,12 @@ impl MultiviewInstance {
             return UiAction::None;
         };
         let id = self.tiles[index].media_id;
-        if !self.action_views(index).iter().any(|a| a.id == action && a.enabled) {
+        // The arrow of a split button belongs to it.
+        let offered = |a: &MediaActionView| match action {
+            MediaActionId::SaveMenu => a.id == MediaActionId::Save && a.split,
+            _ => a.id == action && a.enabled,
+        };
+        if !self.action_views(index).iter().any(offered) {
             tracing::debug!(
                 media_id = id,
                 ?action,
@@ -115,8 +131,27 @@ impl MultiviewInstance {
                 UiAction::ToggleOpenWith(id)
             }
             MediaActionId::Delete => UiAction::DeleteTile(id),
+            MediaActionId::Remove if self.tile_is_dirty(index) => UiAction::ConfirmRemoveTile(key),
             MediaActionId::Remove => self.remove_tile(index),
             MediaActionId::Close => self.close_action(),
+            MediaActionId::Crop => {
+                // One bubble per bar: the crop tool is on the picture, the zoom slider stays where it is.
+                self.toggle_crop(key);
+                UiAction::None
+            }
+            MediaActionId::Undo => {
+                self.undo_edit(key);
+                UiAction::None
+            }
+            MediaActionId::Redo => {
+                self.redo_edit(key);
+                UiAction::None
+            }
+            MediaActionId::Save => UiAction::SaveTile(key),
+            MediaActionId::SaveMenu => {
+                self.zoom_slider.retain(|k| *k != key);
+                UiAction::ToggleSaveMenu(key)
+            }
         }
     }
 
@@ -137,6 +172,16 @@ impl MultiviewInstance {
         }
     }
 
+    /// Makes tile `key` sticky or not (a tile with unsaved edits stays while the user decides about them).
+    pub fn set_sticky(&mut self, key: TileKey, sticky: bool) {
+        if let Some(tile) = self.tiles.iter_mut().find(|t| t.key == key)
+            && tile.sticky != sticky
+        {
+            tile.sticky = sticky;
+            self.bump();
+        }
+    }
+
     fn toggle_sticky_at(&mut self, index: usize) {
         let Some(tile) = self.tiles.get_mut(index) else {
             return;
@@ -148,6 +193,14 @@ impl MultiviewInstance {
             "[Multiview: Actions] Sticky toggled"
         );
         self.bump();
+    }
+
+    /// Removes tile `key` after the question about its unsaved edits (they were saved or discarded).
+    pub fn remove_tile_by_key(&mut self, key: TileKey) -> UiAction {
+        match self.tile_index(key) {
+            Some(index) => self.remove_tile(index),
+            None => UiAction::None,
+        }
     }
 
     /// Takes the tile out of the view (the last tile cannot leave: the button is a close button then). A Multiview that

@@ -36,10 +36,20 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
         return;
     };
     let (routed, click) = match event {
-        PlayerEvent::ImageDecoded { tile, result } => {
+        PlayerEvent::ImageDecoded { tile, result, source } => {
             let mode = {
                 let mut guard = instance.lock();
-                guard.on_image_loaded(tile, result);
+                guard.on_image_loaded(tile, result, source);
+                guard.host_mode()
+            };
+            drop(instance);
+            refresh_host(handle, mode);
+            return;
+        }
+        PlayerEvent::EditPreview { tile, revision, result } => {
+            let mode = {
+                let mut guard = instance.lock();
+                guard.on_edit_preview(tile, revision, result);
                 guard.host_mode()
             };
             drop(instance);
@@ -86,6 +96,13 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             refresh_host(handle, mode);
             return;
         }
+        // Esc in a video's window arrives as a fullscreen toggle: an open crop tool of an image is cancelled first.
+        PlayerEvent::ToggleFullscreen | PlayerEvent::CloseTab if instance.lock().cancel_oldest_crop() => {
+            let mode = instance.lock().host_mode();
+            drop(instance);
+            refresh_host(handle, mode);
+            return;
+        }
         PlayerEvent::ToggleFullscreen => (RoutedEvent::ToggleFullscreen, ClickKind::None),
         PlayerEvent::CloseTab => (RoutedEvent::CloseTab, ClickKind::None),
         PlayerEvent::RenameRequested(tile) => {
@@ -128,7 +145,7 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
 }
 
 /// Shows the changed state of an instance in the host that presents it.
-fn refresh_host(handle: &MultiviewHandle, mode: HostMode) {
+pub(super) fn refresh_host(handle: &MultiviewHandle, mode: HostMode) {
     match mode {
         HostMode::Fullscreen => session::with_session(Session::refresh),
         HostMode::TabView => tab_host::refresh(),
@@ -165,6 +182,10 @@ pub(super) fn execute(action: UiAction, handle: &MultiviewHandle, instance_id: O
         (UiAction::Navigate { forward }, _) => handle.navigate(forward),
         (UiAction::DeselectInBrowse(media_id), _) => handle.deselect_in_browse(media_id),
         (UiAction::TabMembersChanged, _) => handle.tab_members_changed(),
+        (UiAction::SaveTile(key), _) => handle.save_tile(key, crate::ui::image_edit::SaveIntent::Save),
+        (UiAction::SaveTileAs(key), _) => handle.save_tile(key, crate::ui::image_edit::SaveIntent::SaveAs),
+        (UiAction::ToggleSaveMenu(_), _) => MultiviewHandle::toggle_save_menu(),
+        (UiAction::ConfirmRemoveTile(key), _) => handle.confirm_remove_tile(key),
         (UiAction::OpenTileAsTab(media_id), _) => {
             let opened = handle.open_tile_as_tab(media_id);
             session::with_session(|s| s.action_finished(media_id, MediaActionId::OpenAsTab, opened));

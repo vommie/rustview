@@ -9,6 +9,7 @@ import { SettingsPageFormats } from "settings_page_formats.slint";
 import { FormatRowView, UnsupportedFormatView } from "settings_format_row.slint";
 import { SettingsPageViewer } from "settings_page_viewer.slint";
 import { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
+import { SettingsPageImageEdit, RatioChipView } from "settings_page_image_edit.slint";
 import { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
 import { SettingsPageApi } from "settings_page_api.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
@@ -25,6 +26,7 @@ export { SettingsPagePerformance } from "settings_page_performance.slint";
 export { SettingsPageFormats } from "settings_page_formats.slint";
 export { SettingsPageViewer } from "settings_page_viewer.slint";
 export { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
+export { SettingsPageImageEdit, RatioChipView } from "settings_page_image_edit.slint";
 export { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
 export { SettingsPageApi } from "settings_page_api.slint";
 export { SettingsPageDebug } from "settings_page_debug.slint";
@@ -149,6 +151,27 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-media-bar-show-open-as-tab: true;
     in-out property <bool> fullscreen-media-bar-show-open-with: true;
     in-out property <bool> fullscreen-media-bar-show-zoom: true;
+    in-out property <bool> fullscreen-media-bar-show-crop: true;
+
+    // Image Edit (the ratio chips and their callbacks live in `settings_dialog/image_edit_page.rs`)
+    in property <[RatioChipView]> image-edit-ratios;
+    in-out property <string> image-edit-ratio-input;
+    in property <string> image-edit-ratio-error;
+    in-out property <int> image-edit-crop-grid-idx;
+    in-out property <bool> image-edit-align-jpeg;
+    in-out property <int> image-edit-overwrite-mode-idx;
+    in-out property <int> image-edit-jpeg-quality: 90;
+    in-out property <int> image-edit-jpeg-subsampling-idx;
+    in-out property <bool> image-edit-jpeg-progressive;
+    in-out property <int> image-edit-png-compression-idx: 1;
+    in-out property <bool> image-edit-webp-lossless;
+    in-out property <int> image-edit-webp-quality: 90;
+    in-out property <int> image-edit-avif-quality: 80;
+    in-out property <int> image-edit-avif-speed: 6;
+    in-out property <int> image-edit-tiff-compression-idx: 1;
+    callback image-edit-add-ratio(string);
+    callback image-edit-remove-ratio(int);
+    callback image-edit-reset-ratios();
     in-out property <bool> fullscreen-media-bar-show-delete: true;
     in-out property <bool> fullscreen-media-bar-show-remove: true;
     in-out property <int> fullscreen-media-bar-reveal-distance-px: 15;
@@ -358,6 +381,7 @@ export component SettingsWindow inherits Window {
                             media-bar-show-open-as-tab <=> root.fullscreen-media-bar-show-open-as-tab;
                             media-bar-show-open-with <=> root.fullscreen-media-bar-show-open-with;
                             media-bar-show-zoom <=> root.fullscreen-media-bar-show-zoom;
+                            media-bar-show-crop <=> root.fullscreen-media-bar-show-crop;
                             media-bar-show-delete <=> root.fullscreen-media-bar-show-delete;
                             media-bar-show-remove <=> root.fullscreen-media-bar-show-remove;
                             media-bar-reveal-distance-px <=> root.fullscreen-media-bar-reveal-distance-px;
@@ -390,15 +414,36 @@ export component SettingsWindow inherits Window {
                             pick-background-color => { root.pick-fullscreen-background(); }
                         }
 
-                        if root.active-category == 7 : SettingsPageTagsRatings {
+                        if root.active-category == 7 : SettingsPageImageEdit {
+                            ratios: root.image-edit-ratios;
+                            ratio-input <=> root.image-edit-ratio-input;
+                            ratio-error: root.image-edit-ratio-error;
+                            crop-grid-idx <=> root.image-edit-crop-grid-idx;
+                            align-jpeg <=> root.image-edit-align-jpeg;
+                            overwrite-mode-idx <=> root.image-edit-overwrite-mode-idx;
+                            jpeg-quality <=> root.image-edit-jpeg-quality;
+                            jpeg-subsampling-idx <=> root.image-edit-jpeg-subsampling-idx;
+                            jpeg-progressive <=> root.image-edit-jpeg-progressive;
+                            png-compression-idx <=> root.image-edit-png-compression-idx;
+                            webp-lossless <=> root.image-edit-webp-lossless;
+                            webp-quality <=> root.image-edit-webp-quality;
+                            avif-quality <=> root.image-edit-avif-quality;
+                            avif-speed <=> root.image-edit-avif-speed;
+                            tiff-compression-idx <=> root.image-edit-tiff-compression-idx;
+                            add-ratio(text) => { root.image-edit-add-ratio(text); }
+                            remove-ratio(index) => { root.image-edit-remove-ratio(index); }
+                            reset-ratios => { root.image-edit-reset-ratios(); }
+                        }
+
+                        if root.active-category == 8 : SettingsPageTagsRatings {
                             max-history-tags <=> root.max-history-tags;
                         }
 
-                        if root.active-category == 8 : SettingsPageApi {
+                        if root.active-category == 9 : SettingsPageApi {
                             auto-complete-external-stubs <=> root.auto-complete-external-stubs;
                         }
 
-                        if root.active-category == 9 : SettingsPageDebug {
+                        if root.active-category == 10 : SettingsPageDebug {
                             obfuscate-logs <=> root.obfuscate-logs;
                         }
                     }

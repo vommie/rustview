@@ -43,6 +43,9 @@ export { MissingFolderDeleteDialog } from "missing_folder_delete_dialog.slint";
 export { MissingFileDialog } from "missing_file_dialog.slint";
 export { OpenManyFilesDialog } from "open_many_files_dialog.slint";
 export { TabMergeLimitDialog } from "tab_merge_limit_dialog.slint";
+export { ImageSaveConflictDialog, ImageChoiceView } from "image_save_conflict_dialog.slint";
+export { ImageUnsavedDialog, UnsavedPictureView } from "image_unsaved_dialog.slint";
+export { ImageExportDialog } from "image_export_dialog.slint";
 export { MultiviewFullscreenWindow } from "multiview_fullscreen_window.slint";
 export { MultiviewBarWindow } from "multiview_bar_window.slint";
 export { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewBarButtonView } from "multiview_types.slint";
@@ -397,6 +400,9 @@ export component MainWindow inherits Window {
 
     // Rating hotkeys Ctrl+0..5 (text, Ctrl, Alt, Meta, key repeat); true = it was a rating key and is consumed.
     callback rating-hotkey(string, bool, bool, bool, bool) -> bool;
+    // A key of the image editor in the tab view: 0 = Esc, 1 = Enter, 2 = Ctrl+S, 3 = Ctrl+Shift+S, 4 = Ctrl+Z,
+    // 5 = Ctrl+Shift+Z / Ctrl+Y. True = the editor used it; otherwise the key keeps its usual meaning.
+    callback edit-key(int /* code */) -> bool;
 
     callback media-drag-started(int /* id */, length /* x */, length /* y */);
     callback media-drag-moved(length /* x */, length /* y */);
@@ -568,6 +574,28 @@ export component MainWindow inherits Window {
 
             if root.is-dragging-media || root.is-dragging-tab || root.is-dragging-panel-tab || root.rubberband-active {
                 return reject;
+            }
+
+            // The crop tools of the tab view come first: Esc cancels the one opened first, Enter applies, Ctrl+S saves,
+            // Ctrl+Z undoes. Not while a text input has the focus.
+            if root.active-view-mode == 1 && !root.is-text-input-focused {
+                if event.text == Key.Escape && root.edit-key(0) {
+                    return accept;
+                }
+                if event.text == Key.Return && root.edit-key(1) {
+                    return accept;
+                }
+                if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.alt {
+                    if (event.text == "s" || event.text == "S" || event.text == "\u{13}") && root.edit-key(event.modifiers.shift ? 3 : 2) {
+                        return accept;
+                    }
+                    if (event.text == "z" || event.text == "Z" || event.text == "\u{1a}") && root.edit-key(event.modifiers.shift ? 5 : 4) {
+                        return accept;
+                    }
+                    if (event.text == "y" || event.text == "Y" || event.text == "\u{19}") && root.edit-key(5) {
+                        return accept;
+                    }
+                }
             }
 
             // Esc ends the multi-selection of tabs (only while one exists and no text input has the focus)
@@ -1092,6 +1120,8 @@ export component MainWindow inherits Window {
                         tile-pan(index, dx, dy) => { MultiviewTabBus.tile-pan(index, dx, dy); }
                         minimap-pointer(index, x, y, phase) => { MultiviewTabBus.minimap-pointer(index, x, y, phase); }
                         minimap-slider(index, code) => { MultiviewTabBus.minimap-slider(index, code); }
+                        crop-pointer(index, phase, x, y, shift) => { MultiviewTabBus.crop-pointer(index, phase, x, y, shift); }
+                        crop-ratio(index, landscape) => { MultiviewTabBus.crop-ratio(index, landscape); }
                         background-clicked(is-ctrl) => { MultiviewTabBus.background-clicked(is-ctrl); }
                         middle-clicked => { MultiviewTabBus.middle-clicked(); }
                         gutter-drag-started(index) => { MultiviewTabBus.gutter-drag-started(index); }

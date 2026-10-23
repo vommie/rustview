@@ -79,6 +79,9 @@ impl BridgeViewerTabs {
         let fs_close = fullscreen.clone();
         window.on_tab_closed(move |tab_id| {
             tracing::info!(tab_id, "[BridgeViewerTabs: Close] Tab closed by user");
+            if crate::ui::image_edit::close_guard::defer_tab_close(&fs_close, vec![tab_id.wrapping_as::<TabId>()]) {
+                return;
+            }
             tm_close.close_tab(tab_id.wrapping_as::<TabId>());
             Self::sync_ui(&win_close, &tm_close, &lib_close, &set_close, &st_close);
             Self::sync_video_embedding(&win_close, &tm_close, &fs_close, &set_close);
@@ -173,6 +176,9 @@ impl BridgeViewerTabs {
                     tab_id = active_id,
                     "[BridgeViewerTabs: ViewerClose] Closed active tab from viewer toolbar / shortcut"
                 );
+                if crate::ui::image_edit::close_guard::defer_tab_close(&fs_v_close, vec![active_id]) {
+                    return;
+                }
                 tm_v_close.close_tab(active_id);
                 Self::sync_ui(&win_v_close, &tm_v_close, &lib_v_close, &set_v_close, &st_v_close);
                 Self::sync_video_embedding(&win_v_close, &tm_v_close, &fs_v_close, &set_v_close);

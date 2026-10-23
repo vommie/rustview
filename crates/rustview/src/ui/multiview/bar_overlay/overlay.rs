@@ -415,6 +415,9 @@ impl Overlay {
         if self.last_actions != request.actions {
             sync_model(&self.model, request.actions.clone());
             self.last_actions.clone_from(&request.actions);
+            let split = request.actions.iter().position(|a| a.split);
+            self.window
+                .set_split_index(split.map_or(-1, rustview_core::util::cast::SaturatingAs::saturating_as::<i32>));
         }
         if self.window.get_tile() != request.tile {
             self.close_menu();

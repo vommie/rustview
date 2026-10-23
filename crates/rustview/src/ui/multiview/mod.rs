@@ -10,6 +10,7 @@ pub mod cursor;
 pub mod eligibility;
 pub mod grid_host;
 pub mod handle;
+mod handle_edit;
 mod navigation;
 mod pointer_lock;
 mod rating;

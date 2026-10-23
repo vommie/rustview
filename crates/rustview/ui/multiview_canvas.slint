@@ -4,6 +4,7 @@ import { MultiviewTileView, MultiviewGutterView, MultiviewScreenView } from "mul
 import { MultiviewGutter } from "multiview_gutter.slint";
 import { MultiviewBarMenu } from "multiview_bar_menu.slint";
 import { MultiviewZoomSlider } from "multiview_zoom_slider.slint";
+import { MultiviewCropOverlay } from "multiview_crop_overlay.slint";
 
 /// The scene of a Multiview: background, image and status tiles and gutters. Video tiles are native mpv windows that Rust
 /// places on top of this scene. The same component draws the fullscreen window, the tab view and the tab grid item, so a
@@ -36,6 +37,10 @@ export component MultiviewCanvas inherits Rectangle {
     callback minimap-pointer(int /* tile index */, float /* x */, float /* y */, int /* phase */);
     // The zoom slider on the minimap asks for something (the codes of the slider of the media bar).
     callback minimap-slider(int /* tile index */, int /* code */);
+    // The crop tool of a tile: the pointer (phase 0 = press, 1 = move, 2 = release, 3 = double click; logical pixels relative to
+    // the tile, Shift held) and its ratio button (left click = landscape, right click = portrait).
+    callback crop-pointer(int /* tile index */, int /* phase */, length /* x */, length /* y */, bool /* shift */);
+    callback crop-ratio(int /* tile index */, bool /* landscape */);
     callback gutter-drag-started(int);
     callback gutter-dragged(int, length /* distance from drag start */);
     callback gutter-drag-finished(int);
@@ -268,6 +273,44 @@ export component MultiviewCanvas inherits Rectangle {
                         self.last-x = self.mouse-x;
                         self.last-y = self.mouse-y;
                     }
+                }
+            }
+        }
+
+        // The crop tool: above the picture and its pointer area, below the minimap (which keeps moving a zoomed picture).
+        if tile.kind == 0 && tile.crop-open && root.interactive : MultiviewCropOverlay {
+            x: tile.crop-room-x;
+            y: tile.crop-room-y;
+            width: tile.crop-room-width;
+            height: tile.crop-room-height;
+            pic-x: tile.crop-pic-x;
+            pic-y: tile.crop-pic-y;
+            pic-width: tile.crop-pic-width;
+            pic-height: tile.crop-pic-height;
+            crop-x: tile.crop-x;
+            crop-y: tile.crop-y;
+            crop-width: tile.crop-width;
+            crop-height: tile.crop-height;
+            size-label: tile.crop-size-label;
+            ratio-label: tile.crop-ratio-label;
+            show-grid: tile.crop-grid;
+            dragging: tile.crop-dragging;
+
+            pointer(phase, x, y, shift) => {
+                root.crop-pointer(index, phase, x + self.x, y + self.y, shift);
+            }
+            ratio(landscape) => {
+                root.crop-ratio(index, landscape);
+            }
+            pan(dx, dy) => {
+                root.tile-pan(index, dx, dy);
+            }
+            zoom-wheel(delta, x, y) => {
+                // The wheel zoom of a zoomed picture is reported in its room, else in the tile.
+                if tile.zoomed {
+                    root.tile-zoom-wheel(index, delta, x + self.x - tile.zoom-area-x, y + self.y - tile.zoom-area-y);
+                } else {
+                    root.tile-zoom-wheel(index, delta, x + self.x, y + self.y);
                 }
             }
         }

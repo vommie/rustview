@@ -64,7 +64,7 @@ fn with_host<R>(f: impl FnOnce(&mut TabHost) -> R) -> Option<R> {
     })
 }
 
-fn current_instance() -> Option<SharedInstance> {
+pub(super) fn current_instance() -> Option<SharedInstance> {
     with_host(|h| h.instance.upgrade()).flatten()
 }
 
@@ -122,8 +122,31 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
         });
     });
     bus.on_minimap_slider(|index, code| act(|mv| mv.zoom_minimap_slider(index.max(0).saturating_as::<usize>(), code)));
+    bus.on_crop_pointer(|index, phase, x, y, shift| {
+        if let Some(instance) = current_instance()
+            && instance
+                .lock()
+                .crop_pointer_logical(index.max(0).saturating_as::<usize>(), phase, x, y, shift)
+        {
+            refresh();
+        }
+    });
+    bus.on_crop_ratio(|index, landscape| act(|mv| mv.crop_ratio(index.max(0).saturating_as::<usize>(), landscape)));
+    window.on_edit_key(edit_key);
     bus.on_background_clicked(on_click);
     bus.on_middle_clicked(|| run(route_for(RoutedEvent::ToggleFullscreen, ClickKind::None)));
+}
+
+/// A key of the image editor in the tab view: the instance of the shown tab decides; returns whether it used the key.
+fn edit_key(code: i32) -> bool {
+    let Some(instance) = current_instance() else {
+        return false;
+    };
+    let (used, action) = instance.lock().edit_key(code);
+    drop(instance);
+    refresh();
+    run(action);
+    used
 }
 
 /// Runs `f` on the instance of the shown tab and syncs the result.
@@ -337,6 +360,12 @@ pub fn refresh() {
     else {
         return;
     };
+    if let Some(app) = with_host(|h| h.handle.clone())
+        .flatten()
+        .and_then(|handle| handle.app())
+    {
+        crate::ui::tabs::unsaved_marks::sync_if_changed(&window, &app.tab_manager);
+    }
     let (id, view) = {
         let guard = instance.lock();
         let key = (guard.id(), guard.revision());

@@ -1,0 +1,160 @@
+import { CheckBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { IconId } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
+import { ButtonBar } from "button_bar.slint";
+
+/// One picture with unsaved changes.
+export struct UnsavedPictureView {
+    filename: string,
+    folder: string,
+    // "Crop to 893 x 1116 px"
+    description: string,
+    // Checked = save it, unchecked = discard its changes.
+    save: bool,
+    // The format cannot be written back: saving asks for a new file.
+    needs-export: bool,
+}
+
+/// Asked before something closes that holds pictures with unsaved changes: one checkbox per picture (save it or discard its
+/// changes), then Apply (its label follows the checkboxes) or Cancel (nothing closes).
+export component ImageUnsavedDialog inherits Window {
+    title: "RustView - Unsaved Changes";
+    width: 560px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
+    always-on-top: true;
+    background: Theme.background;
+
+    in property <string> heading: "Unsaved Changes";
+    in property <string> message: "";
+    in property <[UnsavedPictureView]> pictures;
+    in property <string> apply-label: "Save All";
+
+    callback toggled(int /* row */, bool /* save */);
+    callback apply();
+    callback cancel();
+
+    forward-focus: dialog-focus;
+
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancel();
+                return accept;
+            }
+            if event.text == Key.Return {
+                root.apply();
+                return accept;
+            }
+            return reject;
+        }
+
+        dialog-layout := VerticalLayout {
+            width: root.width;
+            padding: 0px;
+            spacing: 0px;
+
+            VerticalLayout {
+                width: root.width;
+                padding: 18px;
+                spacing: 12px;
+
+                DialogHeading {
+                    icon: IconId.save;
+                    text: root.heading;
+                    color: Theme.primary;
+                }
+
+                Text {
+                    text: root.message;
+                    font-size: 12px;
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+
+                Rectangle {
+                    border-radius: 6px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+                    height: Math.min(list.preferred-height, 260px);
+
+                    ScrollView {
+                        list := VerticalLayout {
+                            padding: 4px;
+                            spacing: 2px;
+
+                            for picture[row] in root.pictures : Rectangle {
+                                border-radius: 4px;
+                                background: area.has-hover ? Theme.surface-hover : transparent;
+                                height: Math.max(44px, row-layout.preferred-height);
+
+                                area := TouchArea {
+                                    clicked => {
+                                        root.toggled(row, !picture.save);
+                                    }
+                                }
+
+                                row-layout := HorizontalLayout {
+                                    padding: 6px;
+                                    spacing: 10px;
+
+                                    VerticalLayout {
+                                        alignment: center;
+                                        CheckBox {
+                                            checked: picture.save;
+                                            toggled => {
+                                                root.toggled(row, self.checked);
+                                            }
+                                        }
+                                    }
+
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        alignment: center;
+                                        spacing: 1px;
+
+                                        Text {
+                                            text: picture.filename;
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: picture.save ? Theme.text : Theme.text-muted;
+                                            overflow: elide;
+                                        }
+
+                                        Text {
+                                            text: picture.save
+                                                ? (picture.needs-export ? picture.description + " - saved as a new file (the format cannot be written)" : picture.description)
+                                                : picture.description + " - changes discarded";
+                                            font-size: 11px;
+                                            color: picture.save ? (picture.needs-export ? #fab387 : Theme.text-muted) : Theme.status-corrupt;
+                                            overflow: elide;
+                                        }
+
+                                        Text {
+                                            text: picture.folder;
+                                            font-size: 10px;
+                                            color: Theme.text-muted;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            ButtonBar {
+                vertical-stretch: 0;
+                bar-height: 48px;
+                show-cancel: true;
+                show-ok: true;
+                text-ok: root.apply-label;
+                ok-clicked => { root.apply(); }
+                cancel-clicked => { root.cancel(); }
+            }
+        }
+    }
+}

@@ -5,6 +5,7 @@ use crate::ui::button_feedback_bridge;
 use crate::ui::{MultiviewBarButtonView, MultiviewGutterView, MultiviewScreenView, MultiviewTileView};
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::layout::Rect;
+use crate::viewer::multiview::media_actions::ButtonLook;
 use crate::viewer::multiview::model::TileKind;
 use crate::viewer::multiview::view::{
     GutterView, HostedView, MediaActionView, Navigation, PrimaryActionView, TileView, ZoomContentView,
@@ -110,6 +111,11 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
     let mm_rect = minimap.map_or(Rect::default(), |m| m.rect);
     let mm_viewport = minimap.map_or((0.0, 0.0, 1.0, 1.0), |m| m.viewport);
     let bubble = minimap.and_then(|m| m.bubble.as_ref());
+    let crop = tile.crop.as_ref();
+    let crop_room = crop.map_or(Rect::default(), |c| c.clip);
+    let fl = |v: f64| v.az::<f32>() / dpi.max(0.01);
+    let crop_pic = crop.map_or((0.0, 0.0, 0.0, 0.0), |c| c.picture);
+    let crop_rect = crop.map_or((0.0, 0.0, 0.0, 0.0), |c| c.rect);
     MultiviewTileView {
         x: logical(x, dpi),
         y: logical(y, dpi),
@@ -154,6 +160,23 @@ fn tile_view(tile: &TileView, dpi: f32, images: &mut ImageCache) -> MultiviewTil
         mm_zoom_snaps: slint::ModelRc::new(slint::VecModel::from(bubble.map_or_else(Vec::new, |b| b.snaps.clone()))),
         rating_icon: tile.rating.map_or(-1, |pulse| i32::from(pulse.rating)),
         rating_alpha: tile.rating.map_or(0.0, |pulse| pulse.alpha),
+        crop_open: crop.is_some(),
+        crop_room_x: logical(crop_room.x, dpi),
+        crop_room_y: logical(crop_room.y, dpi),
+        crop_room_width: logical(crop_room.w, dpi),
+        crop_room_height: logical(crop_room.h, dpi),
+        crop_pic_x: fl(crop_pic.0),
+        crop_pic_y: fl(crop_pic.1),
+        crop_pic_width: fl(crop_pic.2),
+        crop_pic_height: fl(crop_pic.3),
+        crop_x: fl(crop_rect.0),
+        crop_y: fl(crop_rect.1),
+        crop_width: fl(crop_rect.2),
+        crop_height: fl(crop_rect.3),
+        crop_size_label: crop.map_or_else(Default::default, |c| c.size_label.as_str().into()),
+        crop_ratio_label: crop.map_or_else(Default::default, |c| c.ratio_label.as_str().into()),
+        crop_grid: crop.is_some_and(|c| c.grid),
+        crop_dragging: crop.is_some_and(|c| c.dragging),
     }
 }
 
@@ -170,6 +193,12 @@ fn gutter_view(gutter: &GutterView, dpi: f32) -> MultiviewGutterView {
 }
 
 fn action_view(action: &MediaActionView) -> MultiviewBarButtonView {
+    let (emphasis, fading) = match action.look {
+        ButtonLook::Normal => (0, false),
+        ButtonLook::Emphasized => (1, false),
+        ButtonLook::Busy => (2, false),
+        ButtonLook::Done { fading } => (3, fading),
+    };
     MultiviewBarButtonView {
         id: action.id.code(),
         icon: action.icon.to_slint(),
@@ -179,6 +208,9 @@ fn action_view(action: &MediaActionView) -> MultiviewBarButtonView {
         enabled: action.enabled,
         attention: false,
         feedback: button_feedback_bridge::to_slint(action.feedback),
+        emphasis,
+        fading,
+        split: action.split,
     }
 }
 
@@ -192,6 +224,9 @@ fn primary_action_view(action: &PrimaryActionView) -> MultiviewBarButtonView {
         enabled: action.enabled,
         attention: action.attention,
         feedback: button_feedback_bridge::to_slint(ButtonFeedback::default()),
+        emphasis: 0,
+        fading: false,
+        split: false,
     }
 }
 

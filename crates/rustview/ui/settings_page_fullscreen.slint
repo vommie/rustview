@@ -24,6 +24,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <bool> media-bar-show-open-as-tab: true;
     in-out property <bool> media-bar-show-open-with: true;
     in-out property <bool> media-bar-show-zoom: true;
+    in-out property <bool> media-bar-show-crop: true;
     in-out property <bool> media-bar-show-delete: true;
     in-out property <bool> media-bar-show-remove: true;
     in-out property <int> media-bar-reveal-distance-px: 15;
@@ -300,6 +301,14 @@ export component SettingsPageFullscreen inherits VerticalLayout {
             tooltip: "A button with a zoom slider, shown on images only. Ctrl + mouse wheel over an image zooms without the button.";
             enabled: root.media-bar-enabled;
             checked <=> root.media-bar-show-zoom;
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Crop";
+            tooltip: "A button that opens the crop tool on images. Save, Undo and Redo appear by themselves while a picture has unsaved changes.";
+            enabled: root.media-bar-enabled;
+            checked <=> root.media-bar-show-crop;
         }
 
         SettingsSwitchRow {

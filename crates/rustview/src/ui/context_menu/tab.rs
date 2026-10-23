@@ -3,6 +3,7 @@ use crate::icons::Icon;
 use crate::system::DesktopApp;
 use crate::ui::MainWindow;
 use crate::ui::context_menu::media::MediaContextMenu;
+use crate::ui::image_edit::close_guard;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::{
     CTX_TAB_CLOSE, CTX_TAB_CLOSE_OTHERS, CTX_TAB_CLOSE_SELECTED, CTX_TAB_CLOSE_TO_LEFT, CTX_TAB_CLOSE_TO_RIGHT,
@@ -349,6 +350,11 @@ impl TabContextMenu {
                 }
             }
             CTX_TAB_CLOSE_TO_LEFT => {
+                let order: Vec<TabId> = ctx.tab_manager.list_tabs().iter().map(|t| t.id).collect();
+                let leaving = close_guard::tabs_in_range(&order, close_guard::TabRange::Left, tab_id);
+                if close_guard::defer_tab_close(ctx.fullscreen, leaving) {
+                    return;
+                }
                 let all_tabs_before = ctx.tab_manager.list_tabs();
                 let tab_title = ViewerTabManager::compute_tab_title(&all_tabs_before, tab_id);
                 let (closed_count, _) = ctx.tab_manager.close_tabs_to_left(tab_id);
@@ -376,6 +382,11 @@ impl TabContextMenu {
                 }
             }
             CTX_TAB_CLOSE_TO_RIGHT => {
+                let order: Vec<TabId> = ctx.tab_manager.list_tabs().iter().map(|t| t.id).collect();
+                let leaving = close_guard::tabs_in_range(&order, close_guard::TabRange::Right, tab_id);
+                if close_guard::defer_tab_close(ctx.fullscreen, leaving) {
+                    return;
+                }
                 let all_tabs_before = ctx.tab_manager.list_tabs();
                 let tab_title = ViewerTabManager::compute_tab_title(&all_tabs_before, tab_id);
                 let (closed_count, _) = ctx.tab_manager.close_tabs_to_right(tab_id);
@@ -403,6 +414,11 @@ impl TabContextMenu {
                 }
             }
             CTX_TAB_CLOSE_OTHERS => {
+                let order: Vec<TabId> = ctx.tab_manager.list_tabs().iter().map(|t| t.id).collect();
+                let leaving = close_guard::tabs_in_range(&order, close_guard::TabRange::Others, tab_id);
+                if close_guard::defer_tab_close(ctx.fullscreen, leaving) {
+                    return;
+                }
                 let all_tabs_before = ctx.tab_manager.list_tabs();
                 let tab_title = ViewerTabManager::compute_tab_title(&all_tabs_before, tab_id);
                 let (closed_count, _) = ctx.tab_manager.close_other_tabs(tab_id);
@@ -436,6 +452,9 @@ impl TabContextMenu {
             CTX_TAB_CLOSE_SELECTED => BridgeViewerTabs::close_selected_tabs(ctx),
             CTX_TAB_CLOSE => {
                 tracing::info!(tab_id, "[TabContextMenu: Close] Close tab requested from context menu");
+                if close_guard::defer_tab_close(ctx.fullscreen, vec![tab_id]) {
+                    return;
+                }
                 ctx.tab_manager.close_tab(tab_id);
                 BridgeViewerTabs::sync_ui(ctx.window, ctx.tab_manager, ctx.library, ctx.settings, ctx.state);
                 BridgeViewerTabs::sync_video_embedding(ctx.window, ctx.tab_manager, ctx.fullscreen, ctx.settings);

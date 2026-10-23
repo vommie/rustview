@@ -220,6 +220,21 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
         with_session(|s| s.zoom_minimap_slider(index.max(0).saturating_as::<usize>(), code));
     });
     win.on_zoom_key(|key| with_session(|s| s.zoom_key(key)));
+    win.on_crop_pointer(|index, phase, x, y, shift| {
+        with_session(|s| s.crop_pointer(index.max(0).saturating_as::<usize>(), phase, x, y, shift));
+    });
+    win.on_crop_ratio(|index, landscape| {
+        with_session(|s| s.crop_ratio(index.max(0).saturating_as::<usize>(), landscape));
+    });
+    win.on_edit_key(|code| {
+        let mut used = false;
+        run(|s| {
+            let (handled, action) = s.edit_key(code);
+            used = handled;
+            action
+        });
+        used
+    });
     win.on_rating_hotkey(|text, ctrl, alt, meta, repeat| {
         let handle = SESSION.with(|cell| {
             cell.try_borrow()
@@ -415,6 +430,32 @@ pub(super) fn close_by_user() -> bool {
     if close_refused() {
         return false;
     }
+    // A fullscreen that follows the Browse selection takes its tiles with it; one of a tab hands them back to the tab, edits
+    // included, so only the first one asks about unsaved pictures.
+    let loses = SESSION.with(|cell| {
+        cell.try_borrow().ok().and_then(|slot| {
+            slot.as_ref()
+                .filter(|s| s.tab_return.is_none())
+                .map(|s| (s.instance.clone(), s.handle.clone()))
+        })
+    });
+    if let Some((instance, handle)) = loses
+        && instance.lock().has_unsaved_edits()
+        && let Some((app, window)) = handle.app_and_window_for_edit()
+    {
+        let context = handle.edit_context(app, &window);
+        let closed = crate::ui::image_edit::close_guard::confirm(
+            &context,
+            vec![(instance, None)],
+            crate::viewer::edit::unsaved::CloseReason::Fullscreen,
+            || {
+                if !close_refused() {
+                    close(true);
+                }
+            },
+        );
+        return closed;
+    }
     close(true);
     true
 }
@@ -579,6 +620,9 @@ impl Session {
 
     /// Brings the Slint models and the badge in line with the instance when it changed since the last sync.
     pub(super) fn refresh(&mut self) {
+        if let Some((app, window)) = self.handle.app_and_window_for_edit() {
+            crate::ui::tabs::unsaved_marks::sync_if_changed(&window, &app.tab_manager);
+        }
         let view = {
             let instance = self.instance.lock();
             if Some(instance.revision()) == self.shown_revision {

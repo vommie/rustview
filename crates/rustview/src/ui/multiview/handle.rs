@@ -159,7 +159,7 @@ impl MultiviewHandle {
         *self.shared.main_window.lock() = Some(main_window);
     }
 
-    fn app(&self) -> Option<AppContext> {
+    pub(super) fn app(&self) -> Option<AppContext> {
         self.shared.app.lock().clone()
     }
 
@@ -241,6 +241,19 @@ impl MultiviewHandle {
                 let Some((app, window)) = self.app_and_window() else {
                     return;
                 };
+                // Paging replaces the picture: its unsaved edits are saved or discarded first (the user decides).
+                if let Some(instance) = self.shared.current.lock().upgrade()
+                    && instance.lock().has_unsaved_edits()
+                {
+                    let handle = self.clone();
+                    crate::ui::image_edit::close_guard::confirm(
+                        &self.edit_context(app, &window),
+                        vec![(instance, None)],
+                        crate::viewer::edit::unsaved::CloseReason::SelectionChange,
+                        move || handle.navigate(forward),
+                    );
+                    return;
+                }
                 let target = navigation::neighbor(&app.state.read(), current, forward);
                 let Some(target) = target else {
                     tracing::debug!(

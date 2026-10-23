@@ -10,6 +10,7 @@ use super::follow::{DuplicateRefusal, duplicate_refusal};
 use super::model::TileKind;
 use super::route::{HostMode, OriginKind};
 use crate::icons::Icon;
+use crate::viewer::edit::save_badge::SaveLook;
 use rustview_core::settings::schema::MULTIVIEW_MAX_TILES;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -24,6 +25,14 @@ pub enum MediaActionId {
     Duplicate,
     /// Opens or closes the zoom slider of an image.
     Zoom,
+    /// Opens or cancels the crop tool of a picture.
+    Crop,
+    /// Saves the edited picture over the original (or through the export dialog when its format cannot be written).
+    Save,
+    /// The arrow of the Save button: the drop-down with Save, Save As... and Discard Changes.
+    SaveMenu,
+    Undo,
+    Redo,
 }
 
 /// What a click in the media bar window means: a button, an item of the drop-down menu that hangs below the bar, or a
@@ -45,6 +54,37 @@ pub enum BarClick {
     },
     /// The reset (100%).
     ZoomReset,
+    /// An item of the drop-down of the Save button.
+    SaveMenuItem(SaveMenuItem),
+}
+
+/// The items of the drop-down of the Save button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveMenuItem {
+    Save,
+    SaveAs,
+    Discard,
+}
+
+impl SaveMenuItem {
+    pub const fn index(self) -> i32 {
+        match self {
+            Self::Save => 0,
+            Self::SaveAs => 1,
+            Self::Discard => 2,
+        }
+    }
+
+    pub fn from_index(index: i32) -> Option<Self> {
+        [Self::Save, Self::SaveAs, Self::Discard]
+            .into_iter()
+            .find(|i| i.index() == index)
+    }
+
+    /// The id the item has in the drop-down (`BarClick::SAVE_MENU` + index).
+    pub const fn code(self) -> i32 {
+        BarClick::SAVE_MENU + self.index()
+    }
 }
 
 impl BarClick {
@@ -55,11 +95,15 @@ impl BarClick {
     pub const ZOOM_STEP: i32 = 2_000_000;
     pub const ZOOM_RESET: i32 = 3_000_000;
     pub const ZOOM_POS: i32 = 4_000_000;
+    /// The items of the Save drop-down: `SAVE_MENU + SaveMenuItem::index`.
+    pub const SAVE_MENU: i32 = 5_000_000;
     const MAX_ZOOM_PERMILLE: i32 = 999_999;
     pub const MAX_ZOOM_POS: i32 = 10_000;
 
     pub fn from_code(code: i32) -> Option<Self> {
-        if code >= Self::ZOOM_POS {
+        if code >= Self::SAVE_MENU {
+            SaveMenuItem::from_index(code - Self::SAVE_MENU).map(Self::SaveMenuItem)
+        } else if code >= Self::ZOOM_POS {
             Some(Self::ZoomPos((code - Self::ZOOM_POS).min(Self::MAX_ZOOM_POS)))
         } else if code >= Self::ZOOM_RESET {
             (code == Self::ZOOM_RESET).then_some(Self::ZoomReset)
@@ -88,7 +132,7 @@ impl BarClick {
             }
             Self::ZoomReset => Some(Self::ZOOM_RESET),
             Self::ZoomPos(position) => Some(Self::ZOOM_POS + position.clamp(0, Self::MAX_ZOOM_POS)),
-            Self::Action(_) | Self::MenuItem(_) => None,
+            Self::Action(_) | Self::MenuItem(_) | Self::SaveMenuItem(_) => None,
         }
     }
 }
@@ -106,6 +150,11 @@ impl MediaActionId {
             Self::Delete => 6,
             Self::Duplicate => 7,
             Self::Zoom => 8,
+            Self::Crop => 9,
+            Self::Save => 10,
+            Self::SaveMenu => 11,
+            Self::Undo => 12,
+            Self::Redo => 13,
         }
     }
 
@@ -120,6 +169,11 @@ impl MediaActionId {
             Self::Delete,
             Self::Duplicate,
             Self::Zoom,
+            Self::Crop,
+            Self::Save,
+            Self::SaveMenu,
+            Self::Undo,
+            Self::Redo,
         ]
         .into_iter()
         .find(|id| id.code() == code)
@@ -140,6 +194,32 @@ pub struct MediaBarContext {
     pub broken: bool,
     /// `Some(open)` for a picture that can be zoomed (an image that is shown), with the state of its slider; else `None`.
     pub zoom: Option<bool>,
+    /// The edit buttons of a picture that is shown (`None` for a video or a picture that is still loading).
+    pub edit: Option<EditBarState>,
+}
+
+/// What the edit buttons of a tile show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EditBarState {
+    /// `Ok(open)`: the crop tool can be used (and is open or not); `Err(tooltip)`: the button is there but disabled.
+    pub crop: Result<bool, &'static str>,
+    /// The Save button, while there is one.
+    pub save: Option<SaveLook>,
+    pub can_undo: bool,
+    pub can_redo: bool,
+}
+
+/// How a button is drawn beyond its icon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ButtonLook {
+    #[default]
+    Normal,
+    /// Draws attention (unsaved changes).
+    Emphasized,
+    /// Working (the file is being written).
+    Busy,
+    /// Done; `fading` once it is on its way out.
+    Done { fading: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,6 +231,9 @@ pub struct MediaActionSpec {
     pub active: Option<bool>,
     /// A disabled button is drawn dimmed and does nothing; its tooltip says why.
     pub enabled: bool,
+    pub look: ButtonLook,
+    /// The button has an arrow of its own that opens a drop-down (`MediaActionId::SaveMenu` for Save).
+    pub split: bool,
 }
 
 impl MediaActionSpec {
@@ -161,6 +244,8 @@ impl MediaActionSpec {
             tooltip: tooltip.into(),
             active: None,
             enabled: true,
+            look: ButtonLook::Normal,
+            split: false,
         }
     }
 }
@@ -176,6 +261,10 @@ const PROVIDERS: &[Provider] = &[
     open_with,
     delete,
     zoom,
+    crop,
+    undo,
+    redo,
+    save,
     remove,
     close,
 ];
@@ -271,6 +360,65 @@ fn zoom(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
                 "Zoom (also Ctrl + mouse wheel over the image)"
             },
         )
+    })
+}
+
+/// Images only: opens the crop tool (the button stays lit while it is open) or cancels it. A picture that cannot be edited
+/// (animated, several pages, edited in another tile) keeps the button, disabled, with the reason as tooltip.
+fn crop(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    let edit = ctx.edit.filter(|_| interactive(ctx))?;
+    Some(match edit.crop {
+        Ok(open) => MediaActionSpec {
+            active: Some(open),
+            ..MediaActionSpec::on(
+                MediaActionId::Crop,
+                Icon::Crop,
+                if open {
+                    "Cancel cropping (Esc); double click or Enter applies the crop"
+                } else {
+                    "Crop: drag a rectangle, Shift keeps the ratio, double click or Enter applies"
+                },
+            )
+        },
+        Err(reason) => MediaActionSpec {
+            enabled: false,
+            ..MediaActionSpec::on(MediaActionId::Crop, Icon::Crop, reason)
+        },
+    })
+}
+
+fn undo(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    let edit = ctx.edit.filter(|e| interactive(ctx) && (e.can_undo || e.can_redo))?;
+    Some(MediaActionSpec {
+        enabled: edit.can_undo,
+        ..MediaActionSpec::on(MediaActionId::Undo, Icon::Undo, "Undo the last change (Ctrl+Z)")
+    })
+}
+
+fn redo(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    let edit = ctx.edit.filter(|e| interactive(ctx) && (e.can_undo || e.can_redo))?;
+    Some(MediaActionSpec {
+        enabled: edit.can_redo,
+        ..MediaActionSpec::on(MediaActionId::Redo, Icon::Redo, "Redo (Ctrl+Shift+Z)")
+    })
+}
+
+/// Only while there is something to save (and briefly after saving, fading out). Its arrow opens Save, Save As... and Discard.
+fn save(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
+    let look = ctx.edit.filter(|_| interactive(ctx))?.save?;
+    let (icon, tooltip, look) = match look {
+        SaveLook::Emphasized => (
+            Icon::Save,
+            "Save the changes over the original (Ctrl+S); the arrow offers Save As...",
+            ButtonLook::Emphasized,
+        ),
+        SaveLook::Busy => (Icon::Loader, "Saving...", ButtonLook::Busy),
+        SaveLook::Done { fading } => (Icon::Check, "Saved", ButtonLook::Done { fading }),
+    };
+    Some(MediaActionSpec {
+        look,
+        split: matches!(look, ButtonLook::Emphasized),
+        ..MediaActionSpec::on(MediaActionId::Save, icon, tooltip)
     })
 }
 

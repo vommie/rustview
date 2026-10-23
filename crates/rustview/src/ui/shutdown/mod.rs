@@ -124,6 +124,7 @@ fn close_windows(t: &ShutdownTargets<'_>) {
     t.delete_file_dialog.close(window);
     OpenConfirmation::close(window);
     MergeLimitDialog::close(window);
+    crate::ui::image_edit::close_windows(window);
     t.remove_orphaned_dialog.close(window);
     t.conflict_dialog.close(window);
     t.tag_dialogs.close_add(window);
@@ -144,6 +145,16 @@ fn close_windows(t: &ShutdownTargets<'_>) {
 
 /// Releases what lives outside the windows.
 fn release_resources(t: &ShutdownTargets<'_>) {
+    // Unsaved edits are not asked about when the application exits (they live in memory only; the files are untouched).
+    let unsaved: usize = t
+        .tab_manager
+        .all_instances()
+        .iter()
+        .map(|instance| instance.lock().unsaved_entries().len())
+        .sum();
+    if unsaved > 0 {
+        tracing::warn!(unsaved, "[Shutdown: ImageEdit] Unsaved picture edits are discarded");
+    }
     t.tab_manager.shutdown();
     SystemDndHandler::cancel_ghost_overlay();
     t.settings.flush();

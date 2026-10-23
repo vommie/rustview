@@ -99,6 +99,9 @@ impl UiBridge {
                     type_ahead::config::apply(&new_clone.appearance);
                 }
 
+                if diff_clone.image_edit_changed {
+                    crate::viewer::edit::prefs::apply(&new_clone.image_edit);
+                }
                 if diff_clone.fullscreen_settings_changed || diff_clone.viewer_settings_changed {
                     prefs::apply(&new_clone.fullscreen);
                     zoom_prefs::apply(&new_clone.fullscreen);

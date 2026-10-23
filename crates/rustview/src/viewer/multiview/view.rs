@@ -5,7 +5,7 @@
 
 use super::follow::TileKey;
 use super::layout::Rect;
-use super::media_actions::MediaActionId;
+use super::media_actions::{ButtonLook, MediaActionId};
 use super::model::TileKind;
 use super::primary_actions::PrimaryActionId;
 use super::rating_feedback::PulseView;
@@ -30,6 +30,30 @@ pub struct TileView {
     pub pannable: bool,
     /// The icon of a rating just given, while it is shown.
     pub rating: Option<PulseView>,
+    /// The crop tool, while it is open on this tile.
+    pub crop: Option<CropView>,
+    /// The picture has unsaved edits.
+    pub dirty: bool,
+}
+
+/// The crop tool on a tile (physical pixels).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CropView {
+    /// The part of the host the overlay covers, relative to the tile: the room of the picture (the tile and the free space
+    /// around it, where a zoomed picture is drawn).
+    pub clip: Rect,
+    /// The whole picture, relative to `clip` (it may reach out of it when zoomed in).
+    pub picture: (f64, f64, f64, f64),
+    /// The crop rectangle, relative to `clip`.
+    pub rect: (f64, f64, f64, f64),
+    /// "893 x 1116 px".
+    pub size_label: String,
+    /// "O", "4:5", "Free".
+    pub ratio_label: String,
+    /// The rule-of-thirds lines are drawn.
+    pub grid: bool,
+    /// A handle or the rectangle is being dragged.
+    pub dragging: bool,
 }
 
 /// The picture of a zoomed image: where it goes in its room (physical pixels) and what it is.
@@ -91,6 +115,9 @@ pub struct MediaActionView {
     pub active: Option<bool>,
     pub enabled: bool,
     pub feedback: ButtonFeedback,
+    pub look: ButtonLook,
+    /// The button has an arrow of its own that opens a drop-down.
+    pub split: bool,
 }
 
 pub struct GutterView {

@@ -9,8 +9,12 @@ use super::model::{AspectSource, TileKind, aspect_differs, aspect_from_size};
 use super::prefs;
 use super::teardown::teardown_videos;
 use super::tile;
+use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
 use crate::viewer::zoom::state::ZoomState;
+use rustview_core::image_edit::conflict::FileIdentity;
+use rustview_core::image_edit::probe;
 use rustview_core::library::models::MediaId;
+use rustview_core::media::MediaFormat;
 use rustview_core::settings::LogObscurer;
 use rustview_core::util::cast::SaturatingAs;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
@@ -159,12 +163,30 @@ impl MultiviewInstance {
         let spawned = std::thread::Builder::new()
             .name("multiview-image".into())
             .spawn(move || {
+                // The identity is taken before the pixels are read: a change while decoding shows up when saving.
+                let identity = FileIdentity::read(&path).ok();
                 let result: DecodedImage = image_decode::load_scaled(&path, max_w, max_h);
-                sink.post(me, PlayerEvent::ImageDecoded { tile: key, result });
+                let source = result.as_ref().ok().map(|(w, h, _)| {
+                    let format = MediaFormat::from_path(&path);
+                    EditSource {
+                        identity,
+                        probe: probe::probe(&path, format).map_err(|e| e.to_string()),
+                        format,
+                        size: (*w, *h),
+                    }
+                });
+                sink.post(
+                    me,
+                    PlayerEvent::ImageDecoded {
+                        tile: key,
+                        result,
+                        source,
+                    },
+                );
             });
         if let Err(e) = spawned {
             tracing::error!(media_id, error = %e, "[Multiview: Tile] Could not start the image decoder thread");
-            self.on_image_loaded(key, Err("This image could not be loaded".to_string()));
+            self.on_image_loaded(key, Err("This image could not be loaded".to_string()), None);
         }
     }
 
@@ -187,6 +209,14 @@ impl MultiviewInstance {
         }
         for index in 0..self.tiles.len() {
             if self.tiles[index].media_id != id {
+                continue;
+            }
+            // Unsaved edits are never thrown away by a refresh; saving finds out that the file changed.
+            if self.tiles[index].edit.as_ref().is_some_and(TileEdit::is_live) {
+                tracing::info!(
+                    media_id = id,
+                    "[ImageEdit: Tile] The file was refreshed while it has unsaved edits; the edits stay"
+                );
                 continue;
             }
             match self.tiles[index].kind {
@@ -217,10 +247,19 @@ impl MultiviewInstance {
     }
 
     /// Result of a background decode. Ignored if the tile left in the meantime.
-    pub fn on_image_loaded(&mut self, key: TileKey, result: DecodedImage) {
+    pub fn on_image_loaded(&mut self, key: TileKey, result: DecodedImage, source: Option<EditSource>) {
         let Some(tile) = self.tiles.iter_mut().find(|t| t.key == key) else {
             return;
         };
+        // A picture that is edited keeps what it shows (a decode that was already running when editing started).
+        if tile.edit.as_ref().is_some_and(TileEdit::is_live) {
+            tile.is_loading = false;
+            return;
+        }
+        tile.edit = None;
+        if source.is_some() {
+            tile.source = source;
+        }
         let media_id = tile.media_id;
         tile.is_loading = false;
         let mut relayout = false;

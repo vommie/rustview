@@ -11,6 +11,7 @@ use slint::Timer;
 use std::cell::RefCell;
 
 mod media_refresh;
+pub use media_refresh::RefreshOrigin;
 mod metadata_refresh;
 mod query_callbacks;
 mod records;

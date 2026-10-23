@@ -66,7 +66,11 @@ impl UiBridge {
         let lib_close = self.library.clone();
         let set_close = self.settings.clone();
         let st_close = self.state.clone();
+        let fs_close = self.fullscreen.clone();
         self.window.on_tab_grid_item_close_clicked(move |tab_id| {
+            if crate::ui::image_edit::close_guard::defer_tab_close(&fs_close, vec![tab_id.wrapping_as::<u64>()]) {
+                return;
+            }
             BridgeTabGrid::handle_item_close_clicked(
                 tab_id.wrapping_as::<u64>(),
                 &win_close,
@@ -121,8 +125,13 @@ impl UiBridge {
         let lib_close_all = self.library.clone();
         let set_close_all = self.settings.clone();
         let st_close_all = self.state.clone();
+        let fs_close_all = self.fullscreen.clone();
         self.window.on_tab_grid_close_all_clicked(move || {
             tracing::info!("[UiBridge: TabGrid] Close all tabs clicked from TabGrid toolbar");
+            let all: Vec<u64> = tm_close_all.list_tabs().iter().map(|t| t.id).collect();
+            if crate::ui::image_edit::close_guard::defer_tab_close(&fs_close_all, all) {
+                return;
+            }
             tm_close_all.close_all_tabs();
             BridgeViewerTabs::sync_ui(
                 &win_close_all,

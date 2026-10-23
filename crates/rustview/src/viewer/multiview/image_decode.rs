@@ -2,8 +2,10 @@
 //! to four tiles never hold four full-resolution buffers.
 
 use crate::viewer::HighResImageLoader;
+use crate::viewer::edit::tile_edit::crop_display;
 use fast_image_resize::images::Image;
 use fast_image_resize::{PixelType, ResizeOptions, Resizer};
+use rustview_core::image_edit::geometry::PixelRect;
 use rustview_core::util::cast::FloatToInt;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::Path;
@@ -22,7 +24,24 @@ pub fn downscaled_size(width: u32, height: u32, max_w: u32, max_h: u32) -> (u32,
 
 /// Returns the original pixel size (for the aspect ratio) and the possibly downscaled pixels.
 pub fn load_scaled(path: &Path, max_w: u32, max_h: u32) -> Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), String> {
+    load_scaled_cropped(path, None, max_w, max_h)
+}
+
+/// Like `load_scaled`, but of the part `crop` of the original (an edited picture); the size returned is the size of that part.
+pub fn load_scaled_cropped(
+    path: &Path,
+    crop: Option<PixelRect>,
+    max_w: u32,
+    max_h: u32,
+) -> Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), String> {
     let (width, height, pixels) = HighResImageLoader::load_full_resolution(path).map_err(|e| e.to_string())?;
+    let (width, height, pixels) = match crop {
+        Some(crop) if crop.fits_in((width, height)) => {
+            (crop.width, crop.height, crop_display(&pixels, (width, height), crop))
+        }
+        Some(_) => return Err("the picture on disk does not have the size of the edited one".to_string()),
+        None => (width, height, pixels),
+    };
     let (target_w, target_h) = downscaled_size(width, height, max_w, max_h);
     if (target_w, target_h) == (width, height) {
         return Ok((width, height, pixels));

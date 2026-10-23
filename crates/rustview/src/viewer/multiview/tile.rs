@@ -12,6 +12,8 @@ use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
 use super::rating_overlay::OverlayState;
 use crate::ui::button_feedback::ButtonFeedback;
+use crate::viewer::edit::save_badge::SaveBadge;
+use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
 use crate::viewer::zoom::state::ZoomState;
 use crate::viewer::{MpvPlayer, X11VideoSubwindow, install_nonfatal_error_handler};
 use parking_lot::RwLock;
@@ -57,6 +59,8 @@ pub struct TileSeed {
     pub pixels: Option<SharedPixelBuffer<Rgb8Pixel>>,
     /// Pixel size of the original of an image whose `pixels` are given (the pixels may be a downscaled copy): what zooming needs.
     pub orig_size: Option<(u32, u32)>,
+    /// What is known about the file of a decoded image (a duplicate takes it over from its source tile).
+    pub source: Option<EditSource>,
     pub sticky: bool,
 }
 
@@ -71,6 +75,7 @@ impl TileSeed {
             filename,
             pixels: None,
             orig_size: None,
+            source: None,
             sticky: false,
         }
     }
@@ -110,6 +115,12 @@ pub struct TileState {
     pub zoom: Option<ZoomState>,
     /// The minimap was shown the last time the zoom was looked at (a change of it makes the view redraw).
     pub zoom_minimap_shown: bool,
+    /// What the decoder learned about the file of an image (for editing and saving); `None` until it is decoded.
+    pub source: Option<EditSource>,
+    /// The edits of the picture while it is edited (the crop tool, unsaved changes, a save in progress).
+    pub edit: Option<TileEdit>,
+    /// The Save button of the tile (it outlives the edit for a moment after saving, fading out).
+    pub save_badge: SaveBadge,
 }
 
 /// Parameters that must not be taken for the new file, and how many ticks to ignore them at most.
@@ -146,6 +157,9 @@ impl TileState {
             stale_probe: None,
             zoom: seed.orig_size.filter(|_| decoded).map(ZoomState::new),
             zoom_minimap_shown: false,
+            source: seed.source,
+            edit: None,
+            save_badge: SaveBadge::Hidden,
         }
     }
 }

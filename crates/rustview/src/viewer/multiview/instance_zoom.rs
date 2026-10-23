@@ -14,12 +14,14 @@ use super::model::TileKind;
 use super::route::HostMode;
 use super::view::{MinimapView, ZoomBubbleView, ZoomContentView, ZoomPictureView};
 use crate::viewer::HighResImageLoader;
+use crate::viewer::edit::tile_edit::crop_display;
 use crate::viewer::zoom::geometry::{Area, IRect};
 use crate::viewer::zoom::minimap::MinimapLayout;
 use crate::viewer::zoom::prefs as zoom_prefs;
 use crate::viewer::zoom::render::SourceImage;
 use crate::viewer::zoom::scale;
 use crate::viewer::zoom::state::{PictureContent, RenderDone, Request};
+use rustview_core::image_edit::geometry::PixelRect;
 use rustview_core::util::cast::{Az, FloatToInt};
 use std::sync::Arc;
 use std::time::Instant;
@@ -92,7 +94,7 @@ impl MultiviewInstance {
                 zoom.zoom_step(up, scale::slider_wheel_step(shift, ctrl), None, &prefs, now);
             }
             BarClick::ZoomReset => zoom.reset(&prefs, now),
-            BarClick::Action(_) | BarClick::MenuItem(_) => return,
+            BarClick::Action(_) | BarClick::MenuItem(_) | BarClick::SaveMenuItem(_) => return,
         }
         self.poll_zoom_at(now);
         self.bump();
@@ -402,7 +404,7 @@ impl MultiviewInstance {
         let rects: Vec<Option<Rect>> = (0..self.tiles.len()).map(|i| self.host_tile_rect(i)).collect();
         let bubbles = self.zoom_minimap_bubble.clone();
         let mut changed = false;
-        let mut work: Vec<(TileKey, std::path::PathBuf, Vec<Request>)> = Vec::new();
+        let mut work: Vec<(TileKey, std::path::PathBuf, Option<PixelRect>, Vec<Request>)> = Vec::new();
         for (index, tile) in self.tiles.iter_mut().enumerate() {
             let Some(zoom) = tile.zoom.as_mut() else { continue };
             // The minimap is revealed by the pointer on or around its place.
@@ -425,12 +427,14 @@ impl MultiviewInstance {
                 changed = true;
             }
             if !requests.is_empty() {
-                work.push((tile.key, tile.path.clone(), requests));
+                // An edited picture zooms into its edited state: the original is cut the same way.
+                let crop = tile.edit.as_ref().and_then(|e| e.stack.plan().crop);
+                work.push((tile.key, tile.path.clone(), crop, requests));
             }
         }
-        for (key, path, requests) in work {
+        for (key, path, crop, requests) in work {
             for request in requests {
-                self.run_zoom_request(key, &path, request);
+                self.run_zoom_request(key, &path, crop, request);
             }
         }
         if changed {
@@ -438,7 +442,7 @@ impl MultiviewInstance {
         }
     }
 
-    fn run_zoom_request(&self, key: TileKey, path: &std::path::Path, request: Request) {
+    fn run_zoom_request(&self, key: TileKey, path: &std::path::Path, crop: Option<PixelRect>, request: Request) {
         let (sink, me) = (self.sink.clone(), self.me.clone());
         match request {
             Request::LoadSource => {
@@ -446,6 +450,13 @@ impl MultiviewInstance {
                 let spawned = std::thread::Builder::new().name("zoom-source".into()).spawn(move || {
                     let result = HighResImageLoader::load_full_resolution(&path)
                         .map_err(|e| e.to_string())
+                        .and_then(|(w, h, pixels)| match crop {
+                            Some(crop) if crop.fits_in((w, h)) => {
+                                Ok((crop.width, crop.height, crop_display(&pixels, (w, h), crop)))
+                            }
+                            Some(_) => Err("the picture on disk does not have the size of the edited one".to_string()),
+                            None => Ok((w, h, pixels)),
+                        })
                         .and_then(|(w, h, pixels)| {
                             SourceImage::new(w, h, pixels)
                                 .map(Arc::new)

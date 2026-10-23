@@ -36,6 +36,11 @@ export component MultiviewFullscreenWindow inherits Window {
     callback tile-pan(int /* tile index */, length /* dx */, length /* dy */);
     callback minimap-pointer(int /* tile index */, float /* x */, float /* y */, int /* phase */);
     callback minimap-slider(int /* tile index */, int /* code of the slider */);
+    callback crop-pointer(int /* tile index */, int /* phase */, length /* x */, length /* y */, bool /* shift */);
+    callback crop-ratio(int /* tile index */, bool /* landscape */);
+    // A key of the image editor: 0 = Esc, 1 = Enter, 2 = Ctrl+S, 3 = Ctrl+Shift+S, 4 = Ctrl+Z, 5 = Ctrl+Shift+Z / Ctrl+Y.
+    // True = the editor used it (Esc cancelled a crop tool, ...); otherwise the key keeps its usual meaning.
+    callback edit-key(int /* code */) -> bool;
     callback zoom-key(int /* 0 = reset, 1 = in, 2 = out */);
     // Ctrl+0..5 rate the media shown (text, Ctrl, Alt, Meta, key repeat); true = it was a rating key.
     callback rating-hotkey(string, bool, bool, bool, bool) -> bool;
@@ -59,9 +64,29 @@ export component MultiviewFullscreenWindow inherits Window {
     forward-focus: fs-focus;
     fs-focus := FocusScope {
         key-pressed(event) => {
+            // The crop tools come first: Esc cancels the one opened first, the normal Esc only when none is open.
             if event.text == Key.Escape {
+                if root.edit-key(0) {
+                    return accept;
+                }
                 root.request-close();
                 return accept;
+            }
+            if event.text == Key.Return && root.edit-key(1) {
+                return accept;
+            }
+            if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.alt {
+                if event.text == "s" || event.text == "S" || event.text == "\u{13}" {
+                    if root.edit-key(event.modifiers.shift ? 3 : 2) {
+                        return accept;
+                    }
+                }
+                if (event.text == "z" || event.text == "Z" || event.text == "\u{1a}") && root.edit-key(event.modifiers.shift ? 5 : 4) {
+                    return accept;
+                }
+                if (event.text == "y" || event.text == "Y" || event.text == "\u{19}") && root.edit-key(5) {
+                    return accept;
+                }
             }
             if (event.text == "w" || event.text == "W") && (event.modifiers.control || event.modifiers.meta) {
                 root.request-close();
@@ -145,6 +170,12 @@ export component MultiviewFullscreenWindow inherits Window {
         }
         minimap-slider(index, code) => {
             root.minimap-slider(index, code);
+        }
+        crop-pointer(index, phase, x, y, shift) => {
+            root.crop-pointer(index, phase, x, y, shift);
+        }
+        crop-ratio(index, landscape) => {
+            root.crop-ratio(index, landscape);
         }
         gutter-drag-started(index) => {
             root.gutter-drag-started(index);

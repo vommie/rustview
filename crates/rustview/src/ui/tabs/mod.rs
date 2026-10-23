@@ -4,6 +4,7 @@ pub mod grid_bridge;
 pub mod icon;
 pub mod merge_limit;
 pub mod tab_selection;
+pub mod unsaved_marks;
 
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::multiview::MultiviewHandle;
@@ -82,6 +83,7 @@ impl BridgeViewerTabs {
                 has_tags: false,
                 shift_x: 0.0,
                 is_placeholder: false,
+                has_unsaved: t.multiview.instance.lock().has_unsaved_edits(),
             })
             .collect();
 

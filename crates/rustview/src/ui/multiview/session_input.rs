@@ -95,6 +95,26 @@ impl Session {
         self.refresh();
     }
 
+    /// The pointer on the crop overlay of tile `index` (logical pixels relative to the tile).
+    pub(super) fn crop_pointer(&mut self, index: usize, phase: i32, x: f32, y: f32, shift: bool) {
+        if self.instance.lock().crop_pointer_logical(index, phase, x, y, shift) {
+            self.refresh();
+        }
+    }
+
+    /// The ratio button of the crop overlay of tile `index`.
+    pub(super) fn crop_ratio(&mut self, index: usize, landscape: bool) {
+        self.instance.lock().crop_ratio(index, landscape);
+        self.refresh();
+    }
+
+    /// A key of the image editor; returns whether it was used and what the application has to do about it.
+    pub(super) fn edit_key(&mut self, code: i32) -> (bool, UiAction) {
+        let result = self.instance.lock().edit_key(code);
+        self.refresh();
+        result
+    }
+
     pub(super) fn zoom_minimap_slider(&mut self, index: usize, code: i32) {
         self.instance.lock().zoom_minimap_slider(index, code);
         self.refresh();
@@ -231,6 +251,50 @@ impl Session {
 
     /// Brings the tiles in line with the current selection: tiles that are not sticky and no longer selected leave, new
     /// items take the freed slots, the remaining tiles keep running. An empty selection changes nothing.
+    /// Pictures with unsaved edits would leave the view because the selection changed: the user decides first. When the
+    /// question takes over (`true`), following waits; it runs again once the edits are saved or discarded, and when the user
+    /// cancels, the edited tiles become sticky (they stay, whatever the selection) so nothing is lost.
+    fn ask_before_following(&self, leaving: &[crate::viewer::multiview::follow::TileKey]) -> bool {
+        if crate::ui::image_edit::close_guard::is_asking() {
+            return true;
+        }
+        let dirty: Vec<_> = {
+            let instance = self.instance.lock();
+            instance
+                .unsaved_entries_of(leaving)
+                .into_iter()
+                .map(|e| e.tile)
+                .collect()
+        };
+        if dirty.is_empty() {
+            return false;
+        }
+        let Some((app, window)) = self.handle.app_and_window_for_edit() else {
+            return false;
+        };
+        let context = self.handle.edit_context(app, &window);
+        let weak = std::sync::Arc::downgrade(&self.instance);
+        let keep = dirty.clone();
+        // A cancelled question keeps the tiles: they become sticky right away and turn back to following once saved.
+        for key in &keep {
+            self.instance.lock().set_sticky(*key, true);
+        }
+        let proceeded = crate::ui::image_edit::close_guard::confirm(
+            &context,
+            vec![(self.instance.clone(), Some(dirty))],
+            crate::viewer::edit::unsaved::CloseReason::SelectionChange,
+            move || {
+                if let Some(instance) = weak.upgrade() {
+                    for key in &keep {
+                        instance.lock().set_sticky(*key, false);
+                    }
+                }
+                super::session::schedule_follow(crate::ui::multiview::handle::Pace::Immediate);
+            },
+        );
+        !proceeded
+    }
+
     pub(super) fn follow_now(&mut self) {
         let Some(state) = self.state.clone() else {
             return;
@@ -241,6 +305,9 @@ impl Session {
         self.debounce.stop();
         let wanted = eligibility::wanted(&state.read());
         let plan = self.instance.lock().plan_follow(&wanted);
+        if self.ask_before_following(&plan.remove) {
+            return;
+        }
         if plan.is_noop() {
             if plan.overflow > 0 {
                 tracing::info!(

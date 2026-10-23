@@ -1,0 +1,435 @@
+import { Button, ComboBox, LineEdit, Slider } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { DialogHeading } from "dialog_heading.slint";
+import { ButtonBar } from "button_bar.slint";
+import { InlineNotice } from "inline_notice.slint";
+import { ToggleSwitch } from "toggle_switch.slint";
+
+/// A row of the options card: the name on the left, the control on the right.
+component OptionRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> hint;
+
+    spacing: 12px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 1px;
+
+        Text {
+            text: root.label;
+            font-size: 12px;
+            color: Theme.text;
+        }
+
+        if root.hint != "" : Text {
+            text: root.hint;
+            font-size: 10px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        @children
+    }
+}
+
+/// A slider with its value next to it.
+component ValueSlider inherits HorizontalLayout {
+    in property <int> minimum: 1;
+    in property <int> maximum: 100;
+    in-out property <int> value: 90;
+    in property <bool> enabled: true;
+
+    callback edited();
+
+    spacing: 8px;
+
+    Slider {
+        width: 170px;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value: root.value;
+        enabled: root.enabled;
+        changed(v) => {
+            root.value = Math.round(v);
+            root.edited();
+        }
+    }
+
+    Text {
+        text: root.value;
+        width: 30px;
+        font-size: 12px;
+        font-weight: 700;
+        color: root.enabled ? Theme.primary : Theme.text-muted;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}
+
+/// A switch for the options card.
+component OptionSwitch inherits Rectangle {
+    in-out property <bool> checked;
+
+    callback edited();
+
+    width: 36px;
+    height: 20px;
+
+    ToggleSwitch {
+        checked: root.checked;
+    }
+
+    TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => {
+            root.checked = !root.checked;
+            root.edited();
+        }
+    }
+}
+
+/// "Save As": writes the edited picture to a new file, in a format of the user's choice and with the few options that matter
+/// for it. Also shown when the original's format cannot be written (`note` says why). Rust checks the name and the folder on
+/// every change (`changed`) and fills `warnings`, `exists` and `error`.
+export component ImageExportDialog inherits Window {
+    title: "RustView - Save As";
+    width: 560px;
+    preferred-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.preferred-height;
+    always-on-top: true;
+    background: Theme.background;
+
+    // Why the picture is saved as a new file (empty for a plain Save As).
+    in property <string> note: "";
+    in-out property <string> file-name: "";
+    in property <string> extension: "jpg";
+    in property <string> folder: "";
+    // 0 = JPEG, 1 = PNG, 2 = WebP, 3 = AVIF, 4 = TIFF, 5 = BMP (`WriteFormat::EXPORT_TARGETS`)
+    in-out property <int> format-index: 0;
+    in-out property <int> jpeg-quality: 90;
+    in-out property <int> jpeg-subsampling-index: 0; // 0 = 4:2:0, 1 = 4:2:2, 2 = 4:4:4
+    in-out property <bool> jpeg-progressive: false;
+    in-out property <int> png-compression-index: 1; // 0 = fast, 1 = balanced, 2 = smallest
+    in-out property <bool> webp-lossless: false;
+    in-out property <int> webp-quality: 90;
+    in-out property <int> avif-quality: 80;
+    in-out property <int> avif-speed: 6;
+    in-out property <int> tiff-compression-index: 1; // 0 = none, 1 = LZW, 2 = Deflate
+    // What the chosen format loses of the picture ("transparency becomes white", ...).
+    in property <[string]> warnings;
+    // A file of that name is in the folder: saving replaces it.
+    in property <bool> exists: false;
+    // The name or the folder cannot be used (the Save button is off then).
+    in property <string> error: "";
+    // The picture: "893 x 1116 px".
+    in property <string> size-text: "";
+
+    callback changed();
+    callback browse();
+    callback save();
+    callback cancel();
+
+    property <[string]> format-names: ["JPEG", "PNG", "WebP", "AVIF", "TIFF", "BMP"];
+
+    forward-focus: name-input;
+
+    dialog-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.cancel();
+                return accept;
+            }
+            if event.text == Key.Return && root.error == "" {
+                root.save();
+                return accept;
+            }
+            return reject;
+        }
+
+        dialog-layout := VerticalLayout {
+            width: root.width;
+            padding: 0px;
+            spacing: 0px;
+
+            VerticalLayout {
+                width: root.width;
+                padding: 18px;
+                spacing: 12px;
+
+                HorizontalLayout {
+                    spacing: 8px;
+
+                    DialogHeading {
+                        horizontal-stretch: 1;
+                        icon: IconId.save-as;
+                        text: "Save As";
+                        color: Theme.primary;
+                    }
+
+                    if root.size-text != "" : Rectangle {
+                        width: size-label.preferred-width + 16px;
+                        height: 22px;
+                        border-radius: 11px;
+                        background: Theme.surface-variant;
+
+                        size-label := Text {
+                            text: root.size-text;
+                            font-size: 11px;
+                            font-weight: 600;
+                            color: Theme.text-muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                if root.note != "" : InlineNotice {
+                    icon: IconId.status-warning;
+                    text: root.note;
+                    color: #fab387;
+                }
+
+                // Name and folder
+                VerticalLayout {
+                    spacing: 6px;
+
+                    Text {
+                        text: "File name";
+                        font-size: 11px;
+                        color: Theme.text-muted;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 6px;
+
+                        name-input := LineEdit {
+                            horizontal-stretch: 1;
+                            text <=> root.file-name;
+                            edited => {
+                                root.changed();
+                            }
+                            accepted => {
+                                if root.error == "" {
+                                    root.save();
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "." + root.extension;
+                            font-size: 13px;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+
+                        AppIcon {
+                            y: (parent.height - self.height) / 2;
+                            icon: IconId.folder;
+                            size: IconSize.md;
+                            color: Theme.text-muted;
+                        }
+
+                        Text {
+                            horizontal-stretch: 1;
+                            text: root.folder;
+                            font-size: 11px;
+                            color: Theme.text;
+                            overflow: elide;
+                            vertical-alignment: center;
+                        }
+
+                        Button {
+                            text: "Browse...";
+                            clicked => {
+                                root.browse();
+                            }
+                        }
+                    }
+                }
+
+                // Format: a segmented row of chips.
+                Rectangle {
+                    height: 30px;
+                    border-radius: 8px;
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: Theme.border;
+
+                    HorizontalLayout {
+                        padding: 2px;
+                        spacing: 2px;
+
+                        for name[index] in root.format-names : Rectangle {
+                            border-radius: 6px;
+                            background: index == root.format-index ? Theme.primary : (chip.has-hover ? Theme.surface-hover : transparent);
+                            animate background { duration: 100ms; }
+
+                            chip := TouchArea {
+                                mouse-cursor: MouseCursor.pointer;
+                                clicked => {
+                                    root.format-index = index;
+                                    root.changed();
+                                }
+                            }
+
+                            Text {
+                                text: name;
+                                font-size: 12px;
+                                font-weight: 600;
+                                color: index == root.format-index ? Theme.background : Theme.text;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // The options of the chosen format.
+                Rectangle {
+                    border-radius: 8px;
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: Theme.border;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 6px;
+
+                        if root.format-index == 0 : OptionRow {
+                            label: "Quality";
+                            hint: "90 keeps fine detail; below 75 compression shows.";
+                            ValueSlider {
+                                value <=> root.jpeg-quality;
+                                edited => { root.changed(); }
+                            }
+                        }
+                        if root.format-index == 0 : OptionRow {
+                            label: "Chroma subsampling";
+                            hint: "4:2:0 for photos, 4:4:4 for sharp colored edges (text, graphics).";
+                            ComboBox {
+                                width: 170px;
+                                model: ["4:2:0 (smallest)", "4:2:2", "4:4:4 (sharpest colors)"];
+                                current-index <=> root.jpeg-subsampling-index;
+                                selected => { root.changed(); }
+                            }
+                        }
+                        if root.format-index == 0 : OptionRow {
+                            label: "Progressive";
+                            hint: "Builds up while loading on the web; usually a little smaller.";
+                            OptionSwitch {
+                                checked <=> root.jpeg-progressive;
+                                edited => { root.changed(); }
+                            }
+                        }
+
+                        if root.format-index == 1 : OptionRow {
+                            label: "Compression";
+                            hint: "Lossless in every case; only the file size and the time to write it differ.";
+                            ComboBox {
+                                width: 170px;
+                                model: ["Fast", "Balanced", "Smallest file"];
+                                current-index <=> root.png-compression-index;
+                                selected => { root.changed(); }
+                            }
+                        }
+
+                        if root.format-index == 2 : OptionRow {
+                            label: "Lossless";
+                            hint: "Keeps every pixel; larger files.";
+                            OptionSwitch {
+                                checked <=> root.webp-lossless;
+                                edited => { root.changed(); }
+                            }
+                        }
+                        if root.format-index == 2 : OptionRow {
+                            label: "Quality";
+                            hint: root.webp-lossless ? "Not used for lossless files." : "85 to 90 is a good choice for photos.";
+                            ValueSlider {
+                                value <=> root.webp-quality;
+                                enabled: !root.webp-lossless;
+                                edited => { root.changed(); }
+                            }
+                        }
+
+                        if root.format-index == 3 : OptionRow {
+                            label: "Quality";
+                            hint: "AVIF looks good at lower values than JPEG; 70 to 80 suits photos.";
+                            ValueSlider {
+                                value <=> root.avif-quality;
+                                edited => { root.changed(); }
+                            }
+                        }
+                        if root.format-index == 3 : OptionRow {
+                            label: "Speed";
+                            hint: "Slower makes smaller files; encoding a large photo can take a while.";
+                            ValueSlider {
+                                minimum: 1;
+                                maximum: 10;
+                                value <=> root.avif-speed;
+                                edited => { root.changed(); }
+                            }
+                        }
+
+                        if root.format-index == 4 : OptionRow {
+                            label: "Compression";
+                            hint: "Lossless; LZW is read by every program.";
+                            ComboBox {
+                                width: 170px;
+                                model: ["None", "LZW", "Deflate"];
+                                current-index <=> root.tiff-compression-index;
+                                selected => { root.changed(); }
+                            }
+                        }
+
+                        if root.format-index == 5 : Text {
+                            text: "BMP has no options: the picture is stored uncompressed.";
+                            font-size: 12px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                for warning in root.warnings : InlineNotice {
+                    icon: IconId.status-warning;
+                    text: warning;
+                    color: #fab387;
+                }
+
+                if root.exists && root.error == "" : InlineNotice {
+                    icon: IconId.status-warning;
+                    text: "A file with this name is in the folder; saving replaces it.";
+                    color: Theme.status-corrupt;
+                }
+
+                if root.error != "" : InlineNotice {
+                    icon: IconId.status-error;
+                    text: root.error;
+                    color: Theme.status-corrupt;
+                }
+            }
+
+            ButtonBar {
+                vertical-stretch: 0;
+                bar-height: 48px;
+                show-cancel: true;
+                show-save: root.error == "";
+                text-save: root.exists ? "Replace" : "Save";
+                save-clicked => { root.save(); }
+                cancel-clicked => { root.cancel(); }
+            }
+        }
+    }
+}

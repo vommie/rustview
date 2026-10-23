@@ -104,6 +104,8 @@ impl SettingsStore {
     }
 
     fn validate_and_sanitize(settings: &mut AppSettings) {
+        settings.image_edit.sanitize();
+
         settings.general.confirm_open_file_count = settings
             .general
             .confirm_open_file_count

@@ -86,6 +86,16 @@ open_fullscreen = { tabler = "arrows-maximize", doc = "Open in fullscreen" }
 zoom_in = { tabler = "zoom-in", doc = "Zoom an image (and zoom in one step)" }
 zoom_out = { tabler = "zoom-out", doc = "Zoom out one step" }
 zoom_reset = { tabler = "zoom-reset", doc = "Back to 100% (the image fitted into its view)" }
+crop = { tabler = "crop", doc = "Crop a picture (the crop tool)" }
+save = { tabler = "device-floppy", doc = "Save the edited picture over the original" }
+save_as = { tabler = "file-export", doc = "Save the edited picture as a new file (Save As)" }
+undo = { tabler = "arrow-back-up", doc = "Undo the last edit" }
+redo = { tabler = "arrow-forward-up", doc = "Redo an edit that was undone" }
+discard_changes = { tabler = "restore", doc = "Discard the unsaved edits of a picture" }
+ratio_landscape = { tabler = "rectangle", doc = "A landscape aspect ratio" }
+ratio_portrait = { tabler = "rectangle-vertical", doc = "A portrait aspect ratio" }
+ratio_square = { tabler = "square", doc = "A square aspect ratio" }
+image_edit = { tabler = "photo-edit", doc = "Image editing (settings page)" }
 playing_elsewhere = { tabler = "screen-share", doc = "The content is shown in the fullscreen window, not here (placeholder in the tab grid)" }
 open_multiview = { tabler = "layout-columns", doc = "Open several media side by side in the fullscreen Multiview" }
 multiview_swap = { tabler = "arrows-exchange", doc = "Swap two neighboring media in the Multiview" }

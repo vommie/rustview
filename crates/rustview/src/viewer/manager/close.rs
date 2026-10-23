@@ -235,6 +235,19 @@ impl ViewerTabManager {
             .retain(|weak| weak.upgrade().is_some_and(|other| other.lock().id() != instance_id));
     }
 
+    /// Every Multiview the manager knows: the ones of the tabs and the observed ones (the fullscreen that follows the Browse view).
+    pub fn all_instances(&self) -> Vec<SharedInstance> {
+        let mut instances: Vec<SharedInstance> = self
+            .tabs
+            .read()
+            .all()
+            .iter()
+            .map(|t| t.multiview.instance.clone())
+            .collect();
+        instances.extend(self.observed_instances.lock().iter().filter_map(WeakInstance::upgrade));
+        instances
+    }
+
     pub(super) fn for_each_observed(&self, mut apply: impl FnMut(&mut MultiviewInstance)) {
         let instances: Vec<SharedInstance> = self
             .observed_instances

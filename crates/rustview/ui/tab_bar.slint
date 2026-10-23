@@ -147,6 +147,17 @@ export component TabItemView inherits Rectangle {
                 max-width: 180px;
             }
 
+            // Unsaved picture edits in this tab: a dot in the accent color.
+            if root.tab.has-unsaved : VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: Theme.accent;
+                }
+            }
+
             // 3. Dedicated Rating SVG Icon Badge (Icons API)
             if root.show-rating-badge && root.tab.rating > 0 : IconSlot {
                 icon: IconLookup.rating(root.tab.rating);

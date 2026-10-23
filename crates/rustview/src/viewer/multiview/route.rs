@@ -65,6 +65,14 @@ pub enum UiAction {
     Navigate {
         forward: bool,
     },
+    /// Save button (or Ctrl+S): the edits of the tile are saved over the original (or through the export dialog).
+    SaveTile(u64),
+    /// "Save As..." of the Save drop-down (or Ctrl+Shift+S): the export dialog opens for the tile.
+    SaveTileAs(u64),
+    /// The arrow of the Save button: its drop-down opens or closes.
+    ToggleSaveMenu(u64),
+    /// The remove button of a tile with unsaved edits: the application asks first, then removes the tile.
+    ConfirmRemoveTile(u64),
 }
 
 pub fn route(mode: HostMode, origin: OriginKind, event: RoutedEvent, click: ClickKind) -> UiAction {

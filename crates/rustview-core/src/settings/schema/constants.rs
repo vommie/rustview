@@ -400,6 +400,9 @@ pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE: bool = true;
 /// The zoom button of an image (slider with the zoom of the picture).
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_ZOOM: bool = true;
 
+/// The crop button of an image (the crop tool; Save, Undo and Redo appear by themselves while a picture has edits).
+pub const DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_CROP: bool = true;
+
 /// The bar appears when the pointer comes this close (logical pixels) to the place of the bar.
 pub const DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX: u32 = 15;
 
@@ -566,3 +569,29 @@ pub const PLAYER_TEARDOWN_WAIT_MS: u64 = 2_000;
 // SECTION 12: API & External Tools Settings - Single Point of Truth Constants
 // =============================================================================
 pub const DEFAULT_AUTO_COMPLETE_EXTERNAL_STUBS: bool = true;
+
+// =============================================================================
+// SECTION 13: Image Edit (cropping, saving, format presets) - Single Point of Truth Constants
+// =============================================================================
+/// The aspect ratios of the crop tool's ratio button, in this order (landscape ones on left click, portrait ones on right
+/// click, square ones on both; the original ratio "O" is always there).
+pub const DEFAULT_CROP_ASPECT_RATIOS: &[&str] = &[
+    "1:1", "5:4", "4:3", "3:2", "16:10", "16:9", "21:9", "4:5", "3:4", "2:3", "9:16",
+];
+/// At most this many presets are kept.
+pub const MAX_CROP_ASPECT_RATIOS: usize = 32;
+/// When the rule-of-thirds lines show inside the crop rectangle: "dragging", "always" or "never".
+pub const DEFAULT_CROP_GRID: &str = "dragging";
+/// The top left corner of a JPEG crop keeps to the block grid, so it is always saved without loss.
+pub const DEFAULT_CROP_ALIGN_JPEG_TO_LOSSLESS_GRID: bool = false;
+/// How the original is replaced: "safe" (a backup until the new file is in place), "trash" or "direct".
+pub const DEFAULT_SAVE_OVERWRITE_MODE: &str = "safe";
+pub const DEFAULT_PRESET_JPEG_QUALITY: u8 = 90;
+pub const DEFAULT_PRESET_JPEG_SUBSAMPLING: &str = "420";
+pub const DEFAULT_PRESET_JPEG_PROGRESSIVE: bool = false;
+pub const DEFAULT_PRESET_PNG_COMPRESSION: &str = "default";
+pub const DEFAULT_PRESET_WEBP_LOSSLESS: bool = false;
+pub const DEFAULT_PRESET_WEBP_QUALITY: u8 = 90;
+pub const DEFAULT_PRESET_AVIF_QUALITY: u8 = 80;
+pub const DEFAULT_PRESET_AVIF_SPEED: u8 = 6;
+pub const DEFAULT_PRESET_TIFF_COMPRESSION: &str = "lzw";

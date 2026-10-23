@@ -17,14 +17,28 @@ impl MultiviewInstance {
     /// selection changes, and a copy that vanished at the next click would not be what was asked for).
     fn duplicate_seed(&self, index: usize) -> TileSeed {
         let tile = &self.tiles[index];
+        // A duplicate shows the file: a tile with unsaved edits gives it the picture from before the edits.
+        let (pixels, orig_size, aspect) = match (&tile.edit, &tile.source) {
+            (Some(edit), Some(source)) => (
+                Some(edit.base_pixels.clone()),
+                Some(source.size),
+                crate::viewer::edit::tile_edit::aspect_of(source.size),
+            ),
+            _ => (
+                tile.pixels.clone().filter(|_| !tile.is_loading),
+                tile.zoom.as_ref().map(super::super::zoom::state::ZoomState::image),
+                tile.aspect,
+            ),
+        };
         TileSeed {
             media_id: tile.media_id,
             kind: tile.kind,
-            aspect: tile.aspect,
+            aspect,
             path: tile.path.clone(),
             filename: tile.filename.clone(),
-            pixels: tile.pixels.clone().filter(|_| !tile.is_loading),
-            orig_size: tile.zoom.as_ref().map(super::super::zoom::state::ZoomState::image),
+            pixels,
+            orig_size,
+            source: tile.source.clone(),
             sticky: tile.sticky,
         }
     }

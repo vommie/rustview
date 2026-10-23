@@ -1,0 +1,285 @@
+import { Theme } from "styles.slint";
+import { TooltipArea } from "tooltips.slint";
+
+/// The corner bracket of the crop rectangle: two short thick bars along the edges that meet in the corner.
+component CropCorner inherits Rectangle {
+    // 0 = top left, 1 = top right, 2 = bottom right, 3 = bottom left
+    in property <int> corner;
+    in property <length> arm: 18px;
+    in property <length> thickness: 3px;
+
+    width: root.arm;
+    height: root.arm;
+
+    // A dark rim under the white bars keeps them visible on bright pictures.
+    for layer in [0, 1] : Rectangle {
+        property <length> grow: layer == 0 ? 1px : 0px;
+        property <color> fill: layer == 0 ? #00000066 : #ffffff;
+
+        Rectangle {
+            x: (root.corner == 1 || root.corner == 2 ? 0px : 0px) - parent.grow;
+            y: (root.corner >= 2 ? root.height - root.thickness : 0px) - parent.grow;
+            width: root.arm + 2 * parent.grow;
+            height: root.thickness + 2 * parent.grow;
+            border-radius: 1px;
+            background: parent.fill;
+        }
+
+        Rectangle {
+            x: (root.corner == 1 || root.corner == 2 ? root.width - root.thickness : 0px) - parent.grow;
+            y: 0px - parent.grow;
+            width: root.thickness + 2 * parent.grow;
+            height: root.arm + 2 * parent.grow;
+            border-radius: 1px;
+            background: parent.fill;
+        }
+    }
+}
+
+/// The handle in the middle of an edge: a short thick bar along the edge.
+component CropEdge inherits Rectangle {
+    in property <bool> vertical;
+    in property <length> long: 18px;
+    in property <length> thickness: 3px;
+
+    width: root.vertical ? root.thickness : root.long;
+    height: root.vertical ? root.long : root.thickness;
+
+    Rectangle {
+        x: -1px;
+        y: -1px;
+        width: parent.width + 2px;
+        height: parent.height + 2px;
+        border-radius: 2px;
+        background: #00000066;
+    }
+
+    Rectangle {
+        border-radius: 1px;
+        background: #ffffff;
+    }
+}
+
+/// A small flat pill with text on a dark glass background (the size label and the ratio button).
+component CropPill inherits Rectangle {
+    in property <string> text;
+    in property <bool> interactive: false;
+    in property <bool> hovered: false;
+
+    height: 22px;
+    width: label.preferred-width + 16px;
+    border-radius: 11px;
+    background: root.interactive && root.hovered ? Theme.primary.with-alpha(0.85) : #000000b8;
+    border-width: 1px;
+    border-color: root.interactive && root.hovered ? Theme.primary : #ffffff2e;
+    animate background { duration: 90ms; }
+
+    label := Text {
+        text: root.text;
+        font-size: 11px;
+        font-weight: 600;
+        color: root.interactive && root.hovered ? Theme.background : #ffffff;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+/// The crop tool on a picture: the rectangle with its handles, the picture outside it dimmed, the rule-of-thirds lines, the size
+/// of the crop in pixels of the picture (top left) and the button of the aspect ratio (top right). All geometry comes from Rust in
+/// logical pixels relative to this overlay (which covers the room of the picture); Rust maps the pointer through the zoom of the
+/// tile, so the tool works the same at every zoom.
+export component MultiviewCropOverlay inherits Rectangle {
+    // The whole picture and the crop rectangle, relative to the overlay.
+    in property <length> pic-x;
+    in property <length> pic-y;
+    in property <length> pic-width;
+    in property <length> pic-height;
+    in property <length> crop-x;
+    in property <length> crop-y;
+    in property <length> crop-width;
+    in property <length> crop-height;
+    in property <string> size-label;
+    in property <string> ratio-label;
+    in property <bool> show-grid;
+    in property <bool> dragging;
+
+    // phase: 0 = press, 1 = move, 2 = release, 3 = double click; the position is relative to the overlay.
+    callback pointer(int /* phase */, length /* x */, length /* y */, bool /* shift */);
+    // The ratio button: left click = next landscape ratio, right click = next portrait ratio.
+    callback ratio(bool /* landscape */);
+    // A drag with the middle button moves a zoomed picture.
+    callback pan(length /* dx */, length /* dy */);
+    // Ctrl + mouse wheel zooms (position relative to the overlay).
+    callback zoom-wheel(length /* delta-y */, length /* x */, length /* y */);
+
+    // Reach of a handle around its center (the same as `instance_edit::HANDLE_REACH`).
+    property <length> reach: 10px;
+    property <length> right: root.crop-x + root.crop-width;
+    property <length> bottom: root.crop-y + root.crop-height;
+    property <length> pic-right: root.pic-x + root.pic-width;
+    property <length> pic-bottom: root.pic-y + root.pic-height;
+    property <bool> small: root.crop-width < root.reach * 4 || root.crop-height < root.reach * 4;
+
+    clip: true;
+
+    // The picture outside the crop, dimmed (four bands inside the picture).
+    property <color> dim: #000000a6;
+    Rectangle { x: root.pic-x; y: root.pic-y; width: Math.max(0px, root.pic-width); height: Math.max(0px, root.crop-y - root.pic-y); background: root.dim; }
+    Rectangle { x: root.pic-x; y: root.bottom; width: Math.max(0px, root.pic-width); height: Math.max(0px, root.pic-bottom - root.bottom); background: root.dim; }
+    Rectangle { x: root.pic-x; y: root.crop-y; width: Math.max(0px, root.crop-x - root.pic-x); height: Math.max(0px, root.crop-height); background: root.dim; }
+    Rectangle { x: root.right; y: root.crop-y; width: Math.max(0px, root.pic-right - root.right); height: Math.max(0px, root.crop-height); background: root.dim; }
+
+    // The rule of thirds.
+    if root.show-grid : Rectangle {
+        x: root.crop-x;
+        y: root.crop-y;
+        width: root.crop-width;
+        height: root.crop-height;
+
+        for i in [1, 2] : Rectangle {
+            x: parent.width * i / 3;
+            width: 1px;
+            height: parent.height;
+            background: #ffffff59;
+        }
+
+        for i in [1, 2] : Rectangle {
+            y: parent.height * i / 3;
+            width: parent.width;
+            height: 1px;
+            background: #ffffff59;
+        }
+    }
+
+    // The frame: a thin white line with a dark rim outside it.
+    Rectangle {
+        x: root.crop-x - 1px;
+        y: root.crop-y - 1px;
+        width: root.crop-width + 2px;
+        height: root.crop-height + 2px;
+        border-width: 1px;
+        border-color: #00000080;
+    }
+
+    Rectangle {
+        x: root.crop-x;
+        y: root.crop-y;
+        width: root.crop-width;
+        height: root.crop-height;
+        border-width: 1px;
+        border-color: #ffffffe6;
+    }
+
+    // The eight handles: brackets in the corners, bars in the middle of the edges.
+    CropCorner { corner: 0; x: root.crop-x - 2px; y: root.crop-y - 2px; }
+    CropCorner { corner: 1; x: root.right - self.width + 2px; y: root.crop-y - 2px; }
+    CropCorner { corner: 2; x: root.right - self.width + 2px; y: root.bottom - self.height + 2px; }
+    CropCorner { corner: 3; x: root.crop-x - 2px; y: root.bottom - self.height + 2px; }
+
+    if root.crop-width > 60px : CropEdge { vertical: false; x: root.crop-x + (root.crop-width - self.width) / 2; y: root.crop-y - 2px; }
+    if root.crop-width > 60px : CropEdge { vertical: false; x: root.crop-x + (root.crop-width - self.width) / 2; y: root.bottom - self.height + 2px; }
+    if root.crop-height > 60px : CropEdge { vertical: true; x: root.crop-x - 2px; y: root.crop-y + (root.crop-height - self.height) / 2; }
+    if root.crop-height > 60px : CropEdge { vertical: true; x: root.right - self.width + 2px; y: root.crop-y + (root.crop-height - self.height) / 2; }
+
+    // Where the pointer is: the same rules as the hit test in Rust, for the mouse cursor only.
+    property <bool> near-left: Math.abs(touch.mouse-x - root.crop-x) <= root.reach;
+    property <bool> near-right: Math.abs(touch.mouse-x - root.right) <= root.reach;
+    property <bool> near-top: Math.abs(touch.mouse-y - root.crop-y) <= root.reach;
+    property <bool> near-bottom: Math.abs(touch.mouse-y - root.bottom) <= root.reach;
+    property <bool> within-x: touch.mouse-x >= root.crop-x && touch.mouse-x <= root.right;
+    property <bool> within-y: touch.mouse-y >= root.crop-y && touch.mouse-y <= root.bottom;
+    property <bool> inside: root.within-x && root.within-y;
+    // 0 = outside, 1 = inside, 2 = NW/SE corner, 3 = NE/SW corner, 4 = left/right edge, 5 = top/bottom edge
+    property <int> zone: root.small && root.inside ? 1
+        : ((root.near-left && root.near-top) || (root.near-right && root.near-bottom)) ? 2
+        : ((root.near-right && root.near-top) || (root.near-left && root.near-bottom)) ? 3
+        : (root.within-y && (root.near-left || root.near-right)) ? 4
+        : (root.within-x && (root.near-top || root.near-bottom)) ? 5
+        : root.inside ? 1 : 0;
+
+    property <bool> left-down: false;
+    property <bool> middle-down: false;
+    property <length> last-x;
+    property <length> last-y;
+
+    touch := TouchArea {
+        mouse-cursor: root.middle-down ? MouseCursor.grabbing
+            : root.zone == 1 ? (root.left-down ? MouseCursor.grabbing : MouseCursor.move)
+            : root.zone == 2 ? MouseCursor.nwse-resize
+            : root.zone == 3 ? MouseCursor.nesw-resize
+            : root.zone == 4 ? MouseCursor.ew-resize
+            : root.zone == 5 ? MouseCursor.ns-resize
+            : MouseCursor.crosshair;
+
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left {
+                if event.kind == PointerEventKind.down {
+                    root.left-down = true;
+                    root.pointer(0, self.mouse-x, self.mouse-y, event.modifiers.shift);
+                } else if event.kind == PointerEventKind.up {
+                    root.left-down = false;
+                    root.pointer(2, self.mouse-x, self.mouse-y, event.modifiers.shift);
+                }
+            } else if event.button == PointerEventButton.middle {
+                if event.kind == PointerEventKind.down {
+                    root.middle-down = true;
+                    root.last-x = self.mouse-x;
+                    root.last-y = self.mouse-y;
+                } else if event.kind == PointerEventKind.up {
+                    root.middle-down = false;
+                }
+            } else if event.kind == PointerEventKind.move {
+                if root.left-down {
+                    root.pointer(1, self.mouse-x, self.mouse-y, event.modifiers.shift);
+                } else if root.middle-down {
+                    root.pan(self.mouse-x - root.last-x, self.mouse-y - root.last-y);
+                    root.last-x = self.mouse-x;
+                    root.last-y = self.mouse-y;
+                }
+            }
+        }
+
+        double-clicked => {
+            root.pointer(3, self.mouse-x, self.mouse-y, false);
+        }
+
+        scroll-event(event) => {
+            if event.modifiers.control || event.modifiers.meta {
+                root.zoom-wheel(event.delta-y, self.mouse-x, self.mouse-y);
+            }
+            // Paging to another picture is not what a wheel turn over the crop tool should do.
+            return accept;
+        }
+    }
+
+    // The size of the crop in pixels of the picture, at the top left corner (inside; above the frame when it is too small).
+    size-pill := CropPill {
+        text: root.size-label;
+        x: Math.max(4px, root.crop-x + 8px);
+        y: root.crop-height > self.height * 2 + 24px ? root.crop-y + 8px : Math.max(4px, root.crop-y - self.height - 6px);
+    }
+
+    // The aspect ratio at the top right corner: a flat button; left click = landscape ratios, right click = portrait ratios.
+    ratio-pill := CropPill {
+        text: root.ratio-label;
+        interactive: true;
+        hovered: ratio-touch.has-hover;
+        x: Math.min(root.width - self.width - 4px, Math.max(size-pill.x + size-pill.width + 6px, root.right - self.width - 8px));
+        y: size-pill.y;
+
+        ratio-touch := TooltipArea {
+            width: 100%;
+            height: 100%;
+            text: "Aspect ratio (O = the picture's own). Left click: next landscape ratio, right click: next portrait ratio. Shift while dragging keeps the ratio.";
+            cursor: MouseCursor.pointer;
+
+            clicked => {
+                root.ratio(true);
+            }
+
+            right-clicked => {
+                root.ratio(false);
+            }
+        }
+    }
+}

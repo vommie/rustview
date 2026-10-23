@@ -1,0 +1,399 @@
+import { Button, ComboBox, LineEdit, Slider } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { SettingsCard } from "settings_card.slint";
+import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
+import { InlineNotice } from "inline_notice.slint";
+import { TooltipArea } from "tooltips.slint";
+import { ToggleSwitch } from "toggle_switch.slint";
+
+/// One aspect ratio of the crop tool: its label and whether it is landscape (0), portrait (1) or square (2).
+export struct RatioChipView {
+    label: string,
+    kind: int,
+}
+
+/// A ratio as a chip: the orientation, the ratio, a button that removes it.
+component RatioChip inherits Rectangle {
+    in property <RatioChipView> chip;
+
+    callback remove();
+
+    height: 28px;
+    width: layout.preferred-width;
+    border-radius: 14px;
+    background: Theme.surface-variant;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    layout := HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 4px;
+        spacing: 6px;
+
+        VerticalLayout {
+            alignment: center;
+            AppIcon {
+                icon: root.chip.kind == 0 ? IconId.ratio-landscape : (root.chip.kind == 1 ? IconId.ratio-portrait : IconId.ratio-square);
+                size: IconSize.md;
+                color: Theme.primary;
+            }
+        }
+
+        Text {
+            text: root.chip.label;
+            font-size: 12px;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            width: 22px;
+            border-radius: 11px;
+            background: remove-area.has-hover ? Theme.surface-hover : transparent;
+
+            remove-area := TooltipArea {
+                text: "Remove this ratio";
+                cursor: MouseCursor.pointer;
+                clicked => { root.remove(); }
+
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: IconId.close;
+                    size: IconSize.md;
+                    color: remove-area.has-hover ? Theme.text : Theme.text-muted;
+                }
+            }
+        }
+    }
+}
+
+/// A small card of one format and its presets.
+component FormatCard inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+
+    border-radius: 8px;
+    background: Theme.surface-variant;
+    border-width: 1px;
+    border-color: Theme.border;
+    min-height: card.min-height;
+    preferred-height: card.preferred-height;
+
+    card := VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                text: root.title;
+                font-size: 13px;
+                font-weight: 700;
+                color: Theme.primary;
+                vertical-alignment: center;
+            }
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.subtitle;
+                font-size: 11px;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        @children
+    }
+}
+
+/// A row of a format card: label on the left, control on the right.
+component PresetRow inherits HorizontalLayout {
+    in property <string> label;
+
+    spacing: 10px;
+
+    Text {
+        horizontal-stretch: 1;
+        text: root.label;
+        font-size: 12px;
+        color: Theme.text;
+        vertical-alignment: center;
+    }
+
+    @children
+}
+
+/// A slider with its value.
+component PresetSlider inherits HorizontalLayout {
+    in property <int> minimum: 1;
+    in property <int> maximum: 100;
+    in-out property <int> value;
+    in property <bool> enabled: true;
+
+    spacing: 6px;
+
+    Slider {
+        width: 140px;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value: root.value;
+        enabled: root.enabled;
+        changed(v) => { root.value = Math.round(v); }
+    }
+
+    Text {
+        width: 28px;
+        text: root.value;
+        font-size: 12px;
+        font-weight: 700;
+        color: root.enabled ? Theme.primary : Theme.text-muted;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+}
+
+/// A switch of a format card.
+component PresetSwitch inherits Rectangle {
+    in-out property <bool> checked;
+
+    width: 36px;
+    height: 20px;
+
+    ToggleSwitch {
+        checked: root.checked;
+    }
+
+    TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.checked = !root.checked; }
+    }
+}
+
+/// Settings > Image Edit: the crop tool (its aspect ratios, the grid, lossless JPEG crops), how the original is replaced when
+/// an edited picture is saved, and the presets of the formats the editor writes.
+export component SettingsPageImageEdit inherits VerticalLayout {
+    spacing: 12px;
+
+    in property <[RatioChipView]> ratios;
+    in-out property <string> ratio-input: "";
+    in property <string> ratio-error: "";
+    in-out property <int> crop-grid-idx: 0; // 0 = while dragging, 1 = always, 2 = never
+    in-out property <bool> align-jpeg: false;
+    in-out property <int> overwrite-mode-idx: 0; // 0 = safe, 1 = trash, 2 = direct
+    in-out property <int> jpeg-quality: 90;
+    in-out property <int> jpeg-subsampling-idx: 0;
+    in-out property <bool> jpeg-progressive: false;
+    in-out property <int> png-compression-idx: 1;
+    in-out property <bool> webp-lossless: false;
+    in-out property <int> webp-quality: 90;
+    in-out property <int> avif-quality: 80;
+    in-out property <int> avif-speed: 6;
+    in-out property <int> tiff-compression-idx: 1;
+
+    callback add-ratio(string);
+    callback remove-ratio(int);
+    callback reset-ratios();
+
+    SettingsCard {
+        title: "Cropping";
+        description: "The ratio button of the crop tool goes through these ratios: a left click through the landscape ones, a right click through the portrait ones (square ones are on both). O, the picture's own ratio, is always there. Shift while dragging keeps the ratio.";
+
+        // The ratios as chips that wrap.
+        FlexboxLayout {
+            flex-wrap: FlexboxLayoutWrap.wrap;
+            spacing: 6px;
+            padding: 4px;
+
+            for chip[index] in root.ratios : RatioChip {
+                chip: chip;
+                remove => { root.remove-ratio(index); }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            padding-left: 4px;
+            padding-right: 4px;
+
+            ratio-field := LineEdit {
+                width: 160px;
+                placeholder-text: "Add a ratio, e.g. 16:9";
+                text <=> root.ratio-input;
+                accepted => { root.add-ratio(self.text); }
+            }
+
+            Button {
+                text: "Add";
+                clicked => { root.add-ratio(root.ratio-input); }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "Reset to Defaults";
+                clicked => { root.reset-ratios(); }
+            }
+        }
+
+        if root.ratio-error != "" : InlineNotice {
+            icon: IconId.status-warning;
+            text: root.ratio-error;
+            color: Theme.status-corrupt;
+        }
+
+        SettingsOptionRow {
+            label: "Rule-of-thirds lines";
+            description: "Two lines each way inside the crop rectangle, a classic guide for placing a subject.";
+            tooltip: "When the lines of the rule of thirds show inside the crop rectangle.";
+
+            ComboBox {
+                width: 170px;
+                model: ["While dragging", "Always", "Never"];
+                current-index <=> root.crop-grid-idx;
+            }
+        }
+
+        SettingsSwitchRow {
+            label: "Keep JPEG crops lossless";
+            description: "The top left corner of the rectangle snaps to the 8 or 16 pixel blocks of the JPEG, so every crop is saved without any loss. Off: crops are pixel exact; one that does not start on the blocks is encoded again with the file's own quality.";
+            tooltip: "JPEG pictures are stored in blocks; a crop that starts on a block boundary can be cut out without decoding the picture.";
+            checked <=> root.align-jpeg;
+        }
+    }
+
+    SettingsCard {
+        title: "Saving";
+        description: "Save overwrites the original in its own format (JPEG keeps its quality, lossless files stay lossless). The file is always written completely and checked before it replaces the original; if the file changed on disk since it was opened, you are asked first.";
+
+        SettingsOptionRow {
+            label: "Replacing the original";
+            description: root.overwrite-mode-idx == 0
+                ? "A backup of the original stays next to it until the new file is in place and was read back, then it is removed."
+                : (root.overwrite-mode-idx == 1 ? "The original goes to the trash, where it can be restored." : "The new file replaces the original directly (still written completely before).");
+            tooltip: "What happens to the original file when an edited picture is saved over it.";
+
+            ComboBox {
+                width: 190px;
+                model: ["Safe (temporary backup)", "Original to the trash", "Replace directly"];
+                current-index <=> root.overwrite-mode-idx;
+            }
+        }
+    }
+
+    SettingsCard {
+        title: "Format Presets";
+        description: "The starting values of Save As, and what a saved file of these formats gets when its own quality is not known (WebP, AVIF). JPEG files keep their own quality when they are saved over.";
+
+        HorizontalLayout {
+            spacing: 10px;
+
+            VerticalLayout {
+                spacing: 10px;
+                alignment: start;
+
+                FormatCard {
+                    title: "JPEG";
+                    subtitle: "Photos";
+
+                    PresetRow {
+                        label: "Quality";
+                        PresetSlider { value <=> root.jpeg-quality; }
+                    }
+                    PresetRow {
+                        label: "Chroma subsampling";
+                        ComboBox {
+                            width: 140px;
+                            model: ["4:2:0", "4:2:2", "4:4:4"];
+                            current-index <=> root.jpeg-subsampling-idx;
+                        }
+                    }
+                    PresetRow {
+                        label: "Progressive";
+                        VerticalLayout {
+                            alignment: center;
+                            PresetSwitch { checked <=> root.jpeg-progressive; }
+                        }
+                    }
+                }
+
+                FormatCard {
+                    title: "PNG";
+                    subtitle: "Lossless";
+
+                    PresetRow {
+                        label: "Compression";
+                        ComboBox {
+                            width: 140px;
+                            model: ["Fast", "Balanced", "Smallest file"];
+                            current-index <=> root.png-compression-idx;
+                        }
+                    }
+                }
+
+                FormatCard {
+                    title: "TIFF";
+                    subtitle: "Lossless, 16 bit";
+
+                    PresetRow {
+                        label: "Compression";
+                        ComboBox {
+                            width: 140px;
+                            model: ["None", "LZW", "Deflate"];
+                            current-index <=> root.tiff-compression-idx;
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                spacing: 10px;
+                alignment: start;
+
+                FormatCard {
+                    title: "WebP";
+                    subtitle: "Web, small files";
+
+                    PresetRow {
+                        label: "Lossless";
+                        VerticalLayout {
+                            alignment: center;
+                            PresetSwitch { checked <=> root.webp-lossless; }
+                        }
+                    }
+                    PresetRow {
+                        label: "Quality";
+                        PresetSlider {
+                            value <=> root.webp-quality;
+                            enabled: !root.webp-lossless;
+                        }
+                    }
+                }
+
+                FormatCard {
+                    title: "AVIF";
+                    subtitle: "Smallest files, slow to write";
+
+                    PresetRow {
+                        label: "Quality";
+                        PresetSlider { value <=> root.avif-quality; }
+                    }
+                    PresetRow {
+                        label: "Speed";
+                        PresetSlider {
+                            minimum: 1;
+                            maximum: 10;
+                            value <=> root.avif-speed;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

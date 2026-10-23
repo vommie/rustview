@@ -1,4 +1,5 @@
 mod formats_page;
+mod image_edit_page;
 
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::color_picker::PickerRequest;
@@ -247,6 +248,7 @@ impl SettingsDialogController {
         let fallback_idx = i32::from(settings.fullscreen.fallback_target.eq_ignore_ascii_case("different"));
         window.set_fullscreen_fallback_target_idx(fallback_idx);
         Self::populate_fullscreen_extras(window, &settings.fullscreen);
+        image_edit_page::populate(window, &settings.image_edit);
 
         // Tags & Ratings properties
         window.set_max_history_tags(settings.tags.max_history_tags.saturating_as::<i32>());
@@ -268,6 +270,7 @@ impl SettingsDialogController {
         window.set_fullscreen_media_bar_show_open_as_tab(bar.show_open_as_tab);
         window.set_fullscreen_media_bar_show_open_with(bar.show_open_with);
         window.set_fullscreen_media_bar_show_zoom(bar.show_zoom);
+        window.set_fullscreen_media_bar_show_crop(bar.show_crop);
         window.set_fullscreen_media_bar_show_delete(bar.show_delete);
         window.set_fullscreen_media_bar_show_remove(bar.show_remove);
         window.set_fullscreen_media_bar_reveal_distance_px(bar.reveal_distance_px.saturating_as::<i32>());
@@ -330,6 +333,7 @@ impl SettingsDialogController {
         bar.show_open_as_tab = window.get_fullscreen_media_bar_show_open_as_tab();
         bar.show_open_with = window.get_fullscreen_media_bar_show_open_with();
         bar.show_zoom = window.get_fullscreen_media_bar_show_zoom();
+        bar.show_crop = window.get_fullscreen_media_bar_show_crop();
         bar.show_delete = window.get_fullscreen_media_bar_show_delete();
         bar.show_remove = window.get_fullscreen_media_bar_show_remove();
         bar.reveal_distance_px = u32::try_from(window.get_fullscreen_media_bar_reveal_distance_px())
@@ -422,6 +426,7 @@ impl SettingsDialogController {
 
     fn register_callbacks(&self, window: &SettingsWindow) {
         let w_weak = window.as_weak();
+        image_edit_page::register_callbacks(window);
 
         // The summary and the warnings follow the budget controls while the dialog is open (the machine is read once).
         let system = SystemMemory::read();
@@ -646,6 +651,7 @@ impl SettingsDialogController {
                     "same".to_string()
                 };
                 Self::save_fullscreen_extras(&w, &mut current.fullscreen);
+                image_edit_page::save(&w, &mut current.image_edit);
 
                 // Save Tag History Configuration
                 let new_max_history = w

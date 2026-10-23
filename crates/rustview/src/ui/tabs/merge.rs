@@ -109,6 +109,10 @@ impl BridgeViewerTabs {
     /// "Close Selected Tabs".
     pub fn close_selected_tabs(ctx: &TabActionContext<'_>) {
         let ids = Self::selected_tab_ids(ctx);
+        if crate::ui::image_edit::close_guard::defer_tab_close(ctx.fullscreen, ids.clone()) {
+            ctx.state.write().tab_selection.clear();
+            return;
+        }
         let (closed, _) = ctx.tab_manager.close_tabs(&ids);
         ctx.state.write().tab_selection.clear();
         tracing::info!(

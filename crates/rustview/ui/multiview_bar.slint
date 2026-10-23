@@ -1,5 +1,5 @@
 import { Theme } from "styles.slint";
-import { AppIcon, IconSize } from "icons.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
 import { TooltipArea } from "tooltips.slint";
 import { ButtonFeedbackOverlay } from "button_feedback.slint";
 import { MultiviewBarButtonView } from "multiview_types.slint";
@@ -9,17 +9,29 @@ component MultiviewBarButton inherits Rectangle {
     // The button has its menu open: it stays highlighted and shows no tooltip.
     in property <bool> open: false;
     in property <length> size: 28px;
+    in property <length> arrow-width: 16px;
 
     callback activated();
+    // The arrow of a split button (it opens the button's drop-down).
+    callback arrow-activated();
 
-    width: root.size;
+    property <bool> emphasized: root.action.emphasis == 1;
+
+    width: root.size + (root.action.split ? root.arrow-width : 0px);
     height: root.size;
     border-radius: 6px;
-    background: root.action.attention ? Theme.accent.with-alpha(0.7) : (root.open ? Theme.primary.with-alpha(0.28) : (area.has-hover ? Theme.surface-hover : transparent));
+    background: root.action.attention ? Theme.accent.with-alpha(0.7)
+        : root.emphasized ? (area.has-hover || arrow.has-hover || root.open ? Theme.primary.brighter(15%) : Theme.primary)
+        : (root.open ? Theme.primary.with-alpha(0.28) : (area.has-hover ? Theme.surface-hover : transparent));
     animate background { duration: 90ms; }
+    // The one place a bar button fades with opacity: the Save button going away after a save (an icon cannot be faded by its
+    // color without Slint drawing the raw black SVG at the end).
+    opacity: root.action.fading ? 0.0 : 1.0;
+    animate opacity { duration: 500ms; easing: ease-out; }
 
     area := TooltipArea {
-        width: 100%;
+        x: 0px;
+        width: root.size;
         height: 100%;
         text: root.action.tooltip;
         tooltip-enabled: !root.open;
@@ -33,12 +45,44 @@ component MultiviewBarButton inherits Rectangle {
             y: (parent.height - self.height) / 2;
             icon: root.action.icon;
             size: IconSize.lg;
-            color: root.action.attention ? Theme.background : (!root.action.enabled ? Theme.text-muted.with-alpha(0.5) : ((root.action.toggle && root.action.active) || root.open || area.has-hover ? Theme.primary : Theme.text));
+            color: root.action.attention || root.emphasized ? Theme.background
+                : root.action.emphasis == 3 ? Theme.status-ok
+                : root.action.emphasis == 2 ? Theme.text-muted
+                : (!root.action.enabled ? Theme.text-muted.with-alpha(0.5) : ((root.action.toggle && root.action.active) || root.open || area.has-hover ? Theme.primary : Theme.text));
         }
 
         ButtonFeedbackOverlay {
             feedback: root.action.feedback;
             border-radius: root.border-radius;
+        }
+    }
+
+    if root.action.split : Rectangle {
+        x: root.size - 1px;
+        y: 6px;
+        width: 1px;
+        height: root.height - 12px;
+        background: Theme.background.with-alpha(0.35);
+    }
+
+    arrow := TooltipArea {
+        x: root.size;
+        width: root.action.split ? root.arrow-width : 0px;
+        height: 100%;
+        visible: root.action.split;
+        text: "More: Save, Save As..., Discard Changes";
+        tooltip-enabled: !root.open;
+
+        clicked => {
+            root.arrow-activated();
+        }
+
+        AppIcon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            icon: IconId.chevron-down;
+            size: IconSize.md;
+            color: root.emphasized ? Theme.background : Theme.text;
         }
     }
 }
@@ -52,6 +96,8 @@ export component MultiviewBar inherits Rectangle {
     in property <bool> translucent: true;
     // Position of the button whose menu is open (-1 = none).
     in property <int> menu-owner-index: -1;
+    // Position of the button with an arrow of its own (-1 = none): it is wider by the arrow, and its drop-down hangs from the arrow.
+    in property <int> split-index: -1;
 
     callback action-clicked(int /* action id */);
 
@@ -60,13 +106,17 @@ export component MultiviewBar inherits Rectangle {
     property <length> button-size: 28px;
     property <length> button-spacing: 2px;
     property <length> inset: 3px;
+    property <length> arrow-width: 16px;
 
-    /// Center of the button at `index`, from the left edge of the bar (the layout is plain arithmetic, see `width`).
+    /// Center of the button at `index`, from the left edge of the bar (the layout is plain arithmetic, see `width`); for the
+    /// split button the center of its arrow (its drop-down hangs from there).
     public pure function button-center-x(index: int) -> length {
-        return root.inset + index * (root.button-size + root.button-spacing) + root.button-size / 2;
+        return root.inset + index * (root.button-size + root.button-spacing)
+            + (root.split-index >= 0 && root.split-index < index ? root.arrow-width : 0px)
+            + (index == root.split-index ? root.button-size + root.arrow-width / 2 : root.button-size / 2);
     }
 
-    width: root.actions.length * root.button-size + Math.max(root.actions.length - 1, 0) * root.button-spacing + 2 * root.inset;
+    width: root.actions.length * root.button-size + (root.split-index >= 0 ? root.arrow-width : 0px) + Math.max(root.actions.length - 1, 0) * root.button-spacing + 2 * root.inset;
     height: root.button-size + 2 * root.inset;
     background: root.translucent ? Theme.surface.with-alpha(0.7) : Theme.surface;
     border-radius: 8px;
@@ -81,9 +131,14 @@ export component MultiviewBar inherits Rectangle {
             action: action;
             open: index == root.menu-owner-index;
             size: root.button-size;
+            arrow-width: root.arrow-width;
 
             activated => {
                 root.action-clicked(action.id);
+            }
+            // The arrow reports the code that follows the button's (Save -> SaveMenu).
+            arrow-activated => {
+                root.action-clicked(action.id + 1);
             }
         }
     }

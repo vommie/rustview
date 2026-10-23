@@ -7,6 +7,7 @@ use crate::media::{MediaFormat, MediaHasher, MetadataExtractor};
 use crate::util::cast::SaturatingAs;
 use std::path::Path;
 
+mod edited_copy;
 mod rename;
 mod transfer;
 pub use rename::FilenameValidator;
