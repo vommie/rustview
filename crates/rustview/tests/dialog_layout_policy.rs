@@ -15,10 +15,10 @@
 //! - the outer layout has `width: root.width;` and the content `width: body.width;`, which lets Slint measure wrapped text at the
 //!   real width.
 //!
-//! Every dialog also belongs to the window it was opened from (`ui::dialog_parent`): it is installed with
-//! `dialog_parent::install` and shown with `dialog_parent::show` (never with a plain `show()`), which on X11 tells the window
-//! manager its parent before the window is mapped; no dialog is `always-on-top` (it stays above its parent only); folder and
-//! file pickers are made by `dialog_parent::file_dialog`, which hands them their parent.
+//! Every dialog (and the settings window and the color picker) also belongs to the window it was opened from
+//! (`ui::dialog_parent`): it is installed with `dialog_parent::install*` and shown with `dialog_parent::show` (never with a plain
+//! `show()`), which on X11 tells the window manager its parent before the window is mapped; no dialog is `always-on-top` (it
+//! stays above its parent only); folder and file pickers are made by `dialog_parent::file_dialog`, which hands them their parent.
 
 use std::fs;
 use std::path::PathBuf;
@@ -186,14 +186,25 @@ fn all_rust_sources() -> Vec<(String, String)> {
     sources
 }
 
+/// Windows that are no `ui/*_dialog.slint` but are shown over the window they were opened from like a dialog.
+const DIALOG_LIKE_WINDOWS: [&str; 2] = ["SettingsWindow", "ColorPickerWindow"];
+
 #[test]
 fn every_dialog_window_is_shown_over_its_parent() {
     let sources = all_rust_sources();
     let mut problems = Vec::new();
-    for component in dialog_components() {
+    let components = dialog_components()
+        .into_iter()
+        .chain(DIALOG_LIKE_WINDOWS.iter().map(ToString::to_string));
+    for component in components {
         let creation = format!("{component}::new()");
-        for (file, text) in sources.iter().filter(|(_, text)| text.contains(&creation)) {
-            if !text.contains("dialog_parent::install(") {
+        let sites: Vec<&(String, String)> = sources.iter().filter(|(_, text)| text.contains(&creation)).collect();
+        if sites.is_empty() {
+            problems.push(format!("{component}: no place creates it"));
+        }
+        for (file, text) in sites {
+            // `install`, `install_transient` (color picker) or `install_window` (settings window).
+            if !text.contains("dialog_parent::install") {
                 problems.push(format!("{file}: creates {component} without `dialog_parent::install`"));
             }
             if !text.contains("dialog_parent::show(") {
@@ -212,14 +223,22 @@ fn every_dialog_window_is_shown_over_its_parent() {
 #[test]
 fn dialogs_open_from_the_registered_windows() {
     let sources = all_rust_sources();
-    for role in ["Role::Main", "Role::Fullscreen", "Role::Settings"] {
+    let registered = |call: &str, role: &str| {
+        sources
+            .iter()
+            .any(|(_, text)| text.contains(&format!("dialog_parent::{call}(")) && text.contains(role))
+    };
+    for role in ["Role::Main", "Role::Fullscreen"] {
         assert!(
-            sources
-                .iter()
-                .any(|(_, text)| text.contains("dialog_parent::register_parent(") && text.contains(role)),
+            registered("register_parent", role),
             "no window registers itself as `{role}` with `dialog_parent::register_parent`"
         );
     }
+    // The settings window is a parent of its dialogs and itself a modal child of the main window.
+    assert!(
+        registered("install_window", "Role::Settings"),
+        "the settings window must be installed with `dialog_parent::install_window(.., Role::Settings)`"
+    );
 }
 
 #[test]

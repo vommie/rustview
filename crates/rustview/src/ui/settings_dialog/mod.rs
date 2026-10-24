@@ -78,7 +78,7 @@ impl SettingsDialogController {
     pub fn show(&mut self) {
         if self.settings_window.is_none() {
             let window = SettingsWindow::new().expect("Failed to create SettingsWindow");
-            crate::ui::dialog_parent::register_parent(&window, crate::ui::dialog_parent::Role::Settings);
+            crate::ui::dialog_parent::install_window(&window, crate::ui::dialog_parent::Role::Settings);
             color_picker::install(&window);
             self.formats_page.install(&window);
             self.register_callbacks(&window);
@@ -94,7 +94,7 @@ impl SettingsDialogController {
                 main.set_is_modal_locked(true);
             }
 
-            let _ = window.show();
+            let _ = crate::ui::dialog_parent::show(window);
         }
     }
 

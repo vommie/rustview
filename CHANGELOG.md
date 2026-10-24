@@ -51,8 +51,10 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   on that window and stays above it, and only above it, so a dialog no longer floats over other programs. While it is open its window is dimmed and
   locked; clicking that window (or switching to it in the taskbar) brings the dialog to the front instead of closing it. This covers every dialog,
   including Save As and Unsaved Changes of the image editor, the color picker of the settings (it stays above the settings without locking them) and the
-  folder pickers (root folder in Settings, Browse in Save As). With a compositor, KDE's "Dialog Parent" effect also dims the window and its videos. On
-  Wayland a dialog stays an ordinary window (the toolkit offers no parent there); a click on the locked main window closes the dialogs as before.
+  folder pickers (root folder in Settings, Browse in Save As). **The settings window works the same way:** it belongs to the main window, opens centered
+  on it and no longer closes when you click the main window; that click brings it to the front (close it with Cancel, Save or Esc). With a compositor,
+  KDE's "Dialog Parent" effect also dims the window and its videos. On Wayland a dialog stays an ordinary window (the toolkit offers no parent there); a
+  click on the locked main window closes the dialogs and the settings as before.
 - **Dialogs keep their layout when they are resized:** the content stays at the top at its own height (single-line fields never stretch, extra height stays
   empty below), a dialog made lower than its content gets a scroll bar instead of squeezing it, and a dialog grows when a note appears while it showed
   everything. All dialogs follow this.

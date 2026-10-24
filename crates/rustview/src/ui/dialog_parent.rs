@@ -14,9 +14,12 @@
 //! so a dialog is an ordinary window; the application lock of the main window keeps it modal and a click on the locked main
 //! window closes the dialogs as before (`raise_open` returns false: winit cannot activate a window there).
 //!
-//! Every dialog window calls [`install`] right after it is created and is shown with [`show`]; the windows dialogs open from
-//! are announced with [`register_parent`]; folder and file pickers are made with [`file_dialog`] (all enforced by
-//! `tests/dialog_layout_policy.rs`). UI thread only.
+//! The settings window is both: dialogs open from it, and it is itself a modal child of the window it was opened from (the
+//! main window locks, a click on it brings the settings to the front instead of closing them).
+//!
+//! Every dialog window calls [`install`] right after it is created and is shown with [`show`]; the settings window calls
+//! [`install_window`] instead; the other windows dialogs open from are announced with [`register_parent`]; folder and file
+//! pickers are made with [`file_dialog`] (all enforced by `tests/dialog_layout_policy.rs`). UI thread only.
 
 use crate::viewer::{get_raw_window_xid, request_x11_modal_state, set_x11_dialog_parent};
 use slint::ComponentHandle;
@@ -48,7 +51,8 @@ type LendWindow = Box<dyn Fn(&mut dyn FnMut(&slint::Window)) -> bool>;
 
 struct Entry {
     role: Role,
-    /// Dialogs: whether the dialog is modal (the color picker is not: it only stays above its parent).
+    /// Shown as a modal child of its parent (dialogs, the settings window; not the color picker, which only stays above its
+    /// parent, and not the windows that only are parents).
     modal: bool,
     /// Lends the window of the component to the callback; false once the component is gone.
     window: LendWindow,
@@ -128,24 +132,30 @@ fn entries() -> Vec<Rc<Entry>> {
     WINDOWS.with(|windows| windows.borrow().clone())
 }
 
-/// Announces a window dialogs can be opened from (main window, fullscreen, settings window); once, after it is created.
+/// Announces a window dialogs can be opened from (main window, fullscreen); once, after it is created.
 pub fn register_parent<C: ComponentHandle + 'static>(window: &C, role: Role) {
     add(window, role, false);
 }
 
 /// Prepares a modal dialog window; once, right after it is created.
 pub fn install<C: ComponentHandle + 'static>(dialog: &C) {
-    install_as(dialog, true);
+    install_as(dialog, Role::Dialog, true);
+}
+
+/// Prepares a window that dialogs open from and that is itself shown as a modal child of the window it was opened from (the
+/// settings window, `role`); once, right after it is created. It is shown with [`show`].
+pub fn install_window<C: ComponentHandle + 'static>(window: &C, role: Role) {
+    install_as(window, role, true);
 }
 
 /// Prepares a dialog window that only stays above its parent and leaves the parent usable (the color picker, whose colors
 /// the parent shows live); once, right after it is created.
 pub fn install_transient<C: ComponentHandle + 'static>(dialog: &C) {
-    install_as(dialog, false);
+    install_as(dialog, Role::Dialog, false);
 }
 
-fn install_as<C: ComponentHandle + 'static>(dialog: &C, modal: bool) {
-    let entry = add(dialog, Role::Dialog, modal);
+fn install_as<C: ComponentHandle + 'static>(dialog: &C, role: Role, modal: bool) {
+    let entry = add(dialog, role, modal);
     let (weak_entry, weak_dialog) = (Rc::downgrade(&entry), dialog.as_weak());
     let installed = dialog.window().set_rendering_notifier(move |state, _| {
         // Called while the window exists but is not mapped yet.
@@ -254,12 +264,13 @@ fn hint_after_creation<C: ComponentHandle + 'static>(dialog: &C, entry: &Rc<Entr
     }
 }
 
-/// Brings the open modal dialog that was shown last to the front and gives it the focus (a click on its locked parent). False
-/// when no modal dialog is open whose parent the window manager knows (Wayland): the caller then dismisses the dialogs instead.
+/// Brings the open modal dialog (or settings window) that was shown last to the front and gives it the focus (a click on its
+/// locked parent). False when none is open whose parent the window manager knows (Wayland): the caller then dismisses them
+/// instead.
 pub fn raise_open() -> bool {
     let newest = entries()
         .into_iter()
-        .filter(|e| e.role == Role::Dialog && e.modal && e.parented.get() && e.is_visible())
+        .filter(|e| e.modal && e.parented.get() && e.is_visible())
         .max_by_key(|e| e.shown_at.get());
     let Some(dialog) = newest else {
         return false;
@@ -269,11 +280,9 @@ pub fn raise_open() -> bool {
     true
 }
 
-/// True while a modal dialog is open.
+/// True while a modal dialog or the settings window is open.
 pub fn modal_dialog_open() -> bool {
-    entries()
-        .iter()
-        .any(|e| e.role == Role::Dialog && e.modal && e.is_visible())
+    entries().iter().any(|e| e.modal && e.is_visible())
 }
 
 /// A folder or file picker of the desktop (`rfd`, through the desktop portal) that belongs to `parent`.
