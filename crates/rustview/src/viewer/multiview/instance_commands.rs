@@ -105,11 +105,25 @@ impl MultiviewInstance {
         if self.zoom_key_at(index, zoom) {
             return Ok(UiAction::None);
         }
-        Err(if self.tiles[index].kind == TileKind::Video {
-            HintKind::VideoNotZoomable
-        } else {
-            HintKind::PictureNotZoomable
-        })
+        if self.tiles[index].kind == TileKind::Video {
+            // mpv zooms a video itself (inside its tile, no slider or minimap); a tile without a player yet refuses.
+            let Some(video) = self.tiles[index].video.as_ref() else {
+                return Err(HintKind::VideoNotZoomable);
+            };
+            let step = 1.0 + crate::viewer::zoom::prefs::current().wheel_step;
+            match zoom {
+                ZoomKey::Reset => video.player.reset_video_zoom(),
+                ZoomKey::In => video.player.zoom_video_by(step),
+                ZoomKey::Out => video.player.zoom_video_by(1.0 / step),
+            }
+            tracing::info!(
+                tile = self.tiles[index].key,
+                ?zoom,
+                "[Multiview: Zoom] The video zooms itself (mpv)"
+            );
+            return Ok(UiAction::None);
+        }
+        Err(HintKind::PictureNotZoomable)
     }
 
     /// Esc: cancels the crop tool of the selected tile, else the one opened last (newest first). Returns whether there was

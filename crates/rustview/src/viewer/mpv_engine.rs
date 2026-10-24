@@ -13,6 +13,7 @@ pub mod keys;
 pub mod overlay;
 mod playback;
 mod rating;
+mod zoom;
 
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
 pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;

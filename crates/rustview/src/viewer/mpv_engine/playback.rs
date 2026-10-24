@@ -18,6 +18,8 @@ impl MpvPlayer {
 
         let t0 = Instant::now();
         let path_str = path.to_string_lossy();
+        // A zoom belongs to the file it was made on: the next file of a reused player starts whole.
+        self.reset_video_zoom();
 
         self.mpv
             .command("loadfile", &[&path_str, "replace"])

@@ -143,6 +143,8 @@ images and one video, fullscreen and tab view, keys with and without focus, curs
 1. **Hotkey system** in the settings, modeled on RustCut (`rustcut/crates/rustcut/src/ui/keymap/{mod,action,chord}.rs` and the Hotkeys page
    `ui/settings/hotkeys.rs`: actions with their keys, filter, recording a key, a taken key moves on the second press), grouped by area (Browse,
    Multiview, Player in the Multiview, ...).
+   **Done in 0.4.4** (`docs/hotkeys.md`): the Video Player area is listed already and waits for milestone 2; the video windows report the keymap's
+   keys as `rustview-key`, so milestone 2 extends `hotkeys::video_bindings` to the player keys and turns mpv's own bindings off.
 2. **RustView controls the videos itself:** mpv gets no key bindings of its own any more; RustView forwards its commands (e.g. Space play/pause,
    M mute/unmute, Left/Right jump backward/forward). Removes the screenshot/audio-delay/quit leaks listed above.
 3. **Own OSD** instead of mpv's OSC/OSD.

@@ -13,6 +13,8 @@ use crate::ui::favorites::manager::FavoriteManager;
 use crate::ui::file_dialogs::delete::DeleteFileDialogController;
 use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
 use crate::ui::folder_dialogs::FolderDialogController;
+use crate::ui::hotkeys;
+use crate::ui::keymap::Action;
 use crate::ui::media::BridgeMedia;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::open_confirmation::{OpenConfirmation, OpenKind};
@@ -101,7 +103,7 @@ impl BrowseContextMenus {
             .action_with_tooltip(
                 CTX_BROWSE_SELECTION_DELETE,
                 "Delete...",
-                Some("Del"),
+                hotkeys::shortcut(Action::BrowseDelete).as_deref(),
                 Some(Icon::Delete),
                 !is_busy,
                 if is_busy {
@@ -181,7 +183,7 @@ impl BrowseContextMenus {
                 builder.action_with_tooltip(
                     CTX_FOLDER_NEW,
                     "New Folder...",
-                    Some("Ctrl+Shift+N"),
+                    hotkeys::shortcut(Action::BrowseNewFolder).as_deref(),
                     Some(Icon::FolderPlus),
                     true,
                     "Create a new folder (or a path of folders) in this folder",
@@ -194,7 +196,7 @@ impl BrowseContextMenus {
             .action(
                 CTX_ACTION_SELECT_ALL,
                 "Select All",
-                Some("Ctrl+A"),
+                hotkeys::shortcut(Action::BrowseSelectAll).as_deref(),
                 Some(Icon::SelectAll),
                 info.has_items,
             )

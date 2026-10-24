@@ -9,6 +9,7 @@ pub mod main_window;
 
 use crate::ui::keymap::{Action, Area, Chord, KeyPress, Keymap, mpv_keys, table_from_json};
 use crate::viewer::mpv_engine::keys as mpv_engine_keys;
+use crate::viewer::multiview::key_labels::{self, EditKeys};
 use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock};
@@ -27,12 +28,56 @@ pub fn apply(stored: &BTreeMap<String, serde_json::Value>) {
         tracing::warn!(note, "[Hotkeys] A stored key was repaired");
     }
     mpv_engine_keys::set_bindings(&video_bindings(&keymap));
+    let edit_keys = |undo, redo, save, apply_crop| EditKeys {
+        undo: keymap.first_label(undo),
+        redo: keymap.first_label(redo),
+        save: keymap.first_label(save),
+        apply_crop: keymap.first_label(apply_crop),
+    };
+    key_labels::set(
+        edit_keys(Action::TabUndo, Action::TabRedo, Action::TabSave, Action::TabApplyCrop),
+        edit_keys(
+            Action::FullscreenUndo,
+            Action::FullscreenRedo,
+            Action::FullscreenSave,
+            Action::FullscreenApplyCrop,
+        ),
+    );
     tracing::info!(
         changed = stored.len(),
         repaired = notes.len(),
         "[Hotkeys] Keymap in use"
     );
     *KEYMAP.write() = Arc::new(keymap);
+}
+
+/// The first key of `action` as menus and messages show it ("" when it has none).
+pub fn label(action: Action) -> String {
+    keymap().first_label(action)
+}
+
+/// The shortcut column of a menu entry for `action` (`None` when it has no key).
+pub fn shortcut(action: Action) -> Option<String> {
+    Some(label(action)).filter(|l| !l.is_empty())
+}
+
+/// `text` followed by the first key of `action` in parentheses, or `text` alone when the action has no key.
+pub fn with_key(text: &str, action: Action) -> String {
+    match shortcut(action) {
+        Some(key) => format!("{text} ({key})"),
+        None => text.to_owned(),
+    }
+}
+
+/// The rating keys of the fullscreen as a description names them: "Ctrl+0 (no rating) to Ctrl+5", or a pointer to the
+/// Hotkeys page when either end has no key.
+pub fn rating_keys_text() -> String {
+    let (none, five) = (label(Action::FullscreenRate0), label(Action::FullscreenRate5));
+    if none.is_empty() || five.is_empty() {
+        "the rating keys (Settings > Hotkeys)".to_owned()
+    } else {
+        format!("{none} (no rating) to {five}")
+    }
 }
 
 /// What reached a window: a key press of Slint, or a chord a video's window reported.

@@ -5,6 +5,8 @@ use crate::ui::MainWindow;
 use crate::ui::folder_dialogs::{FolderDialogContext, FolderDialogController};
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::folder_tree::projection::FolderProjection;
+use crate::ui::hotkeys;
+use crate::ui::keymap::Action;
 use crate::ui::media::BridgeMedia;
 use crate::ui::state::{
     CTX_FOLDER_ADD_TO_FAVORITES, CTX_FOLDER_DELETE, CTX_FOLDER_MOVE_BASE, CTX_FOLDER_NEW,
@@ -114,7 +116,7 @@ impl FolderContextMenu {
                 builder.action_with_tooltip(
                     CTX_FOLDER_RENAME,
                     "Rename Folder...",
-                    Some("F2"),
+                    hotkeys::shortcut(Action::BrowseRename).as_deref(),
                     Some(Icon::Rename),
                     false,
                     "Disabled: Cannot rename a folder that does not exist on physical disk",
@@ -123,7 +125,7 @@ impl FolderContextMenu {
                 builder.action(
                     CTX_FOLDER_RENAME,
                     "Rename Folder...",
-                    Some("F2"),
+                    hotkeys::shortcut(Action::BrowseRename).as_deref(),
                     Some(Icon::Rename),
                     true,
                 )
@@ -164,7 +166,7 @@ impl FolderContextMenu {
                 builder = builder.action(
                     CTX_FOLDER_PURGE_DB,
                     "Remove from Database...",
-                    Some("Del"),
+                    hotkeys::shortcut(Action::BrowseDelete).as_deref(),
                     Some(Icon::DatabaseClean),
                     true,
                 );
@@ -172,7 +174,7 @@ impl FolderContextMenu {
                 builder = builder.action(
                     CTX_FOLDER_DELETE,
                     "Delete Folder...",
-                    Some("Del"),
+                    hotkeys::shortcut(Action::BrowseDelete).as_deref(),
                     Some(Icon::Delete),
                     true,
                 );

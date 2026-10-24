@@ -11,6 +11,7 @@ import { SettingsPageViewer } from "settings_page_viewer.slint";
 import { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
 import { SettingsPageImageEdit, RatioChipView } from "settings_page_image_edit.slint";
 import { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
+import { SettingsPageHotkeys } from "settings_page_hotkeys.slint";
 import { SettingsPageApi } from "settings_page_api.slint";
 import { SettingsPageDebug } from "settings_page_debug.slint";
 import { ButtonBar } from "button_bar.slint";
@@ -29,6 +30,7 @@ export { SettingsPageViewer } from "settings_page_viewer.slint";
 export { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
 export { SettingsPageImageEdit, RatioChipView } from "settings_page_image_edit.slint";
 export { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
+export { SettingsPageHotkeys } from "settings_page_hotkeys.slint";
 export { SettingsPageApi } from "settings_page_api.slint";
 export { SettingsPageDebug } from "settings_page_debug.slint";
 export { SettingsCard } from "settings_card.slint";
@@ -203,6 +205,7 @@ export component SettingsWindow inherits Window {
     in-out property <int> fullscreen-sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = selected video, 3 = nobody
     in-out property <bool> fullscreen-sound-hand-over: true;
     in-out property <bool> fullscreen-rating-show-feedback: true;
+    in property <string> fullscreen-rating-keys: "the rating keys";
     in-out property <int> fullscreen-background-source-idx: 0; // 0 = theme, 1 = same as viewer, 2 = custom color
     in-out property <color> fullscreen-background-color: Theme.fullscreen-background;
     callback memory-budget-edited();
@@ -421,6 +424,7 @@ export component SettingsWindow inherits Window {
                             sound-follows-idx <=> root.fullscreen-sound-follows-idx;
                             sound-hand-over <=> root.fullscreen-sound-hand-over;
                             rating-show-feedback <=> root.fullscreen-rating-show-feedback;
+                            rating-keys: root.fullscreen-rating-keys;
                             background-source-idx <=> root.fullscreen-background-source-idx;
                             background-color <=> root.fullscreen-background-color;
                             refresh-displays => { root.refresh-displays(); }
@@ -452,11 +456,13 @@ export component SettingsWindow inherits Window {
                             max-history-tags <=> root.max-history-tags;
                         }
 
-                        if root.active-category == 9 : SettingsPageApi {
+                        if root.active-category == 9 : SettingsPageHotkeys { }
+
+                        if root.active-category == 10 : SettingsPageApi {
                             auto-complete-external-stubs <=> root.auto-complete-external-stubs;
                         }
 
-                        if root.active-category == 10 : SettingsPageDebug {
+                        if root.active-category == 11 : SettingsPageDebug {
                             obfuscate-logs <=> root.obfuscate-logs;
                         }
                     }

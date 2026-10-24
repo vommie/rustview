@@ -1,16 +1,18 @@
 mod confirmations;
+mod formats_page;
+mod hotkeys_page;
+mod image_edit_page;
+mod selected_medium;
 
 /// The index of the page Hotkeys in the sidebar of the settings window (`ui/settings_sidebar.slint`).
 pub const HOTKEYS_PAGE: i32 = 9;
-mod formats_page;
-mod image_edit_page;
-mod selected_medium;
 
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::color_picker::PickerRequest;
 use crate::ui::{MainWindow, SettingsWindow, TooltipSettings, color_picker};
 pub use formats_page::FormatCounter;
 use formats_page::FormatsPage;
+use hotkeys_page::HotkeysPageController;
 use rustview_core::settings::memory_budget::{BYTES_PER_MB, MemoryPlan, SystemMemory};
 use rustview_core::settings::registry::SettingsManager;
 use rustview_core::settings::schema::{
@@ -40,16 +42,19 @@ pub struct SettingsDialogController {
     main_window_weak: Option<slint::Weak<MainWindow>>,
     detected_monitors: Rc<RefCell<Vec<MonitorInfo>>>,
     formats_page: Arc<FormatsPage>,
+    hotkeys_page: Rc<HotkeysPageController>,
 }
 
 impl SettingsDialogController {
     pub fn new(manager: Arc<SettingsManager>) -> Self {
+        let hotkeys_page = HotkeysPageController::new(manager.clone());
         Self {
             settings_window: None,
             manager,
             main_window_weak: None,
             detected_monitors: Rc::new(RefCell::new(Vec::new())),
             formats_page: Arc::new(FormatsPage::default()),
+            hotkeys_page,
         }
     }
 
@@ -82,7 +87,7 @@ impl SettingsDialogController {
 
     /// Opens the window on the page `category` (the index of the sidebar entry, e.g. [`HOTKEYS_PAGE`]).
     pub fn show_page(&mut self, category: i32) {
-        self.show();
+        Self::show(self);
         if let Some(ref window) = self.settings_window {
             window.set_active_category(category);
         }
@@ -94,6 +99,7 @@ impl SettingsDialogController {
             crate::ui::dialog_parent::install_window(&window, crate::ui::dialog_parent::Role::Settings);
             color_picker::install(&window);
             self.formats_page.install(&window);
+            self.hotkeys_page.install(&window);
             self.register_callbacks(&window);
             self.settings_window = Some(window);
         }
@@ -218,6 +224,7 @@ impl SettingsDialogController {
 
         // Formats properties
         self.formats_page.populate(window, settings.formats.format_mask());
+        self.hotkeys_page.populate(settings);
         window.set_auto_detect_extensionless(settings.formats.auto_detect_extensionless_media);
 
         // Viewer properties
@@ -328,6 +335,7 @@ impl SettingsDialogController {
         });
         window.set_fullscreen_sound_hand_over(sound.hand_over);
         window.set_fullscreen_rating_show_feedback(fullscreen.rating.show_feedback);
+        window.set_fullscreen_rating_keys(crate::ui::hotkeys::rating_keys_text().into());
         selected_medium::populate(window, fullscreen);
 
         window.set_fullscreen_background_source_idx(match fullscreen.background.source.as_str() {
@@ -459,6 +467,7 @@ impl SettingsDialogController {
         let manager = self.manager.clone();
         let main_weak = self.main_window_weak.clone();
         let formats_page_save = self.formats_page.clone();
+        let hotkeys_page_save = self.hotkeys_page.clone();
 
         let w_weak_browse = w_weak.clone();
         window.on_browse_root_folder(move || {
@@ -642,6 +651,7 @@ impl SettingsDialogController {
                 // Save Formats Parameters
                 current.formats.auto_detect_extensionless_media = w.get_auto_detect_extensionless();
                 current.formats.disabled_formats = formats_page_save.disabled_ids();
+                hotkeys_page_save.save(&mut current);
 
                 // Save Viewer Parameters
                 current.viewer.images.open_in_tab = w.get_open_images_in_tab();

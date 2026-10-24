@@ -7,6 +7,7 @@
 //! Browse selection to stay independent of). On the last medium remove turns into a close button that fits the host.
 
 use super::follow::{DuplicateRefusal, duplicate_refusal};
+use super::key_labels;
 use super::model::TileKind;
 use super::route::{HostMode, OriginKind};
 use crate::icons::Icon;
@@ -367,6 +368,10 @@ fn zoom(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
 /// (animated, several pages, edited in another tile) keeps the button, disabled, with the reason as tooltip.
 fn crop(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     let edit = ctx.edit.filter(|_| interactive(ctx))?;
+    let apply = match key_labels::of(ctx.host).apply_crop {
+        key if key.is_empty() => "double click".to_owned(),
+        key => format!("double click or {key}"),
+    };
     Some(match edit.crop {
         Ok(open) => MediaActionSpec {
             active: Some(open),
@@ -374,9 +379,9 @@ fn crop(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
                 MediaActionId::Crop,
                 Icon::Crop,
                 if open {
-                    "Cancel cropping (Esc); double click or Enter applies the crop"
+                    format!("Cancel cropping (Esc); {apply} applies the crop")
                 } else {
-                    "Crop: drag a rectangle, Shift keeps the ratio, double click or Enter applies"
+                    format!("Crop: drag a rectangle, Shift keeps the ratio, {apply} applies")
                 },
             )
         },
@@ -391,7 +396,11 @@ fn undo(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     let edit = ctx.edit.filter(|e| interactive(ctx) && (e.can_undo || e.can_redo))?;
     Some(MediaActionSpec {
         enabled: edit.can_undo,
-        ..MediaActionSpec::on(MediaActionId::Undo, Icon::Undo, "Undo the last change (Ctrl+Z)")
+        ..MediaActionSpec::on(
+            MediaActionId::Undo,
+            Icon::Undo,
+            key_labels::with_key("Undo the last change", &key_labels::of(ctx.host).undo),
+        )
     })
 }
 
@@ -399,7 +408,11 @@ fn redo(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     let edit = ctx.edit.filter(|e| interactive(ctx) && (e.can_undo || e.can_redo))?;
     Some(MediaActionSpec {
         enabled: edit.can_redo,
-        ..MediaActionSpec::on(MediaActionId::Redo, Icon::Redo, "Redo (Ctrl+Shift+Z)")
+        ..MediaActionSpec::on(
+            MediaActionId::Redo,
+            Icon::Redo,
+            key_labels::with_key("Redo", &key_labels::of(ctx.host).redo),
+        )
     })
 }
 
@@ -409,11 +422,14 @@ fn save(ctx: &MediaBarContext) -> Option<MediaActionSpec> {
     let (icon, tooltip, look) = match look {
         SaveLook::Emphasized => (
             Icon::Save,
-            "Save the changes over the original (Ctrl+S); the arrow offers Save As...",
+            format!(
+                "{}; the arrow offers Save As...",
+                key_labels::with_key("Save the changes over the original", &key_labels::of(ctx.host).save)
+            ),
             ButtonLook::Emphasized,
         ),
-        SaveLook::Busy => (Icon::Loader, "Saving...", ButtonLook::Busy),
-        SaveLook::Done { fading } => (Icon::Save, "Saved", ButtonLook::Done { fading }),
+        SaveLook::Busy => (Icon::Loader, "Saving...".to_owned(), ButtonLook::Busy),
+        SaveLook::Done { fading } => (Icon::Save, "Saved".to_owned(), ButtonLook::Done { fading }),
     };
     Some(MediaActionSpec {
         look,

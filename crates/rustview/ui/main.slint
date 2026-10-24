@@ -56,6 +56,7 @@ export { FeedbackKind, ButtonFeedback } from "button_feedback_types.slint";
 export { FavoriteRenameDialog } from "favorite_rename_dialog.slint";
 export { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 export { HoldConfirm } from "hold.slint";
+export { HotkeysUi, HotkeySectionView, HotkeyRowView, HotkeyChipView } from "settings_page_hotkeys.slint";
 export { ColorCodec, ColorPickerWindow } from "color_picker.slint";
 export { IconId } from "icons.slint";
 export { ThumbnailBadgeEngine, ThumbnailBadgeConfig, ThumbnailBadgeView, ThumbnailBadgeZones, ThumbnailBadgeOrientation, ThumbnailBadgeKind, ThumbnailBadgeTone, ThumbnailBadgeOverflowMode } from "thumbnail_badge_types.slint";
@@ -365,6 +366,8 @@ export component MainWindow inherits Window {
     callback viewer-zoom-key(int);
     // The refresh key of a Multiview (tab view or fullscreen): the medium is read again from the drive.
     callback refresh-medium(int /* media id */);
+    // The first key of the tab view's refresh (Settings > Hotkeys), for the tooltip of the toolbar's refresh button.
+    in property <string> viewer-refresh-key-label;
     callback viewer-previous();
     callback viewer-next();
     // The area of the viewer tab that a Multiview fills changed (size or position); Rust places the native video windows.
@@ -805,6 +808,7 @@ export component MainWindow inherits Window {
                         resolution: root.viewer-resolution;
                         has-previous: root.viewer-has-previous;
                         has-next: root.viewer-has-next;
+                        refresh-key: root.viewer-refresh-key-label;
                         previous-clicked => { root.viewer-previous(); }
                         next-clicked => { root.viewer-next(); }
                         refresh-clicked => { root.viewer-refresh(); }

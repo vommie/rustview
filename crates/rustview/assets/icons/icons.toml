@@ -106,6 +106,10 @@ multiview_duplicate = { tabler = "duplicate", doc = "Show a medium a second time
 multiview_remove = { tabler = "square-rounded-minus", doc = "Remove a medium from the Multiview" }
 multiview_select_first = { tabler = "hand-click", doc = "Hint: click a medium of the Multiview first (nothing is selected)" }
 tip_hold = { tabler = "hand-click", doc = "Tooltip badge: the element acts only when held (hold to confirm)" }
+hotkey_add = { tabler = "keyboard", doc = "Settings > Hotkeys: press a new key for the action" }
+hotkey_reset = { tabler = "arrow-back-up", doc = "Settings > Hotkeys: back to the default keys of the action" }
+hotkey_reset_all = { tabler = "restore", doc = "Settings > Hotkeys: every key back to its default (held)" }
+hotkey_fixed = { tabler = "lock", doc = "Settings > Hotkeys: a key that cannot be changed" }
 volume_on = { tabler = "volume", doc = "Sound on" }
 volume_off = { tabler = "volume-off", doc = "Sound muted" }
 playback_play = { tabler = "player-play", doc = "Start playback" }

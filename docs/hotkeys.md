@@ -58,8 +58,19 @@ opens it in a background tab, F11 / F show a tab in the fullscreen and leave it,
 Ctrl+Page Down / Ctrl+Page Up switch tabs, Alt+1 / Alt+2 show Browse / the tab grid, Ctrl+Comma opens the settings, F1 opens
 them on the Hotkeys page, Ctrl+T switches Browse between thumbnails and the table. Mouse buttons stay as they are.
 
-## Video zoom (confirmed idea)
+## Video zoom
 mpv's builtin `positioning` script (loaded: `load-scripts=yes`, `load-positioning` defaults to yes) already zooms toward
-the cursor with Ctrl+wheel over a video. The zoom keys of the Multiview send `add video-zoom` / reset `video-zoom`,
-`video-pan-x/y` to the selected video's player; a new file in the same player starts unzoomed. No slider or minimap for
-videos, and a video stays inside its tile.
+the cursor with Ctrl+wheel over a video. The zoom keys of the Multiview zoom the selected video through its player
+(`MpvPlayer::zoom_video_by`: `add video-zoom log2(1 + step)` with the image zoom's step; `reset_video_zoom` sets `video-zoom`,
+`video-pan-x/y`, `video-align-x/y` and `panscan` to 0); `load_file` resets it, so a new file in the same player starts
+unzoomed. No slider or minimap for videos, and a video stays inside its tile.
+
+## Code
+- `ui/keymap/`: `chord.rs` (ported from RustCut; Backtab = Shift+Tab), `action.rs` (the `actions!` table: id, area, title, default keys,
+  flags FIXED/TYPING/REPEAT/LABELS/BESIDE_PLAYER), `area.rs` (`Area::overlaps`), `mpv_keys.rs` (chord -> mpv key names, keypad variants),
+  `mod.rs` (`Keymap`: from/to the stored table with repairs, lookup per area list, conflicts, labels).
+- `ui/hotkeys/`: the keymap in use (`apply` at startup and when the settings change: mpv bindings, media bar labels), `resolve`
+  (typing, repeat), `main_window.rs` (Browse/tab view/tab grid), `ui/multiview/session_keys.rs` (fullscreen), the router's `video_key`.
+- `ui/settings_dialog/hotkeys_page/` (`page.rs` pure: sections, filter, recording, move on the second press, refusals, reset) and
+  `ui/settings_page_hotkeys.slint` (global `HotkeysUi`).
+- `ui/hold.slint` + `ui/hold_confirm.rs`: hold to confirm (`ToolbarButton.hold`, `CtxMenuItem::with_hold`, tooltip hold badge).

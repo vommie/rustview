@@ -3,7 +3,9 @@ use crate::icons::Icon;
 use crate::system::DesktopApp;
 use crate::ui::MainWindow;
 use crate::ui::context_menu::media::MediaContextMenu;
+use crate::ui::hotkeys;
 use crate::ui::image_edit::close_guard;
+use crate::ui::keymap::Action;
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::state::{
     CTX_TAB_CLOSE, CTX_TAB_CLOSE_OTHERS, CTX_TAB_CLOSE_SELECTED, CTX_TAB_CLOSE_TO_LEFT, CTX_TAB_CLOSE_TO_RIGHT,
@@ -135,7 +137,13 @@ impl TabContextMenu {
                     has_other_tabs,
                 )
             })
-            .action(CTX_TAB_CLOSE, "Close Tab", Some("Ctrl+W"), Some(Icon::Close), true);
+            .action(
+                CTX_TAB_CLOSE,
+                "Close Tab",
+                hotkeys::shortcut(Action::TabClose).as_deref(),
+                Some(Icon::Close),
+                true,
+            );
 
         // A tab of several media has no single file: the file sections do not apply (and the drive is not probed for it)
         if !is_solo {

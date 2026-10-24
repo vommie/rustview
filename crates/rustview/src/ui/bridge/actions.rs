@@ -6,6 +6,8 @@ use crate::ui::favorites::BridgeFavorites;
 use crate::ui::file_dialogs::delete::DeleteFollowup;
 use crate::ui::file_dialogs::{FileDialogContext, FileRenameDialogController, RenameDialogParams};
 use crate::ui::folder_dialogs::FolderDialogContext;
+use crate::ui::hotkeys;
+use crate::ui::keymap::Action;
 use crate::ui::media::BridgeMedia;
 use crate::ui::multiview::tab_host;
 use crate::ui::state::LastActivePanel;
@@ -203,7 +205,13 @@ impl UiBridge {
                 return;
             }
 
-            StatusBarBridge::info(window, "Select a favorite to remove (Del).");
+            StatusBarBridge::info(
+                window,
+                format!(
+                    "{}.",
+                    hotkeys::with_key("Select a favorite to remove", Action::BrowseDelete)
+                ),
+            );
             return;
         }
 
@@ -235,7 +243,13 @@ impl UiBridge {
                 .copied()
                 .or(params.state.read().current_folder_id);
             let Some(folder_id) = current_folder_id else {
-                StatusBarBridge::info(window, "No folder selected to delete (Del).");
+                StatusBarBridge::info(
+                    window,
+                    format!(
+                        "{}.",
+                        hotkeys::with_key("No folder selected to delete", Action::BrowseDelete)
+                    ),
+                );
                 return;
             };
             Self::open_folder_delete_dialog(params, folder_id);
@@ -244,7 +258,13 @@ impl UiBridge {
 
         let selected_ids = params.state.read().get_selected_ids_ordered();
         if selected_ids.is_empty() {
-            StatusBarBridge::info(window, "Select one or more files to delete (Del).");
+            StatusBarBridge::info(
+                window,
+                format!(
+                    "{}.",
+                    hotkeys::with_key("Select one or more files to delete", Action::BrowseDelete)
+                ),
+            );
             return;
         }
 
@@ -416,7 +436,13 @@ impl UiBridge {
                 return;
             }
 
-            StatusBarBridge::info(window, "Select a favorite to rename (F2).");
+            StatusBarBridge::info(
+                window,
+                format!(
+                    "{}.",
+                    hotkeys::with_key("Select a favorite to rename", Action::BrowseRename)
+                ),
+            );
             return;
         }
 
@@ -431,7 +457,13 @@ impl UiBridge {
                 .copied()
                 .or(params.state.read().current_folder_id);
             let Some(folder_id) = current_folder_id else {
-                StatusBarBridge::info(window, "No folder selected to rename (F2).");
+                StatusBarBridge::info(
+                    window,
+                    format!(
+                        "{}.",
+                        hotkeys::with_key("No folder selected to rename", Action::BrowseRename)
+                    ),
+                );
                 return;
             };
 
@@ -483,7 +515,13 @@ impl UiBridge {
             let media_id = *sel_ids.iter().next().unwrap();
             Self::open_media_rename(media_id, params);
         } else if sel_ids.is_empty() {
-            StatusBarBridge::info(window, "Select a file to rename (F2).");
+            StatusBarBridge::info(
+                window,
+                format!(
+                    "{}.",
+                    hotkeys::with_key("Select a file to rename", Action::BrowseRename)
+                ),
+            );
         } else {
             StatusBarBridge::warn(window, "Cannot rename multiple files at once. Select a single file.");
         }

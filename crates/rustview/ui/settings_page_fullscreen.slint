@@ -65,6 +65,8 @@ export component SettingsPageFullscreen inherits VerticalLayout {
 
     // Rating
     in-out property <bool> rating-show-feedback: true;
+    // The rating keys as the description names them (Settings > Hotkeys).
+    in property <string> rating-keys: "the rating keys";
 
     // Background
     in-out property <int> background-source-idx: 0; // 0 = theme, 1 = same as viewer, 2 = custom color
@@ -320,7 +322,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
         SettingsSwitchRow {
             indent: 12px;
             label: "Delete";
-            tooltip: "Delete the medium (to the trash or permanently), after the usual confirmation. Del does the same on a single medium.";
+            tooltip: "Delete the medium (to the trash or permanently), after the usual confirmation. The delete key (Settings > Hotkeys) does the same for the selected medium.";
             enabled: root.media-bar-enabled;
             checked <=> root.media-bar-show-delete;
         }
@@ -717,7 +719,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
 
     SettingsCard {
         title: "Rating";
-        description: "Rate the selected medium with Ctrl+0 (no rating) to Ctrl+5, in the fullscreen and in tabs (a single medium needs no selection).";
+        description: "Rate the selected medium with " + root.rating-keys + ", in the fullscreen and in tabs (a single medium needs no selection).";
 
         SettingsSwitchRow {
             label: "Show the rating animation";

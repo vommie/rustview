@@ -1,0 +1,371 @@
+// Settings > Hotkeys: every action of the keymap with its keys, one section per area (`docs/hotkeys.md`). The keyboard button
+// waits for a key (Esc cancels); a key another action has is not taken at once: pressing it a second time moves it here. A key's
+// cross removes it, the reset button puts the action's default keys back, the held button next to the filter every default.
+// Fixed keys show a lock instead. Everything here changes the settings window's copy; Save keeps it, Cancel drops it.
+
+import { Theme } from "styles.slint";
+import { AppIcon, IconId, IconSize } from "icons.slint";
+import { SettingsCard } from "settings_card.slint";
+import { SearchField } from "search_field.slint";
+import { ToggleSwitch } from "toggle_switch.slint";
+import { ToolbarButton } from "toolbar_button.slint";
+import { TooltipArea } from "tooltips.slint";
+
+export struct HotkeyChipView {
+    // The stored text of the key (what removing it names), and how it is written.
+    text: string,
+    label: string,
+}
+
+export struct HotkeyRowView {
+    id: string,
+    title: string,
+    keys: [HotkeyChipView],
+    changed: bool,
+    fixed: bool,
+    // Why the keys of a fixed row cannot be changed (its lock's tooltip).
+    fixed-reason: string,
+    // The default keys, written out ("" = none).
+    defaults: string,
+    // What happened to the last key pressed for this row ("" = nothing).
+    note: string,
+    note-error: bool,
+}
+
+export struct HotkeySectionView {
+    id: string,
+    title: string,
+    description: string,
+    open: bool,
+    rows: [HotkeyRowView],
+}
+
+export global HotkeysUi {
+    in property <[HotkeySectionView]> sections;
+    // The id of the action waiting for a key ("" = none).
+    in property <string> recording;
+    in-out property <string> filter;
+    in-out property <bool> only-changed;
+    // A filter or "Only changed" is on: sections cannot be collapsed meanwhile.
+    in property <bool> narrowing;
+    callback filter-edited(string);
+    callback only-changed-toggled(bool);
+    callback section-toggled(string);
+    callback record(string);
+    callback cancel-recording();
+    // A key while recording (text, Ctrl, Alt, Shift, Meta); true = it was used (bound, refused or cancelled).
+    callback recorded(string, bool, bool, bool, bool) -> bool;
+    callback unbind(string /* action id */, string /* key text */);
+    callback reset(string /* action id */);
+    callback reset-all();
+}
+
+component KeyChip inherits Rectangle {
+    in property <HotkeyChipView> chip;
+    in property <bool> fixed;
+    callback remove();
+
+    height: 22px;
+    width: chip-row.preferred-width;
+    horizontal-stretch: 0;
+    border-radius: 3px;
+    background: Theme.surface-variant;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    chip-row := HorizontalLayout {
+        padding-left: 6px;
+        padding-right: root.fixed ? 6px : 2px;
+        spacing: 2px;
+
+        Text {
+            text: root.chip.label;
+            color: root.fixed ? Theme.text-muted : Theme.accent;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        if !root.fixed : VerticalLayout {
+            alignment: center;
+
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: 2px;
+                background: cross.has-hover ? Theme.surface-hover : transparent;
+
+                cross := TooltipArea {
+                    text: "Remove " + root.chip.label;
+                    cursor: MouseCursor.pointer;
+                    clicked => { root.remove(); }
+                }
+
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: IconId.close;
+                    size: IconSize.xs;
+                    color: cross.has-hover ? Theme.status-corrupt : Theme.text-muted;
+                }
+            }
+        }
+    }
+}
+
+component HotkeyRow inherits Rectangle {
+    in property <HotkeyRowView> row-view;
+    in property <bool> recording;
+    callback start-recording();
+
+    min-height: 30px;
+    border-radius: 4px;
+    background: root.recording ? Theme.primary.with-alpha(0.12) : hover.has-hover ? Theme.surface-hover : transparent;
+
+    hover := TouchArea { }
+
+    VerticalLayout {
+        padding-left: 8px;
+        padding-right: 4px;
+        padding-top: 3px;
+        padding-bottom: 3px;
+        spacing: 2px;
+
+        HorizontalLayout {
+            spacing: 6px;
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.row-view.title;
+                color: root.row-view.fixed ? Theme.text-muted : Theme.text;
+                font-size: 12px;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+
+            if root.recording : Text {
+                text: "Press a key (Esc cancels)";
+                color: Theme.primary;
+                font-size: 11px;
+                vertical-alignment: center;
+            }
+
+            for chip in root.row-view.keys : VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+
+                KeyChip {
+                    chip: chip;
+                    fixed: root.row-view.fixed;
+                    remove => { HotkeysUi.unbind(root.row-view.id, chip.text); }
+                }
+            }
+
+            if !root.row-view.fixed : ToolbarButton {
+                height: 24px;
+                icon: IconId.hotkey-add;
+                is-active: root.recording;
+                tooltip: root.recording ? "Waiting for a key (Esc cancels)" : "Add a key: press it next";
+                clicked => {
+                    if root.recording {
+                        HotkeysUi.cancel-recording();
+                    } else {
+                        root.start-recording();
+                    }
+                }
+            }
+
+            if !root.row-view.fixed : ToolbarButton {
+                height: 24px;
+                icon: IconId.hotkey-reset;
+                is-enabled: root.row-view.changed;
+                tooltip: root.row-view.defaults == "" ? "Back to no key" : "Back to the default: " + root.row-view.defaults;
+                clicked => { HotkeysUi.reset(root.row-view.id); }
+            }
+
+            if root.row-view.fixed : TooltipArea {
+                width: 24px;
+                height: 24px;
+                text: root.row-view.fixed-reason;
+
+                AppIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    icon: IconId.hotkey-fixed;
+                    size: IconSize.md;
+                    color: Theme.text-muted;
+                }
+            }
+        }
+
+        if root.row-view.note != "" : Text {
+            text: root.row-view.note;
+            color: root.row-view.note-error ? Theme.status-corrupt : Theme.accent;
+            font-size: 11px;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component SectionHeader inherits Rectangle {
+    in property <HotkeySectionView> section;
+    in property <bool> narrowing;
+
+    height: 30px;
+    border-radius: 4px;
+    background: touch.has-hover && !root.narrowing ? Theme.surface-hover : transparent;
+
+    touch := TooltipArea {
+        text: root.narrowing ? "" : (root.section.open ? "Collapse this section" : "Expand this section");
+        cursor: root.narrowing ? MouseCursor.default : MouseCursor.pointer;
+        clicked => {
+            if !root.narrowing {
+                HotkeysUi.section-toggled(root.section.id);
+            }
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 4px;
+        spacing: 6px;
+
+        VerticalLayout {
+            alignment: center;
+
+            AppIcon {
+                icon: root.section.open ? IconId.chevron-down : IconId.chevron-right;
+                size: IconSize.md;
+                color: Theme.primary;
+            }
+        }
+
+        Text {
+            text: root.section.title;
+            color: Theme.primary;
+            font-weight: 700;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.section.description;
+            color: Theme.text-muted;
+            font-size: 11px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+export component SettingsPageHotkeys inherits VerticalLayout {
+    spacing: 12px;
+
+    SettingsCard {
+        title: "Hotkeys";
+        description: "Keys of the main window, the Multiview and the videos. The same key may mean different things in different sections. Changes apply with Save.";
+
+        recorder := FocusScope {
+            width: 0px;
+            height: 0px;
+            key-pressed(event) => {
+                if HotkeysUi.recording == "" {
+                    return reject;
+                }
+                if HotkeysUi.recorded(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.shift,
+                    event.modifiers.meta) {
+                    return accept;
+                }
+                accept
+            }
+            changed has-focus => {
+                if !self.has-focus && HotkeysUi.recording != "" {
+                    HotkeysUi.cancel-recording();
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+
+            SearchField {
+                field-width: 280px;
+                field-height: 26px;
+                font-size: 12px;
+                placeholder-text: "Filter by action, section or key";
+                enable-regex-toggle: false;
+                show-search-icon: true;
+                clear-tooltip: "Clear the filter (Esc)";
+                text <=> HotkeysUi.filter;
+                search-changed(text) => { HotkeysUi.filter-edited(text); }
+            }
+
+            only-changed-area := TooltipArea {
+                horizontal-stretch: 1;
+                text: "Show only the actions whose keys differ from the defaults";
+                cursor: MouseCursor.pointer;
+                clicked => {
+                    HotkeysUi.only-changed = !HotkeysUi.only-changed;
+                    HotkeysUi.only-changed-toggled(HotkeysUi.only-changed);
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+
+                    VerticalLayout {
+                        alignment: center;
+
+                        ToggleSwitch {
+                            checked: HotkeysUi.only-changed;
+                        }
+                    }
+
+                    Text {
+                        text: "Only changed";
+                        color: Theme.text;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            ToolbarButton {
+                height: 26px;
+                icon: IconId.hotkey-reset-all;
+                hold: true;
+                tooltip: "Every key back to its default";
+                clicked => { HotkeysUi.reset-all(); }
+            }
+        }
+
+        if HotkeysUi.sections.length == 0 : Text {
+            text: HotkeysUi.only-changed ? "No key differs from its default." : "No action matches the filter.";
+            color: Theme.text-muted;
+            font-size: 12px;
+        }
+
+        for section in HotkeysUi.sections : VerticalLayout {
+            spacing: 2px;
+
+            SectionHeader {
+                section: section;
+                narrowing: HotkeysUi.narrowing;
+            }
+
+            if section.open : VerticalLayout {
+                spacing: 2px;
+                padding-left: 12px;
+
+                for row-view in section.rows : HotkeyRow {
+                    row-view: row-view;
+                    recording: HotkeysUi.recording == row-view.id;
+                    start-recording => {
+                        recorder.focus();
+                        HotkeysUi.record(row-view.id);
+                    }
+                }
+            }
+        }
+    }
+}

@@ -8,6 +8,8 @@ export component ImageTabPanelToolbar inherits PanelToolbar {
     in property <string> resolution: "";
     in property <bool> has-previous: false;
     in property <bool> has-next: false;
+    // The refresh key of the tab view (Settings > Hotkeys; "" = none), shown in the button's tooltip.
+    in property <string> refresh-key: "";
 
     callback previous-clicked();
     callback next-clicked();
@@ -58,7 +60,8 @@ export component ImageTabPanelToolbar inherits PanelToolbar {
     // 3. Refresh Image Action Button (using standardized IconId.refresh)
     ToolbarButton {
         icon: IconId.refresh;
-        tooltip: "Refresh image and reload from disk (F5)";
+        tooltip: "Refresh image and reload from disk";
+        tooltip-shortcut: root.refresh-key;
         clicked => { root.refresh-clicked(); }
     }
 }

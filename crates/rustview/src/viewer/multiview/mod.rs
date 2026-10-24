@@ -37,6 +37,7 @@ mod instance_rating;
 mod instance_sound;
 mod instance_tiles;
 mod instance_zoom;
+pub mod key_labels;
 pub mod layout;
 pub mod layout_pins;
 pub mod media_actions;

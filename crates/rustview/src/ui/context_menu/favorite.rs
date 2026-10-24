@@ -5,6 +5,8 @@ use crate::ui::MainWindow;
 use crate::ui::favorites::BridgeFavorites;
 use crate::ui::favorites::manager::FavoriteManager;
 use crate::ui::favorites::rename_dialog::FavoriteRenameDialogController;
+use crate::ui::hotkeys;
+use crate::ui::keymap::Action;
 use crate::ui::status_bar::StatusBarBridge;
 use parking_lot::RwLock;
 use rustview_core::settings::LogObscurer;
@@ -37,7 +39,7 @@ impl FavoriteContextMenu {
         builder = builder.action(
             crate::ui::state::CTX_FAVORITE_RENAME,
             "Rename Favorite...",
-            Some("F2"),
+            hotkeys::shortcut(Action::BrowseRename).as_deref(),
             Some(Icon::Rename),
             true,
         );
@@ -48,7 +50,7 @@ impl FavoriteContextMenu {
         builder = builder.action(
             crate::ui::state::CTX_FAVORITE_REMOVE,
             "Remove from Favorites",
-            Some("Del"),
+            hotkeys::shortcut(Action::BrowseDelete).as_deref(),
             Some(Icon::FavoriteRemove),
             true,
         );

@@ -35,6 +35,11 @@ pub fn install(window: &MainWindow) {
     });
 }
 
+/// Shows the current keys where the main window names them (the tooltip of the tab view's refresh button).
+pub fn show_labels(window: &MainWindow) {
+    window.set_viewer_refresh_key_label(super::label(Action::TabRefresh).into());
+}
+
 /// Runs the action `trigger` stands for in the view the main window shows; `false` when it has none (the key goes on).
 pub fn dispatch(window: &MainWindow, trigger: &Trigger<'_>, typing: bool) -> bool {
     let mode = window.get_active_view_mode();

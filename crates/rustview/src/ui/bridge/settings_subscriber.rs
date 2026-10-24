@@ -101,6 +101,7 @@ impl UiBridge {
 
                 if diff_clone.hotkeys_changed {
                     crate::ui::hotkeys::apply(&new_clone.hotkeys);
+                    crate::ui::hotkeys::main_window::show_labels(&window);
                 }
 
                 if diff_clone.hold_to_confirm_changed {

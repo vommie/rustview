@@ -31,6 +31,25 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **The panels of a Multiview tab follow the selected medium:** the inspector, the Tag & Rate panel (rating buttons and tags) and the tag history act on the
   selected medium. With several media and none selected the Tag & Rate panel greys out and says "Select a medium in the view", and its buttons show the
   hint over the view. The refresh button of the tab still reads all media of the tab.
+- **Settings > Hotkeys: every key can be changed.** One section per area (General, Browse, Multiview in a Tab, Multiview in the Fullscreen,
+  Video Player), each collapsible; a filter (action, section or key) and an "Only changed" switch. The keyboard button of a row waits for a key (Esc
+  cancels); a key that another action of the same area already has is named in the row and moves over when you press it a second time; a key's cross
+  removes it and the arrow button brings the defaults back. Browse refuses keys that type a character (they belong to type-ahead find); fixed keys (Esc,
+  the cursor keys of Browse, type-ahead find) are listed with a lock whose tooltip says why. "Every key back to its default" is held for a moment. Only the
+  keys that differ from the defaults are stored (`hotkeys` in `settings.json`; the page's filter, switch and collapsed sections in
+  `view.hotkeys_page`); no migration, older settings files load as before.
+- **Hold to confirm:** buttons and menu entries can act only when held (a red line runs around them, a short click shows the tooltip with "Hold 1 s").
+  Settings > General > Confirmations > "Hold to confirm" sets the time (1 s by default, 0 = a click is enough). The first user is "Every key back to its
+  default".
+- **New keys:** F1 opens Settings > Hotkeys, Ctrl+Comma the settings; Ctrl+Tab / Ctrl+Shift+Tab and Ctrl+Page Down / Ctrl+Page Up switch tabs; Alt+1 /
+  Alt+2 show Browse / the tab grid; in Browse F11 opens the selection in the fullscreen, Ctrl+Enter in background tabs, Ctrl+T switches between thumbnails
+  and the table; in a tab F11 or F shows it in the fullscreen, and in the fullscreen F11, F and Ctrl+W close it; F5 also works in the fullscreen
+  (the selected medium is read again); plain Backspace resets the zoom in a Multiview (besides Ctrl+Backspace).
+- **The zoom keys work on a selected video:** mpv zooms the video inside its tile (Ctrl++ / Ctrl+-, Backspace or Ctrl+Backspace for the whole picture
+  again); Ctrl + mouse wheel over a video zooms toward the pointer as before. The next video in the same tile starts unzoomed.
+- **The Video Player section** of Settings > Hotkeys already lists play/pause, mute, short and long jumps, frame steps, volume and speed with their keys;
+  they take effect when RustView controls the videos itself (next version). Until then the player uses its own keys.
+- The Rate Selection submenu shows the rating keys.
 
 ### Changed
 - **Esc** cancels the crop tool of the selected picture first, then the other crop tools (newest first), then it closes the fullscreen as before.
@@ -39,6 +58,19 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **Ctrl+0..5 in a Multiview rate the selected medium only**, wherever the pointer is (also when pressed over a video). Before, they rated every medium the
   view showed; with several media and none selected nothing is rated now and the hint appears. A Multiview of one medium rates it as before.
 - A click on a video in a Multiview is no longer ignored: it selects the video (it still never pauses it).
+- **Menus, tooltips, status messages and setting descriptions name your keys** (Settings > Hotkeys) instead of fixed ones.
+- **Keys over a video follow the keymap:** rename, delete, rating, refresh, zoom, crop, save, undo, close and fullscreen keys reach RustView also while the
+  pointer rests over a video (Ctrl+S no longer takes a screenshot there, Ctrl++ no longer changes the audio delay). The video player keys (Space, M,
+  the arrows, ...) stay with the player until the next version.
+- **The rating keys need Ctrl in a tab too** (the plain digits 0 to 5 no longer rate).
+- **A tab no longer pages with the arrow keys**, and Space no longer pages in the fullscreen; only a single picture of a fullscreen opened from Browse
+  pages (Left, Up, Page Up back; Right, Down, Page Down forward).
+- Shortcuts that also accepted the Meta key instead of Ctrl (Ctrl+A, Ctrl+W, ...), and Ctrl+F4 or Meta+W over a video, no longer do; add such keys on the
+  Hotkeys page if you want them.
+
+### Fixed
+- **F5 in Browse** did nothing although the menu named it; it refreshes the selected files now.
+- The tag menu no longer names F2 for "Rename Tag..." (F2 never renamed a tag).
 
 ## [0.4.0] - 2026-10-24
 

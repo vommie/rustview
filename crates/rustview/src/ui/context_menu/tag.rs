@@ -46,7 +46,7 @@ impl TagContextMenu {
         CtxMenuBuilder::new()
             .header_with_tooltip(header_title, tooltip)
             .action(CTX_TAG_ADD_CHILD, "Add Child Tag...", None, Some(Icon::Plus), true)
-            .action(CTX_TAG_RENAME, "Rename Tag...", Some("F2"), Some(Icon::Rename), true)
+            .action(CTX_TAG_RENAME, "Rename Tag...", None, Some(Icon::Rename), true)
             .item(move_submenu)
             .separator()
             .action(CTX_TAG_DELETE, "Delete Tag...", None, Some(Icon::Delete), true)

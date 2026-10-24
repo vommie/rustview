@@ -7,6 +7,8 @@ use crate::ui::file_dialogs::delete::DeleteFileDialogController;
 use crate::ui::file_dialogs::missing::MissingFileDialogController;
 use crate::ui::file_dialogs::remove_orphaned::RemoveOrphanedFileDialogController;
 use crate::ui::folder_tree::projection::FolderProjection;
+use crate::ui::hotkeys;
+use crate::ui::keymap::Action;
 use crate::ui::media::inspector::BridgeInspector;
 use crate::ui::media::open_with::MediaOpenWith;
 use crate::ui::multiview::MultiviewHandle;
@@ -286,7 +288,7 @@ impl MediaContextMenu {
                 } else {
                     "Rename (Single File Only)".to_string()
                 },
-                Some("F2"),
+                hotkeys::shortcut(Action::BrowseRename).as_deref(),
                 Some(Icon::Rename),
                 can_rename,
             )
@@ -306,7 +308,13 @@ impl MediaContextMenu {
                 }
                 sub_builder
             })
-            .action(delete_action_id, delete_action_text, Some("Del"), delete_icon, !is_busy);
+            .action(
+                delete_action_id,
+                delete_action_text,
+                hotkeys::shortcut(Action::BrowseDelete).as_deref(),
+                delete_icon,
+                !is_busy,
+            );
 
         builder
     }
@@ -326,16 +334,19 @@ impl MediaContextMenu {
         } else {
             format!("Open in Tabs ({} Files)", meta.selected_count)
         };
-        let open_in_tab_shortcut = if is_single { Some("DoubleClick") } else { None };
+        // The key of an entry when it has one, else the mouse gesture (which acts on one medium only).
+        let gesture =
+            |action: Action, mouse: &str| hotkeys::shortcut(action).or_else(|| is_single.then(|| mouse.to_owned()));
+        let open_in_tab_shortcut = gesture(Action::BrowseOpen, "DoubleClick");
 
         let open_in_bg_tab_text = if is_single {
             "Open in Background-Tab".to_string()
         } else {
             format!("Open in Background-Tabs ({} Files)", meta.selected_count)
         };
-        let open_in_bg_tab_shortcut = if is_single { Some("Ctrl+MiddleClick") } else { None };
+        let open_in_bg_tab_shortcut = gesture(Action::BrowseOpenBackground, "Ctrl+MiddleClick");
 
-        let open_in_fullscreen_shortcut = if is_single { Some("MiddleClick") } else { None };
+        let open_in_fullscreen_shortcut = gesture(Action::BrowseOpenFullscreen, "MiddleClick");
 
         let refresh_full_text = if is_single {
             "File (Full)".to_string()
@@ -387,14 +398,14 @@ impl MediaContextMenu {
             .action(
                 CTX_ACTION_OPEN_IN_TAB,
                 open_in_tab_text,
-                open_in_tab_shortcut,
+                open_in_tab_shortcut.as_deref(),
                 Some(Icon::OpenInTab),
                 can_open,
             )
             .action(
                 CTX_ACTION_OPEN_IN_BG_TAB,
                 open_in_bg_tab_text,
-                open_in_bg_tab_shortcut,
+                open_in_bg_tab_shortcut.as_deref(),
                 Some(Icon::OpenInBackgroundTab),
                 can_open,
             );
@@ -402,7 +413,7 @@ impl MediaContextMenu {
             .action_with_tooltip(
                 CTX_ACTION_OPEN_IN_FULLSCREEN,
                 meta.multiview.menu_label(),
-                open_in_fullscreen_shortcut,
+                open_in_fullscreen_shortcut.as_deref(),
                 Some(if is_single {
                     Icon::OpenFullscreen
                 } else {
@@ -455,20 +466,57 @@ impl MediaContextMenu {
         builder = builder
             .separator()
             .submenu("Rate Selection", Some(Icon::Rate), meta.selected_count > 0, |sub| {
-                sub.action(CTX_ACTION_RATE_5, "5 Stars", None, Some(Icon::Rating5), true)
-                    .action(CTX_ACTION_RATE_4, "4 Stars", None, Some(Icon::Rating4), true)
-                    .action(CTX_ACTION_RATE_3, "3 Stars", None, Some(Icon::Rating3), true)
-                    .action(CTX_ACTION_RATE_2, "2 Stars", None, Some(Icon::Rating2), true)
-                    .action(CTX_ACTION_RATE_1, "1 Star", None, Some(Icon::Rating1), true)
-                    .separator()
-                    .action(CTX_ACTION_RATE_0, "Clear Rating", None, Some(Icon::RatingClear), true)
+                let key = |action| hotkeys::shortcut(action);
+                sub.action(
+                    CTX_ACTION_RATE_5,
+                    "5 Stars",
+                    key(Action::BrowseRate5).as_deref(),
+                    Some(Icon::Rating5),
+                    true,
+                )
+                .action(
+                    CTX_ACTION_RATE_4,
+                    "4 Stars",
+                    key(Action::BrowseRate4).as_deref(),
+                    Some(Icon::Rating4),
+                    true,
+                )
+                .action(
+                    CTX_ACTION_RATE_3,
+                    "3 Stars",
+                    key(Action::BrowseRate3).as_deref(),
+                    Some(Icon::Rating3),
+                    true,
+                )
+                .action(
+                    CTX_ACTION_RATE_2,
+                    "2 Stars",
+                    key(Action::BrowseRate2).as_deref(),
+                    Some(Icon::Rating2),
+                    true,
+                )
+                .action(
+                    CTX_ACTION_RATE_1,
+                    "1 Star",
+                    key(Action::BrowseRate1).as_deref(),
+                    Some(Icon::Rating1),
+                    true,
+                )
+                .separator()
+                .action(
+                    CTX_ACTION_RATE_0,
+                    "Clear Rating",
+                    key(Action::BrowseRate0).as_deref(),
+                    Some(Icon::RatingClear),
+                    true,
+                )
             })
             .separator()
             .submenu("Refresh", Some(Icon::Refresh), can_refresh, |sub| {
                 sub.action(
                     CTX_ACTION_REFRESH_FILES,
                     refresh_full_text,
-                    Some("F5"),
+                    hotkeys::shortcut(Action::BrowseRefresh).as_deref(),
                     Some(Icon::Refresh),
                     can_refresh,
                 )
@@ -492,14 +540,14 @@ impl MediaContextMenu {
             .action(
                 CTX_ACTION_SELECT_ALL,
                 "Select All",
-                Some("Ctrl+A"),
+                hotkeys::shortcut(Action::BrowseSelectAll).as_deref(),
                 Some(Icon::SelectAll),
                 true,
             )
             .action(
                 CTX_ACTION_CLEAR_SELECTION,
                 "Clear Selection",
-                Some("Ctrl+Shift+A"),
+                hotkeys::shortcut(Action::BrowseClearSelection).as_deref(),
                 Some(Icon::ClearSelection),
                 meta.selected_count > 0,
             );
