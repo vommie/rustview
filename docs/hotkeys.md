@@ -80,3 +80,13 @@ unzoomed. No slider or minimap for videos, and a video stays inside its tile.
 - `ui/settings_dialog/hotkeys_page/` (`page.rs` pure: sections, filter, recording, move on the second press, refusals, reset) and
   `ui/settings_page_hotkeys.slint` (global `HotkeysUi`).
 - `ui/hold.slint` + `ui/hold_confirm.rs`: hold to confirm (`ToolbarButton.hold`, `CtxMenuItem::with_hold`, tooltip hold badge).
+
+## Mouse over videos (questionnaire round 3, 2026-10-24)
+- Order: RustView builds its own video control bar and takes the mouse over videos together with it (no phase without mouse
+  seeking); video zoom, panning, minimap and zoom slider like pictures come right after.
+- The bar (user spec): play/pause, the current time (live; a click toggles milliseconds), a flat progress bar without chapter
+  marks (a click seeks exactly there), the remaining time like mpv (a click toggles milliseconds), a mute button on the right.
+  Nothing else. It appears only while the pointer is over it, across the whole width (like mpv's OSC), flat and compact;
+  the look is chosen in round 4 (`~/claude/feedback/2026-10-24-rustview-video-bar`).
+- Mouse wheel over a video: volume. Right click: play/pause. Videos get the minimap and the zoom slider like pictures, and a
+  zoomed video may grow beyond its tile into the free room (its native window grows).
