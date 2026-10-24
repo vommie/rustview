@@ -74,9 +74,10 @@ export struct MultiviewTileView {
     mm-zoom-min: int,
     mm-zoom-max: int,
     mm-zoom-snaps: [int],
-    // The icon of a rating just given (0..5, -1 = none) and how strong it is (1 = full, fading to 0). Videos get theirs from mpv.
-    rating-icon: int,
-    rating-alpha: float,
+    // The feedback icon of an interaction (`media_feedback`: 0..5 = a rating just given, 6 = saved, -1 = none) and how strong it
+    // is (1 = full, fading to 0). Videos get theirs from mpv.
+    feedback-icon: int,
+    feedback-alpha: float,
     // The crop tool: the room it covers (relative to the tile), the picture and the crop rectangle (relative to that room), the
     // labels and whether the rule-of-thirds lines show.
     crop-open: bool,

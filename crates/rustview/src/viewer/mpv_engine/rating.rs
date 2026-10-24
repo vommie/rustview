@@ -2,7 +2,7 @@
 //!
 //! The native video window takes the keyboard itself, so Ctrl+0..5 are bound inside mpv and reported to the application as a
 //! client message (like DEL, see `DELETE_KEY_MESSAGE`). The icon is an OSD bitmap overlay of mpv (`overlay-add`), see
-//! `viewer::multiview::rating_overlay`.
+//! `viewer::multiview::feedback_overlay`.
 
 use super::MpvPlayer;
 use crate::viewer::multiview::rating_keys::mpv_key_names;

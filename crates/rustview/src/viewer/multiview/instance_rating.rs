@@ -1,21 +1,15 @@
-//! Instance behavior around ratings given with the keyboard: which media a rating reaches and the feedback on the tiles.
+//! Instance behavior around ratings given with the keyboard: which media a rating reaches and its feedback on the tiles (the
+//! shared feedback pulse of `instance_feedback`).
 //!
 //! A rating applies to every medium the Multiview shows, sticky tiles and tiles that are not selected in the Browse view
-//! included; a medium shown by several tiles is rated once, but each of those tiles shows the feedback. The icon of an image
-//! tile is drawn by the host (`TileView::rating`); a video is drawn over by its native window, so its icon is an overlay of
-//! mpv itself (`rating_overlay`), which also works without a compositor and on Wayland.
+//! included; a medium shown by several tiles is rated once, but each of those tiles shows the feedback.
 
 use super::follow::TileKey;
 use super::instance::MultiviewInstance;
-use super::layout::Rect;
-use super::model::TileKind;
-use super::rating_feedback::{ICON_EDGE, PulseView};
-use super::rating_overlay::{self, OverlayState};
-use super::route::HostMode;
+use super::media_feedback::FeedbackIcon;
 use rustview_core::library::models::MediaId;
-use rustview_core::util::cast::{FloatToInt, SaturatingAs};
 use std::collections::HashSet;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 impl MultiviewInstance {
     /// The media a rating reaches: every medium shown, each once, in slot order.
@@ -50,85 +44,8 @@ impl MultiviewInstance {
             rating,
             "[Multiview: Rating] Feedback started"
         );
-        self.rating_feedback.trigger(tiles, rating, now);
-        self.sync_rating_overlays(now);
-        self.bump();
+        self.show_feedback(tiles, FeedbackIcon::Rating(rating), now);
         true
-    }
-
-    /// What tile `key` shows of the feedback at `now`.
-    pub(super) fn rating_pulse(&self, key: TileKey, now: Instant) -> Option<PulseView> {
-        self.rating_feedback.view(key, now)
-    }
-
-    /// Advances the feedback: the pulses that are over go, the overlays of the videos follow. Returns whether the picture
-    /// changed (a fade is always a change).
-    pub fn poll_rating_feedback(&mut self, now: Instant) -> bool {
-        if !self.rating_feedback.is_active() && !self.has_rating_overlay() {
-            return false;
-        }
-        self.rating_feedback.expire(now);
-        self.sync_rating_overlays(now);
-        self.bump();
-        true
-    }
-
-    /// How long a host may sleep before it has to call `poll_rating_feedback`; `None` while no feedback is shown.
-    pub fn rating_wakeup(&self, now: Instant) -> Option<Duration> {
-        self.rating_feedback.wakeup(now)
-    }
-
-    /// Ends all feedback at once (the Multiview is not shown any more, or its tiles changed).
-    pub fn clear_rating_feedback(&mut self) {
-        if !self.rating_feedback.is_active() && !self.has_rating_overlay() {
-            return;
-        }
-        self.rating_feedback.clear();
-        self.sync_rating_overlays(Instant::now());
-        self.bump();
-    }
-
-    fn has_rating_overlay(&self) -> bool {
-        self.tiles
-            .iter()
-            .any(|t| t.video.as_ref().is_some_and(|v| v.rating_overlay.is_some()))
-    }
-
-    /// Brings the overlays of the video windows in line with the feedback: shows, updates (fade, new rating, new size of the
-    /// window) or removes them. Costs nothing while no feedback runs and no overlay is up.
-    pub(super) fn sync_rating_overlays(&mut self, now: Instant) {
-        self.rating_feedback
-            .retain_tiles(|key| self.tiles.iter().any(|t| t.key == key));
-        if !self.rating_feedback.is_active() && !self.has_rating_overlay() {
-            return;
-        }
-        let shown = matches!(self.host.surface.mode, HostMode::Fullscreen | HostMode::TabView);
-        let dpi = self.host.surface.dpi;
-        let edge = (f64::from(ICON_EDGE) * f64::from(dpi)).round().to_int::<u32>().max(8);
-        let projection = self.host.projection;
-        for (tile, placed) in self.tiles.iter_mut().zip(&self.layout.tiles) {
-            let Some(video) = tile.video.as_mut() else {
-                continue;
-            };
-            let pulse = if shown && tile.kind == TileKind::Video {
-                self.rating_feedback.view(tile.key, now)
-            } else {
-                None
-            };
-            let Rect { w, h, .. } = projection.rect(placed.content);
-            let wanted =
-                pulse.map(|p| OverlayState::new(p, edge, (w.saturating_as::<u32>(), h.saturating_as::<u32>())));
-            if video.rating_overlay == wanted {
-                continue;
-            }
-            if let Some(state) = wanted {
-                // When mpv does not take it (no picture yet) the next frame tries again.
-                video.rating_overlay = rating_overlay::show(&video.player, &state).then_some(state);
-            } else {
-                rating_overlay::hide(&video.player);
-                video.rating_overlay = None;
-            }
-        }
     }
 }
 
@@ -137,7 +54,8 @@ mod tests {
     use super::*;
     use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
     use crate::viewer::multiview::instance::WeakInstance;
-    use crate::viewer::multiview::rating_feedback::{FADE, HOLD};
+    use crate::viewer::multiview::media_feedback::{FADE, HOLD};
+    use crate::viewer::multiview::model::TileKind;
     use crate::viewer::multiview::tile::TileSeed;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -184,10 +102,16 @@ mod tests {
         let keys: Vec<TileKey> = (0..4).filter_map(|i| mv.tile_key_at(i)).collect();
         let now = Instant::now();
         assert!(mv.show_rating_feedback(&HashSet::from([2]), 4, now));
-        assert!(mv.rating_pulse(keys[0], now).is_none());
-        assert_eq!(mv.rating_pulse(keys[1], now).map(|p| p.rating), Some(4));
-        assert_eq!(mv.rating_pulse(keys[2], now).map(|p| p.rating), Some(4));
-        assert!(mv.rating_pulse(keys[3], now).is_none());
+        assert!(mv.feedback_pulse(keys[0], now).is_none());
+        assert_eq!(
+            mv.feedback_pulse(keys[1], now).map(|p| p.icon),
+            Some(FeedbackIcon::Rating(4))
+        );
+        assert_eq!(
+            mv.feedback_pulse(keys[2], now).map(|p| p.icon),
+            Some(FeedbackIcon::Rating(4))
+        );
+        assert!(mv.feedback_pulse(keys[3], now).is_none());
     }
 
     #[test]
@@ -195,7 +119,7 @@ mod tests {
         let shared = instance();
         let mut mv = shared.lock();
         assert!(!mv.show_rating_feedback(&HashSet::from([99]), 3, Instant::now()));
-        assert!(mv.rating_wakeup(Instant::now()).is_none());
+        assert!(mv.feedback_wakeup(Instant::now()).is_none());
     }
 
     #[test]
@@ -206,11 +130,11 @@ mod tests {
         let all = HashSet::from([1, 2, 3]);
         mv.show_rating_feedback(&all, 1, t0);
         let later = t0 + HOLD + FADE / 2;
-        assert!(mv.rating_pulse(mv.tile_key_at(0).unwrap(), later).unwrap().alpha < 1.0);
+        assert!(mv.feedback_pulse(mv.tile_key_at(0).unwrap(), later).unwrap().alpha < 1.0);
         mv.show_rating_feedback(&all, 5, later);
         for i in 0..4 {
-            let pulse = mv.rating_pulse(mv.tile_key_at(i).unwrap(), later).unwrap();
-            assert_eq!((pulse.rating, pulse.alpha), (5, 1.0));
+            let pulse = mv.feedback_pulse(mv.tile_key_at(i).unwrap(), later).unwrap();
+            assert_eq!((pulse.icon, pulse.alpha), (FeedbackIcon::Rating(5), 1.0));
         }
     }
 
@@ -220,13 +144,13 @@ mod tests {
         let mut mv = shared.lock();
         let t0 = Instant::now();
         mv.show_rating_feedback(&HashSet::from([1]), 2, t0);
-        assert!(mv.rating_wakeup(t0).is_some());
-        assert!(mv.poll_rating_feedback(t0 + HOLD + FADE));
-        assert!(mv.rating_wakeup(t0 + HOLD + FADE).is_none());
-        assert!(!mv.poll_rating_feedback(t0 + HOLD + FADE));
+        assert!(mv.feedback_wakeup(t0).is_some());
+        assert!(mv.poll_feedback(t0 + HOLD + FADE));
+        assert!(mv.feedback_wakeup(t0 + HOLD + FADE).is_none());
+        assert!(!mv.poll_feedback(t0 + HOLD + FADE));
         mv.show_rating_feedback(&HashSet::from([1, 2, 3]), 0, t0);
-        mv.clear_rating_feedback();
-        assert!(mv.rating_wakeup(t0).is_none());
+        mv.clear_feedback();
+        assert!(mv.feedback_wakeup(t0).is_none());
     }
 
     #[test]
@@ -239,11 +163,14 @@ mod tests {
         // medium 2 is deleted: both of its tiles leave and the others are laid out again
         mv.drop_deleted(&[2]);
         assert_eq!(mv.tile_count(), 2);
-        let mut left: Vec<TileKey> = mv.rating_feedback.tiles().collect();
+        let mut left: Vec<TileKey> = mv.feedback.tiles().collect();
         left.sort_unstable();
         assert_eq!(left, vec![keys[0], keys[3]]);
-        assert_eq!(mv.rating_pulse(keys[0], t0).map(|p| p.rating), Some(3));
-        assert!(mv.rating_wakeup(t0).is_some());
+        assert_eq!(
+            mv.feedback_pulse(keys[0], t0).map(|p| p.icon),
+            Some(FeedbackIcon::Rating(3))
+        );
+        assert!(mv.feedback_wakeup(t0).is_some());
     }
 
     #[test]
@@ -256,10 +183,33 @@ mod tests {
         assert!(mv.replace_solo(seed(2, TileKind::Image)));
         let new = mv.tile_key_at(0).unwrap();
         assert_ne!(old, new);
-        assert!(mv.rating_pulse(old, t0).is_none());
-        assert!(mv.rating_pulse(new, t0).is_none());
-        assert!(!mv.rating_feedback.is_active());
-        assert!(mv.rating_wakeup(t0).is_none());
+        assert!(mv.feedback_pulse(old, t0).is_none());
+        assert!(mv.feedback_pulse(new, t0).is_none());
+        assert!(!mv.feedback.is_active());
+        assert!(mv.feedback_wakeup(t0).is_none());
+    }
+
+    #[test]
+    fn a_save_uses_the_same_pulse_on_its_own_tile() {
+        let shared = instance();
+        let mut mv = shared.lock();
+        let keys: Vec<TileKey> = (0..4).filter_map(|i| mv.tile_key_at(i)).collect();
+        let t0 = Instant::now();
+        mv.show_rating_feedback(&HashSet::from([1, 2]), 4, t0);
+        mv.show_feedback([keys[1]], FeedbackIcon::Saved, t0 + HOLD);
+        assert_eq!(
+            mv.feedback_pulse(keys[1], t0 + HOLD).map(|p| (p.icon, p.alpha)),
+            Some((FeedbackIcon::Saved, 1.0)),
+            "the save replaces the rating at once, at full strength"
+        );
+        assert_eq!(
+            mv.feedback_pulse(keys[2], t0 + HOLD).map(|p| p.icon),
+            Some(FeedbackIcon::Rating(4))
+        );
+        assert!(
+            mv.feedback_pulse(keys[1], t0 + HOLD + HOLD + FADE).is_none(),
+            "and lasts as long"
+        );
     }
 
     #[test]

@@ -185,30 +185,40 @@ export component MultiviewCanvas inherits Rectangle {
             }
         }
 
-        // The feedback of a rating given with Ctrl+0..5: the icon of the new rating in the middle of the tile, full strength first, then
-        // fading out. A video tile gets the same icon from mpv itself, because its native window covers this scene.
-        if root.interactive && tile.kind != 1 && tile.rating-icon >= 0 : Rectangle {
+        // The feedback of an interaction (`media_feedback`; a rating given with Ctrl+0..5, a save): its icon in the middle of the tile,
+        // full strength first, then fading out. A video tile gets the same icon from mpv itself, because its native window covers this
+        // scene. Rating: the colored rating icon; saved: the save icon, white on a green disc (`feedback_overlay` draws both alike).
+        if root.interactive && tile.kind != 1 && tile.feedback-icon >= 0 : Rectangle {
             width: 50px;
             height: 50px;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             // The one place an icon is dimmed with opacity: it is a fade of a colored icon that cannot be tinted, and at full strength (the
             // whole hold) Slint draws it without a layer.
-            opacity: tile.rating-alpha;
+            opacity: tile.feedback-alpha;
 
-            // The digit is cut out of the colored disc; a white disc behind it fills the digit white instead of letting the picture shine through.
+            // A rating: the digit is cut out of the colored disc; a white disc behind it fills the digit white instead of letting the
+            // picture shine through. Saved: the green disc itself.
             Rectangle {
                 x: 1px;
                 y: 1px;
                 width: parent.width - 2px;
                 height: parent.height - 2px;
                 border-radius: self.width / 2;
-                background: #ffffff;
+                background: tile.feedback-icon == 6 ? Theme.status-ok : #ffffff;
             }
 
-            AppIcon {
-                icon: IconLookup.rating(tile.rating-icon);
+            if tile.feedback-icon <= 5 : AppIcon {
+                icon: IconLookup.rating(tile.feedback-icon);
                 size: 50px;
+            }
+
+            if tile.feedback-icon == 6 : AppIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                icon: IconId.save;
+                size: 28px;
+                color: #ffffff;
             }
         }
 

@@ -6,9 +6,9 @@
 use super::follow::TileKey;
 use super::layout::Rect;
 use super::media_actions::{ButtonLook, MediaActionId};
+use super::media_feedback::PulseView;
 use super::model::TileKind;
 use super::primary_actions::PrimaryActionId;
-use super::rating_feedback::PulseView;
 use crate::icons::Icon;
 use crate::ui::button_feedback::ButtonFeedback;
 use rustview_core::library::models::MediaId;
@@ -28,8 +28,8 @@ pub struct TileView {
     pub minimap: Option<MinimapView>,
     /// Dragging the picture moves something (the image is larger than its tile).
     pub pannable: bool,
-    /// The icon of a rating just given, while it is shown.
-    pub rating: Option<PulseView>,
+    /// The feedback icon of an interaction (a rating just given, a save), while it is shown.
+    pub feedback: Option<PulseView>,
     /// The crop tool, while it is open on this tile.
     pub crop: Option<CropView>,
     /// The picture has unsaved edits.

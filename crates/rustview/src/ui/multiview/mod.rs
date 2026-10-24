@@ -8,6 +8,7 @@ mod bar_hosting;
 pub mod bar_overlay;
 pub mod cursor;
 pub mod eligibility;
+mod feedback;
 pub mod grid_host;
 pub mod handle;
 mod handle_edit;

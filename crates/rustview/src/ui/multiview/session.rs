@@ -86,7 +86,7 @@ pub(super) struct Session {
     /// Redraws every frame while a zoom glides to its new value (the tick is too slow for that).
     pub(super) glide: Timer,
     /// Wakes the session for the next change of a rating icon; armed only while one is shown.
-    pub(super) rating_timer: Timer,
+    pub(super) feedback_timer: Timer,
     pub(super) populated: bool,
 }
 
@@ -569,7 +569,7 @@ impl Session {
             debounce: Timer::default(),
             tick: Timer::default(),
             glide: Timer::default(),
-            rating_timer: Timer::default(),
+            feedback_timer: Timer::default(),
             populated: false,
         }
     }
@@ -663,8 +663,8 @@ impl Session {
         self.debounce.stop();
         self.tick.stop();
         self.glide.stop();
-        self.rating_timer.stop();
-        self.instance.lock().clear_rating_feedback();
+        self.feedback_timer.stop();
+        self.instance.lock().clear_feedback();
         bar_overlay::hide(BarOwner::Fullscreen);
         if let Some(win) = self.window.upgrade() {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);

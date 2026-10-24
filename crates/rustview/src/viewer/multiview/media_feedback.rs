@@ -1,9 +1,11 @@
-//! The on-screen feedback of a rating given with the keyboard (pure, the clock is passed in).
+//! The on-screen feedback of an interaction with a medium of a Multiview (pure, the clock is passed in): the one animation every
+//! such feedback uses, so they all look and time alike. Today: a rating given with the keyboard and a picture that was saved.
 //!
-//! Every tile that shows a rated medium gets a pulse: the icon of the new rating, full strength for [`HOLD`], then fading out
-//! for [`FADE`] (one second in all). A new rating cancels the running pulse of the tile at once: the new icon starts at full
-//! strength, with no cross-fade and no queue. Nothing here keeps time by itself: the host asks `wakeup` how long it may sleep
-//! and arms a single-shot timer only while a pulse is visible.
+//! A tile gets a pulse: an icon in its middle ([`FeedbackIcon`], [`ICON_EDGE`] logical pixels), full strength for [`HOLD`], then
+//! fading out for [`FADE`] (one second in all). A new pulse cancels the running one of the tile at once: the new icon starts at
+//! full strength, with no cross-fade and no queue. Nothing here keeps time by itself: the host asks `wakeup` how long it may sleep
+//! and arms a single-shot timer only while a pulse is visible. An image tile draws the icon itself (`TileView::feedback`), a video
+//! tile gets it from mpv (`feedback_overlay`).
 
 use super::follow::TileKey;
 use std::collections::HashMap;
@@ -18,18 +20,39 @@ pub const ICON_EDGE: u32 = 50;
 /// Distance between two frames of the fade.
 pub const FRAME: Duration = Duration::from_millis(16);
 
+/// The icon of a pulse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FeedbackIcon {
+    /// The medium was rated (0 = no rating).
+    Rating(u8),
+    /// The picture was saved.
+    Saved,
+}
+
+impl FeedbackIcon {
+    /// The number the canvas gets (`feedback-icon` of `MultiviewTileView`): 0..5 a rating, [`SAVED_CODE`] the save icon.
+    pub fn code(self) -> i32 {
+        match self {
+            Self::Rating(rating) => i32::from(rating.min(5)),
+            Self::Saved => SAVED_CODE,
+        }
+    }
+}
+
+/// `FeedbackIcon::Saved` for the canvas.
+pub const SAVED_CODE: i32 = 6;
+
 /// What is drawn on one tile right now.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PulseView {
-    /// The rating whose icon is shown (0 = no rating).
-    pub rating: u8,
+    pub icon: FeedbackIcon,
     /// 1.0 = full strength, 0.0 = gone. Never 0.0 for a pulse that is still shown.
     pub alpha: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct Pulse {
-    rating: u8,
+    icon: FeedbackIcon,
     started: Instant,
 }
 
@@ -49,15 +72,15 @@ impl Pulse {
 
 /// The pulses of one Multiview, by tile.
 #[derive(Debug, Default)]
-pub struct RatingFeedback {
+pub struct MediaFeedback {
     pulses: HashMap<TileKey, Pulse>,
 }
 
-impl RatingFeedback {
-    /// Starts a pulse with `rating` on every tile of `tiles`, replacing the one that runs there.
-    pub fn trigger(&mut self, tiles: impl IntoIterator<Item = TileKey>, rating: u8, now: Instant) {
+impl MediaFeedback {
+    /// Starts a pulse with `icon` on every tile of `tiles`, replacing the one that runs there.
+    pub fn trigger(&mut self, tiles: impl IntoIterator<Item = TileKey>, icon: FeedbackIcon, now: Instant) {
         for tile in tiles {
-            self.pulses.insert(tile, Pulse { rating, started: now });
+            self.pulses.insert(tile, Pulse { icon, started: now });
         }
     }
 
@@ -65,7 +88,7 @@ impl RatingFeedback {
     pub fn view(&self, tile: TileKey, now: Instant) -> Option<PulseView> {
         let pulse = self.pulses.get(&tile)?;
         pulse.alpha(now).map(|alpha| PulseView {
-            rating: pulse.rating,
+            icon: pulse.icon,
             alpha,
         })
     }
@@ -127,9 +150,15 @@ mod tests {
     #[test]
     fn full_strength_during_the_hold_then_a_linear_fade() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
-        fb.trigger([1], 3, t0);
-        assert_eq!(fb.view(1, t0), Some(PulseView { rating: 3, alpha: 1.0 }));
+        let mut fb = MediaFeedback::default();
+        fb.trigger([1], FeedbackIcon::Rating(3), t0);
+        assert_eq!(
+            fb.view(1, t0),
+            Some(PulseView {
+                icon: FeedbackIcon::Rating(3),
+                alpha: 1.0
+            })
+        );
         assert_eq!(fb.view(1, t0 + ms(749)).map(|v| v.alpha), Some(1.0));
         let mid = fb.view(1, t0 + ms(875)).expect("fading").alpha;
         assert!((mid - 0.5).abs() < 1e-3, "{mid}");
@@ -148,12 +177,18 @@ mod tests {
     #[test]
     fn a_new_rating_cancels_the_running_one_at_once() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
-        fb.trigger([7], 2, t0);
+        let mut fb = MediaFeedback::default();
+        fb.trigger([7], FeedbackIcon::Rating(2), t0);
         let t1 = t0 + ms(900); // in the middle of the fade
         assert!(fb.view(7, t1).expect("fading").alpha < 0.7);
-        fb.trigger([7], 5, t1);
-        assert_eq!(fb.view(7, t1), Some(PulseView { rating: 5, alpha: 1.0 }));
+        fb.trigger([7], FeedbackIcon::Rating(5), t1);
+        assert_eq!(
+            fb.view(7, t1),
+            Some(PulseView {
+                icon: FeedbackIcon::Rating(5),
+                alpha: 1.0
+            })
+        );
         // the clock of the new pulse runs from t1, not from t0
         assert_eq!(fb.view(7, t1 + ms(700)).map(|v| v.alpha), Some(1.0));
         assert_eq!(fb.view(7, t1 + ms(1000)), None);
@@ -162,31 +197,43 @@ mod tests {
     #[test]
     fn the_same_rating_again_restarts_the_animation() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
-        fb.trigger([1], 4, t0);
-        fb.trigger([1], 4, t0 + ms(950));
-        assert_eq!(fb.view(1, t0 + ms(950)), Some(PulseView { rating: 4, alpha: 1.0 }));
+        let mut fb = MediaFeedback::default();
+        fb.trigger([1], FeedbackIcon::Rating(4), t0);
+        fb.trigger([1], FeedbackIcon::Rating(4), t0 + ms(950));
+        assert_eq!(
+            fb.view(1, t0 + ms(950)),
+            Some(PulseView {
+                icon: FeedbackIcon::Rating(4),
+                alpha: 1.0
+            })
+        );
     }
 
     #[test]
     fn rapid_sequence_shows_only_the_last_icon() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
+        let mut fb = MediaFeedback::default();
         for (i, rating) in [1u8, 4, 0, 5].into_iter().enumerate() {
-            fb.trigger([1, 2], rating, t0 + ms(50 * i as u64));
+            fb.trigger([1, 2], FeedbackIcon::Rating(rating), t0 + ms(50 * i as u64));
         }
         let now = t0 + ms(150);
         for tile in [1, 2] {
-            assert_eq!(fb.view(tile, now), Some(PulseView { rating: 5, alpha: 1.0 }));
+            assert_eq!(
+                fb.view(tile, now),
+                Some(PulseView {
+                    icon: FeedbackIcon::Rating(5),
+                    alpha: 1.0
+                })
+            );
         }
     }
 
     #[test]
     fn tiles_run_independently() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
-        fb.trigger([1], 3, t0);
-        fb.trigger([2], 1, t0 + ms(600));
+        let mut fb = MediaFeedback::default();
+        fb.trigger([1], FeedbackIcon::Rating(3), t0);
+        fb.trigger([2], FeedbackIcon::Rating(1), t0 + ms(600));
         let now = t0 + ms(900);
         assert!(fb.view(1, now).expect("fading").alpha < 1.0);
         assert_eq!(fb.view(2, now).map(|v| v.alpha), Some(1.0));
@@ -196,9 +243,9 @@ mod tests {
     #[test]
     fn expire_drops_only_finished_pulses() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
-        fb.trigger([1], 3, t0);
-        fb.trigger([2], 3, t0 + ms(500));
+        let mut fb = MediaFeedback::default();
+        fb.trigger([1], FeedbackIcon::Rating(3), t0);
+        fb.trigger([2], FeedbackIcon::Rating(3), t0 + ms(500));
         assert!(!fb.expire(t0 + ms(900)));
         assert!(fb.expire(t0 + ms(1100)));
         assert_eq!(fb.tiles().collect::<Vec<_>>(), vec![2]);
@@ -210,9 +257,9 @@ mod tests {
     #[test]
     fn wakeup_sleeps_through_the_hold_and_ticks_during_the_fade() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
+        let mut fb = MediaFeedback::default();
         assert_eq!(fb.wakeup(t0), None);
-        fb.trigger([1], 3, t0);
+        fb.trigger([1], FeedbackIcon::Rating(3), t0);
         assert_eq!(fb.wakeup(t0), Some(HOLD));
         assert_eq!(fb.wakeup(t0 + ms(250)), Some(ms(500)));
         assert_eq!(fb.wakeup(t0 + ms(800)), Some(FRAME));
@@ -224,9 +271,9 @@ mod tests {
     #[test]
     fn wakeup_follows_the_tile_that_changes_first() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
-        fb.trigger([1], 3, t0);
-        fb.trigger([2], 3, t0 + ms(700));
+        let mut fb = MediaFeedback::default();
+        fb.trigger([1], FeedbackIcon::Rating(3), t0);
+        fb.trigger([2], FeedbackIcon::Rating(3), t0 + ms(700));
         // tile 1 starts to fade in 50 ms, tile 2 holds for 750 ms more
         assert_eq!(fb.wakeup(t0 + ms(700)), Some(ms(50)));
     }
@@ -234,8 +281,8 @@ mod tests {
     #[test]
     fn tiles_that_left_lose_their_pulse() {
         let t0 = Instant::now();
-        let mut fb = RatingFeedback::default();
-        fb.trigger([1, 2, 3], 3, t0);
+        let mut fb = MediaFeedback::default();
+        fb.trigger([1, 2, 3], FeedbackIcon::Rating(3), t0);
         fb.retain_tiles(|tile| tile != 2);
         let mut left: Vec<_> = fb.tiles().collect();
         left.sort_unstable();

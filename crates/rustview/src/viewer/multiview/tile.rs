@@ -5,12 +5,12 @@
 
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
+use super::feedback_overlay::OverlayState;
 use super::follow::TileKey;
 use super::instance::WeakInstance;
 use super::layout::Rect;
 use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
-use super::rating_overlay::OverlayState;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
@@ -43,7 +43,7 @@ pub struct VideoTile {
     /// The Multiview whose tile this is; the events of the player are posted to it.
     pub owner: EventOwner,
     /// The rating icon that mpv draws over the picture right now, if any.
-    pub rating_overlay: Option<OverlayState>,
+    pub feedback_overlay: Option<OverlayState>,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -264,7 +264,7 @@ pub fn create_video(
         last_mute: native_mute,
         current_tile,
         owner,
-        rating_overlay: None,
+        feedback_overlay: None,
     })
 }
 

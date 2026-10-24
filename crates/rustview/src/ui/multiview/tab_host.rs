@@ -42,8 +42,8 @@ struct TabHost {
     tick: Timer,
     /// Redraws every frame while a zoom glides to its new value (the tick is too slow for that).
     glide: Timer,
-    /// Wakes the host for the next change of a rating icon; armed only while one is shown.
-    rating: Timer,
+    /// Wakes the host for the next change of a feedback icon (`media_feedback`); armed only while one is shown.
+    feedback: Timer,
     /// The mouse cursor is hidden over the main window right now.
     cursor_hidden: bool,
 }
@@ -73,24 +73,24 @@ pub fn shown_instance() -> Option<SharedInstance> {
     current_instance()
 }
 
-/// The feedback of a rating changed (started, restarted): draw it and arm the timer. UI thread only.
-pub fn rating_changed() {
+/// The feedback pulse changed (started, restarted): draw it and arm the timer. UI thread only.
+pub fn feedback_changed() {
     refresh();
-    arm_rating_timer();
+    arm_feedback_timer();
 }
 
-fn arm_rating_timer() {
+fn arm_feedback_timer() {
     let Some(instance) = current_instance() else {
         return;
     };
-    with_host(|h| super::rating::arm(&h.rating, &instance, on_rating_frame));
+    with_host(|h| super::feedback::arm(&h.feedback, &instance, on_feedback_frame));
 }
 
-fn on_rating_frame() {
+fn on_feedback_frame() {
     if let Some(instance) = current_instance() {
-        instance.lock().poll_rating_feedback(std::time::Instant::now());
+        instance.lock().poll_feedback(std::time::Instant::now());
     }
-    rating_changed();
+    feedback_changed();
 }
 
 /// Wires the canvas events once at startup.
@@ -329,7 +329,7 @@ pub fn suspend() {
     let released = with_host(|h| {
         h.tick.stop();
         h.glide.stop();
-        h.rating.stop();
+        h.feedback.stop();
         h.instance = WeakInstance::new();
         h.shown.take().is_some()
     })

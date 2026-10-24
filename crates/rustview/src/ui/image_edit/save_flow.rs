@@ -16,6 +16,7 @@ use crate::viewer::edit::tile_edit::EditSource;
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
 use crate::viewer::multiview::instance_edit_view::SaveRequest;
+use crate::viewer::multiview::media_feedback::FeedbackIcon;
 use crate::viewer::multiview::route::OriginKind;
 use rustview_core::image_edit::conflict::{ConflictChoice, DiskState, conflict_prompt};
 use rustview_core::image_edit::formats::EditRefusal;
@@ -84,6 +85,17 @@ fn picture(request: &SaveRequest) -> Option<EditedPicture<'_>> {
         original_size: request.source.size,
         identity: request.source.identity,
     })
+}
+
+/// The save icon pops up in the middle of tile `tile` (the shared feedback pulse of the Multiview, like a rating key): the save
+/// shows also when the media bar is hidden.
+fn show_saved(context: &EditContext, weak: &WeakInstance, tile: TileKey) {
+    if let Some(instance) = weak.upgrade() {
+        instance
+            .lock()
+            .show_feedback([tile], FeedbackIcon::Saved, std::time::Instant::now());
+        context.handle.feedback_started(&instance);
+    }
 }
 
 fn with_instance(
@@ -192,6 +204,7 @@ fn in_place_done(
             with_instance(context, &weak, |mv| {
                 mv.save_finished(request.tile, outcome.identity, outcome.size);
             });
+            show_saved(context, &weak, request.tile);
             StatusBarBridge::success(
                 &window,
                 format!("Saved '{}' ({}).", request.filename, outcome.encoding.describe()),
@@ -578,6 +591,7 @@ fn adopt_copy(
             follow = Some(mv.tile_count() == 1);
         }
     });
+    show_saved(context, weak, request.tile);
     if let Some(lone) = follow {
         library_update::select_in_browse(context, window, request.media_id, &record, &outcome.written, lone);
     }

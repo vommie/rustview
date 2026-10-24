@@ -1,21 +1,18 @@
-//! Ratings given with Ctrl+0..5 in a Multiview (fullscreen, viewer tab, tab shown fullscreen), and their feedback.
+//! Ratings given with Ctrl+0..5 in a Multiview (fullscreen, viewer tab, tab shown fullscreen).
 //!
 //! The key arrives from the fullscreen window, from the main window (a viewer tab) or from a video's own window (mpv client
 //! message). All of them end in [`MultiviewHandle::rate_visible`]: it rates every medium the Multiview shows through the one
-//! path of the Tag & Rate panel and the context menu (`BridgeTags::apply_rating_to_ids`), then starts the feedback on the tiles of
-//! the media that were rated. The host that presents the instance owns a single-shot timer that runs only while a pulse is
-//! shown (`arm`).
+//! path of the Tag & Rate panel and the context menu (`BridgeTags::apply_rating_to_ids`), then starts the feedback pulse on the
+//! tiles of the media that were rated (`feedback`).
 
 use super::handle::MultiviewHandle;
-use super::session::{self, Session};
-use super::tab_host;
+use super::session;
 use crate::ui::rating_hotkey::{rateable_ids, standing_of};
 use crate::ui::tags::{BridgeTags, TagActionContext};
 use crate::viewer::multiview::instance::SharedInstance;
 use crate::viewer::multiview::prefs;
 use crate::viewer::multiview::rating_keys::rating_of_key;
 use crate::viewer::multiview::route::HostMode;
-use slint::{Timer, TimerMode};
 use std::time::Instant;
 
 impl MultiviewHandle {
@@ -87,38 +84,6 @@ impl MultiviewHandle {
             return;
         }
         instance.lock().show_rating_feedback(&rated, rating, Instant::now());
-        match mode {
-            HostMode::Fullscreen => session::with_session(Session::rating_changed),
-            _ => tab_host::rating_changed(),
-        }
-    }
-}
-
-/// Arms `timer` for the next change of the feedback of `instance`, or stops it when nothing is shown. The timer is a single
-/// shot that is armed again by each frame, so it never runs while the feedback is not on screen.
-pub(super) fn arm(timer: &Timer, instance: &SharedInstance, frame: impl FnMut() + 'static) {
-    match instance.lock().rating_wakeup(Instant::now()) {
-        Some(wait) => timer.start(TimerMode::SingleShot, wait, frame),
-        None => timer.stop(),
-    }
-}
-
-impl Session {
-    /// The feedback changed (started, restarted): draw it and arm the timer.
-    pub(super) fn rating_changed(&mut self) {
-        self.refresh();
-        self.arm_rating_timer();
-    }
-
-    fn arm_rating_timer(&self) {
-        arm(&self.rating_timer, &self.instance, || {
-            session::with_session(Session::on_rating_frame);
-        });
-    }
-
-    fn on_rating_frame(&mut self) {
-        self.instance.lock().poll_rating_feedback(Instant::now());
-        self.refresh();
-        self.arm_rating_timer();
+        self.feedback_started(instance);
     }
 }

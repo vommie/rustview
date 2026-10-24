@@ -1,11 +1,11 @@
-//! The rating icon on a video tile, drawn by mpv itself.
+//! The feedback icon (`media_feedback`) on a video tile, drawn by mpv itself.
 //!
 //! The video is a native child window on top of the Slint scene, so Slint cannot draw over it. mpv can: `overlay-add` puts a
 //! bitmap on the OSD layer of the player, centered in its window, blended by mpv's own renderer. That needs no compositor,
 //! no extra window and no X11 call, so it works the same on Wayland. The icon is the same SVG the rest of the application
-//! uses, rasterized once per rating and size; a fade only changes the alpha of the copy that is handed to mpv.
+//! uses, rasterized once per icon and size; a fade only changes the alpha of the copy that is handed to mpv.
 
-use super::rating_feedback::PulseView;
+use super::media_feedback::{FeedbackIcon, PulseView};
 use crate::icons::{Icon, raster};
 use crate::viewer::MpvPlayer;
 use parking_lot::Mutex;
@@ -13,10 +13,10 @@ use rustview_core::util::cast::FloatToInt;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
-/// What an overlay shows: the rating, how strong, the edge of the icon and the size of the window it is centered in.
+/// What an overlay shows: the icon, how strong, the edge of the icon and the size of the window it is centered in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OverlayState {
-    pub rating: u8,
+    pub icon: FeedbackIcon,
     /// 0 = gone, 255 = full strength.
     pub alpha: u8,
     pub edge: u32,
@@ -26,7 +26,10 @@ pub struct OverlayState {
 impl OverlayState {
     pub fn new(pulse: PulseView, edge: u32, window: (u32, u32)) -> Self {
         Self {
-            rating: pulse.rating.min(5),
+            icon: match pulse.icon {
+                FeedbackIcon::Rating(rating) => FeedbackIcon::Rating(rating.min(5)),
+                FeedbackIcon::Saved => FeedbackIcon::Saved,
+            },
             alpha: (pulse.alpha.clamp(0.0, 1.0) * 255.0).round().to_int::<u8>(),
             edge,
             window,
@@ -45,25 +48,73 @@ pub fn centered_origin(window: (u32, u32), edge: u32) -> (i64, i64) {
     (center(window.0), center(window.1))
 }
 
-/// Straight RGBA pixels of the icon of `rating`, rasterized once per size.
-fn icon_pixels(rating: u8, edge: u32) -> Option<Arc<Vec<u8>>> {
-    type Cache = Mutex<HashMap<(u8, u32), Arc<Vec<u8>>>>;
+/// The color of the disc behind the save icon (`Theme.status-ok`, the same as the canvas draws).
+pub const SAVED_DISC: [u8; 3] = [0xa6, 0xe3, 0xa1];
+/// The share of the disc the save icon covers (the canvas draws it at the same share).
+pub const SAVED_ICON_SHARE: f64 = 0.56;
+
+/// Straight RGBA pixels of `icon`, rasterized once per size.
+fn icon_pixels(icon: FeedbackIcon, edge: u32) -> Option<Arc<Vec<u8>>> {
+    type Cache = Mutex<HashMap<(FeedbackIcon, u32), Arc<Vec<u8>>>>;
     static CACHE: OnceLock<Cache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some(found) = cache.lock().get(&(rating, edge)) {
+    if let Some(found) = cache.lock().get(&(icon, edge)) {
         return Some(Arc::clone(found));
     }
-    match raster::render_rgba(Icon::rating(rating), edge, "#ffffff") {
+    let rendered = match icon {
+        FeedbackIcon::Rating(rating) => {
+            raster::render_rgba(Icon::rating(rating), edge, "#ffffff").map(|pixels| over_white_disc(&pixels, edge))
+        }
+        FeedbackIcon::Saved => {
+            let glyph = (f64::from(edge) * SAVED_ICON_SHARE).round().to_int::<u32>().max(1);
+            raster::render_rgba(Icon::Save, glyph, "#ffffff").map(|pixels| on_disc(&pixels, glyph, edge, SAVED_DISC))
+        }
+    };
+    match rendered {
         Ok(pixels) => {
-            let pixels = Arc::new(over_white_disc(&pixels, edge));
-            cache.lock().insert((rating, edge), Arc::clone(&pixels));
+            let pixels = Arc::new(pixels);
+            cache.lock().insert((icon, edge), Arc::clone(&pixels));
             Some(pixels)
         }
         Err(e) => {
-            tracing::warn!(rating, edge, error = %e, "[Multiview: Rating] The icon could not be rasterized");
+            tracing::warn!(?icon, edge, error = %e, "[Multiview: Feedback] The icon could not be rasterized");
             None
         }
     }
+}
+
+/// A `glyph` x `glyph` icon centered on a disc of `color` that fills an `edge` x `edge` square (antialiased rim). Straight RGBA
+/// in and out.
+pub fn on_disc(icon: &[u8], glyph: u32, edge: u32, color: [u8; 3]) -> Vec<u8> {
+    let center = f64::from(edge) / 2.0;
+    let radius = center - 1.0;
+    let offset = (edge.saturating_sub(glyph)) / 2;
+    let mut out = Vec::with_capacity(usize::try_from(edge * edge * 4).unwrap_or(0));
+    for y in 0..edge {
+        for x in 0..edge {
+            let (fx, fy) = (f64::from(x) + 0.5, f64::from(y) + 0.5);
+            let disc = (radius + 0.5 - (fx - center).hypot(fy - center)).clamp(0.0, 1.0);
+            let (gx, gy) = (x.wrapping_sub(offset), y.wrapping_sub(offset));
+            let px = (gx < glyph && gy < glyph)
+                .then(|| usize::try_from((gy * glyph + gx) * 4).ok())
+                .flatten()
+                .and_then(|i| icon.get(i..i + 4));
+            let icon_alpha = px.map_or(0.0, |p| f64::from(p[3]) / 255.0);
+            let alpha = icon_alpha + disc * (1.0 - icon_alpha);
+            if alpha <= 0.0 {
+                out.extend_from_slice(&[0, 0, 0, 0]);
+                continue;
+            }
+            let mix = |channel: usize| {
+                let ic = px.map_or(0.0, |p| f64::from(p[channel]));
+                ((ic * icon_alpha + f64::from(color[channel]) * disc * (1.0 - icon_alpha)) / alpha)
+                    .round()
+                    .to_int::<u8>()
+            };
+            out.extend_from_slice(&[mix(0), mix(1), mix(2), (alpha * 255.0).round().to_int::<u8>()]);
+        }
+    }
+    out
 }
 
 /// The icon over a white disc of the icon's size (one pixel smaller than the icon, so no white rim shows around the colored
@@ -116,7 +167,7 @@ pub fn premultiplied_bgra(rgba: &[u8], alpha: u8) -> Vec<u8> {
 
 /// Puts the icon on the player's picture. Returns whether mpv took it.
 pub fn show(player: &MpvPlayer, state: &OverlayState) -> bool {
-    let Some(rgba) = icon_pixels(state.rating, state.edge) else {
+    let Some(rgba) = icon_pixels(state.icon, state.edge) else {
         return false;
     };
     let bitmap = premultiplied_bgra(&rgba, state.alpha);
@@ -170,12 +221,34 @@ mod tests {
 
     #[test]
     fn the_state_quantizes_the_alpha() {
-        let state = OverlayState::new(PulseView { rating: 9, alpha: 0.5 }, 50, (100, 100));
-        assert_eq!(state.rating, 5);
+        let pulse = |icon, alpha| PulseView { icon, alpha };
+        let state = OverlayState::new(pulse(FeedbackIcon::Rating(9), 0.5), 50, (100, 100));
+        assert_eq!(state.icon, FeedbackIcon::Rating(5));
         assert_eq!(state.alpha, 128);
         assert_ne!(
             state,
-            OverlayState::new(PulseView { rating: 5, alpha: 0.5 }, 50, (200, 100))
+            OverlayState::new(pulse(FeedbackIcon::Rating(5), 0.5), 50, (200, 100))
         );
+        assert_ne!(
+            state,
+            OverlayState::new(pulse(FeedbackIcon::Saved, 0.5), 50, (100, 100))
+        );
+    }
+
+    #[test]
+    fn the_save_icon_sits_white_on_a_green_disc() {
+        let (glyph, edge) = (4u32, 10u32);
+        let mut icon = vec![0u8; (glyph * glyph * 4) as usize];
+        // one opaque white pixel of the glyph, at its top left corner
+        icon[..4].copy_from_slice(&[255, 255, 255, 255]);
+        let out = on_disc(&icon, glyph, edge, SAVED_DISC);
+        let at = |x: u32, y: u32| &out[((y * edge + x) * 4) as usize..][..4];
+        assert_eq!(
+            at(3, 3),
+            &[255, 255, 255, 255],
+            "the glyph is centered: (3, 3) is its corner"
+        );
+        assert_eq!(at(5, 6), &[SAVED_DISC[0], SAVED_DISC[1], SAVED_DISC[2], 255]);
+        assert_eq!(at(0, 0), &[0, 0, 0, 0]);
     }
 }
