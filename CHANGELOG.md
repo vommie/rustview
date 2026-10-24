@@ -9,6 +9,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-24
+
 ### Added
 - **Crop pictures** in every Multiview (fullscreen and tab): the media bar of an image has a **Crop** button. The crop tool draws a rectangle over the picture with
   corner and edge handles, the picture outside it dimmed and rule-of-thirds lines while you drag. Top left it shows the size of the crop in pixels of the picture
@@ -707,7 +709,8 @@ First usable version: the application skeleton grew into a working media browser
 ### Added
 - Initial commit of the project.
 
-[Unreleased]: https://github.com/vommie/rustview/compare/v0.3.86...HEAD
+[Unreleased]: https://github.com/vommie/rustview/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/vommie/rustview/compare/v0.3.86...v0.4.0
 [0.3.86]: https://github.com/vommie/rustview/compare/v0.3.85...v0.3.86
 [0.3.85]: https://github.com/vommie/rustview/compare/v0.3.84...v0.3.85
 [0.3.84]: https://github.com/vommie/rustview/compare/v0.3.83...v0.3.84
