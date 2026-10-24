@@ -211,7 +211,7 @@ component SectionHeader inherits Rectangle {
     in property <HotkeySectionView> section;
     in property <bool> narrowing;
 
-    height: 30px;
+    min-height: 30px;
     border-radius: 4px;
     background: touch.has-hover && !root.narrowing ? Theme.surface-hover : transparent;
 
@@ -225,35 +225,46 @@ component SectionHeader inherits Rectangle {
         }
     }
 
-    HorizontalLayout {
+    VerticalLayout {
         padding-left: 4px;
-        spacing: 6px;
+        padding-right: 8px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        spacing: 2px;
 
-        VerticalLayout {
-            alignment: center;
+        HorizontalLayout {
+            spacing: 6px;
 
-            AppIcon {
-                icon: root.section.open ? IconId.chevron-down : IconId.chevron-right;
-                size: IconSize.md;
+            VerticalLayout {
+                alignment: center;
+
+                AppIcon {
+                    icon: root.section.open ? IconId.chevron-down : IconId.chevron-right;
+                    size: IconSize.md;
+                    color: Theme.primary;
+                }
+            }
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.section.title;
                 color: Theme.primary;
+                font-weight: 700;
+                font-size: 12px;
+                vertical-alignment: center;
             }
         }
 
-        Text {
-            text: root.section.title;
-            color: Theme.primary;
-            font-weight: 700;
-            font-size: 12px;
-            vertical-alignment: center;
-        }
+        // The description under the title, aligned with it (it may wrap: the video player's says when it takes effect).
+        HorizontalLayout {
+            padding-left: 22px;
 
-        Text {
-            horizontal-stretch: 1;
-            text: root.section.description;
-            color: Theme.text-muted;
-            font-size: 11px;
-            vertical-alignment: center;
-            overflow: elide;
+            Text {
+                text: root.section.description;
+                color: Theme.text-muted;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
         }
     }
 }

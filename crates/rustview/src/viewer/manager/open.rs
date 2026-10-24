@@ -226,43 +226,4 @@ impl ViewerTabManager {
             }
         }
     }
-
-    /// Shows `media_id` in the one tile of the active tab (previous/next of the tab toolbar). The tab keeps its title. Fails for a
-    /// tab of several media.
-    pub fn navigate_active_tab_to_media(&self, media_id: MediaId) -> Result<TabId, ViewerError> {
-        let Some(active_id) = *self.active_tab_id.read() else {
-            let (id, _) = self.open_or_focus_media(media_id, false)?;
-            return Ok(id);
-        };
-        let instance: SharedInstance = self
-            .tabs
-            .read()
-            .get(active_id)
-            .map(|t| t.multiview.instance.clone())
-            .ok_or(ViewerError::MediaNotFound(active_id))?;
-
-        let record = self
-            .library
-            .media()
-            .get(media_id)?
-            .ok_or(ViewerError::MediaNotFound(media_id))?;
-        let file_path = self.library.resolve_media_path(media_id)?;
-
-        let replaced = instance.lock().replace_solo(Self::solo_seed(&record, &file_path));
-        if !replaced {
-            return Err(ViewerError::MultiviewTab);
-        }
-        if let Some(tab) = self.tabs.write().get_mut(active_id) {
-            tab.set_solo_identity(record, file_path);
-            tab.last_accessed = Instant::now();
-        }
-
-        tracing::info!(
-            tab_id = active_id,
-            media_id,
-            "[ViewerTabManager: NavigateInPlace] Navigated active tab in-place"
-        );
-
-        Ok(active_id)
-    }
 }

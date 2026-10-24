@@ -305,3 +305,16 @@ fn rating_keys_need_ctrl_and_never_alt_or_meta() {
         }
     }
 }
+
+#[test]
+fn labels_use_the_short_names_of_keyboard_legends() {
+    assert_eq!(chord("Return").label(), "Enter");
+    assert_eq!(chord("Control+Return").label(), "Ctrl+Enter");
+    assert_eq!(chord("Shift+LeftArrow").label(), "Shift+Left");
+    assert_eq!(chord("Control+PageDown").label(), "Ctrl+PgDown");
+    assert_eq!(chord("Delete").label(), "Del");
+    assert_eq!(chord("Escape").label(), "Esc");
+    assert_eq!(chord("Control+Plus").label(), "Ctrl++");
+    assert_eq!(chord("Control+Shift+Z").label(), "Ctrl+Shift+Z");
+    assert_eq!(chord("F2").label(), "F2");
+}

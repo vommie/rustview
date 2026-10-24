@@ -146,23 +146,4 @@ impl MultiviewInstance {
             "[Multiview: Follow] Tiles updated"
         );
     }
-
-    /// A Multiview of exactly one tile (a tab opened on one medium) shows another medium in the place of its tile, the way the
-    /// Browse view's previous/next does: the tile is replaced, a video that replaces a video reuses the player (volume, speed and
-    /// loop carry over). Returns `false` (and changes nothing) unless there is exactly one tile.
-    pub fn replace_solo(&mut self, seed: TileSeed) -> bool {
-        if self.solo_tile().is_none() {
-            return false;
-        }
-        let wanted = [Wanted {
-            id: seed.media_id,
-            is_video: seed.kind == TileKind::Video,
-        }];
-        let plan = self.plan_follow(&wanted);
-        if plan.is_noop() {
-            return false;
-        }
-        self.apply_follow(&plan, vec![Some(seed)]);
-        true
-    }
 }

@@ -122,25 +122,6 @@ impl BridgeViewerTabs {
             };
             window.set_viewer_resolution(res_str.into());
 
-            let (has_prev, has_next) = match solo {
-                None => (false, false),
-                Some(media_id) => {
-                    let st = state.read();
-                    let total_available = if st.active_indices.is_empty() {
-                        st.all_folder_media.len()
-                    } else {
-                        st.active_indices.len()
-                    };
-                    match st.row_of(media_id) {
-                        Some(pos) => (pos > 0, pos + 1 < total_available),
-                        None => (false, false),
-                    }
-                }
-            };
-
-            window.set_viewer_has_previous(has_prev);
-            window.set_viewer_has_next(has_next);
-
             Self::sync_panels(window, tab_manager, library, state);
 
             Self::scroll_active_tab_into_view(window, tab_manager, settings);

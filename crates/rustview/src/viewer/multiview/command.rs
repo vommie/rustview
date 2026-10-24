@@ -5,6 +5,8 @@
 //! the hint shows (`instance_commands`). Esc is not a command: it cancels and closes, whatever is selected. The hotkey system of
 //! a later milestone only replaces the keys that lead here (`docs/multiview_focus.md`).
 
+use super::media_actions::MediaActionId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ZoomKey {
     /// Ctrl+Backspace: back to the fitted picture.
@@ -48,6 +50,8 @@ pub enum MultiviewCommand {
     Redo,
     /// F5 in the tab view: the medium is read from the drive again.
     Refresh,
+    /// A button of the media bar of the selected medium, by key (Settings > Hotkeys; no key by default).
+    Bar(MediaActionId),
 }
 
 impl MultiviewCommand {

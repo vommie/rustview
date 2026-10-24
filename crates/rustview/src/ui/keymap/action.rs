@@ -3,6 +3,8 @@
 //! binding wins when a stored key collides with a default.
 
 use super::area::Area;
+use crate::viewer::multiview::media_actions::MediaActionId;
+use crate::viewer::multiview::primary_actions::PrimaryActionId;
 
 /// The keys cannot be changed (Esc, the cursor keys of Browse, type-ahead find); the page shows them with a lock.
 pub const FIXED: u8 = 1;
@@ -109,6 +111,13 @@ actions! {
     TabRedo: Tab, "tab.redo", "Redo", ["Control+Shift+Z", "Control+Y"], REPEAT;
     TabFullscreen: Tab, "tab.show_fullscreen", "Show in the fullscreen", ["F11", "F"];
     TabClose: Tab, "tab.close", "Close the tab", ["Control+W"], TYPING;
+    TabDuplicate: Tab, "tab.duplicate", "Media bar: show the medium a second time (Duplicate)", [];
+    TabCrop: Tab, "tab.crop", "Media bar: crop tool on or off", [];
+    TabRemove: Tab, "tab.remove", "Media bar: remove the medium from the view", [];
+    TabMuteAll: Tab, "tab.mute_all", "Primary bar: mute or unmute all videos", [];
+    TabPlayPauseAll: Tab, "tab.play_pause_all", "Primary bar: play or pause all videos", [];
+    TabResetLayout: Tab, "tab.reset_layout", "Primary bar: reset the arrangement", [];
+    TabHideCursor: Tab, "tab.hide_cursor", "Primary bar: hide the resting mouse cursor (on or off)", [];
     TabEscape: Tab, "tab.escape", "Cancel the crop, end the selection of tabs", ["Escape"], FIXED;
 
     FullscreenRename: Fullscreen, "fullscreen.rename", "Rename", ["F2"];
@@ -134,6 +143,17 @@ actions! {
     FullscreenNext: Fullscreen, "fullscreen.next", "Next medium (a view opened from Browse)",
         ["RightArrow", "DownArrow", "PageDown"], REPEAT, BESIDE_PLAYER;
     FullscreenClose: Fullscreen, "fullscreen.close", "Close the fullscreen", ["Control+W", "F11", "F"];
+    FullscreenSticky: Fullscreen, "fullscreen.sticky", "Media bar: keep the medium when the selection changes (Sticky)", [];
+    FullscreenDuplicate: Fullscreen, "fullscreen.duplicate", "Media bar: show the medium a second time (Duplicate)", [];
+    FullscreenOpenAsTab: Fullscreen, "fullscreen.open_as_tab", "Media bar: open the medium in a background tab", [];
+    FullscreenCrop: Fullscreen, "fullscreen.crop", "Media bar: crop tool on or off", [];
+    FullscreenRemove: Fullscreen, "fullscreen.remove", "Media bar: remove the medium from the view", [];
+    FullscreenSendToTab: Fullscreen, "fullscreen.send_to_tab", "Primary bar: keep the view as a tab (Send to Tab)", [];
+    FullscreenMuteAll: Fullscreen, "fullscreen.mute_all", "Primary bar: mute or unmute all videos", [];
+    FullscreenPlayPauseAll: Fullscreen, "fullscreen.play_pause_all", "Primary bar: play or pause all videos", [];
+    FullscreenResetLayout: Fullscreen, "fullscreen.reset_layout", "Primary bar: reset the arrangement", [];
+    FullscreenHideCursor: Fullscreen, "fullscreen.hide_cursor", "Primary bar: hide the resting mouse cursor (on or off)", [];
+    FullscreenPin: Fullscreen, "fullscreen.pin", "Primary bar: pin the fullscreen (on or off)", [];
     FullscreenEscape: Fullscreen, "fullscreen.escape", "Cancel the crop, else close the fullscreen", ["Escape"], FIXED;
 
     PlayerPlayPause: Player, "player.play_pause", "Play or pause", ["Space"];
@@ -204,6 +224,31 @@ impl Action {
     }
 
     /// The rating a rating action gives (0 = none).
+    /// The media bar button a key action stands for.
+    pub const fn media_bar(self) -> Option<MediaActionId> {
+        Some(match self {
+            Self::FullscreenSticky => MediaActionId::Sticky,
+            Self::TabDuplicate | Self::FullscreenDuplicate => MediaActionId::Duplicate,
+            Self::FullscreenOpenAsTab => MediaActionId::OpenAsTab,
+            Self::TabCrop | Self::FullscreenCrop => MediaActionId::Crop,
+            Self::TabRemove | Self::FullscreenRemove => MediaActionId::Remove,
+            _ => return None,
+        })
+    }
+
+    /// The primary bar button a key action stands for.
+    pub const fn primary_bar(self) -> Option<PrimaryActionId> {
+        Some(match self {
+            Self::FullscreenSendToTab => PrimaryActionId::SendToTab,
+            Self::TabMuteAll | Self::FullscreenMuteAll => PrimaryActionId::MuteAll,
+            Self::TabPlayPauseAll | Self::FullscreenPlayPauseAll => PrimaryActionId::PlayPauseAll,
+            Self::TabResetLayout | Self::FullscreenResetLayout => PrimaryActionId::ResetLayout,
+            Self::TabHideCursor | Self::FullscreenHideCursor => PrimaryActionId::HideIdleCursor,
+            Self::FullscreenPin => PrimaryActionId::Pin,
+            _ => return None,
+        })
+    }
+
     pub const fn rating(self) -> Option<u8> {
         match self {
             Self::BrowseRate0 | Self::TabRate0 | Self::FullscreenRate0 => Some(0),

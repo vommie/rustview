@@ -6,6 +6,7 @@
 use super::session;
 use crate::ui::hotkeys::{Resolved, Trigger, resolve};
 use crate::ui::keymap::{Action, Area, KeyPress};
+use crate::viewer::multiview::command::MultiviewCommand;
 
 /// Connects the key callback of the fullscreen window.
 pub(super) fn install(win: &crate::ui::MultiviewFullscreenWindow) {
@@ -37,6 +38,14 @@ pub(super) fn dispatch(trigger: &Trigger<'_>) -> bool {
         if let Some(handle) = session::handle() {
             handle.rate_fullscreen(rating);
         }
+        return true;
+    }
+    if let Some(button) = action.media_bar() {
+        session::run(|s| s.command(MultiviewCommand::Bar(button)));
+        return true;
+    }
+    if let Some(button) = action.primary_bar() {
+        session::run(|s| s.on_primary_action(button.code()));
         return true;
     }
     match action {

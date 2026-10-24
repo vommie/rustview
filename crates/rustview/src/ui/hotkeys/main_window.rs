@@ -65,6 +65,14 @@ fn run(window: &MainWindow, action: Action, trigger: &Trigger<'_>) -> bool {
         window.invoke_rate_key(i32::from(rating));
         return true;
     }
+    if let Some(button) = action.media_bar() {
+        crate::ui::multiview::tab_host::bar_key(button);
+        return true;
+    }
+    if let Some(button) = action.primary_bar() {
+        crate::ui::multiview::tab_host::primary_key(button);
+        return true;
+    }
     match action {
         Action::NextTab => window.invoke_tab_wheel_scrolled(true),
         Action::PreviousTab => window.invoke_tab_wheel_scrolled(false),

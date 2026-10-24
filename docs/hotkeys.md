@@ -26,7 +26,10 @@ same, e.g. only the fullscreen of a Browse view pages or becomes a tab) with sim
 - Browse refuses plain printable keys (letters, digits, Space): they belong to type-ahead find.
 - Rating keys need Ctrl everywhere (the plain digits of the tab view are gone).
 - Paging only in a Multiview opened from Browse (fullscreen): Left / Up / Page Up back, Right / Down / Page Down forward;
-  Space never pages; a tab never pages (keys removed).
+  Space never pages; a tab never pages (keys and the toolbar's Prev/Next buttons removed, round 2).
+- The buttons of the media bar and the primary bar are actions without a default key (round 2): `MultiviewCommand::Bar` runs a
+  media bar button of the selected medium like a click (refused with "Not available for this medium" when it is not on offer),
+  a primary bar key runs `perform_primary_action`.
 - Plain Backspace is a second zoom reset in the Multiview (Ctrl+0 rates).
 - Keys over a video follow the keymap now: RustView binds the chords of its Tab/Fullscreen/General actions in mpv as
   `script-message rustview-key <chord>` (input section `rustview_keys`), the router resolves them for the host of that

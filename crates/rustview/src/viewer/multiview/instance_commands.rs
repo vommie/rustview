@@ -7,6 +7,7 @@ use super::command::{MultiviewCommand, ZoomKey};
 use super::follow::TileKey;
 use super::hint::HintKind;
 use super::instance::MultiviewInstance;
+use super::media_actions::MediaActionId;
 use super::model::TileKind;
 use super::route::{HostMode, UiAction};
 use rustview_core::library::models::MediaId;
@@ -57,6 +58,7 @@ impl MultiviewInstance {
                 Ok(UiAction::RequestRename)
             }
             MultiviewCommand::Delete => Ok(UiAction::DeleteTile(media)),
+            MultiviewCommand::Bar(action) => self.bar_key(index, action),
             MultiviewCommand::Zoom(zoom) => self.zoom_selected(index, zoom),
             MultiviewCommand::ApplyCrop => {
                 if self.apply_crop(key) {
@@ -124,6 +126,23 @@ impl MultiviewInstance {
             return Ok(UiAction::None);
         }
         Err(HintKind::PictureNotZoomable)
+    }
+
+    /// The key of a media bar button: the same as a click on it, if the selected tile offers it. Remove becomes Close on the
+    /// last tile, as the bar shows it.
+    fn bar_key(&mut self, index: usize, action: MediaActionId) -> CommandResult {
+        let offers =
+            |mv: &Self, wanted: MediaActionId| mv.action_views(index).iter().any(|a| a.id == wanted && a.enabled);
+        let action = if action == MediaActionId::Remove && !offers(self, action) && offers(self, MediaActionId::Close) {
+            MediaActionId::Close
+        } else {
+            action
+        };
+        if !offers(self, action) {
+            return Err(HintKind::NotOffered);
+        }
+        let key = self.tiles[index].key;
+        Ok(self.perform_action(key, action))
     }
 
     /// Esc: cancels the crop tool of the selected tile, else the one opened last (newest first). Returns whether there was

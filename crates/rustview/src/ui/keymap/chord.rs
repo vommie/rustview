@@ -178,9 +178,32 @@ impl Chord {
         &self.keys
     }
 
-    /// How the desktop writes it (`Ctrl+S`).
+    /// How menus, tooltips and the Hotkeys page write it (`Ctrl+S`, `Enter`, `Shift+Left`): Slint's text with the short
+    /// names of keyboard legends for the keys Slint spells out (`Return`, `LeftArrow`, `PageUp`, ...).
     pub fn label(&self) -> String {
-        self.keys.to_string()
+        let full = self.keys.to_string();
+        // The key is the last part; a `+` key ends the text with "++".
+        let (prefix, key) = match full.strip_suffix("++") {
+            Some(prefix) => (format!("{prefix}+"), "+".to_owned()),
+            None => match full.rsplit_once('+') {
+                Some((prefix, key)) => (format!("{prefix}+"), key.to_owned()),
+                None => (String::new(), full.clone()),
+            },
+        };
+        let short = match key.as_str() {
+            "Return" => "Enter",
+            "Escape" => "Esc",
+            "Delete" => "Del",
+            "Insert" => "Ins",
+            "LeftArrow" => "Left",
+            "RightArrow" => "Right",
+            "UpArrow" => "Up",
+            "DownArrow" => "Down",
+            "PageUp" => "PgUp",
+            "PageDown" => "PgDown",
+            other => other,
+        };
+        format!("{prefix}{short}")
     }
 
     /// Whether `press` triggers this chord (Slint's rule: lowercased text, equal modifiers except the ignored ones).

@@ -185,6 +185,16 @@ fn command_key(command: MultiviewCommand) {
     run(action);
 }
 
+/// The key of a media bar button (Settings > Hotkeys): the button of the selected medium, like a click on it.
+pub fn bar_key(action: MediaActionId) {
+    command_key(MultiviewCommand::Bar(action));
+}
+
+/// The key of a primary bar button (Settings > Hotkeys), like a click on it.
+pub fn primary_key(action: PrimaryActionId) {
+    on_primary_action(action.code());
+}
+
 /// A panel of the main window (Tag & Rate, tag history) was used while the shown tab holds several media and none is selected:
 /// the hint asks for a selection, over the tab view.
 pub fn show_selection_hint() {

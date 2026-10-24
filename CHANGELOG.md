@@ -50,6 +50,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **The Video Player section** of Settings > Hotkeys already lists play/pause, mute, short and long jumps, frame steps, volume and speed with their keys;
   they take effect when RustView controls the videos itself (next version). Until then the player uses its own keys.
 - The Rate Selection submenu shows the rating keys.
+- **Keys for the buttons of the media bar and the primary bar:** Settings > Hotkeys lists Sticky, Duplicate, Open as Tab, Crop, Remove, Send to Tab,
+  Mute All, Play/Pause All, Reset Layout, Hide Cursor and Pin (without a key at first); a key acts like a click on the button of the selected medium.
 
 ### Changed
 - **Esc** cancels the crop tool of the selected picture first, then the other crop tools (newest first), then it closes the fullscreen as before.
@@ -59,6 +61,7 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   view showed; with several media and none selected nothing is rated now and the hint appears. A Multiview of one medium rates it as before.
 - A click on a video in a Multiview is no longer ignored: it selects the video (it still never pauses it).
 - **Menus, tooltips, status messages and setting descriptions name your keys** (Settings > Hotkeys) instead of fixed ones.
+- Keys are written with the short names of keyboard legends: Enter, Esc, Del, Left, Right, Up, Down, PgUp, PgDown.
 - **Keys over a video follow the keymap:** rename, delete, rating, refresh, zoom, crop, save, undo, close and fullscreen keys reach RustView also while the
   pointer rests over a video (Ctrl+S no longer takes a screenshot there, Ctrl++ no longer changes the audio delay). The video player keys (Space, M,
   the arrows, ...) stay with the player until the next version.
@@ -67,6 +70,9 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   pages (Left, Up, Page Up back; Right, Down, Page Down forward).
 - Shortcuts that also accepted the Meta key instead of Ctrl (Ctrl+A, Ctrl+W, ...), and Ctrl+F4 or Meta+W over a video, no longer do; add such keys on the
   Hotkeys page if you want them.
+
+### Removed
+- **The Prev and Next buttons of a tab's toolbar:** a tab always shows the media it was opened with (paging stays in a fullscreen opened from Browse).
 
 ### Fixed
 - **F5 in Browse** did nothing although the menu named it; it refreshes the selected files now.

@@ -6,37 +6,14 @@ import { PanelToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer } from "pa
 export component ImageTabPanelToolbar inherits PanelToolbar {
     in property <string> filename: "";
     in property <string> resolution: "";
-    in property <bool> has-previous: false;
-    in property <bool> has-next: false;
     // The refresh key of the tab view (Settings > Hotkeys; "" = none), shown in the button's tooltip.
     in property <string> refresh-key: "";
 
-    callback previous-clicked();
-    callback next-clicked();
     callback refresh-clicked();
 
     toolbar-height: 26px;
 
-    // 1. Navigation Buttons (Previous / Next image in dataset)
-    ToolbarButton {
-        icon: IconId.chevron-left;
-        text: "Prev";
-        tooltip: "Previous image in list (Left Arrow)" + (root.has-previous ? "" : "\nDisabled: There is no previous image in the list");
-        is-enabled: root.has-previous;
-        clicked => { root.previous-clicked(); }
-    }
-
-    ToolbarButton {
-        icon: IconId.chevron-right;
-        icon-trailing: true;
-        text: "Next";
-        tooltip: "Next image in list (Right Arrow)" + (root.has-next ? "" : "\nDisabled: There is no next image in the list");
-        is-enabled: root.has-next;
-        clicked => { root.next-clicked(); }
-    }
-
-    ToolbarSeparator {}
-
+    // A tab always shows the media it was opened with; there is no paging (user decision 2026-10-24).
     // 2. Info Badges
     Text {
         text: root.filename;

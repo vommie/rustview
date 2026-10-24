@@ -252,28 +252,6 @@ impl BridgeViewerTabs {
         });
 
         // 8. Previous / Next Navigation in active list
-        let win_prev = window.clone_strong();
-        let tm_prev = tab_manager.clone();
-        let lib_prev = library.clone();
-        let st_prev = state.clone();
-        let set_prev = settings.clone();
-        let fs_prev = fullscreen.clone();
-        window.on_viewer_previous(move || {
-            Self::navigate_adjacent(&win_prev, &tm_prev, &lib_prev, &set_prev, &st_prev, &fs_prev, false);
-            Self::sync_video_embedding(&win_prev, &tm_prev, &fs_prev, &set_prev);
-        });
-
-        let win_next = window.clone_strong();
-        let tm_next = tab_manager.clone();
-        let lib_next = library.clone();
-        let st_next = state.clone();
-        let set_next = settings.clone();
-        let fs_next = fullscreen.clone();
-        window.on_viewer_next(move || {
-            Self::navigate_adjacent(&win_next, &tm_next, &lib_next, &set_next, &st_next, &fs_next, true);
-            Self::sync_video_embedding(&win_next, &tm_next, &fs_next, &set_next);
-        });
-
         // 10. The area of the tab view changed (window or sidebar resize): the Multiview of the active tab places its native video
         // windows again.
         let win_geom = window.clone_strong();

@@ -171,22 +171,6 @@ mod tests {
     }
 
     #[test]
-    fn switching_the_only_medium_ends_the_old_feedback_and_starts_none_on_the_new_one() {
-        let shared = MultiviewInstance::create(Arc::new(NullSink), vec![seed(1, TileKind::Image)]);
-        let mut mv = shared.lock();
-        let t0 = Instant::now();
-        mv.show_rating_feedback(&HashSet::from([1]), 5, t0);
-        let old = mv.tile_key_at(0).unwrap();
-        assert!(mv.replace_solo(seed(2, TileKind::Image)));
-        let new = mv.tile_key_at(0).unwrap();
-        assert_ne!(old, new);
-        assert!(mv.feedback_pulse(old, t0).is_none());
-        assert!(mv.feedback_pulse(new, t0).is_none());
-        assert!(!mv.feedback.is_active());
-        assert!(mv.feedback_wakeup(t0).is_none());
-    }
-
-    #[test]
     fn a_save_uses_the_same_pulse_on_its_own_tile() {
         let shared = instance();
         let mut mv = shared.lock();

@@ -25,6 +25,8 @@ pub enum HintKind {
     SaveInProgress,
     /// The rating keys on a medium that cannot be rated (pending, deleted).
     NotRateable,
+    /// The key of a media bar button the selected medium does not offer right now.
+    NotOffered,
 }
 
 impl HintKind {
@@ -39,6 +41,7 @@ impl HintKind {
             Self::PictureNotZoomable => "This picture cannot be zoomed",
             Self::SaveInProgress => "Saving in progress",
             Self::NotRateable => "This medium cannot be rated",
+            Self::NotOffered => "Not available for this medium",
         }
     }
 
