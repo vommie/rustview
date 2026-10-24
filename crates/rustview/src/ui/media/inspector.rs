@@ -19,7 +19,14 @@ impl BridgeInspector {
         let is_tab_mode = window.get_active_view_mode() == 1;
         let st = state.read();
 
-        // When in Tab Mode, inspect the active tab's media (one item, or the tiles of a Multiview) directly without
+        // A tab of several media without a selected one: nothing to inspect, the panel asks for a selection
+        if is_tab_mode && st.active_tab_needs_selection {
+            Self::render_empty(window);
+            window.set_info_filename("- (Select a medium in the view)".into());
+            return;
+        }
+
+        // When in Tab Mode, inspect the active tab's selected medium (the one medium of a tab of one) directly without
         // overwriting the browse selection
         if is_tab_mode && !st.active_tab_media_ids.is_empty() {
             let tab_items: Vec<&IndexedMediaRecord> = st

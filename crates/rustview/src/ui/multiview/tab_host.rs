@@ -15,6 +15,7 @@ use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
 use crate::viewer::multiview::command::{MultiviewCommand, ZoomKey};
+use crate::viewer::multiview::hint::HintKind;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
@@ -47,6 +48,8 @@ struct TabHost {
     feedback: Timer,
     /// The mouse cursor is hidden over the main window right now.
     cursor_hidden: bool,
+    /// The instance and its selected medium the panels of the main window were last brought in line with.
+    panel_focus: Option<(u64, Option<MediaId>)>,
 }
 
 thread_local! {
@@ -180,6 +183,15 @@ fn command_key(command: MultiviewCommand) {
     drop(instance);
     refresh();
     run(action);
+}
+
+/// A panel of the main window (Tag & Rate, tag history) was used while the shown tab holds several media and none is selected:
+/// the hint asks for a selection, over the tab view.
+pub fn show_selection_hint() {
+    if let Some(instance) = current_instance() {
+        let anchor = instance.lock().hint_anchor();
+        super::commands::refused(anchor, HintKind::NoSelection);
+    }
 }
 
 /// The selected medium of the shown tab for a key the application carries out itself (F5), or `None` after the hint.
@@ -413,14 +425,15 @@ pub fn refresh() {
     {
         crate::ui::tabs::unsaved_marks::sync_if_changed(&window, &app.tab_manager);
     }
-    let (id, view) = {
+    let (id, view, focus) = {
         let guard = instance.lock();
         let key = (guard.id(), guard.revision());
         if with_host(|h| h.shown == Some(key)).unwrap_or(true) {
             return;
         }
-        (key.0, guard.view())
+        (key.0, guard.view(), guard.focus_target_media())
     };
+    follow_panels(id, focus);
     with_host(|h| {
         let TabHost { models, images, .. } = h;
         models.sync(&view, images);
@@ -430,6 +443,23 @@ pub fn refresh() {
     bus.set_screen(views::screen_view(&view));
     update_bar_overlay();
     manage_glide(instance.lock().zoom_animating());
+}
+
+/// Another medium of the shown tab was selected (or the selection went): the panels of the main window follow it. They are
+/// synced right after this event, when no lock of the caller is held any more.
+fn follow_panels(instance_id: u64, focus: Option<MediaId>) {
+    let changed = with_host(|h| {
+        let now = Some((instance_id, focus));
+        (h.panel_focus != now).then(|| {
+            h.panel_focus = now;
+            h.handle.clone()
+        })
+    })
+    .flatten()
+    .flatten();
+    if let Some(handle) = changed {
+        slint::Timer::single_shot(Duration::ZERO, move || handle.sync_tab_panels());
+    }
 }
 
 /// Starts the frame timer while a zoom glides and stops it when it is done.

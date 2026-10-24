@@ -9,19 +9,20 @@ use super::media_actions::MediaActionId;
 use super::primary_actions::PrimaryActionId;
 use parking_lot::RwLock;
 use rustview_core::settings::schema::{
-    DEFAULT_FULLSCREEN_FOCUS_HIDE_WITH_CURSOR, DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR, DEFAULT_FULLSCREEN_IDLE_CURSOR_MS,
-    DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED, DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
-    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_CROP, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE,
-    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DUPLICATE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE,
-    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH,
-    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY,
-    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_ZOOM, DEFAULT_FULLSCREEN_PRIMARY_BAR_ENABLED,
-    DEFAULT_FULLSCREEN_PRIMARY_BAR_REVEAL_DISTANCE_PX, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_CLOSE,
-    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL,
-    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL,
-    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB,
-    DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK, FullscreenSettings, MULTIVIEW_FOCUS_BRIGHTEN_PERCENT,
-    MULTIVIEW_FOCUS_CORNER_LOGICAL_PX,
+    DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR, DEFAULT_FULLSCREEN_HIDE_SELECTION_WITH_CURSOR,
+    DEFAULT_FULLSCREEN_IDLE_CURSOR_MS, DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_CROP,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DUPLICATE,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE,
+    DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_ZOOM,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_ENABLED, DEFAULT_FULLSCREEN_PRIMARY_BAR_REVEAL_DISTANCE_PX,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_CLOSE, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT,
+    DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB, DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK,
+    FullscreenSelectionSettings, FullscreenSettings, MULTIVIEW_FOCUS_BRIGHTEN_LEVELS, MULTIVIEW_FOCUS_BRIGHTEN_PERCENT,
+    MULTIVIEW_FOCUS_CORNER_LEVELS, MULTIVIEW_FOCUS_CORNER_LOGICAL_PX,
 };
 
 /// Which buttons the hover bar may show and how close the pointer has to come before it appears.
@@ -139,8 +140,33 @@ impl FocusMarkPrefs {
     pub const DEFAULT: Self = Self {
         brighten_percent: MULTIVIEW_FOCUS_BRIGHTEN_PERCENT,
         corner_logical_px: MULTIVIEW_FOCUS_CORNER_LOGICAL_PX,
-        hide_with_cursor: DEFAULT_FULLSCREEN_FOCUS_HIDE_WITH_CURSOR,
+        hide_with_cursor: DEFAULT_FULLSCREEN_HIDE_SELECTION_WITH_CURSOR,
     };
+
+    /// The steps of Settings > Fullscreen > Selected Medium (sanitized names; an unknown one keeps the default).
+    pub fn from_settings(selection: &FullscreenSelectionSettings, hide_with_cursor: bool) -> Self {
+        Self {
+            brighten_percent: level_of(
+                &MULTIVIEW_FOCUS_BRIGHTEN_LEVELS,
+                &selection.brighten,
+                MULTIVIEW_FOCUS_BRIGHTEN_PERCENT,
+            ),
+            corner_logical_px: level_of(
+                &MULTIVIEW_FOCUS_CORNER_LEVELS,
+                &selection.corner_marks,
+                MULTIVIEW_FOCUS_CORNER_LOGICAL_PX,
+            ),
+            hide_with_cursor,
+        }
+    }
+}
+
+/// The value of the step `name` of `levels`, `default` for a name that is not one of them.
+fn level_of<T: Copy>(levels: &[(&str, T)], name: &str, default: T) -> T {
+    levels
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map_or(default, |(_, value)| *value)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,7 +225,7 @@ impl MultiviewPrefs {
                 hand_over: sound.hand_over,
             },
             rating_feedback: settings.rating.show_feedback,
-            focus_marks: FocusMarkPrefs::DEFAULT,
+            focus_marks: FocusMarkPrefs::from_settings(&settings.selection, primary.hide_selection_with_cursor),
         }
     }
 }
@@ -219,6 +245,7 @@ pub fn apply(settings: &FullscreenSettings) {
             media_bar = ?next.media_bar,
             primary_bar = ?next.primary,
             audio = ?next.audio,
+            focus_marks = ?next.focus_marks,
             "[Multiview: Prefs] Preferences applied"
         );
         *current = next;

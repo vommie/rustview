@@ -623,6 +623,12 @@ impl SettingsDiff {
                 new.fullscreen.rating.show_feedback
             ));
             changes.push(format!(
+                "Fullscreen selection: brighten: '{}', corner_marks: '{}', hide_with_cursor: {}",
+                new.fullscreen.selection.brighten,
+                new.fullscreen.selection.corner_marks,
+                new.fullscreen.primary_bar.hide_selection_with_cursor
+            ));
+            changes.push(format!(
                 "Fullscreen background: source: '{}', color: '{}'",
                 new.fullscreen.background.source, new.fullscreen.background.color
             ));

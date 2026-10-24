@@ -24,6 +24,10 @@ use super::schema::{
     MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_FULLSCREEN_ZOOM_MAX_PERCENT,
     MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT,
 };
+use super::schema::{
+    DEFAULT_FULLSCREEN_SELECTION_BRIGHTEN, DEFAULT_FULLSCREEN_SELECTION_CORNER_MARKS, MULTIVIEW_FOCUS_BRIGHTEN_LEVELS,
+    MULTIVIEW_FOCUS_CORNER_LEVELS,
+};
 use crate::util::hex_color;
 use parking_lot::Mutex;
 use std::fs;
@@ -395,11 +399,23 @@ impl SettingsStore {
             .clamp(MIN_FULLSCREEN_IDLE_CURSOR_MS, MAX_FULLSCREEN_IDLE_CURSOR_MS);
 
         let follows = fullscreen.sound.follows.trim().to_lowercase();
-        fullscreen.sound.follows = if matches!(follows.as_str(), "first" | "newest" | "nobody") {
+        fullscreen.sound.follows = if matches!(follows.as_str(), "first" | "newest" | "selected" | "nobody") {
             follows
         } else {
             DEFAULT_FULLSCREEN_SOUND_FOLLOWS.to_string()
         };
+
+        let selection = &mut fullscreen.selection;
+        selection.brighten = known_level(
+            &selection.brighten,
+            &MULTIVIEW_FOCUS_BRIGHTEN_LEVELS,
+            DEFAULT_FULLSCREEN_SELECTION_BRIGHTEN,
+        );
+        selection.corner_marks = known_level(
+            &selection.corner_marks,
+            &MULTIVIEW_FOCUS_CORNER_LEVELS,
+            DEFAULT_FULLSCREEN_SELECTION_CORNER_MARKS,
+        );
 
         let source = fullscreen.background.source.trim().to_lowercase();
         fullscreen.background.source = if matches!(source.as_str(), "theme" | "viewer" | "custom") {
@@ -437,5 +453,38 @@ impl SettingsStore {
         } else {
             DEFAULT_FULLSCREEN_ZOOM_RESAMPLE.to_string()
         };
+    }
+}
+
+/// `value` when it names one of `levels` (trimmed, any case), else `default`.
+fn known_level<T>(value: &str, levels: &[(&str, T)], default: &str) -> String {
+    let value = value.trim().to_lowercase();
+    if levels.iter().any(|(name, _)| *name == value) {
+        value
+    } else {
+        default.to_string()
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    #[test]
+    fn unknown_selection_levels_fall_back_to_the_default_and_known_ones_are_normalized() {
+        assert_eq!(
+            known_level(" Strong ", &MULTIVIEW_FOCUS_BRIGHTEN_LEVELS, "medium"),
+            "strong"
+        );
+        assert_eq!(
+            known_level("blinding", &MULTIVIEW_FOCUS_BRIGHTEN_LEVELS, "medium"),
+            "medium"
+        );
+        assert_eq!(known_level("long", &MULTIVIEW_FOCUS_CORNER_LEVELS, "medium"), "long");
+        assert_eq!(
+            known_level("off", &MULTIVIEW_FOCUS_CORNER_LEVELS, "medium"),
+            "medium",
+            "the marks cannot be switched off"
+        );
     }
 }

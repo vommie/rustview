@@ -147,8 +147,11 @@ pub struct UiState {
     list_total_bytes: AtomicU64,
     pub file_selection: FileSelectionModel,
     pub last_active_panel: LastActivePanel,
-    /// Media of the active viewer tab: one for a single-media tab, the tiles of a Multiview; empty without a shown tab.
+    /// What the panels (inspector, Tag & Rate, tag history) act on while a viewer tab is shown: the selected medium of its
+    /// Multiview (the one medium of a tab of one); empty without a shown tab or while nothing is selected.
     pub active_tab_media_ids: Vec<MediaId>,
+    /// The shown tab holds several media and none is selected: the panels act on nothing and ask for a selection.
+    pub active_tab_needs_selection: bool,
     pub rubberband_session: RubberbandSession,
     pub active_tab_dnd_session: Option<TabDndSession>,
     pub active_sidebar_panel_tab: String,
@@ -228,6 +231,7 @@ impl Default for UiState {
             file_selection: FileSelectionModel::new(),
             last_active_panel: LastActivePanel::Media,
             active_tab_media_ids: Vec::new(),
+            active_tab_needs_selection: false,
             rubberband_session: RubberbandSession::default(),
             active_tab_dnd_session: None,
             active_sidebar_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
@@ -428,9 +432,13 @@ impl UiState {
             .collect()
     }
 
-    /// The media an action in the viewer tab acts on, or `None` while no tab content is shown (the caller then falls back to
-    /// the Browse selection). A Multiview tab always yields its tiles, so its actions never leak to the Browse selection.
+    /// The media an action in the viewer tab acts on (its selected medium), or `None` while no tab content is shown (the caller
+    /// then falls back to the Browse selection). A tab of several media without a selected one yields an empty set, so its
+    /// actions do nothing and never leak to the Browse selection.
     pub fn active_tab_selection(&self) -> Option<HashSet<MediaId>> {
+        if self.active_tab_needs_selection {
+            return Some(HashSet::new());
+        }
         (!self.active_tab_media_ids.is_empty()).then(|| self.active_tab_media_ids.iter().copied().collect())
     }
 

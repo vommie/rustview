@@ -49,6 +49,9 @@ impl MultiviewInstance {
             tiles = keys.len(),
             "[Multiview: Focus] Medium selected"
         );
+        if let Some(index) = self.tile_index(key) {
+            self.sound_follows_selection(index);
+        }
         self.sync_focus_overlays();
         self.bump();
         true

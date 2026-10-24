@@ -12,6 +12,8 @@ pub enum SoundFollows {
     First,
     /// The video that joined last takes the sound from the others.
     Newest,
+    /// The selected video (`focus`) takes the sound from the others; until one is selected, like `First`.
+    Selected,
     /// Every video starts muted.
     Nobody,
 }
@@ -20,6 +22,7 @@ impl SoundFollows {
     pub fn from_setting(value: &str) -> Self {
         match value {
             "newest" => Self::Newest,
+            "selected" => Self::Selected,
             "nobody" => Self::Nobody,
             _ => Self::First,
         }
@@ -125,7 +128,7 @@ pub fn assign_on_open(slots: &mut AudioSlots, policy: &AudioPolicy) {
         let carries_sound = match policy.follows {
             _ if !policy.auto_control => true,
             SoundFollows::Nobody => false,
-            SoundFollows::First | SoundFollows::Newest => rank == 0,
+            SoundFollows::First | SoundFollows::Newest | SoundFollows::Selected => rank == 0,
         };
         *slot = if carries_sound {
             TileAudio::native()
@@ -208,6 +211,90 @@ pub fn after_merge(slots: &mut AudioSlots, policy: &AudioPolicy) {
         } else {
             TileAudio::muted_by_policy()
         };
+    }
+}
+
+/// A video was selected (slot `selected`): with `Selected` it takes the sound, and every other video the policy controls is muted.
+/// What the user chose for another video stays. Returns whether anything changed; an image, or another policy, changes nothing.
+pub fn after_selection(slots: &mut AudioSlots, selected: usize, policy: &AudioPolicy) -> bool {
+    if !policy.auto_control
+        || policy.follows != SoundFollows::Selected
+        || !slots.get(selected).is_some_and(Option::is_some)
+    {
+        return false;
+    }
+    let mut changed = false;
+    for (index, slot) in slots.iter_mut().enumerate() {
+        let Some(audio) = slot else { continue };
+        let next = if index == selected {
+            TileAudio::native()
+        } else if audio.origin == AudioOrigin::Policy {
+            TileAudio::muted_by_policy()
+        } else {
+            continue;
+        };
+        if *audio != next {
+            *audio = next;
+            changed = true;
+        }
+    }
+    changed
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    const SELECTED: AudioPolicy = AudioPolicy {
+        follows: SoundFollows::Selected,
+        ..AudioPolicy::DEFAULT
+    };
+
+    #[test]
+    fn the_selected_video_takes_the_sound_and_user_choices_stay() {
+        let user_unmuted = TileAudio {
+            mode: AudioMode::Unmuted,
+            origin: AudioOrigin::User,
+        };
+        let mut slots = vec![
+            Some(TileAudio::native()),
+            None,
+            Some(TileAudio::muted_by_policy()),
+            Some(user_unmuted),
+        ];
+        assert!(after_selection(&mut slots, 2, &SELECTED));
+        assert_eq!(
+            slots,
+            vec![
+                Some(TileAudio::muted_by_policy()),
+                None,
+                Some(TileAudio::native()),
+                Some(user_unmuted)
+            ]
+        );
+        assert!(
+            !after_selection(&mut slots, 2, &SELECTED),
+            "selecting it again changes nothing"
+        );
+    }
+
+    #[test]
+    fn an_image_or_another_policy_changes_nothing() {
+        let mut slots = vec![Some(TileAudio::native()), None, Some(TileAudio::muted_by_policy())];
+        assert!(!after_selection(&mut slots, 1, &SELECTED));
+        assert!(!after_selection(&mut slots, 2, &AudioPolicy::DEFAULT));
+        assert_eq!(slots[2], Some(TileAudio::muted_by_policy()));
+    }
+
+    #[test]
+    fn the_setting_name_selects_the_policy_and_it_opens_like_first() {
+        assert_eq!(SoundFollows::from_setting("selected"), SoundFollows::Selected);
+        let mut slots = vec![Some(TileAudio::native()), Some(TileAudio::native())];
+        assign_on_open(&mut slots, &SELECTED);
+        assert_eq!(
+            slots,
+            vec![Some(TileAudio::native()), Some(TileAudio::muted_by_policy())]
+        );
     }
 }
 

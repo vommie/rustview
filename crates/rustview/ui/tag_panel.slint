@@ -208,6 +208,8 @@ export component TagPanel inherits VerticalLayout {
     in property <[bool]> partial-ratings: [false, false, false, false, false, false];
     in property <bool> has-active-query: false;
     in property <bool> is-tab-view: false;
+    // Shown below the rating buttons while the panel acts on nothing because a Multiview tab has no selected medium.
+    in property <string> selection-hint: "";
     in-out property <string> filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
     in property <[TagColumnView]> tag-columns: [];
@@ -261,6 +263,14 @@ export component TagPanel inherits VerticalLayout {
         has-selection: root.has-selection;
         partial-ratings: root.partial-ratings;
         rating-selected(r) => { root.rating-selected(r); }
+    }
+
+    if root.selection-hint != "" : Text {
+        text: root.selection-hint;
+        font-size: 11px;
+        color: Theme.text-muted;
+        horizontal-alignment: center;
+        wrap: word-wrap;
     }
 
     // c. Filter Search: Tag Filter Input with integrated regex toggle & clear button

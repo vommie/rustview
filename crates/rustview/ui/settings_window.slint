@@ -186,6 +186,9 @@ export component SettingsWindow inherits Window {
     in-out property <int> fullscreen-primary-bar-reveal-distance-px: 15;
     in-out property <bool> fullscreen-hide-idle-cursor: false;
     in-out property <int> fullscreen-idle-cursor-secs: 3;
+    in-out property <bool> fullscreen-hide-selection-with-cursor: true;
+    in-out property <int> fullscreen-selection-brighten-idx: 2; // 0 = off, 1 = weak, 2 = medium, 3 = strong
+    in-out property <int> fullscreen-selection-corner-idx: 1; // 0 = short, 1 = medium, 2 = long
     in-out property <int> fullscreen-zoom-step-percent: 15;
     in-out property <int> fullscreen-zoom-max-percent: 1000;
     in-out property <int> fullscreen-zoom-out-percent: 200;
@@ -195,7 +198,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-zoom-minimap-always: false;
     in-out property <int> fullscreen-zoom-resample-idx: 0; // 0 = Lanczos, 1 = Catmull-Rom, 2 = Bilinear, 3 = Nearest neighbor
     in-out property <bool> fullscreen-sound-auto-control: true;
-    in-out property <int> fullscreen-sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
+    in-out property <int> fullscreen-sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = selected video, 3 = nobody
     in-out property <bool> fullscreen-sound-hand-over: true;
     in-out property <bool> fullscreen-rating-show-feedback: true;
     in-out property <int> fullscreen-background-source-idx: 0; // 0 = theme, 1 = same as viewer, 2 = custom color
@@ -396,6 +399,9 @@ export component SettingsWindow inherits Window {
                             primary-bar-reveal-distance-px <=> root.fullscreen-primary-bar-reveal-distance-px;
                             hide-idle-cursor <=> root.fullscreen-hide-idle-cursor;
                             idle-cursor-secs <=> root.fullscreen-idle-cursor-secs;
+                            hide-selection-with-cursor <=> root.fullscreen-hide-selection-with-cursor;
+                            selection-brighten-idx <=> root.fullscreen-selection-brighten-idx;
+                            selection-corner-idx <=> root.fullscreen-selection-corner-idx;
                             zoom-step-percent <=> root.fullscreen-zoom-step-percent;
                             zoom-max-percent <=> root.fullscreen-zoom-max-percent;
                             zoom-out-percent <=> root.fullscreen-zoom-out-percent;

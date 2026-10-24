@@ -22,6 +22,15 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   here", ...). While the pointer rests over a video, the keys the player knows itself (for example Ctrl+S, Ctrl++) still go to the player for now.
 - **DEL and the zoom keys work in a Multiview tab** too, not only in the fullscreen; DEL also with several media (it deletes the selected one).
 - **The marks of the selected medium hide with the mouse cursor** while the resting cursor is hidden; a key that acts on the medium shows them for a moment.
+  Settings > Fullscreen > Primary Action Bar > Mouse cursor has the switch "Hide the selection marks too" (on by default); the tooltip of the cursor button
+  of the primary bar says when the marks go with the cursor.
+- **Settings > Fullscreen > Selected Medium:** how much the area around the selected medium is lightened (Off, Weak, Medium, Strong) and how long its corner
+  marks are (Short, Medium, Long); Medium and Medium by default.
+- **The sound can follow the selected video:** Settings > Fullscreen > Sound > "The sound belongs to" has the new choice "The selected video" (the leftmost
+  video has the sound until you select one; a mute you set yourself stays).
+- **The panels of a Multiview tab follow the selected medium:** the inspector, the Tag & Rate panel (rating buttons and tags) and the tag history act on the
+  selected medium. With several media and none selected the Tag & Rate panel greys out and says "Select a medium in the view", and its buttons show the
+  hint over the view. The refresh button of the tab still reads all media of the tab.
 
 ### Changed
 - **Esc** cancels the crop tool of the selected picture first, then the other crop tools (newest first), then it closes the fullscreen as before.

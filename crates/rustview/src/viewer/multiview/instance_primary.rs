@@ -36,6 +36,7 @@ impl MultiviewInstance {
             layout_custom: self.row_pins.is_some() || self.tiles.iter().any(|t| t.pin.is_some()),
             pinned: self.pin_in_effect(),
             hide_idle_cursor: bar.hide_idle_cursor,
+            hide_selection_with_cursor: prefs::current().focus_marks.hide_with_cursor,
             idle_cursor_ms: bar.idle_cursor_ms,
         }
     }

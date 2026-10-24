@@ -21,6 +21,8 @@ export component SidebarRight inherits Rectangle {
     in property <[bool]> partial-ratings: [false, false, false, false, false, false];
     in property <bool> has-active-query: false;
     in property <bool> is-tab-view: false;
+    // A Multiview tab of several media without a selected one: the panel says so (it acts on nothing meanwhile).
+    in property <string> selection-hint: "";
     in-out property <string> tag-filter-text: "";
     in-out property <bool> tag-filter-is-regex: false;
     in property <[TagColumnView]> tag-columns: [];
@@ -87,6 +89,7 @@ export component SidebarRight inherits Rectangle {
                 partial-ratings: root.partial-ratings;
                 has-active-query: root.has-active-query;
                 is-tab-view: root.is-tab-view;
+                selection-hint: root.selection-hint;
                 filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
                 tag-columns: root.tag-columns;

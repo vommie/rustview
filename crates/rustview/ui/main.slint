@@ -244,6 +244,8 @@ export component MainWindow inherits Window {
     in-out property <int> fullscreen-tab-id: -1;
     /// The tab the tab view shows (-1 = none), to tell whether it is the one in the fullscreen.
     in-out property <int> viewer-tab-id: -1;
+    // The shown Multiview tab holds several media and none is selected: the panels act on nothing and say so.
+    in property <bool> tab-needs-selection: false;
 
     in-out property <bool> is-preloading: false;
     in-out property <int> preload-current: 0;
@@ -1222,6 +1224,7 @@ export component MainWindow inherits Window {
                 partial-ratings: root.partial-ratings;
                 has-active-query: root.has-active-query;
                 is-tab-view: root.active-view-mode == 1;
+                selection-hint: root.active-view-mode == 1 && root.tab-needs-selection ? "Select a medium in the view" : "";
                 tag-filter-text <=> root.tag-filter-text;
                 tag-filter-is-regex <=> root.tag-filter-is-regex;
 

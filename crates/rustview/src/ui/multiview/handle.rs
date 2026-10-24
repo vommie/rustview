@@ -407,6 +407,13 @@ impl MultiviewHandle {
         }
     }
 
+    /// The selected medium of the shown tab changed: the panels of the main window follow it. UI thread only, no lock held.
+    pub(super) fn sync_tab_panels(&self) {
+        if let Some((app, window)) = self.app_and_window() {
+            crate::ui::tabs::BridgeViewerTabs::sync_panels(&window, &app.tab_manager, &app.library, &app.state);
+        }
+    }
+
     /// F2 in a video's window of the tab view: the main window's rename, which acts on the selected medium of the tab (not
     /// marked as coming from the fullscreen).
     pub(super) fn request_tab_rename(&self) {

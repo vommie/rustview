@@ -16,6 +16,7 @@ pub use viewer::FullscreenBackgroundSettings;
 pub use viewer::FullscreenMediaBarSettings;
 pub use viewer::FullscreenPrimaryBarSettings;
 pub use viewer::FullscreenRatingSettings;
+pub use viewer::FullscreenSelectionSettings;
 pub use viewer::FullscreenSettings;
 pub use viewer::FullscreenSoundSettings;
 pub use viewer::FullscreenZoomSettings;

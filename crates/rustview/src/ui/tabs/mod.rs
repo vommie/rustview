@@ -141,13 +141,7 @@ impl BridgeViewerTabs {
             window.set_viewer_has_previous(has_prev);
             window.set_viewer_has_next(has_next);
 
-            {
-                let mut st = state.write();
-                st.active_tab_media_ids = active_tab.member_ids();
-            }
-            BridgeInspector::update(window, state);
-            BridgeTags::sync_tag_selection(window, library, state);
-            StatusBarBridge::update_metrics(window, state);
+            Self::sync_panels(window, tab_manager, library, state);
 
             Self::scroll_active_tab_into_view(window, tab_manager, settings);
         } else {
@@ -155,10 +149,38 @@ impl BridgeViewerTabs {
             {
                 let mut st = state.write();
                 st.active_tab_media_ids.clear();
+                st.active_tab_needs_selection = false;
             }
+            window.set_tab_needs_selection(false);
             BridgeInspector::update(window, state);
             BridgeTags::sync_tag_selection(window, library, state);
             StatusBarBridge::update_metrics(window, state);
         }
+    }
+
+    /// The panels (inspector, Tag & Rate, tag history, status line) follow the selected medium of the shown tab: after the tab
+    /// changed, and when another medium of its Multiview is selected. A tab of several media without a selected one leaves
+    /// them asking for a selection. UI thread only; no lock may be held by the caller.
+    pub fn sync_panels(
+        window: &MainWindow,
+        tab_manager: &ViewerTabManager,
+        library: &Library,
+        state: &RwLock<UiState>,
+    ) {
+        let target = tab_manager.get_active_tab().map(|tab| tab.panel_media_id());
+        {
+            let mut st = state.write();
+            st.active_tab_media_ids = target.flatten().into_iter().collect();
+            st.active_tab_needs_selection = matches!(target, Some(None));
+        }
+        window.set_tab_needs_selection(matches!(target, Some(None)));
+        tracing::debug!(
+            selected = ?target.flatten(),
+            needs_selection = matches!(target, Some(None)),
+            "[BridgeViewerTabs: Panels] The panels follow the selected medium of the tab"
+        );
+        BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
     }
 }

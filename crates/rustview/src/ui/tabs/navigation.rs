@@ -2,7 +2,7 @@
 
 use super::BridgeViewerTabs;
 use crate::ui::MainWindow;
-use crate::ui::media::BridgeMedia;
+use crate::ui::media::{BridgeMedia, RefreshOrigin};
 use crate::ui::multiview::MultiviewHandle;
 use crate::ui::multiview::tab_host;
 use crate::ui::state::UiState;
@@ -144,7 +144,17 @@ impl BridgeViewerTabs {
             "[BridgeViewerTabs: RefreshActive] Executing unified full media refresh for active tab"
         );
 
-        BridgeMedia::refresh_selected_media(window, library, thumbnails, tab_manager, settings, state);
+        // The refresh button of the tab reads every medium of the tab (F5 reads the selected one).
+        BridgeMedia::refresh_media_ids(
+            window,
+            library,
+            thumbnails,
+            tab_manager,
+            settings,
+            state,
+            &active_media_ids,
+            RefreshOrigin::Selection,
+        );
     }
 
     /// Navigates to the adjacent (previous or next) media item in the current active list while keeping the same tab open in-place.

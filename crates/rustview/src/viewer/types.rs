@@ -157,6 +157,12 @@ impl MediaTabSession {
         self.multiview.instance.lock().member_ids()
     }
 
+    /// What the panels of the main window act on while the tab is shown: its selected medium (the one medium of a tab of one);
+    /// `None` while several are shown and none is selected.
+    pub fn panel_media_id(&self) -> Option<MediaId> {
+        self.multiview.instance.lock().focus_target_media()
+    }
+
     pub fn has_member(&self, media_id: MediaId) -> bool {
         self.multiview.instance.lock().has_member(media_id)
     }

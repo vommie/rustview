@@ -1,9 +1,10 @@
 //! Instance behavior around sound: applying the audio rules to the players, noticing mute changes made inside mpv and the
 //! user's mute toggle.
 
-use super::audio::{AudioMode, AudioOrigin, TileAudio};
+use super::audio::{self, AudioMode, AudioOrigin, TileAudio};
 use super::follow::TileKey;
 use super::instance::MultiviewInstance;
+use super::prefs;
 
 impl MultiviewInstance {
     /// Pushes the mute state demanded by the audio rules to every video player whose actual state differs.
@@ -35,6 +36,22 @@ impl MultiviewInstance {
         if changed {
             self.bump();
         }
+    }
+
+    /// Tile `index` was selected: with the sound policy "the selected video" it takes the sound (`audio::after_selection`).
+    pub(super) fn sound_follows_selection(&mut self, index: usize) {
+        let mut slots: Vec<Option<TileAudio>> = self.tiles.iter().map(|t| t.audio).collect();
+        if !audio::after_selection(&mut slots, index, &prefs::current().audio) {
+            return;
+        }
+        for (tile, slot) in self.tiles.iter_mut().zip(slots) {
+            tile.audio = slot;
+        }
+        tracing::info!(
+            media_id = self.tiles.get(index).map(|t| t.media_id),
+            "[Multiview: Audio] The sound follows the selected video"
+        );
+        self.apply_audio();
     }
 
     /// The player of tile `key` reports its mute state. A change that did not come from us (key `m`, mpv on-screen

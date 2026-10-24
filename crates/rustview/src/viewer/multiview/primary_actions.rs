@@ -66,6 +66,8 @@ pub struct PrimaryBarContext {
     pub pinned: bool,
     pub hide_idle_cursor: bool,
     pub idle_cursor_ms: u32,
+    /// The marks of the selected medium go with the hidden cursor (the tooltip says so).
+    pub hide_selection_with_cursor: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,10 +206,19 @@ fn hide_idle_cursor(ctx: &PrimaryBarContext) -> Option<PrimaryActionSpec> {
             } else {
                 Icon::CursorVisible
             },
-            tooltip: if ctx.hide_idle_cursor {
-                format!("The mouse cursor is hidden after {seconds:.1} s without movement (click to keep it visible)")
-            } else {
-                format!("Hide the mouse cursor after {seconds:.1} s without movement (it shows again when it moves)")
+            tooltip: match (ctx.hide_idle_cursor, ctx.hide_selection_with_cursor) {
+                (true, false) => {
+                    format!("The mouse cursor is hidden after {seconds:.1} s without movement (click to keep it visible)")
+                }
+                (true, true) => format!(
+                    "The mouse cursor and the selection marks are hidden after {seconds:.1} s without movement (click to keep them visible)"
+                ),
+                (false, false) => {
+                    format!("Hide the mouse cursor after {seconds:.1} s without movement (it shows again when it moves)")
+                }
+                (false, true) => format!(
+                    "Hide the mouse cursor and the selection marks after {seconds:.1} s without movement (they show again when it moves)"
+                ),
             },
             enabled: true,
             active: Some(ctx.hide_idle_cursor),

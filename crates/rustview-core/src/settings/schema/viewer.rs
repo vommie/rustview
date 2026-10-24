@@ -3,7 +3,8 @@
 use super::{
     DEFAULT_FULLSCREEN_BACKGROUND_COLOR, DEFAULT_FULLSCREEN_BACKGROUND_SOURCE, DEFAULT_FULLSCREEN_ENABLE_FALLBACK_RULE,
     DEFAULT_FULLSCREEN_ENABLE_SPECIFIC_MONITOR, DEFAULT_FULLSCREEN_FALLBACK_TARGET,
-    DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR, DEFAULT_FULLSCREEN_IDLE_CURSOR_MS, DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED,
+    DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR, DEFAULT_FULLSCREEN_HIDE_SELECTION_WITH_CURSOR,
+    DEFAULT_FULLSCREEN_IDLE_CURSOR_MS, DEFAULT_FULLSCREEN_MEDIA_BAR_ENABLED,
     DEFAULT_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_CROP,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DELETE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_DUPLICATE,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
@@ -14,6 +15,7 @@ use super::{
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB, DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK,
+    DEFAULT_FULLSCREEN_SELECTION_BRIGHTEN, DEFAULT_FULLSCREEN_SELECTION_CORNER_MARKS,
     DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL, DEFAULT_FULLSCREEN_SOUND_FOLLOWS, DEFAULT_FULLSCREEN_SOUND_HAND_OVER,
     DEFAULT_FULLSCREEN_SPECIFIC_MONITOR, DEFAULT_FULLSCREEN_ZOOM_MAX_PERCENT, DEFAULT_FULLSCREEN_ZOOM_MINIMAP_ALWAYS,
     DEFAULT_FULLSCREEN_ZOOM_MINIMAP_POSITION, DEFAULT_FULLSCREEN_ZOOM_MINIMAP_SECS,
@@ -140,6 +142,8 @@ pub struct FullscreenPrimaryBarSettings {
     /// Shared with the "hide idle mouse cursor" button of the bar: there is one value, the button writes it.
     pub hide_idle_cursor: bool,
     pub idle_cursor_ms: u32,
+    /// The marks of the selected medium go with the hidden cursor (and come back with it).
+    pub hide_selection_with_cursor: bool,
 }
 
 impl Default for FullscreenPrimaryBarSettings {
@@ -156,6 +160,7 @@ impl Default for FullscreenPrimaryBarSettings {
             reveal_distance_px: DEFAULT_FULLSCREEN_PRIMARY_BAR_REVEAL_DISTANCE_PX,
             hide_idle_cursor: DEFAULT_FULLSCREEN_HIDE_IDLE_CURSOR,
             idle_cursor_ms: DEFAULT_FULLSCREEN_IDLE_CURSOR_MS,
+            hide_selection_with_cursor: DEFAULT_FULLSCREEN_HIDE_SELECTION_WITH_CURSOR,
         }
     }
 }
@@ -164,7 +169,7 @@ impl Default for FullscreenPrimaryBarSettings {
 #[serde(default)]
 pub struct FullscreenSoundSettings {
     pub auto_control: bool,
-    pub follows: String, // "first", "newest" or "nobody"
+    pub follows: String, // "first", "newest", "selected" or "nobody"
     pub hand_over: bool,
 }
 
@@ -190,6 +195,25 @@ impl Default for FullscreenRatingSettings {
     fn default() -> Self {
         Self {
             show_feedback: DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK,
+        }
+    }
+}
+
+/// How the selected medium of a Multiview of several media is marked (fullscreen and tab view, `docs/multiview_focus.md`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FullscreenSelectionSettings {
+    /// The empty area around the selected medium (its column) is lightened: "off", "weak", "medium" or "strong".
+    pub brighten: String,
+    /// The length of the corner marks: "short", "medium" or "long" (they cannot be switched off).
+    pub corner_marks: String,
+}
+
+impl Default for FullscreenSelectionSettings {
+    fn default() -> Self {
+        Self {
+            brighten: DEFAULT_FULLSCREEN_SELECTION_BRIGHTEN.to_string(),
+            corner_marks: DEFAULT_FULLSCREEN_SELECTION_CORNER_MARKS.to_string(),
         }
     }
 }
@@ -252,6 +276,7 @@ pub struct FullscreenSettings {
     pub primary_bar: FullscreenPrimaryBarSettings,
     pub sound: FullscreenSoundSettings,
     pub rating: FullscreenRatingSettings,
+    pub selection: FullscreenSelectionSettings,
     pub background: FullscreenBackgroundSettings,
     pub zoom: FullscreenZoomSettings,
 }
@@ -267,6 +292,7 @@ impl Default for FullscreenSettings {
             primary_bar: FullscreenPrimaryBarSettings::default(),
             sound: FullscreenSoundSettings::default(),
             rating: FullscreenRatingSettings::default(),
+            selection: FullscreenSelectionSettings::default(),
             background: FullscreenBackgroundSettings::default(),
             zoom: FullscreenZoomSettings::default(),
         }

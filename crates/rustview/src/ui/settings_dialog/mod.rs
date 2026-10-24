@@ -1,5 +1,6 @@
 mod formats_page;
 mod image_edit_page;
+mod selected_medium;
 
 use crate::system::{MonitorInfo, SystemDisplayService};
 use crate::ui::color_picker::PickerRequest;
@@ -308,11 +309,13 @@ impl SettingsDialogController {
         window.set_fullscreen_sound_auto_control(sound.auto_control);
         window.set_fullscreen_sound_follows_idx(match sound.follows.as_str() {
             "newest" => 1,
-            "nobody" => 2,
+            "selected" => 2,
+            "nobody" => 3,
             _ => 0,
         });
         window.set_fullscreen_sound_hand_over(sound.hand_over);
         window.set_fullscreen_rating_show_feedback(fullscreen.rating.show_feedback);
+        selected_medium::populate(window, fullscreen);
 
         window.set_fullscreen_background_source_idx(match fullscreen.background.source.as_str() {
             "viewer" => 1,
@@ -396,12 +399,14 @@ impl SettingsDialogController {
         sound.auto_control = window.get_fullscreen_sound_auto_control();
         sound.follows = match window.get_fullscreen_sound_follows_idx() {
             1 => "newest",
-            2 => "nobody",
+            2 => "selected",
+            3 => "nobody",
             _ => "first",
         }
         .to_string();
         sound.hand_over = window.get_fullscreen_sound_hand_over();
         fullscreen.rating.show_feedback = window.get_fullscreen_rating_show_feedback();
+        selected_medium::save(window, fullscreen);
 
         fullscreen.background.source = match window.get_fullscreen_background_source_idx() {
             1 => "viewer",

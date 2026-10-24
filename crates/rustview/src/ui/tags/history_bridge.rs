@@ -209,6 +209,10 @@ impl BridgeTagHistory {
         state: &Arc<RwLock<UiState>>,
     ) {
         let is_tab_active = window.get_active_view_mode() == 1 || tab_manager.active_tab_id().is_some();
+        if is_tab_active && state.read().active_tab_needs_selection {
+            crate::ui::multiview::tab_host::show_selection_hint();
+            return;
+        }
         let selected_ids = {
             let s = state.read();
             if is_tab_active {

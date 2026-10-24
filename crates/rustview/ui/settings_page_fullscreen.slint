@@ -6,6 +6,7 @@ import { SettingsCard } from "settings_card.slint";
 import { TooltipHost } from "tooltips.slint";
 import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
 import { ColorSwatchButton } from "color_picker.slint";
+import { SettingsCardSelectedMedium } from "settings_card_selected_medium.slint";
 
 export component SettingsPageFullscreen inherits VerticalLayout {
     spacing: 12px;
@@ -41,6 +42,11 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     in-out property <int> primary-bar-reveal-distance-px: 15;
     in-out property <bool> hide-idle-cursor: false;
     in-out property <int> idle-cursor-secs: 3;
+    in-out property <bool> hide-selection-with-cursor: true;
+
+    // Selected medium
+    in-out property <int> selection-brighten-idx: 2; // 0 = off, 1 = weak, 2 = medium, 3 = strong
+    in-out property <int> selection-corner-idx: 1; // 0 = short, 1 = medium, 2 = long
 
     // Image zoom
     in-out property <int> zoom-step-percent: 15;
@@ -54,7 +60,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
 
     // Sound
     in-out property <bool> sound-auto-control: true;
-    in-out property <int> sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = nobody
+    in-out property <int> sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = selected video, 3 = nobody
     in-out property <bool> sound-hand-over: true;
 
     // Rating
@@ -441,7 +447,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
         SettingsSwitchRow {
             indent: 12px;
             label: "Hide the mouse cursor when it rests";
-            tooltip: "Hides the cursor over the Multiview (fullscreen and tab) after it has not moved for the time below. It shows again when it moves and is never hidden over other windows. The button of the primary bar changes this setting too.";
+            tooltip: "Hides the cursor over the Multiview (fullscreen and tab) after it has not moved for the time below. It shows again when it moves and is never hidden over other windows. The marks of the selected medium can go with it (below). The button of the primary bar changes this setting too.";
             checked <=> root.hide-idle-cursor;
         }
 
@@ -471,6 +477,14 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                     horizontal-alignment: right;
                 }
             }
+        }
+
+        SettingsSwitchRow {
+            indent: 12px;
+            label: "Hide the selection marks too";
+            tooltip: "While the resting mouse cursor is hidden, the marks of the selected medium are hidden as well. They show again with the cursor; the keys still act on the selected medium, and a key that does shows them for a moment.";
+            enabled: root.hide-idle-cursor;
+            checked <=> root.hide-selection-with-cursor;
         }
     }
 
@@ -632,6 +646,11 @@ export component SettingsPageFullscreen inherits VerticalLayout {
         }
     }
 
+    SettingsCardSelectedMedium {
+        brighten-idx <=> root.selection-brighten-idx;
+        corner-idx <=> root.selection-corner-idx;
+    }
+
     SettingsCard {
         title: "Sound";
         description: "Which videos are muted automatically while several videos are shown. A mute you set yourself is never changed.";
@@ -644,13 +663,13 @@ export component SettingsPageFullscreen inherits VerticalLayout {
 
         SettingsOptionRow {
             label: "The sound belongs to";
-            tooltip: "First video: the leftmost video plays, videos that join start muted. Newest video: a video that joins takes the sound. Nobody: every video starts muted.";
+            tooltip: "First video: the leftmost video plays, videos that join start muted. Newest video: a video that joins takes the sound. Selected video: the video you select takes the sound (the leftmost until you select one). Nobody: every video starts muted.";
             enabled: root.sound-auto-control;
 
             ComboBox {
                 width: 220px;
                 enabled: root.sound-auto-control;
-                model: ["The first video (leftmost)", "The newest video", "Nobody (all muted)"];
+                model: ["The first video (leftmost)", "The newest video", "The selected video", "Nobody (all muted)"];
                 current-index <=> root.sound-follows-idx;
             }
         }
@@ -659,7 +678,7 @@ export component SettingsPageFullscreen inherits VerticalLayout {
             indent: 12px;
             label: "Pass the sound on when its video leaves";
             tooltip: "When the video that plays sound is removed or deleted, the next video takes over instead of the view falling silent.";
-            enabled: root.sound-auto-control && root.sound-follows-idx != 2;
+            enabled: root.sound-auto-control && root.sound-follows-idx != 3;
             checked <=> root.sound-hand-over;
         }
 
@@ -687,7 +706,9 @@ export component SettingsPageFullscreen inherits VerticalLayout {
                             ? ("The leftmost video plays sound, the others start muted. A video that joins starts muted" + (root.sound-hand-over ? ", unless nothing plays; when the video with sound leaves, the next one takes over." : ", unless nothing plays."))
                             : (root.sound-follows-idx == 1
                                 ? ("The leftmost video plays sound when the fullscreen opens. A video that joins takes the sound; the others are muted" + (root.sound-hand-over ? ", and the sound passes on when its video leaves." : "."))
-                                : "Every video starts muted. Unmute one with its button in the media action bar or with the M key."));
+                                : (root.sound-follows-idx == 2
+                                    ? ("The leftmost video plays sound until you select a video; the selected video then takes the sound and the others are muted (a mute you set yourself stays)" + (root.sound-hand-over ? ". When the video with sound leaves, the next one takes over." : "."))
+                                    : "Every video starts muted. Unmute one with its button in the media action bar or with the M key.")));
                     color: Theme.text-muted;
                 }
             }
@@ -696,11 +717,11 @@ export component SettingsPageFullscreen inherits VerticalLayout {
 
     SettingsCard {
         title: "Rating";
-        description: "Rate the media you see with Ctrl+0 (no rating) to Ctrl+5, in the fullscreen and in tabs.";
+        description: "Rate the selected medium with Ctrl+0 (no rating) to Ctrl+5, in the fullscreen and in tabs (a single medium needs no selection).";
 
         SettingsSwitchRow {
             label: "Show the rating animation";
-            tooltip: "The icon of the new rating appears in the middle of every tile and fades out after about a second. The rating itself is always saved, whatever this is set to.";
+            tooltip: "The icon of the new rating appears in the middle of the rated medium and fades out after about a second. The rating itself is always saved, whatever this is set to.";
             checked <=> root.rating-show-feedback;
         }
     }

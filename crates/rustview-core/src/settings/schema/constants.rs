@@ -441,14 +441,23 @@ pub const MAX_FULLSCREEN_IDLE_CURSOR_MS: u32 = 30_000;
 // --- Fullscreen sound (which videos are muted automatically while several videos are shown) ---
 pub const DEFAULT_FULLSCREEN_SOUND_AUTO_CONTROL: bool = true;
 
-/// Who has the sound while several videos are shown: "first" (leftmost), "newest" (the video that joined last) or
-/// "nobody" (every video starts muted).
+/// Who has the sound while several videos are shown: "first" (leftmost), "newest" (the video that joined last), "selected"
+/// (the selected video; the leftmost until one is selected) or "nobody" (every video starts muted).
 pub const DEFAULT_FULLSCREEN_SOUND_FOLLOWS: &str = "first";
 
 /// The sound passes to another video when the video that had it leaves.
 pub const DEFAULT_FULLSCREEN_SOUND_HAND_OVER: bool = true;
 /// Whether a rating given with Ctrl+0..5 in a Multiview shows its icon on the tiles for a moment.
 pub const DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK: bool = true;
+
+/// How the selected medium of a Multiview of several media is marked: "off", "weak", "medium" or "strong" (the lighter area
+/// around it) and "short", "medium" or "long" (the corner marks).
+pub const DEFAULT_FULLSCREEN_SELECTION_BRIGHTEN: &str = "medium";
+
+pub const DEFAULT_FULLSCREEN_SELECTION_CORNER_MARKS: &str = "medium";
+
+/// The marks of the selected medium are hidden while the resting mouse cursor is hidden.
+pub const DEFAULT_FULLSCREEN_HIDE_SELECTION_WITH_CURSOR: bool = true;
 
 // --- Fullscreen image zoom (images only; mpv zooms videos itself) ---
 /// A step of Ctrl + mouse wheel over an image, in percent of the fitted size (the wheel over the slider has its own steps: 5%, Shift 10%, Ctrl 25%).
@@ -524,16 +533,27 @@ pub const MULTIVIEW_TICK_MS: u64 = 50;
 
 pub const MULTIVIEW_DOUBLE_CLICK_MS: u64 = 400;
 
-/// The selected medium of a Multiview of 2+ tiles: white over its column (where the medium leaves room), in percent.
+/// The selected medium of a Multiview of 2+ tiles: white over its column (where the medium leaves room), in percent, for the
+/// steps of Settings > Fullscreen > Selected Medium ("medium" is the default).
 pub const MULTIVIEW_FOCUS_BRIGHTEN_PERCENT: u8 = 7;
 
-/// Length and thickness of the corner marks of the selected medium (logical pixels).
+pub const MULTIVIEW_FOCUS_BRIGHTEN_LEVELS: [(&str, u8); 4] = [
+    ("off", 0),
+    ("weak", 4),
+    ("medium", MULTIVIEW_FOCUS_BRIGHTEN_PERCENT),
+    ("strong", 11),
+];
+
+/// Length of the corner marks of the selected medium (logical pixels) for the steps of the setting, and their thickness.
 pub const MULTIVIEW_FOCUS_CORNER_LOGICAL_PX: u32 = 24;
 
-pub const MULTIVIEW_FOCUS_CORNER_THICKNESS_LOGICAL_PX: u32 = 2;
+pub const MULTIVIEW_FOCUS_CORNER_LEVELS: [(&str, u32); 3] = [
+    ("short", 16),
+    ("medium", MULTIVIEW_FOCUS_CORNER_LOGICAL_PX),
+    ("long", 32),
+];
 
-/// The marks of the selected medium are hidden while the resting mouse cursor is hidden.
-pub const DEFAULT_FULLSCREEN_FOCUS_HIDE_WITH_CURSOR: bool = true;
+pub const MULTIVIEW_FOCUS_CORNER_THICKNESS_LOGICAL_PX: u32 = 2;
 
 /// Ticks during which the display parameters of a recycled player are taken for those of the previous file if they are equal.
 pub const MULTIVIEW_STALE_PROBE_TICKS: u32 = 20;

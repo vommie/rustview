@@ -21,6 +21,10 @@ use std::collections::HashSet;
 impl TagActionHandler {
     pub fn toggle_tag(tag_id: TagId, ctx: &TagActionContext<'_>) {
         let is_tab_active = ctx.window.get_active_view_mode() == 1 || ctx.tab_manager.active_tab_id().is_some();
+        if is_tab_active && ctx.state.read().active_tab_needs_selection {
+            crate::ui::multiview::tab_host::show_selection_hint();
+            return;
+        }
 
         let (selected_ids, is_assign_raw) = {
             let s = ctx.state.read();
