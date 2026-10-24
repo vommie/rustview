@@ -1,33 +1,8 @@
-//! Rating keys and the rating icon in the window of a player.
-//!
-//! The native video window takes the keyboard itself, so Ctrl+0..5 are bound inside mpv and reported to the application as a
-//! client message (like DEL, see `DELETE_KEY_MESSAGE`). The icon is an OSD bitmap overlay of mpv (`overlay-add`), see
-//! `viewer::multiview::feedback_overlay`.
+//! The rating (and save) icon in the window of a player: an OSD bitmap overlay of mpv (`overlay-add`), see
+//! `viewer::multiview::feedback_overlay`. The rating keys themselves reach the application through the keymap (`keys`).
 
 use super::MpvPlayer;
 use super::overlay::FEEDBACK_OVERLAY_ID;
-use crate::viewer::multiview::rating_keys::mpv_key_names;
-use libmpv2::Mpv;
-
-/// The message mpv sends when a rating key is pressed: `rustview-rate <0..5>`.
-pub(super) const RATE_KEY_MESSAGE: &str = "rustview-rate";
-
-pub(super) fn bind_rating_keys(mpv: &Mpv) {
-    for (key, rating) in mpv_key_names() {
-        let command = format!("script-message {RATE_KEY_MESSAGE} {rating}");
-        if let Err(e) = mpv.command("keybind", &[&key, &command]) {
-            tracing::warn!(key, error = ?e, "[MpvPlayer: Rating] Could not bind the rating key");
-        }
-    }
-}
-
-/// The rating of a client message of mpv, `None` when it is another message.
-pub(super) fn rating_of_message(args: &[&str]) -> Option<u8> {
-    match args {
-        [RATE_KEY_MESSAGE, rating] => rating.parse::<u8>().ok().filter(|r| *r <= 5),
-        _ => None,
-    }
-}
 
 impl MpvPlayer {
     /// Shows a square premultiplied BGRA bitmap of `edge` pixels with its top left corner at (`x`, `y`) of the window, on top of
@@ -39,20 +14,5 @@ impl MpvPlayer {
     /// Removes the bitmap overlay.
     pub fn hide_bitmap_overlay(&self) {
         self.remove_overlay(FEEDBACK_OVERLAY_ID);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_the_rate_message_with_a_valid_rating_counts() {
-        assert_eq!(rating_of_message(&["rustview-rate", "3"]), Some(3));
-        assert_eq!(rating_of_message(&["rustview-rate", "0"]), Some(0));
-        assert_eq!(rating_of_message(&["rustview-rate", "6"]), None);
-        assert_eq!(rating_of_message(&["rustview-rate", "x"]), None);
-        assert_eq!(rating_of_message(&["rustview-rate"]), None);
-        assert_eq!(rating_of_message(&["rustview-delete"]), None);
     }
 }

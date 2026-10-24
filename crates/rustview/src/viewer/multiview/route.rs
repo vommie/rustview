@@ -24,7 +24,6 @@ pub enum OriginKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoutedEvent {
     ToggleFullscreen,
-    CloseTab,
     Rename,
     CtrlClick,
     GridLeft,
@@ -76,18 +75,17 @@ pub enum UiAction {
 }
 
 pub fn route(mode: HostMode, origin: OriginKind, event: RoutedEvent, click: ClickKind) -> UiAction {
-    use RoutedEvent::{CloseTab, CtrlClick, GridLeft, GridMiddle, GridWheel, Rename, ToggleFullscreen};
+    use RoutedEvent::{CtrlClick, GridLeft, GridMiddle, GridWheel, Rename, ToggleFullscreen};
     match (mode, event) {
         (HostMode::Hidden, _) => UiAction::None,
         (_, Rename) => UiAction::RequestRename,
-        (HostMode::Fullscreen, ToggleFullscreen | CloseTab) => UiAction::CloseFullscreen,
+        (HostMode::Fullscreen, ToggleFullscreen) => UiAction::CloseFullscreen,
         (HostMode::Fullscreen, CtrlClick) => match (click, origin) {
             (ClickKind::CtrlDouble, OriginKind::Browse) => UiAction::ConvertToTab,
             (ClickKind::CtrlDouble, OriginKind::Tab) => UiAction::CloseFullscreen,
             _ => UiAction::None,
         },
         (HostMode::TabView, ToggleFullscreen) | (HostMode::TabGrid, GridMiddle) => UiAction::OpenTabFullscreen,
-        (HostMode::TabView, CloseTab) => UiAction::CloseActiveTab,
         (HostMode::TabGrid, GridLeft) => UiAction::ActivateTab,
         (HostMode::TabGrid, CtrlClick) => UiAction::ToggleTabSelection,
         (HostMode::TabGrid, GridWheel { up }) => UiAction::ScrollGrid { up },

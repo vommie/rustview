@@ -189,14 +189,11 @@ pub(super) fn connect_callbacks(
     current_tile: &Arc<AtomicU64>,
 ) {
     player.on_toggle_fullscreen(forward(sink, owner, || PlayerEvent::ToggleFullscreen));
-    player.on_close_tab(forward(sink, owner, || PlayerEvent::CloseTab));
-    player.on_rename_requested(forward(sink, owner, || PlayerEvent::RenameRequested));
     player.on_escape(forward(sink, owner, || PlayerEvent::EscapePressed));
-    player.on_delete_requested(forward(sink, owner, || PlayerEvent::DeleteRequested));
-    let (rating_sink, rating_owner) = (Arc::clone(sink), Arc::clone(owner));
-    player.on_rating_requested(move |rating| {
-        let me = rating_owner.read().clone();
-        rating_sink.post(me, PlayerEvent::RatingRequested(rating));
+    let (key_sink, key_owner) = (Arc::clone(sink), Arc::clone(owner));
+    player.on_key(move |chord| {
+        let me = key_owner.read().clone();
+        key_sink.post(me, PlayerEvent::Key(chord.to_owned()));
     });
     let tile = current_tile.clone();
     let (mute_sink, mute_owner) = (Arc::clone(sink), Arc::clone(owner));
@@ -305,7 +302,7 @@ mod tests {
         let (first_id, second_id) = (first.lock().id(), second.lock().id());
 
         let owner: EventOwner = Arc::new(RwLock::new(Arc::downgrade(&first)));
-        let callback = forward(&sink, &owner, || PlayerEvent::CloseTab);
+        let callback = forward(&sink, &owner, || PlayerEvent::ToggleFullscreen);
         callback();
         *owner.write() = Arc::downgrade(&second);
         callback();

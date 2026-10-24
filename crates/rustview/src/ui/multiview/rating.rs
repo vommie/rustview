@@ -1,7 +1,7 @@
-//! Ratings given with Ctrl+0..5 in a Multiview (fullscreen, viewer tab, tab shown fullscreen).
+//! Ratings given with the rating keys (Settings > Hotkeys) in a Multiview (fullscreen, viewer tab, tab shown fullscreen).
 //!
-//! The key arrives from the fullscreen window, from the main window (a viewer tab) or from a video's own window (mpv client
-//! message). All of them end in [`MultiviewHandle::rate_visible`]: it rates the selected medium of the Multiview (`focus`,
+//! The key arrives from the fullscreen window, from the main window (a viewer tab) or from a video's own window (the keymap's
+//! `rustview-key` message of mpv). All of them end in [`MultiviewHandle::rate_visible`]: it rates the selected medium of the Multiview (`focus`,
 //! wherever the pointer is) through the one path of the Tag & Rate panel and the context menu (`BridgeTags::apply_rating_to_ids`),
 //! then starts the feedback pulse on the tiles of that medium. With several tiles and none selected it shows the hint instead.
 
@@ -12,23 +12,10 @@ use crate::ui::tags::{BridgeTags, TagActionContext};
 use crate::viewer::multiview::hint::HintKind;
 use crate::viewer::multiview::instance::SharedInstance;
 use crate::viewer::multiview::prefs;
-use crate::viewer::multiview::rating_keys::rating_of_key;
 use crate::viewer::multiview::route::HostMode;
 use std::time::Instant;
 
 impl MultiviewHandle {
-    /// A rating key in the fullscreen window. Returns whether `text` was a rating key.
-    pub(super) fn fullscreen_key(&self, text: &str, modifiers: (bool, bool, bool), repeat: bool) -> bool {
-        let (ctrl, alt, meta) = modifiers;
-        let Some(rating) = rating_of_key(text, ctrl, alt, meta, false) else {
-            return false;
-        };
-        if !repeat {
-            self.rate_fullscreen(rating);
-        }
-        true
-    }
-
     /// Rates what the open fullscreen Multiview shows.
     pub fn rate_fullscreen(&self, rating: u8) {
         if let Some(instance) = session::instance() {

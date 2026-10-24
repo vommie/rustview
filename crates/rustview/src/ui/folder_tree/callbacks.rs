@@ -52,9 +52,13 @@ impl BridgeFolders {
             }
         });
 
-        let dialog = settings_dialog;
+        let dialog = settings_dialog.clone();
         window.on_open_settings(move || {
             dialog.borrow_mut().show();
+        });
+        let dialog = settings_dialog;
+        window.on_open_hotkey_settings(move || {
+            dialog.borrow_mut().show_page(crate::ui::settings_dialog::HOTKEYS_PAGE);
         });
 
         let lib = library.clone();

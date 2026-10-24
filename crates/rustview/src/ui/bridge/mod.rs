@@ -233,6 +233,8 @@ impl UiBridge {
         );
         type_ahead::config::apply(&app_settings.appearance);
         crate::ui::hold_confirm::install(&window, app_settings.general.hold_to_confirm_ms);
+        crate::ui::hotkeys::apply(&app_settings.hotkeys);
+        crate::ui::hotkeys::main_window::install(&window);
         prefs::apply(&app_settings.fullscreen);
         zoom_prefs::apply(&app_settings.fullscreen);
         crate::viewer::edit::prefs::apply(&app_settings.image_edit);

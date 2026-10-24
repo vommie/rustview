@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 mod appearance;
 mod constants;
+mod hotkeys;
 mod image_edit;
 mod viewer;
 pub use appearance::AppearanceSettings;
@@ -11,6 +12,7 @@ pub use appearance::GridAspectRatio;
 pub use appearance::ThumbnailBadgeOverflow;
 pub use appearance::ViewSettings;
 pub use constants::*;
+pub use hotkeys::HotkeysPageState;
 pub use image_edit::{CropSettings, FormatPresets, ImageEditSettings, LastExport, SaveSettings};
 pub use viewer::FullscreenBackgroundSettings;
 pub use viewer::FullscreenMediaBarSettings;
@@ -271,4 +273,8 @@ pub struct AppSettings {
     /// Added in 0.3.87 (cropping and saving pictures); older files get the defaults.
     #[serde(default)]
     pub image_edit: ImageEditSettings,
+    /// Added in 0.4.4: the keys that differ from the defaults (`docs/hotkeys.md`), action id -> list of key texts. Kept as
+    /// JSON values so a hand-edited entry never breaks loading; the app validates them (`ui::keymap`).
+    #[serde(default)]
+    pub hotkeys: std::collections::BTreeMap<String, serde_json::Value>,
 }

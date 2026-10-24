@@ -327,6 +327,8 @@ export component MainWindow inherits Window {
     callback browse-background-context-menu(length /* x */, length /* y */);
     callback show-folders-toggled(bool);
     callback open-settings();
+    // Opens the settings on the page Hotkeys.
+    callback open-hotkey-settings();
     callback browse-clicked();
     callback tab-grid-clicked();
     callback tab-selected(int /* tab_id */);
@@ -358,10 +360,11 @@ export component MainWindow inherits Window {
 
     callback viewer-close-tab();
     callback viewer-refresh();
-    // Keys of the tab view that act on the selected medium of its Multiview: F5, DEL and the zoom keys (0 = reset, 1 = in, 2 = out).
-    callback viewer-refresh-key();
+    // Keys of the tab view that act on the selected medium of its Multiview: DEL and the zoom keys (0 = reset, 1 = in, 2 = out).
     callback viewer-delete-key();
     callback viewer-zoom-key(int);
+    // The refresh key of a Multiview (tab view or fullscreen): the medium is read again from the drive.
+    callback refresh-medium(int /* media id */);
     callback viewer-previous();
     callback viewer-next();
     // The area of the viewer tab that a Multiview fills changed (size or position); Rust places the native video windows.
@@ -407,8 +410,11 @@ export component MainWindow inherits Window {
     // Type-ahead find: every key press of the Browse view is offered to Rust first; true = the search took the key.
     callback type-ahead-key(string /* event.text */, bool /* Ctrl, Alt or Meta is held */) -> bool;
 
-    // Rating hotkeys Ctrl+0..5 (text, Ctrl, Alt, Meta, key repeat); true = it was a rating key and is consumed.
-    callback rating-hotkey(string, bool, bool, bool, bool) -> bool;
+    // Every key press the fixed handling below leaves (text, Ctrl, Alt, Shift, Meta, key repeat, a text input has the focus): Rust
+    // looks it up in the keymap (`ui::hotkeys`); true = it was an action's key and is consumed.
+    callback hotkey(string, bool, bool, bool, bool, bool, bool) -> bool;
+    // A rating key (0 = no rating): the Browse selection, the selected medium of the tab, or the open fullscreen.
+    callback rate-key(int);
     // A key of the image editor in the tab view: 0 = Esc, 1 = Enter, 2 = Ctrl+S, 3 = Ctrl+Shift+S, 4 = Ctrl+Z,
     // 5 = Ctrl+Shift+Z / Ctrl+Y. True = the editor used it; otherwise the key keeps its usual meaning.
     callback edit-key(int /* code */) -> bool;
@@ -554,6 +560,19 @@ export component MainWindow inherits Window {
         media-toolbar.focus-search();
     }
 
+    /// The rows one page of the Browse view moves (the page keys).
+    pure public function media-page-rows() -> int {
+        return root.is-table-view ? table-view.get-page-rows() : grid-view.get-page-rows();
+    }
+
+    /// Switches the Browse view between thumbnails and the table, like the toolbar's button.
+    public function toggle-table-view() {
+        let new-is-table = !root.is-table-view;
+        let anchor-top-idx = new-is-table ? grid-view.get-top-visible-index() : table-view.get-top-visible-index();
+        root.is-table-view = new-is-table;
+        root.view-mode-toggled-with-index(new-is-table, anchor-top-idx);
+    }
+
     forward-focus: main-window-focus;
     main-window-focus := FocusScope {
         key-pressed(event) => {
@@ -585,205 +604,34 @@ export component MainWindow inherits Window {
                 return reject;
             }
 
-            // The crop tools of the tab view come first: Esc cancels the one of the selected picture (else the one opened last), Enter applies, Ctrl+S saves,
-            // Ctrl+Z undoes. Not while a text input has the focus.
-            if root.active-view-mode == 1 && !root.is-text-input-focused {
-                if event.text == Key.Escape && root.edit-key(0) {
+            // Esc is fixed: the crop tool of the tab view first (the selected picture's, else the one opened last), then a selection
+            // of tabs; in Browse a running type-ahead search, then the media selection.
+            if event.text == Key.Escape && !root.is-text-input-focused {
+                if root.active-view-mode == 1 && root.edit-key(0) {
                     return accept;
                 }
-                if event.text == Key.Return && root.edit-key(1) {
-                    return accept;
-                }
-                if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.alt {
-                    if (event.text == "s" || event.text == "S" || event.text == "\u{13}") && root.edit-key(event.modifiers.shift ? 3 : 2) {
-                        return accept;
-                    }
-                    if (event.text == "z" || event.text == "Z" || event.text == "\u{1a}") && root.edit-key(event.modifiers.shift ? 5 : 4) {
-                        return accept;
-                    }
-                    if (event.text == "y" || event.text == "Y" || event.text == "\u{19}") && root.edit-key(5) {
-                        return accept;
-                    }
-                }
-            }
-
-            // Esc ends the multi-selection of tabs (only while one exists and no text input has the focus)
-            if event.text == Key.Escape && root.has-tab-selection && !root.is-text-input-focused {
-                root.tab-selection-cleared();
-                return accept;
-            }
-
-            // Rating hotkeys Ctrl+0..5 (and the plain digits in a viewer tab): the Browse selection or the media of the tab. Not while a text input has the focus.
-            if !root.is-text-input-focused && (root.active-view-mode == 0 || root.active-view-mode == 1) {
-                if root.rating-hotkey(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta, event.repeat) {
+                if root.has-tab-selection {
+                    root.tab-selection-cleared();
                     return accept;
                 }
             }
 
-            // F2 Shortcut for file renaming across Browse, Tab, and Tab Grid modes
-            if event.text == Key.F2 && !root.is-text-input-focused {
-                root.request-rename();
-                return accept;
-            }
-
-            // DEL Shortcut for media file or folder deletion in Browse mode, the selected medium in a viewer tab (Disabled while editing text inputs)
-            if event.text == Key.Delete && !root.is-text-input-focused {
-                if root.active-view-mode == 0 {
-                    root.request-delete();
-                    return accept;
-                }
-                if root.active-view-mode == 1 {
-                    root.viewer-delete-key();
-                    return accept;
-                }
-            }
-
-            if (event.modifiers.control || event.modifiers.meta) && (event.text == "w" || event.text == "W" || event.text == "\u{17}") {
-                if root.active-view-mode == 1 {
-                    root.viewer-close-tab();
-                    return accept;
-                }
-            }
-
-            if (event.modifiers.control || event.modifiers.meta) && (event.text == "f" || event.text == "F" || event.text == "\u{06}") {
-                if root.active-view-mode == 0 {
-                    media-toolbar.focus-search();
-                    return accept;
-                }
-            }
-
-            // F3 puts the cursor into the filter field, like Ctrl+F
-            if event.text == Key.F3 && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
-                if root.active-view-mode == 0 {
-                    media-toolbar.focus-search();
-                    return accept;
-                }
-            }
-
-            // Selection & Keyboard navigation in Browse View (Disabled while editing text input fields)
+            // Type-ahead find: printable keys of the Browse view jump to the item whose name starts with what was typed;
+            // Backspace and Escape belong to a running search first. Every other key ends it (Rust decides, the key goes on).
             if root.active-view-mode == 0 && !root.is-text-input-focused {
-                // 0. Type-ahead find: printable keys jump to the item whose name starts with what was typed; Backspace and Escape
-                // belong to a running search first. Every other key ends it (Rust decides, the key then goes on below).
                 if root.type-ahead-key(event.text, event.modifiers.control || event.modifiers.alt || event.modifiers.meta) {
                     return accept;
                 }
-
-                // 1. Deselect All: Ctrl+Shift+A (prioritized over Ctrl+A)
-                if (event.modifiers.control || event.modifiers.meta) && event.modifiers.shift && (event.text == "a" || event.text == "A" || event.text == "\u{01}") {
-                    root.clear-media-selection();
-                    return accept;
-                }
-
-                // 2. Select All: Ctrl+A
-                if (event.modifiers.control || event.modifiers.meta) && !event.modifiers.shift && (event.text == "a" || event.text == "A" || event.text == "\u{01}") {
-                    root.select-all-media();
-                    return accept;
-                }
-
-                // 2b. Enter opens the selected folder row (or medium) of the Browse view
-                if event.text == Key.Return && !event.modifiers.control && !event.modifiers.alt {
-                    root.browse-enter-pressed();
-                    return accept;
-                }
-
-                // 2c. Ctrl+Shift+N creates a new folder in the open folder (only where the toolbar button is enabled)
-                if (event.modifiers.control || event.modifiers.meta) && event.modifiers.shift && (event.text == "n" || event.text == "N" || event.text == "\u{0e}") {
-                    if root.is-new-folder-btn-enabled {
-                        root.new-folder-clicked();
-                    }
-                    return accept;
-                }
-
-                // 2d. Backspace and Alt+Up go to the parent folder, Alt+Left / Alt+Right go back / forward through the visited folders
-                if event.text == Key.Backspace && !event.modifiers.control && !event.modifiers.alt {
-                    root.browse-go-up-requested();
-                    return accept;
-                }
-                if event.modifiers.alt && !event.modifiers.control && event.text == Key.UpArrow {
-                    root.browse-go-up-requested();
-                    return accept;
-                }
-                if event.modifiers.alt && !event.modifiers.control && event.text == Key.LeftArrow {
-                    root.browse-history-requested(-1);
-                    return accept;
-                }
-                if event.modifiers.alt && !event.modifiers.control && event.text == Key.RightArrow {
-                    root.browse-history-requested(1);
-                    return accept;
-                }
-
-                // 3. Quick Escape in Browse View clears selection if no popups or dialogs are active
                 if event.text == Key.Escape {
                     root.clear-media-selection();
                     return accept;
                 }
-
-                // 4. Directional Keyboard Navigation (Page rows queried directly from active view)
-                let is-shift = event.modifiers.shift;
-                let page-rows = root.is-table-view ? table-view.get-page-rows() : grid-view.get-page-rows();
-
-                if event.text == Key.UpArrow {
-                    root.media-navigate(0 /* Up */, is-shift, page-rows);
-                    return accept;
-                }
-                if event.text == Key.DownArrow {
-                    root.media-navigate(1 /* Down */, is-shift, page-rows);
-                    return accept;
-                }
-                if event.text == Key.LeftArrow {
-                    root.media-navigate(2 /* Left */, is-shift, page-rows);
-                    return accept;
-                }
-                if event.text == Key.RightArrow {
-                    root.media-navigate(3 /* Right */, is-shift, page-rows);
-                    return accept;
-                }
-                if event.text == Key.PageUp {
-                    root.media-navigate(4 /* PageUp */, is-shift, page-rows);
-                    return accept;
-                }
-                if event.text == Key.PageDown {
-                    root.media-navigate(5 /* PageDown */, is-shift, page-rows);
-                    return accept;
-                }
-                if event.text == Key.Home {
-                    root.media-navigate(6 /* Home */, is-shift, page-rows);
-                    return accept;
-                }
-                if event.text == Key.End {
-                    root.media-navigate(7 /* End */, is-shift, page-rows);
-                    return accept;
-                }
             }
 
-            if root.active-view-mode == 1 {
-                if event.text == Key.F5 {
-                    root.viewer-refresh-key();
-                    return accept;
-                }
-                // Zoom of the selected picture: Ctrl+Backspace resets (Ctrl+0 rates), Ctrl++ / Ctrl+- step.
-                if event.modifiers.control && !event.modifiers.alt && !root.is-text-input-focused {
-                    if event.text == Key.Backspace {
-                        root.viewer-zoom-key(0);
-                        return accept;
-                    }
-                    if event.text == "+" || event.text == "=" {
-                        root.viewer-zoom-key(1);
-                        return accept;
-                    }
-                    if event.text == "-" || event.text == "_" {
-                        root.viewer-zoom-key(2);
-                        return accept;
-                    }
-                }
-                if event.text == Key.LeftArrow {
-                    root.viewer-previous();
-                    return accept;
-                }
-                if event.text == Key.RightArrow {
-                    root.viewer-next();
-                    return accept;
-                }
+            // Every other key: the keymap (Settings > Hotkeys).
+            if root.hotkey(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.shift, event.modifiers.meta,
+                event.repeat, root.is-text-input-focused) {
+                return accept;
             }
             return reject;
         }
@@ -945,9 +793,9 @@ export component MainWindow inherits Window {
                         new-folder-clicked => { root.new-folder-clicked(); }
                         show-folders-toggled(on) => { root.show-folders-toggled(on); }
                         view-mode-toggled(new-is-table) => {
-                            let anchor-top-idx = new-is-table ? grid-view.get-top-visible-index() : table-view.get-top-visible-index();
-                            root.is-table-view = new-is-table;
-                            root.view-mode-toggled-with-index(new-is-table, anchor-top-idx);
+                            if new-is-table != root.is-table-view {
+                                root.toggle-table-view();
+                            }
                         }
                     }
 

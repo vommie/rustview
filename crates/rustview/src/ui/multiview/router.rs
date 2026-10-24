@@ -8,8 +8,9 @@ use super::handle::MultiviewHandle;
 use super::session::{self, Session};
 use super::session_convert;
 use super::tab_host;
+use crate::ui::hotkeys::Trigger;
+use crate::ui::keymap::Chord;
 use crate::viewer::multiview::click::ClickKind;
-use crate::viewer::multiview::command::MultiviewCommand;
 use crate::viewer::multiview::events::{MultiviewEventSink, PlayerEvent};
 use crate::viewer::multiview::instance::WeakInstance;
 use crate::viewer::multiview::media_actions::MediaActionId;
@@ -119,31 +120,12 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             return;
         }
         PlayerEvent::ToggleFullscreen => (RoutedEvent::ToggleFullscreen, ClickKind::None),
-        PlayerEvent::CloseTab => (RoutedEvent::CloseTab, ClickKind::None),
-        // F2 and DEL in a video's window act on the selected medium, whichever video reported them.
-        PlayerEvent::RenameRequested => {
-            let mode = instance.lock().host_mode();
-            match mode {
-                HostMode::Fullscreen => {
-                    let action = super::commands::run(&instance, MultiviewCommand::Rename);
-                    drop(instance);
-                    execute(action, handle, None);
-                }
-                HostMode::TabView => handle.request_tab_rename(),
-                HostMode::TabGrid | HostMode::Hidden => {}
-            }
-            return;
-        }
-        PlayerEvent::DeleteRequested => {
-            let action = super::commands::run(&instance, MultiviewCommand::Delete);
+        // A key of the keymap in a video's window: resolved for the host of the instance, like a key of the host's own window
+        // (it acts on the selected medium, whichever video reported it).
+        PlayerEvent::Key(chord_text) => {
             let mode = instance.lock().host_mode();
             drop(instance);
-            execute(action, handle, None);
-            refresh_host(handle, mode);
-            return;
-        }
-        PlayerEvent::RatingRequested(rating) => {
-            handle.rate_visible(&instance, rating);
+            video_key(handle, mode, &chord_text);
             return;
         }
         // A plain click on a video selects its tile (Slint never sees clicks on the native window).
@@ -176,6 +158,31 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
         tracing::info!(?action, "[Multiview: Click] Ctrl+double click on a video");
     }
     execute(action, handle, Some(instance_id));
+}
+
+fn video_key(handle: &MultiviewHandle, mode: HostMode, chord_text: &str) {
+    let chord = match Chord::parse(chord_text) {
+        Ok(chord) => chord,
+        Err(e) => {
+            tracing::warn!(error = %e, "[Multiview: Keys] A video window reported a key that is no chord");
+            return;
+        }
+    };
+    let trigger = Trigger::Chord(&chord);
+    let used = match mode {
+        HostMode::Fullscreen => super::session_keys::dispatch(&trigger),
+        HostMode::TabView | HostMode::TabGrid => handle
+            .main_window()
+            .and_then(|w| w.upgrade())
+            .is_some_and(|w| crate::ui::hotkeys::main_window::dispatch(&w, &trigger, false)),
+        HostMode::Hidden => false,
+    };
+    tracing::debug!(
+        chord = chord.text(),
+        ?mode,
+        used,
+        "[Multiview: Keys] Key from a video window"
+    );
 }
 
 /// Shows the changed state of an instance in the host that presents it.

@@ -1,9 +1,9 @@
-//! The rating hotkeys Ctrl+0 (no rating) to Ctrl+5 of the main window.
+//! The rating keys of the main window (Settings > Hotkeys; Ctrl+0 for no rating to Ctrl+5 by default).
 //!
 //! The Browse view rates the selected media (never folder rows), a viewer tab rates the selected medium of its Multiview, and
 //! while a fullscreen Multiview is open the keys belong to it. The keys of the fullscreen window and of the video windows
-//! (mpv) arrive through `ui::multiview::rating`; every path ends in `BridgeTags::apply_rating_to_ids`, the one that the Tag
-//! & Rate panel and the context menu use.
+//! arrive through `ui::multiview::rating`; every path ends in `BridgeTags::apply_rating_to_ids`, the one that the Tag & Rate
+//! panel and the context menu use. Which key is a rating key, and key repeat, are decided by the keymap (`ui::hotkeys`).
 
 mod targets;
 
@@ -14,7 +14,6 @@ use crate::ui::multiview::{MultiviewHandle, tab_host};
 use crate::ui::state::UiState;
 use crate::ui::tags::{BridgeTags, TagActionContext};
 use crate::viewer::ViewerTabManager;
-use crate::viewer::multiview::rating_keys::rating_of_key;
 use parking_lot::RwLock;
 use rustview_core::library::Library;
 use rustview_core::library::models::MediaId;
@@ -46,27 +45,18 @@ pub fn standing_of(state: &UiState, library: &Library, id: MediaId) -> Standing 
     }
 }
 
-/// A key press of the main window. Returns whether it was a rating key (it is then consumed, also when nothing is rated). Keys
-/// that repeat while held are consumed without rating again.
-pub fn handle_key(params: &RatingHotkeyParams<'_>, text: &str, modifiers: (bool, bool, bool), repeat: bool) -> bool {
-    let (ctrl, alt, meta) = modifiers;
-    let viewer_tab = params.window.get_active_view_mode() == 1;
-    let Some(rating) = rating_of_key(text, ctrl, alt, meta, viewer_tab) else {
-        return false;
-    };
-    if repeat {
-        return true;
-    }
+/// A rating key of the main window (`rating` 0 = no rating): the open fullscreen, else the view the main window shows.
+pub fn rate(params: &RatingHotkeyParams<'_>, rating: u8) {
     if params.window.get_is_modal_locked() || params.window.get_is_fullscreen_locked() {
         tracing::debug!(
             rating,
             "[RatingHotkey] Ignored: a dialog or the fullscreen has the main window locked"
         );
-        return true;
+        return;
     }
     if params.fullscreen.is_open() {
         params.fullscreen.rate_fullscreen(rating);
-        return true;
+        return;
     }
     match params.window.get_active_view_mode() {
         0 => rate_browse_selection(params, rating),
@@ -79,7 +69,6 @@ pub fn handle_key(params: &RatingHotkeyParams<'_>, text: &str, modifiers: (bool,
         }
         mode => tracing::debug!(rating, mode, "[RatingHotkey] Ignored: this view has nothing to rate"),
     }
-    true
 }
 
 /// Rates the selected media of the Browse view. Folder rows are never part of that selection.

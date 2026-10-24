@@ -10,6 +10,7 @@ pub struct SettingsDiff {
     pub root_folder_changed: bool,
     pub general_behavior_changed: bool,
     pub hold_to_confirm_changed: bool,
+    pub hotkeys_changed: bool,
 
     // Folders Subsystem
     pub folder_tree_presentation_changed: bool,
@@ -68,6 +69,7 @@ impl SettingsDiff {
             || old.general.deletion_mode != new.general.deletion_mode
             || old.general.ignore_nested_mounts != new.general.ignore_nested_mounts;
         let hold_to_confirm_changed = old.general.hold_to_confirm_ms != new.general.hold_to_confirm_ms;
+        let hotkeys_changed = old.hotkeys != new.hotkeys;
 
         let folder_tree_presentation_changed = old.folders.show_deleted_folders != new.folders.show_deleted_folders
             || old.folders.show_folder_metrics != new.folders.show_folder_metrics
@@ -148,6 +150,7 @@ impl SettingsDiff {
         let has_changes = root_folder_changed
             || general_behavior_changed
             || hold_to_confirm_changed
+            || hotkeys_changed
             || folder_tree_presentation_changed
             || folder_tree_behavior_changed
             || folder_expansion_changed
@@ -173,6 +176,7 @@ impl SettingsDiff {
             root_folder_changed,
             general_behavior_changed,
             hold_to_confirm_changed,
+            hotkeys_changed,
             folder_tree_presentation_changed,
             folder_tree_behavior_changed,
             folder_expansion_changed,
@@ -233,6 +237,13 @@ impl SettingsDiff {
             changes.push(format!(
                 "General: ignore_nested_mounts ({} -> {})",
                 old.general.ignore_nested_mounts, new.general.ignore_nested_mounts
+            ));
+        }
+        if self.hotkeys_changed {
+            changes.push(format!(
+                "Hotkeys: {} changed action(s) -> {}",
+                old.hotkeys.len(),
+                new.hotkeys.len()
             ));
         }
         if self.hold_to_confirm_changed {

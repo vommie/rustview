@@ -99,6 +99,10 @@ impl UiBridge {
                     type_ahead::config::apply(&new_clone.appearance);
                 }
 
+                if diff_clone.hotkeys_changed {
+                    crate::ui::hotkeys::apply(&new_clone.hotkeys);
+                }
+
                 if diff_clone.hold_to_confirm_changed {
                     crate::ui::hold_confirm::install(&window, new_clone.general.hold_to_confirm_ms);
                 }

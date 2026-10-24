@@ -45,7 +45,6 @@ pub mod model;
 pub mod navigation;
 pub mod prefs;
 pub mod primary_actions;
-pub mod rating_keys;
 pub mod route;
 pub mod teardown;
 pub mod tile;

@@ -9,26 +9,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 mod events;
+pub mod keys;
 pub mod overlay;
 mod playback;
 mod rating;
 
 pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
 pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;
-pub type MpvCloseTabCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvGridClickCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
-pub type MpvRenameCallback = Arc<dyn Fn() + Send + Sync>;
-pub type MpvDeleteCallback = Arc<dyn Fn() + Send + Sync>;
-/// Called from the observer thread when a rating key (Ctrl+0..5) was pressed in the player's window.
-pub type MpvRatingCallback = Arc<dyn Fn(u8) + Send + Sync>;
-
-/// The message mpv sends to the application when DEL is pressed in its window (`script-message` reaches every client).
-const DELETE_KEY_MESSAGE: &str = "rustview-delete";
-
-fn bind_delete_key(mpv: &Mpv) {
-    let _ = mpv.command("keybind", &["DEL", &format!("script-message {DELETE_KEY_MESSAGE}")]);
-}
+/// Called from the observer thread when a key of the keymap was pressed in the player's window (`keys`), with its chord text.
+pub type MpvKeyCallback = Arc<dyn Fn(&str) + Send + Sync>;
 
 /// The message mpv sends when its window is clicked (a plain left click: the Multiview selects the tile; never a pause).
 const CLICK_MESSAGE: &str = "rustview-click";
@@ -64,15 +55,12 @@ pub struct MpvPlayer {
     observer_running: Arc<AtomicBool>,
     callbacks: Arc<RwLock<Vec<MpvEventCallback>>>,
     fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>>,
-    close_tab_callbacks: Arc<RwLock<Vec<MpvCloseTabCallback>>>,
     grid_left_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
-    rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>>,
-    delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>>,
-    rating_callbacks: Arc<RwLock<Vec<MpvRatingCallback>>>,
+    key_callbacks: Arc<RwLock<Vec<MpvKeyCallback>>>,
     click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
     escape_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
@@ -140,29 +128,18 @@ impl MpvPlayer {
         let _ = mpv_instance.set_property("script-opts", "osc-deadzonesize=0,osc-minmousemove=0");
 
         // Ensure window states are clean
-        let _ = mpv_instance.set_property("window-minimized", false);
         let _ = mpv_instance.set_property("window-maximized", false);
         let _ = mpv_instance.set_property("ontop", false);
         let _ = mpv_instance.set_property("border", true);
-        let _ = mpv_instance.set_property("snap-window", false);
 
         // A single left click never pauses the video; it is reported, so the Multiview can select the tile
         bind_click(&mpv_instance);
 
-        // Bind double-click, middle-click, 'f' and 'F' in MPV to cycle fullscreen; Esc is reported on its own
+        // Bind double-click and middle-click in MPV to cycle fullscreen; Esc is reported on its own. The keys of RustView's
+        // actions (rename, delete, rating, close, fullscreen, ...) come from the keymap (`keys::install` below).
         let _ = mpv_instance.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
-        let _ = mpv_instance.command("keybind", &["f", "cycle fullscreen"]);
-        let _ = mpv_instance.command("keybind", &["F", "cycle fullscreen"]);
         bind_escape(&mpv_instance);
-
-        // Bind F2 and f2 in MPV without OSD to toggle snap-window (intercepted by RustView observer for rename)
-        let _ = mpv_instance.command("keybind", &["F2", "no-osd cycle snap-window"]);
-        let _ = mpv_instance.command("keybind", &["f2", "no-osd cycle snap-window"]);
-
-        // DEL is reported to the application as a client message; the Multiview turns it into its delete flow
-        bind_delete_key(&mpv_instance);
-        rating::bind_rating_keys(&mpv_instance);
 
         // Bind Ctrl+Click and Ctrl+DoubleClick in MPV to toggle window-maximized
         let convert_keys = [
@@ -181,30 +158,13 @@ impl MpvPlayer {
             let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-maximized"]);
         }
 
-        // Bind Ctrl+W variations in MPV without OSD to toggle window-minimized
-        let close_keys = [
-            "ctrl+w",
-            "Ctrl+w",
-            "ctrl+W",
-            "Ctrl+W",
-            "meta+w",
-            "Meta+w",
-            "cmd+w",
-            "Command+w",
-            "ctrl+F4",
-            "Ctrl+F4",
-        ];
-        for k in close_keys {
-            let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-minimized"]);
-        }
-
         // Ignore quit keys in MPV so Slint handles navigation and lifecycle
         let _ = mpv_instance.command("keybind", &["q", "ignore"]);
         let _ = mpv_instance.command("keybind", &["Q", "ignore"]);
 
         // Define the dedicated tabgrid input section for Grid View (active ONLY in Tab-Grid mode).
         // This isolates wheel and click hijacking to Tab-Grid mode without overriding or ignoring normal wheel bindings.
-        let tabgrid_bindings = "MBTN_LEFT no-osd cycle ontop\nMBTN_MID no-osd cycle border\nWHEEL_UP no-osd cycle deinterlace\nWHEEL_DOWN no-osd cycle sub-visibility\nF2 no-osd cycle snap-window\nf2 no-osd cycle snap-window\n";
+        let tabgrid_bindings = "MBTN_LEFT no-osd cycle ontop\nMBTN_MID no-osd cycle border\nWHEEL_UP no-osd cycle deinterlace\nWHEEL_DOWN no-osd cycle sub-visibility\n";
         if let Err(e) = mpv_instance.command("define-section", &["rustview_tabgrid", tabgrid_bindings, "force"]) {
             tracing::warn!(
                 error = ?e,
@@ -217,6 +177,7 @@ impl MpvPlayer {
         }
 
         let mpv_arc = Arc::new(mpv_instance);
+        keys::install(&mpv_arc);
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
         let current_file_path = Arc::new(RwLock::new(None));
         let attached_wid = Arc::new(RwLock::new(None));
@@ -226,15 +187,12 @@ impl MpvPlayer {
         let observer_running = Arc::new(AtomicBool::new(true));
         let callbacks: Arc<RwLock<Vec<MpvEventCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let fullscreen_callbacks: Arc<RwLock<Vec<MpvFullscreenCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let close_tab_callbacks: Arc<RwLock<Vec<MpvCloseTabCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let grid_left_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let grid_middle_click_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let rename_callbacks: Arc<RwLock<Vec<MpvRenameCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let delete_callbacks: Arc<RwLock<Vec<MpvDeleteCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let rating_callbacks: Arc<RwLock<Vec<MpvRatingCallback>>> = Arc::new(RwLock::new(Vec::new()));
+        let key_callbacks: Arc<RwLock<Vec<MpvKeyCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let escape_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
@@ -251,15 +209,12 @@ impl MpvPlayer {
             observer_running: observer_running.clone(),
             callbacks: callbacks.clone(),
             fullscreen_callbacks: fullscreen_callbacks.clone(),
-            close_tab_callbacks: close_tab_callbacks.clone(),
             grid_left_click_callbacks: grid_left_click_callbacks.clone(),
             grid_middle_click_callbacks: grid_middle_click_callbacks.clone(),
             grid_wheel_up_callbacks: grid_wheel_up_callbacks.clone(),
             grid_wheel_down_callbacks: grid_wheel_down_callbacks.clone(),
             convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
-            rename_callbacks: rename_callbacks.clone(),
-            delete_callbacks: delete_callbacks.clone(),
-            rating_callbacks: rating_callbacks.clone(),
+            key_callbacks: key_callbacks.clone(),
             click_callbacks: click_callbacks.clone(),
             escape_callbacks: escape_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
@@ -271,7 +226,7 @@ impl MpvPlayer {
 
         tracing::info!(
             elapsed_us = t0.elapsed().as_micros(),
-            "[MpvPlayer: Init] Native libmpv2 player engine initialized with unreserved mouse wheel pass-through and F2 rename interception"
+            "[MpvPlayer: Init] Native libmpv2 player engine initialized with unreserved mouse wheel pass-through and the keys of the keymap"
         );
 
         Ok(player)
@@ -338,11 +293,6 @@ impl MpvPlayer {
             let _ = self.mpv.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
             let _ = self.mpv.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
             bind_escape(&self.mpv);
-
-            // Re-assert F2 binding
-            let _ = self.mpv.command("keybind", &["F2", "no-osd cycle snap-window"]);
-            let _ = self.mpv.command("keybind", &["f2", "no-osd cycle snap-window"]);
-            bind_delete_key(&self.mpv);
 
             let convert_keys = [
                 "Ctrl+MBTN_LEFT",

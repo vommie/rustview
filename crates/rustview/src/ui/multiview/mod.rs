@@ -21,6 +21,7 @@ mod router;
 mod session;
 mod session_convert;
 mod session_input;
+mod session_keys;
 pub mod tab_host;
 mod views;
 

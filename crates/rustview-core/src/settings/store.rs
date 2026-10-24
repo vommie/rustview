@@ -491,7 +491,7 @@ mod selection_tests {
 }
 
 #[cfg(test)]
-mod hold_tests {
+mod added_settings_tests {
     use super::*;
     use crate::settings::schema::DEFAULT_HOLD_TO_CONFIRM_MS;
 
@@ -508,5 +508,25 @@ mod hold_tests {
         let mut off: AppSettings = serde_json::from_str(r#"{"general": {"hold_to_confirm_ms": 0}}"#).unwrap();
         SettingsStore::validate_and_sanitize(&mut off);
         assert_eq!(off.general.hold_to_confirm_ms, 0, "0 = a click is enough");
+    }
+
+    #[test]
+    fn hotkeys_are_additive_and_a_hand_edited_entry_never_breaks_loading() {
+        let old: AppSettings = serde_json::from_str(r#"{"view": {"is_table_view": true}}"#).unwrap();
+        assert!(old.hotkeys.is_empty());
+        assert_eq!(
+            old.view.hotkeys_page,
+            crate::settings::schema::HotkeysPageState::default()
+        );
+        assert!(old.view.is_table_view);
+
+        let edited: AppSettings = serde_json::from_str(
+            r#"{"hotkeys": {"tab.save": ["F9"], "tab.undo": "Ctrl+Z", "x": 3},
+                "view": {"hotkeys_page": {"filter": "f2", "only_changed": true, "collapsed_areas": ["player"]}}}"#,
+        )
+        .unwrap();
+        assert_eq!(edited.hotkeys.len(), 3, "kept as values; the app repairs them");
+        assert_eq!(edited.view.hotkeys_page.filter, "f2");
+        assert_eq!(edited.view.hotkeys_page.collapsed_areas, vec!["player".to_owned()]);
     }
 }

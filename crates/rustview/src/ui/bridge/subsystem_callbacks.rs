@@ -6,7 +6,7 @@ use crate::ui::favorites::BridgeFavorites;
 use crate::ui::file_dialogs::FileRenameDialogController;
 use crate::ui::folder_tree::BridgeFolders;
 use crate::ui::media::BridgeMedia;
-use crate::ui::rating_hotkey::{RatingHotkeyParams, handle_key as handle_rating_key};
+use crate::ui::rating_hotkey::{RatingHotkeyParams, rate as rate_by_key};
 use crate::ui::selection::BridgeFileSelection;
 use crate::ui::selection::keyboard::{KeyboardNavigateParams, handle_keyboard_navigate};
 use crate::ui::sidebar::BridgeSidebarPanelTabs;
@@ -17,7 +17,7 @@ use crate::ui::tags::BridgeTags;
 use crate::ui::tags::history_bridge::BridgeTagHistory;
 use crate::ui::type_ahead::{TypeAheadParams, TypeAheadState, handle_type_ahead_key};
 use parking_lot::Mutex;
-use rustview_core::util::cast::{Az, WrappingAs};
+use rustview_core::util::cast::{Az, SaturatingAs, WrappingAs};
 
 use slint::ComponentHandle;
 use std::sync::Arc;
@@ -333,8 +333,8 @@ impl UiBridge {
         let st = self.state.clone();
         let fullscreen = self.fullscreen.clone();
 
-        self.window.on_rating_hotkey(move |text, ctrl, alt, meta, repeat| {
-            handle_rating_key(
+        self.window.on_rate_key(move |rating| {
+            rate_by_key(
                 &RatingHotkeyParams {
                     window: &win,
                     library: &lib,
@@ -344,10 +344,8 @@ impl UiBridge {
                     state: &st,
                     fullscreen: &fullscreen,
                 },
-                text.as_str(),
-                (ctrl, alt, meta),
-                repeat,
-            )
+                rating.clamp(0, 5).saturating_as::<u8>(),
+            );
         });
     }
 

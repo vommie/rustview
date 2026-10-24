@@ -17,13 +17,9 @@ pub type DecodedImage = Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), String>
 
 pub enum PlayerEvent {
     ToggleFullscreen,
-    CloseTab,
-    /// F2 in the window of a player (it acts on the selected tile, whichever video reported it).
-    RenameRequested,
-    /// DEL was pressed in a video's window.
-    DeleteRequested,
-    /// A rating key (Ctrl+0..5) was pressed in a video's window.
-    RatingRequested(u8),
+    /// A key of the keymap was pressed in a video's window (its chord text); it is resolved for the host of the instance,
+    /// like a key of the host's own window, and acts on the selected tile.
+    Key(String),
     /// A plain left click on the video of this tile (it becomes the selected tile).
     Clicked(TileKey),
     /// Esc in a video's window.

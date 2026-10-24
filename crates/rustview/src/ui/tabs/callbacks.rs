@@ -189,7 +189,7 @@ impl BridgeViewerTabs {
             }
         });
 
-        // 7a. F5 in a viewer tab: the selected medium of its Multiview is read again (the hint shows when none is selected)
+        // 7a. The refresh key of a Multiview: the selected medium is read again (the key shows the hint when none is selected)
         let win_k_refresh = window.clone_strong();
         let tm_k_refresh = tab_manager.clone();
         let lib_k_refresh = library.clone();
@@ -197,7 +197,7 @@ impl BridgeViewerTabs {
         let set_k_refresh = settings.clone();
         let st_k_refresh = state.clone();
         let fs_k_refresh = fullscreen.clone();
-        window.on_viewer_refresh_key(move || {
+        window.on_refresh_medium(move |media_id| {
             if BridgeMedia::is_system_busy(&win_k_refresh, &thumb_k_refresh, &st_k_refresh) {
                 StatusBarBridge::warn(
                     &win_k_refresh,
@@ -205,12 +205,10 @@ impl BridgeViewerTabs {
                 );
                 return;
             }
-            let Some(media_id) = crate::ui::multiview::tab_host::key_target_media() else {
-                return;
-            };
+            let media_id = media_id.wrapping_as::<u64>();
             tracing::info!(
                 media_id,
-                "[BridgeViewerTabs: Refresh] F5 refreshes the selected medium of the tab"
+                "[BridgeViewerTabs: Refresh] The refresh key refreshes the selected medium"
             );
             BridgeMedia::refresh_media_ids(
                 &win_k_refresh,

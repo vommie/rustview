@@ -1,6 +1,6 @@
 //! Subscriber callbacks and the mpv event observer thread.
 
-use super::{CLICK_MESSAGE, DELETE_KEY_MESSAGE, ESCAPE_MESSAGE, MpvPlayer};
+use super::{CLICK_MESSAGE, ESCAPE_MESSAGE, MpvPlayer};
 use crate::viewer::types::MpvPlaybackState;
 use rustview_core::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
 use rustview_core::util::cast::Az;
@@ -24,39 +24,12 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
-    pub fn on_close_tab<F>(&self, callback: F)
+    /// A key of the keymap was pressed in the player's window (`keys`); the callback gets its chord text.
+    pub fn on_key<F>(&self, callback: F)
     where
-        F: Fn() + Send + Sync + 'static,
+        F: Fn(&str) + Send + Sync + 'static,
     {
-        let mut cbs = self.close_tab_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
-    pub fn on_rename_requested<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.rename_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
-    pub fn on_delete_requested<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.delete_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
-    /// A rating key (Ctrl+0..5) was pressed in the player's window; the callback gets the rating.
-    pub fn on_rating_requested<F>(&self, callback: F)
-    where
-        F: Fn(u8) + Send + Sync + 'static,
-    {
-        let mut cbs = self.rating_callbacks.write();
+        let mut cbs = self.key_callbacks.write();
         cbs.clear();
         cbs.push(Arc::new(callback));
     }
@@ -164,15 +137,12 @@ impl MpvPlayer {
         let is_tab_grid_mode = self.is_tab_grid_mode.clone();
         let callbacks = self.callbacks.clone();
         let fs_callbacks = self.fullscreen_callbacks.clone();
-        let close_callbacks = self.close_tab_callbacks.clone();
         let grid_left_callbacks = self.grid_left_click_callbacks.clone();
         let grid_middle_callbacks = self.grid_middle_click_callbacks.clone();
         let grid_wheel_up_callbacks = self.grid_wheel_up_callbacks.clone();
         let grid_wheel_down_callbacks = self.grid_wheel_down_callbacks.clone();
         let convert_callbacks = self.convert_to_tab_callbacks.clone();
-        let rename_callbacks = self.rename_callbacks.clone();
-        let delete_callbacks = self.delete_callbacks.clone();
-        let rating_callbacks = self.rating_callbacks.clone();
+        let key_callbacks = self.key_callbacks.clone();
         let click_callbacks = self.click_callbacks.clone();
         let escape_callbacks = self.escape_callbacks.clone();
         let mute_callbacks = self.mute_callbacks.clone();
@@ -199,10 +169,9 @@ impl MpvPlayer {
                     if let Some(Ok(libmpv2::events::Event::ClientMessage(args))) =
                         mpv.wait_event(poll_ms.az::<f64>() / 1000.0)
                     {
-                        if args.first() == Some(&DELETE_KEY_MESSAGE) {
-                            let delete_cbs = delete_callbacks.read().clone();
-                            for cb in delete_cbs {
-                                cb();
+                        if let Some(chord) = super::keys::chord_of_message(&args) {
+                            for cb in key_callbacks.read().clone() {
+                                cb(chord);
                             }
                         } else if args.first() == Some(&CLICK_MESSAGE) {
                             for cb in click_callbacks.read().clone() {
@@ -211,11 +180,6 @@ impl MpvPlayer {
                         } else if args.first() == Some(&ESCAPE_MESSAGE) {
                             for cb in escape_callbacks.read().clone() {
                                 cb();
-                            }
-                        } else if let Some(rating) = super::rating::rating_of_message(&args) {
-                            let rating_cbs = rating_callbacks.read().clone();
-                            for cb in rating_cbs {
-                                cb(rating);
                             }
                         }
                     }
@@ -263,17 +227,7 @@ impl MpvPlayer {
                         }
                     }
 
-                    // 2. Intercept F2 Rename Shortcut from MPV via snap-window property toggle
-                    let rename_requested = mpv.get_property::<bool>("snap-window").unwrap_or(false);
-                    if rename_requested {
-                        let _ = mpv.set_property("snap-window", false);
-                        let ren_cbs = rename_callbacks.read().clone();
-                        for cb in ren_cbs {
-                            cb();
-                        }
-                    }
-
-                    // 3. Intercept double-click / middle-click / 'f' Fullscreen triggers from MPV
+                    // 2. Intercept double-click / middle-click Fullscreen triggers from MPV
                     let fs_requested = mpv.get_property::<bool>("fullscreen").unwrap_or(false);
                     if fs_requested {
                         let _ = mpv.set_property("fullscreen", false);
@@ -283,17 +237,7 @@ impl MpvPlayer {
                         }
                     }
 
-                    // 4. Intercept Ctrl+W Close Tab triggers from MPV via window-minimized toggle
-                    let close_requested = mpv.get_property::<bool>("window-minimized").unwrap_or(false);
-                    if close_requested {
-                        let _ = mpv.set_property("window-minimized", false);
-                        let close_cbs = close_callbacks.read().clone();
-                        for cb in close_cbs {
-                            cb();
-                        }
-                    }
-
-                    // 5. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert the fullscreen Multiview to a background tab
+                    // 3. Intercept Ctrl+Click / Ctrl+DoubleClick in Fullscreen to convert the fullscreen Multiview to a background tab
                     let convert_requested = mpv.get_property::<bool>("window-maximized").unwrap_or(false);
                     if convert_requested {
                         let _ = mpv.set_property("window-maximized", false);
@@ -303,7 +247,7 @@ impl MpvPlayer {
                         }
                     }
 
-                    // 6. Sync live playback properties
+                    // 4. Sync live playback properties
                     let pos = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
                     let dur = mpv.get_property::<f64>("duration").unwrap_or(0.0);
                     // The pause state counts as the user's choice only if the view stayed active while it was read.

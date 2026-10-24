@@ -217,6 +217,9 @@ pub struct ViewSettings {
     // Sidebar Panel Tabs Configuration (Dock panel tabs in left sidebar)
     pub left_sidebar_panel_tabs: Vec<String>,
     pub left_sidebar_active_panel_tab: String,
+
+    /// Added in 0.4.4: the state of the Settings page Hotkeys.
+    pub hotkeys_page: super::HotkeysPageState,
 }
 
 impl Default for ViewSettings {
@@ -254,6 +257,7 @@ impl Default for ViewSettings {
                 .map(std::string::ToString::to_string)
                 .collect(),
             left_sidebar_active_panel_tab: DEFAULT_LEFT_SIDEBAR_ACTIVE_PANEL_TAB.to_string(),
+            hotkeys_page: super::HotkeysPageState::default(),
         }
     }
 }

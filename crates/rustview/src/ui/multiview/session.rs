@@ -123,6 +123,15 @@ pub(super) fn instance() -> Option<SharedInstance> {
     })
 }
 
+/// The handle of the open fullscreen.
+pub(super) fn handle() -> Option<MultiviewHandle> {
+    SESSION.with(|cell| {
+        cell.try_borrow()
+            .ok()
+            .and_then(|g| g.as_ref().map(|s| s.handle.clone()))
+    })
+}
+
 fn session_generation() -> Option<u64> {
     SESSION.with(|cell| cell.try_borrow().ok().and_then(|g| g.as_ref().map(|s| s.generation)))
 }
@@ -246,14 +255,7 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
         });
         used
     });
-    win.on_rating_hotkey(|text, ctrl, alt, meta, repeat| {
-        let handle = SESSION.with(|cell| {
-            cell.try_borrow()
-                .ok()
-                .and_then(|g| g.as_ref().map(|s| s.handle.clone()))
-        });
-        handle.is_some_and(|handle| handle.fullscreen_key(text.as_str(), (ctrl, alt, meta), repeat))
-    });
+    super::session_keys::install(&win);
     win.on_gutter_drag_started(|index| with_session(|s| s.drag_started(index.max(0).saturating_as::<usize>())));
     win.on_gutter_dragged(|_, distance| with_session(|s| s.dragged(distance)));
     win.on_gutter_drag_finished(|_| with_session(Session::drag_finished));
@@ -271,7 +273,7 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
 }
 
 /// The persistent window (created on first use); Slint component handles are not `Clone`, so callers upgrade the weak handle.
-fn window_weak() -> Option<slint::Weak<MultiviewFullscreenWindow>> {
+pub(super) fn window_weak() -> Option<slint::Weak<MultiviewFullscreenWindow>> {
     WINDOW.with(|cell| {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {

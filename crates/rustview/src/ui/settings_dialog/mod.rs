@@ -1,4 +1,7 @@
 mod confirmations;
+
+/// The index of the page Hotkeys in the sidebar of the settings window (`ui/settings_sidebar.slint`).
+pub const HOTKEYS_PAGE: i32 = 9;
 mod formats_page;
 mod image_edit_page;
 mod selected_medium;
@@ -74,6 +77,14 @@ impl SettingsDialogController {
             && let Some(mw) = mw_weak.upgrade()
         {
             mw.set_is_modal_locked(false);
+        }
+    }
+
+    /// Opens the window on the page `category` (the index of the sidebar entry, e.g. [`HOTKEYS_PAGE`]).
+    pub fn show_page(&mut self, category: i32) {
+        self.show();
+        if let Some(ref window) = self.settings_window {
+            window.set_active_category(category);
         }
     }
 
