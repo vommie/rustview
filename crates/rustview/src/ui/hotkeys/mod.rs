@@ -177,4 +177,41 @@ mod tests {
         );
         assert_eq!(resolve(&press("q", true, false), &areas, false), Resolved::Pass);
     }
+
+    #[test]
+    fn printable_keys_are_never_actions_of_the_main_window() {
+        let press = |text| {
+            Trigger::Press(KeyPress {
+                text,
+                control: false,
+                alt: false,
+                shift: false,
+                meta: false,
+                repeat: false,
+            })
+        };
+        let printable = ["f", "m", "o", "2", " ", "ä"];
+        // While a text field has the keyboard a printable key is text, also where it is a key of the view (F, Space, M).
+        for areas in [
+            &[Area::General, Area::Browse][..],
+            &[Area::General, Area::Tab],
+            &[Area::General, Area::Player, Area::Tab],
+        ] {
+            for text in printable {
+                assert_eq!(
+                    resolve(&press(text), areas, true),
+                    Resolved::Pass,
+                    "typing {text:?} in {areas:?}"
+                );
+            }
+        }
+        // In Browse they belong to type-ahead find.
+        for text in printable {
+            assert_eq!(
+                resolve(&press(text), &[Area::General, Area::Browse], false),
+                Resolved::Pass,
+                "{text:?}"
+            );
+        }
+    }
 }

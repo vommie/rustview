@@ -210,6 +210,8 @@ export component ContextMenuPopup inherits Rectangle {
     callback request-submenu(int /* depth */, length /* visible_row_y */, int /* menu_index */);
     callback close-submenus-above(int /* depth */);
     callback dismissed();
+    /// A click outside the menu (at its press position): the menu closes and the click goes on to what is under the pointer.
+    callback outside-clicked(length /* x */, length /* y */, PointerEventButton);
 
     property <int> pending-depth: -1;
     property <length> pending-row-y: 0px;
@@ -238,17 +240,25 @@ export component ContextMenuPopup inherits Rectangle {
         }
     }
 
+    // Reports the click on release, so the replayed click (press and release) never meets the real release of this one.
+    // The press position is kept here: `pressed-x`/`pressed-y` of a TouchArea follow the left button only.
     backdrop-touch := TouchArea {
+        property <length> press-x: 0px;
+        property <length> press-y: 0px;
         x: 0px;
         y: 0px;
         width: 100%;
         height: 100%;
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
+                self.press-x = self.mouse-x;
+                self.press-y = self.mouse-y;
+            } else if event.kind == PointerEventKind.up {
+                root.outside-clicked(self.press-x, self.press-y, event.button);
+            } else if event.kind == PointerEventKind.cancel {
                 root.dismissed();
             }
         }
-        clicked => { root.dismissed(); }
     }
 
     for level[depth] in root.levels : Rectangle {

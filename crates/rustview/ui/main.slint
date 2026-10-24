@@ -445,6 +445,7 @@ export component MainWindow inherits Window {
     callback context-menu-request-submenu(int /* depth */, length /* visible_row_y */, int /* menu_index */);
     callback context-menu-close-submenus-above(int /* depth */);
     callback context-menu-dismissed();
+    callback context-menu-outside-clicked(length /* x */, length /* y */, PointerEventButton);
 
     callback search-query-changed(string);
     callback regex-mode-toggled(bool);
@@ -1139,11 +1140,15 @@ export component MainWindow inherits Window {
     }
 
     if root.is-context-menu-open : ContextMenuPopup {
+        // The keys belong to the menu while it is open (the window's key handler closes it with Esc), never to a text
+        // field behind it.
+        init => { main-window-focus.focus(); }
         levels: root.context-menu-levels;
         item-clicked(id) => { root.context-menu-item-clicked(id); }
         request-submenu(depth, row-y, m-idx) => { root.context-menu-request-submenu(depth, row-y, m-idx); }
         close-submenus-above(depth) => { root.context-menu-close-submenus-above(depth); }
         dismissed => { root.context-menu-dismissed(); }
+        outside-clicked(x, y, button) => { root.context-menu-outside-clicked(x, y, button); }
     }
 
     if root.is-choice-popup-open : FloatingChoicePopup {

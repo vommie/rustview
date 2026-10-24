@@ -87,6 +87,10 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - Shortcuts that also accepted the Meta key instead of Ctrl (Ctrl+A, Ctrl+W, ...), and Ctrl+F4 or Meta+W over a video, no longer do; add such keys on the
   Hotkeys page if you want them.
 
+- **A click outside an open context menu also acts on what it hits**, as in KDE applications: it closes the menu and puts the cursor into a text field,
+  selects the medium, presses the button or switches to the tab under the pointer; a right click opens the next menu there. Before, that click only closed
+  the menu.
+
 ### Removed
 - **The Prev and Next buttons of a tab's toolbar:** a tab always shows the media it was opened with (paging stays in a fullscreen opened from Browse).
 - **mpv's own on-screen controller** over videos in tabs and the fullscreen: RustView's control bar replaces it (mouse bindings of your own `input.conf`
@@ -96,6 +100,9 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **Opening the Tab-Grid froze RustView** as soon as a tab was open (since 0.4.0): the app no longer reacted and had to be killed.
 - **F5 in Browse** did nothing although the menu named it; it refreshes the selected files now.
 - The tag menu no longer names F2 for "Rename Tag..." (F2 never renamed a tag).
+- **The tag filter ("Filter tags...") took no typing after a context menu** (the Browse filter neither): the click into the field only closed the menu,
+  the field did not get the cursor, and what you typed went to type-ahead find instead. The click now puts the cursor into the field. While a menu is open
+  the keys belong to it: Esc closes the menu instead of clearing a filter field behind it, and letters no longer land in that field.
 
 ## [0.4.0] - 2026-10-24
 

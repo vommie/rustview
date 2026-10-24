@@ -236,5 +236,13 @@ impl BridgeContextMenu {
             CtxMenuPresenter::dismiss(&win);
             tm.clear_menu_cutouts();
         });
+
+        let win = window.clone_strong();
+        let tm = tab_manager.clone();
+        window.on_context_menu_outside_clicked(move |x, y, button| {
+            CtxMenuPresenter::dismiss(&win);
+            tm.clear_menu_cutouts();
+            super::outside_click::replay(&win, x, y, button);
+        });
     }
 }
