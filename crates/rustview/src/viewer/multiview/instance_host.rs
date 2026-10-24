@@ -84,6 +84,10 @@ pub(super) struct HostState {
     pub projection: Projection,
     /// The mode the player flags were last applied for.
     pub flags_mode: Option<HostMode>,
+    /// A menu of the application is open: the video windows let the pointer through.
+    pub menu_open: bool,
+    /// A dialog is open over the host: the video windows let the pointer through.
+    pub modal_locked: bool,
 }
 
 impl HostState {
@@ -99,6 +103,8 @@ impl HostState {
             },
             projection: Projection::identity(container),
             flags_mode: None,
+            menu_open: false,
+            modal_locked: false,
         }
     }
 }
@@ -206,8 +212,24 @@ impl MultiviewInstance {
     /// A menu of the application is open (or closed again): the video windows let the pointer through to the main window while
     /// it is, so that a click anywhere closes the menu (see `X11VideoSubwindow::set_input_passthrough`).
     pub fn set_menu_open(&mut self, open: bool) {
+        self.host.menu_open = open;
+        self.apply_pointer_passthrough();
+    }
+
+    /// A dialog is open over the host (or closed again): the video windows let the pointer through to the host window, whose
+    /// lock answers the click (the dialog comes to the front) instead of mpv (a double click would toggle the fullscreen).
+    pub fn set_modal_locked(&mut self, locked: bool) {
+        if self.host.modal_locked == locked {
+            return;
+        }
+        self.host.modal_locked = locked;
+        self.apply_pointer_passthrough();
+    }
+
+    fn apply_pointer_passthrough(&mut self) {
+        let through = self.host.menu_open || self.host.modal_locked;
         for video in self.tiles.iter_mut().filter_map(|t| t.video.as_mut()) {
-            video.window.set_input_passthrough(open);
+            video.window.set_input_passthrough(through);
         }
     }
 

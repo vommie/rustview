@@ -47,9 +47,21 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   and the presets of JPEG, PNG, WebP, AVIF and TIFF. Settings > Fullscreen has a switch for the Crop button.
 
 ### Changed
+- **Every dialog belongs to the window it was opened from** (the main window, the fullscreen, the settings window or another dialog): it opens centered
+  on that window and stays above it, and only above it, so a dialog no longer floats over other programs. While it is open its window is dimmed and
+  locked; clicking that window (or switching to it in the taskbar) brings the dialog to the front instead of closing it. This covers every dialog,
+  including Save As and Unsaved Changes of the image editor, the color picker of the settings (it stays above the settings without locking them) and the
+  folder pickers (root folder in Settings, Browse in Save As). With a compositor, KDE's "Dialog Parent" effect also dims the window and its videos. On
+  Wayland a dialog stays an ordinary window (the toolkit offers no parent there); a click on the locked main window closes the dialogs as before.
 - **Dialogs keep their layout when they are resized:** the content stays at the top at its own height (single-line fields never stretch, extra height stays
   empty below), a dialog made lower than its content gets a scroll bar instead of squeezing it, and a dialog grows when a note appears while it showed
   everything. All dialogs follow this.
+
+### Fixed
+- **A dialog opened from the fullscreen locks it:** behind Save As, Unsaved Changes or Delete the fullscreen still reacted to clicks, the wheel and a
+  double click on a video (it could page, close itself or ask again). The videos of a locked window no longer take clicks either.
+- **Clicking the main window behind New Folder, Save As, Unsaved Changes, Open Many Files, Merge Tabs or the delete dialog for several items** unlocked
+  the main window while the dialog stayed open; the click brings the dialog to the front now.
 
 No migration: the new settings are additive and older settings files keep working.
 

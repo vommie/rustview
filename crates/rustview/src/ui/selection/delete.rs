@@ -307,7 +307,7 @@ impl DeleteSelectionDialogController {
             Self::populate(win, &DialogTexts::of(&plan, reborn_restored));
             self.bind_dialog_events(win, window, &Rc::new(plan), ctx);
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -456,6 +456,7 @@ impl DeleteSelectionDialogController {
             *d_ref = Some(DeleteSelectionDialog::new().expect("Failed to instantiate DeleteSelectionDialog"));
             if let Some(win) = d_ref.as_ref() {
                 crate::ui::dialog_fit::install(win);
+                crate::ui::dialog_parent::install(win);
             }
         }
     }

@@ -212,8 +212,17 @@ fn update_bar_overlay() {
         bar_overlay::hide(BarOwner::TabView);
         return;
     };
-    // While a dialog (or the settings window) locks the main window, no bar is shown, so none can be used.
-    let in_tab_view = instance.lock().host_mode() == HostMode::TabView && !window.get_is_modal_locked();
+    // While a dialog (or the settings window) locks the main window, no bar is shown, so none can be used, and the video
+    // windows let the pointer through to the lock of the main window.
+    let locked = window.get_is_modal_locked();
+    let in_tab_view = {
+        let mut guard = instance.lock();
+        let shown_here = guard.host_mode() == HostMode::TabView;
+        if shown_here {
+            guard.set_modal_locked(locked);
+        }
+        shown_here && !locked
+    };
     let host = BarHost {
         owner: BarOwner::TabView,
         host_xid,

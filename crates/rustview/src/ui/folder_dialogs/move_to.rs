@@ -53,7 +53,7 @@ impl MoveFolderDialogController {
             win.set_error_message("".into());
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -128,6 +128,7 @@ impl MoveFolderDialogController {
         if d_ref.is_none() {
             let win = MoveFolderToDialog::new().expect("Failed to instantiate MoveFolderToDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }

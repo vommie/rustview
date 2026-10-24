@@ -60,6 +60,7 @@ impl OpenConfirmation {
                 match OpenManyFilesDialog::new() {
                     Ok(win) => {
                         crate::ui::dialog_fit::install(&win);
+                        crate::ui::dialog_parent::install(&win);
                         Self::bind_events(&win, window);
                         *dialog = Some(win);
                     }
@@ -73,7 +74,7 @@ impl OpenConfirmation {
             win.set_message(policy::message(kind, count).into());
             win.set_hint(policy::HINT.into());
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
             true
         })
     }

@@ -124,6 +124,7 @@ impl TagDialogController {
         if d_ref.is_none() {
             let win = AddTagDialog::new().expect("Failed to instantiate AddTagDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
 
@@ -154,7 +155,7 @@ impl TagDialogController {
             win.set_tag_name("".into());
             win.set_error_message("".into());
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -216,6 +217,7 @@ impl TagDialogController {
         if d_ref.is_none() {
             let win = RenameTagDialog::new().expect("Failed to instantiate RenameTagDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
 
@@ -245,7 +247,7 @@ impl TagDialogController {
             win.set_new_name(current_name.into());
             win.set_error_message("".into());
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -294,6 +296,7 @@ impl TagDialogController {
         if d_ref.is_none() {
             let win = DeleteTagDialog::new().expect("Failed to instantiate DeleteTagDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
 
@@ -332,7 +335,7 @@ impl TagDialogController {
             win.set_children_names(params.children.join(", ").into());
             win.set_error_message("".into());
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 

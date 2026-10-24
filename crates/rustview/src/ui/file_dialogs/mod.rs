@@ -96,6 +96,7 @@ impl FileRenameDialogController {
         if d_ref.is_none() {
             let win = FileRenameDialog::new().expect("Failed to instantiate FileRenameDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
 
@@ -255,7 +256,7 @@ impl FileRenameDialogController {
         });
 
         window.set_is_modal_locked(true);
-        let _ = win.show();
+        let _ = crate::ui::dialog_parent::show(win);
     }
 
     /// Closes the rename dialog and safely restores modal locking depending on fullscreen state.

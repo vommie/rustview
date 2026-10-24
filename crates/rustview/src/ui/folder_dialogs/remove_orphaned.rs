@@ -82,7 +82,7 @@ impl RemoveOrphanedFolderDialogController {
             Self::populate_dialog_fields(win, folder_name, &metrics);
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -190,6 +190,7 @@ impl RemoveOrphanedFolderDialogController {
         if d_ref.is_none() {
             let win = RemoveOrphanedFolderDialog::new().expect("Failed to instantiate RemoveOrphanedFolderDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }

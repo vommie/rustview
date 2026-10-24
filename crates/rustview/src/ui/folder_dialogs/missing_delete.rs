@@ -55,7 +55,7 @@ impl MissingFolderDeleteDialogController {
             Self::populate_dialog_fields(win, folder_name, folder_path, &metrics);
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -159,6 +159,7 @@ impl MissingFolderDeleteDialogController {
         if d_ref.is_none() {
             let win = MissingFolderDeleteDialog::new().expect("Failed to instantiate MissingFolderDeleteDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }

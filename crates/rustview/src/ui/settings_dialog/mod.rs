@@ -78,6 +78,7 @@ impl SettingsDialogController {
     pub fn show(&mut self) {
         if self.settings_window.is_none() {
             let window = SettingsWindow::new().expect("Failed to create SettingsWindow");
+            crate::ui::dialog_parent::register_parent(&window, crate::ui::dialog_parent::Role::Settings);
             color_picker::install(&window);
             self.formats_page.install(&window);
             self.register_callbacks(&window);
@@ -443,10 +444,10 @@ impl SettingsDialogController {
 
         let w_weak_browse = w_weak.clone();
         window.on_browse_root_folder(move || {
-            if let Some(folder) = rfd::FileDialog::new()
+            let Some(w) = w_weak_browse.upgrade() else { return };
+            if let Some(folder) = crate::ui::dialog_parent::file_dialog(w.window())
                 .set_title("Select Root Directory for RustView")
                 .pick_folder()
-                && let Some(w) = w_weak_browse.upgrade()
             {
                 w.set_root_folder_path(folder.to_string_lossy().to_string().into());
             }

@@ -24,7 +24,7 @@ impl RebornFolderWarnDialogController {
             win.set_folder_path(folder_path.into());
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -41,6 +41,7 @@ impl RebornFolderWarnDialogController {
         if d_ref.is_none() {
             let win = RebornFolderDeleteWarnDialog::new().expect("Failed to instantiate RebornFolderDeleteWarnDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }

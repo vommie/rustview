@@ -93,6 +93,7 @@ impl ExportDialog {
                 match ImageExportDialog::new() {
                     Ok(win) => {
                         crate::ui::dialog_fit::install(&win);
+                        crate::ui::dialog_parent::install(&win);
                         Self::bind_events(&win, window);
                         *dialog = Some(win);
                     }
@@ -119,7 +120,7 @@ impl ExportDialog {
         Self::revalidate();
         window.set_is_context_menu_open(false);
         window.set_is_modal_locked(true);
-        if win.show().is_err() {
+        if crate::ui::dialog_parent::show(&win).is_err() {
             tracing::error!("[ImageEdit: Export] The dialog could not be shown");
             Self::hide(window);
             Self::finish(None);
@@ -306,7 +307,7 @@ impl ExportDialog {
             let Some(win) = dialog.upgrade() else { return };
             let home = std::env::var_os("HOME").map(PathBuf::from);
             let current = check_folder(&win.get_folder(), home.as_deref());
-            let mut picker = rfd::FileDialog::new().set_title("Save the picture in");
+            let mut picker = crate::ui::dialog_parent::file_dialog(win.window()).set_title("Save the picture in");
             if let FolderCheck::Ready(folder) = &current {
                 picker = picker.set_directory(folder);
             }

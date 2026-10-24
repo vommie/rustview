@@ -7,6 +7,7 @@ use super::cursor;
 use super::eligibility;
 use super::session::Session;
 use crate::system::MonitorInfo;
+use crate::ui::MultiviewFullscreenWindow;
 use crate::viewer::PointerProbe;
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
@@ -192,6 +193,7 @@ impl Session {
             .main_window()
             .and_then(|main| main.upgrade())
             .is_some_and(|main| main.get_is_modal_locked());
+        self.sync_modal_lock(&win, dialog_open && crate::ui::dialog_parent::modal_dialog_open());
         let bars_visible = bar_hosting::update(
             &host,
             BarTargets::of_instance(BarOwner::Fullscreen, &self.instance, !dialog_open),
@@ -202,6 +204,17 @@ impl Session {
         } else {
             cursor::sync(win.window(), &self.instance, bars_visible, &mut self.cursor_hidden);
         }
+    }
+
+    /// Locks the fullscreen while a dialog is open (its own or one of the main window): the overlay of the window takes every
+    /// click and key, and the video windows let the pointer through to it.
+    fn sync_modal_lock(&self, win: &MultiviewFullscreenWindow, locked: bool) {
+        if win.get_is_modal_locked() == locked {
+            return;
+        }
+        win.set_is_modal_locked(locked);
+        self.instance.lock().set_modal_locked(locked);
+        tracing::info!(locked, "[Multiview: ModalLock] The fullscreen follows the open dialog");
     }
 
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what

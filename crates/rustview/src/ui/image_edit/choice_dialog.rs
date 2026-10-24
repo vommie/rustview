@@ -67,6 +67,7 @@ impl ChoiceDialog {
                 match ImageSaveConflictDialog::new() {
                     Ok(win) => {
                         crate::ui::dialog_fit::install(&win);
+                        crate::ui::dialog_parent::install(&win);
                         Self::bind_events(&win, window);
                         *dialog = Some(win);
                     }
@@ -101,7 +102,7 @@ impl ChoiceDialog {
             win.set_choices(ModelRc::from(Rc::new(VecModel::from(choices))));
             window.set_is_context_menu_open(false);
             window.set_is_modal_locked(true);
-            win.show().is_ok()
+            crate::ui::dialog_parent::show(win).is_ok()
         });
         if shown {
             PENDING.with(|p| *p.borrow_mut() = Some((Box::new(answer), question.cancel)));

@@ -14,6 +14,11 @@
 //!   appears (`ui::dialog_fit::install`, called for every dialog window right after it is created);
 //! - the outer layout has `width: root.width;` and the content `width: body.width;`, which lets Slint measure wrapped text at the
 //!   real width.
+//!
+//! Every dialog also belongs to the window it was opened from (`ui::dialog_parent`): it is installed with
+//! `dialog_parent::install` and shown with `dialog_parent::show` (never with a plain `show()`), which on X11 tells the window
+//! manager its parent before the window is mapped; no dialog is `always-on-top` (it stays above its parent only); folder and
+//! file pickers are made by `dialog_parent::file_dialog`, which hands them their parent.
 
 use std::fs;
 use std::path::PathBuf;
@@ -172,5 +177,74 @@ fn every_dialog_window_follows_its_content() {
             }
         }
     }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+fn all_rust_sources() -> Vec<(String, String)> {
+    let mut sources = Vec::new();
+    rust_sources(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src"), &mut sources);
+    sources
+}
+
+#[test]
+fn every_dialog_window_is_shown_over_its_parent() {
+    let sources = all_rust_sources();
+    let mut problems = Vec::new();
+    for component in dialog_components() {
+        let creation = format!("{component}::new()");
+        for (file, text) in sources.iter().filter(|(_, text)| text.contains(&creation)) {
+            if !text.contains("dialog_parent::install(") {
+                problems.push(format!("{file}: creates {component} without `dialog_parent::install`"));
+            }
+            if !text.contains("dialog_parent::show(") {
+                problems.push(format!("{file}: shows {component} without `dialog_parent::show`"));
+            }
+            if text.contains(".show()") {
+                problems.push(format!(
+                    "{file}: a dialog is shown with a plain `show()`; use `dialog_parent::show` (it sets the parent first)"
+                ));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+#[test]
+fn dialogs_open_from_the_registered_windows() {
+    let sources = all_rust_sources();
+    for role in ["Role::Main", "Role::Fullscreen", "Role::Settings"] {
+        assert!(
+            sources
+                .iter()
+                .any(|(_, text)| text.contains("dialog_parent::register_parent(") && text.contains(role)),
+            "no window registers itself as `{role}` with `dialog_parent::register_parent`"
+        );
+    }
+}
+
+#[test]
+fn no_dialog_floats_above_other_programs() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ui");
+    let mut problems: Vec<String> = dialogs()
+        .into_iter()
+        .filter(|(_, text)| text.contains("always-on-top"))
+        .map(|(name, _)| format!("{name}: a dialog stays above its parent only; remove `always-on-top`"))
+        .collect();
+    let picker = fs::read_to_string(dir.join("color_picker.slint")).unwrap_or_default();
+    if picker.contains("always-on-top") {
+        problems.push("color_picker.slint: the picker window stays above its parent only".to_string());
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+#[test]
+fn file_pickers_belong_to_a_window() {
+    let problems: Vec<String> = all_rust_sources()
+        .into_iter()
+        .filter(|(file, text)| !file.ends_with("dialog_parent.rs") && text.contains("rfd::"))
+        .map(|(file, _)| {
+            format!("{file}: make the picker with `dialog_parent::file_dialog(parent)` (it gets its parent)")
+        })
+        .collect();
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }

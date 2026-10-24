@@ -60,7 +60,7 @@ impl NewFolderDialogController {
             win.set_error_message("".into());
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
             win.invoke_focus_input();
         }
     }
@@ -113,6 +113,7 @@ impl NewFolderDialogController {
         if d_ref.is_none() {
             let win = NewFolderDialog::new().expect("Failed to instantiate NewFolderDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }

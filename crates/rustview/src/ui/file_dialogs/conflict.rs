@@ -132,7 +132,7 @@ impl FileOpsConflictDialogController {
             });
 
             params.window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -156,6 +156,7 @@ impl FileOpsConflictDialogController {
         if d_ref.is_none() {
             let win = FileOpsConflictDialog::new().expect("Failed to instantiate FileOpsConflictDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
 
             let win_dlg_skip = win.as_weak();
             let cb_slot_skip = self.active_callback.clone();

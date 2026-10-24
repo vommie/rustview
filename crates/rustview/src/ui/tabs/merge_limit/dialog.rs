@@ -20,6 +20,7 @@ impl MergeLimitDialog {
                 match TabMergeLimitDialog::new() {
                     Ok(win) => {
                         crate::ui::dialog_fit::install(&win);
+                        crate::ui::dialog_parent::install(&win);
                         Self::bind_events(&win, window);
                         *dialog = Some(win);
                     }
@@ -33,7 +34,7 @@ impl MergeLimitDialog {
             win.set_message(message.into());
             win.set_breakdown(breakdown.into());
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
             true
         })
     }

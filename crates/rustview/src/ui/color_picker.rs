@@ -61,6 +61,7 @@ pub fn open<P: ComponentHandle>(parent: &P, request: &PickerRequest, on_change: 
             match ColorPickerWindow::new() {
                 Ok(window) => {
                     install(&window);
+                    crate::ui::dialog_parent::install_transient(&window);
                     *slot = Some(window);
                 }
                 Err(e) => tracing::error!(error = %e, "[ColorPicker] Failed to create the picker window"),
@@ -102,7 +103,7 @@ pub fn open<P: ComponentHandle>(parent: &P, request: &PickerRequest, on_change: 
         slint::CloseRequestResponse::HideWindow
     });
 
-    if let Err(e) = window.show() {
+    if let Err(e) = crate::ui::dialog_parent::show(&window) {
         tracing::error!(error = %e, "[ColorPicker] Failed to show the picker window");
         return;
     }

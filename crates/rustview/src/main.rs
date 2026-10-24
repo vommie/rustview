@@ -147,6 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     startup_clock::mark("Backend");
     let main_window = MainWindow::new()?;
     startup_clock::mark("MainWindowCreated");
+    rustview::ui::dialog_parent::register_parent(&main_window, rustview::ui::dialog_parent::Role::Main);
     // The restored window state is needed before the first frame: Slint renders it before it maps the window (X11), and the
     // maximized state must be in place at that moment.
     let win_state = settings.get().window;

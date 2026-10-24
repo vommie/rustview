@@ -232,6 +232,11 @@ impl UiBridge {
             tracing::info!(
                 "[UiBridge: ModalDismiss] Main UI modal dismiss requested (backdrop clicked or Escape pressed during modal lock)"
             );
+            // An open dialog belongs to its parent window (X11): the click on the locked parent brings it to the front instead
+            // of closing it. Without a window manager parent (Wayland) the dialogs are closed as before.
+            if crate::ui::dialog_parent::raise_open() {
+                return;
+            }
             if fs_ctrl.is_isolated_open() {
                 fs_ctrl.request_close();
             }

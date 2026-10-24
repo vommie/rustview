@@ -60,7 +60,7 @@ impl FavoriteRenameDialogController {
             win.set_error_message("".into());
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -104,6 +104,7 @@ impl FavoriteRenameDialogController {
         if d_ref.is_none() {
             let win = FavoriteRenameDialog::new().expect("Failed to instantiate FavoriteRenameDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }

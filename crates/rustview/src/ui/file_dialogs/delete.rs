@@ -92,7 +92,7 @@ impl DeleteFileDialogController {
             win.set_error_message("".into());
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -202,6 +202,7 @@ impl DeleteFileDialogController {
         if d_ref.is_none() {
             let win = DeleteFileDialog::new().expect("Failed to instantiate DeleteFileDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }

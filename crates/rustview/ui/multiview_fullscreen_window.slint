@@ -23,8 +23,12 @@ export component MultiviewFullscreenWindow inherits Window {
     // the video player, whose window covers the whole display when a single video is shown.
     out property <color> resolved-fill: root.fill-source == 0 ? Theme.fullscreen-background : (root.fill-source == 2 ? root.custom-fill : transparent);
     in-out property <bool> is-ready: false;
+    // A dialog is open (opened from here, or from the main window while the fullscreen is open): nothing here reacts.
+    in property <bool> is-modal-locked: false;
 
     callback request-close();
+    // A click (or Esc) while a dialog is open.
+    callback modal-dismiss-requested();
     callback request-rename();
     callback request-delete();
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
@@ -64,6 +68,12 @@ export component MultiviewFullscreenWindow inherits Window {
     forward-focus: fs-focus;
     fs-focus := FocusScope {
         key-pressed(event) => {
+            if root.is-modal-locked {
+                if event.text == Key.Escape {
+                    root.modal-dismiss-requested();
+                }
+                return accept;
+            }
             // The crop tools come first: Esc cancels the one opened first, the normal Esc only when none is open.
             if event.text == Key.Escape {
                 if root.edit-key(0) {
@@ -191,6 +201,24 @@ export component MultiviewFullscreenWindow inherits Window {
         }
         gutter-swap(index) => {
             root.gutter-swap(index);
+        }
+    }
+
+    // Above everything: while a dialog is open no click, wheel or drag reaches the Multiview (the native video windows let the
+    // pointer through meanwhile), and a click brings the dialog to the front. Dimmed like the locked main window (a compositor
+    // with KWin's "Dialog Parent" effect also dims the native video windows; Slint cannot draw over them).
+    if root.is-modal-locked : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #00000066;
+
+        TouchArea {
+            clicked => {
+                root.modal-dismiss-requested();
+            }
+            scroll-event(event) => {
+                accept
+            }
         }
     }
 }

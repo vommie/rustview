@@ -42,7 +42,7 @@ impl RenameFolderDialogController {
             Self::populate_dialog_fields(win, current_name);
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -91,6 +91,7 @@ impl RenameFolderDialogController {
         if d_ref.is_none() {
             let win = RenameFolderDialog::new().expect("Failed to instantiate RenameFolderDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }

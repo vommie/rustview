@@ -7,19 +7,19 @@ use x11rb::wrapper::ConnectionExt as _;
 /// `_MOTIF_WM_HINTS` that ask for no decorations (flags = decorations, decorations = none).
 const MOTIF_HINTS_NO_DECORATIONS: [u32; 5] = [2, 0, 0, 0, 0];
 /// `_NET_WM_STATE` actions of the client message.
-const STATE_REMOVE: u32 = 0;
-const STATE_ADD: u32 = 1;
+pub(super) const STATE_REMOVE: u32 = 0;
+pub(super) const STATE_ADD: u32 = 1;
 /// "Normal application" as the source of an EWMH client message.
-const SOURCE_APPLICATION: u32 = 1;
+pub(super) const SOURCE_APPLICATION: u32 = 1;
 
 /// Sends an EWMH client message about `window` to the root window, where the window manager listens.
-fn send_to_window_manager(session: &Session, window: Window, message_type: Atom, data: [u32; 5]) {
+pub(super) fn send_to_window_manager(session: &Session, window: Window, message_type: Atom, data: [u32; 5]) {
     let event = ClientMessageEvent::new(32, window, message_type, data);
     let mask = EventMask::SUBSTRUCTURE_NOTIFY | EventMask::SUBSTRUCTURE_REDIRECT;
     let _ = session.conn.send_event(false, session.root, mask, event);
 }
 
-fn set_atom_list(session: &Session, window: Window, property: Atom, atoms: &[u32]) {
+pub(super) fn set_atom_list(session: &Session, window: Window, property: Atom, atoms: &[u32]) {
     let _ = session
         .conn
         .change_property32(PropMode::REPLACE, window, property, AtomEnum::ATOM, atoms);

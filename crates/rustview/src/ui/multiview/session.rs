@@ -191,8 +191,14 @@ pub(super) fn refresh_settings(settings: &SettingsManager) {
 
 fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     let win = MultiviewFullscreenWindow::new()?;
+    crate::ui::dialog_parent::register_parent(&win, crate::ui::dialog_parent::Role::Fullscreen);
     win.on_request_close(|| {
         close_by_user();
+    });
+    win.on_modal_dismiss_requested(|| {
+        if !crate::ui::dialog_parent::raise_open() {
+            tracing::warn!("[Multiview: ModalLock] A dialog is open, but it cannot be brought to the front");
+        }
     });
     win.on_request_rename(|| run(Session::rename_hovered));
     win.on_request_delete(|| run(Session::delete_single));

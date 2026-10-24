@@ -60,7 +60,7 @@ impl RemoveOrphanedFileDialogController {
             win.set_error_message("".into());
 
             window.set_is_modal_locked(true);
-            let _ = win.show();
+            let _ = crate::ui::dialog_parent::show(win);
         }
     }
 
@@ -118,6 +118,7 @@ impl RemoveOrphanedFileDialogController {
         if d_ref.is_none() {
             let win = RemoveOrphanedFileDialog::new().expect("Failed to instantiate RemoveOrphanedFileDialog");
             crate::ui::dialog_fit::install(&win);
+            crate::ui::dialog_parent::install(&win);
             *d_ref = Some(win);
         }
     }
