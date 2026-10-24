@@ -15,6 +15,7 @@ use rustview_core::image_edit::render::decode_any;
 use rustview_core::image_edit::save::{EditedPicture, EncodingChoice, ExportTarget, export, save_in_place};
 use rustview_core::image_edit::stack::EditPlan;
 use rustview_core::media::{MediaFormat, MediaType};
+use rustview_core::util::cast::Az;
 use std::path::{Path, PathBuf};
 
 /// The smallest PSNR (dB) a lossy save or a lossless JPEG crop (its edge blocks are decoded with other neighbors) must reach.
@@ -29,7 +30,7 @@ fn psnr(a: &DynamicImage, b: &DynamicImage) -> f64 {
         let d = f64::from(*x) - f64::from(*y);
         sum += d * d;
     }
-    let mse = sum / a.as_raw().len().max(1) as f64;
+    let mse = sum / a.as_raw().len().max(1).az::<f64>();
     if mse == 0.0 {
         f64::INFINITY
     } else {
