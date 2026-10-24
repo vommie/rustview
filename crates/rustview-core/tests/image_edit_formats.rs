@@ -174,7 +174,7 @@ fn every_sample_picture_is_saved_exported_or_refused_correctly() {
                                 .map(|b| compare(&expected, &b, Some(outcome.encoding)))
                             {
                                 Ok(Ok(how)) => {
-                                    report.push(format!("{name}: block-grid crop saved without loss, {how}"))
+                                    report.push(format!("{name}: block-grid crop saved without loss, {how}"));
                                 }
                                 Ok(Err(why)) => failures.push(format!("{name}: block-grid crop, but {why}")),
                                 Err(e) => failures.push(format!("{name}: the block-grid crop does not decode: {e}")),
