@@ -97,7 +97,7 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             return;
         }
         // Esc in a video's window arrives as a fullscreen toggle: an open crop tool of an image is cancelled first.
-        PlayerEvent::ToggleFullscreen | PlayerEvent::CloseTab if instance.lock().cancel_oldest_crop() => {
+        PlayerEvent::ToggleFullscreen | PlayerEvent::CloseTab if instance.lock().cancel_newest_crop() => {
             let mode = instance.lock().host_mode();
             drop(instance);
             refresh_host(handle, mode);

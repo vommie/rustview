@@ -81,7 +81,7 @@ pub enum ConflictChoice {
     /// Write the edited picture to a new file (the Save As dialog); the file on disk stays as it is.
     SaveAsCopy,
     /// Drop the edits and show the file as it is on disk now.
-    DiscardAndReload,
+    DiscardAndRefresh,
     /// Keep editing; nothing is written.
     Cancel,
 }
@@ -91,7 +91,7 @@ impl ConflictChoice {
         match self {
             Self::OverwriteAnyway => 0,
             Self::SaveAsCopy => 1,
-            Self::DiscardAndReload => 2,
+            Self::DiscardAndRefresh => 2,
             Self::Cancel => 3,
         }
     }
@@ -100,7 +100,7 @@ impl ConflictChoice {
         [
             Self::OverwriteAnyway,
             Self::SaveAsCopy,
-            Self::DiscardAndReload,
+            Self::DiscardAndRefresh,
             Self::Cancel,
         ]
         .into_iter()
@@ -160,7 +160,7 @@ pub fn conflict_prompt(state: &DiskState, filename: &str) -> Option<ConflictProm
         (ConflictChoice::SaveAsCopy, "Save As Copy...".to_string()),
     ];
     if reload {
-        choices.push((ConflictChoice::DiscardAndReload, "Discard & Reload".to_string()));
+        choices.push((ConflictChoice::DiscardAndRefresh, "Discard & Refresh".to_string()));
     }
     choices.push((ConflictChoice::Cancel, "Cancel".to_string()));
     Some(ConflictPrompt {
@@ -227,7 +227,7 @@ mod tests {
             [
                 ConflictChoice::OverwriteAnyway,
                 ConflictChoice::SaveAsCopy,
-                ConflictChoice::DiscardAndReload,
+                ConflictChoice::DiscardAndRefresh,
                 ConflictChoice::Cancel
             ]
         );
@@ -238,12 +238,12 @@ mod tests {
             !missing
                 .choices
                 .iter()
-                .any(|(c, _)| *c == ConflictChoice::DiscardAndReload)
+                .any(|(c, _)| *c == ConflictChoice::DiscardAndRefresh)
         );
         for choice in [
             ConflictChoice::OverwriteAnyway,
             ConflictChoice::SaveAsCopy,
-            ConflictChoice::DiscardAndReload,
+            ConflictChoice::DiscardAndRefresh,
             ConflictChoice::Cancel,
         ] {
             assert_eq!(ConflictChoice::from_code(choice.code()), Some(choice));

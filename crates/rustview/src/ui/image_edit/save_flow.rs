@@ -175,7 +175,7 @@ fn in_place_done(
                 &window,
                 format!("Saved '{}' ({}).", request.filename, outcome.encoding.describe()),
             );
-            library_update::after_overwrite(context, &window, request.media_id);
+            library_update::refresh_medium(context, &window, request.media_id);
             finish(after, true);
         }
         Err(SaveError::Conflict(state)) => {
@@ -237,11 +237,12 @@ fn ask_conflict(
     ChoiceDialog::ask(window, &question, move |code| match ConflictChoice::from_code(code) {
         Some(ConflictChoice::OverwriteAnyway) => write_in_place(&context, weak, request, true, after),
         Some(ConflictChoice::SaveAsCopy) => ask_export(&context, weak, request, String::new(), after),
-        Some(ConflictChoice::DiscardAndReload) => {
-            with_instance(&context, &weak, |mv| {
-                mv.finish_edits_without_save(request.tile);
-                mv.reload_member(request.media_id);
-            });
+        Some(ConflictChoice::DiscardAndRefresh) => {
+            // The edits go; the refresh reads the file as it is now (record, hash, thumbnail) and every view decodes it again.
+            with_instance(&context, &weak, |mv| mv.finish_edits_without_save(request.tile));
+            if let Some(window) = context.window.upgrade() {
+                library_update::refresh_medium(&context, &window, request.media_id);
+            }
             finish(after, true);
         }
         Some(ConflictChoice::Cancel) | None => finish(after, false),

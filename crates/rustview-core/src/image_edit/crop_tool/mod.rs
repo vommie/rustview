@@ -2,13 +2,15 @@
 //! ratio, and the ratio button. Positions come in as image pixels (the host converts the pointer through the zoom frame, so the
 //! tool works the same at every zoom); the rectangle is whole pixels of the picture that is cropped.
 //!
-//! The ratio button cycles the presets; choosing one fits the largest rectangle of that ratio into the *reference* rectangle
-//! (the last rectangle the user drew or resized, at first the whole picture), so cycling never shrinks the selection step by
-//! step. A resize without Shift is free and the button then reads "Free"; with Shift the proportions stay.
+//! The ratio button cycles the presets; choosing one keeps the area of the last rectangle the user made (drawn, resized, at first
+//! the whole picture) and where the user put it (`placement`: an edge it touches stays touched, otherwise its center stays), so
+//! cycling never shrinks the selection step by step and never makes it jump. A resize without Shift is free and the button then
+//! reads "Free"; with Shift the proportions stay.
 
-use super::geometry::{PixelRect, align_origin, align_position, fit_ratio, snap_coordinate};
+use super::geometry::{PixelRect, align_origin, align_position, snap_coordinate};
 use super::ratio::{AspectRatio, FREE_LABEL, RatioChoice, RatioSet};
 use crate::util::cast::{Az, FloatToInt};
+use placement::Placement;
 use resize::{draw, resize};
 
 /// A crop is never smaller than this many pixels per side (unless the picture itself is smaller).
@@ -128,7 +130,8 @@ pub struct CropTool {
     /// Size of the original picture: the ratio "O".
     original: (u32, u32),
     rect: PixelRect,
-    reference: PixelRect,
+    /// What the ratio button keeps (the area and the anchors of the rectangle the user made).
+    placement: Placement,
     choice: RatioChoice,
     /// The rectangle still has the proportions of `choice` (else the button reads "Free").
     follows_choice: bool,
@@ -146,7 +149,7 @@ impl CropTool {
             image,
             original,
             rect: full,
-            reference: full,
+            placement: Placement::of(full, image),
             choice: RatioChoice::Original,
             follows_choice,
             grid: grid.filter(|(w, h)| *w > 1 && *h > 1),
@@ -154,12 +157,12 @@ impl CropTool {
         }
     }
 
-    /// Starts with `rect` selected instead of the whole picture (the part a zoomed picture shows); it is the reference of the
-    /// ratio button too.
+    /// Starts with `rect` selected instead of the whole picture (the part a zoomed picture shows); the ratio button keeps its
+    /// area and place too.
     pub fn select(&mut self, rect: PixelRect, ratios: &RatioSet) {
         let rect = self.aligned(rect.clamped_into(self.image));
         self.rect = rect;
-        self.reference = rect;
+        self.placement = Placement::of(rect, self.image);
         self.follows_choice = ratios
             .resolve(self.choice, self.original)
             .is_some_and(|r| follows(rect, r));
@@ -280,16 +283,10 @@ impl CropTool {
         };
         self.rect = rect;
         match drag.kind {
-            DragKind::Move => {
-                // The reference travels with the rectangle (the ratio button fits into it where the selection is now).
-                let (dx, dy) = (
-                    i64::from(rect.x) - i64::from(drag.start.x),
-                    i64::from(rect.y) - i64::from(drag.start.y),
-                );
-                self.reference = translate(self.reference, dx, dy, self.image);
-            }
+            // The ratio button keeps the size the user made and takes the new place.
+            DragKind::Move => self.placement = self.placement.moved(rect, self.image),
             DragKind::Resize(_) | DragKind::Draw { .. } => {
-                self.reference = rect;
+                self.placement = Placement::of(rect, self.image);
                 self.follows_choice = chosen.is_some_and(|r| follows(rect, r));
             }
         }
@@ -300,20 +297,20 @@ impl CropTool {
         self.drag = None;
     }
 
-    /// The ratio button was clicked: the next landscape (left click) or portrait (right click) ratio, fitted into the reference
-    /// rectangle.
+    /// The ratio button was clicked: the next landscape (left click) or portrait (right click) ratio, placed like the rectangle
+    /// the user made.
     pub fn cycle_ratio(&mut self, ratios: &RatioSet, landscape: bool) {
         self.choice = ratios.next(self.choice, landscape);
         self.apply_choice(ratios);
     }
 
-    /// Fits the chosen ratio into the reference rectangle again (also after the presets changed).
+    /// Places the chosen ratio again (also after the presets changed).
     pub fn apply_choice(&mut self, ratios: &RatioSet) {
         if ratios.resolve(self.choice, self.original).is_none() {
             self.choice = RatioChoice::Original;
         }
         if let Some(ratio) = ratios.resolve(self.choice, self.original) {
-            self.rect = self.aligned(fit_ratio(self.reference, ratio));
+            self.rect = self.aligned(self.placement.place(ratio, self.image));
             self.follows_choice = true;
         }
     }
@@ -363,11 +360,7 @@ fn follows(rect: PixelRect, ratio: AspectRatio) -> bool {
     (w - h * r).abs() <= 1.0 || (h - w / r).abs() <= 1.0
 }
 
-fn translate(rect: PixelRect, dx: i64, dy: i64, image: (u32, u32)) -> PixelRect {
-    let shift = |v: u32, d: i64| u32::try_from((i64::from(v) + d).max(0)).unwrap_or(u32::MAX);
-    PixelRect::new(shift(rect.x, dx), shift(rect.y, dy), rect.width, rect.height).clamped_into(image)
-}
-
+mod placement;
 mod resize;
 
 #[cfg(test)]

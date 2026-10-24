@@ -1,5 +1,5 @@
-//! The order in which the crop tools of one Multiview were opened (pure). Esc cancels the oldest open tool first; once none is
-//! open, Esc does what it always did (close the fullscreen, end a selection, ...).
+//! The order in which the crop tools of one Multiview were opened (pure). Esc cancels the newest open tool first (the one the
+//! user just opened is the one they mean); once none is open, Esc does what it always did (close the fullscreen, end a selection, ...).
 
 use crate::viewer::multiview::follow::TileKey;
 
@@ -17,9 +17,9 @@ impl ToolOrder {
         self.0.retain(|t| *t != tile);
     }
 
-    /// The tool Esc cancels next.
-    pub fn oldest(&self) -> Option<TileKey> {
-        self.0.first().copied()
+    /// The tool Esc cancels next: the one opened last.
+    pub fn newest(&self) -> Option<TileKey> {
+        self.0.last().copied()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -45,18 +45,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn escape_closes_the_tools_in_the_order_they_were_opened() {
+    fn escape_closes_the_newest_tool_first() {
         let mut order = ToolOrder::default();
         order.opened(7);
         order.opened(3);
         order.opened(7);
         order.opened(5);
         let mut closed = Vec::new();
-        while let Some(tile) = order.oldest() {
+        while let Some(tile) = order.newest() {
             closed.push(tile);
             order.closed(tile);
         }
-        assert_eq!(closed, [7, 3, 5]);
+        assert_eq!(closed, [5, 3, 7]);
         assert!(order.is_empty());
     }
 
@@ -65,8 +65,9 @@ mod tests {
         let mut order = ToolOrder::default();
         order.opened(1);
         order.opened(2);
-        order.retain(|t| t != 1);
-        assert_eq!(order.oldest(), Some(2));
-        assert!(!order.contains(1));
+        order.opened(3);
+        order.retain(|t| t != 3);
+        assert_eq!(order.newest(), Some(2));
+        assert!(!order.contains(3));
     }
 }

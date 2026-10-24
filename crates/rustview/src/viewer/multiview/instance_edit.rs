@@ -154,16 +154,16 @@ impl MultiviewInstance {
         true
     }
 
-    /// Esc: cancels the crop tool that was opened first. Returns whether there was one (then Esc means nothing else).
-    pub fn cancel_oldest_crop(&mut self) -> bool {
+    /// Esc: cancels the crop tool that was opened last. Returns whether there was one (then Esc means nothing else).
+    pub fn cancel_newest_crop(&mut self) -> bool {
         self.prune_crop_order();
         if !self.crop_order.is_empty() {
             tracing::info!(
                 open = self.crop_order.keys().len(),
-                "[ImageEdit: Crop] Esc cancels the crop tool opened first"
+                "[ImageEdit: Crop] Esc cancels the crop tool opened last"
             );
         }
-        match self.crop_order.oldest() {
+        match self.crop_order.newest() {
             Some(key) => {
                 if !self.cancel_crop(key) {
                     self.crop_order.closed(key);
@@ -319,7 +319,7 @@ impl MultiviewInstance {
         true
     }
 
-    /// Enter: applies the crop of the tile under the pointer, else the one opened first.
+    /// Enter: applies the crop of the tile under the pointer, else the one opened last.
     pub fn apply_crop_target(&mut self) -> bool {
         let hovered = self
             .hovered
@@ -327,7 +327,7 @@ impl MultiviewInstance {
             .filter(|t| t.edit.as_ref().is_some_and(|e| e.tool.is_some()))
             .map(|t| t.key);
         self.prune_crop_order();
-        match hovered.or_else(|| self.crop_order.oldest()) {
+        match hovered.or_else(|| self.crop_order.newest()) {
             Some(key) => self.apply_crop(key),
             None => false,
         }
@@ -502,7 +502,7 @@ impl MultiviewInstance {
         }
         tracing::info!(code, "[ImageEdit: Keys] Editor key");
         match code {
-            0 => (self.cancel_oldest_crop(), UiAction::None),
+            0 => (self.cancel_newest_crop(), UiAction::None),
             1 => (self.apply_crop_target(), UiAction::None),
             2 => match self.save_target() {
                 Some(key) => (true, UiAction::SaveTile(key)),

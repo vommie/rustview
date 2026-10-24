@@ -9,8 +9,8 @@ use rustview_core::library::models::MediaId;
 use rustview_core::settings::LogObscurer;
 use std::path::Path;
 
-/// `media_id` was overwritten with its edited picture.
-pub fn after_overwrite(context: &EditContext, window: &MainWindow, media_id: MediaId) {
+/// `media_id` was overwritten with its edited picture, or its edits were dropped for the file as it is on disk now.
+pub fn refresh_medium(context: &EditContext, window: &MainWindow, media_id: MediaId) {
     let app = &context.app;
     BridgeMedia::refresh_media_ids(
         window,
@@ -46,7 +46,7 @@ pub fn after_export(context: &EditContext, window: &MainWindow, source_id: Media
     match app
         .library
         .file_operations()
-        .index_edited_copy(source_id, folder_record.id, &name)
+        .index_edited_copy(source_id, folder_record.id, &name, true)
     {
         Ok(record) => {
             let shown = app

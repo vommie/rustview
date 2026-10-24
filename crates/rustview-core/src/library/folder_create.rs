@@ -1,14 +1,15 @@
 //! Creating folders from a relative path typed by the user (like `mkdir -p`): the missing components are created on disk and
 //! registered in the library one by one, without scanning anything. Components that already exist are left alone silently.
+//! Also the records of a folder an explicit save wrote into (`register_existing`), inside the tree's root or outside it.
 
 use super::db::LibraryDatabase;
 use super::error::LibraryError;
 use super::folder_operations::FolderValidator;
-use super::folders::FolderManager;
+use super::folders::{FolderManager, normalize_path};
 use super::models::{FolderId, FolderRecord};
 use crate::settings::LogObscurer;
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Turns the text of the "New Folder" dialog into folder names.
 pub struct FolderPathPlanner;
@@ -128,5 +129,139 @@ impl<'a> FolderCreator<'a> {
             });
         }
         Ok(report)
+    }
+
+    /// Gives the existing folder `folder` (an explicit save just wrote into it) a record, without scanning anything. Inside the
+    /// tree's root (`scope_root`) the folders between it and the nearest folder the library knows are registered too, top down,
+    /// so the tree links them at once. Outside the root, or when no folder above it is known, only `folder` itself is registered:
+    /// the tree does not show such a record, and a later scan of a root that contains it takes the record over with its media.
+    /// Returns the record and how many records were added.
+    pub fn register_existing(
+        &self,
+        folder: &Path,
+        scope_root: Option<&Path>,
+    ) -> Result<(FolderRecord, usize), LibraryError> {
+        let manager = FolderManager::new(self.db);
+        let folder = normalize_path(folder);
+        let known = |path: &Path| -> Result<bool, LibraryError> {
+            Ok(manager.get_folder_by_path(path)?.is_some_and(|r| !r.is_deleted))
+        };
+        let mut chain = vec![folder.clone()];
+        if let Some(root) = scope_root.map(normalize_path).filter(|root| folder.starts_with(root)) {
+            let mut above = folder.parent();
+            let mut linked = false;
+            while let Some(path) = above.filter(|p| p.starts_with(&root)) {
+                if known(path)? {
+                    linked = true;
+                    break;
+                }
+                chain.push(path.to_path_buf());
+                above = path.parent();
+            }
+            if !linked {
+                chain.truncate(1);
+            }
+        }
+        let mut added = 0;
+        let mut record = None;
+        for path in chain.iter().rev() {
+            record = Some(match manager.get_folder_by_path(path)? {
+                Some(existing) if !existing.is_deleted => existing,
+                _ => {
+                    added += 1;
+                    manager.add_folder(path)?
+                }
+            });
+        }
+        let record = record.ok_or_else(|| LibraryError::FolderNotFound(0))?;
+        tracing::info!(
+            folder = %LogObscurer::folder(Some(record.id), &folder),
+            added,
+            in_scope = scope_root.is_some_and(|root| folder.starts_with(normalize_path(root))),
+            "[FolderCreate: Register] Folder of a saved file registered"
+        );
+        Ok((record, added))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::library::Library;
+
+    #[test]
+    fn a_saved_folder_inside_the_root_is_linked_to_the_nearest_known_folder() {
+        let store = tempfile::tempdir().expect("store");
+        let disk = tempfile::tempdir().expect("disk");
+        let library = Library::open(store.path()).expect("library");
+        let root = disk.path().join("root");
+        let deep = root.join("a").join("b");
+        std::fs::create_dir_all(&deep).expect("mkdir");
+        let root_record = library.folders().add_folder(&root).expect("root");
+
+        let (record, added) = library
+            .folder_creator()
+            .register_existing(&deep, Some(&root))
+            .expect("register");
+        assert_eq!(added, 2, "a and b are registered");
+        let a = library
+            .folders()
+            .get_folder_by_path(&root.join("a"))
+            .expect("read")
+            .expect("a");
+        assert_eq!(a.parent_id, Some(root_record.id));
+        assert_eq!(record.parent_id, Some(a.id));
+
+        let (again, added) = library
+            .folder_creator()
+            .register_existing(&deep, Some(&root))
+            .expect("register again");
+        assert_eq!(
+            (again.id, added),
+            (record.id, 0),
+            "a known folder is not registered twice"
+        );
+    }
+
+    #[test]
+    fn a_saved_folder_outside_the_root_gets_a_record_of_its_own() {
+        let store = tempfile::tempdir().expect("store");
+        let disk = tempfile::tempdir().expect("disk");
+        let library = Library::open(store.path()).expect("library");
+        let root = disk.path().join("root");
+        let outside = disk.path().join("elsewhere").join("pictures");
+        std::fs::create_dir_all(&root).expect("mkdir root");
+        std::fs::create_dir_all(&outside).expect("mkdir outside");
+        library.folders().add_folder(&root).expect("root");
+
+        let (record, added) = library
+            .folder_creator()
+            .register_existing(&outside, Some(&root))
+            .expect("register");
+        assert_eq!(added, 1, "only the folder itself");
+        assert_eq!(record.parent_id, None);
+        assert!(
+            library
+                .folders()
+                .get_folder_by_path(&disk.path().join("elsewhere"))
+                .expect("read")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn without_a_known_folder_above_only_the_folder_itself_is_registered() {
+        let store = tempfile::tempdir().expect("store");
+        let disk = tempfile::tempdir().expect("disk");
+        let library = Library::open(store.path()).expect("library");
+        let root = disk.path().join("root");
+        let deep = root.join("x").join("y");
+        std::fs::create_dir_all(&deep).expect("mkdir");
+
+        let (_, added) = library
+            .folder_creator()
+            .register_existing(&deep, Some(&root))
+            .expect("register");
+        assert_eq!(added, 1, "an unscanned root does not get a partial tree");
+        assert!(library.folders().get_folder_by_path(&root).expect("read").is_none());
     }
 }

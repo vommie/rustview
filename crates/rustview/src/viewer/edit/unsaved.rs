@@ -1,7 +1,8 @@
 //! The question before something closes that holds pictures with unsaved edits (pure): a list with one checkbox per picture
-//! (checked = save it, unchecked = discard the edits) and the buttons Apply / Cancel. Pictures whose format cannot be written
-//! back are saved through the export dialog; the close waits until every checked picture is written and is called off when
-//! one of them fails or the user cancels its dialog.
+//! (checked = save it, unchecked = discard the edits) and the buttons Apply (as the checkboxes say), Don't Save (every edit is
+//! discarded) and Cancel (nothing closes). Both Apply and Don't Save go on with the close. Pictures whose format cannot be
+//! written back are saved through the export dialog; the close waits until every checked picture is written and is called off
+//! when one of them fails or the user cancels its dialog.
 
 use crate::viewer::multiview::follow::TileKey;
 use rustview_core::library::models::MediaId;
@@ -64,8 +65,8 @@ pub fn prompt(reason: CloseReason, entries: Vec<UnsavedEntry>) -> UnsavedPrompt 
     UnsavedPrompt {
         title: "Unsaved Changes".to_string(),
         message: format!(
-            "{pictures} unsaved changes. {what} ends the editing: checked pictures are saved, the changes of the others are \
-             discarded."
+            "{pictures} unsaved changes. {what} ends the editing: the checked pictures are saved and the changes of the \
+             others discarded; Don't Save discards every change."
         ),
         entries: entries.into_iter().map(|e| UnsavedEntry { save: true, ..e }).collect(),
     }
@@ -103,6 +104,15 @@ pub fn decide(entries: &[UnsavedEntry]) -> UnsavedDecision {
         }
     }
     decision
+}
+
+/// Don't Save: every edit is discarded and the close goes on.
+pub fn discard_all(entries: &[UnsavedEntry]) -> UnsavedDecision {
+    UnsavedDecision {
+        overwrite: Vec::new(),
+        export: Vec::new(),
+        discard: entries.iter().map(|e| e.tile).collect(),
+    }
 }
 
 /// The text of the Apply button for the current checkboxes.
@@ -161,5 +171,13 @@ mod tests {
         }
         assert_eq!(apply_label(&entries), "Discard Changes");
         assert!(decide(&entries).is_immediate());
+    }
+
+    #[test]
+    fn dont_save_discards_every_picture_whatever_is_checked() {
+        let entries = prompt(CloseReason::Fullscreen, vec![entry(1, true), entry(2, false)]).entries;
+        let decision = discard_all(&entries);
+        assert_eq!(decision.discard, [1, 2]);
+        assert!(decision.is_immediate(), "the close goes on at once");
     }
 }

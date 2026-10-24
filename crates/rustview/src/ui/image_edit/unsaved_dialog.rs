@@ -1,13 +1,24 @@
-//! The question before something closes that holds pictures with unsaved edits: one checkbox per picture, Apply / Cancel
-//! (`viewer::edit::unsaved` words it and turns the checkboxes into a decision).
+//! The question before something closes that holds pictures with unsaved edits: one checkbox per picture, Apply / Don't Save /
+//! Cancel (`viewer::edit::unsaved` words it and turns the checkboxes into a decision).
 
 use crate::ui::{ImageUnsavedDialog, MainWindow, UnsavedPictureView};
-use crate::viewer::edit::unsaved::{UnsavedDecision, UnsavedEntry, UnsavedPrompt, apply_label, decide};
+use crate::viewer::edit::unsaved::{UnsavedDecision, UnsavedEntry, UnsavedPrompt, apply_label, decide, discard_all};
 use slint::{CloseRequestResponse, ComponentHandle, Model, ModelRc, VecModel};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 type Answer = Box<dyn FnOnce(Option<UnsavedDecision>)>;
+
+/// The button the user pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reply {
+    /// Save the checked pictures, discard the others, go on.
+    Apply,
+    /// Discard every edit, go on.
+    DontSave,
+    /// Nothing closes.
+    Cancel,
+}
 
 struct Pending {
     entries: Vec<UnsavedEntry>,
@@ -32,10 +43,10 @@ fn row(entry: &UnsavedEntry) -> UnsavedPictureView {
 pub struct UnsavedDialog;
 
 impl UnsavedDialog {
-    /// Asks what to do with the pictures of `prompt`; `answer` gets the decision, or `None` when the user cancels (nothing
-    /// closes then).
+    /// Asks what to do with the pictures of `prompt`; `answer` gets the decision (Apply, Don't Save), or `None` when the user
+    /// cancels (nothing closes then).
     pub fn ask(window: &MainWindow, prompt: UnsavedPrompt, answer: impl FnOnce(Option<UnsavedDecision>) + 'static) {
-        Self::finish(false);
+        Self::finish(Reply::Cancel);
         let shown = DIALOG.with(|d| {
             let mut dialog = d.borrow_mut();
             if dialog.is_none() {
@@ -80,7 +91,7 @@ impl UnsavedDialog {
 
     pub fn close(window: &MainWindow) {
         Self::hide(window);
-        Self::finish(false);
+        Self::finish(Reply::Cancel);
     }
 
     fn hide(window: &MainWindow) {
@@ -92,13 +103,24 @@ impl UnsavedDialog {
         window.set_is_modal_locked(false);
     }
 
-    fn finish(apply: bool) {
+    fn finish(reply: Reply) {
         let pending = PENDING.with(|p| p.borrow_mut().take());
         if let Some(pending) = pending {
-            let decision = apply.then(|| decide(&pending.entries));
-            tracing::info!(applied = apply, "[ImageEdit: Unsaved] Answered");
+            let decision = match reply {
+                Reply::Apply => Some(decide(&pending.entries)),
+                Reply::DontSave => Some(discard_all(&pending.entries)),
+                Reply::Cancel => None,
+            };
+            tracing::info!(?reply, "[ImageEdit: Unsaved] Answered");
             (pending.answer)(decision);
         }
+    }
+
+    fn reply(weak: &slint::Weak<MainWindow>, reply: Reply) {
+        if let Some(window) = weak.upgrade() {
+            Self::hide(&window);
+        }
+        Self::finish(reply);
     }
 
     fn bind_events(win: &ImageUnsavedDialog, window: &MainWindow) {
@@ -121,25 +143,17 @@ impl UnsavedDialog {
             }
         });
         let weak = window.as_weak();
-        win.on_apply(move || {
-            if let Some(window) = weak.upgrade() {
-                Self::hide(&window);
-            }
-            Self::finish(true);
-        });
+        win.on_apply(move || Self::reply(&weak, Reply::Apply));
         let weak = window.as_weak();
-        win.on_cancel(move || {
-            if let Some(window) = weak.upgrade() {
-                Self::hide(&window);
-            }
-            Self::finish(false);
-        });
+        win.on_dont_save(move || Self::reply(&weak, Reply::DontSave));
+        let weak = window.as_weak();
+        win.on_cancel(move || Self::reply(&weak, Reply::Cancel));
         let weak = window.as_weak();
         win.window().on_close_requested(move || {
             if let Some(window) = weak.upgrade() {
                 window.set_is_modal_locked(false);
             }
-            Self::finish(false);
+            Self::finish(Reply::Cancel);
             CloseRequestResponse::HideWindow
         });
     }

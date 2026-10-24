@@ -1,7 +1,8 @@
 //! Nothing that holds pictures with unsaved edits closes unasked: closing the fullscreen, closing tabs, removing a tile, paging
 //! to another picture and following another selection first ask what happens to them (`unsaved_dialog`). Checked pictures are
 //! saved one after the other (through the export dialog where their format cannot be written), the others are discarded,
-//! and only when every save succeeded does the close go on. Cancelling, or a save that fails or is cancelled, calls it off.
+//! and only when every save succeeded does the close go on; Don't Save discards every edit and goes on at once. Cancel, or a save
+//! that fails or is cancelled, calls the close off.
 //!
 //! Call sites only ask "is there something unsaved?" (`defer_*` returns `true` when the question took over); the guard then
 //! carries out the close itself once the user agreed.

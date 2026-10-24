@@ -49,21 +49,38 @@ fn the_ratio_button_reproduces_the_reference_pictures() {
 }
 
 #[test]
-fn cycling_ratios_fits_into_the_reference_and_never_shrinks_step_by_step() {
+fn cycling_ratios_keeps_the_drawn_area_and_corner_and_never_drifts() {
     let set = ratios(&["16:9", "1:1", "21:9"]);
     let mut tool = tool((1000, 1000));
     drag(&mut tool, (1000.0, 1000.0), (600.0, 400.0), false, &set);
-    let reference = tool.rect();
-    assert_eq!(reference, PixelRect::new(0, 0, 600, 400));
+    assert_eq!(tool.rect(), PixelRect::new(0, 0, 600, 400));
     let mut seen = Vec::new();
     for _ in 0..8 {
         tool.cycle_ratio(&set, true);
         seen.push(tool.rect());
-        assert!(tool.rect().right() <= 600 && tool.rect().bottom() <= 400);
+        assert_eq!((tool.rect().x, tool.rect().y), (0, 0), "it stays in its corner");
     }
-    // Two rounds give the same rectangles: nothing drifts.
+    // Two rounds give the same rectangles: nothing drifts, and the area stays.
     assert_eq!(seen[..4], seen[4..]);
-    assert_eq!(seen[1], PixelRect::new(100, 0, 400, 400));
+    assert_eq!(seen[1], PixelRect::new(0, 0, 490, 490));
+}
+
+#[test]
+fn a_moved_rectangle_keeps_its_place_when_the_ratio_changes() {
+    let set = ratios(&["1:1", "16:9"]);
+    let mut tool = tool((1200, 800));
+    tool.cycle_ratio(&set, true);
+    assert_eq!(tool.rect(), PixelRect::new(200, 0, 800, 800));
+    // A smaller square, moved to the right edge and down: the next ratio stays there instead of going back to the middle.
+    drag(&mut tool, (1000.0, 800.0), (700.0, 500.0), true, &set);
+    assert_eq!(tool.rect(), PixelRect::new(200, 0, 500, 500));
+    drag(&mut tool, (450.0, 250.0), (1200.0, 400.0), false, &set);
+    assert_eq!(tool.rect(), PixelRect::new(700, 150, 500, 500));
+    tool.cycle_ratio(&set, true);
+    let wide = tool.rect();
+    assert_eq!(wide.right(), 1200, "it stays at the right edge");
+    assert_eq!(wide.y + wide.height / 2, 400, "and around its height");
+    assert_eq!(wide.size(), (667, 375));
 }
 
 #[test]
@@ -204,7 +221,11 @@ fn a_selection_can_start_with_a_part_of_the_picture() {
     assert_eq!(tool.rect(), PixelRect::new(112, 96, 393, 303));
     assert_eq!(tool.ratio_label(&set), "Free");
     tool.cycle_ratio(&set, true);
-    assert!(tool.rect().x >= 112 && tool.rect().right() <= 505);
+    // The ratio keeps the selection's area and middle (the grid moves the left edge by less than one block).
+    let wide = tool.rect();
+    assert_eq!((wide.x % 16, wide.y % 16), (0, 0));
+    assert!((i64::from(wide.x + wide.width / 2) - 308).abs() <= 16, "{wide:?}");
+    assert!((i64::from(wide.y + wide.height / 2) - 247).abs() <= 16, "{wide:?}");
     let mut whole = self::tool((100, 100));
     whole.select(PixelRect::new(0, 0, 500, 500), &set);
     assert_eq!(whole.rect(), PixelRect::full((100, 100)));

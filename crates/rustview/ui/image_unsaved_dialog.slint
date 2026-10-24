@@ -17,7 +17,8 @@ export struct UnsavedPictureView {
 }
 
 /// Asked before something closes that holds pictures with unsaved changes: one checkbox per picture (save it or discard its
-/// changes), then Apply (its label follows the checkboxes) or Cancel (nothing closes).
+/// changes), then Apply (its label follows the checkboxes) or Don't Save (every change is discarded), which both go on with the
+/// close, or Cancel (nothing closes).
 export component ImageUnsavedDialog inherits Window {
     title: "RustView - Unsaved Changes";
     width: 560px;
@@ -33,6 +34,7 @@ export component ImageUnsavedDialog inherits Window {
 
     callback toggled(int /* row */, bool /* save */);
     callback apply();
+    callback dont-save();
     callback cancel();
 
     forward-focus: dialog-focus;
@@ -149,10 +151,13 @@ export component ImageUnsavedDialog inherits Window {
             ButtonBar {
                 vertical-stretch: 0;
                 bar-height: 48px;
+                show-discard: true;
+                text-discard: "Don't Save";
                 show-cancel: true;
                 show-ok: true;
                 text-ok: root.apply-label;
                 ok-clicked => { root.apply(); }
+                discard-clicked => { root.dont-save(); }
                 cancel-clicked => { root.cancel(); }
             }
         }

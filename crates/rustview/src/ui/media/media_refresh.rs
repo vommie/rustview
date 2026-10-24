@@ -110,15 +110,12 @@ impl BridgeMedia {
         let mut targets: Vec<(MediaId, PathBuf, MediaRecord)> = Vec::with_capacity(selected_ids.len());
         {
             let st = state.read();
-            let folder_path_opt = st.current_folder_path.clone();
-
             for &id in selected_ids {
                 if let Some(item) = st.all_folder_media.find(id) {
                     targets.push((id, item.full_path(), item.record.clone()));
-                } else if let Some(ref folder_path) = folder_path_opt
-                    && let Ok(Some(record)) = library.media().get(id)
-                {
-                    targets.push((id, folder_path.join(&record.filename), record));
+                } else if let (Ok(Some(record)), Ok(path)) = (library.media().get(id), library.resolve_media_path(id)) {
+                    // Not in the listed folder (a tab of another folder): its own folder gives the path.
+                    targets.push((id, path, record));
                 }
             }
         }
