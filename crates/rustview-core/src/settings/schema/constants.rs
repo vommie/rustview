@@ -21,6 +21,11 @@ pub const DEFAULT_DELETION_MODE: DeletionMode = DeletionMode::Trash;
 /// Skip mount points located below the root directory during manual folder tree scans.
 pub const DEFAULT_IGNORE_NESTED_MOUNTS: bool = true;
 
+/// How long a button or menu entry that asks to be held must be held before it acts (0 = a click is enough).
+pub const DEFAULT_HOLD_TO_CONFIRM_MS: u32 = 1000;
+
+pub const MAX_HOLD_TO_CONFIRM_MS: u32 = 5000;
+
 // =============================================================================
 // SECTION 2: Folder Tree Settings - Single Point of Truth Constants
 // =============================================================================

@@ -99,6 +99,10 @@ impl UiBridge {
                     type_ahead::config::apply(&new_clone.appearance);
                 }
 
+                if diff_clone.hold_to_confirm_changed {
+                    crate::ui::hold_confirm::install(&window, new_clone.general.hold_to_confirm_ms);
+                }
+
                 if diff_clone.image_edit_changed {
                     crate::viewer::edit::prefs::apply(&new_clone.image_edit);
                 }

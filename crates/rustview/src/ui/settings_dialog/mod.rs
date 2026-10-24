@@ -1,3 +1,4 @@
+mod confirmations;
 mod formats_page;
 mod image_edit_page;
 mod selected_medium;
@@ -114,6 +115,7 @@ impl SettingsDialogController {
         window.set_remember_last_folder(settings.general.remember_last_folder);
         window.set_confirm_delete(settings.general.confirm_on_file_delete);
         window.set_confirm_open_file_count(settings.general.confirm_open_file_count.saturating_as::<i32>());
+        confirmations::populate(window, &settings.general);
 
         window.set_auto_reveal_remembered_folder(settings.folders.auto_reveal_remembered_folder);
         window.set_persist_folder_tree_state(settings.folders.persist_folder_tree_state);
@@ -521,6 +523,7 @@ impl SettingsDialogController {
                     )
                     .saturating_as::<u32>();
                 current.general.ignore_nested_mounts = w.get_ignore_nested_mounts();
+                confirmations::save(&w, &mut current.general);
 
                 current.folders.auto_reveal_remembered_folder = w.get_auto_reveal_remembered_folder();
                 current.folders.persist_folder_tree_state = w.get_persist_folder_tree_state();

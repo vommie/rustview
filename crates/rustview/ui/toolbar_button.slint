@@ -1,10 +1,12 @@
 import { Theme } from "styles.slint";
 import { AppIcon, IconId, IconSize, IconSlot } from "icons.slint";
 import { TooltipHost } from "tooltips.slint";
+import { HoldConfirm, HoldLogic, HoldRing } from "hold.slint";
 
 /// Compact, versatile button component designed specifically for panel toolbars.
 /// Supports Icon-only, Text-only, and Icon+Text modes with automatic sizing, disabled states, theme-adaptive icon colorization, and integrated hover tooltips.
 /// The icon may be placed before (default) or after the text via `icon-trailing`.
+/// With `hold` the button acts only after it was held for `HoldConfirm.duration` (hold.slint); its tooltip says so.
 export component ToolbarButton inherits Rectangle {
     in property <IconId> icon: IconId.none;
     in property <bool> icon-trailing: false;
@@ -17,6 +19,7 @@ export component ToolbarButton inherits Rectangle {
     in property <length> font-size: 11px;
     in property <length> button-width: 0px;
     in property <duration> tooltip-delay: 0ms;
+    in property <bool> hold: false;
 
     callback clicked();
 
@@ -42,11 +45,29 @@ export component ToolbarButton inherits Rectangle {
 
     border-width: (root.is-active || (touch-area.has-hover && root.is-enabled)) ? 1px : 0px;
     border-color: !root.is-enabled ? transparent : (root.is-active ? Theme.primary : Theme.border);
+    clip: root.hold;
 
     tooltip-host := TooltipHost {
         text: root.tooltip;
         shortcut: root.tooltip-shortcut;
         delay: root.tooltip-delay;
+        hold: root.hold && root.is-enabled;
+    }
+
+    hold-logic := HoldLogic {
+        pressed: touch-area.pressed;
+        enabled: root.is-enabled;
+        hold: root.hold;
+        confirmed => { root.clicked(); }
+        short-click => {
+            tooltip-host.reveal(touch-area.mouse-x, touch-area.mouse-y);
+        }
+    }
+
+    if root.hold : HoldRing {
+        progress: hold-logic.progress;
+        flash: hold-logic.flash;
+        border-radius: root.border-radius;
     }
 
     // Always enabled: a disabled TouchArea reports no hover, so the tooltip (with the reason) could not show. Clicks are filtered below.
@@ -55,11 +76,14 @@ export component ToolbarButton inherits Rectangle {
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 tooltip-host.on-hover-leave();
+                hold-logic.pressed-down();
             }
         }
         clicked => {
             tooltip-host.on-hover-leave();
-            if root.is-enabled {
+            if root.hold {
+                hold-logic.released-click();
+            } else if root.is-enabled {
                 root.clicked();
             }
         }
@@ -68,7 +92,7 @@ export component ToolbarButton inherits Rectangle {
         }
     }
 
-    property <bool> is-hovered: touch-area.has-hover && root.tooltip != "";
+    property <bool> is-hovered: touch-area.has-hover && (root.tooltip != "" || root.hold);
     changed is-hovered => {
         if self.is-hovered {
             tooltip-host.on-hover-enter(touch-area.mouse-x, touch-area.mouse-y);
@@ -78,13 +102,14 @@ export component ToolbarButton inherits Rectangle {
     }
 
     // Disabled state dims through the color alpha, never through `opacity` (an opacity layer would resample the icon).
-    property <color> content-color: !root.is-enabled ? Theme.text-muted.transparentize(0.6) : (
+    property <color> content-color: !root.is-enabled ? Theme.text-muted.transparentize(0.6) : hold-logic.progress > 0 ? HoldConfirm.color.mix(Theme.text, hold-logic.progress) : (
         root.is-active ? Theme.primary : (
             touch-area.has-hover ? Theme.text : Theme.text-muted
         )
     );
 
     content-layout := HorizontalLayout {
+        x: hold-logic.nudge;
         width: 100%;
         height: 100%;
         padding-left: root.has-text ? 6px : 2px;

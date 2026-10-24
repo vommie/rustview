@@ -5,9 +5,9 @@ use super::schema::{
     DEFAULT_THUMBNAIL_FORMAT, DEFAULT_VIDEO_ENGINE, DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH, GridAspectRatio, MAX_BATCH_COMMIT_SIZE, MAX_COL_WIDTH, MAX_CONFIRM_OPEN_FILE_COUNT,
     MAX_GRID_ITEM_BORDER_WIDTH, MAX_GRID_ITEM_CORNER_RADIUS, MAX_GRID_ITEM_PADDING_H, MAX_GRID_ITEM_PADDING_V,
-    MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_MAX_HISTORY_TAGS, MAX_MAXIMIZED_WINDOW_SIZE, MAX_MEMORY_BUDGET_MB,
-    MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH, MAX_TAB_GRID_COLUMNS,
-    MAX_TAG_HISTORY_HEIGHT, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH, MAX_TOOLTIP_DELAY_MS,
+    MAX_GRID_PADDING, MAX_GRID_SPACING, MAX_HOLD_TO_CONFIRM_MS, MAX_MAX_HISTORY_TAGS, MAX_MAXIMIZED_WINDOW_SIZE,
+    MAX_MEMORY_BUDGET_MB, MAX_PREVIEW_FRAME_COUNT, MAX_QUALITY, MAX_SHORT_VIDEO_THRESHOLD_SECS, MAX_SIDEBAR_WIDTH,
+    MAX_TAB_GRID_COLUMNS, MAX_TAG_HISTORY_HEIGHT, MAX_THUMBNAIL_DB_SIZE, MAX_THUMBNAIL_WIDTH, MAX_TOOLTIP_DELAY_MS,
     MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS,
     MAX_VIDEO_OFFSET_PERCENT, MAX_WORKER_THREADS, MIN_BATCH_COMMIT_SIZE, MIN_COL_WIDTH, MIN_CONFIRM_OPEN_FILE_COUNT,
     MIN_GRID_ITEM_BORDER_WIDTH, MIN_GRID_ITEM_CORNER_RADIUS, MIN_GRID_ITEM_PADDING_H, MIN_GRID_ITEM_PADDING_V,
@@ -114,6 +114,7 @@ impl SettingsStore {
             .general
             .confirm_open_file_count
             .clamp(MIN_CONFIRM_OPEN_FILE_COUNT, MAX_CONFIRM_OPEN_FILE_COUNT);
+        settings.general.hold_to_confirm_ms = settings.general.hold_to_confirm_ms.min(MAX_HOLD_TO_CONFIRM_MS);
 
         // Formats: canonical ids in table order, without duplicates or ids no format has
         settings.formats.disabled_formats = settings.formats.format_mask().disabled_ids();
@@ -486,5 +487,26 @@ mod selection_tests {
             "medium",
             "the marks cannot be switched off"
         );
+    }
+}
+
+#[cfg(test)]
+mod hold_tests {
+    use super::*;
+    use crate::settings::schema::DEFAULT_HOLD_TO_CONFIRM_MS;
+
+    #[test]
+    fn a_file_without_the_hold_duration_gets_the_default_and_a_long_one_is_capped() {
+        let old: AppSettings = serde_json::from_str(r#"{"general": {"confirm_open_file_count": 7}}"#).unwrap();
+        assert_eq!(old.general.hold_to_confirm_ms, DEFAULT_HOLD_TO_CONFIRM_MS);
+        assert_eq!(old.general.confirm_open_file_count, 7);
+
+        let mut long: AppSettings = serde_json::from_str(r#"{"general": {"hold_to_confirm_ms": 60000}}"#).unwrap();
+        SettingsStore::validate_and_sanitize(&mut long);
+        assert_eq!(long.general.hold_to_confirm_ms, MAX_HOLD_TO_CONFIRM_MS);
+
+        let mut off: AppSettings = serde_json::from_str(r#"{"general": {"hold_to_confirm_ms": 0}}"#).unwrap();
+        SettingsStore::validate_and_sanitize(&mut off);
+        assert_eq!(off.general.hold_to_confirm_ms, 0, "0 = a click is enough");
     }
 }

@@ -108,6 +108,8 @@ export struct ContextMenuItemModel {
     submenu_depth: int,
     menu_index: int,
     tooltip: string,
+    /// The entry acts only when held for `HoldConfirm.duration` (hold.slint).
+    hold: bool,
 }
 
 export struct ContextMenuLevelModel {

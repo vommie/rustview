@@ -1,5 +1,34 @@
 import { TooltipSettings, GlobalTooltip } from "tooltips.slint";
 import { IconSlot, IconSize, IconId } from "icons.slint";
+import { HoldConfirm } from "hold.slint";
+
+/// The hold badge: the element acts only when held this long (hold.slint).
+component HoldBadge inherits Rectangle {
+    height: 18px;
+    border-radius: 3px;
+    background: HoldConfirm.color.with-alpha(0.18);
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 5px;
+        spacing: 3px;
+        alignment: center;
+
+        IconSlot {
+            icon: IconId.tip-hold;
+            size: IconSize.sm;
+            color: HoldConfirm.color;
+        }
+
+        Text {
+            text: "Hold " + Math.round(HoldConfirm.duration / 100ms) / 10 + " s";
+            font-size: 10.5px;
+            font-weight: 700;
+            color: HoldConfirm.color;
+            vertical-alignment: center;
+        }
+    }
+}
 
 /// The tooltip bubble of `GlobalTooltip`, drawn on the highest z level of a window. Every window that hosts tooltip
 /// sources puts one of these over its content (the main window and the Multiview window). Native video windows are
@@ -9,10 +38,11 @@ export component GlobalTooltipLayer inherits Rectangle {
     callback state-changed(bool /* is_visible */, length /* x */, length /* y */, length /* width */, length /* height */);
 
     property <bool> active: GlobalTooltip.is-visible && TooltipSettings.enabled;
+    property <bool> show-hold: GlobalTooltip.hold && HoldConfirm.duration > 0ms;
     // Long tooltips wrap at the maximum width; `measure` is the text on one line, `wrapped` the same text at the final width.
     // The bubble stays inside the window it is drawn in (the bar windows are narrow): 8px margin on both sides, the padding
     // of the bubble, and room for an icon or a shortcut badge.
-    property <length> room: root.width - 16px - 2 * TooltipSettings.default-padding-h - (GlobalTooltip.shortcut != "" ? 60px : 0px) - (GlobalTooltip.icon != IconId.none ? 22px : 0px);
+    property <length> room: root.width - 16px - 2 * TooltipSettings.default-padding-h - (GlobalTooltip.shortcut != "" ? 60px : 0px) - (GlobalTooltip.icon != IconId.none ? 22px : 0px) - (root.show-hold ? 76px : 0px);
     property <length> text-w: Math.max(40px, Math.min(Math.min(TooltipSettings.max-width, root.room), measure.preferred-width));
     property <length> bubble-w: tooltip-bubble.preferred-width;
     property <length> bubble-h: Math.max(tooltip-bubble.preferred-height, wrapped.preferred-height + 2 * TooltipSettings.default-padding-v);
@@ -86,7 +116,7 @@ export component GlobalTooltipLayer inherits Rectangle {
                 color: TooltipSettings.default-text;
             }
 
-            Text {
+            if GlobalTooltip.text != "" : Text {
                 width: root.text-w;
                 wrap: word-wrap;
                 text: GlobalTooltip.text;
@@ -117,6 +147,10 @@ export component GlobalTooltipLayer inherits Rectangle {
                         vertical-alignment: center;
                     }
                 }
+            }
+
+            if root.show-hold : HoldBadge {
+                y: (parent.height - self.height) / 2;
             }
         }
     }

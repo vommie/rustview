@@ -10,6 +10,7 @@ export component SettingsPageGeneral inherits VerticalLayout {
     in-out property <bool> remember-last-folder: true;
     in-out property <bool> confirm-delete: true;
     in-out property <int> confirm-open-file-count: 5;
+    in-out property <int> hold-to-confirm-ms: 1000;
     in-out property <int> deletion-mode-idx: 0;
     in property <string> app-version: "";
 
@@ -80,6 +81,33 @@ export component SettingsPageGeneral inherits VerticalLayout {
 
         Text {
             text: "Applies to Open, Open With, Open in File Manager and Open in (Background) Tabs. Open in Fullscreen has its own limit and never asks.";
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                text: "Hold to confirm (milliseconds):";
+                color: Theme.text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                wrap: word-wrap;
+            }
+
+            SpinBox {
+                width: 90px;
+                minimum: 0;
+                maximum: 5000;
+                step-size: 100;
+                value <=> root.hold-to-confirm-ms;
+            }
+        }
+
+        Text {
+            text: "Buttons and menu entries that reset or discard something act only after they were held this long; their tooltip says so. 0 = a click is enough.";
             font-size: 11px;
             color: Theme.text-muted;
             wrap: word-wrap;

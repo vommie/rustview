@@ -46,6 +46,8 @@ pub struct GeneralSettings {
     pub deletion_mode: DeletionMode,
     /// If enabled, mount points located below the root directory are skipped by folder tree scans.
     pub ignore_nested_mounts: bool,
+    /// Added in 0.4.4: how long a hold-to-confirm element must be held, in milliseconds (0 = a click is enough).
+    pub hold_to_confirm_ms: u32,
 }
 
 impl Default for GeneralSettings {
@@ -58,6 +60,7 @@ impl Default for GeneralSettings {
             confirm_open_file_count: DEFAULT_CONFIRM_OPEN_FILE_COUNT,
             deletion_mode: DEFAULT_DELETION_MODE,
             ignore_nested_mounts: DEFAULT_IGNORE_NESTED_MOUNTS,
+            hold_to_confirm_ms: DEFAULT_HOLD_TO_CONFIRM_MS,
         }
     }
 }

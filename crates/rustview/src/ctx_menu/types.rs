@@ -34,6 +34,9 @@ pub struct CtxMenuItem {
     pub menu_index: usize,
     #[serde(default)]
     pub tooltip: Option<String>,
+    /// The entry acts only when held for the hold duration (`ui/hold.slint`), its tooltip says how long.
+    #[serde(default)]
+    pub hold: bool,
 }
 
 impl CtxMenuItem {
@@ -50,12 +53,19 @@ impl CtxMenuItem {
             children: Vec::new(),
             menu_index: 0,
             tooltip: None,
+            hold: false,
         }
     }
 
     /// Sets the leading library icon of the item.
     pub fn with_icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+
+    /// The entry acts only when held, not on a click (hold to confirm).
+    pub fn with_hold(mut self) -> Self {
+        self.hold = true;
         self
     }
 
@@ -72,6 +82,7 @@ impl CtxMenuItem {
             children: Vec::new(),
             menu_index: 0,
             tooltip: None,
+            hold: false,
         }
     }
 
@@ -88,6 +99,7 @@ impl CtxMenuItem {
             children: Vec::new(),
             menu_index: 0,
             tooltip: None,
+            hold: false,
         }
     }
 
@@ -104,6 +116,7 @@ impl CtxMenuItem {
             children: Vec::new(),
             menu_index: 0,
             tooltip: None,
+            hold: false,
         }
     }
 
@@ -120,6 +133,7 @@ impl CtxMenuItem {
             children: Vec::new(),
             menu_index: 0,
             tooltip: Some(tooltip.into()),
+            hold: false,
         }
     }
 
@@ -141,6 +155,7 @@ impl CtxMenuItem {
             children,
             menu_index: 0,
             tooltip: None,
+            hold: false,
         }
     }
 }

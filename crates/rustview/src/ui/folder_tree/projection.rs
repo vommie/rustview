@@ -120,6 +120,7 @@ impl FolderProjection for FolderHierarchySnapshot {
                 children: Vec::new(),
                 menu_index: 0,
                 tooltip: root_tooltip,
+                hold: false,
             };
             menu_items.push(root_action);
 
@@ -294,6 +295,7 @@ fn build_target_folder_item(
             children: Vec::new(),
             menu_index: 0,
             tooltip,
+            hold: false,
         });
     }
 
@@ -321,6 +323,7 @@ fn build_target_folder_item(
         children: Vec::new(),
         menu_index: 0,
         tooltip: direct_tooltip,
+        hold: false,
     };
 
     let mut sub_elements = Vec::with_capacity(eligible_children.len() + 2);
@@ -352,5 +355,6 @@ fn build_target_folder_item(
         children: sub_elements,
         menu_index: 0,
         tooltip: None,
+        hold: false,
     })
 }

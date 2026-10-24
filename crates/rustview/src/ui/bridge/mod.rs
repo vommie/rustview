@@ -232,6 +232,7 @@ impl UiBridge {
             app_settings.appearance.tooltip_delay_ms.saturating_as::<i32>(),
         );
         type_ahead::config::apply(&app_settings.appearance);
+        crate::ui::hold_confirm::install(&window, app_settings.general.hold_to_confirm_ms);
         prefs::apply(&app_settings.fullscreen);
         zoom_prefs::apply(&app_settings.fullscreen);
         crate::viewer::edit::prefs::apply(&app_settings.image_edit);

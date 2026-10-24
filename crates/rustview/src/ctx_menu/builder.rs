@@ -74,6 +74,7 @@ impl CtxMenuBuilder {
             children: Vec::new(),
             menu_index: 0,
             tooltip: None,
+            hold: false,
         });
         self
     }
@@ -99,6 +100,7 @@ impl CtxMenuBuilder {
             children: Vec::new(),
             menu_index: 0,
             tooltip: Some(tooltip.into()),
+            hold: false,
         });
         self
     }
@@ -125,6 +127,7 @@ impl CtxMenuBuilder {
             children: Vec::new(),
             menu_index: 0,
             tooltip: None,
+            hold: false,
         });
         self
     }
@@ -150,6 +153,7 @@ impl CtxMenuBuilder {
             children: Vec::new(),
             menu_index: 0,
             tooltip: None,
+            hold: false,
         });
         self
     }
@@ -175,6 +179,7 @@ impl CtxMenuBuilder {
             children: Vec::new(),
             menu_index: 0,
             tooltip: None,
+            hold: false,
         });
         self
     }
@@ -198,6 +203,7 @@ impl CtxMenuBuilder {
             children: child_menu.items,
             menu_index: 0,
             tooltip: None,
+            hold: false,
         });
         self
     }

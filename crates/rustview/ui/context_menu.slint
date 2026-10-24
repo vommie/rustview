@@ -3,6 +3,7 @@ import { AppIcon, IconId, IconSlot, IconSize } from "icons.slint";
 import { ContextMenuItemModel, ContextMenuLevelModel } from "types.slint";
 import { TooltipArea, TooltipHost } from "tooltips.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
+import { HoldConfirm, HoldLogic, HoldRing } from "hold.slint";
 
 export component ContextMenuItemRow inherits Rectangle {
     in property <ContextMenuItemModel> item;
@@ -11,16 +12,41 @@ export component ContextMenuItemRow inherits Rectangle {
     callback scrolled(length /* delta_x */, length /* delta_y */);
     callback row-hovered(bool /* is_hover */, length /* y_pos */, int /* menu_index */, bool /* has_sub */);
 
+    property <bool> usable: root.item.is-enabled && root.item.kind != 3 && root.item.kind != 4;
+
     height: (root.item.kind == 3) ? 7px : ((root.item.kind == 4) ? 22px : 28px);
     background: (!root.item.is-enabled || root.item.kind == 3 || root.item.kind == 4)
         ? transparent
         : ((item-touch.has-hover || root.is-parent-active) ? Theme.surface-hover : transparent);
     border-radius: 4px;
+    clip: root.item.hold;
 
     tooltip-host := TooltipHost {
         text: root.item.tooltip;
-        is-enabled: root.item.tooltip != "" && root.item.kind != 3;
+        hold: root.item.hold && root.usable;
+        is-enabled: (root.item.tooltip != "" || (root.item.hold && root.usable)) && root.item.kind != 3;
         delay: 350ms;
+    }
+
+    // A held entry acts only after `HoldConfirm.duration`; a short click wiggles it and shows the tooltip with the hold badge.
+    hold-logic := HoldLogic {
+        pressed: item-touch.pressed;
+        enabled: root.usable && !root.item.has-submenu;
+        hold: root.item.hold;
+        confirmed => {
+            tooltip-host.on-hover-leave();
+            root.clicked();
+        }
+        short-click => {
+            tooltip-host.reveal(item-touch.mouse-x, item-touch.mouse-y);
+        }
+    }
+
+    if root.item.hold : HoldRing {
+        progress: hold-logic.progress;
+        flash: hold-logic.flash;
+        ring: false;
+        border-radius: root.border-radius;
     }
 
     item-touch := TouchArea {
@@ -37,10 +63,15 @@ export component ContextMenuItemRow inherits Rectangle {
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 tooltip-host.on-hover-leave();
+                hold-logic.pressed-down();
             }
         }
         clicked => {
-            if root.item.is-enabled && root.item.kind != 3 && root.item.kind != 4 {
+            if root.item.hold && !root.item.has-submenu {
+                hold-logic.released-click();
+                return;
+            }
+            if root.usable {
                 tooltip-host.on-hover-leave();
                 root.clicked();
             }
@@ -53,7 +84,7 @@ export component ContextMenuItemRow inherits Rectangle {
     property <bool> is-hovered: item-touch.has-hover;
     changed is-hovered => {
         if self.is-hovered {
-            if root.item.tooltip != "" && root.item.kind != 3 {
+            if (root.item.tooltip != "" || root.item.hold) && root.item.kind != 3 {
                 tooltip-host.on-hover-enter(item-touch.mouse-x, item-touch.mouse-y);
             }
             root.row-hovered(true, root.y, root.item.menu-index, root.item.has-submenu);
@@ -101,10 +132,14 @@ export component ContextMenuItemRow inherits Rectangle {
         : root.item.icon;
     property <color> slot-color: !root.item.is-enabled
         ? Theme.text-muted.transparentize(0.55)
+        : hold-logic.progress > 0 ? HoldConfirm.color.mix(Theme.text, hold-logic.progress)
         : (root.shows-mark ? Theme.primary : ((item-touch.has-hover || root.is-parent-active) ? Theme.text : Theme.text-muted));
 
     // Standard Action / Checkable / Submenu Row: [icon slot] [label] [shortcut] [submenu chevron]
     if root.item.kind != 3 && root.item.kind != 4 : HorizontalLayout {
+        x: hold-logic.nudge;
+        width: parent.width;
+        height: parent.height;
         padding-left: 10px;
         padding-right: 10px;
         spacing: 8px;
@@ -135,7 +170,9 @@ export component ContextMenuItemRow inherits Rectangle {
 
         Text {
             text: root.item.text;
-            color: root.item.is-enabled ? Theme.text : Theme.text-muted;
+            color: !root.item.is-enabled ? Theme.text-muted
+                : hold-logic.progress > 0 ? HoldConfirm.color.mix(Theme.text, hold-logic.progress)
+                : Theme.text;
             font-size: 12px;
             vertical-alignment: center;
             horizontal-alignment: left;

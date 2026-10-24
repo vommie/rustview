@@ -15,6 +15,7 @@ pub mod file_dialogs;
 pub mod folder_dialogs;
 pub mod folder_tree;
 pub mod formats_policy;
+pub mod hold_confirm;
 pub mod image_edit;
 pub mod list_loader;
 pub mod media;

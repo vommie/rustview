@@ -35,6 +35,8 @@ export global GlobalTooltip {
     in-out property <bool> is-visible: false;
     in-out property <string> text: "";
     in-out property <string> shortcut: "";
+    // The element acts only when held (hold.slint): the bubble shows the hold badge.
+    in-out property <bool> hold: false;
     in-out property <IconId> icon: IconId.none;
     in-out property <length> pos-x: 0px;
     in-out property <length> pos-y: 0px;
@@ -135,6 +137,8 @@ export component TooltipHost inherits Rectangle {
     in property <string> shortcut: "";
     in property <IconId> icon: IconId.none;
     in property <bool> is-enabled: true;
+    // The element acts only when held: the bubble shows the hold badge (also without a text).
+    in property <bool> hold: false;
 
     // Behavioral Options
     in property <duration> delay: 0ms; // 0ms = use TooltipSettings.default-delay
@@ -156,9 +160,10 @@ export component TooltipHost inherits Rectangle {
         interval: root.effective-delay;
         running: false;
         triggered() => {
-            if root.is-hovered && TooltipSettings.enabled && root.is-enabled && root.text != "" {
+            if root.is-hovered && TooltipSettings.enabled && root.is-enabled && (root.text != "" || root.hold) {
                 let target-x = root.absolute-position.x + root.offset-x;
                 let target-y = root.absolute-position.y + root.height + 4px + root.offset-y;
+                GlobalTooltip.hold = root.hold;
                 GlobalTooltip.show(
                     root.text,
                     root.shortcut,
@@ -174,25 +179,39 @@ export component TooltipHost inherits Rectangle {
     /// Invoked when mouse enters the host component area
     public function on-hover-enter(mx: length, my: length) {
         root.is-hovered = true;
-        if TooltipSettings.enabled && root.is-enabled && root.text != "" {
+        if TooltipSettings.enabled && root.is-enabled && (root.text != "" || root.hold) {
             if root.effective-delay <= 0ms {
-                let target-x = root.follow-cursor
-                    ? (root.absolute-position.x + mx + 8px)
-                    : (root.absolute-position.x + root.offset-x);
-                let target-y = root.follow-cursor
-                    ? (root.absolute-position.y + my + 16px)
-                    : (root.absolute-position.y + root.height + 4px + root.offset-y);
-                GlobalTooltip.show(
-                    root.text,
-                    root.shortcut,
-                    root.icon,
-                    target-x,
-                    target-y
-                );
+                root.show-now(mx, my);
             } else {
                 hover-timer.running = true;
             }
         }
+    }
+
+    /// Shows the tooltip at once, without the delay (a short click on a held element explains why nothing happened).
+    public function reveal(mx: length, my: length) {
+        root.is-hovered = true;
+        hover-timer.running = false;
+        if TooltipSettings.enabled && root.is-enabled && (root.text != "" || root.hold) {
+            root.show-now(mx, my);
+        }
+    }
+
+    function show-now(mx: length, my: length) {
+        let target-x = root.follow-cursor
+            ? (root.absolute-position.x + mx + 8px)
+            : (root.absolute-position.x + root.offset-x);
+        let target-y = root.follow-cursor
+            ? (root.absolute-position.y + my + 16px)
+            : (root.absolute-position.y + root.height + 4px + root.offset-y);
+        GlobalTooltip.hold = root.hold;
+        GlobalTooltip.show(
+            root.text,
+            root.shortcut,
+            root.icon,
+            target-x,
+            target-y
+        );
     }
 
     /// Invoked when mouse leaves the host component area or on click

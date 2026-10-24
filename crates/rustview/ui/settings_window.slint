@@ -17,6 +17,7 @@ import { ButtonBar } from "button_bar.slint";
 import { SmoothScrollArea } from "smooth_scroll_view.slint";
 import { GlobalTooltipLayer } from "global_tooltip_layer.slint";
 import { TooltipSettings } from "tooltips.slint";
+import { HoldConfirm } from "hold.slint";
 
 export { SettingsSidebar } from "settings_sidebar.slint";
 export { SettingsPageGeneral } from "settings_page_general.slint";
@@ -52,6 +53,7 @@ export component SettingsWindow inherits Window {
     in-out property <bool> remember-last-folder: true;
     in-out property <bool> confirm-delete: true;
     in-out property <int> confirm-open-file-count: 5;
+    in-out property <int> hold-to-confirm-ms: 1000;
     in-out property <int> deletion-mode-idx: 0;
 
     // Folders options
@@ -236,6 +238,10 @@ export component SettingsWindow inherits Window {
     changed tooltip-delay-ms => {
         TooltipSettings.default-delay = root.tooltip-delay-ms * 1ms;
     }
+    // The held elements of this window follow the duration being edited.
+    changed hold-to-confirm-ms => {
+        HoldConfirm.duration = root.hold-to-confirm-ms * 1ms;
+    }
 
     forward-focus: dialog-focus;
 
@@ -281,6 +287,7 @@ export component SettingsWindow inherits Window {
                             remember-last-folder <=> root.remember-last-folder;
                             confirm-delete <=> root.confirm-delete;
                             confirm-open-file-count <=> root.confirm-open-file-count;
+                            hold-to-confirm-ms <=> root.hold-to-confirm-ms;
                             deletion-mode-idx <=> root.deletion-mode-idx;
                             app-version: root.app-version;
                             browse-root-folder => { root.browse-root-folder(); }
