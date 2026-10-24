@@ -9,7 +9,6 @@
 mod action;
 mod area;
 mod chord;
-pub mod mpv_keys;
 #[cfg(test)]
 mod tests;
 

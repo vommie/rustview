@@ -1,6 +1,6 @@
 //! Subscriber callbacks and the mpv event observer thread.
 
-use super::{CLICK_MESSAGE, ESCAPE_MESSAGE, MpvPlayer};
+use super::{CLICK_MESSAGE, MpvPlayer};
 use crate::viewer::types::MpvPlaybackState;
 use rustview_core::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
 use rustview_core::util::cast::Az;
@@ -24,32 +24,12 @@ impl MpvPlayer {
         cbs.push(Arc::new(callback));
     }
 
-    /// A key of the keymap was pressed in the player's window (`keys`); the callback gets its chord text.
-    pub fn on_key<F>(&self, callback: F)
-    where
-        F: Fn(&str) + Send + Sync + 'static,
-    {
-        let mut cbs = self.key_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
     /// A plain left click on the player's window (outside the tab grid, whose clicks have their own callbacks).
     pub fn on_clicked<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
     {
         let mut cbs = self.click_callbacks.write();
-        cbs.clear();
-        cbs.push(Arc::new(callback));
-    }
-
-    /// Esc in the player's window.
-    pub fn on_escape<F>(&self, callback: F)
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        let mut cbs = self.escape_callbacks.write();
         cbs.clear();
         cbs.push(Arc::new(callback));
     }
@@ -142,9 +122,7 @@ impl MpvPlayer {
         let grid_wheel_up_callbacks = self.grid_wheel_up_callbacks.clone();
         let grid_wheel_down_callbacks = self.grid_wheel_down_callbacks.clone();
         let convert_callbacks = self.convert_to_tab_callbacks.clone();
-        let key_callbacks = self.key_callbacks.clone();
         let click_callbacks = self.click_callbacks.clone();
-        let escape_callbacks = self.escape_callbacks.clone();
         let mute_callbacks = self.mute_callbacks.clone();
         let pause_callbacks = self.pause_callbacks.clone();
 
@@ -168,19 +146,10 @@ impl MpvPlayer {
                     };
                     if let Some(Ok(libmpv2::events::Event::ClientMessage(args))) =
                         mpv.wait_event(poll_ms.az::<f64>() / 1000.0)
+                        && args.first() == Some(&CLICK_MESSAGE)
                     {
-                        if let Some(chord) = super::keys::chord_of_message(&args) {
-                            for cb in key_callbacks.read().clone() {
-                                cb(chord);
-                            }
-                        } else if args.first() == Some(&CLICK_MESSAGE) {
-                            for cb in click_callbacks.read().clone() {
-                                cb();
-                            }
-                        } else if args.first() == Some(&ESCAPE_MESSAGE) {
-                            for cb in escape_callbacks.read().clone() {
-                                cb();
-                            }
+                        for cb in click_callbacks.read().clone() {
+                            cb();
                         }
                     }
 

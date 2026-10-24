@@ -14,7 +14,7 @@ An action belongs to one area; the same key may mean different things in areas t
 | Browse | the Browse view (Rename also in the tab grid, where it acts on the last used panel) |
 | Tab | a Multiview shown in a tab (acts on the selected medium) |
 | Fullscreen | the Multiview fullscreen window (acts on the selected medium) |
-| Video player | the selected video in a tab or the fullscreen; shown now, takes effect when RustView controls the videos (next milestone) |
+| Video player | the selected video in a tab or the fullscreen (comes first while the Multiview holds a video) |
 
 Conflicts are checked between areas that can be active at the same time: General with Browse, Tab and Video player; Tab and
 Fullscreen each with Video player. The one allowed overlap: a Video player key may also page in the Fullscreen (paging only
@@ -31,9 +31,12 @@ same, e.g. only the fullscreen of a Browse view pages or becomes a tab) with sim
   media bar button of the selected medium like a click (refused with "Not available for this medium" when it is not on offer),
   a primary bar key runs `perform_primary_action`.
 - Plain Backspace is a second zoom reset in the Multiview (Ctrl+0 rates).
-- Keys over a video follow the keymap now: RustView binds the chords of its Tab/Fullscreen/General actions in mpv as
-  `script-message rustview-key <chord>` (input section `rustview_keys`), the router resolves them for the host of that
-  player. Chords that a Video player action has stay with mpv until the next milestone.
+- Keys over a video (0.4.6, the "RustView controls the videos" milestone, keyboard part): mpv takes no keys
+  (`input-vo-keyboard=no`); X11 then delivers a key pressed over a video to the RustView window under it, so every key over a
+  video is the keymap's. The Video Player area comes first while the Multiview holds a video; its actions run `MpvPlayer`
+  commands on the selected video (`MultiviewCommand::Player`: pause, mute, jumps of Settings > Viewer > Videos, 5 % volume
+  steps, frame steps, speed x1.1); a picture as target shows "Select a video". (0.4.4 had bound the keymap's chords inside mpv as
+  `script-message rustview-key`; that path is gone.) The mouse over a video still goes to mpv (see "Mouse over videos").
 - Fixed keys (cannot be changed, shown greyed with a lock and a tooltip that says why): Esc (cancels, closes, clears the
   selection; it also cancels the recording of a key), the cursor keys of Browse (arrows, Page Up/Down, Home/End, Shift
   extends), type-ahead letters. Dialog keys (Enter, Esc) are not listed.

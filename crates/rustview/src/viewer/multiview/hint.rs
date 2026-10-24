@@ -27,6 +27,8 @@ pub enum HintKind {
     NotRateable,
     /// The key of a media bar button the selected medium does not offer right now.
     NotOffered,
+    /// A video player key while the selected medium is a picture (or a video that does not play).
+    NotAVideo,
 }
 
 impl HintKind {
@@ -42,6 +44,7 @@ impl HintKind {
             Self::SaveInProgress => "Saving in progress",
             Self::NotRateable => "This medium cannot be rated",
             Self::NotOffered => "Not available for this medium",
+            Self::NotAVideo => "Select a video",
         }
     }
 

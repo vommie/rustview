@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+mod controls;
 mod events;
-pub mod keys;
 pub mod overlay;
 mod playback;
 mod rating;
@@ -19,8 +19,6 @@ pub type MpvEventCallback = Arc<dyn Fn(&MpvPlaybackState) + Send + Sync>;
 pub type MpvFullscreenCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvGridClickCallback = Arc<dyn Fn() + Send + Sync>;
 pub type MpvConvertToTabCallback = Arc<dyn Fn() + Send + Sync>;
-/// Called from the observer thread when a key of the keymap was pressed in the player's window (`keys`), with its chord text.
-pub type MpvKeyCallback = Arc<dyn Fn(&str) + Send + Sync>;
 
 /// The message mpv sends when its window is clicked (a plain left click: the Multiview selects the tile; never a pause).
 const CLICK_MESSAGE: &str = "rustview-click";
@@ -29,13 +27,6 @@ fn bind_click(mpv: &Mpv) {
     let _ = mpv.command("keybind", &["MBTN_LEFT", &format!("script-message {CLICK_MESSAGE}")]);
 }
 
-/// The message mpv sends for Esc in its window: the Multiview runs its Esc chain (crop tools, then close or nothing), the same
-/// as for Esc anywhere else, instead of toggling a fullscreen.
-const ESCAPE_MESSAGE: &str = "rustview-escape";
-
-fn bind_escape(mpv: &Mpv) {
-    let _ = mpv.command("keybind", &["ESC", &format!("script-message {ESCAPE_MESSAGE}")]);
-}
 /// Called from the observer thread when the player's window was clicked.
 pub type MpvClickCallback = Arc<dyn Fn() + Send + Sync>;
 /// Called from the observer thread when the mute state changed (a hotkey, the on-screen controller or `set_mute`).
@@ -61,9 +52,7 @@ pub struct MpvPlayer {
     grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>>,
     convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>>,
-    key_callbacks: Arc<RwLock<Vec<MpvKeyCallback>>>,
     click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
-    escape_callbacks: Arc<RwLock<Vec<MpvClickCallback>>>,
     mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>>,
     pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>>,
     observer_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -96,7 +85,9 @@ impl MpvPlayer {
 
             // 5. Native input handling
             let _ = init.set_property("input-default-bindings", "yes");
-            let _ = init.set_property("input-vo-keyboard", "yes");
+            // mpv never takes the keyboard: a key pressed over a video reaches the RustView window under it, which handles every
+            // key itself (`docs/hotkeys.md`).
+            let _ = init.set_property("input-vo-keyboard", "no");
 
             // 6. Enable loading of user config files (mpv.conf, input.conf, script-opts, etc.)
             let _ = init.set_property("config", "yes");
@@ -136,11 +127,9 @@ impl MpvPlayer {
         // A single left click never pauses the video; it is reported, so the Multiview can select the tile
         bind_click(&mpv_instance);
 
-        // Bind double-click and middle-click in MPV to cycle fullscreen; Esc is reported on its own. The keys of RustView's
-        // actions (rename, delete, rating, close, fullscreen, ...) come from the keymap (`keys::install` below).
+        // Bind double-click and middle-click in MPV to cycle fullscreen (mpv takes no keys at all, see above)
         let _ = mpv_instance.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
         let _ = mpv_instance.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
-        bind_escape(&mpv_instance);
 
         // Bind Ctrl+Click and Ctrl+DoubleClick in MPV to toggle window-maximized
         let convert_keys = [
@@ -159,10 +148,6 @@ impl MpvPlayer {
             let _ = mpv_instance.command("keybind", &[k, "no-osd cycle window-maximized"]);
         }
 
-        // Ignore quit keys in MPV so Slint handles navigation and lifecycle
-        let _ = mpv_instance.command("keybind", &["q", "ignore"]);
-        let _ = mpv_instance.command("keybind", &["Q", "ignore"]);
-
         // Define the dedicated tabgrid input section for Grid View (active ONLY in Tab-Grid mode).
         // This isolates wheel and click hijacking to Tab-Grid mode without overriding or ignoring normal wheel bindings.
         let tabgrid_bindings = "MBTN_LEFT no-osd cycle ontop\nMBTN_MID no-osd cycle border\nWHEEL_UP no-osd cycle deinterlace\nWHEEL_DOWN no-osd cycle sub-visibility\n";
@@ -178,7 +163,6 @@ impl MpvPlayer {
         }
 
         let mpv_arc = Arc::new(mpv_instance);
-        keys::install(&mpv_arc);
         let state = Arc::new(RwLock::new(MpvPlaybackState::default()));
         let current_file_path = Arc::new(RwLock::new(None));
         let attached_wid = Arc::new(RwLock::new(None));
@@ -193,9 +177,7 @@ impl MpvPlayer {
         let grid_wheel_up_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let grid_wheel_down_callbacks: Arc<RwLock<Vec<MpvGridClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let convert_to_tab_callbacks: Arc<RwLock<Vec<MpvConvertToTabCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let key_callbacks: Arc<RwLock<Vec<MpvKeyCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let click_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
-        let escape_callbacks: Arc<RwLock<Vec<MpvClickCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let mute_callbacks: Arc<RwLock<Vec<MpvMuteCallback>>> = Arc::new(RwLock::new(Vec::new()));
         let pause_callbacks: Arc<RwLock<Vec<MpvPauseCallback>>> = Arc::new(RwLock::new(Vec::new()));
 
@@ -215,9 +197,7 @@ impl MpvPlayer {
             grid_wheel_up_callbacks: grid_wheel_up_callbacks.clone(),
             grid_wheel_down_callbacks: grid_wheel_down_callbacks.clone(),
             convert_to_tab_callbacks: convert_to_tab_callbacks.clone(),
-            key_callbacks: key_callbacks.clone(),
             click_callbacks: click_callbacks.clone(),
-            escape_callbacks: escape_callbacks.clone(),
             mute_callbacks: mute_callbacks.clone(),
             pause_callbacks: pause_callbacks.clone(),
             observer_handle: Mutex::new(None),
@@ -286,14 +266,13 @@ impl MpvPlayer {
 
             let _ = self.mpv.set_property("osc", "yes");
             let _ = self.mpv.set_property("input-default-bindings", "yes");
-            let _ = self.mpv.set_property("input-vo-keyboard", "yes");
+            let _ = self.mpv.set_property("input-vo-keyboard", "no");
             let _ = self.mpv.set_property("input-cursor", "yes");
 
             // Restore standard bindings with Middle-Click Fullscreen toggle and Ctrl+DoubleClick
             bind_click(&self.mpv);
             let _ = self.mpv.command("keybind", &["MBTN_MID", "cycle fullscreen"]);
             let _ = self.mpv.command("keybind", &["MBTN_LEFT_DBL", "cycle fullscreen"]);
-            bind_escape(&self.mpv);
 
             let convert_keys = [
                 "Ctrl+MBTN_LEFT",

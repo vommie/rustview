@@ -370,6 +370,16 @@ pub const DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB: bool = true;
 
 pub const DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS: bool = true;
 
+/// How far the jump keys of the video player move (Settings > Hotkeys > Video Player), in seconds.
+pub const DEFAULT_VIEWER_VIDEO_JUMP_SECS: u32 = 5;
+
+/// How far the long jump keys move, in seconds.
+pub const DEFAULT_VIEWER_VIDEO_JUMP_LONG_SECS: u32 = 60;
+
+pub const MIN_VIEWER_VIDEO_JUMP_SECS: u32 = 1;
+
+pub const MAX_VIEWER_VIDEO_JUMP_SECS: u32 = 600;
+
 pub const DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE: bool = false;
 
 pub const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "Dark";

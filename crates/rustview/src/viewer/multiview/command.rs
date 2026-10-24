@@ -52,6 +52,29 @@ pub enum MultiviewCommand {
     Refresh,
     /// A button of the media bar of the selected medium, by key (Settings > Hotkeys; no key by default).
     Bar(MediaActionId),
+    /// A key of the video player on the selected video (mpv takes no keys itself).
+    Player(PlayerCommand),
+}
+
+/// What a video player key asks the selected video for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerCommand {
+    PlayPause,
+    Mute,
+    /// Settings > Viewer > Videos says how far (`long`: the long jump).
+    Jump {
+        forward: bool,
+        long: bool,
+    },
+    Frame {
+        forward: bool,
+    },
+    Volume {
+        louder: bool,
+    },
+    Speed {
+        faster: bool,
+    },
 }
 
 impl MultiviewCommand {

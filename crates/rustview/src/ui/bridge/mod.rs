@@ -234,6 +234,7 @@ impl UiBridge {
         type_ahead::config::apply(&app_settings.appearance);
         crate::ui::hold_confirm::install(&window, app_settings.general.hold_to_confirm_ms);
         crate::ui::hotkeys::apply(&app_settings.hotkeys);
+        crate::viewer::multiview::player_prefs::apply(&app_settings.viewer.videos);
         crate::ui::hotkeys::main_window::install(&window);
         crate::ui::hotkeys::main_window::show_labels(&window);
         prefs::apply(&app_settings.fullscreen);

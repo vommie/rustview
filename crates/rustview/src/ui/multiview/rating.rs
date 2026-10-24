@@ -1,7 +1,7 @@
 //! Ratings given with the rating keys (Settings > Hotkeys) in a Multiview (fullscreen, viewer tab, tab shown fullscreen).
 //!
-//! The key arrives from the fullscreen window, from the main window (a viewer tab) or from a video's own window (the keymap's
-//! `rustview-key` message of mpv). All of them end in [`MultiviewHandle::rate_visible`]: it rates the selected medium of the Multiview (`focus`,
+//! The key arrives from the fullscreen window or from the main window (a viewer tab); a key pressed over a video reaches the
+//! window under it (mpv takes no keys). All of them end in [`MultiviewHandle::rate_visible`]: it rates the selected medium of the Multiview (`focus`,
 //! wherever the pointer is) through the one path of the Tag & Rate panel and the context menu (`BridgeTags::apply_rating_to_ids`),
 //! then starts the feedback pulse on the tiles of that medium. With several tiles and none selected it shows the hint instead.
 

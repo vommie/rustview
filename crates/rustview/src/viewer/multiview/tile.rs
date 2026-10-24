@@ -189,12 +189,6 @@ pub(super) fn connect_callbacks(
     current_tile: &Arc<AtomicU64>,
 ) {
     player.on_toggle_fullscreen(forward(sink, owner, || PlayerEvent::ToggleFullscreen));
-    player.on_escape(forward(sink, owner, || PlayerEvent::EscapePressed));
-    let (key_sink, key_owner) = (Arc::clone(sink), Arc::clone(owner));
-    player.on_key(move |chord| {
-        let me = key_owner.read().clone();
-        key_sink.post(me, PlayerEvent::Key(chord.to_owned()));
-    });
     let tile = current_tile.clone();
     let (mute_sink, mute_owner) = (Arc::clone(sink), Arc::clone(owner));
     player.on_mute_changed(move |muted| {

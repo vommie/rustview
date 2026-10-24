@@ -251,20 +251,6 @@ fn presses_become_chords() {
 }
 
 #[test]
-fn mpv_gets_its_key_names() {
-    let names = |text| mpv_keys::names(&chord(text));
-    assert_eq!(names("Control+S"), vec!["Ctrl+s"]);
-    assert_eq!(names("Control+Shift+S"), vec!["Shift+Ctrl+s"]);
-    assert_eq!(names("Control+Digit3"), vec!["Ctrl+3", "Ctrl+KP3"]);
-    assert_eq!(names("F2"), vec!["F2"]);
-    assert_eq!(names("Delete"), vec!["DEL", "KP_DEL"]);
-    assert_eq!(names("Control+Plus"), vec!["Ctrl++", "Ctrl+KP_ADD"]);
-    assert_eq!(names("Control+Backspace"), vec!["Ctrl+BS"]);
-    assert_eq!(names("Return"), vec!["ENTER", "KP_ENTER"]);
-    assert_eq!(names("F"), vec!["f"]);
-}
-
-#[test]
 fn rating_keys_need_ctrl_and_never_alt_or_meta() {
     let keymap = Keymap::default();
     for (areas, first) in [
@@ -317,4 +303,21 @@ fn labels_use_the_short_names_of_keyboard_legends() {
     assert_eq!(chord("Control+Plus").label(), "Ctrl++");
     assert_eq!(chord("Control+Shift+Z").label(), "Ctrl+Shift+Z");
     assert_eq!(chord("F2").label(), "F2");
+}
+
+#[test]
+fn the_video_player_keys_come_first_where_a_video_is() {
+    let keymap = Keymap::default();
+    let areas = [Area::General, Area::Player, Area::Tab];
+    assert_eq!(keymap.lookup(&press("m"), &areas), Some(Action::PlayerMute));
+    assert_eq!(keymap.lookup(&press(" "), &areas), Some(Action::PlayerPlayPause));
+    let left = special(Key::LeftArrow);
+    assert_eq!(
+        keymap.lookup(&press(&left), &[Area::Player, Area::Fullscreen]),
+        Some(Action::PlayerJumpBack)
+    );
+    assert_eq!(
+        keymap.lookup(&press(&left), &[Area::Fullscreen]),
+        Some(Action::FullscreenPrevious)
+    );
 }

@@ -1,14 +1,13 @@
 //! Key presses -> actions of the keymap (`ui::keymap`, `docs/hotkeys.md`).
 //!
 //! The windows keep their fixed handling in Slint (dialog locks, popups, Esc, type-ahead find) and hand every other key press
-//! to Rust: the main window through [`main_window`], the fullscreen window through `ui::multiview::session_keys`, and the
-//! windows of the videos through the `rustview-key` message of mpv (resolved for the host of that player). This module keeps
+//! to Rust: the main window through [`main_window`], the fullscreen window through `ui::multiview::session_keys`. mpv takes no
+//! keys (`input-vo-keyboard=no`), so a key pressed over a video reaches the window under it like any other. This module keeps
 //! the one keymap of the application: it is built from `settings.json` at startup and when the settings change.
 
 pub mod main_window;
 
-use crate::ui::keymap::{Action, Area, Chord, KeyPress, Keymap, mpv_keys, table_from_json};
-use crate::viewer::mpv_engine::keys as mpv_engine_keys;
+use crate::ui::keymap::{Action, Area, Chord, KeyPress, Keymap, table_from_json};
 use crate::viewer::multiview::key_labels::{self, EditKeys};
 use parking_lot::RwLock;
 use std::collections::BTreeMap;
@@ -27,7 +26,6 @@ pub fn apply(stored: &BTreeMap<String, serde_json::Value>) {
     for note in &notes {
         tracing::warn!(note, "[Hotkeys] A stored key was repaired");
     }
-    mpv_engine_keys::set_bindings(&video_bindings(&keymap));
     let edit_keys = |undo, redo, save, apply_crop| EditKeys {
         undo: keymap.first_label(undo),
         redo: keymap.first_label(redo),
@@ -138,76 +136,9 @@ pub fn resolve(trigger: &Trigger<'_>, areas: &[Area], typing: bool) -> Resolved 
     Resolved::Run(action)
 }
 
-/// The keys every video window reports to `RustView` (mpv key name, chord text): those of the actions of the areas a video can
-/// be in, except Esc (reported on its own), the fixed keys, the paging keys (paging never applies to a video) and every key
-/// the video player area has (mpv keeps them until `RustView` controls the videos).
-pub fn video_bindings(keymap: &Keymap) -> Vec<(String, String)> {
-    let player: Vec<&Chord> = Action::ALL
-        .iter()
-        .filter(|a| a.area() == Area::Player)
-        .flat_map(|a| keymap.chords(*a))
-        .collect();
-    let mut bindings: Vec<(String, String)> = Vec::new();
-    for &action in Action::ALL {
-        let reported =
-            matches!(action.area(), Area::General | Area::Tab | Area::Fullscreen) || action == Action::BrowseRename;
-        if !reported || action.is_fixed() || matches!(action, Action::FullscreenPrevious | Action::FullscreenNext) {
-            continue;
-        }
-        for chord in keymap.chords(action) {
-            if player.iter().any(|p| p.overlaps(chord)) {
-                continue;
-            }
-            for name in mpv_keys::names(chord) {
-                if !bindings.iter().any(|(n, _)| *n == name) {
-                    bindings.push((name, chord.text().to_owned()));
-                }
-            }
-        }
-    }
-    bindings
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn video_windows_report_the_keys_of_the_multiview_but_leave_the_player_keys_to_mpv() {
-        let bindings = video_bindings(&Keymap::default());
-        let has = |name: &str| bindings.iter().any(|(n, _)| n == name);
-        for name in [
-            "F2",
-            "DEL",
-            "Ctrl+3",
-            "Ctrl+KP3",
-            "Ctrl+s",
-            "Shift+Ctrl+s",
-            "Ctrl+w",
-            "F11",
-            "f",
-            "BS",
-            "Ctrl+BS",
-        ] {
-            assert!(has(name), "{name} missing: {bindings:?}");
-        }
-        for name in [
-            "ESC",
-            "SPACE",
-            "m",
-            "LEFT",
-            "RIGHT",
-            "UP",
-            "DOWN",
-            "PGUP",
-            "Shift+LEFT",
-            ",",
-        ] {
-            assert!(!has(name), "{name} must stay with mpv");
-        }
-        let chord_of = |name: &str| bindings.iter().find(|(n, _)| n == name).map(|(_, c)| c.clone());
-        assert_eq!(chord_of("Ctrl+KP3").as_deref(), Some("Control+Digit3"));
-    }
 
     #[test]
     fn typing_and_repeats() {

@@ -14,7 +14,7 @@ use super::views::{self, ImageCache, ViewModels};
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
 use crate::viewer::multiview::click::ClickKind;
-use crate::viewer::multiview::command::{MultiviewCommand, ZoomKey};
+use crate::viewer::multiview::command::{MultiviewCommand, PlayerCommand, ZoomKey};
 use crate::viewer::multiview::hint::HintKind;
 use crate::viewer::multiview::instance::{MultiviewInstance, SharedInstance, WeakInstance};
 use crate::viewer::multiview::media_actions::{BarClick, MediaActionId};
@@ -188,6 +188,16 @@ fn command_key(command: MultiviewCommand) {
 /// The key of a media bar button (Settings > Hotkeys): the button of the selected medium, like a click on it.
 pub fn bar_key(action: MediaActionId) {
     command_key(MultiviewCommand::Bar(action));
+}
+
+/// A video player key (Settings > Hotkeys > Video Player) on the selected video of the shown tab.
+pub fn player_key(command: PlayerCommand) {
+    command_key(MultiviewCommand::Player(command));
+}
+
+/// The shown tab holds a video, so the video player keys come first.
+pub fn shown_has_video() -> bool {
+    current_instance().is_some_and(|instance| instance.lock().has_video())
 }
 
 /// The key of a primary bar button (Settings > Hotkeys), like a click on it.

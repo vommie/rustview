@@ -11,7 +11,7 @@ pub enum Area {
     Tab,
     /// The Multiview fullscreen window; acts on the selected medium.
     Fullscreen,
-    /// The selected video in a tab or the fullscreen (`RustView` takes these keys over from mpv in a later milestone).
+    /// The selected video in a tab or the fullscreen (mpv takes no keys; `RustView` drives the player).
     Player,
 }
 
@@ -47,10 +47,7 @@ impl Area {
             Self::Browse => "In the view with the thumbnails or the table.",
             Self::Tab => "In a tab; the keys act on the selected medium.",
             Self::Fullscreen => "In the fullscreen; the keys act on the selected medium.",
-            Self::Player => {
-                "On the selected video in a tab or the fullscreen. Takes effect when RustView controls the videos itself \
-                 (next version); until then the video player uses its own keys."
-            }
+            Self::Player => "On the selected video in a tab or the fullscreen.",
         }
     }
 

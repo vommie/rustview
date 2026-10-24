@@ -22,10 +22,10 @@ use rustview_core::settings::schema::{
     MAX_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MAX_FULLSCREEN_ZOOM_MAX_PERCENT, MAX_FULLSCREEN_ZOOM_MINIMAP_SECS,
     MAX_FULLSCREEN_ZOOM_OUT_PERCENT, MAX_FULLSCREEN_ZOOM_STEP_PERCENT, MAX_MAX_HISTORY_TAGS, MAX_MEMORY_BUDGET_MB,
     MAX_TYPE_AHEAD_MULTIVIEW_DELAY_MS, MAX_TYPE_AHEAD_NEW_SEARCH_GAP_MS, MAX_TYPE_AHEAD_TIMEOUT_MS,
-    MIN_CONFIRM_OPEN_FILE_COUNT, MIN_FULLSCREEN_IDLE_CURSOR_MS, MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX,
-    MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MIN_FULLSCREEN_ZOOM_OUT_PERCENT,
-    MIN_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_MAX_HISTORY_TAGS, MIN_MEMORY_BUDGET_MB, MIN_TYPE_AHEAD_TIMEOUT_MS,
-    ThumbnailBadgeOverflow,
+    MAX_VIEWER_VIDEO_JUMP_SECS, MIN_CONFIRM_OPEN_FILE_COUNT, MIN_FULLSCREEN_IDLE_CURSOR_MS,
+    MIN_FULLSCREEN_MEDIA_BAR_REVEAL_DISTANCE_PX, MIN_FULLSCREEN_ZOOM_MAX_PERCENT, MIN_FULLSCREEN_ZOOM_MINIMAP_SECS,
+    MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT, MIN_MAX_HISTORY_TAGS, MIN_MEMORY_BUDGET_MB,
+    MIN_TYPE_AHEAD_TIMEOUT_MS, MIN_VIEWER_VIDEO_JUMP_SECS, ThumbnailBadgeOverflow,
 };
 use rustview_core::util::cast::{Az, FloatToInt, SaturatingAs};
 
@@ -232,6 +232,8 @@ impl SettingsDialogController {
         window.set_allow_multiple_image_tabs(settings.viewer.images.allow_multiple_tabs);
         window.set_open_videos_in_tab(settings.viewer.videos.open_in_tab);
         window.set_allow_multiple_video_tabs(settings.viewer.videos.allow_multiple_tabs);
+        window.set_video_jump_secs(settings.viewer.videos.jump_secs.saturating_as::<i32>());
+        window.set_video_jump_long_secs(settings.viewer.videos.jump_long_secs.saturating_as::<i32>());
         window.set_viewer_show_tab_rating_badge(settings.viewer.tabs.show_rating_badge);
         window.set_viewer_background_mode_idx(match settings.viewer.background_mode.to_lowercase().as_str() {
             "deep black" | "black" => 1,
@@ -658,6 +660,15 @@ impl SettingsDialogController {
                 current.viewer.images.allow_multiple_tabs = w.get_allow_multiple_image_tabs();
                 current.viewer.videos.open_in_tab = w.get_open_videos_in_tab();
                 current.viewer.videos.allow_multiple_tabs = w.get_allow_multiple_video_tabs();
+                let jump = |secs: i32| {
+                    secs.clamp(
+                        MIN_VIEWER_VIDEO_JUMP_SECS.saturating_as::<i32>(),
+                        MAX_VIEWER_VIDEO_JUMP_SECS.saturating_as::<i32>(),
+                    )
+                    .saturating_as::<u32>()
+                };
+                current.viewer.videos.jump_secs = jump(w.get_video_jump_secs());
+                current.viewer.videos.jump_long_secs = jump(w.get_video_jump_long_secs());
                 current.viewer.tabs.show_rating_badge = w.get_viewer_show_tab_rating_badge();
                 current.viewer.background_mode = match w.get_viewer_background_mode_idx() {
                     1 => "Deep Black".to_string(),

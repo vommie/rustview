@@ -44,6 +44,8 @@ pub fn show_labels(window: &MainWindow) {
 pub fn dispatch(window: &MainWindow, trigger: &Trigger<'_>, typing: bool) -> bool {
     let mode = window.get_active_view_mode();
     let areas: &[Area] = match mode {
+        // The video player keys come first while the tab holds a video (they share keys with nothing of the tab).
+        TAB_VIEW if crate::ui::multiview::tab_host::shown_has_video() => &[Area::General, Area::Player, Area::Tab],
         TAB_VIEW => &[Area::General, Area::Tab],
         _ => &[Area::General, Area::Browse],
     };
@@ -67,6 +69,10 @@ fn run(window: &MainWindow, action: Action, trigger: &Trigger<'_>) -> bool {
     }
     if let Some(button) = action.media_bar() {
         crate::ui::multiview::tab_host::bar_key(button);
+        return true;
+    }
+    if let Some(command) = action.player() {
+        crate::ui::multiview::tab_host::player_key(command);
         return true;
     }
     if let Some(button) = action.primary_bar() {

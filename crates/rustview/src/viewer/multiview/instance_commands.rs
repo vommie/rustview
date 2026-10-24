@@ -59,6 +59,7 @@ impl MultiviewInstance {
             }
             MultiviewCommand::Delete => Ok(UiAction::DeleteTile(media)),
             MultiviewCommand::Bar(action) => self.bar_key(index, action),
+            MultiviewCommand::Player(command) => self.player_key(index, command),
             MultiviewCommand::Zoom(zoom) => self.zoom_selected(index, zoom),
             MultiviewCommand::ApplyCrop => {
                 if self.apply_crop(key) {

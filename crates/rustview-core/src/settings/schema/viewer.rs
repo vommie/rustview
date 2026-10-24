@@ -22,7 +22,8 @@ use super::{
     DEFAULT_FULLSCREEN_ZOOM_OUT_PERCENT, DEFAULT_FULLSCREEN_ZOOM_RESAMPLE, DEFAULT_FULLSCREEN_ZOOM_SMOOTH,
     DEFAULT_FULLSCREEN_ZOOM_STEP_PERCENT, DEFAULT_VIEWER_ALLOW_MULTIPLE_IMAGE_TABS,
     DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS, DEFAULT_VIEWER_BACKGROUND_MODE, DEFAULT_VIEWER_OPEN_IMAGES_IN_TAB,
-    DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB, DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE,
+    DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB, DEFAULT_VIEWER_SHOW_TAB_RATING_BADGE, DEFAULT_VIEWER_VIDEO_JUMP_LONG_SECS,
+    DEFAULT_VIEWER_VIDEO_JUMP_SECS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +48,10 @@ impl Default for ViewerImageSettings {
 pub struct ViewerVideoSettings {
     pub open_in_tab: bool,
     pub allow_multiple_tabs: bool,
+    /// Added in 0.4.6: how far the jump keys of the video player move, in seconds.
+    pub jump_secs: u32,
+    /// Added in 0.4.6: how far the long jump keys move, in seconds.
+    pub jump_long_secs: u32,
 }
 
 impl Default for ViewerVideoSettings {
@@ -54,6 +59,8 @@ impl Default for ViewerVideoSettings {
         Self {
             open_in_tab: DEFAULT_VIEWER_OPEN_VIDEOS_IN_TAB,
             allow_multiple_tabs: DEFAULT_VIEWER_ALLOW_MULTIPLE_VIDEO_TABS,
+            jump_secs: DEFAULT_VIEWER_VIDEO_JUMP_SECS,
+            jump_long_secs: DEFAULT_VIEWER_VIDEO_JUMP_LONG_SECS,
         }
     }
 }

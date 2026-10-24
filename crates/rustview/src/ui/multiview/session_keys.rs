@@ -28,7 +28,14 @@ pub(super) fn dispatch(trigger: &Trigger<'_>) -> bool {
     let Some(win) = session::window_weak().and_then(|w| w.upgrade()) else {
         return false;
     };
-    let action = match resolve(trigger, &[Area::Fullscreen], false) {
+    // The video player keys come first while the fullscreen shows a video (Left and Right page only a single picture).
+    let has_video = session::instance().is_some_and(|instance| instance.lock().has_video());
+    let areas: &[Area] = if has_video {
+        &[Area::Player, Area::Fullscreen]
+    } else {
+        &[Area::Fullscreen]
+    };
+    let action = match resolve(trigger, areas, false) {
         Resolved::Pass => return false,
         Resolved::Swallow => return true,
         Resolved::Run(action) => action,
@@ -42,6 +49,10 @@ pub(super) fn dispatch(trigger: &Trigger<'_>) -> bool {
     }
     if let Some(button) = action.media_bar() {
         session::run(|s| s.command(MultiviewCommand::Bar(button)));
+        return true;
+    }
+    if let Some(command) = action.player() {
+        session::run(|s| s.command(MultiviewCommand::Player(command)));
         return true;
     }
     if let Some(button) = action.primary_bar() {

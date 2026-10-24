@@ -3,6 +3,7 @@
 //! binding wins when a stored key collides with a default.
 
 use super::area::Area;
+use crate::viewer::multiview::command::PlayerCommand;
 use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::primary_actions::PrimaryActionId;
 
@@ -245,6 +246,37 @@ impl Action {
             Self::TabResetLayout | Self::FullscreenResetLayout => PrimaryActionId::ResetLayout,
             Self::TabHideCursor | Self::FullscreenHideCursor => PrimaryActionId::HideIdleCursor,
             Self::FullscreenPin => PrimaryActionId::Pin,
+            _ => return None,
+        })
+    }
+
+    /// The video player command a key action stands for.
+    pub const fn player(self) -> Option<PlayerCommand> {
+        Some(match self {
+            Self::PlayerPlayPause => PlayerCommand::PlayPause,
+            Self::PlayerMute => PlayerCommand::Mute,
+            Self::PlayerJumpBack => PlayerCommand::Jump {
+                forward: false,
+                long: false,
+            },
+            Self::PlayerJumpForward => PlayerCommand::Jump {
+                forward: true,
+                long: false,
+            },
+            Self::PlayerJumpBackLong => PlayerCommand::Jump {
+                forward: false,
+                long: true,
+            },
+            Self::PlayerJumpForwardLong => PlayerCommand::Jump {
+                forward: true,
+                long: true,
+            },
+            Self::PlayerFrameBack => PlayerCommand::Frame { forward: false },
+            Self::PlayerFrameForward => PlayerCommand::Frame { forward: true },
+            Self::PlayerVolumeUp => PlayerCommand::Volume { louder: true },
+            Self::PlayerVolumeDown => PlayerCommand::Volume { louder: false },
+            Self::PlayerSlower => PlayerCommand::Speed { faster: false },
+            Self::PlayerFaster => PlayerCommand::Speed { faster: true },
             _ => return None,
         })
     }

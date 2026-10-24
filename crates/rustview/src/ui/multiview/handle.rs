@@ -414,24 +414,10 @@ impl MultiviewHandle {
         }
     }
 
-    /// F2 in a video's window of the tab view: the main window's rename, which acts on the selected medium of the tab (not
-    /// marked as coming from the fullscreen).
     /// The refresh key of the fullscreen: `media_id` is read again from the drive, like the refresh key of the tab view.
     pub(super) fn refresh_medium(&self, media_id: MediaId) {
         if let Some(main_window) = self.shared.main_window.lock().clone() {
             let _ = main_window.upgrade_in_event_loop(move |w| w.invoke_refresh_medium(media_id.wrapping_as::<i32>()));
-        }
-    }
-
-    /// Esc in a video's window of the tab view, with no crop tool to cancel: a selection of tabs ends, as Esc does in the main
-    /// window.
-    pub(super) fn end_tab_selection(&self) {
-        if let Some(main_window) = self.shared.main_window.lock().clone() {
-            let _ = main_window.upgrade_in_event_loop(|w| {
-                if w.get_has_tab_selection() {
-                    w.invoke_tab_selection_cleared();
-                }
-            });
         }
     }
 

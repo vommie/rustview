@@ -28,6 +28,7 @@ use super::schema::{
     DEFAULT_FULLSCREEN_SELECTION_BRIGHTEN, DEFAULT_FULLSCREEN_SELECTION_CORNER_MARKS, MULTIVIEW_FOCUS_BRIGHTEN_LEVELS,
     MULTIVIEW_FOCUS_CORNER_LEVELS,
 };
+use super::schema::{MAX_VIEWER_VIDEO_JUMP_SECS, MIN_VIEWER_VIDEO_JUMP_SECS};
 use crate::util::hex_color;
 use parking_lot::Mutex;
 use std::fs;
@@ -115,6 +116,13 @@ impl SettingsStore {
             .confirm_open_file_count
             .clamp(MIN_CONFIRM_OPEN_FILE_COUNT, MAX_CONFIRM_OPEN_FILE_COUNT);
         settings.general.hold_to_confirm_ms = settings.general.hold_to_confirm_ms.min(MAX_HOLD_TO_CONFIRM_MS);
+        let videos = &mut settings.viewer.videos;
+        videos.jump_secs = videos
+            .jump_secs
+            .clamp(MIN_VIEWER_VIDEO_JUMP_SECS, MAX_VIEWER_VIDEO_JUMP_SECS);
+        videos.jump_long_secs = videos
+            .jump_long_secs
+            .clamp(MIN_VIEWER_VIDEO_JUMP_SECS, MAX_VIEWER_VIDEO_JUMP_SECS);
 
         // Formats: canonical ids in table order, without duplicates or ids no format has
         settings.formats.disabled_formats = settings.formats.format_mask().disabled_ids();
@@ -508,6 +516,19 @@ mod added_settings_tests {
         let mut off: AppSettings = serde_json::from_str(r#"{"general": {"hold_to_confirm_ms": 0}}"#).unwrap();
         SettingsStore::validate_and_sanitize(&mut off);
         assert_eq!(off.general.hold_to_confirm_ms, 0, "0 = a click is enough");
+    }
+
+    #[test]
+    fn the_jump_lengths_of_the_video_keys_are_additive_and_kept_in_range() {
+        let old: AppSettings = serde_json::from_str(r#"{"viewer": {"videos": {"open_in_tab": false}}}"#).unwrap();
+        assert_eq!(old.viewer.videos.jump_secs, 5);
+        assert_eq!(old.viewer.videos.jump_long_secs, 60);
+        assert!(!old.viewer.videos.open_in_tab);
+        let mut odd: AppSettings =
+            serde_json::from_str(r#"{"viewer": {"videos": {"jump_secs": 0, "jump_long_secs": 99999}}}"#).unwrap();
+        SettingsStore::validate_and_sanitize(&mut odd);
+        assert_eq!(odd.viewer.videos.jump_secs, MIN_VIEWER_VIDEO_JUMP_SECS);
+        assert_eq!(odd.viewer.videos.jump_long_secs, MAX_VIEWER_VIDEO_JUMP_SECS);
     }
 
     #[test]

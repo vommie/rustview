@@ -47,8 +47,10 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
   (the selected medium is read again); plain Backspace resets the zoom in a Multiview (besides Ctrl+Backspace).
 - **The zoom keys work on a selected video:** mpv zooms the video inside its tile (Ctrl++ / Ctrl+-, Backspace or Ctrl+Backspace for the whole picture
   again); Ctrl + mouse wheel over a video zooms toward the pointer as before. The next video in the same tile starts unzoomed.
-- **The Video Player section** of Settings > Hotkeys already lists play/pause, mute, short and long jumps, frame steps, volume and speed with their keys;
-  they take effect when RustView controls the videos itself (next version). Until then the player uses its own keys.
+- **RustView controls the videos with the keyboard:** the keys of Settings > Hotkeys > Video Player act on the selected video in a tab and in the
+  fullscreen: Space play/pause, M mute, Left/Right jump, Shift+Left/Right jump far, Comma/Period frame by frame, Ctrl+Up/Down louder/quieter, [ and ]
+  slower/faster. Settings > Viewer > Videos sets how far the jumps go (5 and 60 seconds by default). With a picture selected the hint says
+  "Select a video".
 - The Rate Selection submenu shows the rating keys.
 - **Keys for the buttons of the media bar and the primary bar:** Settings > Hotkeys lists Sticky, Duplicate, Open as Tab, Crop, Remove, Send to Tab,
   Mute All, Play/Pause All, Reset Layout, Hide Cursor and Pin (without a key at first); a key acts like a click on the button of the selected medium.
@@ -62,9 +64,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - A click on a video in a Multiview is no longer ignored: it selects the video (it still never pauses it).
 - **Menus, tooltips, status messages and setting descriptions name your keys** (Settings > Hotkeys) instead of fixed ones.
 - Keys are written with the short names of keyboard legends: Enter, Esc, Del, Left, Right, Up, Down, PgUp, PgDown.
-- **Keys over a video follow the keymap:** rename, delete, rating, refresh, zoom, crop, save, undo, close and fullscreen keys reach RustView also while the
-  pointer rests over a video (Ctrl+S no longer takes a screenshot there, Ctrl++ no longer changes the audio delay). The video player keys (Space, M,
-  the arrows, ...) stay with the player until the next version.
+- **The video player no longer takes any key:** every key pressed while the pointer rests over a video goes to RustView (Ctrl+S no longer takes a
+  screenshot there, Ctrl++ no longer changes the audio delay, keys of your own `input.conf` of mpv no longer apply). The mouse over a video is unchanged.
 - **The rating keys need Ctrl in a tab too** (the plain digits 0 to 5 no longer rate).
 - **A tab no longer pages with the arrow keys**, and Space no longer pages in the fullscreen; only a single picture of a fullscreen opened from Browse
   pages (Left, Up, Page Up back; Right, Down, Page Down forward).

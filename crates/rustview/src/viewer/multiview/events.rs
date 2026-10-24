@@ -17,13 +17,8 @@ pub type DecodedImage = Result<(u32, u32, SharedPixelBuffer<Rgb8Pixel>), String>
 
 pub enum PlayerEvent {
     ToggleFullscreen,
-    /// A key of the keymap was pressed in a video's window (its chord text); it is resolved for the host of the instance,
-    /// like a key of the host's own window, and acts on the selected tile.
-    Key(String),
     /// A plain left click on the video of this tile (it becomes the selected tile).
     Clicked(TileKey),
-    /// Esc in a video's window.
-    EscapePressed,
     /// The mute state of the player of this tile changed (a hotkey or the on-screen controller of mpv, or us).
     MuteChanged {
         tile: TileKey,
