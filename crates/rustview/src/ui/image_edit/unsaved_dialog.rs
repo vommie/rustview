@@ -3,8 +3,12 @@
 
 use crate::ui::{ImageUnsavedDialog, MainWindow, UnsavedPictureView};
 use crate::viewer::edit::unsaved::{UnsavedDecision, UnsavedEntry, UnsavedPrompt, apply_label, decide, discard_all};
-use slint::{CloseRequestResponse, ComponentHandle, Model, ModelRc, VecModel};
+use crate::viewer::multiview::follow::TileKey;
+use crate::viewer::multiview::image_decode::downscale;
+use rustview_core::util::cast::FloatToInt;
+use slint::{CloseRequestResponse, ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, VecModel};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 type Answer = Box<dyn FnOnce(Option<UnsavedDecision>)>;
@@ -30,13 +34,28 @@ thread_local! {
     static PENDING: RefCell<Option<Pending>> = const { RefCell::new(None) };
 }
 
-fn row(entry: &UnsavedEntry) -> UnsavedPictureView {
+/// The edge of the square a thumbnail is drawn in, logical pixels (the same as in `image_unsaved_dialog.slint`).
+const THUMBNAIL_EDGE: f32 = 64.0;
+
+/// The row of `entry`; `picture` is what its tile shows (with the edits), made small enough for the thumbnail square at the
+/// window's `scale`. Without it the square shows the picture icon.
+fn row(entry: &UnsavedEntry, picture: Option<&SharedPixelBuffer<Rgb8Pixel>>, scale: f32) -> UnsavedPictureView {
+    let edge = (THUMBNAIL_EDGE * scale.max(1.0)).ceil().to_int::<u32>();
+    let thumbnail = picture.and_then(|pixels| match downscale(pixels.clone(), edge, edge) {
+        Ok(small) => Some(Image::from_rgb8(small)),
+        Err(e) => {
+            tracing::debug!(error = %e, "[ImageEdit: Unsaved] No thumbnail");
+            None
+        }
+    });
     UnsavedPictureView {
         filename: entry.filename.as_str().into(),
         folder: entry.folder.as_str().into(),
         description: entry.description.as_str().into(),
         save: entry.save,
         needs_export: !entry.overwritable,
+        has_thumbnail: thumbnail.is_some(),
+        thumbnail: thumbnail.unwrap_or_default(),
     }
 }
 
@@ -45,7 +64,12 @@ pub struct UnsavedDialog;
 impl UnsavedDialog {
     /// Asks what to do with the pictures of `prompt`; `answer` gets the decision (Apply, Don't Save), or `None` when the user
     /// cancels (nothing closes then).
-    pub fn ask(window: &MainWindow, prompt: UnsavedPrompt, answer: impl FnOnce(Option<UnsavedDecision>) + 'static) {
+    pub fn ask(
+        window: &MainWindow,
+        prompt: UnsavedPrompt,
+        pictures: &HashMap<TileKey, SharedPixelBuffer<Rgb8Pixel>>,
+        answer: impl FnOnce(Option<UnsavedDecision>) + 'static,
+    ) {
         Self::finish(Reply::Cancel);
         let shown = DIALOG.with(|d| {
             let mut dialog = d.borrow_mut();
@@ -66,8 +90,13 @@ impl UnsavedDialog {
             let Some(win) = dialog.as_ref() else { return false };
             win.set_heading(prompt.title.as_str().into());
             win.set_message(prompt.message.as_str().into());
+            let scale = win.window().scale_factor();
             win.set_pictures(ModelRc::from(Rc::new(VecModel::from(
-                prompt.entries.iter().map(row).collect::<Vec<_>>(),
+                prompt
+                    .entries
+                    .iter()
+                    .map(|entry| row(entry, pictures.get(&entry.tile), scale))
+                    .collect::<Vec<_>>(),
             ))));
             win.set_apply_label(apply_label(&prompt.entries).into());
             window.set_is_context_menu_open(false);

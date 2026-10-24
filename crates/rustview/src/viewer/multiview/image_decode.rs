@@ -42,19 +42,27 @@ pub fn load_scaled_cropped(
         Some(_) => return Err("the picture on disk does not have the size of the edited one".to_string()),
         None => (width, height, pixels),
     };
+    Ok((width, height, downscale(pixels, max_w, max_h)?))
+}
+
+/// `pixels` fitted into `max_w x max_h` (never scaled up; the same buffer when it fits already).
+pub fn downscale(
+    pixels: SharedPixelBuffer<Rgb8Pixel>,
+    max_w: u32,
+    max_h: u32,
+) -> Result<SharedPixelBuffer<Rgb8Pixel>, String> {
+    let (width, height) = (pixels.width(), pixels.height());
     let (target_w, target_h) = downscaled_size(width, height, max_w, max_h);
     if (target_w, target_h) == (width, height) {
-        return Ok((width, height, pixels));
+        return Ok(pixels);
     }
-
     let source =
         Image::from_vec_u8(width, height, pixels.as_bytes().to_vec(), PixelType::U8x3).map_err(|e| e.to_string())?;
     let mut target = Image::new(target_w, target_h, PixelType::U8x3);
     Resizer::new()
         .resize(&source, &mut target, &ResizeOptions::default())
         .map_err(|e| e.to_string())?;
-
     let mut scaled = SharedPixelBuffer::<Rgb8Pixel>::new(target_w, target_h);
     scaled.make_mut_bytes().copy_from_slice(target.buffer());
-    Ok((width, height, scaled))
+    Ok(scaled)
 }

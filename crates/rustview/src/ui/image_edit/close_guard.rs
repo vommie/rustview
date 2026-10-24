@@ -17,6 +17,7 @@ use crate::viewer::TabId;
 use crate::viewer::edit::unsaved::{CloseReason, UnsavedEntry, prompt};
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
+use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -44,6 +45,7 @@ pub fn confirm(
 ) -> bool {
     let mut entries: Vec<UnsavedEntry> = Vec::new();
     let mut owners: HashMap<TileKey, WeakInstance> = HashMap::new();
+    let mut pictures: HashMap<TileKey, SharedPixelBuffer<Rgb8Pixel>> = HashMap::new();
     for (instance, keys) in leaving {
         let mv = instance.lock();
         let found = match keys {
@@ -52,6 +54,9 @@ pub fn confirm(
         };
         for entry in found {
             owners.insert(entry.tile, Arc::downgrade(&instance));
+            if let Some(pixels) = mv.shown_pixels(entry.tile) {
+                pictures.insert(entry.tile, pixels);
+            }
             entries.push(entry);
         }
     }
@@ -73,7 +78,7 @@ pub fn confirm(
         "[ImageEdit: Close] Unsaved pictures would be lost; asking"
     );
     let context = context.clone();
-    UnsavedDialog::ask(&window, prompt(reason, entries), move |decision| {
+    UnsavedDialog::ask(&window, prompt(reason, entries), &pictures, move |decision| {
         ASKING.with(|a| a.set(false));
         let Some(decision) = decision else {
             tracing::info!("[ImageEdit: Close] Cancelled; nothing closes");

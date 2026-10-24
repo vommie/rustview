@@ -10,6 +10,8 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 ## [Unreleased]
 
 ### Added
+- **The Unsaved Changes dialog shows each picture:** a small thumbnail at the left of every row, in a square, as the picture looks with its
+  changes (the cropped part), so you can tell the pictures apart before deciding which to save.
 - **A selected medium in the Multiview** (with two or more media, fullscreen and tab): a plain click on a medium, on a video too, or on a button of its media
   bar selects it. The selected medium is marked by blue corner marks inside its corners and a slightly lighter area around it (in its column); a video gets
   the corner marks from the player itself. The selection stays until another medium is clicked or the medium leaves the view; a Multiview of one medium

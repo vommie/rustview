@@ -16,6 +16,7 @@ use rustview_core::image_edit::formats::SaveSupport;
 use rustview_core::image_edit::options::CropGrid;
 use rustview_core::image_edit::stack::EditPlan;
 use rustview_core::library::models::MediaId;
+use slint::{Rgb8Pixel, SharedPixelBuffer};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -120,6 +121,11 @@ impl MultiviewInstance {
                 })
             })
             .collect()
+    }
+
+    /// The picture tile `key` shows right now (with its edits), for a thumbnail; `None` while it has none (loading, failed).
+    pub fn shown_pixels(&self, key: TileKey) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+        self.tiles.iter().find(|t| t.key == key)?.pixels.clone()
     }
 
     /// The unsaved pictures among the tiles `keys` (a tile that leaves the view).
