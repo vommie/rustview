@@ -1,0 +1,124 @@
+import { ComboBox, Slider } from "std-widgets.slint";
+import { Theme } from "styles.slint";
+import { SettingsCard } from "settings_card.slint";
+import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
+
+/// The ranges of the sliders (from the settings schema).
+export struct PlayerBarLimits {
+    min-opacity: int,
+    max-opacity: int,
+    min-height: int,
+    max-height: int,
+}
+
+/// A slider with its value written next to it (`unit` follows the number).
+component ValueSlider inherits HorizontalLayout {
+    in property <int> minimum;
+    in property <int> maximum;
+    in property <string> unit;
+    in-out property <int> value;
+
+    spacing: 8px;
+
+    Slider {
+        width: 140px;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value: root.value;
+        changed(v) => { root.value = Math.round(v); }
+    }
+
+    Text {
+        text: root.value + root.unit;
+        color: Theme.primary;
+        width: 46px;
+        vertical-alignment: center;
+        horizontal-alignment: right;
+    }
+}
+
+/// Settings > Fullscreen > Player: the control bar of a video in the Multiview (fullscreen and tab view).
+export component SettingsCardPlayer inherits VerticalLayout {
+    in-out property <int> style-idx: 0; // 0 = translucent bar, 1 = floating pill
+    in-out property <int> opacity-percent: 70;
+    in-out property <int> height-px: 30;
+    in-out property <int> reveal-idx: 0; // 0 = near the bottom, 1 = any movement over the video
+    in-out property <bool> fade: true;
+    in-out property <bool> show-ms: false;
+    in-out property <int> seek-idx: 0; // 0 = exact, 1 = like mpv's controller, 2 = keyframes, 3 = as mpv is configured
+    in property <PlayerBarLimits> limits: { min-opacity: 20, max-opacity: 100, min-height: 20, max-height: 64 };
+
+    SettingsCard {
+        title: "Player";
+        description: "Every video has a control bar at its bottom: play and pause, the current time, the progress bar, the remaining time and the volume. It appears under the video the pointer is on.";
+
+        SettingsOptionRow {
+            label: "Style";
+            tooltip: "Translucent bar: over the whole width of the video, the picture stays visible behind it. Floating pill: rounded, with a small margin to the edges of the video.";
+
+            ComboBox {
+                width: 220px;
+                model: ["Translucent bar", "Floating pill"];
+                current-index <=> root.style-idx;
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Opacity";
+            tooltip: "How opaque the background of the bar is. Without a compositing manager the bar is always opaque.";
+
+            ValueSlider {
+                minimum: root.limits.min-opacity;
+                maximum: root.limits.max-opacity;
+                unit: " %";
+                value <=> root.opacity-percent;
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Height";
+            tooltip: "The height of the bar. Its buttons, times and the progress bar grow and shrink with it.";
+
+            ValueSlider {
+                minimum: root.limits.min-height;
+                maximum: root.limits.max-height;
+                unit: " px";
+                value <=> root.height-px;
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Show the bar";
+            tooltip: "Near the bottom: the bar appears while the pointer is in the lower part of the video and goes when it leaves. Any movement: every movement of the pointer over the video shows it, and it goes after a moment without movement.";
+
+            ComboBox {
+                width: 220px;
+                model: ["Pointer near the bottom", "Any movement over the video"];
+                current-index <=> root.reveal-idx;
+            }
+        }
+
+        SettingsOptionRow {
+            label: "Seeking";
+            tooltip: "How a click or a drag on the progress bar seeks. Exact: to the exact frame, also while dragging (slower on long or heavy videos). Like mpv's controller: a click exactly, a drag by keyframes. Keyframes: to the nearest keyframe, the fastest but up to a few seconds off. As mpv is configured: mpv's own setting (hr-seek in your mpv.conf).";
+
+            ComboBox {
+                width: 220px;
+                model: ["Exact", "Like mpv's controller", "Keyframes (fastest)", "As mpv is configured"];
+                current-index <=> root.seek-idx;
+            }
+        }
+
+        SettingsSwitchRow {
+            label: "Fade in and out";
+            tooltip: "The bar fades in and out briefly instead of appearing and vanishing at once (only with a compositing manager).";
+            checked <=> root.fade;
+        }
+
+        SettingsSwitchRow {
+            label: "Times with milliseconds";
+            tooltip: "How the times of a video start. A click on a time in the bar switches the milliseconds on or off for that video until the next one starts.";
+            checked <=> root.show-ms;
+        }
+    }
+}

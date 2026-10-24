@@ -71,19 +71,24 @@ impl BridgeViewerTabs {
         // 1. Prepare Tab Models for the Top Toolbar
         let tab_models: Vec<TabItemModel> = tabs
             .iter()
-            .map(|t| TabItemModel {
-                id: t.id.wrapping_as::<i32>(),
-                media_id: t.media_id.wrapping_as::<i32>(),
-                title: t.title.clone().into(),
-                format_str: t.format.default_extension().into(),
-                is_active: !is_tab_grid && Some(t.id) == active_id_opt,
-                is_selected: selection.contains(t.id),
-                icon: tab_icon(t),
-                rating: i32::from(t.record.rating),
-                has_tags: false,
-                shift_x: 0.0,
-                is_placeholder: false,
-                has_unsaved: t.multiview.instance.lock().has_unsaved_edits(),
+            .map(|t| {
+                // Taken before the struct literal: a lock inside it would be held until the literal is built, and `tab_icon`
+                // takes the same lock.
+                let has_unsaved = t.multiview.instance.lock().has_unsaved_edits();
+                TabItemModel {
+                    id: t.id.wrapping_as::<i32>(),
+                    media_id: t.media_id.wrapping_as::<i32>(),
+                    title: t.title.clone().into(),
+                    format_str: t.format.default_extension().into(),
+                    is_active: !is_tab_grid && Some(t.id) == active_id_opt,
+                    is_selected: selection.contains(t.id),
+                    icon: tab_icon(t),
+                    rating: i32::from(t.record.rating),
+                    has_tags: false,
+                    shift_x: 0.0,
+                    is_placeholder: false,
+                    has_unsaved,
+                }
             })
             .collect();
 

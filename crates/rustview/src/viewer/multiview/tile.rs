@@ -12,6 +12,7 @@ use super::instance::WeakInstance;
 use super::layout::Rect;
 use super::media_actions::MediaActionId;
 use super::model::{AspectSource, TileKind};
+use super::video_bar::state::VideoBarState;
 use crate::ui::button_feedback::ButtonFeedback;
 use crate::viewer::edit::save_badge::SaveBadge;
 use crate::viewer::edit::tile_edit::{EditSource, TileEdit};
@@ -47,6 +48,8 @@ pub struct VideoTile {
     pub feedback_overlay: Option<OverlayState>,
     /// The corner marks of the selected tile that mpv draws over the picture right now, if any.
     pub focus_overlay: Option<CornerMarks>,
+    /// The control bar of the video.
+    pub bar: VideoBarState,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -262,6 +265,7 @@ pub fn create_video(
         owner,
         feedback_overlay: None,
         focus_overlay: None,
+        bar: VideoBarState::default(),
     })
 }
 

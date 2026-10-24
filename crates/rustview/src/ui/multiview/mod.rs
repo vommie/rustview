@@ -22,7 +22,9 @@ mod session;
 mod session_convert;
 mod session_input;
 mod session_keys;
+mod session_video_bar;
 pub mod tab_host;
+pub mod video_bar;
 mod views;
 
 pub use eligibility::OpenSummary;

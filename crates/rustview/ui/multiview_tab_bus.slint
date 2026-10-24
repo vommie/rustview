@@ -10,6 +10,8 @@ export global MultiviewTabBus {
 
     callback tile-clicked(int /* tile index */, bool /* is_ctrl */);
     callback tile-zoom-wheel(int /* tile index */, length /* delta-y */, length /* x */, length /* y */);
+    callback tile-video-wheel(int /* tile index */, length /* delta-y */, bool /* ctrl */);
+    callback tile-right-clicked(int /* tile index */);
     callback tile-pan(int /* tile index */, length /* dx */, length /* dy */);
     callback minimap-pointer(int /* tile index */, float /* x */, float /* y */, int /* phase */);
     callback minimap-slider(int /* tile index */, int /* code of the slider */);

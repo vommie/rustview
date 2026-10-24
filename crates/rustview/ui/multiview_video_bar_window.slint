@@ -1,0 +1,318 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId } from "icons.slint";
+
+/// A stretch of the progress bar (`viewer::multiview::video_bar::progress`): shares of the bar's width and its kind.
+export struct VideoBarSpanView {
+    from: float,
+    to: float,
+    kind: int, // 0 = played
+}
+
+/// A button of the bar: an icon in a square as high as the bar.
+component BarIconButton inherits Rectangle {
+    in property <IconId> icon;
+    in property <length> size;
+    in property <length> icon-size;
+    callback clicked();
+
+    width: root.size;
+
+    AppIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: root.icon;
+        size: root.icon-size;
+        color: touch.has-hover ? #ffffff : Theme.text;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// A time of the bar: as wide as its template (the widest text the video can need), so nothing moves while it plays.
+/// A click switches the milliseconds of both times.
+component BarTime inherits Rectangle {
+    in property <string> text;
+    in property <string> template;
+    in property <length> font-size;
+    in property <color> text-color;
+    in property <TextHorizontalAlignment> alignment;
+    callback clicked();
+
+    width: measure.preferred-width;
+
+    measure := Text {
+        text: root.template;
+        font-size: root.font-size;
+        visible: false;
+    }
+
+    Text {
+        width: 100%;
+        height: 100%;
+        text: root.text;
+        font-size: root.font-size;
+        color: touch.has-hover ? #ffffff : root.text-color;
+        vertical-alignment: center;
+        horizontal-alignment: root.alignment;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// The control bar of a video, in a frameless transparent window of its own above the native mpv window (like the action
+/// bars: nothing drawn in the Multiview window can blend with a video). Rust places the window over the bottom of the video
+/// and limits its pointer input to the bar; the room above the bar holds the bubble with the time under the pointer.
+/// Everything in the bar grows with `bar-height` (Settings > Fullscreen > Player).
+export component MultiviewVideoBarWindow inherits Window {
+    title: "RustView - Video control bar";
+    no-frame: true;
+    background: transparent;
+
+    // False without a compositing manager: the bar is solid then and does not fade.
+    in property <bool> translucent: true;
+    in property <bool> pill: false;
+    in property <float> bar-opacity: 0.7;
+    in property <length> bar-height: 30px;
+    in property <length> bubble-height: 28px;
+    in property <bool> fade: true;
+    // The bar is wanted: it fades in; false: it fades out (Rust hides the window when the fade is over).
+    in property <bool> revealed: false;
+    in property <bool> playing: false;
+    in property <string> current-text: "0:00";
+    in property <string> current-template: "0:00";
+    in property <string> remaining-text: "-0:00";
+    in property <string> remaining-template: "-0:00";
+    in property <[VideoBarSpanView]> spans;
+    in property <float> volume-share: 1.0;
+    in property <int> volume-icon: 2; // 0 = muted (or silent), 1 = low, 2 = high
+    in property <bool> muted: false;
+    // The pointer over the progress bar: the bubble shows the time there.
+    in property <bool> hover-shown: false;
+    in property <float> hover-share: 0;
+    in property <string> hover-text;
+
+    callback play-pause();
+    callback toggle-ms();
+    // The progress bar is pressed (0), dragged (1) or let go (2) at a share of its width.
+    callback seek(float /* share */, int /* phase */);
+    // The pointer is over the progress bar at a share of its width, or left it.
+    callback hover(bool /* inside */, float /* share */);
+    callback speaker();
+    // The volume slider is pressed (0), dragged (1) or let go (2) at a share of its width.
+    callback volume(float /* share */, int /* phase */);
+    callback wheel(length /* delta-y */);
+    // The time bubble appeared, moved or went away (logical pixels in this window): without a compositing manager the shape
+    // of the window has to include it.
+    callback bubble-changed(bool /* visible */, length /* x */, length /* y */, length /* width */, length /* height */);
+
+    // One "point" of the default bar (30 px high): every size below is a multiple of it.
+    property <length> pt: root.bar-height / 30;
+    property <length> icon-size: Math.round(root.bar-height * 0.6 / 1px) * 1px;
+    property <length> font-size: Math.round(root.bar-height * 0.4 / 1px) * 1px;
+    property <length> pad: Math.round((root.pill ? 14 : 8) * root.pt / 1px) * 1px;
+    property <length> gap: Math.round(8 * root.pt / 1px) * 1px;
+    property <color> panel: Theme.fullscreen-background;
+
+    content := Rectangle {
+        opacity: !root.translucent || root.revealed ? 1 : 0;
+        animate opacity { duration: root.fade && root.translucent ? 150ms : 0ms; }
+
+        bar := Rectangle {
+            x: 0px;
+            y: root.height - root.bar-height;
+            width: root.width;
+            height: root.bar-height;
+            border-radius: root.pill ? root.bar-height / 2 : 0px;
+            background: root.translucent ? root.panel.with-alpha(root.bar-opacity) : root.panel;
+
+            TouchArea {
+                scroll-event(event) => {
+                    root.wheel(event.delta-y);
+                    return accept;
+                }
+            }
+
+            HorizontalLayout {
+                padding-left: root.pad;
+                padding-right: root.pad;
+                spacing: root.gap;
+
+                BarIconButton {
+                    icon: root.playing ? IconId.video-bar-pause : IconId.video-bar-play;
+                    size: root.bar-height;
+                    icon-size: root.icon-size;
+                    clicked => { root.play-pause(); }
+                }
+
+                BarTime {
+                    text: root.current-text;
+                    template: root.current-template;
+                    font-size: root.font-size;
+                    text-color: Theme.text;
+                    alignment: right;
+                    clicked => { root.toggle-ms(); }
+                }
+
+                progress := Rectangle {
+                    horizontal-stretch: 1;
+                    property <length> block: root.bar-height - 2 * Math.round(6 * root.pt / 1px) * 1px;
+
+                    track := Rectangle {
+                        y: (parent.height - self.height) / 2;
+                        height: progress.block;
+                        border-radius: Math.round(2 * root.pt / 1px) * 1px;
+                        clip: true;
+                        background: Colors.white.with-alpha(0.18);
+
+                        for span in root.spans : Rectangle {
+                            x: span.from * parent.width;
+                            width: (span.to - span.from) * parent.width;
+                            height: 100%;
+                            background: span.kind == 0 ? Theme.primary : Theme.text-muted;
+                        }
+
+                        if root.hover-shown : Rectangle {
+                            x: Math.round(root.hover-share * parent.width / 1px) * 1px - self.width / 2;
+                            width: Math.max(1px, Math.round(2 * root.pt / 1px) * 1px);
+                            height: 100%;
+                            background: Colors.white.with-alpha(0.7);
+                        }
+                    }
+
+                    seek-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        property <float> share: Math.clamp(self.mouse-x / Math.max(1px, self.width), 0, 1);
+
+                        pointer-event(event) => {
+                            if event.button == PointerEventButton.left {
+                                if event.kind == PointerEventKind.down {
+                                    root.seek(self.share, 0);
+                                } else if event.kind == PointerEventKind.up {
+                                    root.seek(self.share, 2);
+                                }
+                            }
+                        }
+                        changed mouse-x => {
+                            if self.pressed {
+                                root.seek(self.share, 1);
+                            }
+                            if self.has-hover || self.pressed {
+                                root.hover(true, self.share);
+                            }
+                        }
+                        changed has-hover => {
+                            root.hover(self.has-hover || self.pressed, self.share);
+                        }
+                        changed pressed => {
+                            root.hover(self.has-hover || self.pressed, self.share);
+                        }
+                    }
+                }
+
+                BarTime {
+                    text: root.remaining-text;
+                    template: root.remaining-template;
+                    font-size: root.font-size;
+                    text-color: Theme.text-muted;
+                    alignment: left;
+                    clicked => { root.toggle-ms(); }
+                }
+
+                BarIconButton {
+                    icon: root.volume-icon == 0 ? IconId.volume-off : (root.volume-icon == 1 ? IconId.volume-low : IconId.volume-on);
+                    size: root.bar-height;
+                    icon-size: root.icon-size;
+                    clicked => { root.speaker(); }
+                }
+
+                slider := Rectangle {
+                    width: 3 * root.bar-height;
+                    property <length> knob: Math.round(12 * root.pt / 1px) * 1px;
+                    property <length> inner-width: self.width - self.knob;
+                    property <bool> active: volume-touch.has-hover || volume-touch.pressed;
+                    property <color> fill: root.muted ? Theme.text-muted.with-alpha(0.5) : Theme.primary;
+
+                    Rectangle {
+                        x: slider.knob / 2;
+                        y: (parent.height - self.height) / 2;
+                        width: slider.inner-width;
+                        height: Math.max(2px, Math.round(4 * root.pt / 1px) * 1px);
+                        border-radius: self.height / 2;
+                        background: Colors.white.with-alpha(0.22);
+
+                        Rectangle {
+                            x: 0px;
+                            width: root.volume-share * parent.width;
+                            height: 100%;
+                            border-radius: parent.border-radius;
+                            background: slider.fill;
+                        }
+                    }
+
+                    if slider.active : Rectangle {
+                        x: root.volume-share * slider.inner-width;
+                        y: (parent.height - self.height) / 2;
+                        width: slider.knob;
+                        height: slider.knob;
+                        border-radius: self.width / 2;
+                        background: root.muted ? Theme.text-muted : #ffffff;
+                    }
+
+                    volume-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        property <float> share: Math.clamp((self.mouse-x - slider.knob / 2) / Math.max(1px, slider.inner-width), 0, 1);
+
+                        pointer-event(event) => {
+                            if event.button == PointerEventButton.left {
+                                if event.kind == PointerEventKind.down {
+                                    root.volume(self.share, 0);
+                                } else if event.kind == PointerEventKind.up {
+                                    root.volume(self.share, 2);
+                                }
+                            }
+                        }
+                        changed mouse-x => {
+                            if self.pressed {
+                                root.volume(self.share, 1);
+                            }
+                        }
+                        scroll-event(event) => {
+                            root.wheel(event.delta-y);
+                            return accept;
+                        }
+                    }
+                }
+            }
+        }
+
+        // The time under the pointer, above the progress bar (and above a drag on it).
+        bubble := Rectangle {
+            property <length> pointer-x: progress.x + root.hover-share * progress.width;
+            visible: root.hover-shown;
+            width: bubble-text.preferred-width + 2 * Math.round(6 * root.pt / 1px) * 1px;
+            height: root.bubble-height - Math.round(4 * root.pt / 1px) * 1px;
+            x: Math.round(Math.clamp(self.pointer-x - self.width / 2, 0px, Math.max(0px, root.width - self.width)) / 1px) * 1px;
+            y: 0px;
+            border-radius: Math.round(4 * root.pt / 1px) * 1px;
+            background: root.translucent ? root.panel.with-alpha(Math.max(root.bar-opacity, 0.85)) : root.panel;
+
+            bubble-text := Text {
+                text: root.hover-text;
+                font-size: root.font-size;
+                color: #ffffff;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+            }
+
+            changed visible => { root.bubble-changed(self.visible, self.x, self.y, self.width, self.height); }
+            changed x => { root.bubble-changed(self.visible, self.x, self.y, self.width, self.height); }
+            changed width => { root.bubble-changed(self.visible, self.x, self.y, self.width, self.height); }
+        }
+    }
+}

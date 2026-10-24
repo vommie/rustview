@@ -54,6 +54,16 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - The Rate Selection submenu shows the rating keys.
 - **Keys for the buttons of the media bar and the primary bar:** Settings > Hotkeys lists Sticky, Duplicate, Open as Tab, Crop, Remove, Send to Tab,
   Mute All, Play/Pause All, Reset Layout, Hide Cursor and Pin (without a key at first); a key acts like a click on the button of the selected medium.
+- **A control bar of RustView's own for every video** in a tab and in the fullscreen, at the bottom of the video: play/pause, the current time, a wide
+  progress bar, the remaining time and the volume (a speaker button and a volume slider). A click or a drag on the progress bar goes exactly there; a
+  bubble above it shows the time under the pointer. A click on a time shows milliseconds for that video. Mute stays a state of its own: the slider sets
+  the level of a muted video without unmuting it (the level shows dimmed), the speaker shows "muted" also at level 0, and a click on it brings a silent
+  video back to its last level. With several videos each has its own bar. **Settings > Fullscreen > Player:** a translucent bar (default) or a floating
+  pill, its opacity (70 %), its height (30 px; everything in it grows with it), when it shows (pointer near the bottom of the video, or any movement over
+  the video), a short fade, whether times start with milliseconds, and how the progress bar seeks (exact by default; like mpv's controller, by keyframes,
+  or as mpv is configured). No migration: older settings files load with these defaults.
+- **The mouse over a video belongs to RustView** (tab and fullscreen): the wheel changes the volume, Ctrl + wheel zooms the video, a right click plays or
+  pauses, a click selects the video and a double or middle click works as over a picture.
 
 ### Changed
 - **Esc** cancels the crop tool of the selected picture first, then the other crop tools (newest first), then it closes the fullscreen as before.
@@ -65,7 +75,7 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 - **Menus, tooltips, status messages and setting descriptions name your keys** (Settings > Hotkeys) instead of fixed ones.
 - Keys are written with the short names of keyboard legends: Enter, Esc, Del, Left, Right, Up, Down, PgUp, PgDown.
 - **The video player no longer takes any key:** every key pressed while the pointer rests over a video goes to RustView (Ctrl+S no longer takes a
-  screenshot there, Ctrl++ no longer changes the audio delay, keys of your own `input.conf` of mpv no longer apply). The mouse over a video is unchanged.
+  screenshot there, Ctrl++ no longer changes the audio delay, keys of your own `input.conf` of mpv no longer apply).
 - **The rating keys need Ctrl in a tab too** (the plain digits 0 to 5 no longer rate).
 - **A tab no longer pages with the arrow keys**, and Space no longer pages in the fullscreen; only a single picture of a fullscreen opened from Browse
   pages (Left, Up, Page Up back; Right, Down, Page Down forward).
@@ -74,8 +84,11 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ### Removed
 - **The Prev and Next buttons of a tab's toolbar:** a tab always shows the media it was opened with (paging stays in a fullscreen opened from Browse).
+- **mpv's own on-screen controller** over videos in tabs and the fullscreen: RustView's control bar replaces it (mouse bindings of your own `input.conf`
+  of mpv no longer apply there either).
 
 ### Fixed
+- **Opening the Tab-Grid froze RustView** as soon as a tab was open (since 0.4.0): the app no longer reacted and had to be killed.
 - **F5 in Browse** did nothing although the menu named it; it refreshes the selected files now.
 - The tag menu no longer names F2 for "Rename Tag..." (F2 never renamed a tag).
 

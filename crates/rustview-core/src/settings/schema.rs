@@ -16,6 +16,7 @@ pub use hotkeys::HotkeysPageState;
 pub use image_edit::{CropSettings, FormatPresets, ImageEditSettings, LastExport, SaveSettings};
 pub use viewer::FullscreenBackgroundSettings;
 pub use viewer::FullscreenMediaBarSettings;
+pub use viewer::FullscreenPlayerSettings;
 pub use viewer::FullscreenPrimaryBarSettings;
 pub use viewer::FullscreenRatingSettings;
 pub use viewer::FullscreenSelectionSettings;

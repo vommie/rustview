@@ -239,6 +239,7 @@ impl UiBridge {
         crate::ui::hotkeys::main_window::show_labels(&window);
         prefs::apply(&app_settings.fullscreen);
         zoom_prefs::apply(&app_settings.fullscreen);
+        crate::viewer::multiview::video_bar::prefs::apply(&app_settings.fullscreen.player);
         crate::viewer::edit::prefs::apply(&app_settings.image_edit);
         window.set_show_hidden_folders(app_settings.folders.show_hidden_folders);
 

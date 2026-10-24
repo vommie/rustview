@@ -10,6 +10,7 @@ use super::bar_overlay::{self, BarOwner};
 use super::cursor;
 use super::handle::MultiviewHandle;
 use super::router;
+use super::video_bar::{self, VideoBarHost};
 use super::views::{self, ImageCache, ViewModels};
 use crate::ui::{MainWindow, MultiviewTabBus};
 use crate::viewer::multiview::HostSurface;
@@ -28,7 +29,7 @@ use slint::{ComponentHandle, ModelRc, Timer, TimerMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 struct TabHost {
@@ -122,6 +123,12 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     });
     bus.on_tile_zoom_wheel(|index, delta, x, y| {
         act(|mv| mv.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y));
+    });
+    bus.on_tile_video_wheel(|index, delta, ctrl| {
+        video_bar_after(|mv| mv.video_wheel(index.max(0).saturating_as::<usize>(), delta, ctrl));
+    });
+    bus.on_tile_right_clicked(|index| {
+        video_bar_after(|mv| mv.video_right_click(index.max(0).saturating_as::<usize>()));
     });
     bus.on_tile_pan(|index, dx, dy| act(|mv| mv.zoom_pan(index.max(0).saturating_as::<usize>(), dx, dy)));
     bus.on_minimap_pointer(|index, x, y, phase| {
@@ -280,6 +287,7 @@ fn update_bar_overlay() {
         with_host(|h| Some((h.window.clone()?.upgrade()?, h.instance.upgrade()?, h.main_xid))).flatten()
     else {
         bar_overlay::hide(BarOwner::TabView);
+        video_bar::hide(BarOwner::TabView);
         return;
     };
     // While a dialog (or the settings window) locks the main window, no bar is shown, so none can be used, and the video
@@ -305,13 +313,53 @@ fn update_bar_overlay() {
         BarTargets::of_instance(BarOwner::TabView, &instance, in_tab_view),
         in_tab_view,
     );
+    let video_bars_visible = update_video_bars(&instance, host_xid, in_tab_view);
     let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);
     if in_tab_view {
-        cursor::sync(window.window(), &instance, bars_visible, &mut window_hidden);
+        cursor::sync(
+            window.window(),
+            &instance,
+            bars_visible || video_bars_visible,
+            &mut window_hidden,
+        );
     } else {
         cursor::release(window.window(), Some(&instance), &mut window_hidden);
     }
     with_host(|h| h.cursor_hidden = window_hidden);
+}
+
+/// Shows, updates or hides the control bars of the videos of the tab view (none while `active` is false). Returns whether one
+/// is visible.
+fn update_video_bars(instance: &SharedInstance, host_xid: u64, active: bool) -> bool {
+    if !active {
+        instance.lock().release_video_bars();
+        video_bar::hide(BarOwner::TabView);
+        return false;
+    }
+    let prefs = video_bar::effective_prefs();
+    let targets = instance.lock().video_bar_targets(&prefs, Instant::now());
+    let host = VideoBarHost {
+        owner: BarOwner::TabView,
+        host_xid,
+        on_input: Rc::new(|key, input| {
+            video_bar_after(|mv| mv.video_bar_input(key, input, &video_bar::effective_prefs()));
+        }),
+    };
+    video_bar::update(&host, &targets, &prefs)
+}
+
+/// Runs `f` on the shown instance; when it changed something, the view and the control bars follow at once.
+fn video_bar_after(f: impl FnOnce(&mut MultiviewInstance) -> bool) {
+    let Some(instance) = current_instance() else {
+        return;
+    };
+    let changed = f(&mut instance.lock());
+    if changed {
+        refresh();
+        let host_xid = with_host(|h| h.main_xid).unwrap_or(0);
+        let shown_here = instance.lock().host_mode() == HostMode::TabView;
+        update_video_bars(&instance, host_xid, shown_here);
+    }
 }
 
 /// A button of the primary bar was clicked.
@@ -399,6 +447,10 @@ pub fn suspend() {
         return;
     }
     bar_overlay::hide(BarOwner::TabView);
+    video_bar::hide(BarOwner::TabView);
+    if let Some(instance) = with_host(|h| h.instance.upgrade()).flatten() {
+        instance.lock().release_video_bars();
+    }
     if let Some(window) = with_host(|h| h.window.clone()).flatten().and_then(|w| w.upgrade()) {
         let instance = with_host(|h| h.instance.upgrade()).flatten();
         let mut window_hidden = with_host(|h| h.cursor_hidden).unwrap_or(false);

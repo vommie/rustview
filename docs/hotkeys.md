@@ -36,7 +36,7 @@ same, e.g. only the fullscreen of a Browse view pages or becomes a tab) with sim
   video is the keymap's. The Video Player area comes first while the Multiview holds a video; its actions run `MpvPlayer`
   commands on the selected video (`MultiviewCommand::Player`: pause, mute, jumps of Settings > Viewer > Videos, 5 % volume
   steps, frame steps, speed x1.1); a picture as target shows "Select a video". (0.4.4 had bound the keymap's chords inside mpv as
-  `script-message rustview-key`; that path is gone.) The mouse over a video still goes to mpv (see "Mouse over videos").
+  `script-message rustview-key`; that path is gone.) The mouse over a video is RustView's since 0.4.7 (see "Mouse over videos" and `docs/video_controls.md`).
 - Fixed keys (cannot be changed, shown greyed with a lock and a tooltip that says why): Esc (cancels, closes, clears the
   selection; it also cancels the recording of a key), the cursor keys of Browse (arrows, Page Up/Down, Home/End, Shift
   extends), type-ahead letters. Dialog keys (Enter, Esc) are not listed.
@@ -87,6 +87,6 @@ unzoomed. No slider or minimap for videos, and a video stays inside its tile.
 - The bar (user spec): play/pause, the current time (live; a click toggles milliseconds), a flat progress bar without chapter
   marks (a click seeks exactly there), the remaining time like mpv (a click toggles milliseconds), a mute button on the right.
   Nothing else. It appears only while the pointer is over it, across the whole width (like mpv's OSC), flat and compact;
-  the look is chosen in round 4 (`~/claude/feedback/2026-10-24-rustview-video-bar`).
+  the look is chosen in round 4 (`~/claude/feedback/2026-10-24-rustview-video-bar`, built: `docs/video_controls.md`).
 - Mouse wheel over a video: volume. Right click: play/pause. Videos get the minimap and the zoom slider like pictures, and a
   zoomed video may grow beyond its tile into the free room (its native window grows).

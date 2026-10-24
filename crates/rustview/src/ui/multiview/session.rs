@@ -78,6 +78,8 @@ pub(super) struct Session {
     pub(super) bar_click: Rc<dyn Fn(i32, i32)>,
     /// What a click on a button of the primary bar window does.
     pub(super) primary_click: Rc<dyn Fn(i32, i32)>,
+    /// What a click, drag or wheel on a control bar of a video does.
+    pub(super) video_bar_input: super::video_bar::InputHandler,
     /// The mouse cursor is hidden over the window right now.
     pub(super) cursor_hidden: bool,
     pub(super) images: ImageCache,
@@ -228,6 +230,10 @@ fn create_window() -> Result<MultiviewFullscreenWindow, slint::PlatformError> {
     win.on_tile_zoom_wheel(|index, delta, x, y| {
         with_session(|s| s.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y));
     });
+    win.on_tile_video_wheel(|index, delta, ctrl| {
+        with_session(|s| s.video_wheel(index.max(0).saturating_as::<usize>(), delta, ctrl));
+    });
+    win.on_tile_right_clicked(|index| with_session(|s| s.video_right_click(index.max(0).saturating_as::<usize>())));
     win.on_tile_pan(|index, dx, dy| with_session(|s| s.zoom_pan(index.max(0).saturating_as::<usize>(), dx, dy)));
     win.on_minimap_pointer(|index, x, y, phase| {
         with_session(|s| s.zoom_minimap(index.max(0).saturating_as::<usize>(), x, y, phase));
@@ -576,6 +582,7 @@ impl Session {
             models: ViewModels::default(),
             bar_click: Rc::new(|tile, action| run(|s| s.on_action(tile, action))),
             primary_click: Rc::new(|_, action| run(|s| s.on_primary_action(action))),
+            video_bar_input: Rc::new(|key, input| with_session(|s| s.on_video_bar_input(key, input))),
             cursor_hidden: false,
             images: ImageCache::default(),
             shown_revision: None,
@@ -679,6 +686,7 @@ impl Session {
         self.feedback_timer.stop();
         self.instance.lock().clear_feedback();
         bar_overlay::hide(BarOwner::Fullscreen);
+        super::video_bar::hide(BarOwner::Fullscreen);
         if let Some(win) = self.window.upgrade() {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
             win.set_is_ready(false);

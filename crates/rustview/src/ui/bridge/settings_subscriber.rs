@@ -114,6 +114,7 @@ impl UiBridge {
                 if diff_clone.fullscreen_settings_changed || diff_clone.viewer_settings_changed {
                     prefs::apply(&new_clone.fullscreen);
                     zoom_prefs::apply(&new_clone.fullscreen);
+                    crate::viewer::multiview::video_bar::prefs::apply(&new_clone.fullscreen.player);
                     multiview::refresh_settings(&settings);
                 }
 

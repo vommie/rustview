@@ -384,6 +384,7 @@ impl MultiviewHandle {
         session::shutdown();
         super::tab_host::shutdown();
         super::bar_overlay::shutdown();
+        super::video_bar::shutdown();
         super::hint::shutdown();
     }
 

@@ -9,6 +9,7 @@ import { SettingsPageFormats } from "settings_page_formats.slint";
 import { FormatRowView, UnsupportedFormatView } from "settings_format_row.slint";
 import { SettingsPageViewer } from "settings_page_viewer.slint";
 import { SettingsPageFullscreen } from "settings_page_fullscreen.slint";
+import { PlayerBarLimits } from "settings_card_player.slint";
 import { SettingsPageImageEdit, RatioChipView } from "settings_page_image_edit.slint";
 import { SettingsPageTagsRatings } from "settings_page_tags_ratings.slint";
 import { SettingsPageHotkeys } from "settings_page_hotkeys.slint";
@@ -206,6 +207,14 @@ export component SettingsWindow inherits Window {
     in-out property <bool> fullscreen-sound-auto-control: true;
     in-out property <int> fullscreen-sound-follows-idx: 0; // 0 = first video, 1 = newest video, 2 = selected video, 3 = nobody
     in-out property <bool> fullscreen-sound-hand-over: true;
+    in-out property <int> fullscreen-player-style-idx: 0;
+    in-out property <int> fullscreen-player-opacity-percent: 70;
+    in-out property <int> fullscreen-player-height-px: 30;
+    in-out property <int> fullscreen-player-reveal-idx: 0;
+    in-out property <bool> fullscreen-player-fade: true;
+    in-out property <bool> fullscreen-player-show-ms: false;
+    in-out property <int> fullscreen-player-seek-idx: 0;
+    in property <PlayerBarLimits> fullscreen-player-limits: { min-opacity: 20, max-opacity: 100, min-height: 20, max-height: 64 };
     in-out property <bool> fullscreen-rating-show-feedback: true;
     in property <string> fullscreen-rating-keys: "the rating keys";
     in-out property <int> fullscreen-background-source-idx: 0; // 0 = theme, 1 = same as viewer, 2 = custom color
@@ -427,6 +436,14 @@ export component SettingsWindow inherits Window {
                             sound-auto-control <=> root.fullscreen-sound-auto-control;
                             sound-follows-idx <=> root.fullscreen-sound-follows-idx;
                             sound-hand-over <=> root.fullscreen-sound-hand-over;
+                            player-style-idx <=> root.fullscreen-player-style-idx;
+                            player-opacity-percent <=> root.fullscreen-player-opacity-percent;
+                            player-height-px <=> root.fullscreen-player-height-px;
+                            player-reveal-idx <=> root.fullscreen-player-reveal-idx;
+                            player-fade <=> root.fullscreen-player-fade;
+                            player-show-ms <=> root.fullscreen-player-show-ms;
+                            player-seek-idx <=> root.fullscreen-player-seek-idx;
+                            player-limits: root.fullscreen-player-limits;
                             rating-show-feedback <=> root.fullscreen-rating-show-feedback;
                             rating-keys: root.fullscreen-rating-keys;
                             background-source-idx <=> root.fullscreen-background-source-idx;

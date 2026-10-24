@@ -31,6 +31,10 @@ export component MultiviewCanvas inherits Rectangle {
     callback wheel(length /* delta-y */);
     // Ctrl + mouse wheel over an image: zoom (the pointer position is in logical pixels inside the tile).
     callback tile-zoom-wheel(int /* tile index */, length /* delta-y */, length /* x */, length /* y */);
+    // The mouse wheel over a video (its window lets the pointer through): the volume, with Ctrl mpv's zoom.
+    callback tile-video-wheel(int /* tile index */, length /* delta-y */, bool /* ctrl */);
+    // A right click on a video: play or pause it.
+    callback tile-right-clicked(int /* tile index */);
     // The picture of a zoomed image is dragged (the movement since the last report, logical pixels).
     callback tile-pan(int /* tile index */, length /* dx */, length /* dy */);
     // The minimap of a zoomed image is pressed (0), dragged (1) or released (2) at a point given as shares of the image; 3 = middle
@@ -268,6 +272,10 @@ export component MultiviewCanvas inherits Rectangle {
                     root.tile-zoom-wheel(index, event.delta-y, self.mouse-x, self.mouse-y);
                     return accept;
                 }
+                if tile.kind == 1 {
+                    root.tile-video-wheel(index, event.delta-y, event.modifiers.control || event.modifiers.meta);
+                    return accept;
+                }
                 if root.wheel-navigation {
                     root.wheel(event.delta-y);
                     return accept;
@@ -294,6 +302,8 @@ export component MultiviewCanvas inherits Rectangle {
                     }
                 } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.middle {
                     root.middle-clicked();
+                } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.right && tile.kind == 1 {
+                    root.tile-right-clicked(index);
                 }
             }
 

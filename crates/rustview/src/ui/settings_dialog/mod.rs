@@ -2,6 +2,7 @@ mod confirmations;
 mod formats_page;
 mod hotkeys_page;
 mod image_edit_page;
+mod player_bar;
 mod selected_medium;
 
 /// The index of the page Hotkeys in the sidebar of the settings window (`ui/settings_sidebar.slint`).
@@ -339,6 +340,7 @@ impl SettingsDialogController {
         window.set_fullscreen_rating_show_feedback(fullscreen.rating.show_feedback);
         window.set_fullscreen_rating_keys(crate::ui::hotkeys::rating_keys_text().into());
         selected_medium::populate(window, fullscreen);
+        player_bar::populate(window, &fullscreen.player);
 
         window.set_fullscreen_background_source_idx(match fullscreen.background.source.as_str() {
             "viewer" => 1,
@@ -430,6 +432,7 @@ impl SettingsDialogController {
         sound.hand_over = window.get_fullscreen_sound_hand_over();
         fullscreen.rating.show_feedback = window.get_fullscreen_rating_show_feedback();
         selected_medium::save(window, fullscreen);
+        player_bar::save(window, &mut fullscreen.player);
 
         fullscreen.background.source = match window.get_fullscreen_background_source_idx() {
             1 => "viewer",

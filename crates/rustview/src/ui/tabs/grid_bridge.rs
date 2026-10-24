@@ -108,6 +108,9 @@ impl BridgeTabGrid {
             .map(|(idx, s)| {
                 let r = &rects[idx];
                 let solo_kind = s.multiview.instance.lock().solo_tile().map(|(_, kind, _)| kind);
+                // Its own statement: a lock taken inside the struct literal below would be held until the whole literal is
+                // built, and `tab_icon` takes the same lock again (the tab grid hung as soon as a tab was open).
+                let has_unsaved = s.multiview.instance.lock().has_unsaved_edits();
                 let (width, height) = s.display_size();
                 let multiview_item = grid_host.as_ref().map_or_else(
                     || GridItemView {
@@ -126,7 +129,7 @@ impl BridgeTabGrid {
                     is_video: solo_kind == Some(TileKind::Video),
                     is_multiview: true,
                     is_selected: selection.contains(s.id),
-                    has_unsaved: s.multiview.instance.lock().has_unsaved_edits(),
+                    has_unsaved,
                     icon: tab_icon(s),
                     rating: i32::from(s.record.rating),
                     has_tags: false,

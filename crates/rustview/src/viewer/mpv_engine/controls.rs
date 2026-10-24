@@ -1,8 +1,19 @@
-//! The video player keys of `RustView` (Settings > Hotkeys > Video Player) on mpv: mpv takes no keys itself, these commands do
-//! what its own keys did (and show mpv's on-screen message for them until `RustView` has an OSD of its own).
+//! The video player keys of `RustView` (Settings > Hotkeys > Video Player) and the control bar of a video on mpv: mpv takes
+//! no keys and no pointer input itself, these commands do what its own keys and its on-screen controller did.
 
 use super::MpvPlayer;
 use crate::viewer::error::ViewerError;
+
+/// How exactly an absolute seek lands (mpv's seek flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SeekPrecision {
+    /// On the exact frame (slower: mpv decodes from the keyframe before it).
+    Exact,
+    /// On the nearest keyframe (the fastest).
+    Keyframes,
+    /// As mpv is configured (its `hr-seek` option).
+    MpvSetting,
+}
 
 impl MpvPlayer {
     /// One frame forward or back (mpv pauses for it).
@@ -18,6 +29,19 @@ impl MpvPlayer {
         self.mpv
             .command("add", &["volume", &format!("{delta}")])
             .map_err(|e| ViewerError::Mpv(format!("Failed to change the volume: {e:?}")))
+    }
+
+    /// Goes to `secs` as `precision` says (the progress bar of the control bar; a seek that comes while one runs replaces it
+    /// in mpv). Shows no on-screen message: `mpv_command` does not use the OSD.
+    pub fn seek_to(&self, secs: f64, precision: SeekPrecision) -> Result<(), ViewerError> {
+        let flags = match precision {
+            SeekPrecision::Exact => "absolute+exact",
+            SeekPrecision::Keyframes => "absolute+keyframes",
+            SeekPrecision::MpvSetting => "absolute",
+        };
+        self.mpv
+            .command("seek", &[&format!("{:.3}", secs.max(0.0)), flags])
+            .map_err(|e| ViewerError::Mpv(format!("Failed to seek: {e:?}")))
     }
 
     /// Faster (`factor` above 1) or slower.

@@ -7,6 +7,7 @@ import { TooltipHost } from "tooltips.slint";
 import { SettingsOptionRow, SettingsSwitchRow } from "settings_option_row.slint";
 import { ColorSwatchButton } from "color_picker.slint";
 import { SettingsCardSelectedMedium } from "settings_card_selected_medium.slint";
+import { SettingsCardPlayer, PlayerBarLimits } from "settings_card_player.slint";
 
 export component SettingsPageFullscreen inherits VerticalLayout {
     spacing: 12px;
@@ -65,6 +66,15 @@ export component SettingsPageFullscreen inherits VerticalLayout {
 
     // Rating
     in-out property <bool> rating-show-feedback: true;
+    // Player (the control bar of a video)
+    in-out property <int> player-style-idx: 0; // 0 = translucent bar, 1 = floating pill
+    in-out property <int> player-opacity-percent: 70;
+    in-out property <int> player-height-px: 30;
+    in-out property <int> player-reveal-idx: 0; // 0 = near the bottom, 1 = any movement over the video
+    in-out property <bool> player-fade: true;
+    in-out property <bool> player-show-ms: false;
+    in-out property <int> player-seek-idx: 0;
+    in property <PlayerBarLimits> player-limits;
     // The rating keys as the description names them (Settings > Hotkeys).
     in property <string> rating-keys: "the rating keys";
 
@@ -651,6 +661,17 @@ export component SettingsPageFullscreen inherits VerticalLayout {
     SettingsCardSelectedMedium {
         brighten-idx <=> root.selection-brighten-idx;
         corner-idx <=> root.selection-corner-idx;
+    }
+
+    SettingsCardPlayer {
+        style-idx <=> root.player-style-idx;
+        opacity-percent <=> root.player-opacity-percent;
+        height-px <=> root.player-height-px;
+        reveal-idx <=> root.player-reveal-idx;
+        fade <=> root.player-fade;
+        show-ms <=> root.player-show-ms;
+        seek-idx <=> root.player-seek-idx;
+        limits: root.player-limits;
     }
 
     SettingsCard {

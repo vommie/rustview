@@ -114,6 +114,9 @@ volume_on = { tabler = "volume", doc = "Sound on" }
 volume_off = { tabler = "volume-off", doc = "Sound muted" }
 playback_play = { tabler = "player-play", doc = "Start playback" }
 playback_pause = { tabler = "player-pause", doc = "Pause playback" }
+video_bar_play = { tabler = "player-play", style = "filled", doc = "Video control bar: the video is paused, a click plays it" }
+video_bar_pause = { tabler = "player-pause", style = "filled", doc = "Video control bar: the video plays, a click pauses it" }
+volume_low = { tabler = "volume-2", doc = "Video control bar: the volume is low" }
 lock = { tabler = "lock", doc = "Locked: the fullscreen cannot be closed" }
 lock_open = { tabler = "lock-open", doc = "Unlocked" }
 layout_reset = { tabler = "layout-grid-remove", doc = "Reset the arrangement of the Multiview to automatic" }

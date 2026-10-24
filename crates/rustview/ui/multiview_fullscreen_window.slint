@@ -37,6 +37,8 @@ export component MultiviewFullscreenWindow inherits Window {
     callback navigate(bool /* forward */);
     callback wheel(length /* delta-y */);
     callback tile-zoom-wheel(int /* tile index */, length /* delta-y */, length /* x */, length /* y */);
+    callback tile-video-wheel(int /* tile index */, length /* delta-y */, bool /* ctrl */);
+    callback tile-right-clicked(int /* tile index */);
     callback tile-pan(int /* tile index */, length /* dx */, length /* dy */);
     callback minimap-pointer(int /* tile index */, float /* x */, float /* y */, int /* phase */);
     callback minimap-slider(int /* tile index */, int /* code of the slider */);
@@ -121,6 +123,12 @@ export component MultiviewFullscreenWindow inherits Window {
         }
         tile-zoom-wheel(index, delta, x, y) => {
             root.tile-zoom-wheel(index, delta, x, y);
+        }
+        tile-video-wheel(index, delta, ctrl) => {
+            root.tile-video-wheel(index, delta, ctrl);
+        }
+        tile-right-clicked(index) => {
+            root.tile-right-clicked(index);
         }
         tile-pan(index, dx, dy) => {
             root.tile-pan(index, dx, dy);

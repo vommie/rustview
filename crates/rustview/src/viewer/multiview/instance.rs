@@ -88,6 +88,8 @@ pub struct MultiviewInstance {
     pub(super) zoom_minimap_bubble: Vec<TileKey>,
     /// Wheel movement over an image that has not made a whole step yet.
     pub(super) zoom_wheel_accum: f32,
+    /// Wheel movement over a video (volume, or mpv's zoom with Ctrl) that has not made a whole notch yet.
+    pub(super) video_wheel_accum: f32,
     /// The icons of ratings given with the keyboard that are on screen right now.
     pub(super) feedback: MediaFeedback,
     /// The open crop tools in the order they were opened (Esc cancels the oldest first).
@@ -133,6 +135,7 @@ impl MultiviewInstance {
                 zoom_slider: Vec::new(),
                 zoom_minimap_bubble: Vec::new(),
                 zoom_wheel_accum: 0.0,
+                video_wheel_accum: 0.0,
                 feedback: MediaFeedback::default(),
                 crop_order: ToolOrder::default(),
                 focus,

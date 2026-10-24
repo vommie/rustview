@@ -25,6 +25,7 @@ import { TabGridView } from "tab_grid_view.slint";
 
 export { SettingsWindow } from "settings_window.slint";
 export { FormatRowView, UnsupportedFormatView } from "settings_format_row.slint";
+export { PlayerBarLimits } from "settings_card_player.slint";
 export { FileRenameDialog } from "file_rename_dialog.slint";
 export { FileOpsConflictDialog } from "file_ops_conflict_dialog.slint";
 export { DeleteFileDialog } from "delete_file_dialog.slint";
@@ -50,6 +51,7 @@ export { DialogFit } from "dialog_body.slint";
 export { MultiviewFullscreenWindow } from "multiview_fullscreen_window.slint";
 export { MultiviewBarWindow } from "multiview_bar_window.slint";
 export { MultiviewHintWindow } from "multiview_hint_window.slint";
+export { MultiviewVideoBarWindow, VideoBarSpanView } from "multiview_video_bar_window.slint";
 export { MultiviewTileView, MultiviewGutterView, MultiviewScreenView, MultiviewBarButtonView } from "multiview_types.slint";
 export { MultiviewTabBus } from "multiview_tab_bus.slint";
 export { FeedbackKind, ButtonFeedback } from "button_feedback_types.slint";
@@ -989,6 +991,8 @@ export component MainWindow inherits Window {
 
                         tile-clicked(index, is-ctrl) => { MultiviewTabBus.tile-clicked(index, is-ctrl); }
                         tile-zoom-wheel(index, delta, x, y) => { MultiviewTabBus.tile-zoom-wheel(index, delta, x, y); }
+                        tile-video-wheel(index, delta, ctrl) => { MultiviewTabBus.tile-video-wheel(index, delta, ctrl); }
+                        tile-right-clicked(index) => { MultiviewTabBus.tile-right-clicked(index); }
                         tile-pan(index, dx, dy) => { MultiviewTabBus.tile-pan(index, dx, dy); }
                         minimap-pointer(index, x, y, phase) => { MultiviewTabBus.minimap-pointer(index, x, y, phase); }
                         minimap-slider(index, code) => { MultiviewTabBus.minimap-slider(index, code); }

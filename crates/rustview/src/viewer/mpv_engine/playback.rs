@@ -9,6 +9,16 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
+/// Where a video is and how it plays, in short.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlaybackNumbers {
+    pub position: f64,
+    pub duration: f64,
+    pub paused: bool,
+    /// Percent (mpv's `volume`).
+    pub volume: f64,
+}
+
 impl MpvPlayer {
     /// Loads a video file from disk and starts immediate playback (resets user pause state to false).
     pub fn load_file(&self, path: &Path) -> Result<(), ViewerError> {
@@ -215,5 +225,16 @@ impl MpvPlayer {
 
     pub fn get_playback_state(&self) -> MpvPlaybackState {
         self.state.read().clone()
+    }
+
+    /// The numbers of the playback state as the observer saw them last (no call into mpv; for the control bar's ticks).
+    pub fn playback(&self) -> PlaybackNumbers {
+        let st = self.state.read();
+        PlaybackNumbers {
+            position: st.position_secs,
+            duration: st.duration_secs,
+            paused: st.is_paused,
+            volume: st.volume,
+        }
     }
 }

@@ -37,6 +37,7 @@ mod instance_primary;
 mod instance_rating;
 mod instance_sound;
 mod instance_tiles;
+mod instance_video_bar;
 mod instance_zoom;
 pub mod key_labels;
 pub mod layout;
@@ -51,6 +52,7 @@ pub mod primary_actions;
 pub mod route;
 pub mod teardown;
 pub mod tile;
+pub mod video_bar;
 pub mod view;
 
 pub use instance_host::HostSurface;

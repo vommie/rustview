@@ -515,6 +515,57 @@ pub const MAX_FULLSCREEN_ZOOM_MINIMAP_SECS: u32 = 30;
 /// "lanczos3" (best quality), "`catmull_rom`" (bicubic), "bilinear" or "nearest" (hard pixels).
 pub const DEFAULT_FULLSCREEN_ZOOM_RESAMPLE: &str = "lanczos3";
 
+// --- Video control bar of the Multiview (Settings > Fullscreen > Player) ---
+/// "bar" (a translucent bar over the whole width of the video) or "pill" (a floating pill with a margin to the edges).
+pub const DEFAULT_FULLSCREEN_PLAYER_BAR_STYLE: &str = "bar";
+
+/// How opaque the background of the bar is, in percent (only where a compositing manager blends the bar).
+pub const DEFAULT_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT: u32 = 70;
+
+pub const MIN_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT: u32 = 20;
+
+pub const MAX_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT: u32 = 100;
+
+/// The height of the bar in logical pixels; its buttons, texts and the progress bar grow with it.
+pub const DEFAULT_FULLSCREEN_PLAYER_BAR_HEIGHT_PX: u32 = 30;
+
+pub const MIN_FULLSCREEN_PLAYER_BAR_HEIGHT_PX: u32 = 20;
+
+pub const MAX_FULLSCREEN_PLAYER_BAR_HEIGHT_PX: u32 = 64;
+
+/// "bottom" (the pointer in the lower part of the video shows the bar) or "anywhere" (any movement over the video shows it,
+/// it goes after `MULTIVIEW_VIDEO_BAR_IDLE_MS` without movement).
+pub const DEFAULT_FULLSCREEN_PLAYER_BAR_REVEAL: &str = "bottom";
+
+/// The bar fades in and out (`MULTIVIEW_VIDEO_BAR_FADE_MS`) instead of appearing and vanishing at once.
+pub const DEFAULT_FULLSCREEN_PLAYER_BAR_FADE: bool = true;
+
+/// The times of a new video start with milliseconds (a click on a time switches them for that video only).
+pub const DEFAULT_FULLSCREEN_PLAYER_SHOW_MS: bool = false;
+
+/// How a click or a drag on the progress bar seeks: "exact" (to the exact frame, also while dragging), "osc" (like mpv's own
+/// controller: a click exactly, a drag by keyframes), "keyframes" (to the nearest keyframe, the fastest) or "mpv" (as mpv is
+/// configured, its `hr-seek` option).
+pub const DEFAULT_FULLSCREEN_PLAYER_SEEK: &str = "exact";
+
+/// How long the bar fades in or out.
+pub const MULTIVIEW_VIDEO_BAR_FADE_MS: u64 = 150;
+
+/// Reveal "anywhere": how long the bar stays after the pointer stopped moving over the video.
+pub const MULTIVIEW_VIDEO_BAR_IDLE_MS: u64 = 1500;
+
+/// Reveal "bottom": how far above the bar the pointer may be and still reveal it, in logical pixels.
+pub const MULTIVIEW_VIDEO_BAR_REVEAL_MARGIN_LOGICAL_PX: f32 = 12.0;
+
+/// The margin of the floating pill to the edges of the video, in logical pixels.
+pub const MULTIVIEW_VIDEO_BAR_PILL_INSET_LOGICAL_PX: f32 = 10.0;
+
+/// A video narrower or lower than this (logical pixels) gets no control bar.
+pub const MULTIVIEW_VIDEO_BAR_MIN_VIDEO_WIDTH_LOGICAL_PX: f32 = 200.0;
+
+/// One notch of the mouse wheel over a video or its volume bar changes the volume by this many percent.
+pub const MULTIVIEW_VIDEO_WHEEL_VOLUME_STEP: f64 = 5.0;
+
 // --- Fullscreen background ---
 /// "theme" (color of the app theme), "viewer" (the background of the viewer settings) or "custom" (`color`).
 pub const DEFAULT_FULLSCREEN_BACKGROUND_SOURCE: &str = "theme";

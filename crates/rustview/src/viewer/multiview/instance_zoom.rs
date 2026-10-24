@@ -32,7 +32,7 @@ use std::time::Instant;
 pub const SLIDER_TRACK_PX: f64 = 172.0;
 
 /// A mouse wheel notch is worth this much `delta-y` in Slint; touchpads send pixels and add up to a step the same way.
-const WHEEL_STEP_DELTA: f32 = 120.0;
+pub(super) const WHEEL_STEP_DELTA: f32 = 120.0;
 
 impl MultiviewInstance {
     /// Zooming works where the picture is interactive: the fullscreen and the tab view. The tab-grid item is a miniature.

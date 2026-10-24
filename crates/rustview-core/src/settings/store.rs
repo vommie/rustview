@@ -25,6 +25,11 @@ use super::schema::{
     MIN_FULLSCREEN_ZOOM_MINIMAP_SECS, MIN_FULLSCREEN_ZOOM_OUT_PERCENT, MIN_FULLSCREEN_ZOOM_STEP_PERCENT,
 };
 use super::schema::{
+    DEFAULT_FULLSCREEN_PLAYER_BAR_REVEAL, DEFAULT_FULLSCREEN_PLAYER_BAR_STYLE, DEFAULT_FULLSCREEN_PLAYER_SEEK,
+    MAX_FULLSCREEN_PLAYER_BAR_HEIGHT_PX, MAX_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT,
+    MIN_FULLSCREEN_PLAYER_BAR_HEIGHT_PX, MIN_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT,
+};
+use super::schema::{
     DEFAULT_FULLSCREEN_SELECTION_BRIGHTEN, DEFAULT_FULLSCREEN_SELECTION_CORNER_MARKS, MULTIVIEW_FOCUS_BRIGHTEN_LEVELS,
     MULTIVIEW_FOCUS_CORNER_LEVELS,
 };
@@ -462,6 +467,33 @@ impl SettingsStore {
         } else {
             DEFAULT_FULLSCREEN_ZOOM_RESAMPLE.to_string()
         };
+
+        let player = &mut fullscreen.player;
+        let style = player.bar_style.trim().to_lowercase();
+        player.bar_style = if matches!(style.as_str(), "bar" | "pill") {
+            style
+        } else {
+            DEFAULT_FULLSCREEN_PLAYER_BAR_STYLE.to_string()
+        };
+        player.bar_opacity_percent = player.bar_opacity_percent.clamp(
+            MIN_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT,
+            MAX_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT,
+        );
+        player.bar_height_px = player
+            .bar_height_px
+            .clamp(MIN_FULLSCREEN_PLAYER_BAR_HEIGHT_PX, MAX_FULLSCREEN_PLAYER_BAR_HEIGHT_PX);
+        let reveal = player.reveal.trim().to_lowercase();
+        player.reveal = if matches!(reveal.as_str(), "bottom" | "anywhere") {
+            reveal
+        } else {
+            DEFAULT_FULLSCREEN_PLAYER_BAR_REVEAL.to_string()
+        };
+        let seek = player.seek.trim().to_lowercase();
+        player.seek = if matches!(seek.as_str(), "exact" | "osc" | "keyframes" | "mpv") {
+            seek
+        } else {
+            DEFAULT_FULLSCREEN_PLAYER_SEEK.to_string()
+        };
     }
 }
 
@@ -516,6 +548,38 @@ mod added_settings_tests {
         let mut off: AppSettings = serde_json::from_str(r#"{"general": {"hold_to_confirm_ms": 0}}"#).unwrap();
         SettingsStore::validate_and_sanitize(&mut off);
         assert_eq!(off.general.hold_to_confirm_ms, 0, "0 = a click is enough");
+    }
+
+    #[test]
+    fn the_video_control_bar_settings_are_additive_and_kept_in_range() {
+        let old: AppSettings = serde_json::from_str(r#"{"fullscreen": {"zoom": {"step_percent": 20}}}"#).unwrap();
+        assert_eq!(
+            old.fullscreen.player,
+            crate::settings::schema::FullscreenPlayerSettings::default()
+        );
+        assert_eq!(old.fullscreen.zoom.step_percent, 20);
+        assert_eq!(old.fullscreen.player.bar_style, "bar");
+        assert_eq!(old.fullscreen.player.bar_opacity_percent, 70);
+        assert_eq!(old.fullscreen.player.bar_height_px, 30);
+        assert_eq!(old.fullscreen.player.reveal, "bottom");
+        assert!(old.fullscreen.player.fade);
+        assert!(!old.fullscreen.player.show_ms);
+        assert_eq!(old.fullscreen.player.seek, "exact");
+
+        let mut odd: AppSettings = serde_json::from_str(
+            r#"{"fullscreen": {"player": {"bar_style": " PILL ", "bar_opacity_percent": 3, "bar_height_px": 500, "reveal": "nowhere", "seek": "Keyframes"}}}"#,
+        )
+        .unwrap();
+        SettingsStore::validate_and_sanitize(&mut odd);
+        let player = &odd.fullscreen.player;
+        assert_eq!(player.bar_style, "pill");
+        assert_eq!(player.bar_opacity_percent, MIN_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT);
+        assert_eq!(player.bar_height_px, MAX_FULLSCREEN_PLAYER_BAR_HEIGHT_PX);
+        assert_eq!(player.reveal, "bottom");
+        assert_eq!(player.seek, "keyframes");
+        let mut unknown: AppSettings = serde_json::from_str(r#"{"fullscreen": {"player": {"seek": "warp"}}}"#).unwrap();
+        SettingsStore::validate_and_sanitize(&mut unknown);
+        assert_eq!(unknown.fullscreen.player.seek, "exact");
     }
 
     #[test]

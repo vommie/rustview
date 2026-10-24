@@ -4,12 +4,12 @@ use super::{ActionHandler, BarKind, BarOwner, BarRequest, LAST_CLICKED, NEXT_IS_
 use crate::ui::multiview::views::sync_model;
 use crate::ui::{ContextMenuItemModel, MultiviewBarButtonView, MultiviewBarWindow};
 use crate::viewer::multiview::bar_menu::OutsidePress;
-use crate::viewer::multiview::bar_placement::{BarPlacement, in_reveal_zone, place_bar_in, rounded_region};
+use crate::viewer::multiview::bar_placement::{BarPlacement, in_reveal_zone, place_bar_in, rounded_region, xrectangle};
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::layout::Rect;
 use crate::viewer::multiview::media_actions::MediaActionId;
 use crate::viewer::multiview::view::ZoomBubbleView;
-use crate::viewer::{OverlayServer, XRectangle, get_raw_window_xid};
+use crate::viewer::{OverlayServer, get_raw_window_xid};
 use rustview_core::util::cast::{FloatToInt, SaturatingAs};
 use slint::{ComponentHandle, ModelRc, PhysicalPosition, PhysicalSize, VecModel};
 use std::cell::{Cell, RefCell};
@@ -99,15 +99,6 @@ pub(super) fn clear_menu(window: &MultiviewBarWindow, shared: &Shared) {
     if let Ok(mut state) = shared.x.try_borrow_mut() {
         state.menu = None;
         state.apply_shape();
-    }
-}
-
-pub(super) fn xrectangle(rect: Rect) -> XRectangle {
-    XRectangle {
-        x: rect.x.clamp(0, i32::from(i16::MAX)).saturating_as::<i16>(),
-        y: rect.y.clamp(0, i32::from(i16::MAX)).saturating_as::<i16>(),
-        width: rect.w.clamp(1, i32::from(u16::MAX)).saturating_as::<u16>(),
-        height: rect.h.clamp(1, i32::from(u16::MAX)).saturating_as::<u16>(),
     }
 }
 

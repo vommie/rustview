@@ -145,7 +145,7 @@ images and one video, fullscreen and tab view, keys with and without focus, curs
    Multiview, Player in the Multiview, ...).
    **Done in 0.4.4** (`docs/hotkeys.md`).
 2a. **Keyboard part of milestone 2 done in 0.4.6:** mpv takes no keys (`input-vo-keyboard=no`), RustView handles every key over a video (Space,
-   M, jumps, frame steps, volume, speed through the keymap's Video Player area). The mouse over a video is still mpv's (questionnaire round 3).
+   M, jumps, frame steps, volume, speed through the keymap's Video Player area). The mouse over a video is RustView's since 0.4.7 (`docs/video_controls.md`).
 2. **RustView controls the videos itself:** mpv gets no key bindings of its own any more; RustView forwards its commands (e.g. Space play/pause,
    M mute/unmute, Left/Right jump backward/forward). Removes the screenshot/audio-delay/quit leaks listed above.
 3. **Own OSD** instead of mpv's OSC/OSD.

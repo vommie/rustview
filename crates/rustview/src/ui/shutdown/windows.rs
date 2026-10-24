@@ -12,6 +12,10 @@ pub const WINDOWS: &[(&str, &str)] = &[
     ),
     ("MultiviewBarWindow", "bar_overlay::shutdown destroys both bar windows"),
     (
+        "MultiviewVideoBarWindow",
+        "video_bar::shutdown hides and drops the control bars of the videos",
+    ),
+    (
         "MultiviewHintWindow",
         "MultiviewHandle::shutdown hides it (hint::shutdown)",
     ),

@@ -10,6 +10,9 @@ use super::{
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_MUTE, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_AS_TAB,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_OPEN_WITH, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_REMOVE,
     DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_STICKY, DEFAULT_FULLSCREEN_MEDIA_BAR_SHOW_ZOOM,
+    DEFAULT_FULLSCREEN_PLAYER_BAR_FADE, DEFAULT_FULLSCREEN_PLAYER_BAR_HEIGHT_PX,
+    DEFAULT_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT, DEFAULT_FULLSCREEN_PLAYER_BAR_REVEAL,
+    DEFAULT_FULLSCREEN_PLAYER_BAR_STYLE, DEFAULT_FULLSCREEN_PLAYER_SEEK, DEFAULT_FULLSCREEN_PLAYER_SHOW_MS,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_ENABLED, DEFAULT_FULLSCREEN_PRIMARY_BAR_REVEAL_DISTANCE_PX,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_CLOSE, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_HIDE_CURSOR,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN,
@@ -254,6 +257,33 @@ impl Default for FullscreenZoomSettings {
     }
 }
 
+/// The control bar of a video in the Multiview (fullscreen and tab view): Settings > Fullscreen > Player.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FullscreenPlayerSettings {
+    pub bar_style: String, // "bar" or "pill"
+    pub bar_opacity_percent: u32,
+    pub bar_height_px: u32,
+    pub reveal: String, // "bottom" or "anywhere"
+    pub fade: bool,
+    pub show_ms: bool,
+    pub seek: String, // "exact", "osc", "keyframes" or "mpv"
+}
+
+impl Default for FullscreenPlayerSettings {
+    fn default() -> Self {
+        Self {
+            bar_style: DEFAULT_FULLSCREEN_PLAYER_BAR_STYLE.to_string(),
+            bar_opacity_percent: DEFAULT_FULLSCREEN_PLAYER_BAR_OPACITY_PERCENT,
+            bar_height_px: DEFAULT_FULLSCREEN_PLAYER_BAR_HEIGHT_PX,
+            reveal: DEFAULT_FULLSCREEN_PLAYER_BAR_REVEAL.to_string(),
+            fade: DEFAULT_FULLSCREEN_PLAYER_BAR_FADE,
+            show_ms: DEFAULT_FULLSCREEN_PLAYER_SHOW_MS,
+            seek: DEFAULT_FULLSCREEN_PLAYER_SEEK.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FullscreenBackgroundSettings {
@@ -286,6 +316,7 @@ pub struct FullscreenSettings {
     pub selection: FullscreenSelectionSettings,
     pub background: FullscreenBackgroundSettings,
     pub zoom: FullscreenZoomSettings,
+    pub player: FullscreenPlayerSettings,
 }
 
 impl Default for FullscreenSettings {
@@ -302,6 +333,7 @@ impl Default for FullscreenSettings {
             selection: FullscreenSelectionSettings::default(),
             background: FullscreenBackgroundSettings::default(),
             zoom: FullscreenZoomSettings::default(),
+            player: FullscreenPlayerSettings::default(),
         }
     }
 }

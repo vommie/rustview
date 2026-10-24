@@ -91,6 +91,16 @@ pub fn in_reveal_zone(bar: Rect, pointer: (i32, i32), scale: f32, reveal_px: u32
     Rect::new(bar.x - reveal, bar.y - reveal, bar.w + 2 * reveal, bar.h + 2 * reveal).contains(pointer.0, pointer.1)
 }
 
+/// `rect` (relative to its window, so never negative) as the X protocol wants it.
+pub fn xrectangle(rect: Rect) -> XRectangle {
+    XRectangle {
+        x: rect.x.clamp(0, i32::from(i16::MAX)).saturating_as::<i16>(),
+        y: rect.y.clamp(0, i32::from(i16::MAX)).saturating_as::<i16>(),
+        width: rect.w.clamp(1, i32::from(u16::MAX)).saturating_as::<u16>(),
+        height: rect.h.clamp(1, i32::from(u16::MAX)).saturating_as::<u16>(),
+    }
+}
+
 /// `rect` with rounded corners as the list of rectangles the X shape extension wants (one per pixel row of the corners,
 /// plus the straight middle). Used when no compositing manager blends the window: the corners must not show as black.
 pub fn rounded_region(rect: Rect, radius: i32) -> Vec<XRectangle> {

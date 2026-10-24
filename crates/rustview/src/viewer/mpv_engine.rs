@@ -12,6 +12,8 @@ mod controls;
 mod events;
 pub mod overlay;
 mod playback;
+pub use controls::SeekPrecision;
+pub use playback::PlaybackNumbers;
 mod rating;
 mod zoom;
 
@@ -76,8 +78,9 @@ impl MpvPlayer {
             let _ = init.set_property("keep-open", "yes");
             let _ = init.set_property("idle", "yes");
 
-            // 3. Native On-Screen Controller (OSC) & OSD bar
-            let _ = init.set_property("osc", "yes");
+            // 3. No on-screen controller: RustView takes the pointer over videos and draws a control bar of its own
+            // (`viewer::multiview::video_bar`), so mpv's would never see the mouse. The OSD bar stays.
+            let _ = init.set_property("osc", "no");
             let _ = init.set_property("osd-bar", "yes");
 
             // 4. Configure OSC behavior: Disable top deadzone so HUD triggers across 100% of video height
@@ -264,7 +267,7 @@ impl MpvPlayer {
             // Disable the tabgrid section to restore underlying keybindings and unreserve mouse wheel
             let _ = self.mpv.command("disable-section", &["rustview_tabgrid"]);
 
-            let _ = self.mpv.set_property("osc", "yes");
+            let _ = self.mpv.set_property("osc", "no");
             let _ = self.mpv.set_property("input-default-bindings", "yes");
             let _ = self.mpv.set_property("input-vo-keyboard", "no");
             let _ = self.mpv.set_property("input-cursor", "yes");

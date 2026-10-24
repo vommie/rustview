@@ -206,10 +206,16 @@ impl Session {
             BarTargets::of_instance(BarOwner::Fullscreen, &self.instance, !dialog_open),
             !dialog_open,
         );
+        let video_bars_visible = self.update_video_bars(!dialog_open);
         if dialog_open {
             cursor::release(win.window(), Some(&self.instance), &mut self.cursor_hidden);
         } else {
-            cursor::sync(win.window(), &self.instance, bars_visible, &mut self.cursor_hidden);
+            cursor::sync(
+                win.window(),
+                &self.instance,
+                bars_visible || video_bars_visible,
+                &mut self.cursor_hidden,
+            );
         }
     }
 
