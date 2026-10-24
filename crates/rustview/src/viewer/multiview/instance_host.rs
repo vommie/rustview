@@ -248,6 +248,7 @@ impl MultiviewInstance {
         self.place_windows();
         self.apply_all_cutouts();
         self.sync_feedback_overlays(Instant::now());
+        self.sync_focus_overlays();
         self.bump();
     }
 
@@ -492,6 +493,7 @@ impl MultiviewInstance {
                     feedback: self.feedback_pulse(tile.key, now),
                     crop: self.crop_view(index),
                     dirty: self.tile_is_dirty(index),
+                    focus: self.focus_view(index),
                 }
             })
             .collect();

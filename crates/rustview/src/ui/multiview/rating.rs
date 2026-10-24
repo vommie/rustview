@@ -1,14 +1,15 @@
 //! Ratings given with Ctrl+0..5 in a Multiview (fullscreen, viewer tab, tab shown fullscreen).
 //!
 //! The key arrives from the fullscreen window, from the main window (a viewer tab) or from a video's own window (mpv client
-//! message). All of them end in [`MultiviewHandle::rate_visible`]: it rates every medium the Multiview shows through the one
-//! path of the Tag & Rate panel and the context menu (`BridgeTags::apply_rating_to_ids`), then starts the feedback pulse on the
-//! tiles of the media that were rated (`feedback`).
+//! message). All of them end in [`MultiviewHandle::rate_visible`]: it rates the selected medium of the Multiview (`focus`,
+//! wherever the pointer is) through the one path of the Tag & Rate panel and the context menu (`BridgeTags::apply_rating_to_ids`),
+//! then starts the feedback pulse on the tiles of that medium. With several tiles and none selected it shows the hint instead.
 
 use super::handle::MultiviewHandle;
 use super::session;
 use crate::ui::rating_hotkey::{rateable_ids, standing_of};
 use crate::ui::tags::{BridgeTags, TagActionContext};
+use crate::viewer::multiview::hint::HintKind;
 use crate::viewer::multiview::instance::SharedInstance;
 use crate::viewer::multiview::prefs;
 use crate::viewer::multiview::rating_keys::rating_of_key;
@@ -35,9 +36,9 @@ impl MultiviewHandle {
         }
     }
 
-    /// Rates every medium `instance` shows (also sticky tiles and tiles the Browse view has not selected; a medium on several
-    /// tiles once) and lets every tile of a rated medium show the new rating. Ignored while a dialog has the main window locked
-    /// or a gutter is being dragged. UI thread only.
+    /// Rates the selected medium of `instance` (the only one of a single tile) and lets every tile of it show the new rating.
+    /// With several tiles and none selected nothing is rated and the hint asks for a selection. Ignored while a dialog has the
+    /// main window locked or a gutter is being dragged. UI thread only.
     pub fn rate_visible(&self, instance: &SharedInstance, rating: u8) {
         let Some((app, window)) = self.app_and_window() else {
             return;
@@ -46,17 +47,32 @@ impl MultiviewHandle {
             tracing::debug!(rating, "[Multiview: Rating] Ignored: a dialog is open");
             return;
         }
-        let (media, mode, dragging) = {
+        let (target, mode, dragging, anchor) = {
             let guard = instance.lock();
-            (guard.rating_targets(), guard.host_mode(), guard.is_dragging())
+            (
+                guard.rating_target(),
+                guard.host_mode(),
+                guard.is_dragging(),
+                guard.hint_anchor(),
+            )
         };
         if dragging || !matches!(mode, HostMode::Fullscreen | HostMode::TabView) {
             tracing::debug!(rating, ?mode, dragging, "[Multiview: Rating] Ignored");
             return;
         }
+        let Some(target) = target else {
+            tracing::info!(
+                rating,
+                "[Multiview: Rating] Nothing selected: the hint asks for a selection"
+            );
+            if let Some(anchor) = anchor {
+                super::hint::show(anchor, HintKind::NoSelection);
+            }
+            return;
+        };
         let ids = {
             let state = app.state.read();
-            rateable_ids(media, |id| standing_of(&state, &app.library, id))
+            rateable_ids(vec![target], |id| standing_of(&state, &app.library, id))
         };
         if ids.is_empty() {
             tracing::debug!(rating, "[Multiview: Rating] Nothing to rate");
@@ -78,7 +94,7 @@ impl MultiviewHandle {
             rating,
             media = rated.len(),
             ?mode,
-            "[Multiview: Rating] Rated the visible media"
+            "[Multiview: Rating] Rated the selected medium"
         );
         if rated.is_empty() || !prefs::current().rating_feedback {
             return;

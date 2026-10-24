@@ -12,6 +12,10 @@ pub const WINDOWS: &[(&str, &str)] = &[
     ),
     ("MultiviewBarWindow", "bar_overlay::shutdown destroys both bar windows"),
     (
+        "MultiviewHintWindow",
+        "MultiviewHandle::shutdown hides it (hint::shutdown)",
+    ),
+    (
         "SettingsWindow",
         "SettingsDialogController::close; the changes that were not saved are discarded",
     ),

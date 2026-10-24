@@ -9,6 +9,19 @@ The entries before 0.3.82 were reconstructed from the git history (first to last
 
 ## [Unreleased]
 
+### Added
+- **A selected medium in the Multiview** (with two or more media, fullscreen and tab): a plain click on a medium, on a video too, or on a button of its media
+  bar selects it. The selected medium is marked by blue corner marks inside its corners and a slightly lighter area around it (in its column); a video gets
+  the corner marks from the player itself. The selection stays until another medium is clicked or the medium leaves the view; a Multiview of one medium
+  needs none.
+- **A short hint over the view** ("Select a medium first") when a key needs a medium and none is selected: a disc like the rating icon with one line below
+  it, also over a video. It fades by itself.
+
+### Changed
+- **Ctrl+0..5 in a Multiview rate the selected medium only**, wherever the pointer is (also when pressed over a video). Before, they rated every medium the
+  view showed; with several media and none selected nothing is rated now and the hint appears. A Multiview of one medium rates it as before.
+- A click on a video in a Multiview is no longer ignored: it selects the video (it still never pauses it).
+
 ## [0.4.0] - 2026-10-24
 
 ### Added

@@ -124,6 +124,18 @@ fn route_event(handle: &MultiviewHandle, weak: &WeakInstance, event: PlayerEvent
             handle.rate_visible(&instance, rating);
             return;
         }
+        // A plain click on a video selects its tile (Slint never sees clicks on the native window).
+        PlayerEvent::Clicked(tile) => {
+            super::bar_overlay::close_menu(super::bar_overlay::BarKind::Media);
+            let mode = {
+                let mut guard = instance.lock();
+                guard.select_tile(tile);
+                guard.host_mode()
+            };
+            drop(instance);
+            refresh_host(handle, mode);
+            return;
+        }
         PlayerEvent::CtrlClick => {
             let click = instance.lock().register_click(true);
             (RoutedEvent::CtrlClick, click)

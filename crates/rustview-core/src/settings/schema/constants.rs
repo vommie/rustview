@@ -524,6 +524,14 @@ pub const MULTIVIEW_TICK_MS: u64 = 50;
 
 pub const MULTIVIEW_DOUBLE_CLICK_MS: u64 = 400;
 
+/// The selected medium of a Multiview of 2+ tiles: white over its column (where the medium leaves room), in percent.
+pub const MULTIVIEW_FOCUS_BRIGHTEN_PERCENT: u8 = 7;
+
+/// Length and thickness of the corner marks of the selected medium (logical pixels).
+pub const MULTIVIEW_FOCUS_CORNER_LOGICAL_PX: u32 = 24;
+
+pub const MULTIVIEW_FOCUS_CORNER_THICKNESS_LOGICAL_PX: u32 = 2;
+
 /// Ticks during which the display parameters of a recycled player are taken for those of the previous file if they are equal.
 pub const MULTIVIEW_STALE_PROBE_TICKS: u32 = 20;
 

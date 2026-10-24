@@ -1,6 +1,6 @@
 //! Subscriber callbacks and the mpv event observer thread.
 
-use super::{DELETE_KEY_MESSAGE, MpvPlayer};
+use super::{CLICK_MESSAGE, DELETE_KEY_MESSAGE, MpvPlayer};
 use crate::viewer::types::MpvPlaybackState;
 use rustview_core::settings::schema::{MPV_OBSERVER_ACTIVE_POLL_MS, MPV_OBSERVER_IDLE_POLL_MS};
 use rustview_core::util::cast::Az;
@@ -57,6 +57,16 @@ impl MpvPlayer {
         F: Fn(u8) + Send + Sync + 'static,
     {
         let mut cbs = self.rating_callbacks.write();
+        cbs.clear();
+        cbs.push(Arc::new(callback));
+    }
+
+    /// A plain left click on the player's window (outside the tab grid, whose clicks have their own callbacks).
+    pub fn on_clicked<F>(&self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let mut cbs = self.click_callbacks.write();
         cbs.clear();
         cbs.push(Arc::new(callback));
     }
@@ -153,6 +163,7 @@ impl MpvPlayer {
         let rename_callbacks = self.rename_callbacks.clone();
         let delete_callbacks = self.delete_callbacks.clone();
         let rating_callbacks = self.rating_callbacks.clone();
+        let click_callbacks = self.click_callbacks.clone();
         let mute_callbacks = self.mute_callbacks.clone();
         let pause_callbacks = self.pause_callbacks.clone();
 
@@ -180,6 +191,10 @@ impl MpvPlayer {
                         if args.first() == Some(&DELETE_KEY_MESSAGE) {
                             let delete_cbs = delete_callbacks.read().clone();
                             for cb in delete_cbs {
+                                cb();
+                            }
+                        } else if args.first() == Some(&CLICK_MESSAGE) {
+                            for cb in click_callbacks.read().clone() {
                                 cb();
                             }
                         } else if let Some(rating) = super::rating::rating_of_message(&args) {

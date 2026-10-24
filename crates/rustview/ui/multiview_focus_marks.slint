@@ -1,0 +1,24 @@
+import { Theme } from "styles.slint";
+
+/// The corner marks of the selected medium of a Multiview: four L-shaped marks inside the corners of the rectangle it covers
+/// (the medium, or the room of a zoomed picture). A video gets the same marks from mpv itself (`focus_overlay.rs`), because its
+/// native window covers the canvas.
+export component MultiviewFocusCorners inherits Rectangle {
+    in property <length> mark-length: 24px;
+    in property <length> thickness: 2px;
+
+    property <length> arm: Math.min(root.mark-length, Math.min(root.width, root.height) / 2);
+
+    // top left
+    Rectangle { x: 0px; y: 0px; width: root.arm; height: root.thickness; background: Theme.primary; }
+    Rectangle { x: 0px; y: 0px; width: root.thickness; height: root.arm; background: Theme.primary; }
+    // top right
+    Rectangle { x: root.width - root.arm; y: 0px; width: root.arm; height: root.thickness; background: Theme.primary; }
+    Rectangle { x: root.width - root.thickness; y: 0px; width: root.thickness; height: root.arm; background: Theme.primary; }
+    // bottom left
+    Rectangle { x: 0px; y: root.height - root.thickness; width: root.arm; height: root.thickness; background: Theme.primary; }
+    Rectangle { x: 0px; y: root.height - root.arm; width: root.thickness; height: root.arm; background: Theme.primary; }
+    // bottom right
+    Rectangle { x: root.width - root.arm; y: root.height - root.thickness; width: root.arm; height: root.thickness; background: Theme.primary; }
+    Rectangle { x: root.width - root.thickness; y: root.height - root.arm; width: root.thickness; height: root.arm; background: Theme.primary; }
+}

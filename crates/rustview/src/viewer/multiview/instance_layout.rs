@@ -71,8 +71,10 @@ impl MultiviewInstance {
         self.layout = solved;
     }
 
-    /// Solves the layout again (after tiles, aspects, pins or container changed) and places the windows.
+    /// Solves the layout again (after tiles, aspects, pins or container changed) and places the windows. Every change of the
+    /// tile set ends here, so the selection is brought in line with the tiles first.
     pub(super) fn apply_layout(&mut self) {
+        self.normalize_focus();
         self.refresh_geometry();
         self.solve_layout();
         self.reproject();

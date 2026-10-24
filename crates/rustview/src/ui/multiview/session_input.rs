@@ -217,6 +217,17 @@ impl Session {
         tracing::info!(locked, "[Multiview: ModalLock] The fullscreen follows the open dialog");
     }
 
+    /// A click on the medium of tile `index`: a plain click selects the tile, then it counts for a double click like any other.
+    pub(super) fn on_tile_click(&mut self, index: i32, is_ctrl: bool) -> UiAction {
+        if !is_ctrl
+            && let Ok(index) = usize::try_from(index)
+            && self.instance.lock().select_tile_at(index)
+        {
+            self.refresh();
+        }
+        self.on_click(is_ctrl)
+    }
+
     /// A click on a Slint part of the Multiview. Two quick clicks with the same modifier state are a double click, and what
     /// that means is decided by the routing table.
     pub(super) fn on_click(&mut self, is_ctrl: bool) -> UiAction {

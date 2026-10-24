@@ -5,14 +5,12 @@
 //! `viewer::multiview::feedback_overlay`.
 
 use super::MpvPlayer;
+use super::overlay::FEEDBACK_OVERLAY_ID;
 use crate::viewer::multiview::rating_keys::mpv_key_names;
 use libmpv2::Mpv;
 
 /// The message mpv sends when a rating key is pressed: `rustview-rate <0..5>`.
 pub(super) const RATE_KEY_MESSAGE: &str = "rustview-rate";
-
-/// The id of the overlay (mpv knows 0..=63 per client); the rating icon is the only bitmap overlay of a player.
-const OVERLAY_ID: &str = "7";
 
 pub(super) fn bind_rating_keys(mpv: &Mpv) {
     for (key, rating) in mpv_key_names() {
@@ -35,32 +33,12 @@ impl MpvPlayer {
     /// Shows a square premultiplied BGRA bitmap of `edge` pixels with its top left corner at (`x`, `y`) of the window, on top of
     /// the picture. Returns whether mpv took it (it does not while no picture is set up).
     pub fn show_bitmap_overlay(&self, bgra: &[u8], edge: u32, x: i64, y: i64) -> bool {
-        // mpv copies the pixels before the command returns, so the memory only has to live that long.
-        let address = format!("&{}", bgra.as_ptr().addr());
-        let args = [
-            OVERLAY_ID.to_owned(),
-            x.to_string(),
-            y.to_string(),
-            address,
-            "0".to_owned(),
-            "bgra".to_owned(),
-            edge.to_string(),
-            edge.to_string(),
-            (edge * 4).to_string(),
-        ];
-        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        match self.mpv.command("overlay-add", &refs) {
-            Ok(()) => true,
-            Err(e) => {
-                tracing::debug!(error = ?e, "[MpvPlayer: Rating] The overlay was not taken");
-                false
-            }
-        }
+        self.show_overlay(FEEDBACK_OVERLAY_ID, bgra, edge, edge, x, y)
     }
 
     /// Removes the bitmap overlay.
     pub fn hide_bitmap_overlay(&self) {
-        let _ = self.mpv.command("overlay-remove", &[OVERLAY_ID]);
+        self.remove_overlay(FEEDBACK_OVERLAY_ID);
     }
 }
 

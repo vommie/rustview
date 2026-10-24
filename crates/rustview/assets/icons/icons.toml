@@ -104,6 +104,7 @@ multiview_sticky = { tabler = "pin", doc = "Keep a medium on screen while the se
 multiview_sticky_on = { tabler = "pinned", style = "filled", doc = "Sticky medium that stays on screen (on)" }
 multiview_duplicate = { tabler = "duplicate", doc = "Show a medium a second time in the Multiview" }
 multiview_remove = { tabler = "square-rounded-minus", doc = "Remove a medium from the Multiview" }
+multiview_select_first = { tabler = "hand-click", doc = "Hint: click a medium of the Multiview first (nothing is selected)" }
 volume_on = { tabler = "volume", doc = "Sound on" }
 volume_off = { tabler = "volume-off", doc = "Sound muted" }
 playback_play = { tabler = "player-play", doc = "Start playback" }

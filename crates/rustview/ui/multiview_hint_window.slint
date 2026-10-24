@@ -1,0 +1,79 @@
+import { Theme } from "styles.slint";
+import { AppIcon, IconId } from "icons.slint";
+
+/// The short hint of the Multiview when a key has nothing to act on ("Select a medium first"). It is a window of its own
+/// (override-redirect, see `src/ui/multiview/hint.rs`) so that it shows over the native video windows too, and it looks like
+/// the feedback of a rating: a disc with an icon and one line below it. Rust sizes and places the window and keeps the pointer
+/// out of it; `shown` going false fades the content out over `fade`.
+export component MultiviewHintWindow inherits Window {
+    title: "RustView - Multiview Hint";
+    no-frame: true;
+    background: transparent;
+
+    in property <string> text;
+    // A compositing manager blends the window: the disc and the caption are slightly translucent. Otherwise the window is
+    // solid and shaped like them.
+    in property <bool> translucent: true;
+    in property <bool> shown: false;
+    in property <duration> fade: 250ms;
+
+    // Geometry Rust needs for the size and the shape of the window (logical pixels).
+    out property <length> disc-size: 56px;
+    out property <length> caption-top: root.disc-size + 6px;
+    out property <length> caption-height: 26px;
+    out property <length> caption-width: caption-text.preferred-width + 28px;
+    out property <length> content-width: Math.max(root.disc-size, root.caption-width);
+    out property <length> content-height: root.caption-top + root.caption-height;
+
+    property <color> surface: root.translucent ? Theme.surface.with-alpha(0.93) : Theme.surface;
+
+    content := Rectangle {
+        width: root.width;
+        height: root.height;
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: 0px;
+            width: root.disc-size;
+            height: root.disc-size;
+            border-radius: self.width / 2;
+            background: root.surface;
+            border-width: 2px;
+            border-color: Theme.primary;
+
+            AppIcon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                icon: IconId.multiview-select-first;
+                size: 24px;
+                color: Theme.primary;
+            }
+        }
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: root.caption-top;
+            width: root.caption-width;
+            height: root.caption-height;
+            border-radius: self.height / 2;
+            background: root.surface;
+
+            caption-text := Text {
+                text: root.text;
+                font-size: 13px;
+                color: Theme.text;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    states [
+        gone when !root.shown: {
+            content.opacity: 0;
+            in {
+                animate content.opacity { duration: root.fade; easing: linear; }
+            }
+        }
+    ]
+}

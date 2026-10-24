@@ -34,6 +34,21 @@ pub struct TileView {
     pub crop: Option<CropView>,
     /// The picture has unsaved edits.
     pub dirty: bool,
+    /// The marks of the selected medium, while this tile is the selected one of several.
+    pub focus: Option<FocusMarkView>,
+}
+
+/// The marks of the selected medium (physical pixels). The host draws the column and, on an image, the corner marks; mpv draws
+/// the corner marks of a video itself (`focus_overlay`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FocusMarkView {
+    /// The column of the tile (the full height of its row), relative to the tile; brightened where the medium leaves room.
+    pub column: Rect,
+    /// White over the column, 0 (off) to 1.
+    pub brighten: f32,
+    /// Length and thickness of the corner marks.
+    pub corner: i32,
+    pub thickness: i32,
 }
 
 /// The crop tool on a tile (physical pixels).

@@ -1,8 +1,9 @@
 //! Instance behavior around ratings given with the keyboard: which media a rating reaches and its feedback on the tiles (the
 //! shared feedback pulse of `instance_feedback`).
 //!
-//! A rating applies to every medium the Multiview shows, sticky tiles and tiles that are not selected in the Browse view
-//! included; a medium shown by several tiles is rated once, but each of those tiles shows the feedback.
+//! A rating applies to the selected medium (`focus`): the only one of a Multiview of one tile, the selected one of several.
+//! With several tiles and none selected nothing is rated (the host shows a hint). Every tile of the rated medium shows the
+//! feedback.
 
 use super::follow::TileKey;
 use super::instance::MultiviewInstance;
@@ -12,9 +13,9 @@ use std::collections::HashSet;
 use std::time::Instant;
 
 impl MultiviewInstance {
-    /// The media a rating reaches: every medium shown, each once, in slot order.
-    pub fn rating_targets(&self) -> Vec<MediaId> {
-        self.member_ids()
+    /// The medium a rating reaches: the selected one (`None` = several tiles and none selected).
+    pub fn rating_target(&self) -> Option<MediaId> {
+        self.focus_target_media()
     }
 
     /// A gutter is being dragged (a rating is ignored meanwhile).
@@ -90,9 +91,10 @@ mod tests {
     }
 
     #[test]
-    fn every_shown_medium_is_a_target_once_whatever_the_browse_selection_is() {
-        let shared = instance();
-        assert_eq!(shared.lock().rating_targets(), vec![1, 2, 3]);
+    fn several_media_without_a_selection_have_no_target_and_a_lone_one_is_it() {
+        assert_eq!(instance().lock().rating_target(), None);
+        let lone = MultiviewInstance::create(Arc::new(NullSink), vec![seed(9, TileKind::Image)]);
+        assert_eq!(lone.lock().rating_target(), Some(9));
     }
 
     #[test]

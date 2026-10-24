@@ -6,6 +6,7 @@
 use super::audio::TileAudio;
 use super::events::{MultiviewEventSink, PlayerEvent};
 use super::feedback_overlay::OverlayState;
+use super::focus_overlay::CornerMarks;
 use super::follow::TileKey;
 use super::instance::WeakInstance;
 use super::layout::Rect;
@@ -44,6 +45,8 @@ pub struct VideoTile {
     pub owner: EventOwner,
     /// The rating icon that mpv draws over the picture right now, if any.
     pub feedback_overlay: Option<OverlayState>,
+    /// The corner marks of the selected tile that mpv draws over the picture right now, if any.
+    pub focus_overlay: Option<CornerMarks>,
 }
 
 /// What is known about a medium before its tile exists (from the in-memory library state, never from the drive).
@@ -211,6 +214,10 @@ pub(super) fn connect_callbacks(
         let me = pause_owner.read().clone();
         pause_sink.post(me, PlayerEvent::PauseChanged { tile, paused });
     });
+    let tile = Arc::clone(current_tile);
+    player.on_clicked(forward(sink, owner, move || {
+        PlayerEvent::Clicked(tile.load(Ordering::SeqCst))
+    }));
     player.on_convert_to_background_tab(forward(sink, owner, || PlayerEvent::CtrlClick));
     player.on_grid_left_click(forward(sink, owner, || PlayerEvent::GridLeftClick));
     player.on_grid_middle_click(forward(sink, owner, || PlayerEvent::GridMiddleClick));
@@ -265,6 +272,7 @@ pub fn create_video(
         current_tile,
         owner,
         feedback_overlay: None,
+        focus_overlay: None,
     })
 }
 

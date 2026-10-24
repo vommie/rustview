@@ -29,6 +29,8 @@ impl MultiviewInstance {
             return;
         }
         self.probe_aspects();
+        // A mark mpv did not take yet (no picture) is tried again.
+        self.sync_focus_overlays();
     }
 
     /// The tile under a point given in host window coordinates.

@@ -107,7 +107,15 @@ pub fn bind(window: &MainWindow, handle: MultiviewHandle) {
     bus.on_gutter_drag_finished(|_| act(MultiviewInstance::drag_finished));
     bus.on_gutter_reset(|| act(MultiviewInstance::reset_split));
     bus.on_gutter_swap(|index| act(|mv| mv.swap(index.max(0).saturating_as::<usize>())));
-    bus.on_tile_clicked(|_, is_ctrl| on_click(is_ctrl));
+    bus.on_tile_clicked(|index, is_ctrl| {
+        // A plain click on a medium selects its tile.
+        if !is_ctrl && let Ok(index) = usize::try_from(index) {
+            act(|mv| {
+                mv.select_tile_at(index);
+            });
+        }
+        on_click(is_ctrl);
+    });
     bus.on_tile_zoom_wheel(|index, delta, x, y| {
         act(|mv| mv.zoom_wheel(index.max(0).saturating_as::<usize>(), delta, x, y));
     });

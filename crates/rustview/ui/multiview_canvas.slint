@@ -5,6 +5,7 @@ import { MultiviewGutter } from "multiview_gutter.slint";
 import { MultiviewBarMenu } from "multiview_bar_menu.slint";
 import { MultiviewZoomSlider } from "multiview_zoom_slider.slint";
 import { MultiviewCropOverlay } from "multiview_crop_overlay.slint";
+import { MultiviewFocusCorners } from "multiview_focus_marks.slint";
 
 /// The scene of a Multiview: background, image and status tiles and gutters. Video tiles are native mpv windows that Rust
 /// places on top of this scene. The same component draws the fullscreen window, the tab view and the tab grid item, so a
@@ -103,6 +104,16 @@ export component MultiviewCanvas inherits Rectangle {
         width: tile.width;
         height: tile.height;
 
+        // The selected medium of several: its column is brightened (the medium covers its own part of it, so the light shows
+        // only where the medium leaves room, also around a video window).
+        if root.interactive && tile.focused && tile.focus-brighten > 0 : Rectangle {
+            x: tile.focus-column-x;
+            y: tile.focus-column-y;
+            width: tile.focus-column-width;
+            height: tile.focus-column-height;
+            background: Colors.white.with-alpha(tile.focus-brighten);
+        }
+
         if tile.kind == 0 && !tile.zoomed && tile.image.width > 0 : Image {
             source: tile.image;
             width: 100%;
@@ -183,6 +194,17 @@ export component MultiviewCanvas inherits Rectangle {
                     wrap: word-wrap;
                 }
             }
+        }
+
+        // The corner marks of the selected medium of several (on the picture; mpv draws them on a video). A zoomed picture has them
+        // in the corners of its room.
+        if root.interactive && tile.focused && tile.kind != 1 : MultiviewFocusCorners {
+            x: tile.zoomed ? tile.zoom-area-x : 0px;
+            y: tile.zoomed ? tile.zoom-area-y : 0px;
+            width: tile.zoomed ? tile.zoom-area-width : parent.width;
+            height: tile.zoomed ? tile.zoom-area-height : parent.height;
+            mark-length: tile.focus-corner;
+            thickness: tile.focus-thickness;
         }
 
         // The feedback of an interaction (`media_feedback`; a rating given with Ctrl+0..5, a save): its icon in the middle of the tile,

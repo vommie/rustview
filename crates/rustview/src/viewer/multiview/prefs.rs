@@ -20,6 +20,7 @@ use rustview_core::settings::schema::{
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_MUTE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PIN,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_PLAY_PAUSE_ALL, DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_RESET_LAYOUT,
     DEFAULT_FULLSCREEN_PRIMARY_BAR_SHOW_SEND_TO_TAB, DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK, FullscreenSettings,
+    MULTIVIEW_FOCUS_BRIGHTEN_PERCENT, MULTIVIEW_FOCUS_CORNER_LOGICAL_PX,
 };
 
 /// Which buttons the hover bar may show and how close the pointer has to come before it appears.
@@ -122,6 +123,22 @@ impl PrimaryBarPrefs {
     }
 }
 
+/// How the selected medium of a Multiview of 2+ tiles is marked (`focus`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FocusMarkPrefs {
+    /// White over the column of the selected tile, in percent (0 = off).
+    pub brighten_percent: u8,
+    /// Length of the corner marks in logical pixels.
+    pub corner_logical_px: u32,
+}
+
+impl FocusMarkPrefs {
+    pub const DEFAULT: Self = Self {
+        brighten_percent: MULTIVIEW_FOCUS_BRIGHTEN_PERCENT,
+        corner_logical_px: MULTIVIEW_FOCUS_CORNER_LOGICAL_PX,
+    };
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MultiviewPrefs {
     pub media_bar: MediaBarPrefs,
@@ -129,6 +146,7 @@ pub struct MultiviewPrefs {
     pub audio: AudioPolicy,
     /// A rating given with the keyboard shows its icon on the tiles for a moment.
     pub rating_feedback: bool,
+    pub focus_marks: FocusMarkPrefs,
 }
 
 impl MultiviewPrefs {
@@ -137,6 +155,7 @@ impl MultiviewPrefs {
         primary: PrimaryBarPrefs::DEFAULT,
         audio: AudioPolicy::DEFAULT,
         rating_feedback: DEFAULT_FULLSCREEN_RATING_SHOW_FEEDBACK,
+        focus_marks: FocusMarkPrefs::DEFAULT,
     };
 
     pub fn from_settings(settings: &FullscreenSettings) -> Self {
@@ -176,6 +195,7 @@ impl MultiviewPrefs {
                 hand_over: sound.hand_over,
             },
             rating_feedback: settings.rating.show_feedback,
+            focus_marks: FocusMarkPrefs::DEFAULT,
         }
     }
 }

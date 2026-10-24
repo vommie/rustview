@@ -116,6 +116,16 @@ pub fn window_attributes_hook(attributes: WindowAttributes) -> WindowAttributes 
     }
 }
 
+/// Creates a window that is override-redirect like the bar windows (the hint window of the Multiview is one too).
+pub(super) fn create_override_redirect<T>(
+    create: impl FnOnce() -> Result<T, slint::PlatformError>,
+) -> Result<T, slint::PlatformError> {
+    NEXT_IS_OVERLAY.with(|flag| flag.set(true));
+    let created = create();
+    NEXT_IS_OVERLAY.with(|flag| flag.set(false));
+    created
+}
+
 /// The tooltip settings of the application (they apply to the overlay window too).
 pub fn set_tooltip_settings(enabled: bool, delay_ms: i32) {
     TOOLTIPS.with(|cell| cell.set((enabled, delay_ms)));

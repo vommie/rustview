@@ -1,6 +1,6 @@
 //! The rating hotkeys Ctrl+0 (no rating) to Ctrl+5 of the main window.
 //!
-//! The Browse view rates the selected media (never folder rows), a viewer tab rates every medium its Multiview shows, and
+//! The Browse view rates the selected media (never folder rows), a viewer tab rates the selected medium of its Multiview, and
 //! while a fullscreen Multiview is open the keys belong to it. The keys of the fullscreen window and of the video windows
 //! (mpv) arrive through `ui::multiview::rating`; every path ends in `BridgeTags::apply_rating_to_ids`, the one that the Tag
 //! & Rate panel and the context menu use.

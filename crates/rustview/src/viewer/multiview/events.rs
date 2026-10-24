@@ -24,6 +24,8 @@ pub enum PlayerEvent {
     DeleteRequested,
     /// A rating key (Ctrl+0..5) was pressed in a video's window.
     RatingRequested(u8),
+    /// A plain left click on the video of this tile (it becomes the selected tile).
+    Clicked(TileKey),
     /// The mute state of the player of this tile changed (a hotkey or the on-screen controller of mpv, or us).
     MuteChanged {
         tile: TileKey,

@@ -8,11 +8,13 @@
 //!
 //! The behavior is split over `instance_host` (placement and projection), `instance_layout` (arrangement, gutters),
 //! `instance_tiles` (tile lifecycle), `instance_follow` (every change of the tile set: following the Browse selection,
-//! duplicating a tile, `instance_clone`, giving all tiles to another Multiview and taking them over, `instance_merge`), `instance_actions` (the action buttons), `instance_sound` (mute state) and `instance_hover` (pointer, mute badge, aspect probing).
+//! duplicating a tile, `instance_clone`, giving all tiles to another Multiview and taking them over, `instance_merge`), `instance_actions` (the action buttons), `instance_sound` (mute state), `instance_hover` (pointer, mute badge, aspect probing) and
+//! `instance_focus` (the selected tile the keys act on).
 
 use super::click::{ClickDetector, ClickKind};
 use super::container::Container;
 use super::events::MultiviewEventSink;
+use super::focus::Focus;
 use super::follow::TileKey;
 use super::instance_host::HostState;
 use super::instance_layout::{DragState, layout_params};
@@ -92,12 +94,16 @@ pub struct MultiviewInstance {
     pub(super) feedback: MediaFeedback,
     /// The open crop tools in the order they were opened (Esc cancels the oldest first).
     pub(super) crop_order: ToolOrder,
+    /// The selected tile, the one the keys act on (`instance_focus`).
+    pub(super) focus: Focus,
 }
 
 impl MultiviewInstance {
     /// Creates an instance with one (not yet started) tile per seed.
     pub fn create(sink: Arc<dyn MultiviewEventSink>, seeds: Vec<TileSeed>) -> SharedInstance {
         let id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::SeqCst);
+        let tiles: Vec<TileState> = seeds.into_iter().map(TileState::from_seed).collect();
+        let focus = Focus::for_tiles(&tiles.iter().map(|t| t.key).collect::<Vec<_>>());
         Arc::new_cyclic(|me| {
             Mutex::new(Self {
                 me: me.clone(),
@@ -106,7 +112,7 @@ impl MultiviewInstance {
                 origin: OriginKind::Browse,
                 started: false,
                 sound_assigned: false,
-                tiles: seeds.into_iter().map(TileState::from_seed).collect(),
+                tiles,
                 row_pins: None,
                 container: PLACEHOLDER_CONTAINER,
                 params: layout_params(&PLACEHOLDER_CONTAINER, 0),
@@ -131,6 +137,7 @@ impl MultiviewInstance {
                 zoom_wheel_accum: 0.0,
                 feedback: MediaFeedback::default(),
                 crop_order: ToolOrder::default(),
+                focus,
             })
         })
     }
