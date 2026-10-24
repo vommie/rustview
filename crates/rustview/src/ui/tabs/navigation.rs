@@ -192,6 +192,34 @@ impl BridgeViewerTabs {
         let Some(target_id) = target_media_id_opt else {
             return;
         };
+        // Paging replaces the picture: its unsaved edits are saved or discarded first (the user decides), then it pages.
+        if let Some(instance) = tab_manager.get_active_tab().map(|tab| tab.multiview.instance)
+            && instance.lock().has_unsaved_edits()
+            && let Some((app, main)) = fullscreen.app_and_window_for_edit()
+        {
+            let (weak, fullscreen) = (slint::ComponentHandle::as_weak(&main), fullscreen.clone());
+            let (tab_manager, library, settings, state) =
+                (tab_manager.clone(), library.clone(), settings.clone(), state.clone());
+            crate::ui::image_edit::close_guard::confirm(
+                &fullscreen.edit_context(app, &main),
+                vec![(instance, None)],
+                crate::viewer::edit::unsaved::CloseReason::SelectionChange,
+                move || {
+                    if let Some(window) = weak.upgrade() {
+                        Self::navigate_adjacent(
+                            &window,
+                            &tab_manager,
+                            &library,
+                            &settings,
+                            &state,
+                            &fullscreen,
+                            is_next,
+                        );
+                    }
+                },
+            );
+            return;
+        }
         tracing::info!(
             active_media_id,
             target_media_id = target_id,
