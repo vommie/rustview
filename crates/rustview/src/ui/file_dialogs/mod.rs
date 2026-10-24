@@ -95,6 +95,7 @@ impl FileRenameDialogController {
         let mut d_ref = dialog_ref.borrow_mut();
         if d_ref.is_none() {
             let win = FileRenameDialog::new().expect("Failed to instantiate FileRenameDialog");
+            crate::ui::dialog_fit::install(&win);
             *d_ref = Some(win);
         }
 

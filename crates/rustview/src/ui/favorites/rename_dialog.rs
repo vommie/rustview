@@ -103,6 +103,7 @@ impl FavoriteRenameDialogController {
         let mut d_ref = self.dialog.borrow_mut();
         if d_ref.is_none() {
             let win = FavoriteRenameDialog::new().expect("Failed to instantiate FavoriteRenameDialog");
+            crate::ui::dialog_fit::install(&win);
             *d_ref = Some(win);
         }
     }

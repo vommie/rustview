@@ -7,22 +7,22 @@ use rustview_core::library::file_operations::FilenameValidator;
 use rustview_core::media::MediaFormat;
 use std::path::{Path, PathBuf};
 
-/// The suggested name of the new file (without extension): the original's name with "-edited".
+/// The name the dialog starts with (without extension): the original's own, so saving without renaming replaces it; the user
+/// types another name for a copy.
 pub fn suggested_stem(filename: &str) -> String {
-    let stem = Path::new(filename)
+    Path::new(filename)
         .file_stem()
-        .map_or_else(|| filename.to_string(), |s| s.to_string_lossy().into_owned());
-    format!("{stem}-edited")
+        .map_or_else(|| filename.to_string(), |s| s.to_string_lossy().into_owned())
 }
 
-/// The format the dialog starts with: the one used last time, else the original's own when it can be written, else PNG for a
-/// picture with transparency and JPEG for any other.
+/// The format the dialog starts with: the original's own when it can be written (the unchanged dialog then replaces the
+/// original), else the one used last time, else PNG for a picture with transparency and JPEG for any other.
 pub fn initial_format(last: Option<WriteFormat>, source: MediaFormat, has_alpha: Option<bool>) -> WriteFormat {
-    if let Some(last) = last.filter(|f| WriteFormat::EXPORT_TARGETS.contains(f)) {
-        return last;
-    }
     if let Some(own) = WriteFormat::in_place(source).filter(|f| WriteFormat::EXPORT_TARGETS.contains(f)) {
         return own;
+    }
+    if let Some(last) = last.filter(|f| WriteFormat::EXPORT_TARGETS.contains(f)) {
+        return last;
     }
     if has_alpha == Some(true) {
         WriteFormat::Png
@@ -64,8 +64,8 @@ pub fn check_stem(stem: &str) -> Result<(), String> {
         .map_err(|e| format!("This name cannot be used: {e}"))
 }
 
-pub fn target_path(folder: &Path, stem: &str, format: WriteFormat) -> PathBuf {
-    folder.join(format!("{}.{}", stem.trim(), format.extension()))
+pub fn target_path(folder: &Path, stem: &str, extension: &str) -> PathBuf {
+    folder.join(format!("{}.{extension}", stem.trim()))
 }
 
 /// The options of the dialog's controls (indexes of its combo boxes) and back.
@@ -138,10 +138,15 @@ mod tests {
 
     #[test]
     fn the_new_name_and_format_are_suggested_sensibly() {
-        assert_eq!(suggested_stem("beach.jpg"), "beach-edited");
-        assert_eq!(suggested_stem("archive.tar.gz"), "archive.tar-edited");
+        assert_eq!(suggested_stem("beach.jpg"), "beach");
+        assert_eq!(suggested_stem("archive.tar.gz"), "archive.tar");
+        // The original's own format first (the unchanged dialog replaces the original), the last one for the others.
         assert_eq!(
             initial_format(Some(WriteFormat::Webp), MediaFormat::Png, None),
+            WriteFormat::Png
+        );
+        assert_eq!(
+            initial_format(Some(WriteFormat::Webp), MediaFormat::Heic, None),
             WriteFormat::Webp
         );
         assert_eq!(initial_format(None, MediaFormat::Tiff, None), WriteFormat::Tiff);
@@ -165,10 +170,7 @@ mod tests {
         assert!(check_stem("  ").is_err());
         assert!(check_stem("a/b").is_err());
         assert!(check_stem("holiday 2024").is_ok());
-        assert_eq!(
-            target_path(Path::new("/p"), " x ", WriteFormat::Tiff),
-            PathBuf::from("/p/x.tiff")
-        );
+        assert_eq!(target_path(Path::new("/p"), " x ", "tiff"), PathBuf::from("/p/x.tiff"));
         for format in WriteFormat::EXPORT_TARGETS {
             assert_eq!(format_of(format_index(format)), format);
         }

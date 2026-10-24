@@ -32,6 +32,8 @@ export component ButtonBar inherits Rectangle {
 
     // Button Labels
     in property <string> text-save: "Save";
+    // The Save button stays visible but cannot be pressed (the input cannot be used yet).
+    in property <bool> enabled-save: true;
     in property <string> text-cancel: "Cancel";
     in property <string> text-apply: "Apply";
     in property <string> text-ok: "OK";
@@ -112,6 +114,7 @@ export component ButtonBar inherits Rectangle {
         if root.show-save : Button {
             text: root.text-save;
             primary: true;
+            enabled: root.enabled-save;
             clicked => { root.save-clicked(); }
         }
     }

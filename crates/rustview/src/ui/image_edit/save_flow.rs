@@ -6,18 +6,25 @@
 use super::choice_dialog::{Choice, ChoiceDialog, Question};
 use super::export_dialog::{ExportChoice, ExportDialog, ExportSetup};
 use super::export_plan::{initial_format, suggested_stem};
+use super::export_target::describe_assignments;
 use super::library_update;
 use super::{AfterSave, EditContext};
 use crate::ui::MainWindow;
 use crate::ui::status_bar::StatusBarBridge;
 use crate::viewer::edit::prefs as edit_prefs;
+use crate::viewer::edit::tile_edit::EditSource;
 use crate::viewer::multiview::follow::TileKey;
 use crate::viewer::multiview::instance::{SharedInstance, WeakInstance};
 use crate::viewer::multiview::instance_edit_view::SaveRequest;
+use crate::viewer::multiview::route::OriginKind;
 use rustview_core::image_edit::conflict::{ConflictChoice, DiskState, conflict_prompt};
 use rustview_core::image_edit::formats::EditRefusal;
-use rustview_core::image_edit::formats::SaveSupport;
-use rustview_core::image_edit::save::{EditedPicture, ExportTarget, SaveError, SaveOutcome, export, save_in_place};
+use rustview_core::image_edit::formats::{SaveSupport, WriteFormat};
+use rustview_core::image_edit::options::in_place_encoding;
+use rustview_core::image_edit::probe::{SourceProbe, probe};
+use rustview_core::image_edit::save::{
+    EditedPicture, EncodingChoice, ExportTarget, SaveError, SaveOutcome, export, save_in_place_with,
+};
 use rustview_core::image_edit::writer::WriteError;
 use rustview_core::settings::LogObscurer;
 use rustview_core::settings::schema::FormatPresets;
@@ -58,7 +65,7 @@ pub fn save_tile(context: &EditContext, instance: &SharedInstance, key: TileKey,
         (SaveIntent::Save, Ok(SaveSupport::ExportOnly(reason))) => {
             ask_export(context, weak, request, reason.text(), after);
         }
-        (SaveIntent::Save, Ok(SaveSupport::InPlace(_))) => write_in_place(context, weak, request, false, after),
+        (SaveIntent::Save, Ok(SaveSupport::InPlace(_))) => write_in_place(context, weak, request, None, false, after),
     }
 }
 
@@ -96,7 +103,15 @@ struct Waiting {
     weak: WeakInstance,
     request: SaveRequest,
     export: Option<ExportChoice>,
+    /// The encoding of a save over the original (`None` = like Save: as the original).
+    encoding: Option<EncodingChoice>,
     after: AfterSave,
+}
+
+/// A written export and what the decoder needs to know about the new file (examined right after writing, on the worker).
+struct Exported {
+    outcome: SaveOutcome,
+    probe: Result<SourceProbe, String>,
 }
 
 thread_local! {
@@ -115,32 +130,36 @@ fn unpark(ticket: u64) -> Option<Waiting> {
     WAITING.with(|w| w.borrow_mut().remove(&ticket))
 }
 
-/// Writes over the original on a worker. `overwrite_anyway` is the user's answer to a conflict.
+/// Writes over the original on a worker, encoded as `encoding` says (`None` = like the original, the plain Save).
+/// `overwrite_anyway` is the user's answer to a conflict.
 fn write_in_place(
     context: &EditContext,
     weak: WeakInstance,
     request: SaveRequest,
+    encoding: Option<EncodingChoice>,
     overwrite_anyway: bool,
     after: AfterSave,
 ) {
     with_instance(context, &weak, |mv| mv.set_saving(request.tile, true));
     let prefs = edit_prefs::current();
+    let choice = encoding.unwrap_or(EncodingChoice::SameAsOriginal(prefs.presets));
     let job = request.clone();
     let ticket = park(Waiting {
         context: context.clone(),
         weak,
         request,
         export: None,
+        encoding,
         after,
     });
     let spawned = std::thread::Builder::new().name("image-save".into()).spawn(move || {
         let result = match picture(&job) {
-            Some(picture) => save_in_place(&picture, &prefs.presets, prefs.overwrite, overwrite_anyway),
+            Some(picture) => save_in_place_with(&picture, choice, prefs.overwrite, overwrite_anyway),
             None => Err(SaveError::Refused(EditRefusal::Unreadable)),
         };
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(w) = unpark(ticket) {
-                in_place_done(&w.context, w.weak, w.request, result, w.after);
+                in_place_done(&w.context, w.weak, w.request, w.encoding, result, w.after);
             }
         });
     });
@@ -151,6 +170,7 @@ fn write_in_place(
                 &w.context,
                 w.weak,
                 w.request,
+                w.encoding,
                 Err(SaveError::Render(e.to_string())),
                 w.after,
             );
@@ -162,6 +182,7 @@ fn in_place_done(
     context: &EditContext,
     weak: WeakInstance,
     request: SaveRequest,
+    encoding: Option<EncodingChoice>,
     result: Result<SaveOutcome, SaveError>,
     after: AfterSave,
 ) {
@@ -180,7 +201,7 @@ fn in_place_done(
         }
         Err(SaveError::Conflict(state)) => {
             with_instance(context, &weak, |mv| mv.set_saving(request.tile, false));
-            ask_conflict(context, &window, weak, request, &state, after);
+            ask_conflict(context, &window, weak, request, encoding, &state, after);
         }
         Err(SaveError::NeedsExport(reason)) => {
             with_instance(context, &weak, |mv| mv.set_saving(request.tile, false));
@@ -208,11 +229,12 @@ fn ask_conflict(
     window: &MainWindow,
     weak: WeakInstance,
     request: SaveRequest,
+    encoding: Option<EncodingChoice>,
     state: &DiskState,
     after: AfterSave,
 ) {
     let Some(prompt) = conflict_prompt(state, &request.filename) else {
-        write_in_place(context, weak, request, false, after);
+        write_in_place(context, weak, request, encoding, false, after);
         return;
     };
     let question = Question {
@@ -235,7 +257,7 @@ fn ask_conflict(
     };
     let context = context.clone();
     ChoiceDialog::ask(window, &question, move |code| match ConflictChoice::from_code(code) {
-        Some(ConflictChoice::OverwriteAnyway) => write_in_place(&context, weak, request, true, after),
+        Some(ConflictChoice::OverwriteAnyway) => write_in_place(&context, weak, request, encoding, true, after),
         Some(ConflictChoice::SaveAsCopy) => ask_export(&context, weak, request, String::new(), after),
         Some(ConflictChoice::DiscardAndRefresh) => {
             // The edits go; the refresh reads the file as it is now (record, hash, thumbnail) and every view decodes it again.
@@ -305,13 +327,37 @@ fn ask_export(context: &EditContext, weak: WeakInstance, request: SaveRequest, n
         .as_ref()
         .filter(|_| last.is_some())
         .map_or_else(|| settings.presets.encode_options(), FormatPresets::encode_options);
+    let own_format = match request.source.support() {
+        Ok(SaveSupport::InPlace(write)) if WriteFormat::EXPORT_TARGETS.contains(&write) => Some(write),
+        _ => None,
+    };
+    let same_hint = match (own_format, probe) {
+        (Some(write), Some(probe)) => {
+            let encoding = in_place_encoding(write, probe, &request.plan, &settings.presets.encode_options());
+            format!("Saved like the original: {}.", encoding.describe())
+        }
+        _ => String::new(),
+    };
+    let assignments = context
+        .app
+        .library
+        .media()
+        .get(request.media_id)
+        .ok()
+        .flatten()
+        .map(|record| {
+            let tags = context
+                .app
+                .library
+                .tags()
+                .get_tags_for_media(request.media_id)
+                .map_or(0, |t| t.len());
+            describe_assignments(record.rating, tags)
+        })
+        .unwrap_or_default();
     let setup = ExportSetup {
         note,
-        folder: request
-            .path
-            .parent()
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_default(),
+        source: request.path.clone(),
         stem: suggested_stem(&request.filename),
         format: initial_format(
             last,
@@ -319,12 +365,16 @@ fn ask_export(context: &EditContext, weak: WeakInstance, request: SaveRequest, n
             probe.and_then(|p| p.has_alpha),
         ),
         options,
+        own_format,
+        same_as_original: settings.last_export.same_as_original,
+        same_hint,
+        assignments,
         size: request.plan.output_size,
         has_alpha: probe.and_then(|p| p.has_alpha),
         bit_depth: probe.and_then(|p| p.bit_depth),
     };
     let context = context.clone();
-    ExportDialog::ask(&window, &setup, move |choice| match choice {
+    ExportDialog::ask(&window, setup, move |choice| match choice {
         Some(choice) => write_export(&context, weak, request, choice, after),
         None => finish(after, false),
     });
@@ -338,6 +388,12 @@ fn write_export(
     after: AfterSave,
 ) {
     remember_export(context, &choice);
+    if choice.is_original {
+        // The original's own name: saved over it like Save (same safety, same conflict check), encoded as the dialog says.
+        tracing::info!("[ImageEdit: Export] Save As with the original's name: saved over the original");
+        write_in_place(context, weak, request, Some(choice.encoding), false, after);
+        return;
+    }
     with_instance(context, &weak, |mv| mv.set_saving(request.tile, true));
     let (job, target) = (request.clone(), choice.clone());
     let ticket = park(Waiting {
@@ -345,19 +401,11 @@ fn write_export(
         weak,
         request,
         export: Some(choice),
+        encoding: None,
         after,
     });
     let spawned = std::thread::Builder::new().name("image-export".into()).spawn(move || {
-        let export_target = ExportTarget {
-            path: &target.path,
-            format: target.format,
-            options: target.options,
-            replace: target.replace,
-        };
-        let result = match picture(&job) {
-            Some(picture) => export(&picture, &export_target),
-            None => Err(SaveError::Refused(EditRefusal::Unreadable)),
-        };
+        let result = write_new_file(&job, &target);
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(w) = unpark(ticket)
                 && let Some(choice) = w.export
@@ -383,19 +431,39 @@ fn write_export(
     }
 }
 
+/// On the worker: creates the folder when it is new, writes the file and examines it for the tile that shows it next.
+fn write_new_file(job: &SaveRequest, target: &ExportChoice) -> Result<Exported, SaveError> {
+    if target.create_folder
+        && let Some(folder) = target.path.parent()
+    {
+        std::fs::create_dir_all(folder).map_err(|e| SaveError::Write(WriteError::Io(e)))?;
+        tracing::info!(folder = %LogObscurer::path(folder), "[ImageEdit: Export] Folder created");
+    }
+    let export_target = ExportTarget {
+        path: &target.path,
+        format: target.format,
+        encoding: target.encoding,
+        replace: target.replace,
+    };
+    let outcome = match picture(job) {
+        Some(picture) => export(&picture, &export_target)?,
+        None => return Err(SaveError::Refused(EditRefusal::Unreadable)),
+    };
+    let probe = probe(&outcome.written, target.format.media_format()).map_err(|e| e.to_string());
+    Ok(Exported { outcome, probe })
+}
+
 fn export_done(
     context: &EditContext,
     weak: WeakInstance,
     request: SaveRequest,
     choice: ExportChoice,
-    result: Result<SaveOutcome, SaveError>,
+    result: Result<Exported, SaveError>,
     after: AfterSave,
 ) {
     let Some(window) = context.window.upgrade() else { return };
     match result {
-        Ok(outcome) => {
-            // The original is unchanged: the tile shows it again, the edits live on in the new file.
-            with_instance(context, &weak, |mv| mv.finish_edits_without_save(request.tile));
+        Ok(Exported { outcome, probe }) => {
             let name = outcome
                 .written
                 .file_name()
@@ -408,7 +476,14 @@ fn export_done(
                     outcome.encoding.describe()
                 ),
             );
-            library_update::after_export(context, &window, request.media_id, &outcome.written);
+            let record = library_update::after_export(
+                context,
+                &window,
+                request.media_id,
+                &outcome.written,
+                choice.keep_assignments,
+            );
+            adopt_copy(context, &window, &weak, &request, &outcome, probe, record);
             finish(after, true);
         }
         Err(SaveError::Write(WriteError::Exists)) => {
@@ -471,11 +546,55 @@ fn export_done(
     }
 }
 
+/// The saved copy becomes what the tile shows (in every host); a Multiview that follows the Browse selection has the Browse
+/// view select it in the background. Without a record (it could not be indexed) the tile shows the original again.
+fn adopt_copy(
+    context: &EditContext,
+    window: &MainWindow,
+    weak: &WeakInstance,
+    request: &SaveRequest,
+    outcome: &SaveOutcome,
+    probe: Result<SourceProbe, String>,
+    record: Option<rustview_core::library::models::MediaRecord>,
+) {
+    let Some(record) = record else {
+        with_instance(context, weak, |mv| mv.finish_edits_without_save(request.tile));
+        StatusBarBridge::warn(
+            window,
+            "The copy was saved but could not be added to the library; the view shows the original again.",
+        );
+        return;
+    };
+    let source = EditSource {
+        identity: Some(outcome.identity),
+        probe,
+        format: rustview_core::media::MediaFormat::from_path(&outcome.written),
+        size: outcome.size,
+    };
+    let mut follow = None;
+    with_instance(context, weak, |mv| {
+        mv.adopt_saved_copy(request.tile, record.id, outcome.written.clone(), source);
+        if mv.origin() == OriginKind::Browse {
+            follow = Some(mv.tile_count() == 1);
+        }
+    });
+    if let Some(lone) = follow {
+        library_update::select_in_browse(context, window, request.media_id, &record, &outcome.written, lone);
+    }
+    // A tab describes the medium it shows (toolbar, record): it is the copy now.
+    let app = &context.app;
+    crate::ui::tabs::BridgeViewerTabs::sync_ui(window, &app.tab_manager, &app.library, &app.settings, &app.state);
+}
+
 /// The export dialog starts with the same choices next time (persisted with the settings).
 fn remember_export(context: &EditContext, choice: &ExportChoice) {
     let settings = &context.app.settings;
     let mut next = settings.get();
+    let options = match choice.encoding {
+        EncodingChoice::SameAsOriginal(options) | EncodingChoice::Options(options) => options,
+    };
     next.image_edit.last_export.format = choice.format.id().to_string();
-    next.image_edit.last_export.options = Some(FormatPresets::from_options(&choice.options));
+    next.image_edit.last_export.options = Some(FormatPresets::from_options(&options));
+    next.image_edit.last_export.same_as_original = choice.same_as_original;
     settings.update(&next);
 }

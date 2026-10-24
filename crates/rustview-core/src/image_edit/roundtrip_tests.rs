@@ -8,7 +8,7 @@ use super::geometry::PixelRect;
 use super::metadata::read_metadata;
 use super::options::{EncodeOptions, Encoding, OverwriteMode};
 use super::probe::{SourceProbe, probe};
-use super::save::{EditedPicture, ExportTarget, SaveError, export, save_in_place};
+use super::save::{EditedPicture, EncodingChoice, ExportTarget, SaveError, export, save_in_place, save_in_place_with};
 use super::stack::EditPlan;
 use super::writer::{Expect, WriteError, backup_path, overwrite_using};
 use crate::media::MediaFormat;
@@ -329,6 +329,50 @@ fn a_jpeg_crop_on_the_block_grid_is_lossless_and_keeps_the_metadata() {
 }
 
 #[test]
+fn an_export_like_the_original_is_lossless_and_one_with_options_is_encoded_again() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("photo.jpg");
+    write_jpeg(&path, false);
+    let probe = probe(&path, MediaFormat::Jpeg).expect("probe");
+    let crop = PixelRect::new(16, 32, 61, 27);
+    let edited = picture(&path, MediaFormat::Jpeg, &probe, crop);
+    let like = dir.path().join("like.jpg");
+    let outcome = export(
+        &edited,
+        &ExportTarget {
+            path: &like,
+            format: WriteFormat::Jpeg,
+            encoding: EncodingChoice::SameAsOriginal(EncodeOptions::default()),
+            replace: false,
+        },
+    )
+    .expect("export like the original");
+    assert_eq!(outcome.encoding, Encoding::JpegLossless { crop });
+    check_jpeg_metadata(&like, (61, 27));
+    let chosen = dir.path().join("chosen.jpg");
+    let outcome = export(
+        &edited,
+        &ExportTarget {
+            path: &chosen,
+            format: WriteFormat::Jpeg,
+            encoding: EncodingChoice::Options(EncodeOptions::default()),
+            replace: false,
+        },
+    )
+    .expect("export with options");
+    assert!(matches!(outcome.encoding, Encoding::Jpeg { .. }));
+    // The original's own name with options of the user's choice: saved over it, encoded again.
+    let outcome = save_in_place_with(
+        &edited,
+        EncodingChoice::Options(EncodeOptions::default()),
+        OverwriteMode::Safe,
+        false,
+    )
+    .expect("save with options");
+    assert!(matches!(outcome.encoding, Encoding::Jpeg { .. }));
+}
+
+#[test]
 fn a_jpeg_crop_off_the_grid_is_encoded_with_the_original_tables_and_keeps_the_metadata() {
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().join("photo.jpg");
@@ -564,10 +608,10 @@ fn exports_write_a_new_file_and_never_replace_one_unasked() {
         let request = ExportTarget {
             path: &target,
             format,
-            options: EncodeOptions {
+            encoding: EncodingChoice::Options(EncodeOptions {
                 avif_speed: 10,
                 ..EncodeOptions::default()
-            },
+            }),
             replace: false,
         };
         let outcome = export(&edited, &request).unwrap_or_else(|e| panic!("{format:?}: {e}"));

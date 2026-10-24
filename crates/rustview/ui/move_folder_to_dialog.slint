@@ -3,12 +3,13 @@ import { BulletItem } from "bullet_item.slint";
 import { IconId } from "icons.slint";
 import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
+import { DialogBody } from "dialog_body.slint";
 
 export component MoveFolderToDialog inherits Window {
     title: "RustView - Move Folder";
     width: 480px;
     preferred-height: dialog-layout.preferred-height;
-    min-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.min-height;
     background: Theme.background;
 
     in-out property <string> source-folder-name: "";
@@ -37,59 +38,63 @@ export component MoveFolderToDialog inherits Window {
             spacing: 0px;
             alignment: space-between;
 
-            VerticalLayout {
-                width: root.width;
-                padding: 16px;
-                spacing: 12px;
-                vertical-stretch: 1;
+            body := DialogBody {
+                content-height: content.preferred-height;
 
-                DialogHeading {
-                    icon: IconId.move-to;
-                    text: "Move Directory";
-                    color: Theme.primary;
-                }
+                content := VerticalLayout {
+                    width: body.width;
+                    height: self.preferred-height;
+                    padding: 16px;
+                    spacing: 12px;
 
-                Text {
-                    text: "Move folder '" + root.source-folder-name + "' under destination '" + root.target-folder-name + "'?";
-                    font-size: 12px;
-                    color: Theme.text;
-                    wrap: word-wrap;
-                }
+                    DialogHeading {
+                        icon: IconId.move-to;
+                        text: "Move Directory";
+                        color: Theme.primary;
+                    }
 
-                Rectangle {
-                    background: Theme.surface-variant;
-                    border-radius: 4px;
-                    border-width: 1px;
-                    border-color: Theme.border;
+                    Text {
+                        text: "Move folder '" + root.source-folder-name + "' under destination '" + root.target-folder-name + "'?";
+                        font-size: 12px;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
 
-                    VerticalLayout {
-                        padding: 8px;
-                        spacing: 4px;
+                    Rectangle {
+                        background: Theme.surface-variant;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: Theme.border;
 
-                        Text {
-                            text: "Contents to be relocated on disk and in database:";
-                            font-size: 11px;
-                            font-weight: 700;
-                            color: Theme.primary;
-                        }
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 4px;
 
-                        BulletItem {
-                            text: root.subfolders-count + " subfolder(s)";
-                            color: Theme.text;
-                        }
+                            Text {
+                                text: "Contents to be relocated on disk and in database:";
+                                font-size: 11px;
+                                font-weight: 700;
+                                color: Theme.primary;
+                            }
 
-                        BulletItem {
-                            text: root.files-count + " media file(s)";
-                            color: Theme.text;
+                            BulletItem {
+                                text: root.subfolders-count + " subfolder(s)";
+                                color: Theme.text;
+                            }
+
+                            BulletItem {
+                                text: root.files-count + " media file(s)";
+                                color: Theme.text;
+                            }
                         }
                     }
-                }
 
-                if root.error-message != "" : Text {
-                    text: root.error-message;
-                    font-size: 11px;
-                    color: #ff5555;
-                    wrap: word-wrap;
+                    if root.error-message != "" : Text {
+                        text: root.error-message;
+                        font-size: 11px;
+                        color: #ff5555;
+                        wrap: word-wrap;
+                    }
                 }
             }
 

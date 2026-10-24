@@ -117,6 +117,7 @@ impl RemoveOrphanedFileDialogController {
         let mut d_ref = self.dialog.borrow_mut();
         if d_ref.is_none() {
             let win = RemoveOrphanedFileDialog::new().expect("Failed to instantiate RemoveOrphanedFileDialog");
+            crate::ui::dialog_fit::install(&win);
             *d_ref = Some(win);
         }
     }

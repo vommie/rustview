@@ -2,12 +2,13 @@ import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "styles.slint";
 import { InlineNotice } from "inline_notice.slint";
 import { ButtonBar } from "button_bar.slint";
+import { DialogBody } from "dialog_body.slint";
 
 export component FileRenameDialog inherits Window {
     title: "RustView - Rename Media File";
     width: 480px;
     preferred-height: dialog-layout.preferred-height;
-    min-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.min-height;
     always-on-top: true;
     background: Theme.background;
 
@@ -46,89 +47,93 @@ export component FileRenameDialog inherits Window {
             spacing: 0px;
             alignment: space-between;
 
-            VerticalLayout {
-                width: root.width;
-                padding: 16px;
-                spacing: 10px;
-                vertical-stretch: 1;
+            body := DialogBody {
+                content-height: content.preferred-height;
 
-                Text {
-                    text: "Rename File";
-                    font-size: 14px;
-                    font-weight: 700;
-                    color: Theme.primary;
-                }
+                content := VerticalLayout {
+                    width: body.width;
+                    height: self.preferred-height;
+                    padding: 16px;
+                    spacing: 10px;
 
-                Text {
-                    text: "Enter a new filename for the selected media item:";
-                    font-size: 11px;
-                    color: Theme.text-muted;
-                }
-
-                name-input := LineEdit {
-                    text: root.initial-name;
-                    placeholder-text: "New filename...";
-                    height: 32px;
-                    vertical-stretch: 0;
-                    edited => {
-                        root.name-edited(self.text);
+                    Text {
+                        text: "Rename File";
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: Theme.primary;
                     }
-                    accepted => {
-                        if self.text != "" {
-                            root.confirmed(self.text);
+
+                    Text {
+                        text: "Enter a new filename for the selected media item:";
+                        font-size: 11px;
+                        color: Theme.text-muted;
+                    }
+
+                    name-input := LineEdit {
+                        text: root.initial-name;
+                        placeholder-text: "New filename...";
+                        height: 32px;
+                        vertical-stretch: 0;
+                        edited => {
+                            root.name-edited(self.text);
+                        }
+                        accepted => {
+                            if self.text != "" {
+                                root.confirmed(self.text);
+                            }
+                        }
+                        key-pressed(event) => {
+                            if event.text == Key.Escape {
+                                root.cancelled();
+                                return accept;
+                            }
+                            return reject;
                         }
                     }
-                    key-pressed(event) => {
-                        if event.text == Key.Escape {
-                            root.cancelled();
-                            return accept;
-                        }
-                        return reject;
-                    }
-                }
 
-                // Real-time Conflict Alert & Quick Resolution Action
-                if root.has-conflict : Rectangle {
-                    background: #f9e2af18;
-                    border-radius: 4px;
-                    border-width: 1px;
-                    border-color: #f9e2af44;
+                    // Real-time Conflict Alert & Quick Resolution Action
+                    if root.has-conflict : Rectangle {
+                        background: #f9e2af18;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: #f9e2af44;
 
-                    VerticalLayout {
-                        padding: 8px;
-                        spacing: 6px;
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 6px;
 
-                        InlineNotice {
-                            text: root.conflict-message;
-                            color: #f9e2af;
-                        }
-
-                        HorizontalLayout {
-                            spacing: 8px;
-                            alignment: start;
-
-                            Text {
-                                text: "Next available name:";
-                                font-size: 11px;
-                                color: Theme.text-muted;
-                                vertical-alignment: center;
+                            InlineNotice {
+                                text: root.conflict-message;
+                                color: #f9e2af;
                             }
 
-                            Button {
-                                text: "Use \"" + root.suggested-name + "\"";
-                                clicked => {
-                                    root.use-suggested-name();
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: start;
+
+                                Text {
+                                    text: "Next available name:";
+                                    font-size: 11px;
+                                    color: Theme.text-muted;
+                                    vertical-alignment: center;
+                                }
+
+                                Button {
+                                    text: "Use \"" + root.suggested-name + "\"";
+                                    clicked => {
+                                        root.use-suggested-name();
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                if root.error-message != "" : Text {
-                    text: root.error-message;
-                    font-size: 11px;
-                    color: #ff5555;
-                    wrap: word-wrap;
+                    if root.error-message != "" : Text {
+                        text: root.error-message;
+                        font-size: 11px;
+                        color: #ff5555;
+                        wrap: word-wrap;
+                    }
                 }
             }
 

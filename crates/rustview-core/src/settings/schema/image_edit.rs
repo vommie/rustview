@@ -130,12 +130,24 @@ impl FormatPresets {
 }
 
 /// What the export dialog was last used with (remembered across restarts; the presets are the starting values until then).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LastExport {
     /// The id of the format (`WriteFormat::id`); empty = never used.
     pub format: String,
     pub options: Option<FormatPresets>,
+    /// "Same as original" was on (a picture saved in its own format keeps its quality, lossless where possible).
+    pub same_as_original: bool,
+}
+
+impl Default for LastExport {
+    fn default() -> Self {
+        Self {
+            format: String::new(),
+            options: None,
+            same_as_original: true,
+        }
+    }
 }
 
 impl LastExport {
@@ -210,7 +222,10 @@ impl ImageEditSettings {
             ));
         }
         if self.last_export != old.last_export {
-            lines.push(format!("Image edit: last export format '{}'", self.last_export.format));
+            lines.push(format!(
+                "Image edit: last export format '{}' (same as original: {})",
+                self.last_export.format, self.last_export.same_as_original
+            ));
         }
         lines
     }
@@ -247,6 +262,10 @@ mod tests {
         assert_eq!(options.tiff_compression, TiffCompression::Lzw);
         assert_eq!(options.jpeg_subsampling, ChromaSubsampling::S444);
         assert_eq!(settings.last_export.format, "");
+        assert!(
+            settings.last_export.same_as_original,
+            "a file without the switch starts with it on"
+        );
     }
 
     #[test]
@@ -257,6 +276,7 @@ mod tests {
         settings.last_export = LastExport {
             format: "webp".to_string(),
             options: Some(settings.presets.clone()),
+            same_as_original: false,
         };
         let text = serde_json::to_string(&settings).expect("write");
         let back: ImageEditSettings = serde_json::from_str(&text).expect("read");

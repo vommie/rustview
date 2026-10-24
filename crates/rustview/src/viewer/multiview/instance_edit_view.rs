@@ -227,6 +227,37 @@ impl MultiviewInstance {
         self.edits_changed(index);
     }
 
+    /// The edits of tile `key` were saved as the new file `path`, medium `media_id` ("Save As"): that file is what the tile shows
+    /// from now on, in every host. The tile keeps the picture it shows (it is exactly what the new file holds, so nothing is
+    /// decoded again), the edit ends (the original is free for other tiles again) and the Save button shows the success.
+    pub fn adopt_saved_copy(&mut self, key: TileKey, media_id: MediaId, path: PathBuf, source: EditSource) {
+        let Some(index) = self.tile_index(key) else { return };
+        if self.tiles[index].edit.as_ref().is_some_and(|e| e.tool.is_some()) {
+            self.crop_order.closed(key);
+        }
+        let tile = &mut self.tiles[index];
+        let previous = tile.media_id;
+        tile.filename = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        tile.path = path;
+        tile.media_id = media_id;
+        tile.source = Some(source);
+        tile.edit = None;
+        tile.save_badge = SaveBadge::Saved(Instant::now());
+        if self.last_hovered == Some(previous) {
+            self.last_hovered = Some(media_id);
+        }
+        crate::viewer::edit::touch_unsaved();
+        tracing::info!(
+            previous_media_id = previous,
+            media_id,
+            "[ImageEdit: Save] The tile shows the saved copy from now on"
+        );
+        self.bump();
+    }
+
     /// The next moment an edit button changes by itself (the Save button fading after a save).
     pub fn edit_wakeup(&self, now: Instant) -> Option<Instant> {
         self.tiles.iter().filter_map(|t| t.save_badge.wakeup(now)).min()

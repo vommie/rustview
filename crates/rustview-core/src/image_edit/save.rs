@@ -70,11 +70,36 @@ pub struct SaveOutcome {
     pub bytes: usize,
 }
 
-/// Overwrites the original in its own format. `overwrite_anyway` is the user's answer to a conflict (write whatever is on disk
-/// now, or create the file again).
+/// How the picture is encoded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EncodingChoice {
+    /// Like the original: its own format and as much of its quality as the format allows (lossless where possible, the file's
+    /// own JPEG tables); the presets fill in what the file does not store.
+    SameAsOriginal(EncodeOptions),
+    /// With the options the user chose in the export dialog.
+    Options(EncodeOptions),
+}
+
+/// Overwrites the original in its own format, with as much of its quality as the format allows. `overwrite_anyway` is the
+/// user's answer to a conflict (write whatever is on disk now, or create the file again).
 pub fn save_in_place(
     picture: &EditedPicture<'_>,
     presets: &EncodeOptions,
+    mode: OverwriteMode,
+    overwrite_anyway: bool,
+) -> Result<SaveOutcome, SaveError> {
+    save_in_place_with(
+        picture,
+        EncodingChoice::SameAsOriginal(*presets),
+        mode,
+        overwrite_anyway,
+    )
+}
+
+/// Overwrites the original in its own format, encoded as `choice` says ("Save As" with the original's name and format).
+pub fn save_in_place_with(
+    picture: &EditedPicture<'_>,
+    choice: EncodingChoice,
     mode: OverwriteMode,
     overwrite_anyway: bool,
 ) -> Result<SaveOutcome, SaveError> {
@@ -94,7 +119,10 @@ pub fn save_in_place(
     }
     let data = std::fs::read(picture.path).map_err(SaveError::Read)?;
     let actual = picture.probe.signature.unwrap_or(picture.format);
-    let encoding = in_place_encoding(write, picture.probe, &picture.plan, presets);
+    let encoding = match choice {
+        EncodingChoice::SameAsOriginal(presets) => in_place_encoding(write, picture.probe, &picture.plan, &presets),
+        EncodingChoice::Options(options) => export_encoding(write, &options),
+    };
     let bytes = rendered(picture, &data, actual, write, encoding)?;
     let expect = if overwrite_anyway {
         Expect::Anything
@@ -125,7 +153,8 @@ pub fn save_in_place(
 pub struct ExportTarget<'a> {
     pub path: &'a Path,
     pub format: WriteFormat,
-    pub options: EncodeOptions,
+    /// `SameAsOriginal` only when `format` is the one the original is saved in (`SaveSupport::InPlace`).
+    pub encoding: EncodingChoice,
     /// The user confirmed that an existing file at `path` is replaced.
     pub replace: bool,
 }
@@ -138,7 +167,15 @@ pub fn export(picture: &EditedPicture<'_>, target: &ExportTarget<'_>) -> Result<
     }
     let data = std::fs::read(picture.path).map_err(SaveError::Read)?;
     let actual = picture.probe.signature.unwrap_or(picture.format);
-    let encoding = export_encoding(target.format, &target.options);
+    let encoding = match target.encoding {
+        EncodingChoice::SameAsOriginal(presets) => match save_support(picture.format, picture.probe) {
+            Ok(SaveSupport::InPlace(write)) if write == target.format => {
+                in_place_encoding(write, picture.probe, &picture.plan, &presets)
+            }
+            _ => export_encoding(target.format, &presets),
+        },
+        EncodingChoice::Options(options) => export_encoding(target.format, &options),
+    };
     let bytes = rendered(picture, &data, actual, target.format, encoding)?;
     let outcome = if target.replace {
         writer::overwrite(target.path, &bytes, OverwriteMode::Safe, Expect::Anything)?

@@ -88,6 +88,7 @@ impl MissingFileDialogController {
         let mut d_ref = self.dialog.borrow_mut();
         if d_ref.is_none() {
             let win = MissingFileDialog::new().expect("Failed to instantiate MissingFileDialog");
+            crate::ui::dialog_fit::install(&win);
             *d_ref = Some(win);
         }
     }

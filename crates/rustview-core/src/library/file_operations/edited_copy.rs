@@ -190,7 +190,7 @@ mod tests {
             .index_edited_copy(source.id, folder, "plain.png", false)
             .expect("plain");
         assert_eq!(plain.rating, 0);
-        assert!(library.tags().get_tags_for_media(plain.id).expect("tags").is_empty());
+        assert_eq!(library.tags().get_tags_for_media(plain.id).expect("tags"), Vec::new());
     }
 
     #[test]
@@ -216,8 +216,9 @@ mod tests {
             .map(|t| t.name)
             .collect();
         assert_eq!(names, ["holiday"]);
-        assert!(
-            library.tags().get_media_for_tag(own.id).expect("tagged").is_empty(),
+        assert_eq!(
+            library.tags().get_media_for_tag(own.id).expect("tagged"),
+            Vec::<u64>::new(),
             "the tag index forgets the replaced assignment"
         );
     }

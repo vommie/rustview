@@ -3,6 +3,7 @@ import { Theme } from "styles.slint";
 import { IconId } from "icons.slint";
 import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
+import { DialogBody } from "dialog_body.slint";
 
 /// One picture with unsaved changes.
 export struct UnsavedPictureView {
@@ -23,7 +24,7 @@ export component ImageUnsavedDialog inherits Window {
     title: "RustView - Unsaved Changes";
     width: 560px;
     preferred-height: dialog-layout.preferred-height;
-    min-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.min-height;
     always-on-top: true;
     background: Theme.background;
 
@@ -57,88 +58,93 @@ export component ImageUnsavedDialog inherits Window {
             padding: 0px;
             spacing: 0px;
 
-            VerticalLayout {
-                width: root.width;
-                padding: 18px;
-                spacing: 12px;
+            body := DialogBody {
+                content-height: content.preferred-height;
 
-                DialogHeading {
-                    icon: IconId.save;
-                    text: root.heading;
-                    color: Theme.primary;
-                }
+                content := VerticalLayout {
+                    width: body.width;
+                    height: self.preferred-height;
+                    padding: 18px;
+                    spacing: 12px;
 
-                Text {
-                    text: root.message;
-                    font-size: 12px;
-                    color: Theme.text;
-                    wrap: word-wrap;
-                }
+                    DialogHeading {
+                        icon: IconId.save;
+                        text: root.heading;
+                        color: Theme.primary;
+                    }
 
-                Rectangle {
-                    border-radius: 6px;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    background: Theme.surface;
-                    height: Math.min(list.preferred-height, 260px);
+                    Text {
+                        text: root.message;
+                        font-size: 12px;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
 
-                    ScrollView {
-                        list := VerticalLayout {
-                            padding: 4px;
-                            spacing: 2px;
+                    Rectangle {
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: Theme.surface;
+                        height: Math.min(list.preferred-height, 260px);
 
-                            for picture[row] in root.pictures : Rectangle {
-                                border-radius: 4px;
-                                background: area.has-hover ? Theme.surface-hover : transparent;
-                                height: Math.max(44px, row-layout.preferred-height);
+                        ScrollView {
+                            list := VerticalLayout {
+                                padding: 4px;
+                                spacing: 2px;
 
-                                area := TouchArea {
-                                    clicked => {
-                                        root.toggled(row, !picture.save);
+                                for picture[row] in root.pictures : Rectangle {
+                                    border-radius: 4px;
+                                    background: area.has-hover ? Theme.surface-hover : transparent;
+                                    height: Math.max(44px, row-layout.preferred-height);
+
+                                    area := TouchArea {
+                                        clicked => {
+                                            root.toggled(row, !picture.save);
+                                        }
                                     }
-                                }
 
-                                row-layout := HorizontalLayout {
-                                    padding: 6px;
-                                    spacing: 10px;
+                                    row-layout := HorizontalLayout {
+                                        padding: 6px;
+                                        spacing: 10px;
 
-                                    VerticalLayout {
-                                        alignment: center;
-                                        CheckBox {
-                                            checked: picture.save;
-                                            toggled => {
-                                                root.toggled(row, self.checked);
+                                        VerticalLayout {
+                                            alignment: center;
+                                            CheckBox {
+                                                checked: picture.save;
+                                                toggled => {
+                                                    root.toggled(row, self.checked);
+                                                }
                                             }
                                         }
-                                    }
 
-                                    VerticalLayout {
-                                        horizontal-stretch: 1;
-                                        alignment: center;
-                                        spacing: 1px;
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            alignment: center;
+                                            spacing: 1px;
 
-                                        Text {
-                                            text: picture.filename;
-                                            font-size: 12px;
-                                            font-weight: 600;
-                                            color: picture.save ? Theme.text : Theme.text-muted;
-                                            overflow: elide;
-                                        }
+                                            Text {
+                                                text: picture.filename;
+                                                font-size: 12px;
+                                                font-weight: 600;
+                                                color: picture.save ? Theme.text : Theme.text-muted;
+                                                overflow: elide;
+                                            }
 
-                                        Text {
-                                            text: picture.save
-                                                ? (picture.needs-export ? picture.description + " - saved as a new file (the format cannot be written)" : picture.description)
-                                                : picture.description + " - changes discarded";
-                                            font-size: 11px;
-                                            color: picture.save ? (picture.needs-export ? #fab387 : Theme.text-muted) : Theme.status-corrupt;
-                                            overflow: elide;
-                                        }
+                                            Text {
+                                                text: picture.save
+                                                    ? (picture.needs-export ? picture.description + " - saved as a new file (the format cannot be written)" : picture.description)
+                                                    : picture.description + " - changes discarded";
+                                                font-size: 11px;
+                                                color: picture.save ? (picture.needs-export ? #fab387 : Theme.text-muted) : Theme.status-corrupt;
+                                                overflow: elide;
+                                            }
 
-                                        Text {
-                                            text: picture.folder;
-                                            font-size: 10px;
-                                            color: Theme.text-muted;
-                                            overflow: elide;
+                                            Text {
+                                                text: picture.folder;
+                                                font-size: 10px;
+                                                color: Theme.text-muted;
+                                                overflow: elide;
+                                            }
                                         }
                                     }
                                 }

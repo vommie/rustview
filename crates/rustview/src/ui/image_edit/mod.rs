@@ -5,6 +5,7 @@ mod choice_dialog;
 pub mod close_guard;
 mod export_dialog;
 pub mod export_plan;
+pub mod export_target;
 mod library_update;
 mod save_flow;
 mod unsaved_dialog;

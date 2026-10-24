@@ -3,13 +3,14 @@ import { Theme } from "styles.slint";
 import { IconId } from "icons.slint";
 import { DialogHeading } from "dialog_heading.slint";
 import { ButtonBar } from "button_bar.slint";
+import { DialogBody } from "dialog_body.slint";
 
 /// Asks for the name of a new folder, or for a relative path whose missing folders are all created (like `mkdir -p`).
 export component NewFolderDialog inherits Window {
     title: "RustView - New Folder";
     width: 480px;
     preferred-height: dialog-layout.preferred-height;
-    min-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.min-height;
     always-on-top: true;
     background: Theme.background;
 
@@ -45,59 +46,63 @@ export component NewFolderDialog inherits Window {
             spacing: 0px;
             alignment: space-between;
 
-            VerticalLayout {
-                width: root.width;
-                padding: 16px;
-                spacing: 10px;
-                vertical-stretch: 1;
+            body := DialogBody {
+                content-height: content.preferred-height;
 
-                DialogHeading {
-                    icon: IconId.folder-plus;
-                    text: "New Folder";
-                    color: Theme.primary;
-                    font-size: 14px;
-                }
+                content := VerticalLayout {
+                    width: body.width;
+                    height: self.preferred-height;
+                    padding: 16px;
+                    spacing: 10px;
 
-                Text {
-                    text: "Name of the new folder, or a relative path such as photos/2025/trip (missing folders are created, existing ones are kept):";
-                    font-size: 11px;
-                    color: Theme.text-muted;
-                    wrap: word-wrap;
-                }
-
-                name-input := LineEdit {
-                    placeholder-text: "Folder name or path...";
-                    height: 32px;
-                    vertical-stretch: 0;
-                    edited => {
-                        root.text-edited(self.text);
+                    DialogHeading {
+                        icon: IconId.folder-plus;
+                        text: "New Folder";
+                        color: Theme.primary;
+                        font-size: 14px;
                     }
-                    accepted => {
-                        if self.text != "" && root.error-message == "" {
-                            root.confirmed(self.text);
+
+                    Text {
+                        text: "Name of the new folder, or a relative path such as photos/2025/trip (missing folders are created, existing ones are kept):";
+                        font-size: 11px;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
+                    }
+
+                    name-input := LineEdit {
+                        placeholder-text: "Folder name or path...";
+                        height: 32px;
+                        vertical-stretch: 0;
+                        edited => {
+                            root.text-edited(self.text);
+                        }
+                        accepted => {
+                            if self.text != "" && root.error-message == "" {
+                                root.confirmed(self.text);
+                            }
+                        }
+                        key-pressed(event) => {
+                            if event.text == Key.Escape {
+                                root.cancelled();
+                                return accept;
+                            }
+                            return reject;
                         }
                     }
-                    key-pressed(event) => {
-                        if event.text == Key.Escape {
-                            root.cancelled();
-                            return accept;
-                        }
-                        return reject;
+
+                    Text {
+                        text: "In: " + root.parent-path;
+                        font-size: 10px;
+                        color: Theme.text-muted;
+                        overflow: elide;
                     }
-                }
 
-                Text {
-                    text: "In: " + root.parent-path;
-                    font-size: 10px;
-                    color: Theme.text-muted;
-                    overflow: elide;
-                }
-
-                if root.error-message != "" : Text {
-                    text: root.error-message;
-                    font-size: 11px;
-                    color: #ff5555;
-                    wrap: word-wrap;
+                    if root.error-message != "" : Text {
+                        text: root.error-message;
+                        font-size: 11px;
+                        color: #ff5555;
+                        wrap: word-wrap;
+                    }
                 }
             }
 

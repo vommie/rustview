@@ -7,6 +7,7 @@ pub mod button_feedback;
 pub mod button_feedback_bridge;
 pub mod color_picker;
 pub mod context_menu;
+pub mod dialog_fit;
 pub mod dnd;
 pub mod favorites;
 pub mod file_dialogs;

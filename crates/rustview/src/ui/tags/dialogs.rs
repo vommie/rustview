@@ -123,6 +123,7 @@ impl TagDialogController {
         let mut d_ref = self.add.borrow_mut();
         if d_ref.is_none() {
             let win = AddTagDialog::new().expect("Failed to instantiate AddTagDialog");
+            crate::ui::dialog_fit::install(&win);
             *d_ref = Some(win);
         }
 
@@ -214,6 +215,7 @@ impl TagDialogController {
         let mut d_ref = self.rename.borrow_mut();
         if d_ref.is_none() {
             let win = RenameTagDialog::new().expect("Failed to instantiate RenameTagDialog");
+            crate::ui::dialog_fit::install(&win);
             *d_ref = Some(win);
         }
 
@@ -291,6 +293,7 @@ impl TagDialogController {
         let mut d_ref = self.delete.borrow_mut();
         if d_ref.is_none() {
             let win = DeleteTagDialog::new().expect("Failed to instantiate DeleteTagDialog");
+            crate::ui::dialog_fit::install(&win);
             *d_ref = Some(win);
         }
 

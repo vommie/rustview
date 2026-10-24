@@ -201,6 +201,7 @@ impl DeleteFileDialogController {
         let mut d_ref = self.dialog.borrow_mut();
         if d_ref.is_none() {
             let win = DeleteFileDialog::new().expect("Failed to instantiate DeleteFileDialog");
+            crate::ui::dialog_fit::install(&win);
             *d_ref = Some(win);
         }
     }

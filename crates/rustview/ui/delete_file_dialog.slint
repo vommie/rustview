@@ -3,12 +3,13 @@ import { Theme } from "styles.slint";
 import { BulletItem } from "bullet_item.slint";
 import { IconId } from "icons.slint";
 import { DialogHeading } from "dialog_heading.slint";
+import { DialogBody } from "dialog_body.slint";
 
 export component DeleteFileDialog inherits Window {
     title: "RustView - Delete File";
     width: 500px;
     preferred-height: dialog-layout.preferred-height;
-    min-height: dialog-layout.preferred-height;
+    min-height: dialog-layout.min-height;
     always-on-top: true;
     background: Theme.background;
 
@@ -38,65 +39,69 @@ export component DeleteFileDialog inherits Window {
             spacing: 0px;
             alignment: space-between;
 
-            VerticalLayout {
-                width: root.width;
-                padding: 16px;
-                spacing: 12px;
-                vertical-stretch: 1;
+            body := DialogBody {
+                content-height: content.preferred-height;
 
-                DialogHeading {
-                    icon: IconId.status-warning;
-                    text: "Delete File" + (root.files-count > 1 ? "s" : "");
-                    color: #f38ba8;
-                }
+                content := VerticalLayout {
+                    width: body.width;
+                    height: self.preferred-height;
+                    padding: 16px;
+                    spacing: 12px;
 
-                Text {
-                    text: root.files-count > 1
-                        ? ("Are you sure you want to delete the " + root.files-count + " selected files?")
-                        : ("Are you sure you want to delete '" + root.file-name + "'?");
-                    font-size: 12px;
-                    color: Theme.text;
-                    wrap: word-wrap;
-                }
+                    DialogHeading {
+                        icon: IconId.status-warning;
+                        text: "Delete File" + (root.files-count > 1 ? "s" : "");
+                        color: #f38ba8;
+                    }
 
-                Rectangle {
-                    background: #f38ba818;
-                    border-radius: 4px;
-                    border-width: 1px;
-                    border-color: #f38ba844;
+                    Text {
+                        text: root.files-count > 1
+                            ? ("Are you sure you want to delete the " + root.files-count + " selected files?")
+                            : ("Are you sure you want to delete '" + root.file-name + "'?");
+                        font-size: 12px;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
 
-                    VerticalLayout {
-                        padding: 8px;
-                        spacing: 4px;
+                    Rectangle {
+                        background: #f38ba818;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: #f38ba844;
 
-                        Text {
-                            text: "Database and storage cleanup:";
-                            font-size: 11px;
-                            font-weight: 700;
-                            color: #f38ba8;
-                        }
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 4px;
 
-                        BulletItem {
-                            text: root.files-count > 1
-                                ? (root.files-count + " media records, thumbnails and preview caches will be deleted")
-                                : "Media record, thumbnail and preview cache will be removed from database";
-                            color: Theme.text;
+                            Text {
+                                text: "Database and storage cleanup:";
+                                font-size: 11px;
+                                font-weight: 700;
+                                color: #f38ba8;
+                            }
+
+                            BulletItem {
+                                text: root.files-count > 1
+                                    ? (root.files-count + " media records, thumbnails and preview caches will be deleted")
+                                    : "Media record, thumbnail and preview cache will be removed from database";
+                                color: Theme.text;
+                            }
                         }
                     }
-                }
 
-                if root.missing-note != "" : Text {
-                    text: root.missing-note;
-                    font-size: 11px;
-                    color: #f9e2af;
-                    wrap: word-wrap;
-                }
+                    if root.missing-note != "" : Text {
+                        text: root.missing-note;
+                        font-size: 11px;
+                        color: #f9e2af;
+                        wrap: word-wrap;
+                    }
 
-                if root.error-message != "" : Text {
-                    text: root.error-message;
-                    font-size: 11px;
-                    color: #ff5555;
-                    wrap: word-wrap;
+                    if root.error-message != "" : Text {
+                        text: root.error-message;
+                        font-size: 11px;
+                        color: #ff5555;
+                        wrap: word-wrap;
+                    }
                 }
             }
 

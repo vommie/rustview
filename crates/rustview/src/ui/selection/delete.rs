@@ -454,6 +454,9 @@ impl DeleteSelectionDialogController {
         let mut d_ref = self.dialog.borrow_mut();
         if d_ref.is_none() {
             *d_ref = Some(DeleteSelectionDialog::new().expect("Failed to instantiate DeleteSelectionDialog"));
+            if let Some(win) = d_ref.as_ref() {
+                crate::ui::dialog_fit::install(win);
+            }
         }
     }
 

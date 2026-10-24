@@ -52,6 +52,7 @@ impl UnsavedDialog {
             if dialog.is_none() {
                 match ImageUnsavedDialog::new() {
                     Ok(win) => {
+                        crate::ui::dialog_fit::install(&win);
                         Self::bind_events(&win, window);
                         *dialog = Some(win);
                     }

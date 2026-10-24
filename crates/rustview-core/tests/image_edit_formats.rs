@@ -8,7 +8,7 @@ use rustview_core::image_edit::geometry::PixelRect;
 use rustview_core::image_edit::options::{EncodeOptions, OverwriteMode};
 use rustview_core::image_edit::probe::probe;
 use rustview_core::image_edit::render::decode_any;
-use rustview_core::image_edit::save::{EditedPicture, ExportTarget, export, save_in_place};
+use rustview_core::image_edit::save::{EditedPicture, EncodingChoice, ExportTarget, export, save_in_place};
 use rustview_core::image_edit::stack::EditPlan;
 use rustview_core::media::{MediaFormat, MediaType};
 use std::path::{Path, PathBuf};
@@ -111,7 +111,7 @@ fn every_sample_picture_is_saved_exported_or_refused_correctly() {
                 let request = ExportTarget {
                     path: &target,
                     format: WriteFormat::Png,
-                    options: EncodeOptions::default(),
+                    encoding: EncodingChoice::Options(EncodeOptions::default()),
                     replace: false,
                 };
                 match export(&picture, &request) {

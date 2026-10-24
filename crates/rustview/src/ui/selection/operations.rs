@@ -207,6 +207,38 @@ impl BridgeFileSelection {
         tracing::info!(media_id, "[FileSelection: Deselect] Media item deselected");
     }
 
+    /// A Multiview that follows the selection shows `new` where it showed `old` (a picture saved as a new file): the selection
+    /// takes `new` in place of `old` (the rest stays selected) and the view reveals it. The Multiview is not told: it shows `new`
+    /// already. Returns `false` (and changes nothing) when `new` is not listed.
+    pub fn swap_selected_media(
+        old: MediaId,
+        new: MediaId,
+        window: &MainWindow,
+        library: &Arc<Library>,
+        state: &Arc<RwLock<UiState>>,
+    ) -> bool {
+        let visual = {
+            let mut st = state.write();
+            let Some(row) = st.row_of(new) else {
+                return false;
+            };
+            if st.file_selection.is_selected(old) {
+                st.file_selection.deselect_many(&std::collections::HashSet::from([old]));
+            }
+            if !st.file_selection.is_selected(new) {
+                st.file_selection.toggle(new);
+            }
+            row + st.folder_front_len()
+        };
+        Self::sync_selection_diff(window, state, &[old, new]);
+        window.invoke_scroll_media_item_into_view(visual.saturating_as::<i32>());
+        BridgeInspector::update(window, state);
+        BridgeTags::sync_tag_selection(window, library, state);
+        StatusBarBridge::update_metrics(window, state);
+        tracing::info!(old, new, "[FileSelection: Swap] The selection follows a saved copy");
+        true
+    }
+
     /// Deselects everything in the current Browse View (Ctrl+Shift+A / Esc): media and folder rows.
     pub fn clear_selection(window: &MainWindow, library: &Arc<Library>, state: &Arc<RwLock<UiState>>) {
         let t_start = Instant::now();
